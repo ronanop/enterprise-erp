@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { ModuleUsersNavTab } from "@/components/organization/module-users-nav-tab";
 import { cn } from "@/lib/utils";
 
 /** Primary Integration Hub screens from FRD-21 / ERD_21 */
@@ -47,6 +48,7 @@ export function IntegrationWorkspaceNav() {
             </li>
           );
         })}
+        <ModuleUsersNavTab moduleKey="integration" />
       </ul>
     </nav>
   );

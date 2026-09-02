@@ -6,6 +6,7 @@ from uuid import UUID
 from database.session import SessionLocal
 from modules.foundation.models.notification import NtfDelivery, NtfEvent
 from modules.foundation.repository.base import utcnow
+from modules.foundation.service.engines.email_delivery_engine import EmailDeliveryEngine
 from workers.celery_app import celery_app
 
 
@@ -83,15 +84,17 @@ def send_notification_task(
                     }
                 )
 
-        delivery.status = "delivered"
-        delivery.delivered_at = utcnow()
-        event.status = "sent"
-        db.commit()
-        return {
-            "status": "delivered",
-            "event_id": event_id,
-            "channel": delivery.channel,
-        }
+            delivery.status = "delivered"
+            delivery.delivered_at = utcnow()
+            event.status = "sent"
+            db.commit()
+            return {
+                "status": "delivered",
+                "event_id": event_id,
+                "channel": delivery.channel,
+            }
+
+        return EmailDeliveryEngine(db).deliver(UUID(event_id), UUID(delivery_id))
     finally:
         db.close()
 

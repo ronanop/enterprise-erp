@@ -13,6 +13,7 @@ Creates:
   - A "Calipers Consulting" CrmCompany (Sales Account) with sane entity
     defaults so the happy-path demo script in
     docs/07_RELEASES/Sales_CRM_Demo_Guide.md can be followed end to end.
+  - Demo CrmContact people under Calipers (and other accounts when re-seeded).
 
 Usage (from apps/api):
   .venv\\Scripts\\python.exe -m scripts.seed_sales_crm_demo
@@ -32,7 +33,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from database.session import SessionLocal  # noqa: E402
-from modules.crm.models import CrmCompany, CrmProduct  # noqa: E402
+from modules.crm.models import CrmCompany, CrmContact, CrmProduct  # noqa: E402
 from modules.crm.permissions import (  # noqa: E402
     CRM_ACCOUNTS_PERMISSIONS,
     CRM_MANAGEMENT_PERMISSIONS,
@@ -40,6 +41,7 @@ from modules.crm.permissions import (  # noqa: E402
     CRM_SALES_MANAGER_PERMISSIONS,
 )
 from modules.crm.service.company_service import CompanyService  # noqa: E402
+from modules.crm.service.contact_service import ContactService  # noqa: E402
 from modules.crm.service.product_service import ProductService  # noqa: E402
 from modules.foundation.domain.value_objects import TenantContext  # noqa: E402
 from modules.foundation.models.security import (  # noqa: E402
@@ -53,7 +55,7 @@ from modules.foundation.models.security import (  # noqa: E402
 from modules.foundation.service.rbac_service import RBACService  # noqa: E402
 from modules.foundation.service.user_service import UserService  # noqa: E402
 from modules.organization.models.branch import OrgBranch  # noqa: E402
-from modules.organization.models.company import OrgCompany  # noqa: E402
+from modules.master_data.models.employee import MasterEmployee  # noqa: E402
 from security.password import PasswordHasher  # noqa: E402
 
 DEMO_PASSWORD = "Secure1!"
@@ -69,6 +71,13 @@ PRODUCTS: list[tuple[str, str, str, Decimal]] = [
     ("Enterprise Server Rack Unit", "hardware", Decimal("185000.00")),
     ("ERP Platform License (per seat)", "software", Decimal("42000.00")),
     ("Implementation & Onboarding Services", "services", Decimal("95000.00")),
+]
+
+# (first_name, last_name, email, phone, title, is_primary)
+CALIPERS_CONTACTS: list[tuple[str, str, str, str, str, bool]] = [
+    ("Arjun", "Mehta", "arjun.mehta@calipersconsulting.example", "+91-98765-43210", "Head of IT Procurement", True),
+    ("Priya", "Sharma", "priya.sharma@calipersconsulting.example", "+91-98111-22334", "Procurement Manager", False),
+    ("Rahul", "Iyer", "rahul.iyer@calipersconsulting.example", "+91-98222-33445", "Technical Evaluator", False),
 ]
 
 
@@ -221,6 +230,33 @@ def seed_team_users(
     return users
 
 
+def link_crm_demo_users_to_employee(
+    db,
+    tenant_id,
+    company_id,
+    users: dict[str, SecUser],
+) -> MasterEmployee | None:
+    """Point CRM demo logins at a real master_employee row (required for lead owner FK)."""
+    employee = db.scalar(
+        select(MasterEmployee)
+        .where(
+            MasterEmployee.tenant_id == tenant_id,
+            MasterEmployee.company_id == company_id,
+            MasterEmployee.is_deleted.is_(False),
+        )
+        .order_by(MasterEmployee.employee_code)
+    )
+    if employee is None:
+        return None
+    sales = users.get("sales.user@example.com")
+    for user in users.values():
+        user.employee_id = employee.id
+    if sales and not employee.user_id:
+        employee.user_id = sales.id
+    db.flush()
+    return employee
+
+
 def seed_products(db, ctx: TenantContext, company: OrgCompany) -> list[CrmProduct]:
     svc = ProductService(db)
     rows: list[CrmProduct] = []
@@ -288,6 +324,38 @@ def seed_calipers_company(db, ctx: TenantContext, branch: OrgBranch, owner: SecU
     )
 
 
+def seed_calipers_contacts(db, ctx: TenantContext, account: CrmCompany) -> list[CrmContact]:
+    svc = ContactService(db)
+    rows: list[CrmContact] = []
+    for first, last, email, phone, title, is_primary in CALIPERS_CONTACTS:
+        existing = db.scalar(
+            select(CrmContact).where(
+                CrmContact.company_account_id == account.id,
+                CrmContact.first_name == first,
+                CrmContact.last_name == last,
+                CrmContact.is_deleted.is_(False),
+            )
+        )
+        if existing:
+            rows.append(existing)
+            continue
+        rows.append(
+            svc.create(
+                ctx,
+                company_account_id=account.id,
+                branch_id=account.branch_id,
+                first_name=first,
+                last_name=last,
+                email=email,
+                phone=phone,
+                mobile=phone,
+                title=title,
+                is_primary=is_primary,
+            )
+        )
+    return rows
+
+
 def main() -> None:
     db = SessionLocal()
     try:
@@ -302,6 +370,7 @@ def main() -> None:
         db.commit()
 
         users = seed_team_users(db, tenant, company, branch, perm_map)
+        link_crm_demo_users_to_employee(db, tenant.id, company.id, users)
         db.commit()
 
         rbac = RBACService(db)
@@ -323,6 +392,9 @@ def main() -> None:
         calipers = seed_calipers_company(db, ctx, branch, sales_user)
         db.commit()
 
+        contacts = seed_calipers_contacts(db, ctx, calipers)
+        db.commit()
+
         print("=" * 70)
         print("Sales CRM demo data seeded")
         print("=" * 70)
@@ -338,6 +410,10 @@ def main() -> None:
             print(f"  - [{p.product_type:<9}] {p.product_code}  {p.product_name}  @ {p.unit_price}")
         print("-" * 70)
         print(f"Sales account     : {calipers.account_number}  {calipers.customer_name}  (id={calipers.id})")
+        print(f"Contacts seeded   : {len(contacts)}")
+        for c in contacts:
+            primary = "primary" if c.is_primary else "secondary"
+            print(f"  - {c.first_name} {c.last_name}  ({c.title})  [{primary}]")
         print("=" * 70)
         print("Next: sign in as sales.user@example.com and POST")
         print(f"  /crm/companies/{calipers.id}/leads")

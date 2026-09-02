@@ -19,12 +19,26 @@ class LeadRepository(CrmScopedRepository):
         stmt = self.apply_crm_filter(stmt, CrmLead, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_leads(self, ctx: TenantContext, company_id: UUID):
+    def list_leads(
+        self,
+        ctx: TenantContext,
+        company_id: UUID,
+        company_account_id: UUID | None = None,
+        owner_employee_id: UUID | None = None,
+    ):
         stmt = select(CrmLead).where(
             CrmLead.company_id == company_id,
             CrmLead.is_deleted.is_(False),
+            # Converted leads live under Opportunities — keep Leads free of duplicates.
+            CrmLead.blueprint_state != "converted",
+            CrmLead.converted_opportunity_id.is_(None),
         )
+        if company_account_id is not None:
+            stmt = stmt.where(CrmLead.company_account_id == company_account_id)
+        if owner_employee_id is not None:
+            stmt = stmt.where(CrmLead.owner_employee_id == owner_employee_id)
         stmt = self.apply_crm_filter(stmt, CrmLead, ctx, branch_scoped=True)
+        stmt = stmt.order_by(CrmLead.created_at.desc())
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> CrmLead:
@@ -52,3 +66,15 @@ class LeadRepository(CrmScopedRepository):
             row.version = int(row.version or 1) + 1
         self.db.flush()
         return row
+
+    def soft_delete(self, ctx: TenantContext, row_id: UUID) -> bool:
+        row = self.get(ctx, row_id)
+        if row is None:
+            return False
+        row.is_deleted = True
+        row.deleted_at = utcnow()
+        row.deleted_by = ctx.user_id
+        row.updated_at = utcnow()
+        row.updated_by = ctx.user_id
+        self.db.flush()
+        return True

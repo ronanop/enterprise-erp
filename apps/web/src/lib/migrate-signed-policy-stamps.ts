@@ -11,6 +11,7 @@ import {
 import { stampPoliciesWithSignature } from "@/lib/stamp-policy-signatures";
 import { saveSignedPolicyDocsForCase } from "@/lib/onboarding-signed-docs-store";
 import type { OnboardingCase } from "@/types/onboarding-management";
+import { devWarn } from "@/lib/dev-log";
 
 /** Bump when stamp appearance changes so old IDB PDFs are regenerated. */
 export const SIGNED_POLICY_STAMP_FORMAT = 2;
@@ -46,14 +47,14 @@ export async function migrateSignedPolicyStampFormat(
               candidateName: c.candidateName,
             });
             await saveSignedPolicyDocsForCase(c.id, stamped);
-          } catch (err) {
-            console.warn(`Could not re-stamp policies for case ${c.id}`, err);
+          } catch {
+            devWarn(`Could not re-stamp policies for case ${c.id}`);
           }
         }
 
         await idbSetJson(FORMAT_KEY, SIGNED_POLICY_STAMP_FORMAT);
-      } catch (err) {
-        console.warn("Signed policy stamp migration failed", err);
+      } catch {
+        devWarn("Signed policy stamp migration failed");
         migratePromise = null;
       }
     })();

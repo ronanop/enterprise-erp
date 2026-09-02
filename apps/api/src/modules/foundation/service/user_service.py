@@ -4,9 +4,17 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import ConflictException, NotFoundException
+from core.exceptions import AppException, ConflictException, NotFoundException
+from modules.foundation.domain.erp_modules import (
+    ERP_MODULE_KEY_SET,
+    effective_admin_module_keys,
+    effective_module_keys,
+)
+from modules.foundation.domain.entities import UserEntity
 from modules.foundation.repository.session_repository import SessionRepository
+from modules.foundation.repository.user_module_repository import UserModuleRepository
 from modules.foundation.repository.user_repository import UserRepository
+from modules.foundation.schemas import UserResponse
 from modules.foundation.service.audit_service import AuditService
 from modules.foundation.service.rbac_service import RBACService
 from security.password import PasswordHasher
@@ -15,9 +23,78 @@ from security.password import PasswordHasher
 class UserService:
     def __init__(self, db: Session) -> None:
         self._repo = UserRepository(db)
+        self._modules = UserModuleRepository(db)
         self._sessions = SessionRepository(db)
         self._audit = AuditService(db)
         self._rbac = RBACService(db)
+
+    @staticmethod
+    def to_response(user: UserEntity) -> UserResponse:
+        return UserResponse(
+            id=user.id,
+            tenant_id=user.tenant_id,
+            email=user.email,
+            display_name=user.display_name,
+            employee_id=user.employee_id,
+            user_type=user.user_type,
+            status=user.status,
+            mfa_enabled=user.mfa_enabled,
+            role_ids=user.role_ids,
+            assigned_module_keys=list(user.assigned_module_keys),
+            admin_module_keys=list(user.admin_module_keys),
+        )
+
+    def effective_modules_for_user(self, user: UserEntity) -> list[str]:
+        return effective_module_keys(user.user_type, user.assigned_module_keys, user.role_codes)
+
+    def effective_admin_modules_for_user(self, user: UserEntity) -> list[str]:
+        return effective_admin_module_keys(user.user_type, user.admin_module_keys, user.role_codes)
+
+    def get_user_modules(self, tenant_id: UUID, user_id: UUID) -> tuple[UserEntity, list[str], list[str], list[str]]:
+        user = self.get_user(tenant_id, user_id)
+        assigned = list(user.assigned_module_keys)
+        admin_keys = list(user.admin_module_keys)
+        effective = self.effective_modules_for_user(user)
+        return user, assigned, admin_keys, effective
+
+    def set_user_modules(
+        self,
+        *,
+        tenant_id: UUID,
+        user_id: UUID,
+        module_keys: list[str],
+        updated_by: UUID | None,
+    ) -> UserEntity:
+        user = self.get_user(tenant_id, user_id)
+        previous_admin_keys = list(user.admin_module_keys)
+        normalized = sorted({k.strip() for k in module_keys if k and k.strip()})
+        invalid = [k for k in normalized if k not in ERP_MODULE_KEY_SET]
+        if invalid:
+            raise AppException(f"Unknown module keys: {', '.join(invalid)}")
+        self._modules.replace_admin_keys(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            module_keys=normalized,
+            assigned_by=updated_by,
+        )
+        from modules.foundation.service.org_module_admin_sync_service import OrgModuleAdminSyncService
+
+        OrgModuleAdminSyncService(self._modules.db).sync_user_admin_modules(
+            tenant_id,
+            user_id,
+            previous_admin_keys=previous_admin_keys,
+            new_admin_keys=normalized,
+            actor_id=updated_by,
+        )
+        self._audit.log_entity_change(
+            tenant_id=tenant_id,
+            entity_name="sec_user_module",
+            entity_id=user_id,
+            operation="update",
+            performed_by=updated_by,
+            new_value={"admin_module_keys": normalized},
+        )
+        return self.get_user(tenant_id, user_id)
 
     def list_users(self, tenant_id: UUID):
         return self._repo.list_users(tenant_id)
@@ -114,18 +191,37 @@ class UserService:
         tenant_id: UUID,
         user_id: UUID,
         role_id: UUID,
-        revoked_by: UUID | None,
+        revoked_by: UUID | None = None,
     ) -> None:
-        if self._repo.revoke_role(user_id=user_id, role_id=role_id):
-            self._rbac.invalidate_user(user_id)
-            self._audit.log_entity_change(
-                tenant_id=tenant_id,
-                entity_name="sec_user_role",
-                entity_id=user_id,
-                operation="delete",
-                performed_by=revoked_by,
-                new_value={"role_id": str(role_id)},
-            )
+        from sqlalchemy import select
+
+        from modules.foundation.models.security import SecUserRole
+
+        links = list(
+            self._repo.db.scalars(
+                select(SecUserRole).where(
+                    SecUserRole.tenant_id == tenant_id,
+                    SecUserRole.user_id == user_id,
+                    SecUserRole.role_id == role_id,
+                )
+            ).all()
+        )
+        if not links:
+            if not self._repo.revoke_role(user_id=user_id, role_id=role_id):
+                return
+        else:
+            for link in links:
+                self._repo.db.delete(link)
+            self._repo.db.flush()
+        self._rbac.invalidate_user(user_id)
+        self._audit.log_entity_change(
+            tenant_id=tenant_id,
+            entity_name="sec_user_role",
+            entity_id=user_id,
+            operation="delete",
+            performed_by=revoked_by,
+            new_value={"role_id": str(role_id)},
+        )
 
     def revoke_all_sessions(
         self, tenant_id: UUID, user_id: UUID, revoked_by: UUID | None = None

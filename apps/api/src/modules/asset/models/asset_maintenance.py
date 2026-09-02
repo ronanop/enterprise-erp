@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, Date, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -43,6 +43,8 @@ class AstAssetMaintenance(Base, *AstTransactionMixin):
         index=True,
     )
     maintenance_type: Mapped[str] = mapped_column(String(40), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    expected_duration_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     scheduled_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     completed_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     vendor_id: Mapped[UUID | None] = mapped_column(

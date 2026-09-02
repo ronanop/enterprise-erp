@@ -148,7 +148,10 @@ class CrmEntityType(str, Enum):
     QUOTE = "quote"
     OVF = "ovf"
     PRODUCT = "product"
+    OEM = "oem"
+    SELLING_ENTITY = "selling_entity"
     APPROVAL_TASK = "approval_task"
+    KYC = "kyc"
 
 
 CODE_PREFIXES: dict[CrmEntityType, tuple[str, int]] = {
@@ -161,11 +164,14 @@ CODE_PREFIXES: dict[CrmEntityType, tuple[str, int]] = {
     CrmEntityType.MEETING: ("MTG-", 6),
     CrmEntityType.INTERACTION: ("INT-", 6),
     CrmEntityType.FEEDBACK: ("FBK-", 6),
-    CrmEntityType.COMPANY: ("ACC-", 6),
-    CrmEntityType.QUOTE: ("QTE-", 6),
+    CrmEntityType.COMPANY: ("COMP-", 2),
+    CrmEntityType.QUOTE: ("QT-", 6),
     CrmEntityType.OVF: ("OVF-", 6),
     CrmEntityType.PRODUCT: ("PRD-", 6),
+    CrmEntityType.OEM: ("OEM-", 6),
+    CrmEntityType.SELLING_ENTITY: ("ENT-", 6),
     CrmEntityType.APPROVAL_TASK: ("JOB-", 6),
+    CrmEntityType.KYC: ("KYC-", 6),
 }
 
 # Team roles that can receive a "My Jobs" approval task.

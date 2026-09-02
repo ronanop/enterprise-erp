@@ -313,7 +313,7 @@ export function CoaHubPage() {
           </div>
 
           <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-            <h3 className="text-sm font-medium tracking-tight">Recently Created Accounts</h3>
+            <h3 className="text-base font-extrabold tracking-tight">Recently Created Accounts</h3>
             {loading && recent.length === 0 ? (
               <div className="mt-3 space-y-2">
                 {Array.from({ length: 4 }).map((_, i) => (

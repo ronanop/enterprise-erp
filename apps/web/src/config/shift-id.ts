@@ -40,9 +40,11 @@ export function consumeShiftCode(): string {
 export function syncShiftCodesFromList(codes: string[]): void {
   const cfg = loadShiftIdConfig();
   let max = 0;
+  const needle = `${cfg.prefix}-`;
   for (const c of codes) {
-    const m = c.match(new RegExp(`^${cfg.prefix}-(\\d+)$`, "i"));
-    if (m) max = Math.max(max, Number.parseInt(m[1], 10));
+    if (!c.toUpperCase().startsWith(needle.toUpperCase())) continue;
+    const digits = c.slice(needle.length);
+    if (/^\d+$/.test(digits)) max = Math.max(max, Number.parseInt(digits, 10));
   }
   if (max > 0) {
     const cur = Number.parseInt(localStorage.getItem(SEQ_KEY) ?? "0", 10);

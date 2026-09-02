@@ -42,6 +42,11 @@ class ConflictException(AppException):
         super().__init__(message, status_code=status.HTTP_409_CONFLICT)
 
 
+class ValidationException(AppException):
+    def __init__(self, message: str = "Validation error") -> None:
+        super().__init__(message, status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+
 class TooManyRequestsException(AppException):
     def __init__(self, message: str = "Too many requests") -> None:
         super().__init__(message, status_code=status.HTTP_429_TOO_MANY_REQUESTS)
@@ -112,8 +117,14 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(Exception)
-    async def unhandled_exception_handler(_: Request, exc: Exception) -> JSONResponse:
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        origin = request.headers.get("origin")
+        headers: dict[str, str] = {}
+        if origin:
+            headers["Access-Control-Allow-Origin"] = origin
+            headers["Access-Control-Allow-Credentials"] = "true"
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=ErrorResponse(message="Internal server error").model_dump(),
+            headers=headers,
         )

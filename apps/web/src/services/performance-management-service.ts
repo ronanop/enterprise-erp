@@ -5,6 +5,7 @@
 import { loadHrOverview } from "@/services/hr-service";
 import { loadHrMasterDirectory, type HrMasterOption } from "@/services/hr-master-connector";
 import { resourceService } from "@/services/api-client";
+import { devError, devWarn } from "@/lib/dev-log";
 import type {
   AppraisalRecord,
   ContinuousFeedback,
@@ -435,7 +436,7 @@ export async function createGoal(
       }
     }
   } catch (err) {
-    console.warn("createGoal API failed; local cache kept", err);
+    devWarn("createGoal API failed; local cache kept");
   }
   const all = load<PerformanceGoal>(KEYS.goals);
   all.unshift(row);
@@ -494,7 +495,7 @@ export async function createKpi(
       }
     }
   } catch (err) {
-    console.warn("createKpi API failed; local cache kept", err);
+    devWarn("createKpi API failed; local cache kept");
   }
   const all = load<KpiDefinition>(KEYS.kpis);
   all.unshift(row);
@@ -553,7 +554,7 @@ export async function createOkr(
       }
     }
   } catch (err) {
-    console.warn("createOkr API failed; local cache kept", err);
+    devWarn("createOkr API failed; local cache kept");
   }
   const all = load<OkrObjective>(KEYS.okrs);
   all.unshift(row);
@@ -611,7 +612,7 @@ export async function createReview(
       }
     }
   } catch (err) {
-    console.warn("createReview API failed; local cache kept", err);
+    devWarn("createReview API failed; local cache kept");
   }
   const all = load<PerformanceReview>(KEYS.reviews);
   all.unshift(row);
@@ -778,7 +779,7 @@ export async function createAppraisal(
       }
     }
   } catch (err) {
-    console.warn("createAppraisal API failed; local cache kept", err);
+    devWarn("createAppraisal API failed; local cache kept");
   }
   const all = load<AppraisalRecord>(KEYS.appraisals);
   all.unshift(row);

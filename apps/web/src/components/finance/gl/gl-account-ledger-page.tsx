@@ -151,7 +151,7 @@ export function GlAccountLedgerPage({ accountId }: { accountId: string }) {
       </div>
 
       <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-        <h3 className="text-sm font-medium tracking-tight">Monthly Summary</h3>
+        <h3 className="text-base font-extrabold tracking-tight">Monthly Summary</h3>
         {ledger.monthly_summary.length === 0 ? (
           <p className="mt-2 text-xs text-muted-foreground">No monthly activity in range.</p>
         ) : (
@@ -182,7 +182,7 @@ export function GlAccountLedgerPage({ accountId }: { accountId: string }) {
 
       <div className="rounded-xl border border-border/80 bg-card shadow-sm">
         <div className="border-b border-border/70 px-3 py-2.5">
-          <h3 className="text-sm font-medium tracking-tight">Running Balance</h3>
+          <h3 className="text-base font-extrabold tracking-tight">Running Balance</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[800px] text-sm">
@@ -225,7 +225,7 @@ export function GlAccountLedgerPage({ accountId }: { accountId: string }) {
       </div>
 
       <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-        <h3 className="text-sm font-medium tracking-tight">Related Journals</h3>
+        <h3 className="text-base font-extrabold tracking-tight">Related Journals</h3>
         {ledger.related_journal_ids.length === 0 ? (
           <p className="mt-2 text-xs text-muted-foreground">No related journals.</p>
         ) : (

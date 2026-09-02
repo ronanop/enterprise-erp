@@ -16,7 +16,7 @@ class AstAssetInsurance(Base, *AstDetailMixin):
     __tablename__ = "ast_asset_insurance"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('active','expired','cancelled')",
+            "status IN ('draft','active','renewed','expired','cancelled')",
             name="ck_ast_asset_insurance_status",
         ),
         CheckConstraint("end_date >= start_date", name="ck_ast_asset_insurance_dates"),
@@ -49,4 +49,4 @@ class AstAssetInsurance(Base, *AstDetailMixin):
     coverage_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
-    status: Mapped[str] = mapped_column(String(30), nullable=False, default="active", index=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)

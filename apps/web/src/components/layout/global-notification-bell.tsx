@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { formatNotificationDateTime } from "@/lib/format-notification-datetime";
 import { useNotificationInbox } from "@/hooks/use-notification-inbox";
 import { mapInboxHref } from "@/lib/notification-inbox";
 import { cn } from "@/lib/utils";
@@ -54,6 +55,13 @@ function formatRelative(iso: string): string {
   if (h < 24) return `${h}h ago`;
   const d = Math.floor(h / 24);
   return `${d}d ago`;
+}
+
+function formatNotificationWhen(iso: string): string {
+  const absolute = formatNotificationDateTime(iso);
+  const relative = formatRelative(iso);
+  if (!relative || relative === absolute) return absolute;
+  return `${absolute} · ${relative}`;
 }
 
 export function GlobalNotificationBell({ variant = "topbar", className }: Props) {
@@ -207,7 +215,7 @@ export function GlobalNotificationBell({ variant = "topbar", className }: Props)
                             </span>
                             <span className="mt-0.5 block text-muted-foreground">{n.body}</span>
                             <span className="mt-1 block text-[10px] text-muted-foreground/80">
-                              {formatRelative(n.created_at)}
+                              {formatNotificationWhen(n.created_at)}
                             </span>
                           </span>
                         </Link>

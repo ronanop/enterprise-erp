@@ -64,9 +64,15 @@ class TaskService:
         self._numbers = DocumentNumberService(db)
         self._engine = TaskEngine()
 
-    def list(self, ctx: TenantContext, company_id: UUID | None = None):
+    def list(
+        self,
+        ctx: TenantContext,
+        company_id: UUID | None = None,
+        *,
+        opportunity_id: UUID | None = None,
+    ):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_tasks(ctx, cid)
+        return self._repo.list_tasks(ctx, cid, opportunity_id=opportunity_id)
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)
@@ -100,9 +106,15 @@ class FollowupService:
         self._numbers = DocumentNumberService(db)
         self._engine = FollowupEngine()
 
-    def list(self, ctx: TenantContext, company_id: UUID | None = None):
+    def list(
+        self,
+        ctx: TenantContext,
+        company_id: UUID | None = None,
+        *,
+        company_account_id: UUID | None = None,
+    ):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_followups(ctx, cid)
+        return self._repo.list_followups(ctx, cid, company_account_id=company_account_id)
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)
@@ -128,9 +140,15 @@ class MeetingService:
         self._numbers = DocumentNumberService(db)
         self._engine = MeetingEngine()
 
-    def list(self, ctx: TenantContext, company_id: UUID | None = None):
+    def list(
+        self,
+        ctx: TenantContext,
+        company_id: UUID | None = None,
+        *,
+        company_account_id: UUID | None = None,
+    ):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_meetings(ctx, cid)
+        return self._repo.list_meetings(ctx, cid, company_account_id=company_account_id)
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)
@@ -140,6 +158,9 @@ class MeetingService:
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
+        if fields.get("all_day"):
+            fields["start_time"] = None
+            fields["end_time"] = None
         code = self._numbers.generate(CrmEntityType.MEETING, cid, CrmMeeting, "meeting_code")
         return self._repo.create(ctx, company_id=cid, branch_id=branch_id, meeting_code=code, **fields)
 

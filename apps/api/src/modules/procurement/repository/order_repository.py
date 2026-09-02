@@ -22,6 +22,62 @@ class OrderRepository(ProcScopedRepository):
         stmt = self.apply_proc_filter(stmt, ProcOrderHeader, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt.order_by(ProcOrderHeader.document_date.desc())).all())
 
+    def list_orders_with_lines(self, ctx: TenantContext, company_id: UUID) -> list[ProcOrderHeader]:
+        stmt = (
+            select(ProcOrderHeader)
+            .options(selectinload(ProcOrderHeader.lines))
+            .where(
+                ProcOrderHeader.company_id == company_id,
+                ProcOrderHeader.is_deleted.is_(False),
+            )
+        )
+        stmt = self.apply_proc_filter(stmt, ProcOrderHeader, ctx, branch_scoped=True)
+        return list(self.db.scalars(stmt.order_by(ProcOrderHeader.document_date.desc())).all())
+
+    def list_by_source(
+        self,
+        ctx: TenantContext,
+        *,
+        source_module: str,
+        source_document_type: str,
+        source_document_id: UUID,
+    ) -> list[ProcOrderHeader]:
+        stmt = (
+            select(ProcOrderHeader)
+            .options(selectinload(ProcOrderHeader.lines))
+            .where(
+                ProcOrderHeader.tenant_id == ctx.tenant_id,
+                ProcOrderHeader.is_deleted.is_(False),
+                ProcOrderHeader.source_module == source_module,
+                ProcOrderHeader.source_document_type == source_document_type,
+                ProcOrderHeader.source_document_id == source_document_id,
+            )
+            .order_by(ProcOrderHeader.created_at.desc())
+        )
+        return list(self.db.scalars(stmt).all())
+
+    def find_by_source(
+        self,
+        ctx: TenantContext,
+        *,
+        source_module: str,
+        source_document_type: str,
+        source_document_id: UUID,
+    ) -> ProcOrderHeader | None:
+        rows = self.list_by_source(
+            ctx,
+            source_module=source_module,
+            source_document_type=source_document_type,
+            source_document_id=source_document_id,
+        )
+        if not rows:
+            return None
+        # Prefer an active PO; cancelled ones remain only if nothing else exists (Hold).
+        for row in rows:
+            if row.status != "cancelled":
+                return row
+        return rows[0]
+
     def get_order(self, ctx: TenantContext, order_id: UUID) -> ProcOrderHeader | None:
         stmt = (
             select(ProcOrderHeader)
@@ -89,7 +145,7 @@ class OrderRepository(ProcScopedRepository):
         return True
 
     def add_line(
-        self, ctx: TenantContext, order: ProcOrderHeader, **fields: object
+        self, ctx: TenantContext, order: ProcOrderHeader, *, flush: bool = True, **fields: object
     ) -> ProcOrderLine:
         row = ProcOrderLine(
             id=uuid4(),
@@ -102,7 +158,11 @@ class OrderRepository(ProcScopedRepository):
             **fields,
         )
         self.db.add(row)
-        self.db.flush()
+        if flush:
+            self.db.flush()
+        # Keep in-memory collection in sync when it was already selectinloaded empty.
+        if "lines" in order.__dict__:
+            order.lines.append(row)
         return row
 
     def get_line(self, ctx: TenantContext, line_id: UUID) -> ProcOrderLine | None:

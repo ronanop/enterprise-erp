@@ -10,11 +10,16 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.exceptions import UnauthorizedException
 from core.redis import SessionStore
-from modules.foundation.domain.exceptions import AccountLockedException, InvalidCredentialsException
-from modules.foundation.models.security import SecUser
+from modules.foundation.domain.exceptions import (
+    AccountLockedException,
+    InvalidCredentialsException,
+)
+from modules.foundation.domain.erp_modules import resolve_session_user_type
+from modules.foundation.models.security import SecRole, SecUser, SecUserRole
 from modules.foundation.repository.session_repository import SessionRepository
 from modules.foundation.repository.user_repository import UserRepository
 from modules.foundation.service.audit_service import AuditService
+from modules.foundation.service.microsoft_oauth_service import MicrosoftOAuthService
 from modules.master_data.models.employee import MasterEmployee
 from modules.organization.models.company import OrgCompany
 from security.ess_default_password import normalize_employee_code
@@ -153,6 +158,58 @@ class AuthService:
             raise InvalidCredentialsException()
         return self._issue_tokens(user, ip_address=ip_address, user_agent=user_agent)
 
+    def login_with_microsoft(
+        self,
+        *,
+        email: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> dict:
+        user = self._users.get_active_by_email(email)
+        if user is None:
+            raise InvalidCredentialsException("No ERP account is linked to this Microsoft identity")
+
+        if user.locked_until and user.locked_until > datetime.now(timezone.utc):
+            raise AccountLockedException()
+
+        return self._issue_tokens(user, ip_address=ip_address, user_agent=user_agent)
+
+    def complete_microsoft_oauth(
+        self,
+        *,
+        code: str,
+        state: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> tuple[str, str]:
+        oauth = MicrosoftOAuthService()
+        stored = self._store.pop_oauth_state(state)
+        if stored is None:
+            raise InvalidCredentialsException("Microsoft sign-in session expired. Try again.")
+
+        return_to = (
+            stored.get("return_to") if isinstance(stored.get("return_to"), str) else "/"
+        )
+        claims = oauth.exchange_authorization_code(code)
+        email = MicrosoftOAuthService.email_from_claims(claims)
+        if not email:
+            raise InvalidCredentialsException("Microsoft account did not include an email address")
+
+        tokens = self.login_with_microsoft(
+            email=email,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        exchange_code = oauth.create_exchange_code()
+        self._store.set_oauth_exchange(exchange_code, {**tokens, "return_to": return_to})
+        return exchange_code, return_to
+
+    def redeem_microsoft_exchange(self, exchange_code: str) -> dict:
+        payload = self._store.pop_oauth_exchange(exchange_code)
+        if payload is None:
+            raise InvalidCredentialsException("Sign-in code expired or already used")
+        return payload
+
     def refresh(self, refresh_token: str) -> dict:
         payload = self._jwt.decode_token(refresh_token, expected_type="refresh")
         stored = self._sessions.get_refresh_token(refresh_token)
@@ -169,6 +226,7 @@ class AuthService:
         if user_model is None:
             raise UnauthorizedException("User not found")
 
+        session_user_type = self._session_user_type(user_model)
         new_refresh, _ = self._jwt.create_refresh_token(user_id=user_id, session_id=session_id)
         refresh_days = settings.jwt_refresh_token_expire_days
         new_row = self._sessions.store_refresh_token(
@@ -183,9 +241,11 @@ class AuthService:
         access = self._jwt.create_access_token(
             user_id=user_id,
             tenant_id=session.tenant_id,
-            user_type=user_model.user_type,
+            user_type=session_user_type,
             session_id=session_id,
         )
+        # Keep Redis session alive alongside refreshed tokens.
+        self._store.touch_session(session_id)
         return {
             "access_token": access,
             "refresh_token": new_refresh,
@@ -201,6 +261,26 @@ class AuthService:
             user_id=user_id,
         )
 
+    def _role_codes_for_user(self, user_id: UUID) -> list[str]:
+        stmt = (
+            select(SecRole.role_code)
+            .join(SecUserRole, SecUserRole.role_id == SecRole.id)
+            .where(SecUserRole.user_id == user_id, SecRole.is_deleted.is_(False))
+        )
+        return list(self._db.scalars(stmt).all())
+
+    def _session_user_type(self, user: SecUser) -> str:
+        resolved = resolve_session_user_type(
+            user.user_type,
+            user.email,
+            self._role_codes_for_user(user.id),
+            platform_admin_emails=settings.microsoft_platform_admin_email_set(),
+        )
+        if resolved != user.user_type:
+            user.user_type = resolved
+            self._db.flush()
+        return resolved
+
     def _issue_tokens(
         self,
         user: SecUser,
@@ -208,6 +288,7 @@ class AuthService:
         ip_address: str | None,
         user_agent: str | None,
     ) -> dict:
+        user_type = self._session_user_type(user)
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.session_ttl_seconds)
         provisional_session_id = uuid4()
         session = self._sessions.create_session(
@@ -221,7 +302,7 @@ class AuthService:
         access = self._jwt.create_access_token(
             user_id=user.id,
             tenant_id=user.tenant_id,
-            user_type=user.user_type,
+            user_type=user_type,
             session_id=session.id,
         )
         refresh, _ = self._jwt.create_refresh_token(user_id=user.id, session_id=session.id)
@@ -233,16 +314,25 @@ class AuthService:
             token=refresh,
             expires_at=datetime.now(timezone.utc) + timedelta(days=refresh_days),
         )
+        from modules.foundation.service.org_context_service import OrgContextService
+
+        company_id, branch_id = OrgContextService(self._db).resolve_company_and_branch(
+            user_id=user.id,
+            tenant_id=user.tenant_id,
+            user_type=user.user_type,
+        )
+        session_payload: dict[str, str | None] = {
+            "user_id": str(user.id),
+            "tenant_id": str(user.tenant_id),
+            "ip": ip_address,
+            "user_agent": user_agent,
+        }
+        if company_id:
+            session_payload["company_id"] = str(company_id)
+        if branch_id:
+            session_payload["branch_id"] = str(branch_id)
         try:
-            self._store.set_session(
-                session.id,
-                {
-                    "user_id": str(user.id),
-                    "tenant_id": str(user.tenant_id),
-                    "ip": ip_address,
-                    "user_agent": user_agent,
-                },
-            )
+            self._store.set_session(session.id, session_payload)
         except redis.ConnectionError:
             pass
         self._users.record_successful_login(user)

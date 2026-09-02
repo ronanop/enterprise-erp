@@ -6,6 +6,11 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from core.exceptions import ForbiddenException
+from modules.foundation.domain.org_data_scope import (
+    apply_company_scope,
+    effective_company_ids,
+    has_tenant_wide_data_access,
+)
 from modules.foundation.domain.value_objects import TenantContext
 
 
@@ -26,14 +31,19 @@ class OrgScopedRepository:
 
     @staticmethod
     def ensure_company_access(ctx: TenantContext, company_id: UUID) -> None:
-        if ctx.user_type in {"super_admin", "tenant_admin"}:
+        if has_tenant_wide_data_access(ctx):
             return
+        allowed = effective_company_ids(ctx)
+        if allowed is not None:
+            if company_id in allowed:
+                return
+            raise ForbiddenException("Company scope mismatch")
         if ctx.company_id and ctx.company_id != company_id:
             raise ForbiddenException("Company scope mismatch")
 
     @staticmethod
     def ensure_branch_access(ctx: TenantContext, branch_id: UUID) -> None:
-        if ctx.user_type in {"super_admin", "tenant_admin"}:
+        if has_tenant_wide_data_access(ctx):
             return
         if ctx.branch_id and ctx.branch_id != branch_id:
             raise ForbiddenException("Branch scope mismatch")

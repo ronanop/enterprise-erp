@@ -75,9 +75,48 @@ class SessionStore:
         except redis.ConnectionError:
             return
 
+    def touch_session(self, session_id: UUID, payload: dict[str, Any] | None = None) -> None:
+        """Refresh session TTL; optionally replace cached payload."""
+        key = f"session:{session_id}"
+        if payload is not None:
+            self._client.setex(key, self._ttl, json.dumps(payload))
+            return
+        raw = cast(str | None, self._client.get(key))
+        if raw is not None:
+            self._client.setex(key, self._ttl, raw)
+
     def increment_login_attempts(self, ip: str) -> int:
+        """Return attempt count. When login_rate_limit <= 0, rate limiting is disabled."""
+        if settings.login_rate_limit <= 0:
+            return 0
         key = f"rate_limit:login:{ip}"
         count = cast(int, self._client.incr(key))
         if count == 1:
             self._client.expire(key, settings.login_rate_window_seconds)
         return count
+
+    def set_oauth_state(
+        self, state: str, payload: dict[str, Any], *, ttl_seconds: int = 600
+    ) -> None:
+        self._client.setex(f"oauth:state:{state}", ttl_seconds, json.dumps(payload))
+
+    def pop_oauth_state(self, state: str) -> dict[str, Any] | None:
+        key = f"oauth:state:{state}"
+        raw = cast(str | None, self._client.get(key))
+        if raw is None:
+            return None
+        self._client.delete(key)
+        return json.loads(raw)
+
+    def set_oauth_exchange(
+        self, exchange_code: str, payload: dict[str, Any], *, ttl_seconds: int = 120
+    ) -> None:
+        self._client.setex(f"oauth:exchange:{exchange_code}", ttl_seconds, json.dumps(payload))
+
+    def pop_oauth_exchange(self, exchange_code: str) -> dict[str, Any] | None:
+        key = f"oauth:exchange:{exchange_code}"
+        raw = cast(str | None, self._client.get(key))
+        if raw is None:
+            return None
+        self._client.delete(key)
+        return json.loads(raw)

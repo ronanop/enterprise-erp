@@ -19,11 +19,20 @@ class TaskRepository(CrmScopedRepository):
         stmt = self.apply_crm_filter(stmt, CrmTask, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_tasks(self, ctx: TenantContext, company_id: UUID):
+    def list_tasks(
+        self,
+        ctx: TenantContext,
+        company_id: UUID,
+        *,
+        opportunity_id: UUID | None = None,
+    ):
         stmt = select(CrmTask).where(
             CrmTask.company_id == company_id,
             CrmTask.is_deleted.is_(False),
         )
+        if opportunity_id is not None:
+            stmt = stmt.where(CrmTask.opportunity_id == opportunity_id)
+        stmt = stmt.order_by(CrmTask.created_at.desc())
         stmt = self.apply_crm_filter(stmt, CrmTask, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 

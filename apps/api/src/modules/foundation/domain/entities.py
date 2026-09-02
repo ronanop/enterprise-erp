@@ -35,6 +35,10 @@ class UserEntity:
     failed_login_count: int = 0
     locked_until: datetime | None = None
     role_ids: list[UUID] = field(default_factory=list)
+    assigned_module_keys: list[str] = field(default_factory=list)
+    admin_module_keys: list[str] = field(default_factory=list)
+    role_codes: list[str] = field(default_factory=list)
+    employee_id: UUID | None = None
 
 
 @dataclass
@@ -107,6 +111,18 @@ class NotificationTemplateEntity:
     locale: str = "en"
     subject_template: str | None = None
     is_active: bool = True
+
+
+@dataclass(frozen=True)
+class NotificationInboxItem:
+    id: UUID
+    title: str
+    body: str
+    kind: str
+    unread: bool
+    created_at: datetime
+    href: str | None = None
+    read_at: datetime | None = None
 
 
 @dataclass

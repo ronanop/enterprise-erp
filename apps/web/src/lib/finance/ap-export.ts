@@ -1,5 +1,6 @@
-import type { ApAgingBucket, ApEntry, ApVendorAgingSummary } from "@/services/ap-service";
+import { escapeHtml, openPrintDocument } from "@/lib/html";
 import { downloadCsv, downloadXlsx } from "@/lib/spreadsheet";
+import type { ApAgingBucket, ApEntry, ApVendorAgingSummary } from "@/services/ap-service";
 
 function invoiceRowsForExport(rows: ApEntry[]) {
   return rows.map((r) => ({
@@ -54,25 +55,24 @@ export async function exportApInvoicesXlsx(rows: ApEntry[]) {
 }
 
 export function printApInvoicesTable(title: string, rows: ApEntry[]) {
-  const win = window.open("", "_blank", "noopener,noreferrer,width=1200,height=800");
-  if (!win) return;
+  const safeTitle = escapeHtml(title);
   const body = rows
     .map(
       (r) =>
         `<tr>
-          <td>${r.document_number}</td>
-          <td>${r.vendor_name ?? r.vendor_code ?? ""}</td>
-          <td>${r.document_date}</td>
-          <td>${r.due_date}</td>
-          <td>${r.status}</td>
-          <td>${r.currency_code}</td>
+          <td>${escapeHtml(r.document_number)}</td>
+          <td>${escapeHtml(r.vendor_name ?? r.vendor_code ?? "")}</td>
+          <td>${escapeHtml(r.document_date)}</td>
+          <td>${escapeHtml(r.due_date)}</td>
+          <td>${escapeHtml(r.status)}</td>
+          <td>${escapeHtml(r.currency_code)}</td>
           <td style="text-align:right">${Number(r.outstanding_amount ?? r.balance_amount).toFixed(2)}</td>
           <td style="text-align:right">${Number(r.paid_amount ?? 0).toFixed(2)}</td>
           <td style="text-align:right">${Number(r.balance_amount).toFixed(2)}</td>
         </tr>`,
     )
     .join("");
-  win.document.write(`<!doctype html><html><head><title>${title}</title>
+  openPrintDocument(`<!doctype html><html><head><title>${safeTitle}</title>
     <style>
       body{font-family:Inter,system-ui,sans-serif;font-size:12px;color:#0f172a;padding:24px}
       h1{font-size:16px;margin:0 0 12px}
@@ -80,13 +80,11 @@ export function printApInvoicesTable(title: string, rows: ApEntry[]) {
       th,td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left}
       th{background:#f8fafc;font-size:11px;text-transform:uppercase}
     </style></head><body>
-    <h1>${title}</h1>
+    <h1>${safeTitle}</h1>
     <table><thead><tr>
       <th>Invoice No</th><th>Vendor</th><th>Invoice Date</th><th>Due Date</th><th>Status</th><th>Currency</th><th>Outstanding</th><th>Paid</th><th>Balance</th>
     </tr></thead><tbody>${body}</tbody></table>
-    <script>window.onload=()=>{window.print();}</script>
     </body></html>`);
-  win.document.close();
 }
 
 export function exportApAgingCsv(
@@ -128,19 +126,19 @@ export async function exportApVendorSummaryXlsx(
 }
 
 export function printApAgingTable(title: string, buckets: ApAgingBucket[]) {
-  const win = window.open("", "_blank", "noopener,noreferrer,width=800,height=600");
-  if (!win) return;
+  const safeTitle = escapeHtml(title);
   const body = buckets
     .map(
       (b) =>
         `<tr>
-          <td>${b.bucket}</td>
+          <td>${escapeHtml(b.bucket)}</td>
           <td style="text-align:right">${Number(b.amount).toFixed(2)}</td>
-          <td style="text-align:right">${b.count}</td>
+          <td style="text-align:right">${escapeHtml(b.count)}</td>
         </tr>`,
     )
     .join("");
-  win.document.write(`<!doctype html><html><head><title>${title}</title>
+  openPrintDocument(
+    `<!doctype html><html><head><title>${safeTitle}</title>
     <style>
       body{font-family:Inter,system-ui,sans-serif;font-size:12px;color:#0f172a;padding:24px}
       h1{font-size:16px;margin:0 0 12px}
@@ -148,11 +146,12 @@ export function printApAgingTable(title: string, buckets: ApAgingBucket[]) {
       th,td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left}
       th{background:#f8fafc;font-size:11px;text-transform:uppercase}
     </style></head><body>
-    <h1>${title}</h1>
+    <h1>${safeTitle}</h1>
     <table><thead><tr>
       <th>Bucket</th><th>Amount</th><th>Count</th>
     </tr></thead><tbody>${body}</tbody></table>
-    <script>window.onload=()=>{window.print();}</script>
-    </body></html>`);
-  win.document.close();
+    </body></html>`,
+    800,
+    600,
+  );
 }

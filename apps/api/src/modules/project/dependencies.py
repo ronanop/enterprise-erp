@@ -1,11 +1,13 @@
 """Project module dependencies."""
 
+from collections.abc import Generator
 from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Query
+from sqlalchemy.orm import Session
 
-from database.session import get_db
+from database.session import SessionLocal
 from modules.foundation.dependencies import get_tenant_context, require_permission
 from modules.foundation.domain.value_objects import TenantContext
 
@@ -19,6 +21,25 @@ __all__ = [
     "paginate",
     "extract_update_fields",
 ]
+
+
+def get_db() -> Generator[Session]:
+    """Project request-scoped unit of work.
+
+    Project services and repositories only flush so a multi-step operation
+    (document numbering, scope validation, audit) stays atomic. Commit once per
+    successful request and roll back on failure; without this, flushed projects,
+    phases, tasks, and timesheets vanish when the session closes.
+    """
+    db = SessionLocal()
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 @dataclass(frozen=True)

@@ -1,5 +1,5 @@
-import { AssetsDashboard } from "@/components/assets/assets-dashboard";
+import { AssetOperationsContainer } from "@/components/assets/asset-operations-container";
 
 export default function AssetsPage() {
-  return <AssetsDashboard />;
+  return <AssetOperationsContainer />;
 }

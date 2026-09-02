@@ -96,23 +96,50 @@ def corrective_action_followups() -> dict:
 
 @celery_app.task(name="grc.compliance_refresh")
 def compliance_refresh() -> dict:
-    from sqlalchemy import select
-
     from database.session import SessionLocal
-    from modules.grc.models import GrcComplianceAssessment
+    from modules.foundation.domain.value_objects import TenantContext
+    from modules.foundation.models.security import SecUser
+    from modules.grc.service.compliance_monitor_service import ComplianceMonitorService
+    from sqlalchemy import select
 
     db = SessionLocal()
     try:
-        rows = list(
-            db.scalars(
-                select(GrcComplianceAssessment).where(
-                    GrcComplianceAssessment.is_deleted.is_(False),
-                    GrcComplianceAssessment.next_due_at.is_not(None),
-                    GrcComplianceAssessment.status.in_(["draft", "completed", "overdue"]),
-                )
-            ).all()
+        admin = db.scalar(
+            select(SecUser).where(SecUser.email == "admin@example.com").limit(1)
         )
-        return {"status": "ok", "assessments_due": len(rows)}
+        if admin is None:
+            return {"status": "skipped", "reason": "no bootstrap admin"}
+        ctx = TenantContext(
+            tenant_id=admin.tenant_id,
+            user_id=admin.id,
+            user_type="super_admin",
+            company_id=None,
+            branch_id=None,
+        )
+        from modules.organization.models.company import OrgCompany
+
+        company = db.scalar(
+            select(OrgCompany).where(OrgCompany.tenant_id == admin.tenant_id).limit(1)
+        )
+        if company is None:
+            return {"status": "skipped", "reason": "no company"}
+        from modules.organization.models.branch import OrgBranch
+
+        branch = db.scalar(
+            select(OrgBranch).where(OrgBranch.company_id == company.id).limit(1)
+        )
+        if branch is None:
+            return {"status": "skipped", "reason": "no branch"}
+        ctx = TenantContext(
+            tenant_id=admin.tenant_id,
+            user_id=admin.id,
+            user_type="super_admin",
+            company_id=company.id,
+            branch_id=branch.id,
+        )
+        result = ComplianceMonitorService(db).refresh_company(ctx, company.id, branch_id=branch.id)
+        db.commit()
+        return {"status": "ok", **result}
     finally:
         db.close()
 

@@ -1,9 +1,9 @@
 """CRM task ORM."""
 
-from datetime import datetime
+from datetime import date, datetime, time
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, Date, DateTime, ForeignKey, String, Text, Time, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -19,7 +19,10 @@ class CrmTask(Base, *CrmTransactionMixin):
             "status IN ('pending','in_progress','completed','cancelled')",
             name="ck_crm_task_status",
         ),
-        CheckConstraint("priority IN ('low','medium','high')", name="ck_crm_task_priority"),
+        CheckConstraint(
+            "priority IN ('highest','high','medium','low')",
+            name="ck_crm_task_priority",
+        ),
         {"schema": "crm"},
     )
 
@@ -27,6 +30,8 @@ class CrmTask(Base, *CrmTransactionMixin):
     task_code: Mapped[str] = mapped_column(String(50), nullable=False)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    account_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    opportunity_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     lead_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("crm.crm_lead.id", ondelete="RESTRICT"),
@@ -51,7 +56,17 @@ class CrmTask(Base, *CrmTransactionMixin):
         nullable=False,
         index=True,
     )
+    assigned_to_employee_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("master.master_employee.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    reminder_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    reminder_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    repeat_rule: Mapped[str | None] = mapped_column(String(30), nullable=True)
     priority: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending", index=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

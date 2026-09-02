@@ -1,0 +1,75 @@
+"""Asset maintenance plan optimistic-locking tests (FP-ASSET-011)."""
+
+from datetime import date, datetime, timezone
+from uuid import uuid4
+
+import pytest
+from sqlalchemy import create_engine, event
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from core.exceptions import ConflictException
+from modules.asset.models.asset_maintenance_plan import AstAssetMaintenancePlan
+from modules.asset.repository.asset_maintenance_plan_repository import (
+    AssetMaintenancePlanRepository,
+)
+from modules.foundation.domain.value_objects import TenantContext
+
+
+def _ctx() -> TenantContext:
+    return TenantContext(
+        tenant_id=uuid4(),
+        user_id=uuid4(),
+        user_type="employee",
+        company_id=uuid4(),
+        branch_id=uuid4(),
+    )
+
+
+def test_repository_rejects_stale_version() -> None:
+    raw = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+    @event.listens_for(raw, "connect")
+    def _fk_off(dbapi_conn, _record) -> None:  # noqa: ANN001
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA foreign_keys=OFF")
+        cursor.close()
+
+    engine = raw.execution_options(schema_translate_map={"asset": None, "foundation": None})
+    AstAssetMaintenancePlan.__table__.create(bind=engine, checkfirst=True)
+    session: Session = sessionmaker(bind=engine, autocommit=False, autoflush=False)()
+    ctx = _ctx()
+    now = datetime.now(timezone.utc)
+    row = AstAssetMaintenancePlan(
+        id=uuid4(),
+        tenant_id=ctx.tenant_id,
+        company_id=ctx.company_id,
+        branch_id=ctx.branch_id,
+        document_number="AMPL-2026-000001",
+        asset_id=uuid4(),
+        plan_name="Quarterly PM",
+        maintenance_type="preventive",
+        frequency_days=90,
+        next_due_date=date(2026, 6, 1),
+        status="draft",
+        is_deleted=False,
+        version=3,
+        created_at=now,
+        updated_at=now,
+        created_by=ctx.user_id,
+        updated_by=ctx.user_id,
+    )
+    session.add(row)
+    session.flush()
+
+    with pytest.raises(ConflictException, match="modified by another user"):
+        AssetMaintenancePlanRepository(session).update(
+            ctx, row.id, plan_name="stale", version=2
+        )
+
+    session.close()
+    raw.dispose()

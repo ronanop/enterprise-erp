@@ -2,41 +2,273 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Pencil, Plus, RefreshCw, Target } from "lucide-react";
+import {
+  Building2,
+  CalendarDays,
+  ClipboardList,
+  FileText,
+  MapPin,
+  Plus,
+  Target,
+} from "lucide-react";
 
-import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
-import { CompanyFormDialog } from "@/components/crm/sales/company-form-dialog";
-import { DealTimeline, type DealStage } from "@/components/crm/sales/deal-timeline";
+import { CompanyWorkspaceShell } from "@/components/crm/company-workspace-shell";
+import {
+  CrmCountBadge,
+  CrmErrorBanner,
+  CrmIconBadge,
+  CrmListPanel,
+  CrmPage,
+  CrmSection,
+  CrmViewAllLink,
+  CRM_TABLE_HEAD_CELL,
+  CRM_TABLE_HEAD_ROW,
+} from "@/components/crm/crm-ui";
+import { FollowupFormDialog } from "@/components/crm/sales/followup-form-dialog";
+import { MeetingFormDialog } from "@/components/crm/sales/meeting-form-dialog";
+import { MeetingsDataTable } from "@/components/crm/sales/meetings-data-table";
+import {
+  buildCompanyDocumentPreviewRows,
+  enrichCompanyOvfsWithTotals,
+  CompanyOverviewDealPanels,
+  type CompanyOvfOverviewRow,
+  type DocPreviewRow,
+} from "@/components/crm/sales/company-overview-deal-panels";
+import { FinanceField } from "@/components/finance/journals/finance-form-field";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
-import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
 import {
   fullName,
   getCompany,
+  listAttachmentsByCategory,
+  listContacts,
+  listCrmMemberOptions,
+  listFollowups,
+  listMeetings,
+  listOpportunities,
+  listOvfs,
+  listQuotes,
   listSalesLeads,
   type Company,
+  type Contact,
+  type CrmFollowup,
+  type CrmMeeting,
+  type Opportunity,
+  type Option,
+  type Ovf,
+  type Quote,
   type SalesLead,
 } from "@/services/sales-crm-service";
+
+const COMPANY_SOURCES = [
+  "referral",
+  "website",
+  "cold_call",
+  "partner",
+  "event",
+  "advertisement",
+  "other",
+] as const;
+
+function textOrDash(value: string | null | undefined): string {
+  return value?.trim() || "—";
+}
+
+function ReadOnlyValue({ value }: { value: string }) {
+  return (
+    <div className="flex min-h-8 w-full items-center rounded-lg border border-input bg-muted/20 px-2.5 text-sm text-foreground">
+      {value}
+    </div>
+  );
+}
+
+function CompanyReadOnlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <FinanceField label={label}>
+      <ReadOnlyValue value={value} />
+    </FinanceField>
+  );
+}
+
+function formatSourceLabel(source: string): string {
+  if (!source.trim()) return "—";
+  if ((COMPANY_SOURCES as readonly string[]).includes(source)) {
+    return source === "other" ? "other" : source.replaceAll("_", " ");
+  }
+  return source;
+}
+
+function formatFollowupDate(row: CrmFollowup): string {
+  const iso = row.followup_at;
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function formatFollowupTime(row: CrmFollowup): string {
+  const iso = row.followup_at;
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.length >= 16 ? iso.slice(11, 16) : "—";
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function formatFollowupTaskDeadline(row: CrmFollowup): string {
+  const date = formatFollowupDate(row);
+  const time = formatFollowupTime(row);
+  if (date === "—") return "—";
+  return time === "—" ? date : `${date} ${time}`;
+}
+
+function CompanyProfileReadOnly({
+  company,
+  employeeName,
+}: {
+  company: Company;
+  employeeName: (id: string | null) => string;
+}) {
+  const knownSource = (COMPANY_SOURCES as readonly string[]).includes(company.source);
+  const sourceSelectValue = knownSource ? company.source : "other";
+  const otherSourceValue = knownSource ? "" : company.source;
+
+  return (
+    <>
+      <CrmSection title="Account Information" icon={Building2}>
+        <div className="grid gap-4 lg:grid-cols-2 lg:gap-x-10">
+          <div className="space-y-3">
+            <CompanyReadOnlyField label="Account Manager Owner" value={employeeName(company.account_owner_id)} />
+            <CompanyReadOnlyField label="Company Name *" value={textOrDash(company.customer_name)} />
+            <CompanyReadOnlyField label="Company ID" value={textOrDash(company.account_number)} />
+            <CompanyReadOnlyField label="Account Type *" value={textOrDash(company.account_type)} />
+            <CompanyReadOnlyField label="Industry *" value={textOrDash(company.industry)} />
+            <CompanyReadOnlyField label="Other Industries" value={textOrDash(company.other_industries)} />
+            <CompanyReadOnlyField label="Source *" value={formatSourceLabel(sourceSelectValue)} />
+            {sourceSelectValue === "other" ? (
+              <CompanyReadOnlyField label="Other Source *" value={textOrDash(otherSourceValue)} />
+            ) : null}
+          </div>
+
+          <div className="space-y-3">
+            <CompanyReadOnlyField label="First Name *" value={textOrDash(company.first_name)} />
+            <CompanyReadOnlyField label="Last Name *" value={textOrDash(company.last_name)} />
+            <CompanyReadOnlyField label="Customer Email *" value={textOrDash(company.customer_email)} />
+            <CompanyReadOnlyField label="Phone *" value={textOrDash(company.phone)} />
+            <CompanyReadOnlyField label="Website" value={textOrDash(company.website)} />
+            <CompanyReadOnlyField
+              label="Assigned Ownership"
+              value={company.account_ownership_id ? employeeName(company.account_ownership_id) : "None"}
+            />
+          </div>
+        </div>
+      </CrmSection>
+
+      <CrmSection title="Address Information" icon={MapPin}>
+        <div className="grid gap-x-10 gap-y-3 sm:grid-cols-2">
+          <CompanyReadOnlyField label="Billing Street *" value={textOrDash(company.billing_street)} />
+          <CompanyReadOnlyField label="Shipping Street" value={textOrDash(company.shipping_street)} />
+          <CompanyReadOnlyField label="Billing City *" value={textOrDash(company.billing_city)} />
+          <CompanyReadOnlyField label="Shipping City" value={textOrDash(company.shipping_city)} />
+          <CompanyReadOnlyField label="Billing State *" value={textOrDash(company.billing_state)} />
+          <CompanyReadOnlyField label="Shipping State" value={textOrDash(company.shipping_state)} />
+          <CompanyReadOnlyField label="Billing Code *" value={textOrDash(company.billing_code)} />
+          <CompanyReadOnlyField label="Shipping Code" value={textOrDash(company.shipping_code)} />
+          <CompanyReadOnlyField label="Billing Country *" value={textOrDash(company.billing_country)} />
+          <CompanyReadOnlyField label="Shipping Country" value={textOrDash(company.shipping_country)} />
+        </div>
+      </CrmSection>
+
+      <CrmSection title="Description Information" icon={FileText}>
+        <FinanceField label="Description">
+          <div className="flex min-h-[72px] w-full rounded-lg border border-input bg-muted/20 px-2.5 py-2 text-sm whitespace-pre-wrap text-foreground">
+            {textOrDash(company.description)}
+          </div>
+        </FinanceField>
+      </CrmSection>
+    </>
+  );
+}
 
 export function CompanyDetailPage({ companyAccountId }: { companyAccountId: string }) {
   const [company, setCompany] = useState<Company | null>(null);
   const [leads, setLeads] = useState<SalesLead[]>([]);
+  const [meetings, setMeetings] = useState<CrmMeeting[]>([]);
+  const [followups, setFollowups] = useState<CrmFollowup[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [ovfs, setOvfs] = useState<CompanyOvfOverviewRow[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [oemQuoteRows, setOemQuoteRows] = useState<DocPreviewRow[]>([]);
+  const [purchaseOrderRows, setPurchaseOrderRows] = useState<DocPreviewRow[]>([]);
+  const [employees, setEmployees] = useState<Option[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editOpen, setEditOpen] = useState(false);
+  const [meetingOpen, setMeetingOpen] = useState(false);
+  const [followupOpen, setFollowupOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [companyRow, allLeads] = await Promise.all([
+      const [
+        companyRow,
+        allLeads,
+        employeeOptions,
+        meetingRows,
+        followupRows,
+        opportunityRows,
+        quoteRows,
+        ovfRows,
+        contactRows,
+        oemAttachments,
+        poAttachments,
+      ] = await Promise.all([
         getCompany(companyAccountId),
-        listSalesLeads().catch(() => [] as SalesLead[]),
+        listSalesLeads(companyAccountId).catch(() => [] as SalesLead[]),
+        listCrmMemberOptions().catch(() => [] as Option[]),
+        listMeetings(companyAccountId).catch(() => [] as CrmMeeting[]),
+        listFollowups(companyAccountId).catch(() => [] as CrmFollowup[]),
+        listOpportunities({ company_account_id: companyAccountId }).catch(() => [] as Opportunity[]),
+        listQuotes({ company_account_id: companyAccountId }).catch(() => [] as Quote[]),
+        listOvfs({ company_account_id: companyAccountId }).catch(() => [] as Ovf[]),
+        listContacts(companyAccountId).catch(() => [] as Contact[]),
+        listAttachmentsByCategory("oem_quote").catch(() => []),
+        listAttachmentsByCategory("customer_po").catch(() => []),
       ]);
+      const scopedOpportunities = opportunityRows.filter(
+        (row) => row.company_account_id === companyAccountId,
+      );
       setCompany(companyRow);
-      setLeads(allLeads.filter((l) => l.company_account_id === companyAccountId));
+      setLeads(allLeads);
+      setEmployees(employeeOptions);
+      setMeetings(meetingRows);
+      setFollowups(followupRows);
+      setOpportunities(scopedOpportunities);
+      setQuotes(quoteRows.filter((row) => row.company_account_id === companyAccountId));
+      const scopedOvfs = ovfRows.filter((row) => row.company_account_id === companyAccountId);
+      setOvfs(await enrichCompanyOvfsWithTotals(scopedOvfs));
+      setContacts(contactRows);
+      setOemQuoteRows(
+        buildCompanyDocumentPreviewRows(
+          oemAttachments,
+          scopedOpportunities,
+          "oem_quote_attached",
+          "OEM Quote",
+        ),
+      );
+      setPurchaseOrderRows(
+        buildCompanyDocumentPreviewRows(
+          poAttachments,
+          scopedOpportunities,
+          "customer_po_attached",
+          "Customer PO",
+        ),
+      );
     } catch (err) {
       setCompany(null);
       setError(err instanceof ApiClientError ? err.message : "Failed to load company");
@@ -46,249 +278,227 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
   }, [companyAccountId]);
 
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
   }, [load]);
 
-  if (loading && !company) {
-    return (
-      <div className="space-y-3">
-        <div className="h-8 w-48 animate-pulse rounded bg-muted" />
-        <div className="h-40 animate-pulse rounded-xl bg-muted/60" />
-      </div>
-    );
-  }
-
-  if (error || !company) {
-    return (
-      <div className="space-y-3">
-        <Link href="/crm/companies" className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary">
-          <ArrowLeft className="size-3.5" /> Back to Company
-        </Link>
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error ?? "Company not found"}
-        </div>
-      </div>
-    );
-  }
-
-  const hasOpenLead = leads.some((l) => l.blueprint_state === "open");
-  const activeLead = leads.find((lead) => lead.blueprint_state === "open") ?? leads[0];
-  const timelineStage: DealStage = activeLead?.converted_opportunity_id
-    ? "opportunity"
-    : activeLead
-      ? "lead"
-      : "company";
-  const timelineLinks = {
-    company: `/crm/companies/${company.id}`,
-    ...(activeLead ? { lead: `/crm/leads/${activeLead.id}` } : {}),
-    ...(activeLead?.converted_opportunity_id
-      ? { opportunity: `/crm/opportunities/${activeLead.converted_opportunity_id}` }
-      : {}),
+  const employeeName = (id: string | null) => {
+    if (!id) return "Unassigned";
+    return employees.find((employee) => employee.id === id)?.label ?? "—";
   };
-  const nextStep = activeLead?.converted_opportunity_id
-    ? {
-        label: "Continue Opportunity",
-        description: "Resume BOQ, OEM, Quote, Customer PO, and OVF actions.",
-        href: `/crm/opportunities/${activeLead.converted_opportunity_id}`,
-      }
-    : activeLead
-      ? {
-          label: "Continue Lead",
-          description: "Review this lead and convert it to an opportunity when qualified.",
-          href: `/crm/leads/${activeLead.id}`,
-        }
-      : company.status === "active"
-        ? {
-            label: "Create Lead",
-            description: "Start the sales blueprint from this company account.",
-            href: `/crm/companies/${company.id}/leads/new`,
-          }
-        : undefined;
+  const openMeetings = meetings.filter((m) => m.status === "scheduled");
+  const openFollowups = followups.filter((f) => f.status === "scheduled");
 
   return (
-    <div className="space-y-4">
-      <Link href="/crm/companies" className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80">
-        <ArrowLeft className="size-3.5" /> Company
-      </Link>
+    <CompanyWorkspaceShell companyAccountId={companyAccountId}>
+      {loading && !company ? (
+        <div className="h-40 animate-pulse rounded-xl bg-muted/60" />
+      ) : error || !company ? (
+        <CrmErrorBanner>{error ?? "Company not found"}</CrmErrorBanner>
+      ) : (
+        <CrmPage>
+          <CompanyProfileReadOnly company={company} employeeName={employeeName} />
 
-      <DealTimeline current={timelineStage} links={timelineLinks} nextStep={nextStep} />
-      <ApprovalBanner locked={company.locked} label="This company account" />
-
-      <PageHeader
-        title={company.customer_name}
-        description={`Account ${company.account_number} · ${company.industry}`}
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()}>
-              <RefreshCw className="size-3.5" /> Refresh
-            </Button>
-            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => setEditOpen(true)}>
-              <Pencil className="size-3.5" /> Edit
-            </Button>
-            {hasOpenLead || company.status !== "active" ? (
-              <Button
-                type="button"
-                size="sm"
-                className="cursor-pointer"
-                disabled
-                title={
-                  hasOpenLead
-                    ? "This company already has an open lead in progress"
-                    : "Company account must be active to create a lead"
-                }
-              >
-                <Plus className="size-3.5" /> Create Lead
-              </Button>
-            ) : (
-              <Link
-                href={`/crm/companies/${company.id}/leads/new`}
-                className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
-              >
-                <Plus className="size-3.5" /> Create Lead
-              </Link>
-            )}
+          <div id="company-meetings">
+            <CrmListPanel>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <CrmIconBadge icon={CalendarDays} />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-extrabold tracking-tight text-foreground">Meetings</h2>
+                      <CrmCountBadge count={openMeetings.length} label="open" />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="cursor-pointer"
+                    onClick={() => setMeetingOpen(true)}
+                  >
+                    <Plus className="size-3.5" /> Meeting
+                  </Button>
+                  <CrmViewAllLink href={`/crm/companies/${company.id}/meetings`} />
+                </div>
+              </div>
+              <MeetingsDataTable
+                rows={meetings.slice(0, 5)}
+                hostName={employeeName}
+                emptyMessage='No meetings yet — use "Meeting" above to schedule one.'
+              />
+            </CrmListPanel>
           </div>
-        }
-      />
 
-      <div className="grid gap-3 lg:grid-cols-3">
-        <section className="space-y-3 rounded-xl border border-border/80 bg-card p-4 shadow-sm lg:col-span-2">
-          <h2 className="text-sm font-medium tracking-tight">Account Info</h2>
-          <dl className="grid grid-cols-2 gap-3 text-xs">
-            <div>
-              <dt className="text-muted-foreground">Status</dt>
-              <dd className="mt-1"><FinanceStatusBadge status={company.status} /></dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Rating</dt>
-              <dd className="mt-1 capitalize">{company.rating ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Account Type</dt>
-              <dd className="mt-1 capitalize">{company.account_type ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Source</dt>
-              <dd className="mt-1 capitalize">{company.source.replaceAll("_", " ")}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Phone</dt>
-              <dd className="mt-1">{company.phone ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Email</dt>
-              <dd className="mt-1">{company.customer_email ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Website</dt>
-              <dd className="mt-1">{company.website ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Contact</dt>
-              <dd className="mt-1">
-                {[company.first_name, company.last_name].filter(Boolean).join(" ") || "—"}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Portal ID</dt>
-              <dd className="mt-1">{company.portal_id ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Customer ID</dt>
-              <dd className="mt-1">{company.customer_id_ext ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Role</dt>
-              <dd className="mt-1">{company.role ?? "—"}</dd>
-            </div>
-          </dl>
+          <div id="company-followups">
+            <CrmListPanel>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <CrmIconBadge icon={ClipboardList} />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-extrabold tracking-tight text-foreground">Customer Follow Up</h2>
+                      <CrmCountBadge count={openFollowups.length} label="open" />
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="cursor-pointer"
+                    onClick={() => setFollowupOpen(true)}
+                  >
+                    <Plus className="size-3.5" /> Create Follow Up
+                  </Button>
+                  <CrmViewAllLink href={`/crm/companies/${company.id}/customer-followups`} />
+                </div>
+              </div>
+              <div className="erp-scroll overflow-x-auto">
+                <table className="w-full min-w-[860px] text-left text-sm">
+                  <thead>
+                    <tr className={CRM_TABLE_HEAD_ROW}>
+                      <th className={CRM_TABLE_HEAD_CELL}>Opportunity Name</th>
+                      <th className={CRM_TABLE_HEAD_CELL}>Date</th>
+                      <th className={CRM_TABLE_HEAD_CELL}>Time</th>
+                      <th className={CRM_TABLE_HEAD_CELL}>Remark</th>
+                      <th className={CRM_TABLE_HEAD_CELL}>Task deadline</th>
+                      <th className={CRM_TABLE_HEAD_CELL}>Team Member</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {followups.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                          No follow-ups yet — use “Follow Up” above to schedule one.
+                        </td>
+                      </tr>
+                    ) : (
+                      followups.slice(0, 5).map((followup) => (
+                        <tr
+                          key={followup.id}
+                          className="border-b border-border/50 last:border-0 hover:bg-accent/30"
+                        >
+                          <td className="px-4 py-2.5 font-medium text-foreground">
+                            {followup.customer_name || company.customer_name}
+                            <div className="text-[11px] font-normal text-muted-foreground">
+                              {followup.followup_code}
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-muted-foreground">
+                            {formatFollowupDate(followup)}
+                          </td>
+                          <td className="px-4 py-2.5 text-muted-foreground">
+                            {formatFollowupTime(followup)}
+                          </td>
+                          <td className="max-w-[240px] px-4 py-2.5 text-muted-foreground">
+                            <span className="line-clamp-2">{textOrDash(followup.notes)}</span>
+                          </td>
+                          <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
+                            {formatFollowupTaskDeadline(followup)}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <Badge variant="outline" className="font-normal">
+                              {employeeName(followup.owner_employee_id)}
+                            </Badge>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CrmListPanel>
+          </div>
 
-          <h3 className="pt-2 text-sm font-medium tracking-tight">Billing Address</h3>
-          <p className="text-xs text-muted-foreground">
-            {company.billing_street}, {company.billing_city}, {company.billing_state}{" "}
-            {company.billing_code}, {company.billing_country}
-          </p>
-          {company.shipping_street ? (
-            <>
-              <h3 className="pt-2 text-sm font-medium tracking-tight">Shipping Address</h3>
-              <p className="text-xs text-muted-foreground">
-                {company.shipping_street}, {company.shipping_city}, {company.shipping_state}{" "}
-                {company.shipping_code}, {company.shipping_country}
-              </p>
-            </>
-          ) : null}
-          {company.description ? (
-            <>
-              <h3 className="pt-2 text-sm font-medium tracking-tight">Description</h3>
-              <p className="whitespace-pre-wrap text-xs text-muted-foreground">{company.description}</p>
-            </>
-          ) : null}
-        </section>
+          <div id="company-leads">
+            <CrmListPanel>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <CrmIconBadge icon={Target} />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-extrabold tracking-tight text-foreground">Leads</h2>
+                      <CrmCountBadge count={leads.length} />
+                    </div>
+                  </div>
+                </div>
+                <CrmViewAllLink href={`/crm/companies/${company.id}/leads`} />
+              </div>
+              <div className="erp-scroll overflow-x-auto">
+                <table className="w-full min-w-[700px] text-left text-sm">
+                  <thead>
+                    <tr className={CRM_TABLE_HEAD_ROW}>
+                      <th className={CRM_TABLE_HEAD_CELL}>Lead Name</th>
+                      <th className={CRM_TABLE_HEAD_CELL}>Customer</th>
+                      <th className={CRM_TABLE_HEAD_CELL}>Status</th>
+                      <th className={CRM_TABLE_HEAD_CELL}>Remark</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {leads.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                          No leads yet for this company.
+                        </td>
+                      </tr>
+                    ) : (
+                      leads.slice(0, 5).map((lead) => (
+                        <tr key={lead.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
+                          <td className="px-4 py-2.5 font-medium text-foreground">
+                            <Link href={`/crm/leads/${lead.id}`} className="cursor-pointer hover:underline">
+                              {fullName(lead)}
+                            </Link>
+                            <div className="text-[11px] font-normal text-muted-foreground">{lead.lead_code}</div>
+                          </td>
+                          <td className="px-4 py-2.5 text-muted-foreground">
+                            {textOrDash(lead.end_customer_name ?? company.customer_name)}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <FinanceStatusBadge status={lead.status} />
+                          </td>
+                          <td className="max-w-[240px] px-4 py-2.5 text-muted-foreground">
+                            <span className="line-clamp-2">{textOrDash(lead.notes)}</span>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </CrmListPanel>
+          </div>
 
-        <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-          <h2 className="text-sm font-medium tracking-tight">Sales Blueprint</h2>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Leads created from this company follow the Company → Lead → Opportunity → Quote → OVF →
-            Won blueprint. Only one open lead is allowed at a time.
-          </p>
-        </section>
-      </div>
+          <CompanyOverviewDealPanels
+            companyAccountId={companyAccountId}
+            companyCustomerName={company.customer_name}
+            opportunities={opportunities}
+            oemQuoteRows={oemQuoteRows}
+            quotes={quotes}
+            purchaseOrderRows={purchaseOrderRows}
+            ovfs={ovfs}
+            contacts={contacts}
+            onDocumentsChanged={() => void load()}
+          />
 
-      <section className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-          <h2 className="flex items-center gap-2 text-sm font-medium tracking-tight">
-            <Target className="size-3.5" /> Leads from this company
-          </h2>
-          <Badge variant="secondary">{leads.length}</Badge>
-        </div>
-        <div className="erp-scroll overflow-x-auto">
-          <table className="w-full min-w-[700px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
-                <th className="px-4 py-2.5">Lead</th>
-                <th className="px-4 py-2.5">Mobile</th>
-                <th className="px-4 py-2.5">Blueprint State</th>
-                <th className="px-4 py-2.5">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leads.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
-                    No leads yet — use “Create Lead” above to start the sales process.
-                  </td>
-                </tr>
-              ) : (
-                leads.map((lead) => (
-                  <tr key={lead.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
-                    <td className="px-4 py-2.5 font-medium text-foreground">
-                      <Link href={`/crm/leads/${lead.id}`} className="cursor-pointer hover:underline">
-                        {fullName(lead)} · {lead.lead_code}
-                      </Link>
-                    </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{lead.mobile}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge variant="outline" className="capitalize">
-                        {lead.blueprint_state.replaceAll("_", " ")}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <FinanceStatusBadge status={lead.status} />
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <CompanyFormDialog
-        open={editOpen}
-        company={company}
-        onClose={() => setEditOpen(false)}
-        onSaved={() => void load()}
-      />
-    </div>
+          <MeetingFormDialog
+            open={meetingOpen}
+            companyAccount={company}
+            onClose={() => setMeetingOpen(false)}
+            onSaved={() => void load()}
+          />
+          <FollowupFormDialog
+            open={followupOpen}
+            companyAccount={company}
+            companyAccountId={company.id}
+            onClose={() => setFollowupOpen(false)}
+            onSaved={() => void load()}
+          />
+        </CrmPage>
+      )}
+    </CompanyWorkspaceShell>
   );
 }

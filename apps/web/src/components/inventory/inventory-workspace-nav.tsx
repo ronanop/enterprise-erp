@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { ModuleUsersNavTab } from "@/components/organization/module-users-nav-tab";
 import { cn } from "@/lib/utils";
 
 /** Primary inventory screens from FRD-08 screen inventory */
@@ -44,6 +45,7 @@ export function InventoryWorkspaceNav() {
             </li>
           );
         })}
+        <ModuleUsersNavTab moduleKey="inventory" />
       </ul>
     </nav>
   );

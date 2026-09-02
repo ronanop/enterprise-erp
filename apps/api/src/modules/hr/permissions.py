@@ -66,25 +66,39 @@ HR_PERMISSIONS: list[tuple[str, str, str, str]] = [
     ("hr.superadmin:manage", "hr.superadmin", "manage", "hr"),
 ]
 
-HR_EMPLOYEE_PERMISSIONS = [
-    "hr.employee_profile:read",
-    "hr.employment:read",
-    "hr.attendance:read",
-    "hr.leave:read",
-    "hr.leave:create",
-    "hr.leave:submit",
-    "hr.shift_assignment:read",
-    "hr.document:read",
-    "hr.performance:read",
-    "hr.training:read",
-    "hr.separation:read",
-    "hr.separation:create",
-    "hr.separation:submit",
-    "hr.holiday_calendar:read",
-    "hr.leave_type:read",
-    "hr.shift:read",
-    "hr.designation:read",
+# Read-only master/org lookups scoped via SecUserOrgScope (HR dashboard + directory).
+HR_MEMBER_WORKSPACE_READ_PERMISSIONS = [
+    "master.employee:read",
+    "organization.company:read",
+    "organization.branch:read",
+    "organization.department:read",
+    "organization.location:read",
 ]
+
+HR_EMPLOYEE_PERMISSIONS = list(
+    dict.fromkeys(
+        [
+            "hr.employee_profile:read",
+            "hr.employment:read",
+            "hr.attendance:read",
+            "hr.leave:read",
+            "hr.leave:create",
+            "hr.leave:submit",
+            "hr.shift_assignment:read",
+            "hr.document:read",
+            "hr.performance:read",
+            "hr.training:read",
+            "hr.separation:read",
+            "hr.separation:create",
+            "hr.separation:submit",
+            "hr.holiday_calendar:read",
+            "hr.leave_type:read",
+            "hr.shift:read",
+            "hr.designation:read",
+        ]
+        + HR_MEMBER_WORKSPACE_READ_PERMISSIONS
+    )
+)
 
 HR_MANAGER_PERMISSIONS = list(
     dict.fromkeys(

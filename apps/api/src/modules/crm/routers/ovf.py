@@ -6,14 +6,16 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from modules.crm.dependencies import PaginationParams, get_db, get_pagination, paginate
+from modules.crm.dependencies import PaginationParams, extract_update_fields, get_db, get_pagination, paginate
 from modules.crm.schemas import (
     OvfCreate,
     OvfDealWonRequest,
     OvfLineCreate,
     OvfLineResponse,
+    OvfLineUpdate,
     OvfResponse,
     OvfSendForApprovalRequest,
+    OvfUpdate,
 )
 from modules.crm.service import OvfService
 from modules.foundation.dependencies import require_permission
@@ -50,7 +52,34 @@ def get_ovf(
     ctx: Annotated[TenantContext, Depends(require_permission("crm.ovf:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=OvfService(db).get(ctx, ovf_id))
+    svc = OvfService(db)
+    ovf = svc.get(ctx, ovf_id)
+    resp = OvfResponse.model_validate(ovf)
+    if resp.po_date is None:
+        resolved = svc.resolve_customer_po_display_date(ctx, ovf)
+        if resolved is not None:
+            resp = resp.model_copy(update={"po_date": resolved})
+    return APIResponse(message="OK", data=resp)
+
+
+@ovf_router.patch("/{ovf_id}", response_model=APIResponse[OvfResponse])
+def update_ovf(
+    ovf_id: UUID,
+    body: OvfUpdate,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.ovf:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=OvfService(db).update(ctx, ovf_id, **extract_update_fields(body)))
+
+
+@ovf_router.delete("/{ovf_id}", response_model=APIResponse[dict[str, str]])
+def delete_ovf(
+    ovf_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.ovf:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    OvfService(db).delete(ctx, ovf_id)
+    return APIResponse(message="OK", data={"id": str(ovf_id)})
 
 
 @ovf_router.get("/{ovf_id}/lines", response_model=APIResponse[list[OvfLineResponse]])
@@ -70,6 +99,19 @@ def add_ovf_line(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=OvfService(db).add_line(ctx, ovf_id, **body.model_dump()))
+
+
+@ovf_router.patch("/lines/{line_id}", response_model=APIResponse[OvfLineResponse])
+def update_ovf_line(
+    line_id: UUID,
+    body: OvfLineUpdate,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.ovf:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=OvfService(db).update_line(ctx, line_id, **extract_update_fields(body)),
+    )
 
 
 @ovf_router.post("/{ovf_id}/send-for-approval", response_model=APIResponse[OvfResponse])

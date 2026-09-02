@@ -10,7 +10,7 @@ function LoginFallback() {
   );
 }
 
-export default function LoginPage() {
+export default function Page() {
   return (
     <Suspense fallback={<LoginFallback />}>
       <LoginForm />

@@ -20,11 +20,10 @@ class JobLevelRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrJobLevel, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrJobLevel).where(
-            HrJobLevel.company_id == company_id,
-            HrJobLevel.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrJobLevel).where(HrJobLevel.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrJobLevel.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrJobLevel, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 
@@ -63,11 +62,10 @@ class GradeRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrGrade, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrGrade).where(
-            HrGrade.company_id == company_id,
-            HrGrade.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrGrade).where(HrGrade.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrGrade.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrGrade, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 

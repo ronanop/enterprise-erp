@@ -4,19 +4,22 @@ OVF is created only after the customer PO is approved on the opportunity, and
 carries vendor/customer payment terms used to compute the finance cost.
 """
 
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
+    DateTime,
     ForeignKey,
     Numeric,
     SmallInteger,
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -58,13 +61,38 @@ class CrmOvf(Base, *CrmTransactionMixin):
         index=True,
     )
     po_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    po_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     delivery_period: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    customer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    quote_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    billing_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    billing_state: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    billing_country: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    owner_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    billing_contact_person: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    shipping_address: Mapped[str | None] = mapped_column(Text, nullable=True)
+    shipping_state: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    shipping_country: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    shipping_contact_person: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    account_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     technology_segment: Mapped[str | None] = mapped_column(Text, nullable=True)
     sub_technology_segment: Mapped[str | None] = mapped_column(String(255), nullable=True)
     installation_details: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     approval_status: Mapped[str] = mapped_column(String(30), nullable=False, default="not_required")
     shared_to_scm: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    shared_to_scm_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scm_on_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    scm_on_hold_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scm_hold_blocked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    scm_last_hold_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    scm_last_hold_released_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    scm_hold_history: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    scm_on_hold_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
     deal_won: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     deal_won_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
 
@@ -101,6 +129,11 @@ class CrmOvfLine(Base, *CrmTransactionMixin):
     side: Mapped[str] = mapped_column(String(20), nullable=False, default="customer_po")
     line_no: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
     product_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    distributor_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_person: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    contact_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     qty: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=1)
     unit_price: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
+    gst_pct: Mapped[Decimal] = mapped_column(Numeric(6, 3), nullable=False, default=Decimal("18"))
     line_total: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)

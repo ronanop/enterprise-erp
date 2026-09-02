@@ -5,13 +5,16 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { LogIn, LogOut, Search } from "lucide-react";
 
+import { CrmGlobalSearch } from "@/components/crm/crm-global-search";
+import { AppTopbarNotifications } from "@/components/layout/app-topbar-notifications";
+import { CompanyContextBadge } from "@/components/layout/company-context-badge";
+import { GlobalNotificationBell } from "@/components/layout/global-notification-bell";
+import { ProjectsGlobalSearch } from "@/components/projects/projects-global-search";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useHealthCheck } from "@/hooks/use-health-check";
-import { CompanyContextBadge } from "@/components/layout/company-context-badge";
-import { GlobalNotificationBell } from "@/components/layout/global-notification-bell";
 import { hrNavGroups, isHrPath } from "@/config/hr-nav";
+import { useHealthCheck } from "@/hooks/use-health-check";
 import { clearTokens, isAuthenticated } from "@/lib/auth";
 import { authService } from "@/services/api-client";
 import { cn } from "@/lib/utils";
@@ -27,6 +30,16 @@ function readProfileName(): string {
   }
 }
 
+function workspaceSubtitle(pathname: string, signedIn: boolean): string {
+  if (!signedIn) return "Guest · sign in for protected APIs";
+  if (pathname === "/crm" || pathname.startsWith("/crm/")) return "Sales CRM · secure session";
+  if (pathname === "/projects" || pathname.startsWith("/projects/")) {
+    return "Projects · secure session";
+  }
+  if (isHrPath(pathname)) return "HRMS · secure session";
+  return "Signed in · secure session";
+}
+
 export function AppTopbar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -35,6 +48,8 @@ export function AppTopbar() {
   const [signedIn, setSignedIn] = useState(false);
   const [profileName, setProfileName] = useState("HR Manager");
   const [navQuery, setNavQuery] = useState("");
+  const isCrm = pathname === "/crm" || pathname.startsWith("/crm/");
+  const isProjects = pathname === "/projects" || pathname.startsWith("/projects/");
 
   useEffect(() => {
     setSignedIn(isAuthenticated());
@@ -81,56 +96,64 @@ export function AppTopbar() {
         hrMode && "shadow-[0_1px_0_rgb(155_91_184_/_8%)]",
       )}
     >
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium tracking-tight">
-            {hrMode ? "HRMS" : "Workspace"}
-          </p>
-          <p className="truncate text-xs text-muted-foreground">
-            {signedIn ? "Signed in · secure session" : "Guest · sign in for protected APIs"}
-          </p>
-        </div>
-        {hrMode ? (
-          <div className="relative hidden min-w-[200px] max-w-sm flex-1 md:block">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              value={navQuery}
-              onChange={(e) => setNavQuery(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && navHits[0]) {
-                  router.push(navHits[0].href);
-                  setNavQuery("");
-                }
-              }}
-              placeholder="Search modules…"
-              className="h-9 rounded-xl pl-8"
-            />
-            {navHits.length > 0 ? (
-              <ul className="absolute top-[calc(100%+6px)] left-0 z-50 w-full overflow-hidden rounded-xl border border-border bg-card py-1 shadow-lg">
-                {navHits.map((item) => (
-                  <li key={item.href}>
-                    <button
-                      type="button"
-                      className="flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted"
-                      onClick={() => {
-                        router.push(item.href);
-                        setNavQuery("");
-                      }}
-                    >
-                      <span className="font-medium">{item.title}</span>
-                      <span className="truncate text-[10px] text-muted-foreground">
-                        {item.description}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
-        ) : null}
+      <div className="min-w-0 shrink-0 sm:w-44">
+        <Link
+          href="/"
+          className="block cursor-pointer truncate text-sm font-medium tracking-tight transition-opacity duration-200 hover:opacity-80"
+        >
+          {hrMode ? "HRMS" : "Workspace"}
+        </Link>
+        <p className="truncate text-xs text-muted-foreground">
+          {workspaceSubtitle(pathname, signedIn)}
+        </p>
       </div>
 
-      <div className="flex items-center gap-2">
+      {isCrm ? (
+        <CrmGlobalSearch className="min-w-0 flex-1" />
+      ) : isProjects ? (
+        <ProjectsGlobalSearch className="min-w-0 flex-1" />
+      ) : hrMode ? (
+        <div className="relative hidden min-w-[200px] max-w-sm flex-1 md:block">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={navQuery}
+            onChange={(e) => setNavQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && navHits[0]) {
+                router.push(navHits[0].href);
+                setNavQuery("");
+              }
+            }}
+            placeholder="Search modules…"
+            className="h-9 rounded-xl pl-8"
+          />
+          {navHits.length > 0 ? (
+            <ul className="absolute top-[calc(100%+6px)] left-0 z-50 w-full overflow-hidden rounded-xl border border-border bg-card py-1 shadow-lg">
+              {navHits.map((item) => (
+                <li key={item.href}>
+                  <button
+                    type="button"
+                    className="flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-1.5 text-left text-xs hover:bg-muted"
+                    onClick={() => {
+                      router.push(item.href);
+                      setNavQuery("");
+                    }}
+                  >
+                    <span className="font-medium">{item.title}</span>
+                    <span className="truncate text-[10px] text-muted-foreground">
+                      {item.description}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : (
+        <div className="min-w-0 flex-1" />
+      )}
+
+      <div className="flex shrink-0 items-center gap-2">
         {signedIn ? <CompanyContextBadge /> : null}
         <Badge variant={healthVariant} className="hidden sm:inline-flex">
           <span
@@ -141,6 +164,7 @@ export function AppTopbar() {
           {healthLabel}
         </Badge>
         {signedIn ? <GlobalNotificationBell variant="topbar" /> : null}
+        <AppTopbarNotifications />
         {hrMode && signedIn ? (
           <div className="hidden h-9 items-center gap-2 rounded-xl border border-border/70 bg-muted/40 px-2.5 text-xs lg:flex">
             <span className="flex size-6 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
@@ -157,7 +181,7 @@ export function AppTopbar() {
         ) : (
           <Link
             href="/login"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
+            className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
           >
             <LogIn className="size-3.5" />
             Sign in

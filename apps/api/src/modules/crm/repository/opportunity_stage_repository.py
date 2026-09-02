@@ -27,6 +27,18 @@ class OpportunityStageRepository(CrmScopedRepository):
         stmt = self.apply_crm_filter(stmt, CrmOpportunityStage, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 
+    def list_for_opportunity(self, ctx: TenantContext, opportunity_id: UUID):
+        stmt = (
+            select(CrmOpportunityStage)
+            .where(
+                CrmOpportunityStage.opportunity_id == opportunity_id,
+                CrmOpportunityStage.is_deleted.is_(False),
+            )
+            .order_by(CrmOpportunityStage.sequence_no, CrmOpportunityStage.entered_at)
+        )
+        stmt = self.apply_crm_filter(stmt, CrmOpportunityStage, ctx, branch_scoped=True)
+        return list(self.db.scalars(stmt).all())
+
     def create(self, ctx: TenantContext, **fields) -> CrmOpportunityStage:
         row = CrmOpportunityStage(
             id=uuid4(),

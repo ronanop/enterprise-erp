@@ -12,10 +12,11 @@ from database.base import Base
 engine: Engine = create_engine(
     str(settings.database_url),
     pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
+    # Home / platform analytics fans out across many module list endpoints.
+    pool_size=20,
+    max_overflow=40,
     pool_recycle=1800,
-    pool_timeout=30,
+    pool_timeout=60,
 )
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)

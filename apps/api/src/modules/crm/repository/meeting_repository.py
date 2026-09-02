@@ -19,12 +19,21 @@ class MeetingRepository(CrmScopedRepository):
         stmt = self.apply_crm_filter(stmt, CrmMeeting, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_meetings(self, ctx: TenantContext, company_id: UUID):
+    def list_meetings(
+        self,
+        ctx: TenantContext,
+        company_id: UUID,
+        *,
+        company_account_id: UUID | None = None,
+    ):
         stmt = select(CrmMeeting).where(
             CrmMeeting.company_id == company_id,
             CrmMeeting.is_deleted.is_(False),
         )
+        if company_account_id is not None:
+            stmt = stmt.where(CrmMeeting.company_account_id == company_account_id)
         stmt = self.apply_crm_filter(stmt, CrmMeeting, ctx, branch_scoped=True)
+        stmt = stmt.order_by(CrmMeeting.meeting_date.desc(), CrmMeeting.start_time.desc())
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> CrmMeeting:

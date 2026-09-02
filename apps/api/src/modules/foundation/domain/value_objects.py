@@ -35,3 +35,5 @@ class TenantContext:
     session_id: UUID | None = None
     company_id: UUID | None = None
     branch_id: UUID | None = None
+    tenant_wide: bool = False
+    scoped_company_ids: tuple[UUID, ...] = ()

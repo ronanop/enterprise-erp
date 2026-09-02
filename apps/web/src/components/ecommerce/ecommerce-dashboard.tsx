@@ -251,7 +251,7 @@ export function EcommerceDashboard() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium tracking-tight">Workspace</h2>
+          <h2 className="text-base font-extrabold tracking-tight">Workspace</h2>
           <Badge variant="secondary">{ecommerceWorkspaceGroups.length} areas</Badge>
         </div>
         <div className="grid gap-3 lg:grid-cols-3">
@@ -268,7 +268,7 @@ export function EcommerceDashboard() {
                     <Icon className="size-4" />
                   </span>
                   <div className="min-w-0">
-                    <h3 className="text-sm font-medium tracking-tight">{group.title}</h3>
+                    <h3 className="text-base font-extrabold tracking-tight">{group.title}</h3>
                     <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                       {group.description}
                     </p>
@@ -299,7 +299,7 @@ export function EcommerceDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Recent orders</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Recent orders</h2>
               <p className="text-[11px] text-muted-foreground">Channel intake</p>
             </div>
             <Link
@@ -368,7 +368,7 @@ export function EcommerceDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Shipment watch</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Shipment watch</h2>
               <p className="text-[11px] text-muted-foreground">Fulfillment tracking</p>
             </div>
             <Link
@@ -411,7 +411,7 @@ export function EcommerceDashboard() {
 
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
           <div className="mb-3">
-            <h2 className="text-sm font-medium tracking-tight">Channel type mix</h2>
+            <h2 className="text-base font-extrabold tracking-tight">Channel type mix</h2>
             <p className="text-[11px] text-muted-foreground">FRD-22 §9–§13</p>
           </div>
           {loading ? (
