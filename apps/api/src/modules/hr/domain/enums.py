@@ -36,6 +36,60 @@ class EmploymentStatus(str, Enum):
     CANCELLED = "cancelled"
 
 
+_EMPLOYMENT_STATUS_ALIASES: dict[str, str] = {
+    "archived": EmploymentStatus.EX_EMPLOYEE.value,
+    "inactive": EmploymentStatus.ENDED.value,
+    "notice": EmploymentStatus.NOTICE_PERIOD.value,
+    "resigned": EmploymentStatus.SEPARATED.value,
+    "terminated": EmploymentStatus.SEPARATED.value,
+}
+
+
+def normalize_employment_status(status: str) -> str:
+    """Map UI lifecycle values onto ck_hr_empl_status."""
+    raw = status.strip().lower()
+    mapped = _EMPLOYMENT_STATUS_ALIASES.get(raw, raw)
+    allowed = {item.value for item in EmploymentStatus}
+    if mapped not in allowed:
+        from core.exceptions import ConflictException
+
+        raise ConflictException(
+            f"Invalid employment status '{status}'. "
+            f"Allowed: {', '.join(sorted(allowed))}."
+        )
+    return mapped
+
+
+def normalize_active_inactive(status: str) -> str:
+    """Map UI lifecycle values onto active/inactive check constraints."""
+    raw = status.strip().lower()
+    if raw in {
+        "active",
+        "onboarding",
+        "probation",
+        "notice",
+        "notice_period",
+        "confirmed",
+        "draft",
+        "on_leave",
+    }:
+        return ActiveInactive.ACTIVE.value
+    if raw in {
+        "inactive",
+        "archived",
+        "resigned",
+        "terminated",
+        "ex_employee",
+        "separated",
+        "ended",
+        "cancelled",
+    }:
+        return ActiveInactive.INACTIVE.value
+    from core.exceptions import ConflictException
+
+    raise ConflictException(f"Invalid status '{status}'. Use active or inactive.")
+
+
 class LeaveRequestStatus(str, Enum):
     DRAFT = "draft"
     SUBMITTED = "submitted"

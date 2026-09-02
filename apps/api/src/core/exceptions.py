@@ -3,7 +3,7 @@
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 
 from shared.schemas import ErrorResponse
 
@@ -47,6 +47,25 @@ class TooManyRequestsException(AppException):
         super().__init__(message, status_code=status.HTTP_429_TOO_MANY_REQUESTS)
 
 
+def conflict_from_integrity(exc: IntegrityError) -> ConflictException:
+    """Turn a DB constraint failure into a client-facing 409."""
+    orig = getattr(exc, "orig", None)
+    name = type(orig).__name__ if orig is not None else ""
+    detail = str(orig) if orig is not None else str(exc)
+    lowered = detail.lower()
+    if "CheckViolation" in name or "check constraint" in lowered:
+        return ConflictException(
+            "This status or value is not allowed for this record.",
+        )
+    if "ForeignKeyViolation" in name or "foreign key" in lowered:
+        return ConflictException(
+            "Cannot delete or change this record because other data still depends on it.",
+        )
+    if "UniqueViolation" in name or "unique constraint" in lowered:
+        return ConflictException("A record with these values already exists.")
+    return ConflictException("This change conflicts with existing data.")
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppException)
     async def app_exception_handler(_: Request, exc: AppException) -> JSONResponse:
@@ -82,6 +101,14 @@ def register_exception_handlers(app: FastAPI) -> None:
                 ),
                 errors=[str(exc.orig) if exc.orig else str(exc)],
             ).model_dump(),
+        )
+
+    @app.exception_handler(IntegrityError)
+    async def integrity_error_handler(_: Request, exc: IntegrityError) -> JSONResponse:
+        mapped = conflict_from_integrity(exc)
+        return JSONResponse(
+            status_code=mapped.status_code,
+            content=ErrorResponse(message=mapped.message).model_dump(),
         )
 
     @app.exception_handler(Exception)

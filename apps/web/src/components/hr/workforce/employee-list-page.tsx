@@ -34,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { isAuthenticated } from "@/lib/auth";
+import { ApiClientError } from "@/services/api-client";
 import {
   EXACT_CASE_HEADER_COLUMNS,
   renderEmployeeCell,
@@ -166,6 +167,20 @@ export function EmployeeManagementPage() {
     toast(`${title} — ${selectedRecords.length} employee(s)`, "success");
     setSelected(new Set());
     void load();
+  }
+
+  async function applyLifecycle(
+    record: EmployeeRecord,
+    status: EmployeeRecord["lifecycleStatus"],
+    title: string,
+  ) {
+    try {
+      await setEmployeeLifecycleStatus(record, status, title);
+      toast(title, "success");
+      await load();
+    } catch (err) {
+      toast(err instanceof ApiClientError ? err.message : "Status update failed", "error");
+    }
   }
 
   function renderColumnFilter(key: EmployeeTableColumnKey): ReactNode {
@@ -566,9 +581,7 @@ export function EmployeeManagementPage() {
                                 <RowActionsItem
                                   onClick={() => {
                                     setMenuId(null);
-                                    void setEmployeeLifecycleStatus(row, "inactive", "Deactivated").then(
-                                      load,
-                                    );
+                                    void applyLifecycle(row, "inactive", "Deactivated");
                                   }}
                                 >
                                   <UserMinus className="size-3.5 text-muted-foreground" />
@@ -581,10 +594,7 @@ export function EmployeeManagementPage() {
                                       title: "Archive Employee",
                                       message:
                                         "Soft delete — status becomes archived. Record is retained.",
-                                      action: async () => {
-                                        await setEmployeeLifecycleStatus(row, "archived", "Archived");
-                                        await load();
-                                      },
+                                      action: () => applyLifecycle(row, "archived", "Archived"),
                                     });
                                     setMenuId(null);
                                   }}
@@ -627,10 +637,15 @@ export function EmployeeManagementPage() {
         onConfirm={() => {
           if (!confirm) return;
           setConfirmLoading(true);
-          void confirm.action().finally(() => {
-            setConfirmLoading(false);
-            setConfirm(null);
-          });
+          void confirm
+            .action()
+            .catch((err) => {
+              toast(err instanceof ApiClientError ? err.message : "Action failed", "error");
+            })
+            .finally(() => {
+              setConfirmLoading(false);
+              setConfirm(null);
+            });
         }}
       />
     </div>
