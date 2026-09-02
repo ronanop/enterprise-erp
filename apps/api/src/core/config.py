@@ -29,6 +29,18 @@ class Settings(BaseSettings):
         alias="DATABASE_URL",
     )
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value: str | None) -> str | None:
+        """Ensure psycopg3 driver — bare postgresql:// defaults to missing psycopg2."""
+        if not value or not isinstance(value, str):
+            return value
+        if value.startswith("postgresql://"):
+            return "postgresql+psycopg://" + value.removeprefix("postgresql://")
+        if value.startswith("postgres://"):
+            return "postgresql+psycopg://" + value.removeprefix("postgres://")
+        return value
+
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
     celery_broker_url: str = Field(
         default="amqp://erp:erp_dev_password@localhost:5672//",
