@@ -105,8 +105,12 @@ export function ModuleUsersPage({ moduleKey }: Props) {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Users"
-        description={`Assign Entra users to ${title}. Assigned users see this module in their ERP menu. Users who already have ${title} are hidden from the dropdown.`}
+        title={moduleKey === "service" ? "Service team" : "Users"}
+        description={
+          moduleKey === "service"
+            ? "As Service Head, assign Entra users as Service Engineers. They get the Service module and can work tickets you assign. Module admins (Service Head) are set by the ERP admin under Organization → Users."
+            : `Assign Entra users to ${title}. Assigned users see this module in their ERP menu. Users who already have ${title} are hidden from the dropdown.`
+        }
       />
 
       {error ? (
@@ -122,7 +126,9 @@ export function ModuleUsersPage({ moduleKey }: Props) {
               <Users className="size-4" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-foreground">Module users</p>
+              <p className="text-sm font-semibold text-foreground">
+                {moduleKey === "service" ? "Service engineers" : "Module users"}
+              </p>
               <p className="text-[11px] text-muted-foreground">
                 {loading ? "Loading…" : `${members.length} assigned`}
               </p>

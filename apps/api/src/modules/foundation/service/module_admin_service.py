@@ -19,6 +19,7 @@ from modules.foundation.models.security import SecUser
 from modules.foundation.repository.user_module_repository import UserModuleRepository
 from modules.foundation.repository.user_repository import UserRepository
 from modules.foundation.service.audit_service import AuditService
+from modules.foundation.service.org_module_admin_sync_service import OrgModuleAdminSyncService
 
 
 class ModuleAdminService:
@@ -115,6 +116,10 @@ class ModuleAdminService:
             module_key=module_key,
             assigned_by=ctx.user_id,
         )
+        if module_key == "service":
+            OrgModuleAdminSyncService(self._db).promote_service_engineer(
+                ctx, user_id, ctx.user_id
+            )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="sec_user_module",
@@ -139,6 +144,10 @@ class ModuleAdminService:
         if row.role == MODULE_ROLE_ADMIN:
             raise ForbiddenException("Module admins are assigned from Organization users")
         self._modules.delete_assignment(row)
+        if module_key == "service":
+            OrgModuleAdminSyncService(self._db).demote_service_engineer(
+                ctx.tenant_id, user_id, ctx.user_id
+            )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="sec_user_module",

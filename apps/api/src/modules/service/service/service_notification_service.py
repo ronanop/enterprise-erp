@@ -20,9 +20,12 @@ class ServiceNotificationService:
         self._engine = ServiceNotificationEngine()
         self._audit = AuditService(db)
 
-    def list(self, ctx: TenantContext, company_id: UUID | None = None):
+    def list(self, ctx: TenantContext, company_id: UUID | None = None, *, mine: bool = False):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_rows(ctx, cid)
+        rows = self._repo.list_rows(ctx, cid)
+        if mine:
+            rows = [r for r in rows if r.recipient_user_id == ctx.user_id]
+        return sorted(rows, key=lambda r: r.sent_at or r.created_at, reverse=True)
 
     def get(self, ctx: TenantContext, row_id: UUID) -> SvcServiceNotification:
         row = self._repo.get(ctx, row_id)

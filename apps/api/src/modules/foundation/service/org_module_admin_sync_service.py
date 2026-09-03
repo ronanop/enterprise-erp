@@ -20,6 +20,8 @@ from modules.organization.repository.org_scope_repository import OrgScopeReposit
 
 ASSET_MANAGER_ROLE_CODE = "ASSET_MANAGER"
 PROCUREMENT_MANAGER_ROLE_CODE = "PROCUREMENT_MANAGER"
+SERVICE_HEAD_ROLE_CODE = "SERVICE_COORDINATOR"
+SERVICE_ENGINEER_ROLE_CODE = "SERVICE_ENGINEER"
 
 
 class OrgModuleAdminSyncService:
@@ -59,6 +61,11 @@ class OrgModuleAdminSyncService:
         if "procurement" in old_set and "procurement" not in new_set:
             self._demote_procurement(ctx, user_id, actor_id)
 
+        if "service" in new_set and "service" not in old_set:
+            self._promote_service(ctx, user_id, actor_id)
+        if "service" in old_set and "service" not in new_set:
+            self._demote_service(ctx, user_id, actor_id)
+
     def sync_all_org_module_admins(self, tenant_id: UUID) -> None:
         rows = list(
             self._db.scalars(
@@ -84,6 +91,8 @@ class OrgModuleAdminSyncService:
                 self._promote_assets(tenant_id, user_id, None)
             if "procurement" in keys:
                 self._promote_procurement(ctx, user_id, None)
+            if "service" in keys:
+                self._promote_service(ctx, user_id, None)
 
     def _role(self, tenant_id: UUID, role_code: str) -> SecRole | None:
         return self._db.scalar(
@@ -266,4 +275,120 @@ class OrgModuleAdminSyncService:
             operation="demote",
             performed_by=actor_id,
             new_value={"module": "procurement"},
+        )
+
+    def _promote_service(self, ctx: TenantContext, user_id: UUID, actor_id: UUID | None) -> None:
+        """ERP admin → Service Head (SERVICE_COORDINATOR: assign tickets, see all)."""
+        # Service head must not keep a stale engineer role.
+        self._revoke_role(ctx.tenant_id, user_id, SERVICE_ENGINEER_ROLE_CODE)
+        self._ensure_role(ctx.tenant_id, user_id, SERVICE_HEAD_ROLE_CODE, actor_id)
+        company_ids = self._all_company_ids(ctx.tenant_id)
+        user = self._db.get(SecUser, user_id)
+        default_company: UUID | None = None
+        if user and user.employee_id:
+            from modules.master_data.models.employee import MasterEmployee
+
+            emp = self._db.get(MasterEmployee, user.employee_id)
+            if emp and emp.company_id:
+                default_company = emp.company_id
+        if default_company is None and company_ids:
+            default_company = company_ids[0]
+        if company_ids:
+            self._scopes.replace_company_scopes(
+                ctx,
+                user_id=user_id,
+                company_ids=company_ids,
+                default_company_id=default_company,
+            )
+        try:
+            from modules.foundation.service.user_employee_link_service import UserEmployeeLinkService
+
+            if user is not None:
+                UserEmployeeLinkService(self._db).ensure_employee_for_user(
+                    ctx,
+                    user,
+                    bypass_onboarding=True,
+                )
+        except Exception:
+            pass
+        self._rbac.invalidate_user(user_id)
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="org_module_admin",
+            entity_id=user_id,
+            operation="promote",
+            performed_by=actor_id,
+            new_value={"module": "service", "role": SERVICE_HEAD_ROLE_CODE},
+        )
+
+    def _demote_service(self, ctx: TenantContext, user_id: UUID, actor_id: UUID | None) -> None:
+        self._revoke_role(ctx.tenant_id, user_id, SERVICE_HEAD_ROLE_CODE)
+        user = self._db.get(SecUser, user_id)
+        if user and user.employee_id:
+            from modules.master_data.models.employee import MasterEmployee
+
+            emp = self._db.get(MasterEmployee, user.employee_id)
+            if emp and emp.company_id:
+                self._scopes.replace_company_scopes(
+                    ctx,
+                    user_id=user_id,
+                    company_ids=[emp.company_id],
+                    default_company_id=emp.company_id,
+                )
+        self._users.revoke_all_sessions(ctx.tenant_id, user_id, revoked_by=actor_id)
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="org_module_admin",
+            entity_id=user_id,
+            operation="demote",
+            performed_by=actor_id,
+            new_value={"module": "service"},
+        )
+
+    def promote_service_engineer(
+        self,
+        ctx: TenantContext,
+        user_id: UUID,
+        actor_id: UUID | None,
+    ) -> None:
+        """Service Head assigns a module member → SERVICE_ENGINEER."""
+        self._revoke_role(ctx.tenant_id, user_id, SERVICE_HEAD_ROLE_CODE)
+        self._ensure_role(ctx.tenant_id, user_id, SERVICE_ENGINEER_ROLE_CODE, actor_id)
+        user = self._db.get(SecUser, user_id)
+        try:
+            from modules.foundation.service.user_employee_link_service import UserEmployeeLinkService
+
+            if user is not None:
+                UserEmployeeLinkService(self._db).ensure_employee_for_user(
+                    ctx,
+                    user,
+                    bypass_onboarding=True,
+                )
+        except Exception:
+            pass
+        self._rbac.invalidate_user(user_id)
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="org_module_member",
+            entity_id=user_id,
+            operation="promote",
+            performed_by=actor_id,
+            new_value={"module": "service", "role": SERVICE_ENGINEER_ROLE_CODE},
+        )
+
+    def demote_service_engineer(
+        self,
+        tenant_id: UUID,
+        user_id: UUID,
+        actor_id: UUID | None,
+    ) -> None:
+        self._revoke_role(tenant_id, user_id, SERVICE_ENGINEER_ROLE_CODE)
+        self._users.revoke_all_sessions(tenant_id, user_id, revoked_by=actor_id)
+        self._audit.log_entity_change(
+            tenant_id=tenant_id,
+            entity_name="org_module_member",
+            entity_id=user_id,
+            operation="demote",
+            performed_by=actor_id,
+            new_value={"module": "service"},
         )

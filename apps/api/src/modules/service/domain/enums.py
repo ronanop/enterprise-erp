@@ -13,11 +13,39 @@ class ServiceRequestStatus(str, Enum):
     SUBMITTED = "submitted"
     APPROVED = "approved"
     NEW = "new"
+    TICKET_REGISTERED = "ticket_registered"
+    AWAITING_ASSIGNMENT = "awaiting_assignment"
     ASSIGNED = "assigned"
     IN_PROGRESS = "in_progress"
+    ENGINEER_WORKING = "engineer_working"
+    PENDING_CUSTOMER = "pending_customer"
+    PENDING_OEM = "pending_oem"
     RESOLVED = "resolved"
     CLOSED = "closed"
     CANCELLED = "cancelled"
+
+
+class ModeOfAction(str, Enum):
+    REMOTE_SUPPORT = "remote_support"
+    ONSITE_SUPPORT = "onsite_support"
+    OEM_SUPPORT = "oem_support"
+
+
+class TicketCategory(str, Enum):
+    HARDWARE = "hardware"
+    SOFTWARE = "software"
+    NETWORK = "network"
+
+
+class TicketPriority(str, Enum):
+    P1 = "p1"
+    P2 = "p2"
+    P3 = "p3"
+    P4 = "p4"
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
 
 
 class ServiceTicketStatus(str, Enum):

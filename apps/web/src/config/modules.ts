@@ -1477,11 +1477,17 @@ export const erpModules: ErpModule[] = [
     key: "service",
     title: "Service",
     description:
-      "Field service — requests, tickets, dispatch, work orders, visits, SLA, escalations, and contracts.",
+      "Service request tickets — Service Head assigns engineers; engineers work assigned tickets, SLAs, and mailbox.",
     href: "/service",
     group: "operations",
     icon: "service",
     resources: [
+      {
+        key: "service-request-tickets",
+        title: "Request Tickets",
+        description: "SOP service request ticket workflow",
+        apiPath: "/service/service-request-tickets",
+      },
       {
         key: "service-categories",
         title: "Categories",

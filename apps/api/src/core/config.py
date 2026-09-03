@@ -179,6 +179,37 @@ class Settings(BaseSettings):
         default=False,
         alias="PROJECT_STAGE_EMAIL_NOTIFICATIONS_ENABLED",
     )
+    # Mailbox whose inbox is polled for email→ticket (defaults to AZURE_FROM_EMAIL)
+    graph_mailbox_email: str = Field(default="", alias="GRAPH_MAILBOX_EMAIL")
+    graph_mail_poll_enabled: bool = Field(default=True, alias="GRAPH_MAIL_POLL_ENABLED")
+
+    # Email → Service Request Ticket automation
+    email_ticket_enabled: bool = Field(default=False, alias="EMAIL_TICKET_ENABLED")
+    email_inbound_webhook_secret: str = Field(default="", alias="EMAIL_INBOUND_WEBHOOK_SECRET")
+    email_ticket_default_branch_id: str | None = Field(
+        default=None, alias="EMAIL_TICKET_DEFAULT_BRANCH_ID"
+    )
+    email_ticket_default_category_id: str | None = Field(
+        default=None, alias="EMAIL_TICKET_DEFAULT_CATEGORY_ID"
+    )
+    email_ticket_default_customer_id: str | None = Field(
+        default=None, alias="EMAIL_TICKET_DEFAULT_CUSTOMER_ID"
+    )
+    email_ticket_subject_patterns: str = Field(default="", alias="EMAIL_TICKET_SUBJECT_PATTERNS")
+    smtp_host: str = Field(default="", alias="SMTP_HOST")
+    smtp_port: int = Field(default=587, alias="SMTP_PORT")
+    smtp_user: str = Field(default="", alias="SMTP_USER")
+    smtp_password: str = Field(default="", alias="SMTP_PASSWORD")
+    smtp_from_address: str = Field(default="", alias="SMTP_FROM_ADDRESS")
+    smtp_use_tls: bool = Field(default=True, alias="SMTP_USE_TLS")
+    imap_enabled: bool = Field(default=False, alias="IMAP_ENABLED")
+    imap_host: str = Field(default="", alias="IMAP_HOST")
+    imap_port: int = Field(default=993, alias="IMAP_PORT")
+    imap_user: str = Field(default="", alias="IMAP_USER")
+    imap_password: str = Field(default="", alias="IMAP_PASSWORD")
+    imap_mailbox: str = Field(default="INBOX", alias="IMAP_MAILBOX")
+    imap_poll_interval_seconds: int = Field(default=120, alias="IMAP_POLL_INTERVAL_SECONDS")
+    service_followup_hours: int = Field(default=24, alias="SERVICE_FOLLOWUP_HOURS")
 
     # ElevenLabs Conversational AI (voice agent — server-side only)
     xi_api_key: str = Field(
@@ -277,21 +308,53 @@ class Settings(BaseSettings):
             and self.minio_root_password.strip()
         )
 
+    def resolved_graph_tenant_id(self) -> str:
+        return (self.azure_tenant_id or self.microsoft_tenant_id or "").strip()
+
+    def resolved_graph_client_id(self) -> str:
+        return (self.azure_client_id or self.microsoft_client_id or "").strip()
+
+    def resolved_graph_client_secret(self) -> str:
+        return (self.azure_client_secret or self.microsoft_client_secret or "").strip()
+
+    def resolved_graph_mailbox(self) -> str:
+        return (self.graph_mailbox_email or self.azure_from_email or self.imap_user or "").strip()
+
     @property
     def graph_email_configured(self) -> bool:
         return bool(
-            self.azure_tenant_id.strip()
-            and self.azure_client_id.strip()
-            and self.azure_client_secret.strip()
-            and self.azure_from_email.strip()
+            self.resolved_graph_tenant_id()
+            and self.resolved_graph_client_id()
+            and self.resolved_graph_client_secret()
+            and (self.azure_from_email.strip() or self.resolved_graph_mailbox())
         )
+
+    @property
+    def graph_mail_configured(self) -> bool:
+        return bool(
+            self.email_ticket_enabled
+            and self.graph_mail_poll_enabled
+            and self.resolved_graph_tenant_id()
+            and self.resolved_graph_client_id()
+            and self.resolved_graph_client_secret()
+            and self.resolved_graph_mailbox()
+        )
+
+    @property
+    def smtp_configured(self) -> bool:
+        return bool(self.smtp_host and self.smtp_from_address)
+
+    @property
+    def imap_configured(self) -> bool:
+        return bool(self.imap_enabled and self.imap_host and self.imap_user and self.imap_password)
 
     def graph_credential_diagnostics(self) -> dict:
         """Safe diagnostics for UI (never returns secret values)."""
         checks = {
-            "AZURE_TENANT_ID": bool(self.azure_tenant_id.strip()),
-            "AZURE_CLIENT_ID": bool(self.azure_client_id.strip()),
-            "AZURE_CLIENT_SECRET": bool(self.azure_client_secret.strip()),
+            "tenant_id": bool(self.resolved_graph_tenant_id()),
+            "client_id": bool(self.resolved_graph_client_id()),
+            "client_secret": bool(self.resolved_graph_client_secret()),
+            "mailbox": bool(self.resolved_graph_mailbox()),
             "AZURE_FROM_EMAIL": bool(self.azure_from_email.strip()),
         }
         missing = [name for name, ok in checks.items() if not ok]
@@ -302,23 +365,24 @@ class Settings(BaseSettings):
             "missing": missing,
             "present": present,
             "from_email": self.azure_from_email.strip() or None,
+            "mailbox": self.resolved_graph_mailbox() or None,
             "tenant_id_preview": (
-                f"{self.azure_tenant_id.strip()[:8]}…"
-                if len(self.azure_tenant_id.strip()) > 8
-                else (self.azure_tenant_id.strip() or None)
+                f"{self.resolved_graph_tenant_id()[:8]}…"
+                if len(self.resolved_graph_tenant_id()) > 8
+                else (self.resolved_graph_tenant_id() or None)
             ),
             "client_id_preview": (
-                f"{self.azure_client_id.strip()[:8]}…"
-                if len(self.azure_client_id.strip()) > 8
-                else (self.azure_client_id.strip() or None)
+                f"{self.resolved_graph_client_id()[:8]}…"
+                if len(self.resolved_graph_client_id()) > 8
+                else (self.resolved_graph_client_id() or None)
             ),
             "env_files_found": env_paths,
             "hint": (
                 None
                 if not missing
                 else (
-                    "Set the missing variables in apps/api/.env, then restart the API "
-                    "(uvicorn --reload). Required: Mail.Send application permission + admin consent."
+                    "Set MICROSOFT_* or AZURE_* plus GRAPH_MAILBOX_EMAIL / AZURE_FROM_EMAIL "
+                    "in apps/api/.env, then restart the API. Required: Mail.Send + Mail.Read."
                 )
             ),
         }

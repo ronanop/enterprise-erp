@@ -77,7 +77,15 @@ SERVICE_PERMISSIONS: list[tuple[str, str, str, str]] = [
 
 _ALL = [p[0] for p in SERVICE_PERMISSIONS]
 
-SERVICE_MANAGER_PERMISSIONS = list(_ALL)
+# Master/org reads needed for service ticket form dropdowns (customer, branch, owner, product).
+SERVICE_LOOKUP_PERMISSIONS = [
+    "master.customer:read",
+    "organization.branch:read",
+    "master.employee:read",
+    "master.product:read",
+]
+
+SERVICE_MANAGER_PERMISSIONS = list(_ALL) + list(SERVICE_LOOKUP_PERMISSIONS)
 SERVICE_ENGINEER_PERMISSIONS = [
     p for p in _ALL
     if not any(
@@ -94,7 +102,7 @@ SERVICE_ENGINEER_PERMISSIONS = [
             "report:export",
         )
     )
-]
+] + list(SERVICE_LOOKUP_PERMISSIONS)
 SERVICE_COORDINATOR_PERMISSIONS = [
     p for p in _ALL
     if not any(
@@ -108,5 +116,10 @@ SERVICE_COORDINATOR_PERMISSIONS = [
             "sla:update",
         )
     )
+] + list(SERVICE_LOOKUP_PERMISSIONS)
+SERVICE_ADMIN_PERMISSIONS = list(_ALL) + list(SERVICE_LOOKUP_PERMISSIONS)
+
+# Field engineers only need FE dashboard + mark-solved (read permission covers both routes).
+SERVICE_FIELD_ENGINEER_PERMISSIONS = [
+    "service.request:read",
 ]
-SERVICE_ADMIN_PERMISSIONS = list(_ALL)

@@ -22,11 +22,10 @@ export function ServicePipelineFunnel({
 
   return (
     <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-      <div className="mb-3 flex items-baseline justify-between gap-2">
-        <h2 className="text-base font-extrabold tracking-tight">Service delivery funnel</h2>
-        <p className="text-[11px] text-muted-foreground">Request → Contract (FRD-16)</p>
+      <div className="mb-3">
+        <h2 className="text-sm font-medium tracking-tight">Service delivery funnel</h2>
       </div>
-      <ol className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
+      <ol className="grid gap-2 sm:grid-cols-3">
         {values.map((stage, index) => {
           const prev = index > 0 ? values[index - 1].count : null;
           const conversion =

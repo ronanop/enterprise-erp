@@ -28,6 +28,10 @@ celery_app.conf.update(
             "task": "hr.attendance_auto_lock",
             "schedule": 3600.0,
         },
+        "service.poll_support_mailbox": {
+            "task": "service.poll_support_mailbox",
+            "schedule": 120.0,
+        },
     },
 )
 

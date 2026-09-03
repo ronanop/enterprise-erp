@@ -22,6 +22,13 @@ export type AdminLoginAccount = {
   kind: "platform" | "tenant";
 };
 
+export type ServiceTeamLoginAccount = {
+  email: string;
+  displayName: string;
+  role: string;
+  href: string;
+};
+
 /** Platform / tenant admins land on the overview dashboard. */
 export const adminLoginAccounts: AdminLoginAccount[] = [
   {
@@ -44,6 +51,31 @@ export const adminLoginAccounts: AdminLoginAccount[] = [
   },
 ];
 
+/**
+ * Service workflow demo team — mirrors production roles after SSO assignment:
+ * ERP admin → Service Head (module admin); Head → Service Engineers (module members).
+ */
+export const serviceTeamLoginAccounts: ServiceTeamLoginAccount[] = [
+  {
+    email: "service.head@example.com",
+    displayName: "Service Head",
+    role: "Assigns tickets · sees all",
+    href: "/service/service-request-tickets",
+  },
+  {
+    email: "service.engineer1@example.com",
+    displayName: "Service Engineer 1",
+    role: "Works assigned tickets",
+    href: "/service/service-request-tickets",
+  },
+  {
+    email: "service.engineer2@example.com",
+    displayName: "Service Engineer 2",
+    role: "Works assigned tickets",
+    href: "/service/service-request-tickets",
+  },
+];
+
 /** One demo user per ERP module — email uses the module registry key. */
 export const moduleLoginAccounts: ModuleLoginAccount[] = erpModules.map((mod) => ({
   email: `${mod.key}.user@example.com`,
@@ -56,6 +88,7 @@ export const moduleLoginAccounts: ModuleLoginAccount[] = erpModules.map((mod) =>
 const redirectByEmail = new Map<string, string>([
   ...adminLoginAccounts.map((a) => [a.email.toLowerCase(), a.href] as const),
   ...moduleLoginAccounts.map((a) => [a.email.toLowerCase(), a.href] as const),
+  ...serviceTeamLoginAccounts.map((a) => [a.email.toLowerCase(), a.href] as const),
 ]);
 
 /** Resolve post-login destination from the signed-in email. Unknown → `/`. */
