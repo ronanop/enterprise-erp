@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { RefreshCw } from "lucide-react";
+import { Activity, Clock3, RefreshCw, Wrench, type LucideIcon } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import {
@@ -22,6 +22,7 @@ import {
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { isAuthenticated } from "@/lib/auth";
 import { shouldScopeServiceToMine } from "@/lib/service-engineer-access";
+import { cn } from "@/lib/utils";
 import {
   countByStatus,
   loadServiceOverview,
@@ -63,14 +64,49 @@ function supportModeCounts(rows: ServiceRow[], linkOpts?: ServiceDashboardLinkOp
   }));
 }
 
-function ChartPanel({ title, children }: { title: string; children: ReactNode }) {
+function ChartPanel({
+  title,
+  subtitle,
+  icon: Icon,
+  children,
+  className,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: LucideIcon;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-      <div className="border-b border-border/70 px-4 py-3">
-        <h2 className="text-sm font-medium tracking-tight">{title}</h2>
+    <section
+      className={cn(
+        "group relative overflow-hidden rounded-2xl border border-border/60 bg-card p-4 shadow-sm",
+        "transition-[box-shadow,border-color] duration-200 hover:border-primary/25 hover:shadow-md",
+        className,
+      )}
+    >
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/35 to-transparent"
+        aria-hidden
+      />
+      <div className="mb-3 flex items-start gap-2.5">
+        {Icon ? (
+          <span
+            className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40 text-foreground"
+            aria-hidden
+          >
+            <Icon className="size-3.5" />
+          </span>
+        ) : null}
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold tracking-tight text-foreground">{title}</h2>
+          {subtitle ? (
+            <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{subtitle}</p>
+          ) : null}
+        </div>
       </div>
-      <div className="p-4">{children}</div>
-    </div>
+      {children}
+    </section>
   );
 }
 
@@ -162,14 +198,14 @@ export function ServiceDashboard() {
         </div>
       ) : null}
 
-      <div className="grid gap-3 lg:grid-cols-2">
-        <ChartPanel title="Ticket status">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartPanel title="Ticket status" icon={Activity}>
           <ServiceStatusBarChart data={statusBar} loading={loading} />
         </ChartPanel>
-        <ChartPanel title="SLA overview">
+        <ChartPanel title="SLA overview" icon={Clock3}>
           <ServiceSlaComplianceBarChart data={slaCompliance} loading={loading} />
         </ChartPanel>
-        <ChartPanel title="Support mode">
+        <ChartPanel title="Support mode" icon={Wrench} className="lg:col-span-2">
           <ServiceSupportModeChart data={supportModes} loading={loading} />
         </ChartPanel>
       </div>
