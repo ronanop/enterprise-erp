@@ -33,6 +33,8 @@ class AssetModuleAdminService:
             return False
         if ctx.user_type in ADMIN_USER_TYPES:
             return True
+        if ASSET_MODULE_KEY in ctx.admin_module_keys:
+            return True
         if self._modules.is_module_admin(ctx.tenant_id, ctx.user_id, ASSET_MODULE_KEY):
             return True
         if self._rbac.has_permission(ctx.user_id, ctx.tenant_id, "asset.module:admin"):

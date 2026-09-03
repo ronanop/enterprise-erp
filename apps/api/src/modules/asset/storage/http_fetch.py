@@ -99,7 +99,7 @@ def guard_document_url(url: str) -> str:
         )
 
     settings = get_settings()
-    allowed = parse_allowed_hosts(getattr(settings, "asset_dc_challan_scm_allowed_hosts", "") or "")
+    allowed = parse_allowed_hosts(settings.asset_dc_challan_scm_allowed_hosts or "")
     is_production = (settings.environment or "").strip().lower() in {"production", "prod"}
     if not allowed:
         if is_production:

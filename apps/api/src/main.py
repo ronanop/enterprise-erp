@@ -18,8 +18,10 @@ from shared.router import api_v1_router
 async def lifespan(application: FastAPI):
     setup_logging()
     from core.infra_health import log_infrastructure_connections
+    from modules.asset.storage import validate_asset_storage_on_startup
 
     log_infrastructure_connections()
+    validate_asset_storage_on_startup()
     async with mcp_lifespan(application):
         yield
 

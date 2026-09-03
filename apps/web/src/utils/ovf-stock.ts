@@ -150,8 +150,9 @@ export function ovfVendorPoGroups(
   const groups = new Map<string, { distributorName: string; lines: ScmVendorLine[] }>();
   for (const line of lines) {
     if (ovfLineIsInventoryFulfillment(line)) continue;
-    const name = (line.distributor_name || "").trim() || "Vendor";
-    const key = name.toLowerCase().replace(/\s+/g, " ");
+    const raw = (line.distributor_name || "").trim();
+    const name = raw && raw.toLowerCase() !== "vendor" ? raw : "";
+    const key = (name || "__unassigned__").toLowerCase().replace(/\s+/g, " ");
     const existing = groups.get(key);
     if (existing) existing.lines.push(line);
     else groups.set(key, { distributorName: name, lines: [line] });

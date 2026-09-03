@@ -2,24 +2,16 @@ import sharp from "sharp";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
+const { assertWithinRoot } = require("../../../.cursor/skills/shared/safe-fs.cjs");
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 const iconsDir = path.join(root, "public", "icons");
 
 fs.mkdirSync(iconsDir, { recursive: true });
-
-function assertWithinRoot(baseDir, targetPath) {
-  const resolvedBase = path.resolve(baseDir);
-  const resolvedTarget = path.resolve(targetPath);
-  if (
-    resolvedTarget !== resolvedBase &&
-    !resolvedTarget.startsWith(resolvedBase + path.sep)
-  ) {
-    throw new Error(`Refusing to write outside project root: ${targetPath}`);
-  }
-  return resolvedTarget;
-}
 
 function svg(size, { maskable = false } = {}) {
   const inner = size * (maskable ? 0.64 : 0.76);
@@ -43,23 +35,21 @@ function svg(size, { maskable = false } = {}) {
 </svg>`;
 }
 
-async function writePng(filePath, size, opts) {
-  assertWithinRoot(root, filePath);
+async function writePng(relativePath, size, opts) {
+  const filePath = assertWithinRoot(root, relativePath);
   const buf = await sharp(Buffer.from(svg(size, opts))).png().toBuffer();
   fs.writeFileSync(filePath, buf);
   console.log("wrote", path.relative(root, filePath), buf.length);
 }
 
-await writePng(path.join(iconsDir, "icon-192.png"), 192);
-await writePng(path.join(iconsDir, "icon-512.png"), 512);
-await writePng(path.join(iconsDir, "icon-512-maskable.png"), 512, {
+await writePng(path.join("public", "icons", "icon-192.png"), 192);
+await writePng(path.join("public", "icons", "icon-512.png"), 512);
+await writePng(path.join("public", "icons", "icon-512-maskable.png"), 512, {
   maskable: true,
 });
-await writePng(path.join(root, "public", "apple-touch-icon.png"), 180);
-await writePng(path.join(root, "public", "favicon-32.png"), 32);
-await writePng(path.join(root, "public", "icon-192.png"), 192);
-
-// Favicon as PNG (browsers accept linked PNG); also write ICO-compatible PNG copy
-await writePng(path.join(root, "public", "favicon.png"), 48);
+await writePng(path.join("public", "apple-touch-icon.png"), 180);
+await writePng(path.join("public", "favicon-32.png"), 32);
+await writePng(path.join("public", "icon-192.png"), 192);
+await writePng(path.join("public", "favicon.png"), 48);
 
 console.log("done");

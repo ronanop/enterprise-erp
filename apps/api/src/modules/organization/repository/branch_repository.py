@@ -5,11 +5,16 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from modules.foundation.domain.org_data_scope import effective_company_ids, has_tenant_wide_data_access
+from modules.foundation.domain.org_data_scope import (
+    effective_company_ids,
+    has_module_wide_data_access,
+)
 from modules.foundation.domain.value_objects import TenantContext
 from modules.organization.domain.entities import BranchEntity
 from modules.organization.models.branch import OrgBranch
 from modules.organization.repository.base import OrgScopedRepository, utcnow
+
+ORGANIZATION_MODULE_KEY = "organization"
 
 
 class BranchRepository(OrgScopedRepository):
@@ -25,10 +30,10 @@ class BranchRepository(OrgScopedRepository):
         )
         if company_id:
             stmt = stmt.where(OrgBranch.company_id == company_id)
-        elif has_tenant_wide_data_access(ctx):
+        elif has_module_wide_data_access(ctx, ORGANIZATION_MODULE_KEY):
             pass
         else:
-            allowed = effective_company_ids(ctx)
+            allowed = effective_company_ids(ctx, module_key=ORGANIZATION_MODULE_KEY)
             if allowed is not None:
                 if not allowed:
                     stmt = stmt.where(OrgBranch.id.is_(None))
@@ -36,12 +41,12 @@ class BranchRepository(OrgScopedRepository):
                     stmt = stmt.where(OrgBranch.company_id == allowed[0])
                 else:
                     stmt = stmt.where(OrgBranch.company_id.in_(allowed))
-        # Branch-scoped users only see their own branch; admins see all in scope
-        if ctx.branch_id and ctx.user_type not in {
-            "super_admin",
-            "tenant_admin",
-            "company_admin",
-        }:
+        # Branch-scoped users only see their own branch; org/platform admins see all in scope
+        if (
+            ctx.branch_id
+            and ctx.user_type not in {"super_admin", "tenant_admin", "company_admin"}
+            and not has_module_wide_data_access(ctx, ORGANIZATION_MODULE_KEY)
+        ):
             stmt = stmt.where(OrgBranch.id == ctx.branch_id)
         stmt = stmt.order_by(OrgBranch.branch_name.asc())
         return [self._to_entity(r) for r in self.db.scalars(stmt).all()]

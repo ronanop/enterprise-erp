@@ -24,11 +24,13 @@ import {
   type DeliveryChallanRecord,
 } from "@/utils/delivery-challan-storage";
 import {
+  getDeliveryStatus,
   openStoredDeliveryFile,
   resolveDeliveryStatusForChallan,
   upsertDeliveryChallanBilling,
   type DeliveryStatusAttachment,
 } from "@/utils/delivery-status-storage";
+import { syncOvfTimelineForDeliveryStatus } from "@/utils/ovf-timeline-sync";
 
 type DeliveryStatusBillDialogProps = {
   open: boolean;
@@ -136,6 +138,7 @@ export function DeliveryStatusBillDialog({
     setBusy(true);
     setError(null);
     try {
+      const previous = challan ? getDeliveryStatus(challan.id) : null;
       const saved = upsertDeliveryChallanBilling({
         challanId: challan.id,
         billStatus: nextStatus,
@@ -149,6 +152,9 @@ export function DeliveryStatusBillDialog({
         setError("Could not save bill status.");
         setBusy(false);
         return;
+      }
+      if (challan) {
+        syncOvfTimelineForDeliveryStatus(challan, saved, previous);
       }
       onSaved?.();
       onClose();

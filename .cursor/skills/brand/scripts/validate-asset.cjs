@@ -15,6 +15,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { resolveWithinRoot, statWithinRoot } = require("../../shared/safe-fs.cjs");
 
 // Validation rules
 const RULES = {
@@ -123,7 +124,7 @@ function validateFileSize(filepath, extension) {
   const issues = [];
   const warnings = [];
 
-  const stats = fs.statSync(filepath);
+  const stats = statWithinRoot(process.cwd(), filepath);
   const size = stats.size;
 
   let limits;
@@ -366,9 +367,13 @@ function main() {
   }
 
   // Resolve path
-  const resolvedPath = path.isAbsolute(assetPath)
-    ? assetPath
-    : path.join(process.cwd(), assetPath);
+  let resolvedPath;
+  try {
+    resolvedPath = resolveWithinRoot(process.cwd(), assetPath);
+  } catch {
+    console.error(`Asset path is not allowed: ${assetPath}`);
+    process.exit(1);
+  }
 
   // Validate
   const results = validateAsset(resolvedPath);

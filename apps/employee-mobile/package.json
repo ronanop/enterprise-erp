@@ -41,6 +41,12 @@
     "@types/react": "~19.2.4",
     "typescript": "~6.0.3"
   },
+  "overrides": {
+    "browserslist": "4.28.8",
+    "decode-uri-component": "0.5.0",
+    "image-size": "2.0.2",
+    "uuid": "^14.0.0"
+  },
   "scripts": {
     "start": "expo start --lan",
     "start:clear": "expo start --lan --clear",

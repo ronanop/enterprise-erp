@@ -454,8 +454,17 @@ export function ScmQueuePage() {
                 return (
                   <tr
                     key={row.ovf_id}
+                    role="link"
+                    tabIndex={0}
+                    onClick={() => router.push(`/procurement/scm/ovf/${row.ovf_id}`)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        router.push(`/procurement/scm/ovf/${row.ovf_id}`);
+                      }
+                    }}
                     className={cn(
-                      "border-b border-border/70 transition-colors duration-150 hover:bg-muted/30",
+                      "cursor-pointer border-b border-border/70 transition-colors duration-150 hover:bg-muted/30",
                       isNew && "bg-sky-50/80",
                     )}
                   >
@@ -527,7 +536,7 @@ export function ScmQueuePage() {
                         ) : null}
                       </span>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2" onClick={(event) => event.stopPropagation()}>
                       <Link
                         href={`/procurement/scm/ovf/${row.ovf_id}`}
                         className={cn(

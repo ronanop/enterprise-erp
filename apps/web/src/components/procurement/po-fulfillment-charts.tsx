@@ -131,39 +131,6 @@ export function PoFulfillmentCharts({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 xl:grid-cols-5">
-        <StatChip
-          label="Ordered"
-          value={formatPoQty(metrics.orderedQty)}
-          icon={Package}
-          tone="slate"
-        />
-        <StatChip
-          label="Received"
-          value={formatPoQty(metrics.receivedQty)}
-          icon={PackageCheck}
-          tone="sky"
-        />
-        <StatChip
-          label="Pending GRN"
-          value={formatPoQty(metrics.remainingQty)}
-          icon={Package}
-          tone="amber"
-        />
-        <StatChip
-          label="Billed"
-          value={formatPoQty(metrics.billedQty)}
-          icon={Receipt}
-          tone="emerald"
-        />
-        <StatChip
-          label="In stock"
-          value={formatPoQty(metrics.unbilledQty)}
-          icon={Warehouse}
-          tone="teal"
-        />
-      </div>
-
       <div className="overflow-hidden rounded-xl border border-border/70 bg-white/80">
         <div className="border-b border-border/70 px-3 py-2">
           <p className="text-[11px] font-bold uppercase tracking-wide text-foreground">

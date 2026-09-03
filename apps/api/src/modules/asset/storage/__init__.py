@@ -23,7 +23,7 @@ def get_storage() -> StorageBackend:
         raise RuntimeError(
             f"Unsupported ASSET_STORAGE_BACKEND={backend!r}; only 'local' is implemented"
         )
-    root = Path(settings.asset_storage_path or "./var/asset-storage")
+    root = settings.resolved_asset_storage_path
     return LocalDiskStorage(root)
 
 

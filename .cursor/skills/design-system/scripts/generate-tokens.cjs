@@ -9,6 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { isSafeObjectKey, resolveWithinRoot } = require('../../shared/safe-fs.cjs');
 
 /**
  * Parse command line arguments
@@ -57,6 +58,7 @@ function resolveReference(value, tokens) {
   let result = tokens;
 
   for (const key of path) {
+    if (!isSafeObjectKey(key)) return value;
     result = result?.[key];
   }
 
@@ -77,8 +79,9 @@ function toCssVarName(path) {
 /**
  * Flatten tokens into CSS variables
  */
-function flattenTokens(obj, tokens, prefix = [], result = {}) {
+function flattenTokens(obj, tokens, prefix = [], result = Object.create(null)) {
   for (const [key, value] of Object.entries(obj)) {
+    if (!isSafeObjectKey(key)) continue;
     const currentPath = [...prefix, key];
 
     if (value && typeof value === 'object') {
@@ -173,7 +176,14 @@ function main() {
   }
 
   // Resolve config path
-  const configPath = path.resolve(process.cwd(), options.config);
+  const root = process.cwd();
+  let configPath;
+  try {
+    configPath = resolveWithinRoot(root, options.config);
+  } catch {
+    console.error(`Error: Config path is not allowed: ${options.config}`);
+    process.exit(1);
+  }
 
   if (!fs.existsSync(configPath)) {
     console.error(`Error: Config file not found: ${configPath}`);
@@ -193,9 +203,8 @@ function main() {
 
   // Write output
   if (options.output) {
-    const outputPath = path.resolve(process.cwd(), options.output);
-    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-    fs.writeFileSync(outputPath, output);
+    const { writeFileWithinRoot } = require('../../shared/safe-fs.cjs');
+    const outputPath = writeFileWithinRoot(root, options.output, output);
     console.log(`Generated: ${outputPath}`);
   } else {
     console.log(output);

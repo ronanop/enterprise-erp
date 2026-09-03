@@ -13,7 +13,7 @@ _TTL_SEC = 300
 
 
 def captcha_enabled() -> bool:
-    return bool(getattr(get_settings(), "ess_login_captcha_enabled", False))
+    return bool(get_settings().ess_login_captcha_enabled)
 
 
 def issue_challenge() -> tuple[str, str]:

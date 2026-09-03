@@ -67,6 +67,14 @@ export function matchVendorByOem(
   return matchVendorByDistributor(vendors, distributorName);
 }
 
+function normalizeDistributorDisplayName(raw: string | null | undefined): string | null {
+  const trimmed = raw?.trim();
+  if (!trimmed) return null;
+  // Legacy placeholder when OVF vendor rows had no distributor filled in CRM.
+  if (trimmed.toLowerCase() === "vendor") return null;
+  return trimmed;
+}
+
 /** Display name for procurement vendor column: CRM distributor only (not PO/master vendor). */
 export function resolveVendorDisplayName(input: {
   vendor_name?: string | null;
@@ -74,9 +82,11 @@ export function resolveVendorDisplayName(input: {
   oem_name?: string | null;
   open_distributor_names?: string[] | null;
 }): string {
-  const distributor = input.distributor_name?.trim();
+  const distributor = normalizeDistributorDisplayName(input.distributor_name);
   if (distributor) return distributor;
-  const open = (input.open_distributor_names || []).map((n) => n.trim()).filter(Boolean);
+  const open = (input.open_distributor_names || [])
+    .map((name) => normalizeDistributorDisplayName(name))
+    .filter((name): name is string => Boolean(name));
   if (open.length > 0) return open.join(", ");
   return "—";
 }

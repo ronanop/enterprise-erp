@@ -92,6 +92,44 @@ class Settings(BaseSettings):
         alias="PROJECT_TRACKER_UPLOAD_ROOT",
     )
 
+    asset_storage_backend: str = Field(
+        default="local",
+        alias="ASSET_STORAGE_BACKEND",
+        description="Asset file storage backend; only 'local' is implemented in this phase.",
+    )
+    asset_storage_path: str = Field(
+        default="",
+        alias="ASSET_STORAGE_PATH",
+        description="Directory for asset-module files (DC challan docs); default apps/api/var/asset-storage",
+    )
+
+    asset_workflow_governance_enabled: bool = Field(
+        default=False,
+        alias="ASSET_WORKFLOW_GOVERNANCE_ENABLED",
+        description="When true, asset mutations require workflow approval (FP-ASSET-WF-GOV-001).",
+    )
+    asset_dc_challan_max_upload_mb: int = Field(
+        default=10,
+        alias="ASSET_DC_CHALLAN_MAX_UPLOAD_MB",
+        description="Max upload size (MB) for asset DC challan documents.",
+    )
+    asset_dc_challan_scm_api_key: str = Field(
+        default="",
+        alias="ASSET_DC_CHALLAN_SCM_API_KEY",
+        description="Shared secret for SCM callback POST on asset DC challans.",
+    )
+    asset_dc_challan_scm_allowed_hosts: str = Field(
+        default="",
+        alias="ASSET_DC_CHALLAN_SCM_ALLOWED_HOSTS",
+        description="Comma-separated allowlist for SCM document URL fetch (SSRF guard).",
+    )
+
+    ess_login_captcha_enabled: bool = Field(
+        default=False,
+        alias="ESS_LOGIN_CAPTCHA_ENABLED",
+        description="Require math CAPTCHA on ESS employee code login.",
+    )
+
     minio_endpoint: str = Field(default="172.16.200.26:9000", alias="MINIO_ENDPOINT")
     minio_endpoint_fallback: str = Field(
         default="localhost:9000",
@@ -224,6 +262,12 @@ class Settings(BaseSettings):
         if self.project_tracker_upload_root.strip():
             return Path(self.project_tracker_upload_root)
         return _API_ROOT / "var" / "project-trackers"
+
+    @property
+    def resolved_asset_storage_path(self) -> Path:
+        if self.asset_storage_path.strip():
+            return Path(self.asset_storage_path)
+        return _API_ROOT / "var" / "asset-storage"
 
     @property
     def minio_configured(self) -> bool:

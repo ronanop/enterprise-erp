@@ -14,23 +14,21 @@ class OrderRepository(ProcScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
-    def list_orders(self, ctx: TenantContext, company_id: UUID) -> list[ProcOrderHeader]:
-        stmt = select(ProcOrderHeader).where(
-            ProcOrderHeader.company_id == company_id,
-            ProcOrderHeader.is_deleted.is_(False),
-        )
+    def list_orders(self, ctx: TenantContext, company_id: UUID | None) -> list[ProcOrderHeader]:
+        stmt = select(ProcOrderHeader).where(ProcOrderHeader.is_deleted.is_(False))
+        stmt = self.apply_optional_company_filter(stmt, ProcOrderHeader, company_id)
         stmt = self.apply_proc_filter(stmt, ProcOrderHeader, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt.order_by(ProcOrderHeader.document_date.desc())).all())
 
-    def list_orders_with_lines(self, ctx: TenantContext, company_id: UUID) -> list[ProcOrderHeader]:
+    def list_orders_with_lines(
+        self, ctx: TenantContext, company_id: UUID | None
+    ) -> list[ProcOrderHeader]:
         stmt = (
             select(ProcOrderHeader)
             .options(selectinload(ProcOrderHeader.lines))
-            .where(
-                ProcOrderHeader.company_id == company_id,
-                ProcOrderHeader.is_deleted.is_(False),
-            )
+            .where(ProcOrderHeader.is_deleted.is_(False))
         )
+        stmt = self.apply_optional_company_filter(stmt, ProcOrderHeader, company_id)
         stmt = self.apply_proc_filter(stmt, ProcOrderHeader, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt.order_by(ProcOrderHeader.document_date.desc())).all())
 

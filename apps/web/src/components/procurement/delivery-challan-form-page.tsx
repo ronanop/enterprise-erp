@@ -77,7 +77,8 @@ import {
 import { resolveChallanBillStatus } from "@/utils/delivery-challan-bill";
 import { patchPendingGrnChallan, upsertPendingGrnChallan } from "@/utils/grn-challan-pending";
 import { deliveryStatusUpdateHref } from "@/utils/delivery-status-routes";
-import { ensureDeliveryStatusForChallan } from "@/utils/delivery-status-storage";
+import { ensureDeliveryStatusForChallan, getDeliveryStatus } from "@/utils/delivery-status-storage";
+import { syncOvfTimelineForChallan, syncOvfTimelineForDeliveryStatus } from "@/utils/ovf-timeline-sync";
 import { ovfGrnStockSourceKey, ovfStockSourceKey, takeOvfInventoryShipSelection } from "@/utils/ovf-stock";
 
 function todayIso(): string {
@@ -834,7 +835,12 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       }
     }
     setLoadError(null);
+    const existingChallan = recordId ? getDeliveryChallan(recordId) : null;
     const saved = upsertDeliveryChallan(buildSavePayload());
+    syncOvfTimelineForChallan(saved, {
+      ovfId: ovfIdParam,
+      isCreate: !existingChallan,
+    });
     ensureDeliveryStatusForChallan(
       saved,
       grnKind === "billing" && invoiceNumber.trim()
@@ -848,6 +854,10 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
           }
         : { billStatus: "unbilled" },
     );
+    if (grnKind === "billing" && invoiceNumber.trim()) {
+      const status = getDeliveryStatus(saved.id);
+      if (status) syncOvfTimelineForDeliveryStatus(saved, status, null);
+    }
     const gk = grnKind === "billing" || grnKind === "delivery_challan" ? grnKind : undefined;
     const saveKeys = resolveSaveGrnKeys();
     const batchKey = saveKeys[0] || null;
@@ -1105,7 +1115,6 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               className="h-8"
-              placeholder="OVF customer name; falls back to account / company if blank"
             />
           </FinanceField>
           <FinanceField label="Customer GST no.">

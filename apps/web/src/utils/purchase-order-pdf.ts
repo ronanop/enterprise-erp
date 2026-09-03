@@ -1,6 +1,7 @@
 import { GState, jsPDF } from "jspdf";
 
 import { loadCacheLogo } from "@/utils/load-cache-logo";
+import { pdfImageFormat } from "@/utils/pdf-letterhead";
 import {
   amountInIndianWords,
   amountInUsdWords,
@@ -406,20 +407,17 @@ export async function downloadPurchaseOrderPdf(
     const lx = L + (logoW - drawW) / 2;
     const ly = y + (headH - drawH) / 2;
     try {
-      doc.addImage(logo.dataUrl, "JPEG", lx, ly, drawW, drawH);
+      doc.addImage(
+        logo.dataUrl,
+        pdfImageFormat(logo.dataUrl),
+        lx,
+        ly,
+        drawW,
+        drawH,
+      );
     } catch {
-      doc.setTextColor(200, 0, 0);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(16);
-      doc.text("CACHE", L + logoW / 2, y + headH / 2 + 2, { align: "center" });
-      doc.setTextColor(0, 0, 0);
+      // Logo file missing or corrupt — leave header cell blank.
     }
-  } else {
-    doc.setTextColor(200, 0, 0);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.text("CACHE", L + logoW / 2, y + headH / 2 + 2, { align: "center" });
-    doc.setTextColor(0, 0, 0);
   }
 
   const companyRightX = R - 3;

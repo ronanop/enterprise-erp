@@ -1,10 +1,15 @@
 """Application exception types and FastAPI handlers."""
 
+import logging
+
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DBAPIError, OperationalError, TimeoutError as SATimeoutError
 
 from shared.schemas import ErrorResponse
+
+logger = logging.getLogger(__name__)
 
 
 class AppException(Exception):
@@ -74,6 +79,42 @@ def register_exception_handlers(app: FastAPI) -> None:
                 errors=errors,
             ).model_dump(),
         )
+
+    @app.exception_handler(DatabaseUnavailableException)
+    async def database_unavailable_handler(
+        _: Request,
+        exc: DatabaseUnavailableException,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=ErrorResponse(message=exc.message).model_dump(),
+        )
+
+    @app.exception_handler(OperationalError)
+    async def operational_error_handler(_: Request, exc: OperationalError) -> JSONResponse:
+        logger.warning("database operational error: %s", exc)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=ErrorResponse(message="Database temporarily unavailable").model_dump(),
+        )
+
+    @app.exception_handler(SATimeoutError)
+    async def pool_timeout_handler(_: Request, exc: SATimeoutError) -> JSONResponse:
+        logger.warning("database pool timeout: %s", exc)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=ErrorResponse(message="Database temporarily unavailable").model_dump(),
+        )
+
+    @app.exception_handler(DBAPIError)
+    async def dbapi_error_handler(_: Request, exc: DBAPIError) -> JSONResponse:
+        if isinstance(exc.orig, Exception) and "too many clients" in str(exc.orig).lower():
+            logger.warning("database connection pool exhausted: %s", exc.orig)
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content=ErrorResponse(message="Database temporarily unavailable").model_dump(),
+            )
+        raise exc
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

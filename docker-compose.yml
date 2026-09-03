@@ -11,6 +11,7 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - erp_pgdata:/var/lib/postgresql/data
+    command: ["postgres", "-c", "max_connections=200"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-erp-postgres} -d ${POSTGRES_DB:-erp}"]
       interval: 5s
@@ -112,8 +113,11 @@ services:
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
       SSL_CERT_DIR: /etc/ssl/certs
+      ASSET_STORAGE_BACKEND: local
+      ASSET_STORAGE_PATH: /app/var/asset-storage
     volumes:
       - crm_uploads:/app/var/crm-attachments
+      - asset_storage:/app/var/asset-storage
     depends_on:
       postgres:
         condition: service_healthy
@@ -150,8 +154,11 @@ services:
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
       SSL_CERT_DIR: /etc/ssl/certs
+      ASSET_STORAGE_BACKEND: local
+      ASSET_STORAGE_PATH: /app/var/asset-storage
     volumes:
       - crm_uploads:/app/var/crm-attachments
+      - asset_storage:/app/var/asset-storage
     depends_on:
       api:
         condition: service_healthy
@@ -211,3 +218,5 @@ volumes:
     name: erp_opensearch_data
   crm_uploads:
     name: erp_crm_uploads
+  asset_storage:
+    name: erp_asset_storage

@@ -31,7 +31,9 @@ class OrgScopeRepository:
         return self.db.scalar(stmt)
 
     def user_has_company_access(self, ctx: TenantContext, company_id: UUID) -> bool:
-        if has_tenant_wide_data_access(ctx):
+        if has_tenant_wide_data_access(ctx, "organization") or has_tenant_wide_data_access(
+            ctx
+        ):
             return True
         stmt = select(SecUserOrgScope).where(
             SecUserOrgScope.user_id == ctx.user_id,

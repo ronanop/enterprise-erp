@@ -19,6 +19,7 @@ from modules.organization.models.company import OrgCompany
 from modules.organization.repository.org_scope_repository import OrgScopeRepository
 
 ASSET_MANAGER_ROLE_CODE = "ASSET_MANAGER"
+PROCUREMENT_MANAGER_ROLE_CODE = "PROCUREMENT_MANAGER"
 
 
 class OrgModuleAdminSyncService:
@@ -53,6 +54,11 @@ class OrgModuleAdminSyncService:
         if "assets" in old_set and "assets" not in new_set:
             self._demote_assets(tenant_id, user_id, actor_id)
 
+        if "procurement" in new_set and "procurement" not in old_set:
+            self._promote_procurement(ctx, user_id, actor_id)
+        if "procurement" in old_set and "procurement" not in new_set:
+            self._demote_procurement(ctx, user_id, actor_id)
+
     def sync_all_org_module_admins(self, tenant_id: UUID) -> None:
         rows = list(
             self._db.scalars(
@@ -76,6 +82,8 @@ class OrgModuleAdminSyncService:
                 self._promote_hr(ctx, user_id, None)
             if "assets" in keys:
                 self._promote_assets(tenant_id, user_id, None)
+            if "procurement" in keys:
+                self._promote_procurement(ctx, user_id, None)
 
     def _role(self, tenant_id: UUID, role_code: str) -> SecRole | None:
         return self._db.scalar(
@@ -204,4 +212,58 @@ class OrgModuleAdminSyncService:
             operation="demote",
             performed_by=actor_id,
             new_value={"module": "assets"},
+        )
+
+    def _promote_procurement(self, ctx: TenantContext, user_id: UUID, actor_id: UUID | None) -> None:
+        self._ensure_role(ctx.tenant_id, user_id, PROCUREMENT_MANAGER_ROLE_CODE, actor_id)
+        company_ids = self._all_company_ids(ctx.tenant_id)
+        user = self._db.get(SecUser, user_id)
+        default_company: UUID | None = None
+        if user and user.employee_id:
+            from modules.master_data.models.employee import MasterEmployee
+
+            emp = self._db.get(MasterEmployee, user.employee_id)
+            if emp and emp.company_id:
+                default_company = emp.company_id
+        if default_company is None and company_ids:
+            default_company = company_ids[0]
+        if company_ids:
+            self._scopes.replace_company_scopes(
+                ctx,
+                user_id=user_id,
+                company_ids=company_ids,
+                default_company_id=default_company,
+            )
+        self._rbac.invalidate_user(user_id)
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="org_module_admin",
+            entity_id=user_id,
+            operation="promote",
+            performed_by=actor_id,
+            new_value={"module": "procurement", "role": PROCUREMENT_MANAGER_ROLE_CODE},
+        )
+
+    def _demote_procurement(self, ctx: TenantContext, user_id: UUID, actor_id: UUID | None) -> None:
+        self._revoke_role(ctx.tenant_id, user_id, PROCUREMENT_MANAGER_ROLE_CODE)
+        user = self._db.get(SecUser, user_id)
+        if user and user.employee_id:
+            from modules.master_data.models.employee import MasterEmployee
+
+            emp = self._db.get(MasterEmployee, user.employee_id)
+            if emp and emp.company_id:
+                self._scopes.replace_company_scopes(
+                    ctx,
+                    user_id=user_id,
+                    company_ids=[emp.company_id],
+                    default_company_id=emp.company_id,
+                )
+        self._users.revoke_all_sessions(ctx.tenant_id, user_id, revoked_by=actor_id)
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="org_module_admin",
+            entity_id=user_id,
+            operation="demote",
+            performed_by=actor_id,
+            new_value={"module": "procurement"},
         )

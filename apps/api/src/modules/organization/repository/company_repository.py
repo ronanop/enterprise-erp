@@ -11,6 +11,8 @@ from modules.organization.domain.entities import CompanyEntity
 from modules.organization.models.company import OrgCompany
 from modules.organization.repository.base import OrgScopedRepository, utcnow
 
+ORGANIZATION_MODULE_KEY = "organization"
+
 
 class CompanyRepository(OrgScopedRepository):
     def __init__(self, db: Session) -> None:
@@ -19,7 +21,9 @@ class CompanyRepository(OrgScopedRepository):
     def list_companies(self, ctx: TenantContext) -> list[CompanyEntity]:
         stmt = select(OrgCompany)
         stmt = self.apply_tenant_filter(stmt, OrgCompany, ctx)
-        stmt = apply_company_scope(stmt, OrgCompany, ctx)
+        stmt = apply_company_scope(
+            stmt, OrgCompany, ctx, module_key=ORGANIZATION_MODULE_KEY
+        )
         return [self._to_entity(r) for r in self.db.scalars(stmt).all()]
 
     def get_by_id(self, ctx: TenantContext, company_id: UUID) -> CompanyEntity | None:

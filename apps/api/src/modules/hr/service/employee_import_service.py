@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from modules.foundation.domain.org_data_scope import has_module_wide_data_access
 from modules.foundation.domain.value_objects import TenantContext
 from modules.hr.models import HrDesignationAssignment, HrEmployment
 from modules.hr.service.assignment_service import DesignationAssignmentService
@@ -150,7 +151,7 @@ class EmployeeImportService:
             MasterEmployee.tenant_id == ctx.tenant_id,
             MasterEmployee.is_deleted.is_(False),
         )
-        if ctx.company_id and ctx.user_type not in {"super_admin", "tenant_admin"}:
+        if ctx.company_id and not has_module_wide_data_access(ctx, "hr"):
             stmt = stmt.where(MasterEmployee.company_id == ctx.company_id)
 
         rows = list(self._db.scalars(stmt).all())

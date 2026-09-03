@@ -11,6 +11,7 @@ from core.config import settings
 from core.redis import SessionStore
 from database.session import get_db
 from modules.foundation.dependencies import get_client_ip, get_current_user, get_tenant_context
+from security.public_routes import optional_authentication
 from modules.foundation.domain.erp_modules import resolve_session_user_type
 from modules.foundation.domain.exceptions import MicrosoftLoginNotConfiguredException
 from modules.foundation.domain.value_objects import TenantContext
@@ -34,7 +35,9 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
 @router.get("/microsoft/config", response_model=APIResponse[MicrosoftLoginConfigResponse])
-def microsoft_config() -> APIResponse[MicrosoftLoginConfigResponse]:
+def microsoft_config(
+    _: Annotated[None, Depends(optional_authentication)],
+) -> APIResponse[MicrosoftLoginConfigResponse]:
     """Public: exposes only whether Microsoft SSO is enabled (no secrets)."""
     return APIResponse(
         message="Microsoft sign-in configuration",

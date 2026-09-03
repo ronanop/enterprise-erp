@@ -38,8 +38,12 @@ from modules.procurement.schemas import (
     ScmVendorInvoiceExtractRequest,
     ScmVendorInvoiceExtractResponse,
     ScmVendorPoResponse,
+    OvfTimelineListItemResponse,
+    OvfTimelineEventRecordRequest,
+    OvfTimelineResponse,
 )
 from modules.procurement.service.order_service import OrderService
+from modules.procurement.service.ovf_timeline_service import OvfTimelineService
 from modules.procurement.service.scm_handoff_service import ScmHandoffService
 from shared.schemas import APIResponse
 
@@ -57,6 +61,53 @@ def list_scm_queue(
         message="SCM queue retrieved",
         data=[ScmQueueItemResponse.model_validate(r) for r in rows],
     )
+
+
+@scm_router.get("/timeline/ovfs", response_model=APIResponse[list[OvfTimelineListItemResponse]])
+def list_ovf_timeline_rows(
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+) -> APIResponse[list[OvfTimelineListItemResponse]]:
+    rows = OvfTimelineService(db).list_ovfs(ctx, company_id)
+    return APIResponse(
+        message="OVF timeline list retrieved",
+        data=[OvfTimelineListItemResponse.model_validate(r) for r in rows],
+    )
+
+
+@scm_router.get("/timeline/ovf/{ovf_id}", response_model=APIResponse[OvfTimelineResponse])
+def get_ovf_timeline(
+    ovf_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:read"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[OvfTimelineResponse]:
+    row = OvfTimelineService(db).timeline(ctx, ovf_id)
+    return APIResponse(message="OVF timeline retrieved", data=OvfTimelineResponse.model_validate(row))
+
+
+@scm_router.post(
+    "/timeline/ovf/{ovf_id}/events",
+    response_model=APIResponse[dict],
+    status_code=status.HTTP_201_CREATED,
+)
+def record_ovf_timeline_event(
+    ovf_id: UUID,
+    body: OvfTimelineEventRecordRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[dict]:
+    OvfTimelineService(db).record_event(
+        ctx,
+        ovf_id,
+        action=body.action,
+        title=body.title,
+        summary=body.summary,
+        entity_label=body.entity_label,
+        occurred_at=body.occurred_at,
+        metadata=body.metadata,
+    )
+    return APIResponse(message="OVF timeline event recorded", data={"recorded": True})
 
 
 @scm_router.get(

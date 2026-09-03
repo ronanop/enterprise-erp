@@ -14,11 +14,9 @@ class InvoiceRepository(ProcScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
-    def list_invoices(self, ctx: TenantContext, company_id: UUID) -> list[ProcInvoiceHeader]:
-        stmt = select(ProcInvoiceHeader).where(
-            ProcInvoiceHeader.company_id == company_id,
-            ProcInvoiceHeader.is_deleted.is_(False),
-        )
+    def list_invoices(self, ctx: TenantContext, company_id: UUID | None) -> list[ProcInvoiceHeader]:
+        stmt = select(ProcInvoiceHeader).where(ProcInvoiceHeader.is_deleted.is_(False))
+        stmt = self.apply_optional_company_filter(stmt, ProcInvoiceHeader, company_id)
         stmt = self.apply_proc_filter(stmt, ProcInvoiceHeader, ctx, branch_scoped=True)
         return list(
             self.db.scalars(stmt.order_by(ProcInvoiceHeader.document_date.desc())).all()

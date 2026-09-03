@@ -6,12 +6,17 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
 from core.redis import SessionStore
-from modules.foundation.domain.org_data_scope import has_tenant_wide_data_access
+from modules.foundation.domain.org_data_scope import (
+    has_module_wide_data_access,
+    is_platform_admin,
+)
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.organization.repository.company_repository import CompanyRepository
 from modules.organization.repository.org_scope_repository import OrgScopeRepository
 from modules.organization.service.org_scope_validator import OrgScopeValidator
+
+ORGANIZATION_MODULE_KEY = "organization"
 
 
 class OrgContextService:
@@ -33,13 +38,13 @@ class OrgContextService:
         }
 
     def list_accessible_companies(self, ctx: TenantContext):
-        if has_tenant_wide_data_access(ctx):
+        if is_platform_admin(ctx) or has_module_wide_data_access(ctx, ORGANIZATION_MODULE_KEY):
             return self._companies.list_companies(ctx)
 
         scopes = self._scopes.list_user_scopes(ctx.user_id, ctx.tenant_id)
         company_ids = {s.company_id for s in scopes}
         if not company_ids:
-            # HR Admins are strictly entity-scoped. Empty scope must not leak every company.
+            # Empty org scope must not leak every company for non-admins.
             if self._is_hr_admin(ctx):
                 return []
             return self._companies.list_companies(ctx)

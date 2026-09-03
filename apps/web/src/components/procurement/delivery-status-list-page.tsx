@@ -16,7 +16,6 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { listProcurementInventory } from "@/services/procurement-service";
 import {
-  aggregatePoDcBillStatus,
   challanDeliveredQuantity,
   deliveryBillStatusBadgeVariant,
   formatDeliveryBillStatusLabel,
@@ -43,12 +42,13 @@ import {
 import {
   formatGeneratedGrnNumbers,
   resolveChallanDisplayGrnNumbers,
+  uniqueGeneratedGrnNumbers,
 } from "@/utils/grn-number-display";
+import { formatUniquePoLabels } from "@/utils/format-po-labels";
 
 type DeliveryStatusListRow = DeliveryStatusRow & {
   billStatusLabel: string;
   billStatusKey: ReturnType<typeof resolveDeliveryBillStatus>;
-  poBillStatus: string;
   canUpdateOutcome: boolean;
   canUpdateBill: boolean;
 };
@@ -66,7 +66,6 @@ function loadDeliveryStatusRows(): DeliveryStatusListRow[] {
           ...row,
           billStatusLabel: formatDeliveryBillStatusLabel(billStatusKey),
           billStatusKey,
-          poBillStatus: aggregatePoDcBillStatus(challan.orderId),
           canUpdateOutcome: deliveryStatusUiMode(row) === "tracking",
           canUpdateBill: billStatusKey === "fully_billed",
         },
@@ -87,9 +86,11 @@ async function enrichDeliveryStatusGrnNumbers(
       if (!challan) return row;
       const numbers = resolveChallanDisplayGrnNumbers(challan, inventory);
       const label = formatGeneratedGrnNumbers(numbers);
+      const storedClean = uniqueGeneratedGrnNumbers(challan.selectedGrnNumbers);
       if (
         numbers.length > 0 &&
-        (challan.selectedGrnNumbers || []).join(", ") !== numbers.join(", ")
+        (storedClean.join("\0") !== numbers.join("\0") ||
+          (challan.selectedGrnNumbers?.length ?? 0) !== numbers.length)
       ) {
         upsertDeliveryChallan({
           ...challan,
@@ -135,7 +136,6 @@ export function DeliveryStatusListPage() {
         row.billInvoiceNumber,
         row.shipmentStatus,
         row.billStatusLabel,
-        row.poBillStatus,
         row.docketNumber,
         row.deliveryBoyName,
       ]
@@ -229,14 +229,13 @@ export function DeliveryStatusListPage() {
                 <th className={procurementUi.th}>Invoice</th>
                 <th className={procurementUi.th}>Delivery status</th>
                 <th className={procurementUi.th}>Bill taken</th>
-                <th className={procurementUi.th}>PO bill status</th>
                 <th className={procurementUi.th}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className={procurementUi.empty}>
+                  <td colSpan={6} className={procurementUi.empty}>
                     {rows.length === 0
                       ? "No GRNs to track yet."
                       : "No rows match your search."}
@@ -246,7 +245,7 @@ export function DeliveryStatusListPage() {
               {filtered.map((row) => (
                 <tr key={row.challanId} className={procurementUi.tr}>
                   <td className={cn(procurementUi.td, "font-medium tabular-nums")}>
-                    {row.purchaseOrderNumber || "—"}
+                    {formatUniquePoLabels(row.purchaseOrderNumber)}
                   </td>
                   <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
                     {row.grnSummary || "—"}
@@ -269,9 +268,6 @@ export function DeliveryStatusListPage() {
                     >
                       {row.billStatusLabel}
                     </Badge>
-                  </td>
-                  <td className={cn(procurementUi.td, "text-muted-foreground")}>
-                    {row.poBillStatus}
                   </td>
                   <td className={procurementUi.td}>
                     <div className="flex flex-wrap items-center gap-1">

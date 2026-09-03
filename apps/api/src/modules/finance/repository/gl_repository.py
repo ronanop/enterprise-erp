@@ -11,6 +11,7 @@ from modules.finance.models.fiscal import FinFiscalYear, FinPeriod
 from modules.finance.models.journal import FinJournalHeader
 from modules.finance.models.ledger import FinGlEntry
 from modules.finance.repository.base import FinanceScopedRepository
+from modules.foundation.domain.org_data_scope import has_module_wide_data_access
 from modules.foundation.domain.value_objects import TenantContext
 
 _SORTABLE = {
@@ -130,7 +131,7 @@ class GLRepository(FinanceScopedRepository):
             )
             .group_by(FinGlEntry.account_id, FinGlEntry.account_code)
         )
-        if ctx.branch_id and ctx.user_type not in {"super_admin", "tenant_admin"}:
+        if ctx.branch_id and not has_module_wide_data_access(ctx, "finance"):
             stmt = stmt.where(FinGlEntry.branch_id == ctx.branch_id)
         return list(self.db.execute(stmt).all())  # type: ignore[arg-type]
 
@@ -152,7 +153,7 @@ class GLRepository(FinanceScopedRepository):
             FinGlEntry.company_id == company_id,
             FinGlEntry.tenant_id == ctx.tenant_id,
         )
-        if ctx.branch_id and ctx.user_type not in {"super_admin", "tenant_admin"}:
+        if ctx.branch_id and not has_module_wide_data_access(ctx, "finance"):
             stmt = stmt.where(FinGlEntry.branch_id == ctx.branch_id)
         if from_date:
             stmt = stmt.where(FinGlEntry.entry_date >= from_date)
@@ -170,7 +171,7 @@ class GLRepository(FinanceScopedRepository):
             FinGlEntry.company_id == company_id,
             FinGlEntry.tenant_id == ctx.tenant_id,
         )
-        if ctx.branch_id and ctx.user_type not in {"super_admin", "tenant_admin"}:
+        if ctx.branch_id and not has_module_wide_data_access(ctx, "finance"):
             stmt = stmt.where(FinGlEntry.branch_id == ctx.branch_id)
         return int(self.db.scalar(stmt) or 0)
 
@@ -218,7 +219,7 @@ class GLRepository(FinanceScopedRepository):
             FinGlEntry.account_id == account_id,
             FinGlEntry.entry_date < before_date,
         )
-        if ctx.branch_id and ctx.user_type not in {"super_admin", "tenant_admin"}:
+        if ctx.branch_id and not has_module_wide_data_access(ctx, "finance"):
             stmt = stmt.where(FinGlEntry.branch_id == ctx.branch_id)
         row = self.db.execute(stmt).one()
         return float(row[0]), float(row[1])

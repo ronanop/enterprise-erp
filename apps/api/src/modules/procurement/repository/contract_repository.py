@@ -14,11 +14,9 @@ class ContractRepository(ProcScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
-    def list_contracts(self, ctx: TenantContext, company_id: UUID) -> list[ProcVendorContract]:
-        stmt = select(ProcVendorContract).where(
-            ProcVendorContract.company_id == company_id,
-            ProcVendorContract.is_deleted.is_(False),
-        )
+    def list_contracts(self, ctx: TenantContext, company_id: UUID | None) -> list[ProcVendorContract]:
+        stmt = select(ProcVendorContract).where(ProcVendorContract.is_deleted.is_(False))
+        stmt = self.apply_optional_company_filter(stmt, ProcVendorContract, company_id)
         stmt = self.apply_proc_filter(stmt, ProcVendorContract, ctx)
         return list(
             self.db.scalars(stmt.order_by(ProcVendorContract.start_date.desc())).all()

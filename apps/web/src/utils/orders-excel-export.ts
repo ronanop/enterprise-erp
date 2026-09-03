@@ -1,4 +1,5 @@
 import type { ProcOrder } from "@/services/procurement-service";
+import { buildOrdersExcelBuffer } from "@/utils/orders-excel-buffer";
 import {
   ORDER_EXPORT_HEADERS,
   formatPoStatusForExport,
@@ -65,40 +66,11 @@ export function buildOrderExportRows(
   });
 }
 
+/** Build and download PO Excel in the browser (nginx routes /api/* to FastAPI). */
 export async function exportOrdersXlsx(filename: string, rows: OrderExportRow[]) {
-  const response = await fetch("/api/procurement/orders/export", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "*/*" },
-    body: JSON.stringify({ filename, rows }),
-    cache: "no-store",
+  const buffer = await buildOrdersExcelBuffer(rows);
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
-
-  if (!response.ok) {
-    let detail = `Export failed (${response.status})`;
-    try {
-      const payload = (await response.json()) as { error?: string };
-      if (payload.error?.trim()) detail = payload.error.trim();
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail);
-  }
-
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("spreadsheetml") && !contentType.includes("octet-stream")) {
-    let detail = "Export returned an invalid file type. Refresh the page and try again.";
-    try {
-      const payload = (await response.json()) as { error?: string };
-      if (payload.error?.trim()) detail = payload.error.trim();
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail);
-  }
-
-  const blob = await response.blob();
-  if (blob.size < 512) {
-    throw new Error("Export file was empty. Refresh the page and try again.");
-  }
   downloadBlob(filename, blob);
 }

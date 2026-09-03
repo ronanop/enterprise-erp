@@ -429,7 +429,7 @@ class ScmHandoffService:
             key = self._distributor_group_key(ln) or "__unassigned__"
             if key not in grouped:
                 grouped[key] = {
-                    "distributor_name": (ln.get("distributor_name") or "").strip() or "Vendor",
+                    "distributor_name": (ln.get("distributor_name") or "").strip() or None,
                     "line_count": 0,
                     "has_po": False,
                     "purchase_order_id": None,
@@ -2097,19 +2097,20 @@ class ScmHandoffService:
         return path, row.file_name, row.content_type, None
 
     def get_receipt_batch(self, ctx: TenantContext, batch_id: UUID) -> ProcOrderReceiptBatch:
-        cid = self._scope.resolve_company_id(ctx, None)
-        batch = (
-            self._db.query(ProcOrderReceiptBatch)
-            .filter(
+        stmt = (
+            select(ProcOrderReceiptBatch)
+            .where(
                 ProcOrderReceiptBatch.id == batch_id,
                 ProcOrderReceiptBatch.tenant_id == ctx.tenant_id,
-                ProcOrderReceiptBatch.company_id == cid,
                 ProcOrderReceiptBatch.is_deleted.is_(False),
             )
-            .first()
         )
+        batch = self._db.scalar(stmt)
         if batch is None:
             raise NotFoundException("Receipt batch not found")
+        from modules.organization.repository.base import OrgScopedRepository
+
+        OrgScopedRepository.ensure_company_access(ctx, batch.company_id)
         return batch
 
     def attach_receipt_batch_document(

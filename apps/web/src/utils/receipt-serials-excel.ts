@@ -56,11 +56,31 @@ export function receiptProductsMatch(lineProduct: string, rowProduct: string): b
 
 type ProductSerialRow = { product: string; serial: string };
 
+function createSerialDraft(): Record<string, string[]> {
+  return Object.create(null) as Record<string, string[]>;
+}
+
+function setSerialDraftLine(
+  serialDraft: Record<string, string[]>,
+  lineId: string,
+  slots: string[],
+): void {
+  if (!isSafeObjectKey(lineId)) return;
+  serialDraft[lineId] = slots;
+}
+
+function writeSerialSlot(slots: string[], index: number, serial: string): string[] {
+  if (!Number.isInteger(index) || index < 0 || index >= slots.length) return slots;
+  const next = slots.slice();
+  next[index] = serial;
+  return next;
+}
+
 function parseTemplateFormat(json: Record<string, unknown>[]): Map<string, Map<number, string>> {
   const byLine = new Map<string, Map<number, string>>();
   for (const row of json) {
     const lineId = cellValue(row, TEMPLATE_HEADERS[0]);
-    if (!lineId) continue;
+    if (!lineId || !isSafeObjectKey(lineId)) continue;
     const unitIndex = Number(cellValue(row, TEMPLATE_HEADERS[3]));
     if (!Number.isFinite(unitIndex) || unitIndex < 1) continue;
     const serial = cellValue(row, TEMPLATE_HEADERS[4]);
@@ -119,7 +139,7 @@ function buildSerialDraftFromTemplate(
   byLine: Map<string, Map<number, string>>,
   expected: ReceiptSerialImportLine[],
 ): Record<string, string[]> {
-  const serialDraft: Record<string, string[]> = {};
+  const serialDraft = createSerialDraft();
   for (const line of expected) {
     const qty = Math.max(0, Math.floor(line.receiveQty));
     if (qty <= 0) continue;
@@ -129,7 +149,7 @@ function buildSerialDraftFromTemplate(
       const raw = imported?.get(i) ?? "";
       slots.push(normalizeSerialValue(raw));
     }
-    serialDraft[line.lineId] = slots;
+    setSerialDraftLine(serialDraft, line.lineId, slots);
   }
   return serialDraft;
 }
@@ -138,7 +158,7 @@ function buildSerialDraftFromProductRows(
   importRows: ProductSerialRow[],
   expected: ReceiptSerialImportLine[],
 ): { serialDraft: Record<string, string[]>; matched: number } {
-  const serialDraft: Record<string, string[]> = {};
+  const serialDraft = createSerialDraft();
   const cursors = expected.map((line) => ({
     lineId: line.lineId,
     productLabel: line.productLabel,
@@ -149,7 +169,7 @@ function buildSerialDraftFromProductRows(
   for (const line of expected) {
     const qty = Math.max(0, Math.floor(line.receiveQty));
     if (qty > 0) {
-      serialDraft[line.lineId] = resizeSerialSlots([], qty);
+      setSerialDraftLine(serialDraft, line.lineId, resizeSerialSlots([], qty));
     }
   }
 
@@ -161,11 +181,11 @@ function buildSerialDraftFromProductRows(
     const target = cursors.find(
       (c) => c.filled < c.qty && receiptProductsMatch(c.productLabel, row.product),
     );
-    if (!target) continue;
+    if (!target || !isSafeObjectKey(target.lineId)) continue;
 
     const slots = serialDraft[target.lineId];
     if (!slots) continue;
-    slots[target.filled] = serial;
+    serialDraft[target.lineId] = writeSerialSlot(slots, target.filled, serial);
     target.filled += 1;
     matched += 1;
   }

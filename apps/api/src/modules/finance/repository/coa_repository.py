@@ -9,6 +9,7 @@ from modules.finance.models.coa import FinAccountGroup, FinChartOfAccount
 from modules.finance.models.journal import FinJournalHeader, FinJournalLine
 from modules.finance.models.ledger import FinGlEntry
 from modules.finance.repository.base import FinanceScopedRepository, utcnow
+from modules.foundation.domain.org_data_scope import has_module_wide_data_access
 from modules.foundation.domain.value_objects import TenantContext
 
 _SORTABLE = {
@@ -203,7 +204,7 @@ class COARepository(FinanceScopedRepository):
             )
             .group_by(FinGlEntry.account_id)
         )
-        if ctx.branch_id and ctx.user_type not in {"super_admin", "tenant_admin"}:
+        if ctx.branch_id and not has_module_wide_data_access(ctx, "finance"):
             stmt = stmt.where(FinGlEntry.branch_id == ctx.branch_id)
         rows = self.db.execute(stmt).all()
         return {row[0]: (float(row[1]), float(row[2])) for row in rows}

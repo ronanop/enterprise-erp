@@ -6,6 +6,12 @@ import {
   scmHoldSinceDisplay,
 } from "@/utils/scm-ovf-hold";
 import { dash, formatInrPdf } from "@/utils/purchase-order-amount-words";
+import {
+  CACHE_LOGO_MM,
+  WOMEN_OWNED_LOGO_MM,
+  loadLetterheadLogos,
+  pdfImageFormat,
+} from "@/utils/pdf-letterhead";
 
 const MARGIN = 12;
 const PAGE_W = 210;
@@ -269,8 +275,31 @@ export async function downloadScmOvfPdf(
   preview: ScmOvfPreview,
   fileName?: string,
 ): Promise<void> {
+  const { cache: cacheLogo, womenOwned: womenLogo } = await loadLetterheadLogos();
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   let y = MARGIN;
+
+  if (cacheLogo) {
+    doc.addImage(
+      cacheLogo,
+      pdfImageFormat(cacheLogo),
+      MARGIN,
+      y,
+      CACHE_LOGO_MM.w,
+      CACHE_LOGO_MM.h,
+    );
+  }
+  if (womenLogo) {
+    doc.addImage(
+      womenLogo,
+      pdfImageFormat(womenLogo),
+      PAGE_W - MARGIN - WOMEN_OWNED_LOGO_MM.w,
+      y + (CACHE_LOGO_MM.h - WOMEN_OWNED_LOGO_MM.h) / 2,
+      WOMEN_OWNED_LOGO_MM.w,
+      WOMEN_OWNED_LOGO_MM.h,
+    );
+  }
+  y += CACHE_LOGO_MM.h + 4;
 
   const queueStatus = deriveQueueStatus(preview);
   const marginSummary = computeMarginSummary(preview);

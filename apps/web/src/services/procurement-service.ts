@@ -577,6 +577,87 @@ export async function listScmQueue(): Promise<ScmQueueItem[]> {
   });
 }
 
+export type OvfTimelineListItem = {
+  ovf_id: string;
+  ovf_no: string;
+  customer_name?: string | null;
+  quote_name?: string | null;
+  account_name?: string | null;
+  blueprint_state?: string | null;
+  shared_to_scm?: boolean;
+  deal_won?: boolean;
+  timeline_status: "ongoing" | "completed" | string;
+  updated_at?: string | null;
+  shared_to_scm_at?: string | null;
+  company_po_numbers?: string[];
+};
+
+export type OvfTimelineEvent = {
+  id: string;
+  occurred_at: string;
+  event_type: string;
+  entity_type: string;
+  entity_id: string;
+  entity_label?: string | null;
+  title: string;
+  summary?: string | null;
+  action?: string | null;
+  from_state?: string | null;
+  to_state?: string | null;
+  actor_id?: string | null;
+  actor_name?: string | null;
+  requested_by_id?: string | null;
+  requested_by_name?: string | null;
+  decided_by_id?: string | null;
+  decided_by_name?: string | null;
+  decision?: string | null;
+  team_role?: string | null;
+  remark?: string | null;
+  version?: number | null;
+};
+
+export type OvfTimeline = {
+  ovf_id: string;
+  ovf_no: string;
+  customer_name?: string | null;
+  quote_name?: string | null;
+  timeline_status: string;
+  blueprint_state?: string | null;
+  linked_order_ids?: string[];
+  events: OvfTimelineEvent[];
+};
+
+export type RecordOvfTimelineEventInput = {
+  action: string;
+  title: string;
+  summary?: string;
+  entity_label?: string;
+  occurred_at?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export async function listOvfTimelineRows(): Promise<OvfTimelineListItem[]> {
+  const res = await apiClient<OvfTimelineListItem[]>(`${SCM_API}/timeline/ovfs`);
+  return unwrapData(res);
+}
+
+export async function getOvfTimeline(ovfId: string): Promise<OvfTimeline> {
+  const id = ovfId.trim();
+  const res = await apiClient<OvfTimeline>(`${SCM_API}/timeline/ovf/${id}`);
+  return unwrapData(res);
+}
+
+export async function recordOvfTimelineEvent(
+  ovfId: string,
+  event: RecordOvfTimelineEventInput,
+): Promise<void> {
+  const id = ovfId.trim();
+  await apiClient(`${SCM_API}/timeline/ovf/${id}/events`, {
+    method: "POST",
+    body: JSON.stringify(event),
+  });
+}
+
 export async function getScmOvfPreview(ovfId: string): Promise<ScmOvfPreview> {
   const id = ovfId.trim();
   return cachedFetch(scmOvfPreviewCacheKey(id), PROCUREMENT_LIST_TTL_MS, async () => {

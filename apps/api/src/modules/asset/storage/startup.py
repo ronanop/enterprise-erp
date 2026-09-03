@@ -17,7 +17,7 @@ def validate_asset_storage_on_startup() -> None:
     """Probe the configured storage path. Log loudly on failure; do not raise."""
     settings = get_settings()
     backend = (settings.asset_storage_backend or "local").strip().lower()
-    configured = settings.asset_storage_path or "./var/asset-storage"
+    configured = str(settings.resolved_asset_storage_path)
     try:
         root = Path(configured).expanduser().resolve()
     except OSError as exc:

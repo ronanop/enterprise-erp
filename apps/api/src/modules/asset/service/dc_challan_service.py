@@ -190,7 +190,16 @@ class DcChallanService:
         self._master = AssetMasterDataAdapter(db)
         self._scm = AssetScmAdapter(db)
         self._audit = AuditService(db)
-        self._storage = storage if storage is not None else get_storage()
+        self._storage_override = storage
+        self._storage_instance: StorageBackend | None = None
+
+    @property
+    def _storage(self) -> StorageBackend:
+        if self._storage_override is not None:
+            return self._storage_override
+        if self._storage_instance is None:
+            self._storage_instance = get_storage()
+        return self._storage_instance
 
     def to_response(self, row: AstDcChallan) -> DcChallanResponse:
         return to_dc_challan_response(row, self._docs.list_active(row.id))

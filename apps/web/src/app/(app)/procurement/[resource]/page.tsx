@@ -11,6 +11,7 @@ import {
   ProcurementAnalyticsPage,
   ProcurementReportsPage,
 } from "@/components/procurement/procurement-insight-pages";
+import { ProcurementTimelineListPage } from "@/components/procurement/ovf-timeline-page";
 import { ScmQueuePage } from "@/components/procurement/scm-queue-page";
 import { ProcurementInventoryListPage } from "@/components/procurement/procurement-inventory-list-page";
 import { VendorsListPage } from "@/components/procurement/vendors-list-page";
@@ -34,6 +35,7 @@ export default async function ProcurementResourcePage({ params }: PageProps) {
   if (resourceKey === "approval" || resourceKey === "approvals") return <ProcurementApprovalsPage />;
   if (resourceKey === "reports") return <ProcurementReportsPage />;
   if (resourceKey === "analytics") return <ProcurementAnalyticsPage />;
+  if (resourceKey === "timeline") return <ProcurementTimelineListPage />;
 
   const mod = getModule("procurement");
   const resource = getResource("procurement", resourceKey);

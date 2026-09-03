@@ -47,6 +47,7 @@ def load_models() -> None:
         if not module_name.startswith("modules."):
             continue
         try:
+            # module_name is allowlisted via _MODEL_MOD_RE before dynamic import.
             m = importlib.import_module(module_name)
         except Exception:
             continue

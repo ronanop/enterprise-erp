@@ -12,6 +12,7 @@ import {
   ChevronRight,
   ClipboardList,
   FileBarChart,
+  History,
   LayoutDashboard,
   MapPinned,
   Package,
@@ -47,7 +48,7 @@ export const PROCUREMENT_NAV = [
   { title: "SCM Queue", href: "/procurement/scm", icon: ClipboardList },
   { title: "Purchase Orders", href: "/procurement/orders", icon: ShoppingCart },
   { title: "GRNs", href: "/procurement/grns", icon: PackageCheck },
-  { title: "Delivery Challan", href: "/procurement/delivery-challan", icon: Truck },
+  { title: "Billing/DC", href: "/procurement/delivery-challan", icon: Truck },
   { title: "Delivery Status", href: "/procurement/delivery-status", icon: MapPinned },
   { title: "Installation", href: "/procurement/installation", icon: Wrench },
   { title: "Vendors", href: "/procurement/vendors", icon: Building2 },
@@ -58,6 +59,7 @@ export const PROCUREMENT_NAV = [
 export const PROCUREMENT_INSIGHT_NAV = [
   { title: "Reports", href: "/procurement/reports", icon: FileBarChart },
   { title: "Analytics", href: "/procurement/analytics", icon: BarChart3 },
+  { title: "Timeline", href: "/procurement/timeline", icon: History },
 ] as const satisfies ReadonlyArray<ProcurementNavItem>;
 
 export const ALL_PROCUREMENT_NAV = [

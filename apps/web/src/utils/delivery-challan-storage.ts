@@ -118,7 +118,7 @@ function normalizeRecord(raw: DeliveryChallanRecord): DeliveryChallanRecord {
     vendorName: raw.vendorName ?? legacySupplier ?? "",
     itemsSourceMode: raw.itemsSourceMode ?? "full_po",
     selectedGrnKeys: (raw.selectedGrnKeys ?? []).map((k) => String(k ?? "")).filter(Boolean),
-    selectedGrnNumbers: (raw.selectedGrnNumbers ?? []).map((n) => String(n ?? "").trim()).filter(Boolean),
+    selectedGrnNumbers: uniqueGeneratedGrnNumbers(raw.selectedGrnNumbers ?? []),
     grnKind:
       raw.grnKind === "billing" || raw.grnKind === "delivery_challan"
         ? raw.grnKind
@@ -188,6 +188,7 @@ import type { ProcurementInventoryRow } from "@/services/procurement-service";
 import {
   formatGeneratedGrnNumbers,
   resolveChallanDisplayGrnNumbers,
+  uniqueGeneratedGrnNumbers,
 } from "@/utils/grn-number-display";
 
 /** Display label for GRN(s) covered by a challan (generated GRN numbers when known). */

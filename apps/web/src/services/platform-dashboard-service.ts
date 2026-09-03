@@ -116,7 +116,18 @@ function classifyModuleHealth(
       m.includes("forbidden") ||
       m.includes("not authorized") ||
       m.includes("access denied") ||
-      m.includes("permission denied")
+      m.includes("permission denied") ||
+      m.includes("not found")
+    );
+  };
+
+  const isTransientMessage = (message: string) => {
+    const m = message.toLowerCase();
+    return (
+      m.includes("temporarily unavailable") ||
+      m.includes("queuepool") ||
+      m.includes("connection timed out") ||
+      m.includes("too many clients")
     );
   };
 
@@ -143,6 +154,16 @@ function classifyModuleHealth(
     if (message && isDeniedMessage(message)) {
       continue;
     }
+    // Pool pressure / brief DB unavailability — treat as partial when some data loaded,
+    // otherwise surface once without marking the whole module permanently offline.
+    if (code === 503 || (message && isTransientMessage(message))) {
+      if (recordCount > 0) {
+        continue;
+      }
+      hardCodes.push(503);
+      if (message) hardErrors.push(message);
+      continue;
+    }
     if (typeof code === "number") hardCodes.push(code);
     if (message) hardErrors.push(message);
   }
@@ -161,6 +182,15 @@ function classifyModuleHealth(
 
   if (hardErrors.length === 0 && hardCodes.every((c) => c === 401)) {
     return { status: "ok", errors: [], statusCodes: hardCodes };
+  }
+
+  // Pure transient unavailability with no data → partial (retryable), not offline.
+  if (hardCodes.length > 0 && hardCodes.every((c) => c === 503)) {
+    return {
+      status: recordCount > 0 ? "ok" : "partial",
+      errors: hardErrors.slice(0, 3),
+      statusCodes: hardCodes,
+    };
   }
 
   const status: ModuleAnalytics["status"] = recordCount > 0 ? "partial" : "error";
@@ -801,6 +831,37 @@ function buildExecutive(results: ModuleLoaderResult[]): PlatformKpi[] {
   return kpis;
 }
 
+/** Cap parallel module overview loads so the API DB pool is not exhausted. */
+const MODULE_LOAD_CONCURRENCY = 2;
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+
+  async function runWorker(): Promise<void> {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      try {
+        const value = await worker(items[index]!, index);
+        results[index] = { status: "fulfilled", value };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(limit, Math.max(items.length, 1)) }, () =>
+    runWorker(),
+  );
+  await Promise.all(workers);
+  return results;
+}
+
 export async function loadPlatformDashboard(
   moduleKeys: string[],
   userType?: string,
@@ -809,8 +870,10 @@ export async function loadPlatformDashboard(
     canAccessHref(moduleMeta(key).href, moduleKeys, userType),
   );
 
-  const settled = await Promise.allSettled(
-    accessibleKeys.map((key) => MODULE_LOADERS[key]()),
+  const settled = await mapWithConcurrency(
+    accessibleKeys,
+    MODULE_LOAD_CONCURRENCY,
+    (key) => MODULE_LOADERS[key]!(),
   );
 
   const results: ModuleLoaderResult[] = settled.map((row, index) => {

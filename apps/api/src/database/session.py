@@ -12,10 +12,11 @@ from database.base import Base
 engine: Engine = create_engine(
     str(settings.database_url),
     pool_pre_ping=True,
-    # Home / platform analytics fans out across many module list endpoints.
-    pool_size=20,
-    max_overflow=40,
-    pool_timeout=60,
+    # Platform home fans out many list GETs; keep headroom under Postgres max_connections.
+    pool_size=25,
+    max_overflow=50,
+    pool_timeout=20,
+    pool_recycle=1800,
 )
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)

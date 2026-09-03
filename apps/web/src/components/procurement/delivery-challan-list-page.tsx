@@ -36,7 +36,9 @@ import {
   formatGeneratedGrnNumbers,
   isGeneratedGrnNumber,
   resolveDisplayGrnNumbers,
+  uniqueGeneratedGrnNumbers,
 } from "@/utils/grn-number-display";
+import { formatUniquePoLabels } from "@/utils/format-po-labels";
 
 const LIST_RETURN_TO = encodeURIComponent("/procurement/delivery-challan");
 
@@ -64,7 +66,7 @@ function enrichQueueRowsWithGeneratedGrns(
       }
       if (
         saved &&
-        (saved.selectedGrnNumbers || []).join(", ") !== numbers.join(", ")
+        uniqueGeneratedGrnNumbers(saved.selectedGrnNumbers).join("\0") !== numbers.join("\0")
       ) {
         upsertDeliveryChallan({
           ...saved,
@@ -282,8 +284,8 @@ function PendingGrnQueueCard({
                   <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
                     {row.docDate || "—"}
                   </td>
-                  <td className={cn(procurementUi.td, "max-w-[160px] font-medium tabular-nums")}>
-                    {row.purchaseOrderNumber || "—"}
+                  <td className={cn(procurementUi.td, "max-w-[220px] font-medium tabular-nums")}>
+                    {formatUniquePoLabels(row.purchaseOrderNumber)}
                   </td>
                   <td className={procurementUi.tdMuted}>{row.vendorName || "—"}</td>
                   <td className={procurementUi.td}>{row.customerName?.trim() || "—"}</td>

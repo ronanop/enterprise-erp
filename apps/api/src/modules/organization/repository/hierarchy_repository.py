@@ -25,6 +25,8 @@ from modules.organization.models.hierarchy import (
 from modules.foundation.domain.org_data_scope import apply_company_scope, effective_company_ids
 from modules.organization.repository.base import OrgScopedRepository, utcnow
 
+ORGANIZATION_MODULE_KEY = "organization"
+
 
 class DepartmentRepository(OrgScopedRepository):
     def __init__(self, db: Session) -> None:
@@ -40,7 +42,9 @@ class DepartmentRepository(OrgScopedRepository):
         if company_id:
             stmt = stmt.where(OrgDepartment.company_id == company_id)
         elif hasattr(OrgDepartment, "company_id"):
-            stmt = apply_company_scope(stmt, OrgDepartment, ctx)
+            stmt = apply_company_scope(
+                stmt, OrgDepartment, ctx, module_key=ORGANIZATION_MODULE_KEY
+            )
         if branch_id:
             stmt = stmt.where(OrgDepartment.branch_id == branch_id)
         return [self._to_entity(r) for r in self.db.scalars(stmt).all()]
@@ -221,7 +225,7 @@ class LocationRepository(OrgScopedRepository):
         elif company_id:
             stmt = stmt.where(OrgLocation.company_id == company_id)
         else:
-            allowed = effective_company_ids(ctx)
+            allowed = effective_company_ids(ctx, module_key=ORGANIZATION_MODULE_KEY)
             if allowed is not None:
                 if not allowed:
                     stmt = stmt.where(OrgLocation.id.is_(None))

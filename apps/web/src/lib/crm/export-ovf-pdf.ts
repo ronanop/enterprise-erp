@@ -7,6 +7,12 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import {
+  CACHE_LOGO_MM,
+  WOMEN_OWNED_LOGO_MM,
+  loadLetterheadLogos,
+  pdfImageFormat,
+} from "@/utils/pdf-letterhead";
+import {
   computeOvfMargins,
   formatChargeRowFileNames,
   type CustomerChargeRow,
@@ -303,7 +309,8 @@ export function buildOvfExportFilename(ovf: Ovf, quoteName?: string | null): str
   return `OVF_${base || ovf.ovf_no}.pdf`;
 }
 
-export function exportOvfPdf(input: OvfExportInput): void {
+export async function exportOvfPdf(input: OvfExportInput): Promise<void> {
+  const { cache: cacheLogo, womenOwned: womenLogo } = await loadLetterheadLogos();
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   const pageRef: PageRef = { n: 1, landscape: false };
   const { ovf, quote, opportunity, customerRows, vendorRows } = input;
@@ -317,7 +324,29 @@ export function exportOvfPdf(input: OvfExportInput): void {
   const saleTotal = customerRows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
   const purchaseTotal = vendorRows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
 
-  let y = 18;
+  let y = MARGIN;
+  if (cacheLogo) {
+    doc.addImage(
+      cacheLogo,
+      pdfImageFormat(cacheLogo),
+      MARGIN,
+      y,
+      CACHE_LOGO_MM.w,
+      CACHE_LOGO_MM.h,
+    );
+  }
+  if (womenLogo) {
+    doc.addImage(
+      womenLogo,
+      pdfImageFormat(womenLogo),
+      PORTRAIT_W - MARGIN - WOMEN_OWNED_LOGO_MM.w,
+      y + (CACHE_LOGO_MM.h - WOMEN_OWNED_LOGO_MM.h) / 2,
+      WOMEN_OWNED_LOGO_MM.w,
+      WOMEN_OWNED_LOGO_MM.h,
+    );
+  }
+  y += CACHE_LOGO_MM.h + 6;
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
   doc.setTextColor(...TEXT);

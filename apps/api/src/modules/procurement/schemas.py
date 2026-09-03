@@ -393,7 +393,7 @@ class ScmLinkedPurchaseOrder(BaseModel):
 
 
 class ScmPoGroup(BaseModel):
-    distributor_name: str
+    distributor_name: str | None = None
     line_count: int = 0
     has_po: bool = False
     purchase_order_id: UUID | None = None
@@ -1142,6 +1142,68 @@ class PerformanceResponse(BaseModel):
     overall_score: float
     calculated_at: datetime
     status: str
+
+
+# --- OVF timeline (Insight) ---
+
+
+class OvfTimelineListItemResponse(BaseModel):
+    ovf_id: UUID
+    ovf_no: str
+    customer_name: str | None = None
+    quote_name: str | None = None
+    account_name: str | None = None
+    blueprint_state: str | None = None
+    shared_to_scm: bool = False
+    deal_won: bool = False
+    timeline_status: str
+    updated_at: datetime | None = None
+    shared_to_scm_at: datetime | None = None
+    company_po_numbers: list[str] = Field(default_factory=list)
+
+
+class OvfTimelineEventResponse(BaseModel):
+    id: str
+    occurred_at: datetime
+    event_type: str
+    entity_type: str
+    entity_id: UUID
+    entity_label: str | None = None
+    title: str
+    summary: str | None = None
+    action: str | None = None
+    from_state: str | None = None
+    to_state: str | None = None
+    actor_id: UUID | None = None
+    actor_name: str | None = None
+    requested_by_id: UUID | None = None
+    requested_by_name: str | None = None
+    decided_by_id: UUID | None = None
+    decided_by_name: str | None = None
+    decision: str | None = None
+    team_role: str | None = None
+    remark: str | None = None
+    version: int | None = None
+
+
+class OvfTimelineResponse(BaseModel):
+    ovf_id: UUID
+    ovf_no: str
+    customer_name: str | None = None
+    quote_name: str | None = None
+    timeline_status: str
+    blueprint_state: str | None = None
+    linked_order_ids: list[UUID] = Field(default_factory=list)
+    events: list[OvfTimelineEventResponse]
+
+
+class OvfTimelineEventRecordRequest(BaseModel):
+    action: str
+    title: str
+    summary: str | None = None
+    entity_label: str | None = None
+    occurred_at: datetime | None = None
+    metadata: dict | None = None
 
 
 # --- Shared ---

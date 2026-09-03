@@ -85,7 +85,6 @@ export function ApInvoiceTable(props: Props) {
   const [colsOpen, setColsOpen] = useState(false);
   const visible = useMemo(() => new Set(prefs.visibleColumns), [prefs.visibleColumns]);
   const pageCount = Math.max(1, Math.ceil(props.total / props.pageSize));
-  const detailHref = props.detailHref ?? ((row: ApEntry) => `/finance/accounts-payable/invoices/${row.id}`);
   const exportTitle = props.exportTitle ?? "Accounts Payable Invoices";
 
   const sortable: Partial<Record<ColumnKey, ApSortKey>> = {
@@ -175,7 +174,16 @@ export function ApInvoiceTable(props: Props) {
                 <tr key={row.id} className="border-b border-border/50 transition-colors duration-150 hover:bg-muted/40">
                   {visible.has("invoice_no") ? (
                     <td className="px-2 py-1.5 font-mono text-xs">
-                      <Link href={safeAppHref(detailHref(row))} className="cursor-pointer hover:underline">{row.document_number}</Link>
+                      <Link
+                        href={
+                          props.detailHref
+                            ? safeAppHref(props.detailHref(row))
+                            : `/finance/accounts-payable/invoices/${row.id}`
+                        }
+                        className="cursor-pointer hover:underline"
+                      >
+                        {row.document_number}
+                      </Link>
                     </td>
                   ) : null}
                   {visible.has("vendor") ? (

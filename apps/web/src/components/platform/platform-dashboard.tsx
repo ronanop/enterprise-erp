@@ -436,7 +436,7 @@ export function PlatformDashboard() {
 
       {data?.partial && !authBlocked ? (
         <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-2.5 text-xs text-amber-950">
-          Some module endpoints returned errors. Showing available analytics only — check Module health for details.
+          Some module endpoints were slow or unavailable. Showing available analytics — refresh or check Module health for details.
         </div>
       ) : null}
 

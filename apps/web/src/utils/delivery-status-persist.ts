@@ -12,6 +12,7 @@ import {
   validateDeliveryStatusForm,
   type DeliveryStatusFormErrors,
 } from "@/utils/delivery-status-storage";
+import { syncOvfTimelineForDeliveryStatus } from "@/utils/ovf-timeline-sync";
 
 export type PersistDeliveryStatusResult =
   | { ok: true; trackingOnly: boolean; emailWarning?: string }
@@ -88,6 +89,12 @@ export async function persistDeliveryStatusFromForm(
     billStatus,
     requiresInstallation: delivered ? Boolean(normalized.requiresInstallation) : false,
   });
+  syncOvfTimelineForDeliveryStatus(challan, {
+    ...normalized,
+    billStatus,
+    requiresInstallation: delivered ? Boolean(normalized.requiresInstallation) : false,
+    updatedAt: new Date().toISOString(),
+  }, existing);
   runDeliveryReminderSweep();
 
   if (normalized.reminderEmail?.trim()) {

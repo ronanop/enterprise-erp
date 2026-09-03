@@ -12,6 +12,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { extractSection, resolveWithinRoot, readFileWithinRoot, writeFileWithinRoot } = require('../../shared/safe-fs.cjs');
 
 // Paths
 const BRAND_GUIDELINES = 'docs/brand-guidelines.md';
@@ -48,9 +49,9 @@ function extractColorsFromMarkdown(content) {
   // 2) Dedicated "### <Role> Colors" tables — assign base/dark/light by the
   //    row label keyword.
   const assignFromSection = (heading, target) => {
-    const section = content.match(new RegExp(`### ${heading}[\\s\\S]*?(?=\\n###|$)`, 'i'));
+    const section = extractSection(content, heading);
     if (!section) return;
-    for (const m of section[0].matchAll(rowRe)) {
+    for (const m of section.matchAll(rowRe)) {
       const label = m[1].trim().toLowerCase();
       const hex = `#${m[2]}`;
       if (label.includes('dark')) target.dark = hex;
@@ -193,7 +194,14 @@ function main() {
   console.log('🔄 Syncing brand guidelines → design tokens\n');
 
   // Read brand guidelines
-  const guidelinesPath = path.resolve(process.cwd(), BRAND_GUIDELINES);
+  const root = process.cwd();
+  let guidelinesPath;
+  try {
+    guidelinesPath = resolveWithinRoot(root, BRAND_GUIDELINES);
+  } catch {
+    console.error(`❌ Brand guidelines not found: ${BRAND_GUIDELINES}`);
+    process.exit(1);
+  }
   if (!fs.existsSync(guidelinesPath)) {
     console.error(`❌ Brand guidelines not found: ${guidelinesPath}`);
     process.exit(1);
@@ -208,10 +216,14 @@ function main() {
   console.log(`   Accent: ${colors.accent.name} (${colors.accent.base})\n`);
 
   // Read existing tokens
-  const tokensPath = path.resolve(process.cwd(), DESIGN_TOKENS_JSON);
   let tokens = {};
-  if (fs.existsSync(tokensPath)) {
-    tokens = JSON.parse(fs.readFileSync(tokensPath, 'utf-8'));
+  try {
+    const tokensPath = resolveWithinRoot(root, DESIGN_TOKENS_JSON);
+    if (fs.existsSync(tokensPath)) {
+      tokens = JSON.parse(fs.readFileSync(tokensPath, 'utf-8'));
+    }
+  } catch {
+    tokens = {};
   }
 
   // Update tokens
@@ -225,20 +237,20 @@ function main() {
   }
 
   // Write updated tokens
-  fs.writeFileSync(tokensPath, JSON.stringify(tokens, null, 2));
+  writeFileWithinRoot(root, DESIGN_TOKENS_JSON, JSON.stringify(tokens, null, 2));
   console.log(`✅ Updated: ${DESIGN_TOKENS_JSON}`);
 
   // Regenerate CSS
-  const generateScript = path.resolve(process.cwd(), GENERATE_TOKENS_SCRIPT);
+  const generateScript = resolveWithinRoot(root, GENERATE_TOKENS_SCRIPT);
   if (fs.existsSync(generateScript)) {
     try {
       execFileSync('node', [generateScript, '--config', DESIGN_TOKENS_JSON, '-o', DESIGN_TOKENS_CSS], {
-        cwd: process.cwd(),
+        cwd: root,
         stdio: 'inherit'
       });
       console.log(`✅ Regenerated: ${DESIGN_TOKENS_CSS}`);
-    } catch (e) {
-      console.error('⚠️  Failed to regenerate CSS:', e.message);
+    } catch {
+      console.error('⚠️  Failed to regenerate CSS tokens.');
     }
   }
 

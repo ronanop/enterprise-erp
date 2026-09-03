@@ -1,5 +1,7 @@
+import { CACHE_LOGO_PATH as LETTERHEAD_CACHE_LOGO_PATH } from "@/utils/pdf-letterhead";
+
 /** Public CACHE logo used on PO / GRN PDFs. */
-export const CACHE_LOGO_PATH = "/cache.jpg";
+export const CACHE_LOGO_PATH = LETTERHEAD_CACHE_LOGO_PATH;
 
 export type CacheLogoImage = {
   dataUrl: string;

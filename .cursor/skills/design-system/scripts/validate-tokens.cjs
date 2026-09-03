@@ -10,6 +10,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { resolveWithinRoot } = require('../../shared/safe-fs.cjs');
 
 /**
  * Parse command line arguments
@@ -216,7 +217,7 @@ function main() {
     process.exit(1);
   }
 
-  const dirPath = path.resolve(process.cwd(), options.dir);
+  const dirPath = resolveWithinRoot(process.cwd(), options.dir);
 
   if (!fs.existsSync(dirPath)) {
     console.error(`Error: Directory not found: ${dirPath}`);

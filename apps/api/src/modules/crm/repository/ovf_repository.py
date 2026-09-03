@@ -7,7 +7,20 @@ from sqlalchemy.orm import Session
 
 from modules.crm.models import CrmOvf, CrmOvfLine
 from modules.crm.repository.base import CrmScopedRepository, utcnow
+from modules.foundation.domain.org_data_scope import (
+    apply_org_scope_filter,
+    has_module_wide_data_access,
+)
 from modules.foundation.domain.value_objects import TenantContext
+
+PROCUREMENT_MODULE_KEY = "procurement"
+
+
+def _apply_procurement_ovf_scope(stmt, model, ctx: TenantContext):
+    stmt = CrmScopedRepository.apply_tenant_filter(stmt, model, ctx)
+    return apply_org_scope_filter(
+        stmt, model, ctx, module_key=PROCUREMENT_MODULE_KEY, branch_scoped=True
+    )
 
 
 class OvfRepository(CrmScopedRepository):
@@ -16,7 +29,10 @@ class OvfRepository(CrmScopedRepository):
 
     def get(self, ctx: TenantContext, row_id: UUID, *, branch_scoped: bool = True) -> CrmOvf | None:
         stmt = select(CrmOvf).where(CrmOvf.id == row_id, CrmOvf.is_deleted.is_(False))
-        stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=branch_scoped)
+        if has_module_wide_data_access(ctx, PROCUREMENT_MODULE_KEY):
+            stmt = _apply_procurement_ovf_scope(stmt, CrmOvf, ctx)
+        else:
+            stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=branch_scoped)
         return self.db.scalar(stmt)
 
     def list_ovfs(
@@ -36,15 +52,30 @@ class OvfRepository(CrmScopedRepository):
         stmt = stmt.order_by(CrmOvf.created_at.desc())
         return list(self.db.scalars(stmt).all())
 
-    def list_shared_to_scm(self, ctx: TenantContext, company_id: UUID) -> list[CrmOvf]:
+    def list_shared_to_scm(self, ctx: TenantContext, company_id: UUID | None) -> list[CrmOvf]:
         """OVFs Finance/Sales shared to SCM (approved commercial lock)."""
         stmt = select(CrmOvf).where(
-            CrmOvf.company_id == company_id,
             CrmOvf.is_deleted.is_(False),
             CrmOvf.shared_to_scm.is_(True),
             CrmOvf.blueprint_state.in_(("shared_scm", "deal_won")),
         )
-        stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=True)
+        if company_id is not None:
+            stmt = stmt.where(CrmOvf.company_id == company_id)
+        stmt = _apply_procurement_ovf_scope(stmt, CrmOvf, ctx)
+        stmt = stmt.order_by(CrmOvf.updated_at.desc())
+        return list(self.db.scalars(stmt).all())
+
+    def list_for_procurement_timeline(
+        self, ctx: TenantContext, company_id: UUID | None
+    ) -> list[CrmOvf]:
+        """OVFs in procurement (shared to SCM or completed)."""
+        stmt = select(CrmOvf).where(
+            CrmOvf.is_deleted.is_(False),
+            CrmOvf.shared_to_scm.is_(True),
+        )
+        if company_id is not None:
+            stmt = stmt.where(CrmOvf.company_id == company_id)
+        stmt = _apply_procurement_ovf_scope(stmt, CrmOvf, ctx)
         stmt = stmt.order_by(CrmOvf.updated_at.desc())
         return list(self.db.scalars(stmt).all())
 
@@ -52,7 +83,10 @@ class OvfRepository(CrmScopedRepository):
         if not row_ids:
             return []
         stmt = select(CrmOvf).where(CrmOvf.id.in_(row_ids), CrmOvf.is_deleted.is_(False))
-        stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=True)
+        if has_module_wide_data_access(ctx, PROCUREMENT_MODULE_KEY):
+            stmt = _apply_procurement_ovf_scope(stmt, CrmOvf, ctx)
+        else:
+            stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> CrmOvf:

@@ -26,14 +26,14 @@ def build_bank_export_csv(rows: list[dict]) -> str:
     writer = csv.writer(buf, lineterminator="\n")
     writer.writerow(
         [
-            "employee_code",
-            "employee_name",
-            "account_number",
-            "ifsc",
-            "bank_name",
-            "account_holder",
-            "net_pay",
-            "payroll_run_line_id",
+            _csv_cell("employee_code"),
+            _csv_cell("employee_name"),
+            _csv_cell("account_number"),
+            _csv_cell("ifsc"),
+            _csv_cell("bank_name"),
+            _csv_cell("account_holder"),
+            _csv_cell("net_pay"),
+            _csv_cell("payroll_run_line_id"),
         ]
     )
     for r in rows:

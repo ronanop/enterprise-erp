@@ -10,24 +10,37 @@ export function isGeneratedGrnNumber(value: string | null | undefined): boolean 
   return true;
 }
 
+function grnTokensFromValue(raw: string | null | undefined): string[] {
+  const text = String(raw ?? "").trim();
+  if (!text) return [];
+  return text
+    .split(/[,;]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
 export function uniqueGeneratedGrnNumbers(
-  ...groups: Array<ReadonlyArray<string | null | undefined> | undefined>
+  ...groups: Array<ReadonlyArray<string | null | undefined> | string | null | undefined>
 ): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   for (const group of groups) {
-    for (const raw of group || []) {
-      const v = String(raw ?? "").trim();
-      if (!isGeneratedGrnNumber(v) || seen.has(v)) continue;
-      seen.add(v);
-      out.push(v);
+    if (group == null) continue;
+    const list = Array.isArray(group) ? group : [group];
+    for (const raw of list) {
+      for (const v of grnTokensFromValue(raw == null ? "" : String(raw))) {
+        if (!isGeneratedGrnNumber(v) || seen.has(v)) continue;
+        seen.add(v);
+        out.push(v);
+      }
     }
   }
   return out;
 }
 
 export function formatGeneratedGrnNumbers(numbers: string[]): string {
-  return numbers.length > 0 ? numbers.join(", ") : "—";
+  const unique = uniqueGeneratedGrnNumbers(numbers);
+  return unique.length > 0 ? unique.join(", ") : "—";
 }
 
 /** GRN numbers recorded on warehouse inventory for a purchase order. */

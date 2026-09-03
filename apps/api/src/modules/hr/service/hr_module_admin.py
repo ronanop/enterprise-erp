@@ -49,6 +49,8 @@ class HrModuleAdminService:
             return False
         if ctx.user_type in ADMIN_USER_TYPES:
             return True
+        if HR_MODULE_KEY in ctx.admin_module_keys:
+            return True
         if self._modules.is_module_admin(ctx.tenant_id, ctx.user_id, HR_MODULE_KEY):
             return True
         user = self._db.scalar(

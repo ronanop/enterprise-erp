@@ -207,5 +207,5 @@ export async function cloneOvfRecord() {
 export async function printOvfPreview(
   input: Parameters<typeof exportOvfPdf>[0],
 ) {
-  exportOvfPdf(input);
+  await exportOvfPdf(input);
 }

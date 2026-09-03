@@ -9,7 +9,8 @@ from core.exceptions import ForbiddenException
 from modules.foundation.domain.org_data_scope import (
     apply_company_scope,
     effective_company_ids,
-    has_tenant_wide_data_access,
+    has_module_wide_data_access,
+    is_platform_admin,
 )
 from modules.foundation.domain.value_objects import TenantContext
 
@@ -30,10 +31,17 @@ class OrgScopedRepository:
         return stmt
 
     @staticmethod
-    def ensure_company_access(ctx: TenantContext, company_id: UUID) -> None:
-        if has_tenant_wide_data_access(ctx):
+    def ensure_company_access(
+        ctx: TenantContext,
+        company_id: UUID,
+        *,
+        module_key: str | None = None,
+    ) -> None:
+        if module_key and has_module_wide_data_access(ctx, module_key):
             return
-        allowed = effective_company_ids(ctx)
+        if is_platform_admin(ctx):
+            return
+        allowed = effective_company_ids(ctx, module_key=module_key)
         if allowed is not None:
             if company_id in allowed:
                 return
@@ -42,8 +50,15 @@ class OrgScopedRepository:
             raise ForbiddenException("Company scope mismatch")
 
     @staticmethod
-    def ensure_branch_access(ctx: TenantContext, branch_id: UUID) -> None:
-        if has_tenant_wide_data_access(ctx):
+    def ensure_branch_access(
+        ctx: TenantContext,
+        branch_id: UUID,
+        *,
+        module_key: str | None = None,
+    ) -> None:
+        if module_key and has_module_wide_data_access(ctx, module_key):
+            return
+        if is_platform_admin(ctx):
             return
         if ctx.branch_id and ctx.branch_id != branch_id:
             raise ForbiddenException("Branch scope mismatch")

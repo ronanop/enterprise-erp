@@ -14,11 +14,9 @@ class RfqRepository(ProcScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
-    def list_rfqs(self, ctx: TenantContext, company_id: UUID) -> list[ProcRfqHeader]:
-        stmt = select(ProcRfqHeader).where(
-            ProcRfqHeader.company_id == company_id,
-            ProcRfqHeader.is_deleted.is_(False),
-        )
+    def list_rfqs(self, ctx: TenantContext, company_id: UUID | None) -> list[ProcRfqHeader]:
+        stmt = select(ProcRfqHeader).where(ProcRfqHeader.is_deleted.is_(False))
+        stmt = self.apply_optional_company_filter(stmt, ProcRfqHeader, company_id)
         stmt = self.apply_proc_filter(stmt, ProcRfqHeader, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt.order_by(ProcRfqHeader.document_date.desc())).all())
 

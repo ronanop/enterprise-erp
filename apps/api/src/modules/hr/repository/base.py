@@ -7,12 +7,14 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import ForbiddenException
 from modules.foundation.domain.org_data_scope import (
-    apply_company_scope,
+    apply_org_scope_filter,
     effective_company_ids,
-    has_tenant_wide_data_access,
+    has_module_wide_data_access,
 )
 from modules.foundation.domain.value_objects import TenantContext
 from modules.organization.repository.base import OrgScopedRepository
+
+HR_MODULE_KEY = "hr"
 
 
 def utcnow() -> datetime:
@@ -26,25 +28,20 @@ class HrScopedRepository(OrgScopedRepository):
     @staticmethod
     def apply_hr_filter(stmt, model, ctx: TenantContext, *, branch_scoped: bool = False):
         stmt = HrScopedRepository.apply_tenant_filter(stmt, model, ctx)
-        if hasattr(model, "company_id"):
-            stmt = apply_company_scope(stmt, model, ctx)
-        if (
-            branch_scoped
-            and ctx.branch_id
-            and not has_tenant_wide_data_access(ctx)
-            and hasattr(model, "branch_id")
-        ):
-            stmt = stmt.where(model.branch_id == ctx.branch_id)
-        return stmt
+        return apply_org_scope_filter(
+            stmt, model, ctx, module_key=HR_MODULE_KEY, branch_scoped=branch_scoped
+        )
 
     @staticmethod
     def resolve_company_id(ctx: TenantContext, company_id: UUID | None) -> UUID | None:
         if company_id is not None:
-            HrScopedRepository.ensure_company_access(ctx, company_id)
+            HrScopedRepository.ensure_company_access(
+                ctx, company_id, module_key=HR_MODULE_KEY
+            )
             return company_id
-        if has_tenant_wide_data_access(ctx):
+        if has_module_wide_data_access(ctx, HR_MODULE_KEY):
             return None
-        allowed = effective_company_ids(ctx)
+        allowed = effective_company_ids(ctx, module_key=HR_MODULE_KEY)
         if allowed and len(allowed) > 1:
             return None
         if allowed and len(allowed) == 1:

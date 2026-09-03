@@ -19,12 +19,12 @@ class VendorQuotationRepository(ProcScopedRepository):
         super().__init__(db)
 
     def list_quotations(
-        self, ctx: TenantContext, company_id: UUID
+        self, ctx: TenantContext, company_id: UUID | None
     ) -> list[ProcVendorQuotationHeader]:
         stmt = select(ProcVendorQuotationHeader).where(
-            ProcVendorQuotationHeader.company_id == company_id,
             ProcVendorQuotationHeader.is_deleted.is_(False),
         )
+        stmt = self.apply_optional_company_filter(stmt, ProcVendorQuotationHeader, company_id)
         stmt = self.apply_proc_filter(stmt, ProcVendorQuotationHeader, ctx, branch_scoped=True)
         return list(
             self.db.scalars(
@@ -119,16 +119,15 @@ class VendorQuotationRepository(ProcScopedRepository):
         )
         return self.db.scalar(stmt)
 
-    def list_comparisons(self, ctx: TenantContext, company_id: UUID) -> list[ProcVendorComparison]:
-        stmt = (
-            select(ProcVendorComparison)
-            .where(
-                ProcVendorComparison.company_id == company_id,
-                ProcVendorComparison.tenant_id == ctx.tenant_id,
-                ProcVendorComparison.is_deleted.is_(False),
-            )
-            .order_by(ProcVendorComparison.document_number)
+    def list_comparisons(
+        self, ctx: TenantContext, company_id: UUID | None
+    ) -> list[ProcVendorComparison]:
+        stmt = select(ProcVendorComparison).where(
+            ProcVendorComparison.tenant_id == ctx.tenant_id,
+            ProcVendorComparison.is_deleted.is_(False),
         )
+        stmt = self.apply_optional_company_filter(stmt, ProcVendorComparison, company_id)
+        stmt = stmt.order_by(ProcVendorComparison.document_number)
         return list(self.db.scalars(stmt).all())
 
     def create_comparison(
