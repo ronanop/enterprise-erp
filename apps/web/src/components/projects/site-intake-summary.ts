@@ -86,7 +86,12 @@ export function intakeAdminDetailRows(input: {
   }
 
   rows.push(
-    { label: "Customer", value: labelOrDash(project.customer_id, customerName) },
+    {
+      label: "Customer",
+      value:
+        project.customer_name?.trim() ||
+        labelOrDash(project.customer_id, customerName),
+    },
     { label: "Site Name", value: site?.site_name?.trim() || "—" },
     {
       label: "Project Manager",
@@ -139,7 +144,9 @@ export function intakeSummaryValues(input: {
   return {
     intake_project_label: `${project.project_name} (${project.project_code})`,
     intake_branch_label: site.circle?.trim() || optionLabel(branches, project.branch_id),
-    intake_customer_label: optionLabel(customers, project.customer_id),
+    intake_customer_label:
+      project.customer_name?.trim() ||
+      optionLabel(customers, project.customer_id),
     intake_site_name: site.site_name?.trim() || "—",
     intake_delivery_type_label: siteDeliveryTypeLabel(site.delivery_type),
     intake_project_title: project.project_name?.trim() || "—",

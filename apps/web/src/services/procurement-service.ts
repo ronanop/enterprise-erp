@@ -8,7 +8,7 @@ const PROCUREMENT_LIST_TTL_MS = 300_000;
 
 export const PROCUREMENT_INVENTORY_CACHE_KEY = "erp.procurement.inventory";
 export const PROCUREMENT_OVERVIEW_CACHE_KEY = "erp.procurement.overview";
-export const PROCUREMENT_SCM_QUEUE_CACHE_KEY = "erp.procurement.scm-queue";
+export const PROCUREMENT_SCM_QUEUE_CACHE_KEY = "erp.procurement.scm-queue.v2";
 export const PROCUREMENT_ORDERS_CACHE_KEY = "erp.procurement.orders";
 export const PROCUREMENT_VENDOR_POS_CACHE_KEY = "erp.procurement.vendor-pos";
 export const PROCUREMENT_VENDOR_OPTIONS_CACHE_KEY = "erp.procurement.vendor-options";
@@ -279,6 +279,8 @@ export type ScmQueueItem = {
   remaining_demand_qty?: number;
   stock_availability?: ScmStockAvailability[];
   open_distributor_names?: string[];
+  /** One group per distributor that needs a PO (excludes in-stock lines). */
+  po_groups?: ScmPoGroup[];
   purchase_orders?: ScmLinkedPurchaseOrder[];
   item_plan?: ScmItemPlan;
 };

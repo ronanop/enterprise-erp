@@ -1,18 +1,23 @@
 """ProjectService."""
 
+from __future__ import annotations
+
 from datetime import date, timedelta
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.exceptions import AppException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
+from modules.master_data.models.party import MasterCustomer
 from modules.project.adapters.master_data_port import ProjectMasterDataAdapter
 from modules.project.domain.enums import PrjEntityType, SiteInstallationStatus, SiteWorkflowStage
 from modules.project.models import PrjProject
 from modules.project.repository.project_repository import ProjectRepository
 from modules.project.repository.site_installation_repository import SiteInstallationRepository
+from modules.project.schemas import ProjectResponse
 from modules.project.service.document_number_service import DocumentNumberService
 from modules.project.service.engines import ProjectEngine
 from modules.project.service.project_assignment_scope import ProjectAssignmentScope
@@ -44,6 +49,76 @@ class ProjectService:
         self._assignment.ensure_project_access(ctx, row.id, row.company_id)
         return row
 
+    def to_response(self, ctx: TenantContext, row: PrjProject) -> ProjectResponse:
+        return self.to_responses(ctx, [row])[0]
+
+    def to_responses(self, ctx: TenantContext, rows: list[PrjProject]) -> list[ProjectResponse]:
+        names = self._customer_names_by_id(
+            ctx,
+            {row.customer_id for row in rows if row.customer_id is not None},
+        )
+        po_names = self._customer_names_by_proc_order(
+            ctx,
+            {
+                row.proc_order_id
+                for row in rows
+                if row.proc_order_id is not None
+                and (row.customer_id is None or row.customer_id not in names)
+            },
+        )
+        out: list[ProjectResponse] = []
+        for row in rows:
+            payload = ProjectResponse.model_validate(row)
+            name = None
+            if row.customer_id is not None:
+                name = names.get(row.customer_id)
+            if not name and row.proc_order_id is not None:
+                name = po_names.get(row.proc_order_id)
+            out.append(payload.model_copy(update={"customer_name": name}))
+        return out
+
+    def _customer_names_by_id(
+        self,
+        ctx: TenantContext,
+        customer_ids: set[UUID],
+    ) -> dict[UUID, str]:
+        if not customer_ids:
+            return {}
+        stmt = select(MasterCustomer.id, MasterCustomer.customer_name).where(
+            MasterCustomer.tenant_id == ctx.tenant_id,
+            MasterCustomer.is_deleted.is_(False),
+            MasterCustomer.id.in_(customer_ids),
+        )
+        return {
+            customer_id: (name or "").strip()
+            for customer_id, name in self._db.execute(stmt).all()
+            if (name or "").strip()
+        }
+
+    def _customer_names_by_proc_order(
+        self,
+        ctx: TenantContext,
+        order_ids: set[UUID],
+    ) -> dict[UUID, str]:
+        """Fallback customer labels from linked SCM POs when master customer_id is missing."""
+        if not order_ids:
+            return {}
+        from modules.project.adapters.procurement_port import ProjectProcurementAdapter
+
+        procurement = ProjectProcurementAdapter(self._db)
+        resolved: dict[UUID, str] = {}
+        for order_id in order_ids:
+            try:
+                order = procurement.get_order_response(
+                    ctx, order_id, enrich_commercial=True
+                )
+            except Exception:
+                continue
+            name = (getattr(order, "customer_name", None) or "").strip()
+            if name:
+                resolved[order_id] = name
+        return resolved
+
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         self._module_admin.ensure_admin(ctx)
 
@@ -62,6 +137,12 @@ class ProjectService:
                 fields["budget_amount"] = prefill.budget_amount
             if not fields.get("customer_id") and prefill.customer_id:
                 fields["customer_id"] = prefill.customer_id
+            if not fields.get("customer_id") and prefill.customer_name:
+                matched = po_queue._match_customer_id(
+                    ctx, prefill.company_id, prefill.customer_name
+                )
+                if matched is not None:
+                    fields["customer_id"] = matched
             if not fields.get("crm_opportunity_id") and prefill.crm_opportunity_id:
                 fields["crm_opportunity_id"] = prefill.crm_opportunity_id
             if not fields.get("description") and prefill.description:

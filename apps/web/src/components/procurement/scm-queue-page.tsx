@@ -88,13 +88,6 @@ function payTermsLabel(days: number | null | undefined): string {
   return `Net ${value} days`;
 }
 
-function formatNetMarginPct(margin: number | null | undefined, customerTotal: number | null | undefined): string {
-  const customer = Number(customerTotal) || 0;
-  if (customer <= 0) return "—";
-  const pct = ((Number(margin) || 0) / customer) * 100;
-  return `${pct.toFixed(2)}%`;
-}
-
 function queuePoNumberLabels(row: ScmQueueItem): string[] {
   const fromLinked = (row.purchase_orders || [])
     .map((po) => (po.company_po_number || po.document_number || "").trim())
@@ -104,6 +97,45 @@ function queuePoNumberLabels(row: ScmQueueItem): string[] {
   }
   const single = (row.company_po_number || "").trim();
   return single ? [single] : [];
+}
+
+/** Created vs required vendor POs for an OVF (one PO per distributor group). */
+function queuePoCreationProgress(row: ScmQueueItem): { created: number; total: number } {
+  const groups = row.po_groups || [];
+  if (groups.length > 0) {
+    const created = groups.filter((g) => g.has_po).length;
+    return { created, total: groups.length };
+  }
+  const created = (row.purchase_orders || []).length;
+  const open = (row.open_distributor_names || []).length;
+  const linkedFallback =
+    created === 0 && Boolean(row.company_po_number || row.purchase_order_id) ? 1 : 0;
+  const createdCount = created || linkedFallback;
+  return { created: createdCount, total: createdCount + open };
+}
+
+function PoCreationStatusBadge({ created, total }: { created: number; total: number }) {
+  const incomplete = total > 0 && created !== total;
+  const label = `${created}/${total}`;
+  return (
+    <span
+      title={
+        incomplete
+          ? `${created} of ${total} purchase orders created`
+          : total === 0
+            ? "No vendor purchase orders required"
+            : `All ${total} purchase orders created`
+      }
+      className={cn(
+        "inline-flex w-fit items-center rounded border px-1.5 py-0.5 text-[11px] font-semibold tabular-nums tracking-tight transition-colors duration-200",
+        incomplete
+          ? "border-red-300 bg-red-50 text-red-800"
+          : "border-emerald-300 bg-emerald-50 text-emerald-900",
+      )}
+    >
+      {label}
+    </span>
+  );
 }
 
 function scmQueueRowMatchesSearch(
@@ -401,7 +433,7 @@ export function ScmQueuePage() {
 
       <ProcurementListPanel id="procurement-list" className="scroll-mt-24">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1260px] text-left text-sm">
+          <table className="w-full min-w-[1080px] text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs font-bold uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 font-bold">PO number</th>
@@ -414,13 +446,6 @@ export function ScmQueuePage() {
                 <th className="px-3 py-2 font-bold">OVF date</th>
                 <th className="px-3 py-2 font-bold text-right">Customer amt</th>
                 <th className="px-3 py-2 font-bold text-right">Vendor amt</th>
-                <th
-                  className="px-3 py-2 font-bold text-right"
-                  title="Product margin minus freight, additional charges, and finance cost"
-                >
-                  Net margin
-                </th>
-                <th className="px-3 py-2 font-bold text-right">Margin %</th>
                 <th className="px-3 py-2 font-bold">OVF status</th>
                 <th className="px-3 py-2 font-bold">View OVF</th>
               </tr>
@@ -428,14 +453,14 @@ export function ScmQueuePage() {
             <tbody>
               {loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
                     Loading SCM queue…
                   </td>
                 </tr>
               ) : null}
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">
                     {query.trim()
                       ? "No queue rows match your search."
                       : filter === "open"
@@ -451,6 +476,7 @@ export function ScmQueuePage() {
               {filtered.map((row) => {
                 const isNew = newOvfIds.has(row.ovf_id);
                 const ovfStatus = row.ovf_status;
+                const poProgress = queuePoCreationProgress(row);
                 return (
                   <tr
                     key={row.ovf_id}
@@ -469,26 +495,32 @@ export function ScmQueuePage() {
                     )}
                   >
                     <td className="px-3 py-2 font-medium tabular-nums">
-                      <span className="inline-flex flex-wrap items-center gap-1.5">
-                        {(() => {
-                          const labels = queuePoNumberLabels(row);
-                          if (labels.length === 0) return <span>—</span>;
-                          return (
-                            <span className="flex flex-col gap-0.5">
-                              {labels.map((label) => (
-                                <span key={label}>{label}</span>
-                              ))}
+                      <span className="inline-flex flex-col items-start gap-1">
+                        <span className="inline-flex flex-wrap items-center gap-1.5">
+                          {(() => {
+                            const labels = queuePoNumberLabels(row);
+                            if (labels.length === 0) return <span>—</span>;
+                            return (
+                              <span className="flex flex-col gap-0.5">
+                                {labels.map((label) => (
+                                  <span key={label}>{label}</span>
+                                ))}
+                              </span>
+                            );
+                          })()}
+                          {isNew ? (
+                            <span
+                              className="text-xs font-semibold tracking-tight text-sky-700"
+                              title="Recently shared to SCM"
+                            >
+                              [New]
                             </span>
-                          );
-                        })()}
-                        {isNew ? (
-                          <span
-                            className="text-xs font-semibold tracking-tight text-sky-700"
-                            title="Recently shared to SCM"
-                          >
-                            [New]
-                          </span>
-                        ) : null}
+                          ) : null}
+                        </span>
+                        <PoCreationStatusBadge
+                          created={poProgress.created}
+                          total={poProgress.total}
+                        />
                       </span>
                     </td>
                     <td className="px-3 py-2">{row.customer_name || "—"}</td>
@@ -509,12 +541,6 @@ export function ScmQueuePage() {
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {formatInr(row.vendor_total || 0)}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {formatInr(row.margin_amount || 0)}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                      {formatNetMarginPct(row.margin_amount, row.customer_total)}
                     </td>
                     <td className="px-3 py-2">
                       <span className="inline-flex flex-wrap items-center gap-1.5">

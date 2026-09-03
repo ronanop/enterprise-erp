@@ -7,7 +7,8 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from modules.foundation.domain.erp_modules import ADMIN_USER_TYPES, ERP_MODULE_KEY_SET
+from core.exceptions import AppException
+from modules.foundation.domain.erp_modules import ERP_MODULE_KEY_SET
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import SecUser, SecUserModule
 from modules.foundation.service.user_employee_link_service import UserEmployeeLinkService
@@ -25,20 +26,31 @@ class ModuleMemberService:
                 "display_name": user.display_name,
                 "email": user.email,
             }
-            for user in self._list_module_users(ctx, module_key)
+            for user in self._list_module_assigned_users(ctx, module_key)
         ]
 
     def list_member_options(self, ctx: TenantContext, module_key: str) -> list[dict]:
+        """Employee options for module assignees (admin + member roles)."""
         if module_key not in ERP_MODULE_KEY_SET:
             return []
 
         options: list[dict] = []
         seen_employee_ids: set[UUID] = set()
 
-        for user in self._list_module_users(ctx, module_key):
-            employee = self._user_employees.find_employee_for_user(ctx, user)
-            if employee is None:
-                employee = self._user_employees.ensure_employee_for_user(ctx, user)
+        for user in self._list_module_assigned_users(ctx, module_key):
+            try:
+                employee = self._user_employees.find_employee_for_user(ctx, user)
+                if employee is None:
+                    # Module assignees need an employee id for PM/owner FKs.
+                    employee = self._user_employees.ensure_employee_for_user(
+                        ctx,
+                        user,
+                        bypass_onboarding=True,
+                    )
+            except AppException:
+                continue
+            except Exception:
+                continue
             if employee is None or employee.id in seen_employee_ids:
                 continue
             seen_employee_ids.add(employee.id)
@@ -57,7 +69,8 @@ class ModuleMemberService:
         options.sort(key=lambda row: row["label"].lower())
         return options
 
-    def _list_module_users(self, ctx: TenantContext, module_key: str) -> list[SecUser]:
+    def _list_module_assigned_users(self, ctx: TenantContext, module_key: str) -> list[SecUser]:
+        """Users with an org assignment to this module (admin or member)."""
         tenant_id = ctx.tenant_id
         module_user_ids = set(
             self._db.scalars(
@@ -67,6 +80,8 @@ class ModuleMemberService:
                 )
             ).all()
         )
+        if not module_user_ids:
+            return []
 
         stmt = (
             select(SecUser)
@@ -74,6 +89,7 @@ class ModuleMemberService:
                 SecUser.tenant_id == tenant_id,
                 SecUser.is_deleted.is_(False),
                 SecUser.status == "active",
+                SecUser.id.in_(module_user_ids),
             )
             .order_by(SecUser.display_name.asc())
         )
@@ -82,6 +98,5 @@ class ModuleMemberService:
             email = (user.email or "").strip().lower()
             if email.endswith("@example.com"):
                 continue
-            if user.user_type in ADMIN_USER_TYPES or user.id in module_user_ids:
-                users.append(user)
+            users.append(user)
         return users

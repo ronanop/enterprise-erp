@@ -180,8 +180,10 @@ def list_projects(
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
 ):
-    items = ProjectService(db).list(ctx, company_id=company_id)
-    return APIResponse(message="OK", data=paginate(items, pagination))
+    service = ProjectService(db)
+    items = service.list(ctx, company_id=company_id)
+    page = paginate(items, pagination)
+    return APIResponse(message="OK", data=service.to_responses(ctx, page))
 
 @projects_router.get("/{row_id}", response_model=APIResponse[ProjectResponse])
 def get_projects(
@@ -189,7 +191,8 @@ def get_projects(
     ctx: Annotated[TenantContext, Depends(require_permission("project.project:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=ProjectService(db).get(ctx, row_id))
+    service = ProjectService(db)
+    return APIResponse(message="OK", data=service.to_response(ctx, service.get(ctx, row_id)))
 
 @projects_router.post("", response_model=APIResponse[ProjectResponse])
 def create_projects(
@@ -201,10 +204,9 @@ def create_projects(
     site = payload.pop("site_installation", None)
     if site is not None:
         payload["site_installation"] = site
-    return APIResponse(
-        message="Created",
-        data=ProjectService(db).create(ctx, branch_id=body.branch_id, **payload),
-    )
+    service = ProjectService(db)
+    row = service.create(ctx, branch_id=body.branch_id, **payload)
+    return APIResponse(message="Created", data=service.to_response(ctx, row))
 
 @projects_router.patch("/{row_id}", response_model=APIResponse[ProjectResponse])
 def update_projects(
@@ -213,7 +215,9 @@ def update_projects(
     ctx: Annotated[TenantContext, Depends(require_permission("project.project:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="Updated", data=ProjectService(db).update(ctx, row_id, **extract_update_fields(body)))
+    service = ProjectService(db)
+    row = service.update(ctx, row_id, **extract_update_fields(body))
+    return APIResponse(message="Updated", data=service.to_response(ctx, row))
 
 @projects_router.post("/{row_id}/submit", response_model=APIResponse[ProjectResponse])
 def submit_projects(
@@ -221,7 +225,8 @@ def submit_projects(
     ctx: Annotated[TenantContext, Depends(require_permission("project.project:submit"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="Submit", data=ProjectService(db).submit(ctx, row_id))
+    service = ProjectService(db)
+    return APIResponse(message="Submit", data=service.to_response(ctx, service.submit(ctx, row_id)))
 
 @projects_router.post("/{row_id}/approve", response_model=APIResponse[ProjectResponse])
 def approve_projects(
@@ -229,7 +234,8 @@ def approve_projects(
     ctx: Annotated[TenantContext, Depends(require_permission("project.project:approve"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="Approve", data=ProjectService(db).approve(ctx, row_id))
+    service = ProjectService(db)
+    return APIResponse(message="Approve", data=service.to_response(ctx, service.approve(ctx, row_id)))
 
 @projects_router.post("/{row_id}/complete", response_model=APIResponse[ProjectResponse])
 def complete_projects(
@@ -237,7 +243,11 @@ def complete_projects(
     ctx: Annotated[TenantContext, Depends(require_permission("project.project:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="Completed", data=ProjectService(db).complete(ctx, row_id))
+    service = ProjectService(db)
+    return APIResponse(
+        message="Completed",
+        data=service.to_response(ctx, service.complete(ctx, row_id)),
+    )
 
 @projects_router.post("/{row_id}/close", response_model=APIResponse[ProjectResponse])
 def close_projects(
@@ -245,7 +255,8 @@ def close_projects(
     ctx: Annotated[TenantContext, Depends(require_permission("project.project:close"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="Close", data=ProjectService(db).close(ctx, row_id))
+    service = ProjectService(db)
+    return APIResponse(message="Close", data=service.to_response(ctx, service.close(ctx, row_id)))
 
 @project_phases_router.get("", response_model=APIResponse[list[ProjectPhaseResponse]])
 def list_project_phases(

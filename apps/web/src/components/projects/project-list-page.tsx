@@ -58,8 +58,8 @@ export function ProjectListPage() {
       {
         key: "customer_id",
         label: "Customer",
-        sort: (r) => labels.customerName(r.customer_id),
-        cell: (r) => labels.customerName(r.customer_id),
+        sort: (r) => r.customer_name || labels.customerName(r.customer_id),
+        cell: (r) => r.customer_name || labels.customerName(r.customer_id),
       },
       {
         key: "project_manager_employee_id",
@@ -107,13 +107,14 @@ export function ProjectListPage() {
       errorMessage="Failed to load projects"
       minWidth={1200}
       columns={columns}
-      defaultSortKey="project_code"
+      defaultSortKey="created_at"
+      defaultSortDir="desc"
       load={load}
       matches={(r, q) =>
         r.project_name.toLowerCase().includes(q) ||
         r.project_code.toLowerCase().includes(q) ||
         r.project_type.toLowerCase().includes(q) ||
-        labels.customerName(r.customer_id).toLowerCase().includes(q)
+        (r.customer_name || labels.customerName(r.customer_id)).toLowerCase().includes(q)
       }
     />
   );

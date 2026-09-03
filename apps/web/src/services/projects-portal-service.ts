@@ -132,6 +132,8 @@ export type Project = AuditFields & {
   project_name: string;
   project_type: string;
   customer_id: string | null;
+  /** Resolved master customer name (from API enrichment). */
+  customer_name?: string | null;
   department_id: string | null;
   project_manager_employee_id: string;
   sponsor_employee_id: string | null;

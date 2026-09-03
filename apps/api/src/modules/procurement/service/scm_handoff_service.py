@@ -744,6 +744,7 @@ class ScmHandoffService:
                     "scm_on_hold_at": resolve_scm_hold_started_at(ovf),
                     "can_create_po": can_create,
                     "open_distributor_names": open_distributors,
+                    "po_groups": po_groups,
                     "purchase_orders": self._serialize_linked_pos(ctx, existing_orders),
                     "stock_fulfillment_status": stock["stock_fulfillment_status"],
                     "remaining_demand_qty": remaining_demand,

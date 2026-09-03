@@ -83,6 +83,7 @@ class UserEmployeeLinkService:
         user: SecUser,
         *,
         commit: bool = False,
+        bypass_onboarding: bool = False,
     ) -> MasterEmployee | None:
         existing = self.find_employee_for_user(ctx, user)
         if existing is not None:
@@ -137,6 +138,8 @@ class UserEmployeeLinkService:
             designation="Employee",
             date_of_joining=date.today(),
             user_id=user.id,
+            bypass_onboarding=bypass_onboarding,
+            status="active",
         )
         row = self._db.get(MasterEmployee, entity.id)
         if row is not None:

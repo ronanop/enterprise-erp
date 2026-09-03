@@ -85,6 +85,7 @@ class ProjectResponse(OrmModel):
     project_name: str
     project_type: str
     customer_id: UUID | None
+    customer_name: str | None = None
     department_id: UUID | None
     project_manager_employee_id: UUID
     sponsor_employee_id: UUID | None
