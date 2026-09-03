@@ -29,3 +29,11 @@ class AnalyticsMasterDataAdapter:
 
     def get_vendor(self, ctx: TenantContext, vendor_id: UUID):
         return self._vendors.get_vendor(ctx, vendor_id)
+
+    def count_active_customers(self, ctx: TenantContext, company_id: UUID) -> int:
+        rows = self._customers.list_customers(ctx, company_id=company_id)
+        return sum(1 for row in rows if getattr(row, "status", None) == "active")
+
+    def count_active_vendors(self, ctx: TenantContext, company_id: UUID) -> int:
+        rows = self._vendors.list_vendors(ctx, company_id=company_id)
+        return sum(1 for row in rows if getattr(row, "status", None) == "active")

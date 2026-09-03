@@ -1,16 +1,21 @@
 """KpiService."""
 
+from __future__ import annotations
+
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
-from modules.analytics.domain.enums import AnalyticsEntityType
+from modules.analytics.domain.enums import AnalyticsEntityType, SourceKpiKey
+from modules.analytics.domain.exceptions import UnknownKpiSource
 from modules.analytics.models import BiKpi
 from modules.analytics.repository.kpi_repository import KpiRepository
 from modules.analytics.service.analytics_number_service import AnalyticsNumberService
 from modules.analytics.service.analytics_scope_validator import AnalyticsScopeValidator
 from modules.analytics.service.engines import KpiEngine
+from modules.analytics.service.integration_service import AnalyticsIntegrationService
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 
@@ -22,6 +27,7 @@ class KpiService:
         self._numbers = AnalyticsNumberService(db)
         self._engine = KpiEngine()
         self._audit = AuditService(db)
+        self._integration = AnalyticsIntegrationService(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -55,3 +61,31 @@ class KpiService:
         self._engine.approve(row)
         return self._repo.update(ctx, row_id, status=row.status)
 
+    def compute_current_value(self, ctx: TenantContext, row_id: UUID) -> BiKpi:
+        row = self.get(ctx, row_id)
+        total, _breakdown = self._aggregate(ctx, row)
+        return self._repo.update(ctx, row_id, current_value=Decimal(total))
+
+    def get_detail(self, ctx: TenantContext, row_id: UUID) -> dict:
+        row = self.get(ctx, row_id)
+        total, breakdown = self._aggregate(ctx, row)
+        current = row.current_value
+        if current is None:
+            current = Decimal(total)
+        return {
+            "kpi_code": row.kpi_code,
+            "current_value": current,
+            "target_value": row.target_value,
+            "breakdown": breakdown,
+        }
+
+    def _aggregate(self, ctx: TenantContext, row: BiKpi) -> tuple[int, list[dict]]:
+        key = (row.source_kpi_key or "").strip()
+        company_id = row.company_id
+        if key == SourceKpiKey.ORG_HEADCOUNT_BY_DEPARTMENT.value:
+            return self._integration.headcount_by_department(ctx, company_id)
+        if key == SourceKpiKey.MASTER_ACTIVE_CUSTOMERS.value:
+            return self._integration.count_active_customers(ctx, company_id), []
+        if key == SourceKpiKey.MASTER_ACTIVE_VENDORS.value:
+            return self._integration.count_active_vendors(ctx, company_id), []
+        raise UnknownKpiSource(f"Unsupported source_kpi_key: {key or '(empty)'}")

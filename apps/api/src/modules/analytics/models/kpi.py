@@ -74,6 +74,7 @@ class BiKpi(Base, *BiRowMixin):
     direction: Mapped[str | None] = mapped_column(String(20), nullable=True)
     period_grain: Mapped[str | None] = mapped_column(String(20), nullable=True)
     current_value: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    source_kpi_key: Mapped[str | None] = mapped_column(String(80), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
 
     workflow_status: Mapped[str | None] = mapped_column(String(30), nullable=True)

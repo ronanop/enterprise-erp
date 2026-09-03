@@ -52,6 +52,7 @@ from modules.analytics.schemas import (
     FactTableResponse,
     FactTableUpdate,
     KpiCreate,
+    KpiDetailResponse,
     KpiResponse,
     KpiUpdate,
     MetricCreate,
@@ -496,6 +497,22 @@ def get_kpis(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=KpiService(db).get(ctx, row_id))
+
+@kpis_router.get("/{row_id}/detail", response_model=APIResponse[KpiDetailResponse])
+def get_kpi_detail(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("analytics.kpi:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=KpiService(db).get_detail(ctx, row_id))
+
+@kpis_router.post("/{row_id}/compute", response_model=APIResponse[KpiResponse])
+def compute_kpis(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("analytics.kpi:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="compute", data=KpiService(db).compute_current_value(ctx, row_id))
 
 @kpis_router.post("", response_model=APIResponse[KpiResponse])
 def create_kpis(

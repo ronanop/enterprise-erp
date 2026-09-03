@@ -33,3 +33,12 @@ class AnalyticsIntegrationService:
 
     def finance_ledger_hint(self, ctx: TenantContext, ledger_ref_id: UUID | None) -> UUID | None:
         return self._finance.resolve_ledger_ref(ctx, ledger_ref_id)
+
+    def headcount_by_department(self, ctx: TenantContext, company_id: UUID):
+        return self._org.headcount_by_department(ctx, company_id)
+
+    def count_active_customers(self, ctx: TenantContext, company_id: UUID) -> int:
+        return self._master.count_active_customers(ctx, company_id)
+
+    def count_active_vendors(self, ctx: TenantContext, company_id: UUID) -> int:
+        return self._master.count_active_vendors(ctx, company_id)

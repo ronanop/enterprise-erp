@@ -147,6 +147,12 @@ class UsageAuditStatus(str, Enum):
     RECORDED = "recorded"
 
 
+class SourceKpiKey(str, Enum):
+    ORG_HEADCOUNT_BY_DEPARTMENT = "org.headcount_by_department"
+    MASTER_ACTIVE_CUSTOMERS = "master.active_customers"
+    MASTER_ACTIVE_VENDORS = "master.active_vendors"
+
+
 class AnalyticsEntityType(str, Enum):
     DASHBOARD = "dashboard"
     REPORT = "report"

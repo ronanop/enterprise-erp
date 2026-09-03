@@ -5438,6 +5438,51 @@ def seed_analytics(db, tenant_id, company_id, branch_id, admin_id, employees):
         )
 
 
+def seed_pilot_kpis(db, tenant_id, company_id, branch_id, admin_id, employees):
+    """Additive CXO pilot KPIs — does not change seed_analytics()."""
+    owner_id = employees[0].id
+    specs = [
+        (
+            "HCNT",
+            "Headcount",
+            "org.headcount_by_department",
+            Decimal("20"),
+        ),
+        (
+            "ACUST",
+            "Active Customers",
+            "master.active_customers",
+            Decimal("50"),
+        ),
+        (
+            "AVEND",
+            "Active Vendors",
+            "master.active_vendors",
+            Decimal("20"),
+        ),
+    ]
+    for code, name, source_key, target in specs:
+        row = ensure(
+            db,
+            BiKpi,
+            {"tenant_id": tenant_id, "company_id": company_id, "kpi_code": code},
+            {
+                "kpi_number": f"KPI-{code}",
+                "kpi_name": name,
+                "owner_employee_id": owner_id,
+                "direction": "higher_better",
+                "status": "active",
+                "source_kpi_key": source_key,
+                "target_value": target,
+                "created_by": admin_id,
+                "updated_by": admin_id,
+            },
+        )
+        if row is not None and getattr(row, "source_kpi_key", None) != source_key:
+            row.source_kpi_key = source_key
+            row.kpi_name = name
+
+
 def seed_integration(db, tenant_id, company_id, admin_id, employees):
     system = ensure(
         db,
@@ -6383,6 +6428,10 @@ def main() -> None:
         run(
             "analytics",
             lambda: seed_analytics(db, tenant.id, company.id, branch.id, admin.id, employees),
+        )
+        run(
+            "analytics pilot kpis",
+            lambda: seed_pilot_kpis(db, tenant.id, company.id, branch.id, admin.id, employees),
         )
         run("integration", lambda: seed_integration(db, tenant.id, company.id, admin.id, employees))
         run(

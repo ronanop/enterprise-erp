@@ -213,10 +213,22 @@ class MetricResponse(OrmModel):
 class KpiCreate(BaseModel):
     company_id: UUID | None = None
     status: str | None = None
+    source_kpi_key: str | None = None
 
 class KpiUpdate(BaseModel):
     status: str | None = None
     version: int | None = None
+    source_kpi_key: str | None = None
+
+class KpiBreakdownItem(BaseModel):
+    dimension_label: str
+    value: Decimal
+
+class KpiDetailResponse(BaseModel):
+    kpi_code: str
+    current_value: Decimal | None
+    target_value: Decimal | None
+    breakdown: list[KpiBreakdownItem]
 
 class KpiResponse(OrmModel):
     id: UUID
@@ -233,6 +245,7 @@ class KpiResponse(OrmModel):
     direction: str | None
     period_grain: str | None
     current_value: Decimal | None
+    source_kpi_key: str | None = None
     status: str
     workflow_status: str | None
     workflow_instance_id: UUID | None

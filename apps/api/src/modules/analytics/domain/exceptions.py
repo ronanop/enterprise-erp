@@ -39,6 +39,11 @@ class InvalidKpiState(ConflictException):
     def __init__(self, message: str = "Invalid kpi state") -> None:
         super().__init__(message)
 
+
+class UnknownKpiSource(ConflictException):
+    def __init__(self, message: str = "Unknown KPI source key") -> None:
+        super().__init__(message)
+
 class InvalidDimensionState(ConflictException):
     def __init__(self, message: str = "Invalid dimension state") -> None:
         super().__init__(message)
