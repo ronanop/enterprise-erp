@@ -2,8 +2,9 @@
 
 from decimal import Decimal, ROUND_HALF_UP
 
-from modules.payroll.domain.enums import PayrollRunStatus
+from modules.payroll.domain.enums import PayrollRunStatus, PfOnLopMode, SalaryProrationMode
 from modules.payroll.domain.exceptions import InvalidPayrollRunState
+from modules.payroll.domain.payroll_day_ledger import FIXED_SALARY_DAYS
 from modules.payroll.domain.payroll_salary_calculator import (
     compute_net_and_deductions,
     compute_pf,
@@ -40,13 +41,18 @@ class PayrollRunEngine:
         resolved = resolve_policy(policy)
         use_legacy = policy is None
 
-        gross = Decimal(str(gross_amount or 0))
+        monthly_gross = Decimal(str(gross_amount or 0))
         denom = Decimal(str(period_days if period_days is not None else _STANDARD_DAYS))
+        if str(resolved.get("salary_proration_mode") or "") == SalaryProrationMode.FIXED_30_DAY_FACTOR.value:
+            denom = FIXED_SALARY_DAYS
+        if str(resolved.get("period_day_denominator") or "") == "fixed_30":
+            denom = FIXED_SALARY_DAYS
         if denom <= 0:
             denom = _STANDARD_DAYS
+        gross = monthly_gross
         if prorate and paid_days is not None:
             factor = Decimal(str(paid_days)) / denom
-            gross = _money(gross * factor)
+            gross = _money(monthly_gross * factor)
 
         if use_legacy:
             basic = _money(gross * _LEGACY_BASIC_RATE)
@@ -92,7 +98,12 @@ class PayrollRunEngine:
             )
             net_pay = _money(gross - total_deductions)
         else:
-            statutory = compute_pf(resolved, gross=gross, basic=basic)
+            pf_on_lop = str(resolved.get("pf_on_lop") or PfOnLopMode.FIXED.value)
+            pf_gross, pf_basic = gross, basic
+            if pf_on_lop == PfOnLopMode.FIXED.value:
+                monthly_basic, _, _ = split_earnings(monthly_gross, resolved)
+                pf_gross, pf_basic = monthly_gross, monthly_basic
+            statutory = compute_pf(resolved, gross=pf_gross, basic=pf_basic)
             total_deductions, net_pay, employer_contribution = compute_net_and_deductions(
                 gross, statutory, resolved, deduction_adjustments=ded_adj
             )

@@ -62,7 +62,7 @@ const QUICK_ACTIONS = [
   { label: "Employee Request", href: "/hr/ess", icon: Bell },
   { label: "Biometric Devices", href: "/hr/time/biometric-devices", icon: Fingerprint },
   { label: "Offboarding", href: "/hr/separation", icon: UserMinus },
-  { label: "Payroll", href: "/hr/payroll", icon: Wallet },
+  { label: "Payroll", href: "/hr/payroll?section=salary-structure", icon: Wallet },
   { label: "Training", href: "/hr/learning", icon: GraduationCap },
 ] as const;
 

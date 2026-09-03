@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Bell, GraduationCap, Plus, Search } from "lucide-react";
+import { Bell, GraduationCap, Pencil, Plus, Search, Trash2 } from "lucide-react";
 
 import {
   HrAuthBanner,
@@ -11,6 +11,7 @@ import {
   HrUnderlineTabs,
   type HrTabItem,
 } from "@/components/hr/hr-primitives";
+import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
 import {
   SetupDrawer,
   SetupField,
@@ -28,8 +29,10 @@ import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
 import {
   createTrainingProgram,
+  deleteTrainingProgram,
   loadTrainingDirectory,
   markTrainingNotificationsRead,
+  updateTrainingProgram,
   type TrainingDirectory,
 } from "@/services/training-management-service";
 import type { TrainingProgram } from "@/types/training-management";
@@ -45,7 +48,10 @@ export function TrainingManagementPage() {
   const [dir, setDir] = useState<TrainingDirectory | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("training");
-  const [createOpen, setCreateOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [editing, setEditing] = useState<TrainingProgram | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<TrainingProgram | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [timeFilter, setTimeFilter] = useState("");
@@ -117,7 +123,14 @@ export function TrainingManagementPage() {
         title="Training"
         actions={
           <HrToolbar onRefresh={() => void load()} loading={loading}>
-            <Button size="sm" className="cursor-pointer" onClick={() => setCreateOpen(true)}>
+            <Button
+              size="sm"
+              className="cursor-pointer"
+              onClick={() => {
+                setEditing(null);
+                setDrawerOpen(true);
+              }}
+            >
               <Plus className="size-3.5" />
               Create Training
             </Button>
@@ -198,18 +211,25 @@ export function TrainingManagementPage() {
             title="No training sessions"
             description="Create a training with date, time, host, room, and attendees."
             action={
-              <Button size="sm" className="cursor-pointer" onClick={() => setCreateOpen(true)}>
+              <Button
+                size="sm"
+                className="cursor-pointer"
+                onClick={() => {
+                  setEditing(null);
+                  setDrawerOpen(true);
+                }}
+              >
                 Create Training
               </Button>
             }
           />
         ) : (
-          <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-            <table className="w-full min-w-[960px] text-left text-sm">
+          <div className="overflow-x-auto rounded-xl border border-border/70 bg-card shadow-sm">
+            <table className="w-full min-w-[1040px] text-left text-sm">
               <thead className="border-b bg-muted/50 text-[10px] uppercase text-muted-foreground">
                 <tr>
-                  {["Name", "Date", "Time", "Host", "Room", "Attendees", "Status"].map((h) => (
-                    <th key={h} className="px-3 py-2 font-medium">
+                  {["Name", "Date", "Time", "Host", "Room", "Attendees", "Status", "Actions"].map((h) => (
+                    <th key={h} className={cn("px-3 py-2 font-medium", h === "Actions" && "text-right")}>
                       {h}
                     </th>
                   ))}
@@ -218,11 +238,19 @@ export function TrainingManagementPage() {
               <tbody>
                 {filtered.length ? (
                   filtered.map((p) => (
-                    <TrainingRow key={p.id} program={p} />
+                    <TrainingRow
+                      key={p.id}
+                      program={p}
+                      onEdit={() => {
+                        setEditing(p);
+                        setDrawerOpen(true);
+                      }}
+                      onDelete={() => setConfirmDelete(p)}
+                    />
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={7} className="px-3 py-8 text-center text-xs text-muted-foreground">
+                    <td colSpan={8} className="px-3 py-8 text-center text-xs text-muted-foreground">
                       No training matches the filter.
                     </td>
                   </tr>
@@ -281,17 +309,55 @@ export function TrainingManagementPage() {
         </div>
       ) : null}
 
-      <CreateTrainingDrawer
-        open={createOpen}
+      <TrainingFormDrawer
+        open={drawerOpen}
+        program={editing}
         directory={dir}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => {
+          setDrawerOpen(false);
+          setEditing(null);
+        }}
         onSaved={() => void load()}
+      />
+
+      <SetupConfirmDialog
+        open={Boolean(confirmDelete)}
+        title="Delete training"
+        message={
+          confirmDelete
+            ? `Remove “${confirmDelete.name}”? Attendees will be unenrolled.`
+            : ""
+        }
+        confirmLabel="Delete"
+        destructive
+        loading={deleting}
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={() => {
+          if (!confirmDelete) return;
+          setDeleting(true);
+          void deleteTrainingProgram(confirmDelete.id)
+            .then(() => {
+              toast("Training deleted", "success");
+              setConfirmDelete(null);
+              void load();
+            })
+            .catch((e) => toast(e instanceof ApiClientError ? e.message : "Delete failed", "error"))
+            .finally(() => setDeleting(false));
+        }}
       />
     </div>
   );
 }
 
-function TrainingRow({ program: p }: { program: TrainingProgram }) {
+function TrainingRow({
+  program: p,
+  onEdit,
+  onDelete,
+}: {
+  program: TrainingProgram;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   return (
     <tr className="border-b border-border/40 hover:bg-muted/30">
       <td className="px-3 py-2 text-xs font-medium">{p.name}</td>
@@ -306,21 +372,50 @@ function TrainingRow({ program: p }: { program: TrainingProgram }) {
       <td className="px-3 py-2">
         <HrStatusBadge status={p.status} />
       </td>
+      <td className="px-3 py-2">
+        <div className="flex items-center justify-end gap-0.5">
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            className="cursor-pointer text-muted-foreground transition-colors duration-200 hover:text-foreground"
+            aria-label={`Edit ${p.name}`}
+            title="Edit"
+            onClick={onEdit}
+          >
+            <Pencil className="size-3.5" />
+          </Button>
+          <Button
+            type="button"
+            size="icon-sm"
+            variant="ghost"
+            className="cursor-pointer text-muted-foreground transition-colors duration-200 hover:text-destructive"
+            aria-label={`Delete ${p.name}`}
+            title="Delete"
+            onClick={onDelete}
+          >
+            <Trash2 className="size-3.5" />
+          </Button>
+        </div>
+      </td>
     </tr>
   );
 }
 
-function CreateTrainingDrawer({
+function TrainingFormDrawer({
   open,
+  program,
   directory,
   onClose,
   onSaved,
 }: {
   open: boolean;
+  program: TrainingProgram | null;
   directory: TrainingDirectory | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const isEdit = Boolean(program);
   const [name, setName] = useState("");
   const [type, setType] = useState("technical");
   const [branchId, setBranchId] = useState("");
@@ -333,25 +428,54 @@ function CreateTrainingDrawer({
   const [isRecurring, setIsRecurring] = useState(false);
   const [recurrence, setRecurrence] = useState("weekly");
   const [notes, setNotes] = useState("");
+  const [status, setStatus] = useState("planned");
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open || !directory) return;
-    setBranchId(directory.options.branches[0]?.id ?? "");
-    setHostId(directory.options.employees[0]?.id ?? "");
-    setRoomId(directory.rooms[0]?.id ?? "");
-    setName("");
-    setSelected([]);
+    if (program) {
+      setName(program.name);
+      setType(program.type || "technical");
+      setBranchId(program.branchId || directory.options.branches[0]?.id || "");
+      setHostId(program.hostEmployeeId);
+      setStartDate(program.startDate);
+      setEndDate(program.endDate && program.endDate !== program.startDate ? program.endDate : "");
+      setStartTime(program.startTime || "10:00");
+      setEndTime(program.endTime || "12:00");
+      setRoomId(program.roomId === "—" ? "" : program.roomId);
+      setIsRecurring(program.isRecurring);
+      setRecurrence(
+        program.recurrenceRule && program.recurrenceRule !== "none" ? program.recurrenceRule : "weekly",
+      );
+      setNotes(program.notes);
+      setStatus(program.status || "planned");
+      setSelected(program.attendeeIds);
+    } else {
+      setBranchId(directory.options.branches[0]?.id ?? "");
+      setHostId(directory.options.employees[0]?.id ?? "");
+      setRoomId(directory.rooms[0]?.id ?? "");
+      setName("");
+      setType("technical");
+      setStartDate("");
+      setEndDate("");
+      setStartTime("10:00");
+      setEndTime("12:00");
+      setIsRecurring(false);
+      setRecurrence("weekly");
+      setNotes("");
+      setStatus("planned");
+      setSelected([]);
+    }
     setBusy(false);
-  }, [open, directory]);
+  }, [open, directory, program]);
 
   const host = directory?.options.employees.find((e) => e.id === hostId);
 
   return (
     <SetupDrawer
       open={open}
-      title="Create Training"
+      title={isEdit ? "Edit Training" : "Create Training"}
       description="Name, schedule, host, room, and attendees"
       wide
       onClose={onClose}
@@ -370,8 +494,7 @@ function CreateTrainingDrawer({
                 toast("Name and date are required", "error");
                 return;
               }
-              setBusy(true);
-              void createTrainingProgram({
+              const payload = {
                 branchId,
                 name,
                 type,
@@ -385,21 +508,29 @@ function CreateTrainingDrawer({
                 isRecurring,
                 recurrenceRule: recurrence,
                 notes,
+                status,
                 employeeIds: selected,
                 employeeLabels: (directory?.options.employees ?? [])
                   .filter((e) => selected.includes(e.id))
                   .map((e) => ({ id: e.id, label: e.label })),
-              })
+              };
+              setBusy(true);
+              const save = program
+                ? updateTrainingProgram(program.id, payload)
+                : createTrainingProgram(payload);
+              void save
                 .then(() => {
-                  toast("Training created — attendees will be notified on the day", "success");
+                  toast(program ? "Training updated" : "Training created — attendees will be notified on the day", "success");
                   onSaved();
                   onClose();
                 })
-                .catch((e) => toast(e instanceof ApiClientError ? e.message : "Create failed", "error"))
+                .catch((e) =>
+                  toast(e instanceof ApiClientError ? e.message : program ? "Update failed" : "Create failed", "error"),
+                )
                 .finally(() => setBusy(false));
             }}
           >
-            {busy ? "Saving…" : "Create"}
+            {busy ? "Saving…" : isEdit ? "Save" : "Create"}
           </Button>
         </>
       }
@@ -472,6 +603,16 @@ function CreateTrainingDrawer({
             <option value="monthly">Monthly</option>
           </SetupSelect>
         </SetupField>
+        {isEdit ? (
+          <SetupField label="Status">
+            <SetupSelect value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="planned">Planned</option>
+              <option value="in_progress">In progress</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </SetupSelect>
+          </SetupField>
+        ) : null}
         <div className="sm:col-span-2">
           <SetupField label="Notes">
             <SetupTextarea value={notes} onChange={(e) => setNotes(e.target.value)} />

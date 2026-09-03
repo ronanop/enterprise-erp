@@ -15,13 +15,13 @@ def test_payslip_document_and_text():
         employee_name="Test User",
         payroll_run_id="run-1",
         payroll_run_line_id="line-1",
-        paid_days=Decimal("26"),
-        period_days=Decimal("26"),
+        paid_days=Decimal("30"),
+        period_days=Decimal("30"),
         lop_days=Decimal("0"),
         leave_days=Decimal("2"),
         gross_earnings=Decimal("30000"),
-        total_deductions=Decimal("3700"),
-        net_pay=Decimal("26300"),
+        total_deductions=Decimal("1800"),
+        net_pay=Decimal("28200"),
         employer_contribution=Decimal("1900"),
         component_breakdown={
             "basic": 18000,
@@ -31,17 +31,23 @@ def test_payslip_document_and_text():
             "pf_employer": 1900,
             "pf_total": 3700,
             "gross": 30000,
-            "net_pay_formula": "gross_minus_fixed_pf_total",
+            "net_pay_formula": "gross_minus_employee_pf_only",
         },
         day_summary={
             "counts": {
-                "scheduled_working": 26,
+                "scheduled_working": 22,
+                "week_off": 8,
+                "holiday": 0,
+                "present": 22,
                 "paid_leave": 2,
                 "lop": 0,
             }
         },
     )
-    assert doc["summary"]["net_pay"] == 26300.0
+    assert doc["attendance"]["payable_days"] == 30.0
+    assert doc["attendance"]["present"] == 22.0
+    assert doc["summary"]["net_pay"] == 28200.0
+    assert "Payable days" in doc["export_text"]
     assert "NET PAY" in doc["export_text"]
-    assert "₹26,300.00" in doc["export_text"]
+    assert "₹28,200.00" in doc["export_text"]
     assert format_payslip_text(doc) == doc["export_text"]

@@ -15,7 +15,10 @@ from modules.payroll.domain.enums import (
     PayrollCycleType,
     PayrollPeriodDayDenominator,
     PfDeductionMode,
+    PfOnLopMode,
     SalaryProrationMode,
+    SandwichOffBecomes,
+    SandwichTrigger,
 )
 
 
@@ -54,8 +57,8 @@ def default_company_payroll_policy_fields() -> dict[str, Any]:
         "payroll_cycle_start_day": 20,
         "leave_cycle_type": PayrollCycleType.CALENDAR_MONTH.value,
         "leave_balance_credit_timing": LeaveBalanceCreditTiming.AFTER_CALENDAR_MONTH_END.value,
-        "salary_proration_mode": SalaryProrationMode.PER_DAY_X_OVER_N.value,
-        "period_day_denominator": PayrollPeriodDayDenominator.SHIFT_SCHEDULED_DAYS.value,
+        "salary_proration_mode": SalaryProrationMode.FIXED_30_DAY_FACTOR.value,
+        "period_day_denominator": PayrollPeriodDayDenominator.FIXED_30.value,
         "lop_source": "attendance",
         "basic_percent": Decimal("0.6000"),
         "hra_percent_of_basic": Decimal("0.5000"),
@@ -63,12 +66,20 @@ def default_company_payroll_policy_fields() -> dict[str, Any]:
         "pf_employee_amount": Decimal("1800.0000"),
         "pf_employer_amount": Decimal("1900.0000"),
         "pf_total_amount": Decimal("3700.0000"),
-        "net_pay_formula": NetPayFormula.GROSS_MINUS_FIXED_PF_TOTAL.value,
+        "pf_employee_percent": Decimal("0.1200"),
+        "pf_employer_percent": Decimal("0.1200"),
+        "pf_wage_ceiling": Decimal("15000.0000"),
+        "pf_on_lop": PfOnLopMode.FIXED.value,
+        "net_pay_formula": NetPayFormula.GROSS_MINUS_EMPLOYEE_PF_ONLY.value,
+        "sandwich_enabled": False,
+        "sandwich_off_becomes": SandwichOffBecomes.LOP.value,
+        "sandwich_triggers": SandwichTrigger.UNAUTHORIZED_ABSENCE.value,
         "attendance_rules_json": dict(DEFAULT_ATTENDANCE_PAY_RULES),
         "notes": (
             "Gross X: Basic=60%×X, HRA=50%×Basic, Special=remainder. "
-            "Payable gross = X×(paid_days/N) with N from shift schedule in 20–20 period. "
-            "Net = payable_gross − fixed PF total (3700). Leave balance credits on calendar month end."
+            "Payable days = 30 − LOP. Payable gross = X×(paid_days/30) on the 20th–19th cycle. "
+            "Net = payable_gross − employee PF. Employer PF is not deducted from net. "
+            "Sandwich is OFF unless company policy enables it."
         ),
     }
 

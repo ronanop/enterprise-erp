@@ -334,6 +334,10 @@ function formatAttendanceMonthLabel(ym: string): string {
 function formatAttendanceTime(value: unknown): string {
   if (value == null || value === "") return "—";
   const s = String(value);
+  const parsed = new Date(s);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false });
+  }
   if (s.length >= 16 && s.includes("T")) return s.slice(11, 16);
   if (/^\d{2}:\d{2}/.test(s)) return s.slice(0, 5);
   return s;
@@ -342,7 +346,9 @@ function formatAttendanceTime(value: unknown): string {
 async function loadLinkedData(employeeId: string, employeeCode: string): Promise<LinkedData> {
   const [attendance, leaveRequests, leaveBalances, hrDocuments, payslips, salaries, separation] =
     await Promise.all([
-      resourceService.list("/hr/attendance", { page_size: 200 }).catch(() => ({ data: [] })),
+      resourceService
+        .list("/hr/attendance", { page_size: 200, employee_id: employeeId })
+        .catch(() => ({ data: [] })),
       resourceService.list("/hr/leave-requests", { page_size: 100 }).catch(() => ({ data: [] })),
       resourceService.list("/hr/leave-balances", { page_size: 100 }).catch(() => ({ data: [] })),
       resourceService.list("/hr/employee-documents", { page_size: 100 }).catch(() => ({ data: [] })),

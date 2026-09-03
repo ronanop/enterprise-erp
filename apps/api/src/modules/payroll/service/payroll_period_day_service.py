@@ -18,7 +18,7 @@ from modules.hr.repository.leave_type_repository import LeaveTypeRepository
 from modules.hr.repository.roster_entry_repository import RosterEntryRepository
 from modules.hr.repository.shift_assignment_repository import ShiftAssignmentRepository
 from modules.hr.repository.weekly_off_policy_repository import WeeklyOffPolicyRepository
-from modules.hr.domain.sandwich_rules import sandwich_lop_dates
+from modules.hr.domain.sandwich_rules import sandwich_off_dates
 from modules.hr.service.engines.calendar_rules import holiday_dates_from_json, is_weekly_off_day
 from modules.payroll.domain.enums import PayrollPeriodDayDenominator
 from modules.payroll.domain.payroll_day_ledger import (
@@ -26,6 +26,7 @@ from modules.payroll.domain.payroll_day_ledger import (
     expand_leave_markers,
     is_scheduled_working_day,
     iter_dates_inclusive,
+    payable_days_from_lop,
     resolve_lop_on_scheduled_days,
     scheduled_working_dates,
 )
@@ -61,6 +62,8 @@ class _PeriodCalendarCache:
     holidays_by_calendar: dict[UUID, set[date]] = field(default_factory=dict)
     company_holiday_dates: set[date] = field(default_factory=set)
     sandwich_enabled: bool = False
+    sandwich_triggers: str = "unauthorized_absence"
+    sandwich_off_becomes: str = "lop"
 
 
 class PayrollPeriodDayService:
@@ -96,11 +99,17 @@ class PayrollPeriodDayService:
             denominator=denominator,
             attendance_rules=rules,
         )
-        cache.sandwich_enabled = any(
-            bool(getattr(lt, "sandwich_rule_enabled", False))
-            and str(getattr(lt, "status", "")).lower() == "active"
-            for lt in self._leave_types.list_rows(ctx, company_id)
+        cache.sandwich_enabled = bool(resolved.get("sandwich_enabled"))
+        cache.sandwich_triggers = str(
+            resolved.get("sandwich_triggers") or "unauthorized_absence"
         )
+        cache.sandwich_off_becomes = str(resolved.get("sandwich_off_becomes") or "lop")
+        if not cache.sandwich_enabled:
+            cache.sandwich_enabled = any(
+                bool(getattr(lt, "sandwich_rule_enabled", False))
+                and str(getattr(lt, "status", "")).lower() == "active"
+                for lt in self._leave_types.list_rows(ctx, company_id)
+            )
 
         for emp in self._employment.list_rows(ctx, company_id):
             cache.employment_by_emp[emp.employee_id] = emp
@@ -389,16 +398,24 @@ class PayrollPeriodDayService:
                 for d in iter_dates_inclusive(clip_start, clip_end):
                     approved_leave_dates.add(d)
             holidays = self._holiday_set(cache, employee_id)
-            sandwich_dates = sandwich_lop_dates(
+            sandwich_dates = sandwich_off_dates(
                 pad_start,
                 pad_end,
                 is_non_working=lambda d: d in holidays or self._is_week_off(cache, employee_id, d),
                 attendance_status_by_date=att_padded,
                 approved_leave_dates=approved_leave_dates,
                 as_of=end,
+                trigger=cache.sandwich_triggers,
             )
-            sandwich_lop = Decimal(sum(1 for d in sandwich_dates if start <= d <= end))
-            lop_days += sandwich_lop
+            in_period = {d for d in sandwich_dates if start <= d <= end}
+            sandwich_lop = Decimal("0")
+            sandwich_leave = Decimal("0")
+            if (cache.sandwich_off_becomes or "lop").strip().lower() == "leave":
+                sandwich_leave = Decimal(len(in_period))
+                paid_leave_days += sandwich_leave
+            else:
+                sandwich_lop = Decimal(len(in_period))
+                lop_days += sandwich_lop
 
         day_summary = self.build_day_summary(
             cache,
@@ -424,9 +441,7 @@ class PayrollPeriodDayService:
                 day_summary_json=day_summary,
             )
 
-        paid_days = period_days - lop_days
-        if paid_days < 0:
-            paid_days = Decimal("0")
+        paid_days = payable_days_from_lop(lop_days, period_days=period_days)
 
         return EmployeePayDaysResult(
             period_days=period_days,

@@ -54,7 +54,7 @@ export function AppShell({ children }: AppShellProps) {
         <AppSidebar />
       )}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip">
-        <AppTopbar />
+        {hrMode ? null : <AppTopbar />}
         <main
           className={cn(
             "min-h-0 min-w-0 flex-1 overflow-x-clip px-4 py-4 sm:px-6 lg:px-8",
@@ -71,14 +71,6 @@ export function AppShell({ children }: AppShellProps) {
             {children}
           </div>
         </main>
-        {hrMode ? (
-          <footer className="border-t border-border/70 bg-card/40 px-4 py-3 text-[11px] text-muted-foreground sm:px-6">
-            <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-2">
-              <span className="font-medium tracking-tight">HRMS workspace</span>
-              <span>Workforce · Leave · Attendance · Talent · Hire · Pay</span>
-            </div>
-          </footer>
-        ) : null}
       </div>
       <ElevenLabsConvaiWidget />
     </div>

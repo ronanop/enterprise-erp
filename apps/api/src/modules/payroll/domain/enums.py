@@ -159,10 +159,28 @@ class PayrollPeriodDayDenominator(str, Enum):
     FIXED_30 = "fixed_30"
 
 
+class SandwichTrigger(str, Enum):
+    UNAUTHORIZED_ABSENCE = "unauthorized_absence"
+    APPROVED_LEAVE = "approved_leave"
+    BOTH = "both"
+
+
+class SandwichOffBecomes(str, Enum):
+    LOP = "lop"
+    LEAVE = "leave"
+
+
+class PfOnLopMode(str, Enum):
+    FIXED = "fixed"
+    PRORATED = "prorated"
+    PERCENTAGE_OF_PF_WAGE = "percentage_of_pf_wage"
+
+
 class PfDeductionMode(str, Enum):
     FIXED_SPLIT = "fixed_split"
     FIXED_TOTAL = "fixed_total"
     STATUTORY_PERCENT = "statutory_percent"
+    PERCENTAGE = "percentage"
 
 
 class NetPayFormula(str, Enum):

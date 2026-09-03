@@ -74,6 +74,7 @@ def build_payslip_document(
     attendance = {
         "period_days": _f(period_days or bd.get("period_days")),
         "paid_days": _f(paid_days or bd.get("paid_days")),
+        "payable_days": _f(paid_days or bd.get("paid_days")),
         "lop_days": _f(lop_days),
         "leave_days": _f(leave_days),
         "scheduled_working": _f(counts.get("scheduled_working") if counts else 0),
@@ -81,6 +82,10 @@ def build_payslip_document(
         "unpaid_leave": _f(counts.get("unpaid_leave") if counts else 0),
         "present": _f(counts.get("present") if counts else 0),
         "absent": _f(counts.get("absent") if counts else 0),
+        "half_day": _f(counts.get("half_day") if counts else 0),
+        "week_off": _f(counts.get("week_off") if counts else 0),
+        "holiday": _f(counts.get("holiday") if counts else 0),
+        "sandwich_lop": _f(counts.get("sandwich_lop") if counts else 0),
     }
 
     doc: dict[str, Any] = {
@@ -129,12 +134,13 @@ def format_payslip_text(doc: dict[str, Any]) -> str:
         f"Employee: {emp.get('name') or '—'} ({emp.get('code') or emp.get('id')})",
         "-" * 42,
         "ATTENDANCE (payroll cycle)",
-        f"  Scheduled / N     {att.get('period_days', 0)}",
-        f"  Paid days         {att.get('paid_days', 0)}",
+        f"  Payable days      {att.get('paid_days', 0)} / {att.get('period_days', 30)}",
+        f"  Present           {att.get('present', 0)}",
+        f"  Paid leave        {att.get('paid_leave', 0)}",
+        f"  Weekly off        {att.get('week_off', 0)}",
+        f"  Holiday           {att.get('holiday', 0)}",
         f"  LOP days          {att.get('lop_days', 0)}",
         f"  Leave (requests)  {att.get('leave_days', 0)}",
-        f"  Paid leave        {att.get('paid_leave', 0)}",
-        f"  Unpaid leave      {att.get('unpaid_leave', 0)}",
         "-" * 42,
         "EARNINGS",
     ]

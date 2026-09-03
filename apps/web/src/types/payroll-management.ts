@@ -22,6 +22,24 @@ export type SalaryStructure = {
   id: string;
   name: string;
   code?: string;
+  status?: string;
+  /** Excel G — Gross CTC (monthly). */
+  grossCtc?: number;
+  /** Excel I: fraction of monthly CTC (default 0.60). */
+  basicPercent?: number;
+  /** Excel J: fraction of Basic (default 0.50). */
+  hraPercentOfBasic?: number;
+  telephoneAllowance?: number;
+  employerContribution?: number;
+  ctcAmount?: number;
+  pfPercent?: number;
+  pfWageCeiling?: number;
+  pfFixedCeiling?: number;
+  edliAdminAmount?: number;
+  esiPercent?: number;
+  esiMonthlyCeiling?: number;
+  effectiveFrom?: string;
+  version?: number;
   basic: number;
   hra: number;
   specialAllowance: number;
@@ -263,6 +281,7 @@ export type EmployeeSalary = {
   annualCtc: number;
   payrollGroup: string;
   bankAccount: string;
+  bankName?: string;
   taxRegime: TaxRegime;
   salaryStatus: SalaryStatus;
   department: string;
@@ -301,9 +320,39 @@ export type PayrollEmployeeAttendance = {
   halfDays: number;
   holidays: number;
   weeklyOff: number;
+  lopDays?: number;
   payableDays: number;
   workingDaysInCycle: number;
+  periodDays?: number;
   attendanceFactor: number;
+};
+
+export type PayrollPayItem = { label: string; amount: number };
+
+export type PayrollRunEmployeeLine = {
+  employeeId: string;
+  employeeName: string;
+  employeeCode?: string;
+  department: string;
+  bankAccount: string;
+  bankName?: string;
+  presentDays: number;
+  leaveDays: number;
+  absentDays: number;
+  halfDays?: number;
+  holidays?: number;
+  weeklyOff?: number;
+  lopDays?: number;
+  payableDays: number;
+  workingDaysInCycle: number;
+  periodDays?: number;
+  attendanceFactor: number;
+  monthlyCtc: number;
+  earnings: PayrollPayItem[];
+  deductionItems: PayrollPayItem[];
+  gross: number;
+  deductionTotal: number;
+  net: number;
 };
 
 export type MonthLock = {
@@ -382,6 +431,11 @@ export type PayslipRecord = {
   bankAccount: string;
   presentDays: number;
   leaveDays: number;
+  payableDays?: number;
+  periodDays?: number;
+  lopDays?: number;
+  weeklyOff?: number;
+  holidays?: number;
   earnings: { label: string; amount: number }[];
   deductions: { label: string; amount: number }[];
   gross: number;
@@ -405,10 +459,13 @@ export type PayrollFilters = {
   query: string;
   status: string;
   month: string;
+  customMonth: string;
+  dateFrom: string;
+  dateTo: string;
 };
 
 export function emptyPayrollFilters(): PayrollFilters {
-  return { query: "", status: "all", month: "all" };
+  return { query: "", status: "all", month: "all", customMonth: "", dateFrom: "", dateTo: "" };
 }
 
 export const RUN_STATUS_LABELS: Record<PayrollRunStatus, string> = {
@@ -442,7 +499,39 @@ export function monthLabel(ym: string): string {
   return `${names[(m || 1) - 1]} ${y}`;
 }
 
+export function roundInr(n: number): number {
+  return Math.max(0, Math.round(Number.isFinite(n) ? n : 0));
+}
+
+/** CTC split from Gross CTC. Basic 50%, HRA 50% of Basic, PF 12% capped, Special = remainder. */
+export const SALARY_SPLIT = {
+  basicPctOfCtc: 0.6,
+  hraPctOfBasic: 0.5,
+  pfPctOfBasic: 0.12,
+  pfMonthlyCeiling: 1800,
+} as const;
+
+export type SalarySplitOverrides = Partial<{
+  basic: number;
+  hra: number;
+  medical: number;
+  travel: number;
+  pf: number;
+}>;
+
+export function splitSalaryFromGrossCtc(grossCtc: number, overrides?: SalarySplitOverrides) {
+  const ctc = roundInr(grossCtc);
+  const basic = overrides?.basic ?? roundInr(ctc * SALARY_SPLIT.basicPctOfCtc);
+  const hra = overrides?.hra ?? roundInr(basic * SALARY_SPLIT.hraPctOfBasic);
+  const medical = overrides?.medical ?? 0;
+  const travel = overrides?.travel ?? 0;
+  const pf = overrides?.pf ?? SALARY_SPLIT.pfMonthlyCeiling;
+  const specialAllowance = roundInr(ctc - basic - hra - medical - travel - pf);
+  return { basic, hra, medical, travel, pf, specialAllowance };
+}
+
 export function structureGross(s: SalaryStructure): number {
+  if ((s.grossCtc ?? 0) > 0) return roundInr(s.grossCtc ?? 0);
   return (
     s.basic +
     s.hra +
@@ -458,6 +547,13 @@ export function structureGross(s: SalaryStructure): number {
     s.reimbursement +
     s.otherEarnings
   );
+}
+
+/** Excel N — CTC = SUM(I:M). Falls back to earnings + employer PF. */
+export function structureCtc(s: SalaryStructure): number {
+  if ((s.ctcAmount ?? 0) > 0) return roundInr(s.ctcAmount ?? 0);
+  if ((s.grossCtc ?? 0) > 0) return roundInr(s.grossCtc ?? 0);
+  return structureGross(s) + s.pf;
 }
 
 export function structureDeductions(s: SalaryStructure): number {

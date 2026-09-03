@@ -656,7 +656,9 @@ class LeaveRequestService:
                 continue
             if bool(getattr(leave_type, "sandwich_rule_enabled", False)):
                 return True
-        return False
+        from modules.hr.service.sandwich_attendance_service import resolve_company_sandwich_settings
+
+        return bool(resolve_company_sandwich_settings(self._db, company_id).get("enabled"))
 
     def _refresh_attendance_sandwich(
         self,
@@ -671,7 +673,12 @@ class LeaveRequestService:
         """Re-evaluate sandwich LOP after leave approval (approved leave → sandwich off)."""
         if not self._company_sandwich_enabled(ctx, company_id):
             return
-        from modules.hr.service.sandwich_attendance_service import apply_sandwich_for_employee
+        from modules.hr.service.sandwich_attendance_service import (
+            apply_sandwich_for_employee,
+            resolve_company_sandwich_settings,
+        )
+
+        settings = resolve_company_sandwich_settings(self._db, company_id)
 
         window_start = around_start - timedelta(days=10)
         window_end = around_end + timedelta(days=10)
@@ -696,6 +703,8 @@ class LeaveRequestService:
             as_of=date.today(),
             is_non_working=lambda d: d in non_working,
             holiday_dates=holiday_dates,
+            trigger=settings["trigger"],
+            off_becomes=settings["off_becomes"],
         )
 
     def _validate_cycle_for_request(

@@ -8,19 +8,33 @@ import {
   SetupField,
   SetupInput,
   SetupSelect,
-  SetupTextarea,
 } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { HrMasterOption } from "@/services/hr-master-connector";
+import { formatInr } from "@/services/payroll-service";
 import type {
   BonusType,
   EmployeeSalary,
   ReimbType,
   RevisionReason,
   SalaryStructure,
-  TaxRegime,
 } from "@/types/payroll-management";
-import { monthLabel } from "@/types/payroll-management";
+import {
+  splitSalaryFromGrossCtc,
+  structureCtc,
+} from "@/types/payroll-management";
+
+function monthlyFromStructure(s?: SalaryStructure | null): number {
+  if (!s) return 0;
+  if ((s.grossCtc ?? 0) > 0) return s.grossCtc ?? 0;
+  return structureCtc(s);
+}
+
+function bankOptionLabel(emp: HrMasterOption): string {
+  const last4 = String(emp.accountNumber || emp.bankAccount || "").replace(/\D/g, "").slice(-4);
+  return [emp.bankName, last4 ? `****${last4}` : null, emp.bankIfsc].filter(Boolean).join(" · ");
+}
 
 export function StructureDrawer({
   open,
@@ -33,62 +47,96 @@ export function StructureDrawer({
   onSubmit: (input: Omit<SalaryStructure, "id" | "createdAt">) => void;
   initial?: SalaryStructure | null;
 }) {
-  const [name, setName] = useState("Engineer Structure");
-  const [basic, setBasic] = useState("35000");
-  const [hra, setHra] = useState("14000");
-  const [special, setSpecial] = useState("10000");
-  const [medical, setMedical] = useState("1250");
-  const [travel, setTravel] = useState("2400");
-  const [food, setFood] = useState("0");
-  const [internet, setInternet] = useState("1000");
+  const [name, setName] = useState("India Standard");
+  const [grossCtc, setGrossCtc] = useState("18000");
+  const [basic, setBasic] = useState("9000");
+  const [hra, setHra] = useState("4500");
+  const [special, setSpecial] = useState("2700");
+  const [medical, setMedical] = useState("0");
+  const [travel, setTravel] = useState("0");
   const [pf, setPf] = useState("1800");
-  const [esi, setEsi] = useState("0");
-  const [pt, setPt] = useState("200");
-  const [tds, setTds] = useState("3500");
-  const [loan, setLoan] = useState("0");
-  const [advance, setAdvance] = useState("0");
-  const [insurance, setInsurance] = useState("300");
 
   useEffect(() => {
     if (!open) return;
     if (initial) {
       setName(initial.name);
+      const unusedEarnings =
+        initial.foodAllowance +
+        initial.internetAllowance +
+        initial.bonus +
+        initial.incentives +
+        initial.overtime +
+        initial.arrears +
+        initial.reimbursement +
+        initial.otherEarnings;
+      setGrossCtc(String(structureCtc(initial) || 18000));
       setBasic(String(initial.basic));
       setHra(String(initial.hra));
-      setSpecial(String(initial.specialAllowance));
+      setSpecial(String(initial.specialAllowance + unusedEarnings));
       setMedical(String(initial.medicalAllowance));
       setTravel(String(initial.travelAllowance));
-      setFood(String(initial.foodAllowance));
-      setInternet(String(initial.internetAllowance));
       setPf(String(initial.pf));
-      setEsi(String(initial.esi));
-      setPt(String(initial.professionalTax));
-      setTds(String(initial.tds));
-      setLoan(String(initial.loanRecovery));
-      setAdvance(String(initial.advanceRecovery));
-      setInsurance(String(initial.insurance));
-    } else {
-      setName("Engineer Structure");
-      setBasic("35000");
-      setHra("14000");
-      setSpecial("10000");
-      setMedical("1250");
-      setTravel("2400");
-      setFood("0");
-      setInternet("1000");
-      setPf("1800");
-      setEsi("0");
-      setPt("200");
-      setTds("3500");
-      setLoan("0");
-      setAdvance("0");
-      setInsurance("300");
+      return;
     }
+    const split = splitSalaryFromGrossCtc(18000);
+    setName("India Standard");
+    setGrossCtc("18000");
+    setBasic(String(split.basic));
+    setHra(String(split.hra));
+    setSpecial(String(split.specialAllowance));
+    setMedical("0");
+    setTravel("0");
+    setPf(String(split.pf));
   }, [open, initial]);
 
   function num(v: string) {
     return Number(v) || 0;
   }
+
+  function onGrossChange(value: string) {
+    setGrossCtc(value);
+    const split = splitSalaryFromGrossCtc(num(value));
+    setBasic(String(split.basic));
+    setHra(String(split.hra));
+    setSpecial(String(split.specialAllowance));
+    setMedical("0");
+    setTravel("0");
+    setPf(String(split.pf));
+  }
+
+  function onBasicChange(value: string) {
+    setBasic(value);
+    const split = splitSalaryFromGrossCtc(num(grossCtc), {
+      basic: num(value),
+      medical: num(medical),
+      travel: num(travel),
+    });
+    setHra(String(split.hra));
+    setPf(String(split.pf));
+    setSpecial(String(split.specialAllowance));
+  }
+
+  function rebalanceSpecial(next: {
+    hra?: number;
+    medical?: number;
+    travel?: number;
+    pf?: number;
+  }) {
+    const split = splitSalaryFromGrossCtc(num(grossCtc), {
+      basic: num(basic),
+      hra: next.hra ?? num(hra),
+      medical: next.medical ?? num(medical),
+      travel: next.travel ?? num(travel),
+      pf: next.pf ?? num(pf),
+    });
+    setSpecial(String(split.specialAllowance));
+  }
+
+  const target = num(grossCtc);
+  const calculated =
+    num(basic) + num(hra) + num(special) + num(medical) + num(travel) + num(pf);
+  const diff = calculated - target;
+  const balanced = diff === 0;
 
   return (
     <SetupDrawer
@@ -96,12 +144,12 @@ export function StructureDrawer({
       onClose={onClose}
       wide
       title={initial ? "Edit Salary Structure" : "Create Salary Structure"}
-      description="Earnings and statutory deductions template."
+      description="Enter Gross CTC — components fill automatically and stay editable."
       footer={
         <Button
           type="button"
           className="cursor-pointer"
-          disabled={!name.trim()}
+          disabled={!name.trim() || target <= 0}
           onClick={() => {
             onSubmit({
               code: initial?.code,
@@ -111,22 +159,22 @@ export function StructureDrawer({
               specialAllowance: num(special),
               medicalAllowance: num(medical),
               travelAllowance: num(travel),
-              foodAllowance: num(food),
-              internetAllowance: num(internet),
-              bonus: initial?.bonus ?? 0,
-              incentives: initial?.incentives ?? 0,
-              overtime: initial?.overtime ?? 0,
-              arrears: initial?.arrears ?? 0,
-              reimbursement: initial?.reimbursement ?? 0,
-              otherEarnings: initial?.otherEarnings ?? 0,
+              foodAllowance: 0,
+              internetAllowance: 0,
+              bonus: 0,
+              incentives: 0,
+              overtime: 0,
+              arrears: 0,
+              reimbursement: 0,
+              otherEarnings: 0,
               pf: num(pf),
-              esi: num(esi),
-              professionalTax: num(pt),
-              tds: num(tds),
-              loanRecovery: num(loan),
-              advanceRecovery: num(advance),
-              insurance: num(insurance),
-              otherDeductions: initial?.otherDeductions ?? 0,
+              esi: 0,
+              professionalTax: 0,
+              tds: 0,
+              loanRecovery: 0,
+              advanceRecovery: 0,
+              insurance: 0,
+              otherDeductions: 0,
             });
             onClose();
           }}
@@ -135,213 +183,97 @@ export function StructureDrawer({
         </Button>
       }
     >
-      <div className="space-y-3">
+      <div className="space-y-4">
         <SetupField label="Structure name" required>
           <SetupInput value={name} onChange={(e) => setName(e.target.value)} />
         </SetupField>
-        <p className="text-[10px] font-semibold uppercase text-muted-foreground">Earnings</p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {(
-            [
-              ["Basic", basic, setBasic],
-              ["HRA", hra, setHra],
-              ["Special Allowance", special, setSpecial],
-              ["Medical", medical, setMedical],
-              ["Travel", travel, setTravel],
-              ["Food", food, setFood],
-              ["Internet", internet, setInternet],
-            ] as const
-          ).map(([label, val, set]) => (
-            <SetupField key={label} label={label}>
-              <SetupInput type="number" value={val} onChange={(e) => set(e.target.value)} />
-            </SetupField>
-          ))}
-        </div>
-        <p className="text-[10px] font-semibold uppercase text-muted-foreground">Deductions</p>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {(
-            [
-              ["PF", pf, setPf],
-              ["ESI", esi, setEsi],
-              ["Professional Tax", pt, setPt],
-              ["TDS", tds, setTds],
-              ["Loan Recovery", loan, setLoan],
-              ["Advance Recovery", advance, setAdvance],
-              ["Insurance", insurance, setInsurance],
-            ] as const
-          ).map(([label, val, set]) => (
-            <SetupField key={label} label={label}>
-              <SetupInput type="number" value={val} onChange={(e) => set(e.target.value)} />
-            </SetupField>
-          ))}
-        </div>
-      </div>
-    </SetupDrawer>
-  );
-}
-
-export function RunPayrollDrawer({
-  open,
-  onClose,
-  onSubmit,
-}: {
-  open: boolean;
-  onClose: () => void;
-  onSubmit: (month: string, cutoverDay: number) => void;
-}) {
-  const now = new Date();
-  const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const [month, setMonth] = useState(defaultMonth);
-  const [cutoverDay, setCutoverDay] = useState(20);
-  const [loadingPreview, setLoadingPreview] = useState(false);
-  const [cycleLabel, setCycleLabel] = useState("");
-  const [previewLines, setPreviewLines] = useState<
-    import("@/types/payroll-management").PayrollEmployeeAttendance[]
-  >([]);
-
-  useEffect(() => {
-    if (!open) return;
-    import("@/lib/payroll-cycle").then(({ readPayrollCutoverDay, writePayrollCutoverDay }) => {
-      const d = readPayrollCutoverDay();
-      setCutoverDay(d);
-      writePayrollCutoverDay(d);
-    });
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    setLoadingPreview(true);
-    import("@/services/payroll-management-service").then(({ previewPayrollAttendanceForCycle }) =>
-      previewPayrollAttendanceForCycle(month, cutoverDay)
-        .then(({ cycle, lines }) => {
-          if (cancelled) return;
-          setCycleLabel(cycle.label);
-          setPreviewLines(lines);
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setCycleLabel("");
-            setPreviewLines([]);
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setLoadingPreview(false);
-        }),
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [open, month, cutoverDay]);
-
-  const options = Array.from({ length: 8 }).map((_, i) => {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    return { value: ym, label: monthLabel(ym) };
-  });
-
-  function persistCutover(day: number) {
-    setCutoverDay(day);
-    void import("@/lib/payroll-cycle").then(({ writePayrollCutoverDay }) =>
-      writePayrollCutoverDay(day),
-    );
-  }
-
-  return (
-    <SetupDrawer
-      open={open}
-      onClose={onClose}
-      title="Run Payroll"
-      description="Pulls attendance and approved leave for the pay cycle, then prorates salary by payable days."
-      footer={
-        <Button
-          type="button"
-          className="cursor-pointer transition-colors duration-200"
-          disabled={loadingPreview}
-          onClick={() => {
-            onSubmit(month, cutoverDay);
-            onClose();
-          }}
-        >
-          {loadingPreview ? "Loading attendance…" : "Run Payroll"}
-        </Button>
-      }
-    >
-      <div className="space-y-3">
         <SetupField
-          label="Pay cycle anchor month"
-          hint="Cycle runs from the cutover day of this month through the day before the next cutover."
+          label="Gross CTC"
+          required
+          hint="Basic 50% of CTC · HRA 50% of Basic · Employer PF 12% (max ₹1,800) · Special = remainder"
         >
-          <SetupSelect value={month} onChange={(e) => setMonth(e.target.value)}>
-            {options.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </SetupSelect>
+          <SetupInput
+            type="number"
+            min={0}
+            step={100}
+            value={grossCtc}
+            onChange={(e) => onGrossChange(e.target.value)}
+            className="font-semibold tabular-nums"
+          />
         </SetupField>
-        <SetupField label="Cycle cutover day" hint="Default 20 → 20th to 19th of next month">
-          <SetupSelect
-            value={String(cutoverDay)}
-            onChange={(e) => persistCutover(Number(e.target.value))}
-          >
-            {Array.from({ length: 28 }).map((_, i) => {
-              const day = i + 1;
-              return (
-                <option key={day} value={day}>
-                  {day}
-                  {day === 1 ? "st" : day === 2 ? "nd" : day === 3 ? "rd" : "th"} of month
-                </option>
-              );
-            })}
-          </SetupSelect>
-        </SetupField>
-        <div className="rounded-xl border border-hrms-mint bg-hrms-mint px-3 py-2 text-xs text-foreground">
-          <p className="font-medium">Pay period</p>
-          <p className="mt-0.5 tabular-nums">
-            {loadingPreview ? "Calculating…" : cycleLabel || "—"}
-          </p>
-        </div>
-        <div>
-          <p className="text-[11px] font-medium text-foreground">Attendance preview</p>
-          <p className="text-[10px] text-muted-foreground">
-            Present, leave, and absent from HR attendance + approved leave in this cycle.
-          </p>
-          <div className="mt-2 max-h-48 overflow-auto rounded-lg border border-border/70">
-            <table className="w-full min-w-[420px] text-left text-[11px]">
-              <thead className="sticky top-0 border-b bg-muted/60 text-[10px] uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-2 py-1.5 font-medium">Employee</th>
-                  <th className="px-2 py-1.5 font-medium">Present</th>
-                  <th className="px-2 py-1.5 font-medium">Leave</th>
-                  <th className="px-2 py-1.5 font-medium">Absent</th>
-                  <th className="px-2 py-1.5 font-medium">Payable</th>
-                </tr>
-              </thead>
-              <tbody>
-                {previewLines.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-2 py-3 text-muted-foreground">
-                      {loadingPreview ? "Loading…" : "No attendance in cycle — full month salary used."}
-                    </td>
-                  </tr>
-                ) : (
-                  previewLines.map((l) => (
-                    <tr key={l.employeeId} className="border-b border-border/40">
-                      <td className="px-2 py-1.5 font-medium">{l.employeeName}</td>
-                      <td className="px-2 py-1.5 tabular-nums">{l.presentDays}</td>
-                      <td className="px-2 py-1.5 tabular-nums">{l.leaveDays}</td>
-                      <td className="px-2 py-1.5 tabular-nums">{l.absentDays}</td>
-                      <td className="px-2 py-1.5 tabular-nums">
-                        {l.payableDays}/{l.workingDaysInCycle}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+
+        <div
+          className={cn(
+            "rounded-xl border px-3 py-2.5 text-xs transition-colors duration-200",
+            balanced
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+              : "border-amber-200 bg-amber-50 text-amber-950",
+          )}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-medium">{balanced ? "CTC balanced" : "CTC mismatch"}</span>
+            <span className="tabular-nums">
+              Target {formatInr(target)} · Calculated {formatInr(calculated)}
+              {!balanced ? ` · Diff ${formatInr(diff)}` : ""}
+            </span>
           </div>
         </div>
+
+        <p className="text-[10px] font-semibold uppercase text-muted-foreground">Earnings</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <SetupField label="Basic" hint="AUTO · 50% of Gross CTC">
+            <SetupInput type="number" min={0} value={basic} onChange={(e) => onBasicChange(e.target.value)} />
+          </SetupField>
+          <SetupField label="HRA" hint="AUTO · 50% of Basic">
+            <SetupInput
+              type="number"
+              min={0}
+              value={hra}
+              onChange={(e) => {
+                setHra(e.target.value);
+                rebalanceSpecial({ hra: num(e.target.value) });
+              }}
+            />
+          </SetupField>
+          <SetupField label="Special allowance" hint="Balance / residual">
+            <SetupInput type="number" min={0} value={special} onChange={(e) => setSpecial(e.target.value)} />
+          </SetupField>
+          <SetupField label="Medical">
+            <SetupInput
+              type="number"
+              min={0}
+              value={medical}
+              onChange={(e) => {
+                setMedical(e.target.value);
+                rebalanceSpecial({ medical: num(e.target.value) });
+              }}
+            />
+          </SetupField>
+          <SetupField label="Conveyance">
+            <SetupInput
+              type="number"
+              min={0}
+              value={travel}
+              onChange={(e) => {
+                setTravel(e.target.value);
+                rebalanceSpecial({ travel: num(e.target.value) });
+              }}
+            />
+          </SetupField>
+        </div>
+
+        <p className="text-[10px] font-semibold uppercase text-muted-foreground">Employer contribution</p>
+        <SetupField label="Employer PF" hint="AUTO · 12% of Basic, ceiling ₹1,800">
+          <SetupInput
+            type="number"
+            min={0}
+            value={pf}
+            onChange={(e) => {
+              setPf(e.target.value);
+              rebalanceSpecial({ pf: num(e.target.value) });
+            }}
+          />
+        </SetupField>
       </div>
     </SetupDrawer>
   );
@@ -456,60 +388,6 @@ export function RevisionDrawer({
   );
 }
 
-export function LockMonthDrawer({
-  open,
-  onClose,
-  mode,
-  onSubmit,
-}: {
-  open: boolean;
-  onClose: () => void;
-  mode: "lock" | "unlock";
-  onSubmit: (month: string, reason: string) => void;
-}) {
-  const now = new Date();
-  const [month, setMonth] = useState(
-    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
-  );
-  const [reason, setReason] = useState("");
-
-  return (
-    <SetupDrawer
-      open={open}
-      onClose={onClose}
-      title={mode === "lock" ? "Lock Payroll Month" : "Unlock Payroll Month"}
-      description={
-        mode === "lock"
-          ? "Locked months cannot edit attendance, leave, or salary. Only Super Admin unlocks."
-          : "Reason is mandatory. Unlock is audited."
-      }
-      footer={
-        <Button
-          type="button"
-          className="cursor-pointer"
-          disabled={!reason.trim()}
-          onClick={() => {
-            onSubmit(month, reason.trim());
-            onClose();
-            setReason("");
-          }}
-        >
-          {mode === "lock" ? "Lock Month" : "Unlock Month"}
-        </Button>
-      }
-    >
-      <div className="space-y-3">
-        <SetupField label="Month">
-          <SetupInput type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-        </SetupField>
-        <SetupField label="Reason" required>
-          <SetupTextarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} />
-        </SetupField>
-      </div>
-    </SetupDrawer>
-  );
-}
-
 export function AssignSalaryDrawer({
   open,
   onClose,
@@ -528,19 +406,22 @@ export function AssignSalaryDrawer({
   const [employeeKey, setEmployeeKey] = useState("");
   const [structureId, setStructureId] = useState(structures[0]?.id ?? "");
   const [effectiveDate, setEffectiveDate] = useState("");
-  const [monthlyCtc, setMonthlyCtc] = useState("50000");
-  const [payrollGroup, setPayrollGroup] = useState("General");
+  const [monthlyCtc, setMonthlyCtc] = useState("");
   const [bankAccount, setBankAccount] = useState("");
-  const [taxRegime, setTaxRegime] = useState<TaxRegime>("new");
 
   const editing = Boolean(initial);
   const structure = structures.find((s) => s.id === structureId);
   const employee = (employees ?? []).find(
     (e) => e.id === employeeKey || e.code === employeeKey || e.code === initial?.employeeId,
   );
+  const bankValue = employee?.accountNumber || employee?.bankAccount || "";
 
   useEffect(() => {
     if (!open) return;
+    const defaultStructure =
+      (initial?.structureId ? structures.find((s) => s.id === initial.structureId) : undefined) ||
+      structures[0];
+    const nextStructureId = defaultStructure?.id ?? "";
     if (initial) {
       const match =
         (employees ?? []).find(
@@ -550,39 +431,42 @@ export function AssignSalaryDrawer({
             e.label.toLowerCase().includes(initial.employeeName.toLowerCase()),
         ) ?? null;
       setEmployeeKey(match?.id ?? initial.employeeId);
-      setStructureId(initial.structureId || structures[0]?.id || "");
+      setStructureId(nextStructureId);
       setEffectiveDate(initial.effectiveDate || "");
-      setMonthlyCtc(String(initial.monthlyCtc || 0));
-      setPayrollGroup(initial.payrollGroup || "General");
-      setBankAccount(initial.bankAccount || "");
-      setTaxRegime(initial.taxRegime || "new");
+      setMonthlyCtc(String(monthlyFromStructure(defaultStructure) || initial.monthlyCtc || 0));
+      setBankAccount(match?.accountNumber || match?.bankAccount || initial.bankAccount || "");
       return;
     }
     setEmployeeKey("");
-    setStructureId(structures[0]?.id ?? "");
+    setStructureId(nextStructureId);
     setEffectiveDate("");
-    setMonthlyCtc("50000");
-    setPayrollGroup("General");
+    setMonthlyCtc(String(monthlyFromStructure(defaultStructure) || ""));
     setBankAccount("");
-    setTaxRegime("new");
   }, [open, initial, structures, employees]);
 
-  useEffect(() => {
-    if (!open || editing || !employee) return;
-    if (employee.monthlyCtc) setMonthlyCtc(String(employee.monthlyCtc));
-    if (employee.bankAccount) setBankAccount(employee.bankAccount);
-  }, [employee, open, editing]);
+  function applyStructure(id: string) {
+    setStructureId(id);
+    const next = structures.find((s) => s.id === id);
+    const ctc = monthlyFromStructure(next);
+    if (ctc > 0) setMonthlyCtc(String(ctc));
+  }
+
+  function applyEmployee(id: string) {
+    setEmployeeKey(id);
+    const next = (employees ?? []).find((e) => e.id === id || e.code === id);
+    setBankAccount(next?.accountNumber || next?.bankAccount || "");
+  }
 
   return (
     <SetupDrawer
       open={open}
       onClose={onClose}
       wide
-      title={editing ? "Edit Employee Salary" : "Assign Employee Salary"}
+      title={editing ? "Edit assigned salary" : "Assign salary"}
       description={
         editing
-          ? "Update CTC, structure, and bank details for this employee."
-          : "Pick an employee from Workforce. Re-assigning the same person updates their existing salary."
+          ? "Update structure, CTC, and bank for this employee."
+          : "Pick an employee and salary structure. Monthly CTC fills from the structure."
       }
       footer={
         <Button
@@ -598,7 +482,9 @@ export function AssignSalaryDrawer({
                 label: initial?.employeeName ?? employeeKey,
                 department: initial?.department,
                 bankAccount,
+                bankName: initial?.bankName,
               } as HrMasterOption);
+            const ctc = Number(monthlyCtc) || monthlyFromStructure(structure) || 0;
             onSubmit({
               id: initial?.id,
               employeeId: emp.code || initial?.employeeId || emp.id,
@@ -606,11 +492,12 @@ export function AssignSalaryDrawer({
               structureId,
               structureName: structure?.name ?? initial?.structureName ?? "",
               effectiveDate,
-              monthlyCtc: Number(monthlyCtc) || 0,
-              annualCtc: (Number(monthlyCtc) || 0) * 12,
-              payrollGroup,
-              bankAccount: bankAccount || emp.bankAccount || "",
-              taxRegime,
+              monthlyCtc: ctc,
+              annualCtc: ctc * 12,
+              payrollGroup: initial?.payrollGroup || "General",
+              bankAccount: bankAccount || emp.accountNumber || emp.bankAccount || "",
+              bankName: emp.bankName || initial?.bankName || "",
+              taxRegime: initial?.taxRegime || "new",
               salaryStatus: "active",
               department: emp.department || initial?.department || "General",
             });
@@ -625,7 +512,7 @@ export function AssignSalaryDrawer({
         {editing ? (
           <SetupField label="Employee">
             <SetupInput
-              value={`${initial?.employeeName ?? ""} (${initial?.employeeId ?? ""})`}
+              value={`${employee?.label.split(" · ")[0] || initial?.employeeName || ""} (${initial?.employeeId || ""})`}
               readOnly
               disabled
             />
@@ -635,7 +522,7 @@ export function AssignSalaryDrawer({
             value={employeeKey}
             options={employees}
             required
-            onChange={setEmployeeKey}
+            onChange={applyEmployee}
           />
         )}
         {!editing && employee ? (
@@ -645,8 +532,8 @@ export function AssignSalaryDrawer({
             {employee.shiftName ? ` · Shift ${employee.shiftName}` : ""}
           </p>
         ) : null}
-        <SetupField label="Salary structure">
-          <SetupSelect value={structureId} onChange={(e) => setStructureId(e.target.value)}>
+        <SetupField label="Salary structure" required>
+          <SetupSelect value={structureId} onChange={(e) => applyStructure(e.target.value)}>
             {structures.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
@@ -658,23 +545,22 @@ export function AssignSalaryDrawer({
           <SetupField label="Effective date">
             <SetupInput type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} />
           </SetupField>
-          <SetupField label="Monthly CTC">
-            <SetupInput type="number" value={monthlyCtc} onChange={(e) => setMonthlyCtc(e.target.value)} />
-          </SetupField>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <SetupField label="Payroll group">
-            <SetupInput value={payrollGroup} onChange={(e) => setPayrollGroup(e.target.value)} />
-          </SetupField>
-          <SetupField label="Tax regime">
-            <SetupSelect value={taxRegime} onChange={(e) => setTaxRegime(e.target.value as TaxRegime)}>
-              <option value="new">New</option>
-              <option value="old">Old</option>
-            </SetupSelect>
+          <SetupField label="Monthly CTC" hint="Filled from the selected salary structure">
+            <SetupInput type="number" value={monthlyCtc} readOnly className="tabular-nums bg-muted/40" />
           </SetupField>
         </div>
         <SetupField label="Bank account">
-          <SetupInput value={bankAccount} onChange={(e) => setBankAccount(e.target.value)} />
+          {bankValue ? (
+            <SetupSelect value={bankAccount || bankValue} onChange={(e) => setBankAccount(e.target.value)}>
+              <option value={bankValue}>{employee ? bankOptionLabel(employee) : bankValue}</option>
+            </SetupSelect>
+          ) : (
+            <SetupSelect value="" disabled>
+              <option value="">
+                {employeeKey ? "No bank account on employee profile" : "Select an employee first"}
+              </option>
+            </SetupSelect>
+          )}
         </SetupField>
       </div>
     </SetupDrawer>
@@ -708,7 +594,7 @@ export function BonusDrawer({
     <SetupDrawer
       open={open}
       onClose={onClose}
-      title="Add Bonus"
+      title="Add Incentive"
       footer={
         <Button
           type="button"
@@ -726,13 +612,13 @@ export function BonusDrawer({
             onClose();
           }}
         >
-          Save Bonus
+          Save Incentive
         </Button>
       }
     >
       <div className="space-y-3">
         <EmployeeSelect value={employeeKey} options={employees} required onChange={setEmployeeKey} />
-        <SetupField label="Bonus type">
+        <SetupField label="Incentive type">
           <SetupSelect value={bonusType} onChange={(e) => setBonusType(e.target.value as BonusType)}>
             <option value="festival">Festival</option>
             <option value="performance">Performance</option>

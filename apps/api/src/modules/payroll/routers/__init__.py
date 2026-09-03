@@ -363,6 +363,14 @@ def list_salary_structures(
 ):
     return APIResponse(message="OK", data=paginate(SalaryStructureService(db).list(ctx, company_id), pagination))
 
+@salary_structures_router.get("/{row_id}", response_model=APIResponse[SalaryStructureResponse])
+def get_salary_structure(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.structure:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=SalaryStructureService(db).get(ctx, row_id))
+
 @salary_structures_router.post("", response_model=APIResponse[SalaryStructureResponse])
 def create_salary_structures(
     body: SalaryStructureCreate,
@@ -379,6 +387,16 @@ def update_salary_structures(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="Updated", data=SalaryStructureService(db).update(ctx, row_id, **extract_update_fields(body)))
+
+
+@salary_structures_router.delete("/{row_id}", response_model=APIResponse[None])
+def delete_salary_structure(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.structure:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    SalaryStructureService(db).delete(ctx, row_id)
+    return APIResponse(message="Deleted", data=None)
 
 @salary_components_router.get("", response_model=APIResponse[list[SalaryComponentResponse]])
 def list_salary_components(
@@ -457,6 +475,16 @@ def update_employee_salaries(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="Updated", data=EmployeeSalaryService(db).update(ctx, row_id, **extract_update_fields(body)))
+
+
+@employee_salaries_router.delete("/{row_id}", response_model=APIResponse[None])
+def delete_employee_salary(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("payroll.employee_salary:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    EmployeeSalaryService(db).delete(ctx, row_id)
+    return APIResponse(message="Deleted", data=None)
 
 @employee_salary_components_router.get("", response_model=APIResponse[list[EmployeeSalaryComponentResponse]])
 def list_employee_salary_components(

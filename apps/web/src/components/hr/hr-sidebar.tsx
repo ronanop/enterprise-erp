@@ -6,6 +6,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronRight, LogOut, Search } from "lucide-react";
 
 import { flattenHrNavHrefs, hrNavGroups, type HrNavGroup, type HrNavItem } from "@/config/hr-nav";
+import { CacheBrandLogo } from "@/components/layout/cache-brand-logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
@@ -18,6 +19,9 @@ function navHrefMatches(pathname: string, search: string, href: string): boolean
   if (pathPart === "/hr") return pathname === "/hr" && !queryPart;
   if (pathPart === "/hr/ess") {
     return pathname === "/hr/ess" || pathname.startsWith("/hr/ess-inbox");
+  }
+  if (pathname.startsWith("/hr/payroll/salary-structures")) {
+    return href === "/hr/payroll?section=salary-structure";
   }
   const pathOk = pathname === pathPart || pathname.startsWith(`${pathPart}/`);
   if (!pathOk) return false;
@@ -274,14 +278,7 @@ function SidebarBrand({ collapsed }: { collapsed: boolean }) {
           <CacheMark className="size-full" />
         </span>
       ) : (
-        <div className="w-full rounded-lg bg-white px-2.5 py-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/brand/cache-wordmark.png?v=3"
-            alt="CACHE"
-            className="block h-[52px] w-full max-w-full object-contain object-center"
-          />
-        </div>
+        <CacheBrandLogo className="h-11 w-full max-w-full object-contain object-center" />
       )}
     </Link>
   );

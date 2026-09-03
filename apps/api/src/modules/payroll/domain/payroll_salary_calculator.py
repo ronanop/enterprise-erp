@@ -38,12 +38,22 @@ def split_earnings(gross: Decimal, policy: dict) -> tuple[Decimal, Decimal, Deci
 
 def compute_pf(policy: dict, *, gross: Decimal, basic: Decimal) -> dict:
     mode = policy.get("pf_mode") or PfDeductionMode.FIXED_SPLIT.value
-    if mode == PfDeductionMode.STATUTORY_PERCENT.value:
+    if mode in {PfDeductionMode.STATUTORY_PERCENT.value, PfDeductionMode.PERCENTAGE.value}:
         from modules.payroll.service.engines.statutory_contribution_engine import (
             StatutoryContributionEngine,
         )
 
-        return StatutoryContributionEngine().compute_pf_esi_pt(gross, basic)
+        ee_rate = _dec(policy.get("pf_employee_percent", "0.12"))
+        er_rate = _dec(policy.get("pf_employer_percent", "0.12"))
+        ceiling = _dec(policy.get("pf_wage_ceiling", "15000"))
+        return StatutoryContributionEngine().compute_pf_esi_pt(
+            gross,
+            basic,
+            pf_employee_rate=ee_rate,
+            pf_employer_rate=er_rate,
+            pf_wage_ceiling=ceiling,
+            statutory_esi=mode == PfDeductionMode.STATUTORY_PERCENT.value,
+        )
 
     ee = _money(_dec(policy.get("pf_employee_amount")))
     er = _money(_dec(policy.get("pf_employer_amount")))

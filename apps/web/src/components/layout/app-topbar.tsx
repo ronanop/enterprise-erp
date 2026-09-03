@@ -30,16 +30,6 @@ function readProfileName(): string {
   }
 }
 
-function workspaceSubtitle(pathname: string, signedIn: boolean): string {
-  if (!signedIn) return "Guest · sign in for protected APIs";
-  if (pathname === "/crm" || pathname.startsWith("/crm/")) return "Sales CRM · secure session";
-  if (pathname === "/projects" || pathname.startsWith("/projects/")) {
-    return "Projects · secure session";
-  }
-  if (isHrPath(pathname)) return "HRMS · secure session";
-  return "Signed in · secure session";
-}
-
 export function AppTopbar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -96,18 +86,6 @@ export function AppTopbar() {
         hrMode && "shadow-[0_1px_0_rgb(155_91_184_/_8%)]",
       )}
     >
-      <div className="min-w-0 shrink-0 sm:w-44">
-        <Link
-          href="/"
-          className="block cursor-pointer truncate text-sm font-medium tracking-tight transition-opacity duration-200 hover:opacity-80"
-        >
-          {hrMode ? "HRMS" : "Workspace"}
-        </Link>
-        <p className="truncate text-xs text-muted-foreground">
-          {workspaceSubtitle(pathname, signedIn)}
-        </p>
-      </div>
-
       {isCrm ? (
         <CrmGlobalSearch className="min-w-0 flex-1" />
       ) : isProjects ? (

@@ -14,15 +14,15 @@ def test_full_month_30000_company_policy():
     engine = PayrollRunEngine()
     result = engine.compute_salary_breakdown(
         30000,
-        paid_days=Decimal("26"),
-        period_days=Decimal("26"),
+        paid_days=Decimal("30"),
+        period_days=Decimal("30"),
         prorate=False,
         policy=policy,
     )
     assert result["basic"] == Decimal("18000.0000")
     assert result["hra"] == Decimal("9000.0000")
     assert result["special_allowance"] == Decimal("3000.0000")
-    assert result["net_pay"] == Decimal("26300.0000")
+    assert result["net_pay"] == Decimal("28200.0000")
     bd = result["component_breakdown_json"]
     assert bd["pf_employee"] == 1800.0
     assert bd["pf_employer"] == 1900.0
@@ -34,15 +34,14 @@ def test_prorated_gross_with_fixed_pf():
     engine = PayrollRunEngine()
     result = engine.compute_salary_breakdown(
         30000,
-        paid_days=Decimal("24"),
-        period_days=Decimal("26"),
+        paid_days=Decimal("28"),
+        period_days=Decimal("30"),
         prorate=True,
         policy=policy,
     )
-  # 30000 * 24/26
-    expected_gross = Decimal("27692.3077")
+    expected_gross = Decimal("28000.0000")
     assert result["gross_earnings"] == expected_gross
-    assert result["net_pay"] == expected_gross - Decimal("3700.0000")
+    assert result["net_pay"] == expected_gross - Decimal("1800.0000")
 
 
 def test_split_earnings_helpers():

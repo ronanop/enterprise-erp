@@ -19,11 +19,20 @@ class AttendanceRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrAttendance, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+    def list_rows(
+        self,
+        ctx: TenantContext,
+        company_id: UUID | None,
+        *,
+        employee_id: UUID | None = None,
+    ):
         stmt = select(HrAttendance).where(HrAttendance.is_deleted.is_(False))
         if company_id is not None:
             stmt = stmt.where(HrAttendance.company_id == company_id)
+        if employee_id is not None:
+            stmt = stmt.where(HrAttendance.employee_id == employee_id)
         stmt = self.apply_hr_filter(stmt, HrAttendance, ctx, branch_scoped=True)
+        stmt = stmt.order_by(HrAttendance.attendance_date.desc())
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> HrAttendance:
