@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Clock, RefreshCw, Shield, X } from "lucide-react";
+import { Clock, RefreshCw, Shield, X } from "lucide-react";
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { ResourceListView } from "@/components/module/resource-list-view";
 import { PageHeader } from "@/components/layout/page-header";
+import { ServicePageNoticeHost } from "@/components/service/service-page-notice";
 import { Button } from "@/components/ui/button";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { shouldScopeServiceToMine } from "@/lib/service-engineer-access";
@@ -75,6 +76,16 @@ export function ServiceSlaPage() {
 
   const breachedCount = useMemo(() => rows.filter((r) => r.is_breached).length, [rows]);
   const filteredRows = useMemo(() => filterSlaRows(rows, slaFilter), [rows, slaFilter]);
+  const pageNotices = useMemo(() => {
+    if (breachedCount <= 0) return [];
+    return [
+      {
+        id: `sla-breached-${breachedCount}`,
+        tone: "danger" as const,
+        message: `${breachedCount} ticket${breachedCount === 1 ? "" : "s"} breached or past due`,
+      },
+    ];
+  }, [breachedCount]);
 
   const clearDashboardFilter = () => {
     router.replace("/service/service-slas");
@@ -82,6 +93,8 @@ export function ServiceSlaPage() {
 
   return (
     <div className="space-y-4">
+      <ServicePageNoticeHost notices={pageNotices} />
+
       <PageHeader
         title={scopedToMine ? "My SLAs" : "SLAs"}
         actions={
@@ -116,13 +129,6 @@ export function ServiceSlaPage() {
         />
       ) : (
         <>
-          {breachedCount > 0 ? (
-            <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              <AlertTriangle className="size-4 shrink-0" />
-              {breachedCount} ticket{breachedCount === 1 ? "" : "s"} breached or past due
-            </div>
-          ) : null}
-
           {slaFilter && SLA_FILTER_LABELS[slaFilter] ? (
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-sky-200/80 bg-sky-50 px-3 py-2 text-sm text-sky-950">
               <span>

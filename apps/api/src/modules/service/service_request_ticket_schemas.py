@@ -451,7 +451,6 @@ class ServiceRequestTicketAccessInfo(BaseModel):
     can_reopen: bool
     can_open: bool = False
     is_opened: bool = False
-    can_end: bool = False
     can_resume: bool = False
     employee_id: UUID | None = None
 

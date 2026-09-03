@@ -197,7 +197,6 @@ export type TicketAccessInfo = {
   can_reopen: boolean;
   can_open: boolean;
   is_opened: boolean;
-  can_end?: boolean;
   can_resume?: boolean;
   employee_id: string | null;
 };
@@ -450,11 +449,6 @@ export async function resolveTicket(
   payload: { solution_type: string; solution_summary: string; reason?: string },
 ): Promise<ServiceRequestTicket> {
   const res = await resourceService.action<ServiceRequestTicket>(API, id, "resolve", payload);
-  return unwrap(res.data);
-}
-
-export async function closeTicket(id: string, reason?: string): Promise<ServiceRequestTicket> {
-  const res = await resourceService.action<ServiceRequestTicket>(API, id, "close", reason ? { reason } : {});
   return unwrap(res.data);
 }
 

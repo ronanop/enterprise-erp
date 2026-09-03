@@ -1,13 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Edit, Paperclip, RefreshCw, UserPlus, Users } from "lucide-react";
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
+import { ServicePageNoticeHost } from "@/components/service/service-page-notice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
+import { formatServiceDisplayText } from "@/lib/service-display-text";
 import { authService } from "@/services/api-client";
 import {
   addTicketCoOwner,
@@ -15,7 +19,6 @@ import {
   ApiClientError,
   assignTicketOwner,
   attachmentDownloadUrl,
-  closeTicket,
   deleteTicketAttachment,
   exportTicketTimelineXlsx,
   formatStatus,
@@ -44,13 +47,13 @@ import {
 } from "@/services/service-request-ticket-service";
 
 function DetailRow({ label, value }: { label: string; value?: string | null }) {
-  const display = value?.trim() ? value : "—";
+  const display = value?.trim() ? formatServiceDisplayText(value) : "—";
   const empty = !value?.trim();
   return (
     <div className="min-w-0 rounded-md border border-border/50 bg-background/80 px-3 py-2.5">
       <dt className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">{label}</dt>
       <dd
-        className={`mt-1 break-words text-sm leading-snug ${
+        className={`mt-1 max-w-full break-words text-sm leading-snug [overflow-wrap:anywhere] ${
           empty ? "text-muted-foreground/70" : "font-medium text-foreground"
         }`}
       >
@@ -129,13 +132,18 @@ function DetailInput({
 }
 
 function DetailGrid({ children }: { children: ReactNode }) {
-  return <dl className="grid gap-2 sm:grid-cols-2">{children}</dl>;
+  return <dl className="grid min-w-0 gap-2 sm:grid-cols-2">{children}</dl>;
 }
 
 function ProseBlock({ children }: { children: ReactNode }) {
+  const content =
+    typeof children === "string" || typeof children === "number"
+      ? formatServiceDisplayText(String(children))
+      : children;
+
   return (
-    <div className="rounded-md border border-border/50 bg-muted/25 px-3.5 py-3 text-sm leading-relaxed whitespace-pre-wrap text-foreground">
-      {children}
+    <div className="min-w-0 max-w-full overflow-x-hidden rounded-md border border-border/50 bg-muted/25 px-3.5 py-3 text-sm leading-relaxed break-words whitespace-pre-wrap [overflow-wrap:anywhere] text-foreground">
+      {content}
     </div>
   );
 }
@@ -151,11 +159,11 @@ function FormField({ label, children }: { label: string; children: ReactNode }) 
 
 function SectionCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="rounded-xl border border-border/80 bg-card shadow-sm">
+    <section className="min-w-0 overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
       <div className="border-b border-border/60 bg-muted/35 px-4 py-2.5">
         <h2 className="text-xs font-semibold tracking-[0.08em] text-foreground uppercase">{title}</h2>
       </div>
-      <div className="p-4">{children}</div>
+      <div className="min-w-0 overflow-x-hidden p-4">{children}</div>
     </section>
   );
 }
@@ -183,22 +191,25 @@ function FieldEngineerStatusCard({
         {fieldEngineers.map((fe) => (
           <li
             key={fe.id}
-            className={`rounded-md border px-3 py-3 ${
+            className={cn(
+              "rounded-md border px-3 py-3",
               fe.status === "solved"
-                ? "border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/20"
-                : "border-border/60 bg-muted/20"
-            }`}
+                ? "border-primary/25 bg-accent/40"
+                : "border-border/60 bg-muted/20",
+            )}
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium">{fe.engineer_name}</div>
                 <div className="truncate text-xs text-muted-foreground">{fe.engineer_email || "—"}</div>
               </div>
-              <FinanceStatusBadge status={fe.status === "solved" ? "active" : "pending"} />
+              <Badge
+                variant={fe.status === "solved" ? "secondary" : "outline"}
+                className="font-medium capitalize"
+              >
+                {fe.status === "solved" ? "Solved" : formatStatus(fe.status)}
+              </Badge>
             </div>
-            <p className="mt-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              {fe.status === "solved" ? "Solved" : formatStatus(fe.status)}
-            </p>
             {fe.status === "solved" ? (
               <div className="mt-3 space-y-2">
                 <ProseBlock>{fe.solution_summary || "—"}</ProseBlock>
@@ -458,8 +469,6 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
   const [solutionSummary, setSolutionSummary] = useState("");
   const [resolveOpen, setResolveOpen] = useState(false);
   const [resolving, setResolving] = useState(false);
-  const [closeOpen, setCloseOpen] = useState(false);
-  const [closing, setClosing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [canAssign, setCanAssign] = useState(false);
@@ -558,6 +567,65 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
   const needsAssetConfirm = canWork && isOpened && !ticketEnded && !assetConfirmed;
   const canEditVisitPlan = canWork && showFieldEngineers && !ticketEnded && assetConfirmed;
   const showVisitSection = showFieldEngineers && (canEditVisitPlan || Boolean(ticket?.field_engineer) || hasFieldEngineers);
+
+  const pageNotices = useMemo(() => {
+    const items: Array<{ id: string; message: ReactNode; tone?: "info" | "warning" | "neutral" }> = [];
+
+    if (isViewOnly) {
+      items.push({
+        id: "view-only",
+        tone: "info",
+        message:
+          "View-only access. As service head you can see this ticket but cannot open or work on it. SLA starts when the ticket is created or the email is received.",
+      });
+    }
+
+    if (isPreview) {
+      items.push({
+        id: "assign-preview",
+        tone: "warning",
+        message:
+          "This ticket is unassigned. Everyone in the service module can see it here. A coordinator must assign an owner before work can begin.",
+      });
+    }
+
+    if (needsSupportChoice) {
+      items.push({
+        id: "support-choice",
+        tone: "warning",
+        message: (
+          <>
+            Ticket is open. Choose <span className="font-medium">Mode</span> and{" "}
+            <span className="font-medium">Category</span> in Basic Information to continue.
+          </>
+        ),
+      });
+    }
+
+    if (needsAssetConfirm) {
+      items.push({
+        id: "asset-confirm",
+        tone: "warning",
+        message: (
+          <>
+            Asset details are taken from the email. Review them below — fill anything missing or change what is wrong, then{" "}
+            <span className="font-medium">Confirm asset details</span> before continuing work.
+          </>
+        ),
+      });
+    }
+
+    if (!canWork && !isPreview && !isViewOnly && !canOpen) {
+      items.push({
+        id: "other-owner",
+        tone: "neutral",
+        message:
+          "This ticket is assigned to another engineer. Only the owner and co-owners can open and work on it.",
+      });
+    }
+
+    return items;
+  }, [canOpen, canWork, isPreview, isViewOnly, needsAssetConfirm, needsSupportChoice]);
 
   const onOpenTicket = async () => {
     await openTicket(ticketId);
@@ -725,21 +793,6 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
     }
   };
 
-  const onEndTicket = async () => {
-    if (closing) return;
-    setClosing(true);
-    setError(null);
-    try {
-      await closeTicket(ticketId);
-      setCloseOpen(false);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to end ticket");
-    } finally {
-      setClosing(false);
-    }
-  };
-
   const onUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !canWork) return;
@@ -759,6 +812,8 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
 
   return (
     <div className="space-y-5">
+      <ServicePageNoticeHost key={ticketId} notices={pageNotices} />
+
       <PageHeader
         title={ticket.subject}
         description={`${ticket.document_number} · ${formatStatus(ticket.status)}`}
@@ -780,11 +835,6 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
             {canWork && supportChosen && assetConfirmed && ticket.status !== "resolved" && ticket.status !== "closed" ? (
               <Button type="button" size="sm" onClick={() => setResolveOpen(true)}>
                 End Ticket
-              </Button>
-            ) : null}
-            {access?.can_end ? (
-              <Button type="button" size="sm" variant="outline" onClick={() => setCloseOpen(true)}>
-                Close (Helpdesk)
               </Button>
             ) : null}
           </div>
@@ -862,77 +912,6 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
         </div>
       ) : null}
 
-      {closeOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4"
-          role="presentation"
-          onClick={() => {
-            if (!closing) setCloseOpen(false);
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="close-dialog-title"
-            className="w-full max-w-md rounded-xl border border-border/80 bg-card p-4 shadow-lg"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h2 id="close-dialog-title" className="text-sm font-medium tracking-tight">
-              Close Ticket (Helpdesk)
-            </h2>
-            <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-              This ticket is still Resolved. Confirm to mark it Closed and lock ownership.
-            </p>
-            <div className="mt-4 flex justify-end gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={closing}
-                onClick={() => setCloseOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="button" size="sm" disabled={closing} onClick={() => void onEndTicket()}>
-                {closing ? "Closing…" : "Confirm Close"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {isViewOnly ? (
-        <div className="rounded-lg border border-sky-500/35 bg-sky-500/10 px-4 py-3 text-sm leading-relaxed">
-          View-only access. As service head you can see this ticket but cannot open or work on it. SLA starts when the ticket is created or the email is received.
-        </div>
-      ) : null}
-
-      {isPreview ? (
-        <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed">
-          This ticket is unassigned. Everyone in the service module can see it here. A coordinator must assign an owner before work can begin.
-        </div>
-      ) : null}
-
-      {needsSupportChoice ? (
-        <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed">
-          Ticket is open. Choose <span className="font-medium">Mode</span> and{" "}
-          <span className="font-medium">Category</span> in Basic Information to continue.
-        </div>
-      ) : null}
-
-      {needsAssetConfirm ? (
-        <div className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed">
-          Asset details are taken from the email. Review them below — fill anything missing or change what is wrong, then{" "}
-          <span className="font-medium">Confirm asset details</span> before continuing work.
-        </div>
-      ) : null}
-
-      {!canWork && !isPreview && !isViewOnly && !canOpen ? (
-        <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm leading-relaxed text-muted-foreground">
-          This ticket is assigned to another engineer. Only the owner and co-owners can open and work on it.
-        </div>
-      ) : null}
-
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/70 bg-card px-3 py-2.5 shadow-sm">
         <span className="mr-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Status</span>
         <FinanceStatusBadge status={ticket.priority} />
@@ -942,8 +921,8 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
         {access?.is_co_owner ? <FinanceStatusBadge status="co_owner" /> : null}
       </div>
 
-      <div className="grid items-start gap-5 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
+      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-3">
+        <div className="min-w-0 space-y-4 lg:col-span-2">
           <SectionCard title="Basic Information">
             <DetailGrid>
               <DetailRow label="Contact Name" value={ticket.contact_name} />
@@ -1559,7 +1538,7 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
           ) : null}
         </div>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {(canWork || access?.is_manager || isViewOnly || isPreview || ticketEnded) ? (
             <SectionCard title="Ticket Timeline">
               <div className="mb-3 flex justify-end">
@@ -1585,14 +1564,18 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
                   timeline.map((item, i) => (
                     <li
                       key={`${item.occurred_at}-${i}`}
-                      className="rounded-md border border-border/50 bg-background px-3 py-2.5"
+                      className="min-w-0 rounded-md border border-border/50 bg-background px-3 py-2.5"
                     >
                       <p className="text-[11px] tabular-nums text-muted-foreground">
                         {item.occurred_at?.slice(0, 16)?.replace("T", " ") || "—"}
                       </p>
-                      <p className="mt-0.5 text-sm font-medium leading-snug">{item.title}</p>
+                      <p className="mt-0.5 break-words text-sm font-medium leading-snug [overflow-wrap:anywhere]">
+                        {item.title}
+                      </p>
                       {item.description ? (
-                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.description}</p>
+                        <p className="mt-1 break-words text-xs leading-relaxed [overflow-wrap:anywhere] text-muted-foreground">
+                          {formatServiceDisplayText(item.description)}
+                        </p>
                       ) : null}
                     </li>
                   ))

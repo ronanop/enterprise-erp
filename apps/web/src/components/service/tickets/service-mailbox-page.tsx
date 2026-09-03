@@ -17,6 +17,7 @@ import {
   type MailboxMessageItem,
 } from "@/services/service-request-ticket-service";
 import { cn } from "@/lib/utils";
+import { formatServiceDisplayText } from "@/lib/service-display-text";
 
 function formatWhen(value?: string | null): string {
   if (!value) return "—";
@@ -233,7 +234,7 @@ function MailReadingPane({
     );
   }
 
-  const body = detail?.body_text || detail?.body_preview || row.body_preview;
+  const body = formatServiceDisplayText(detail?.body_text || detail?.body_preview || row.body_preview || "");
   const display = { ...row, ...(detail ?? {}) };
   const initials = senderInitials(display.from_name, display.from_address);
   const ticketStatus = mailboxTicketDisplayStatus(display);
@@ -241,7 +242,7 @@ function MailReadingPane({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 border-b border-border/60 bg-muted/20 px-6 py-5">
-        <h2 className="text-xl font-semibold leading-snug tracking-tight">{display.subject}</h2>
+        <h2 className="break-words text-xl font-semibold leading-snug tracking-tight">{display.subject}</h2>
 
         <div className="mt-4 flex flex-wrap items-start gap-4">
           <div className="flex min-w-0 flex-1 items-start gap-3">
@@ -289,7 +290,7 @@ function MailReadingPane({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto px-6 py-5">
         {loading ? (
           <div className="space-y-3">
             <div className="h-4 w-full animate-pulse rounded bg-muted" />
@@ -297,8 +298,8 @@ function MailReadingPane({
             <div className="h-4 w-4/5 animate-pulse rounded bg-muted" />
           </div>
         ) : (
-          <article className="rounded-xl border border-border/60 bg-card p-5 shadow-sm">
-            <pre className="font-sans text-sm leading-7 whitespace-pre-wrap text-foreground/90">
+          <article className="max-w-full overflow-hidden rounded-xl border border-border/60 bg-card p-5 shadow-sm">
+            <pre className="max-w-full font-sans text-sm leading-7 break-words whitespace-pre-wrap [overflow-wrap:anywhere] text-foreground/90">
               {body || "(No body)"}
             </pre>
           </article>

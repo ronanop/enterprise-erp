@@ -41,7 +41,6 @@ class TicketAccess:
     can_reopen: bool
     can_open: bool = False
     is_opened: bool = False
-    can_end: bool = False
     can_resume: bool = False
 
 
@@ -157,8 +156,6 @@ class TicketAccessService:
         can_work = (is_owner or is_co_owner) and not closed and is_opened
         can_manage_collaborators = is_owner and not locked and is_opened
         can_reopen = is_owner and closed
-        # Helpdesk End only — engineer resolves (End SLA); helpdesk alone closes
-        can_end = is_manager and row.status == "resolved"
         can_resume = (is_manager or is_owner or is_co_owner) and not closed and (
             awaiting or row.status in ("pending_customer", "pending_oem", "assigned")
         )
@@ -176,7 +173,6 @@ class TicketAccessService:
             can_reopen=can_reopen,
             can_open=can_open,
             is_opened=is_opened,
-            can_end=can_end,
             can_resume=can_resume,
         )
 

@@ -289,19 +289,6 @@ def resolve_ticket(
     return APIResponse(message="Ticket resolved", data=data)
 
 
-@service_request_tickets_router.post("/{row_id}/close", response_model=APIResponse[ServiceRequestTicketDetail])
-def close_ticket(
-    row_id: UUID,
-    ctx: Annotated[TenantContext, Depends(require_permission("service.request:update"))],
-    db: Annotated[Session, Depends(get_db)],
-    body: ServiceRequestReopenPayload | None = None,
-):
-    reason = body.reason if body else None
-    data = ServiceRequestTicketService(db).close_ticket(ctx, row_id, reason=reason)
-    db.commit()
-    return APIResponse(message="Ticket ended by helpdesk", data=data)
-
-
 @service_request_tickets_router.post("/{row_id}/resume", response_model=APIResponse[ServiceRequestTicketDetail])
 def resume_ticket(
     row_id: UUID,

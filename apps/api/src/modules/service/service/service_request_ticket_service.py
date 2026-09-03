@@ -477,7 +477,6 @@ class ServiceRequestTicketService:
             can_reopen=access.can_reopen,
             can_open=access.can_open,
             is_opened=access.is_opened,
-            can_end=access.can_end,
             can_resume=access.can_resume,
             employee_id=access.employee_id,
         )
@@ -1226,24 +1225,6 @@ class ServiceRequestTicketService:
         self._record_status(ctx, row, "resolved", "closed", "Ticket ended and closed")
         self._notify(ctx, row, "ticket_ended", f"Ticket {row.document_number} ended and closed")
         self._notify_service_heads(ctx, row, "ticket_ended", f"Ticket {row.document_number} closed")
-        return self.get_ticket(ctx, row_id)
-
-    def close_ticket(self, ctx: TenantContext, row_id: UUID, *, reason: str | None = None):
-        row = self._repo.get(ctx, row_id)
-        if row is None:
-            raise NotFoundException("Service request ticket not found")
-        access = self._access.evaluate(ctx, row)
-        if not access.can_end:
-            raise AppException("Only helpdesk can end a resolved ticket")
-        if row.status != "resolved":
-            raise AppException("Ticket must be resolved by the service engineer before helpdesk can end it")
-        old = row.status
-        self._engine.transition(row, "closed")
-        now = datetime.now(timezone.utc)
-        self._repo.update(ctx, row_id, status=row.status, closed_at=now, ownership_locked=True)
-        self._record_status(ctx, row, old, row.status, reason or "Ticket ended by helpdesk")
-        self._notify(ctx, row, "ticket_ended", f"Ticket {row.document_number} ended by helpdesk")
-        self._notify_service_heads(ctx, row, "ticket_ended", f"Ticket {row.document_number} ended")
         return self.get_ticket(ctx, row_id)
 
     def resume_ticket(self, ctx: TenantContext, row_id: UUID, *, reason: str | None = None):
