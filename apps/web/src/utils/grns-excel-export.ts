@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import writeXlsxFile from "write-excel-file/browser";
 
 import {
   listOrderReceiptBatches,
@@ -13,9 +13,12 @@ const HEADERS = [
   "Company PO Number",
   "PO Date",
   "Vendor",
-  "GRN Status",
+  "Customer name",
+  "Customer PO number",
+  "PO Status",
   "GRN Number",
   "GRN Date",
+  "GRN Maker",
   "Items",
 ] as const;
 
@@ -25,6 +28,20 @@ export type BuildGrnExportOptions = {
   inventory?: ProcurementInventoryRow[];
   batchesByOrderId?: Record<string, ScmReceiptBatch[]>;
 };
+
+type ExcelCell =
+  | string
+  | number
+  | null
+  | {
+      value: string | number | null;
+      type?: typeof String | typeof Number;
+      fontWeight?: "bold";
+      wrap?: boolean;
+      align?: "left" | "center" | "right";
+      alignVertical?: "top" | "center" | "bottom";
+      height?: number;
+    };
 
 function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
@@ -43,14 +60,21 @@ function formatDate(value: string | null | undefined): string {
   return d.toISOString().slice(0, 10);
 }
 
-function formatGrnStatusLabel(status: string): string {
-  const value = (status || "").toLowerCase();
-  if (value === "closed" || value === "delivered") return "Delivered";
-  if (value === "partial") return "Partial";
-  if (value === "pending") return "Open";
-  return status
-    ? status.charAt(0).toUpperCase() + status.slice(1).toLowerCase()
-    : "";
+function formatPoCompletionStatus(order: ScmVendorPo): string {
+  const grn = (order.grn_status || "").toLowerCase();
+  const status = (order.status || "").toLowerCase();
+  if (
+    grn === "closed" ||
+    grn === "delivered" ||
+    status === "received" ||
+    status === "closed"
+  ) {
+    return "Completed";
+  }
+  if (grn === "partial" || status === "partially_received") {
+    return "Partial";
+  }
+  return "Not completed";
 }
 
 export function resolveGrnNumber(row: ScmVendorPo): string {
@@ -76,20 +100,29 @@ function findBatchForGrn(
   return batches.find((b) => Number(b.sequence) === seq);
 }
 
+/** One product per line — Excel shows these as separate rows inside the cell. */
+function joinItemLines(lines: string[]): string {
+  return lines.filter(Boolean).join("\n");
+}
+
 /** Line items for one GRN batch (received qty on that GRN). */
 function formatBatchItemsCell(order: ScmVendorPo, batch: ScmReceiptBatch): string {
   const lines = batch.lines || [];
   if (lines.length === 0) return "";
 
-  return lines
-    .map((line, index) => {
+  return joinItemLines(
+    lines.map((line, index) => {
       const orderLine = (order.lines || []).find((ln) => ln.id === line.order_line_id);
-      const name = (line.product_name || orderLine?.product_name || `Line ${line.line_number}`).trim();
+      const name = (
+        line.product_name ||
+        orderLine?.product_name ||
+        `Line ${line.line_number}`
+      ).trim();
       const ordered = Number(orderLine?.quantity) || 0;
       const received = Number(line.quantity) || 0;
       return `${index + 1}. ${name} | Ordered: ${ordered} | Received: ${received}`;
-    })
-    .join("\n");
+    }),
+  );
 }
 
 /** Fallback: aggregate inventory stock units for a GRN. */
@@ -109,15 +142,15 @@ function formatInventoryItemsCell(
     byProduct.set(name, (byProduct.get(name) || 0) + (Number(row.received_quantity) || 1));
   }
 
-  return [...byProduct.entries()]
-    .map(([name, qty], index) => {
+  return joinItemLines(
+    [...byProduct.entries()].map(([name, qty], index) => {
       const orderLine = (order.lines || []).find(
         (ln) => (ln.product_name || "").trim().toLowerCase() === name.toLowerCase(),
       );
       const ordered = Number(orderLine?.quantity) || 0;
       return `${index + 1}. ${name} | Ordered: ${ordered} | Received: ${qty}`;
-    })
-    .join("\n");
+    }),
+  );
 }
 
 /** PO-level ordered vs received (used when only one provisional GRN row exists). */
@@ -125,16 +158,15 @@ function formatPoItemsCell(order: ScmVendorPo): string {
   const lines = order.lines || [];
   if (lines.length === 0) return "";
 
-  return lines
-    .map((line, index) => {
+  return joinItemLines(
+    lines.map((line, index) => {
       const itemNo = index + 1;
       const name = (line.product_name || `Line ${line.line_number}`).trim();
       const ordered = Number(line.quantity) || 0;
       const received = Number(line.quantity_received) || 0;
-      const status = formatGrnStatusLabel(line.grn_status || order.grn_status);
-      return `${itemNo}. ${name} | Ordered: ${ordered} | Received: ${received} | ${status}`;
-    })
-    .join("\n");
+      return `${itemNo}. ${name} | Ordered: ${ordered} | Received: ${received}`;
+    }),
+  );
 }
 
 function grnNumbersForExport(
@@ -182,7 +214,7 @@ export function buildGrnExportRows(
     const vendor = vendors[order.vendor_id]?.label || order.vendor_id;
     const poNumber = order.company_po_number?.trim() || order.document_number;
     const poDate = formatDate(order.created_at || order.document_date);
-    const poGrnStatus = formatGrnStatusLabel(order.grn_status);
+    const poStatus = formatPoCompletionStatus(order);
     const batches = batchesByOrderId[order.id];
     const grnNumbers = grnNumbersForExport(order, inventory, batches);
     const singleProvisional = grnNumbers.length === 1 && !batches?.length;
@@ -190,14 +222,13 @@ export function buildGrnExportRows(
     for (const grnNumber of grnNumbers) {
       serial += 1;
       const batch = findBatchForGrn(batches, grnNumber);
-      const reversed = Boolean(batch?.reversed);
-      const grnStatus = reversed ? `${poGrnStatus} (Reversed)` : poGrnStatus;
       const grnDate = formatDate(
         batch?.receipt_at ||
           (grnNumber === (order.current_grn_number || "").trim()
             ? order.receipt_saved_at || order.document_date
             : null),
       );
+      const grnMaker = (batch?.created_by_name || "").trim();
 
       let items = "";
       if (batch && (batch.lines?.length ?? 0) > 0) {
@@ -214,9 +245,12 @@ export function buildGrnExportRows(
         "Company PO Number": poNumber,
         "PO Date": poDate,
         Vendor: vendor,
-        "GRN Status": grnStatus,
+        "Customer name": (order.customer_name || "").trim(),
+        "Customer PO number": (order.customer_po_number || "").trim(),
+        "PO Status": batch?.reversed ? `${poStatus} (GRN reversed)` : poStatus,
         "GRN Number": grnNumber,
         "GRN Date": grnDate,
+        "GRN Maker": grnMaker,
         Items: items,
       });
     }
@@ -244,40 +278,90 @@ export async function buildGrnExportRowsWithBatches(
   return buildGrnExportRows(orders, vendors, { inventory, batchesByOrderId });
 }
 
-export function exportGrnsXlsx(filename: string, rows: GrnExportRow[]) {
-  const data = rows.length
+function toExcelCell(key: (typeof HEADERS)[number], value: string | number): ExcelCell {
+  if (typeof value === "number") {
+    return { type: Number, value };
+  }
+  return { type: String, value: String(value ?? "") };
+}
+
+function splitItemLines(items: string): string[] {
+  const lines = String(items || "")
+    .split(/\r\n|\n|\r/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines.length > 0 ? lines : [""];
+}
+
+/**
+ * Expand each GRN into one Excel row per product line so items never collapse
+ * onto a single line (Excel shared-string whitespace stripping).
+ */
+function expandRowsForExcel(rows: GrnExportRow[]): GrnExportRow[] {
+  const out: GrnExportRow[] = [];
+  for (const row of rows) {
+    const itemLines = splitItemLines(String(row.Items ?? ""));
+    itemLines.forEach((itemLine, index) => {
+      if (index === 0) {
+        out.push({ ...row, Items: itemLine });
+        return;
+      }
+      out.push({
+        "S.No": "",
+        "Company PO Number": "",
+        "PO Date": "",
+        Vendor: "",
+        "Customer name": "",
+        "Customer PO number": "",
+        "PO Status": "",
+        "GRN Number": "",
+        "GRN Date": "",
+        "GRN Maker": "",
+        Items: itemLine,
+      });
+    });
+  }
+  return out;
+}
+
+/** Build and download GRN Excel with one product line per row. */
+export async function exportGrnsXlsx(filename: string, rows: GrnExportRow[]) {
+  const source = rows.length
     ? rows
     : [Object.fromEntries(HEADERS.map((h) => [h, ""])) as GrnExportRow];
+  const data = expandRowsForExcel(source);
 
-  const ws = XLSX.utils.json_to_sheet(data, { header: [...HEADERS] });
-  const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
-  ws["!autofilter"] = { ref: XLSX.utils.encode_range(range) };
-  ws["!views"] = [
-    {
-      state: "frozen",
-      ySplit: 1,
-      topLeftCell: "A2",
-      activeCell: "A2",
-    },
-  ];
-  ws["!cols"] = [
-    { wch: 8 },
-    { wch: 22 },
-    { wch: 12 },
-    { wch: 26 },
-    { wch: 14 },
-    { wch: 22 },
-    { wch: 12 },
-    { wch: 56 },
-  ];
+  const headerRow: ExcelCell[] = HEADERS.map((h) => ({
+    type: String,
+    value: h,
+    fontWeight: "bold",
+  }));
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "GRNs");
-  const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  downloadBlob(
-    filename,
-    new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }),
+  const body: ExcelCell[][] = data.map((row) =>
+    HEADERS.map((key) => toExcelCell(key, row[key] ?? "")),
   );
+
+  const result = await writeXlsxFile([
+    {
+      sheet: "GRNs",
+      stickyRowsCount: 1,
+      data: [headerRow, ...body],
+      columns: [
+        { width: 8 },
+        { width: 22 },
+        { width: 12 },
+        { width: 26 },
+        { width: 24 },
+        { width: 20 },
+        { width: 14 },
+        { width: 22 },
+        { width: 12 },
+        { width: 22 },
+        { width: 56 },
+      ],
+    },
+  ]);
+  const blob = await result.toBlob();
+  downloadBlob(filename, blob);
 }
+

@@ -115,7 +115,7 @@ export function companyPoLocationByEntityCode(entityCode: string): CompanyPoLoca
 }
 
 export function defaultShippingIdForLocation(location: CompanyPoLocation): string {
-  return location.lockShippingToEntity ? "mumbai-eastern-court" : DEFAULT_COMPANY_PO_SHIPPING_OPTION.id;
+  return location.lockShippingToEntity ? "mumbai-eastern-court" : "sultanpur";
 }
 
 export function shippingOptionsForLocation(location: CompanyPoLocation): Array<{

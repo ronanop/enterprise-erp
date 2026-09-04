@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session, load_only
 from core.exceptions import ConflictException, NotFoundException
 from modules.crm.service.ovf_service import resolve_scm_hold_started_at
 from modules.foundation.domain.value_objects import TenantContext
+from modules.foundation.repository.user_repository import UserRepository
 from modules.foundation.service.audit_service import AuditService
 from modules.procurement.adapters.crm_adapter import ProcurementCrmAdapter
 from modules.procurement.adapters.master_data_adapter import (
@@ -103,6 +104,19 @@ class ScmHandoffService:
         self._order_service = OrderService(db)
         self._scope = ProcurementScopeValidator(db)
         self._audit = AuditService(db)
+        self._users = UserRepository(db)
+
+    def _resolve_user_names(
+        self, tenant_id: UUID, user_ids: set[UUID]
+    ) -> dict[UUID, str]:
+        names: dict[UUID, str] = {}
+        for user_id in user_ids:
+            if user_id is None:
+                continue
+            user = self._users.get_by_id(tenant_id, user_id)
+            if user and user.display_name:
+                names[user_id] = user.display_name
+        return names
 
     def _receipt_batch_tables_exist(self) -> bool:
         if self._receipt_batch_storage_ready is None:
@@ -799,6 +813,25 @@ class ScmHandoffService:
             freight=freight,
             additional_charges=additional_charges,
             finance_cost_pct=finance_cost_pct,
+        )
+        return self.get_ovf_preview(ctx, ovf_id)
+
+    def update_item_plan_vendor(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        product_name: str,
+        line_index: int,
+        distributor_name: str,
+    ) -> dict:
+        """Persist item-plan distributor selection onto the matching CRM vendor line."""
+        self._crm.update_scm_item_plan_vendor(
+            ctx,
+            ovf_id,
+            product_name=product_name,
+            line_index=line_index,
+            distributor_name=distributor_name,
         )
         return self.get_ovf_preview(ctx, ovf_id)
 
@@ -1509,6 +1542,14 @@ class ScmHandoffService:
         orders = self._orders.list_orders_with_lines(ctx, cid)
         result: list[dict] = []
         handoff_cache: dict[UUID, dict] = {}
+        ovf_ids = [
+            order.source_document_id
+            for order in orders
+            if order.source_module == self.SOURCE_MODULE
+            and order.source_document_type == self.SOURCE_DOC_TYPE
+            and order.source_document_id is not None
+        ]
+        ovf_meta = self._crm.get_ovf_display_meta(ctx, ovf_ids) if ovf_ids else {}
         for order in orders:
             lines = [ln for ln in (order.lines or []) if not getattr(ln, "is_deleted", False)]
             grn = _header_grn_badge(lines)
@@ -1522,12 +1563,17 @@ class ScmHandoffService:
             vendor_total = float(order.total_amount or 0)
             customer_total = 0.0
             margin_amount = 0.0
+            customer_name = None
+            customer_po_number = None
             if (
                 order.source_module == self.SOURCE_MODULE
                 and order.source_document_type == self.SOURCE_DOC_TYPE
                 and order.source_document_id is not None
             ):
                 ovf_id = order.source_document_id
+                ovf = ovf_meta.get(ovf_id) or {}
+                customer_name = ovf.get("customer_name")
+                customer_po_number = ovf.get("po_number")
                 try:
                     if ovf_id not in handoff_cache:
                         handoff_cache[ovf_id] = self._crm.get_commercial_totals(ctx, ovf_id)
@@ -1555,6 +1601,8 @@ class ScmHandoffService:
                     "source_document_type": order.source_document_type,
                     "source_document_id": order.source_document_id,
                     "company_po_number": order.company_po_number,
+                    "customer_name": customer_name,
+                    "customer_po_number": customer_po_number,
                     "vendor_total": vendor_total,
                     "customer_total": customer_total,
                     "margin_amount": margin_amount,
@@ -2317,15 +2365,24 @@ class ScmHandoffService:
             for bl in all_batch_lines:
                 lines_by_batch[bl.receipt_batch_id].append(bl)
             attachments_by_batch = self._receipt_batch_attachment_summaries(ctx, batch_ids)
+            creator_ids = {
+                batch.created_by
+                for batch in sorted_batches
+                if getattr(batch, "created_by", None)
+            }
+            creator_names = self._resolve_user_names(ctx.tenant_id, creator_ids)
             result: list[dict] = []
             for batch in sorted_batches:
                 batch_lines = lines_by_batch.get(batch.id, [])
+                created_by = getattr(batch, "created_by", None)
                 result.append(
                     {
                         "id": batch.id,
                         "sequence": int(batch.sequence),
                         "grn_number": batch.grn_number,
                         "receipt_at": batch.receipt_at,
+                        "created_by": created_by,
+                        "created_by_name": creator_names.get(created_by) if created_by else None,
                         "lines": self._receipt_batch_line_payload(batch_lines, line_by_id),
                         "attachments": attachments_by_batch.get(batch.id, []),
                         **self._vendor_invoice_batch_fields(batch),
@@ -2353,6 +2410,10 @@ class ScmHandoffService:
             self._receipt_batch_attachment_summaries(ctx, [batch_id])
             if batch_id is not None
             else {}
+        )
+        created_by = getattr(current_batch, "created_by", None) if current_batch else None
+        creator_names = (
+            self._resolve_user_names(ctx.tenant_id, {created_by}) if created_by else {}
         )
         fallback: list[dict] = []
         for s in range(1, seq + 1):
@@ -2386,12 +2447,17 @@ class ScmHandoffService:
                         }
                     )
             row_batch_id = batch_id if s == seq else None
+            row_created_by = created_by if s == seq else None
             fallback.append(
                 {
                     "id": row_batch_id,
                     "sequence": s,
                     "grn_number": grn_number,
                     "receipt_at": getattr(order, "current_receipt_batch_at", None),
+                    "created_by": row_created_by,
+                    "created_by_name": (
+                        creator_names.get(row_created_by) if row_created_by else None
+                    ),
                     "lines": lines_payload,
                     "attachments": (
                         attachments_by_batch.get(batch_id, [])

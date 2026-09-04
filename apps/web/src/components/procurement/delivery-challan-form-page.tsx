@@ -15,7 +15,11 @@ import {
   Truck,
 } from "lucide-react";
 
-import { FinanceField, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
+import {
+  FinanceField,
+  FinanceSelect,
+  FinanceTextarea,
+} from "@/components/finance/journals/finance-form-field";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,6 +73,7 @@ import { formatInrPdf } from "@/utils/purchase-order-amount-words";
 import {
   emptyChallanLine,
   getDeliveryChallan,
+  peekNextDeliveryChallanNumber,
   upsertDeliveryChallan,
   type DeliveryChallanLine,
   type DeliveryChallanMode,
@@ -112,6 +117,7 @@ function safeProcurementReturnTo(raw: string | null): string | null {
 function challanBackLabel(backHref: string): string {
   if (/\/orders\/[^/]+/.test(backHref)) return "Purchase order";
   if (backHref.includes("/grns")) return "GRNs";
+  if (backHref.includes("/inventory")) return "Inventory";
   if (backHref.includes("/delivery-challan")) return "Delivery challans";
   return "Delivery challans";
 }
@@ -144,8 +150,11 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   const isOvfGrnStock = Boolean(ovfIdParam?.trim()) && ovfShipSource === "ovf_grn_stock";
   const isOvfPrefilledLines = isOvfStock || isOvfGrnStock;
   const returnToParam = searchParams.get("returnTo");
+  const fromInventory = searchParams.get("from") === "inventory";
   const returnTo = useMemo(() => safeProcurementReturnTo(returnToParam), [returnToParam]);
-  const backHref = resolveChallanModuleExitHref(returnTo);
+  const backHref = resolveChallanModuleExitHref(
+    returnTo || (fromInventory ? "/procurement/inventory" : null),
+  );
   const backLabel = challanBackLabel(backHref);
   const isNew = !challanId;
   const isLocked = Boolean(challanId) && !embedded;
@@ -158,7 +167,9 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   }, [challanId, recordId]);
 
   const [orderId, setOrderId] = useState<string | null>(orderIdParam);
-  const [challanNumber, setChallanNumber] = useState("");
+  const [challanNumber, setChallanNumber] = useState(() =>
+    isNew ? peekNextDeliveryChallanNumber() : "",
+  );
   const [challanDate, setChallanDate] = useState(todayIso());
   const [customerName, setCustomerName] = useState("");
   const [customerBillTo, setCustomerBillTo] = useState("");
@@ -193,6 +204,9 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [prefillBusy, setPrefillBusy] = useState(Boolean(challanId || orderIdParam || isOvfShip));
+  const [inventoryProductOptions, setInventoryProductOptions] = useState<
+    Array<{ name: string; description: string; rate: string; availableQty: number }>
+  >([]);
   const skipAutoApplyLinesRef = useRef(Boolean(challanId));
   const linesLockedFromSaveRef = useRef(Boolean(challanId));
 
@@ -350,8 +364,76 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     setRemarks(header.remarks);
     setVendorName(vendorLabel);
     setChallanDate(order.document_date || todayIso());
-    const challanSeed = (companyPoNumber || order.document_number || "PO").replace(/\//g, "-").slice(-6);
-    setChallanNumber(`CT/23-24/${challanSeed}`);
+    setChallanNumber((current) => current.trim() || peekNextDeliveryChallanNumber());
+  }
+
+  useEffect(() => {
+    if (!fromInventory || !isNew) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const inventory = await listProcurementInventory();
+        if (cancelled) return;
+        const byName = new Map<
+          string,
+          { name: string; description: string; rate: string; availableQty: number }
+        >();
+        for (const row of inventory) {
+          const name = (row.product_name || "").trim();
+          if (!name) continue;
+          const qty =
+            Number(row.received_quantity) > 0
+              ? Number(row.received_quantity)
+              : 1;
+          const existing = byName.get(name);
+          if (existing) {
+            existing.availableQty += qty;
+            if (!existing.description && row.description?.trim()) {
+              existing.description = row.description.trim();
+            }
+            if (!existing.rate && Number(row.unit_cost) > 0) {
+              existing.rate = String(row.unit_cost);
+            }
+          } else {
+            byName.set(name, {
+              name,
+              description: (row.description || "").trim(),
+              rate: Number(row.unit_cost) > 0 ? String(row.unit_cost) : "",
+              availableQty: qty,
+            });
+          }
+        }
+        setInventoryProductOptions(
+          Array.from(byName.values()).sort((a, b) => a.name.localeCompare(b.name)),
+        );
+      } catch {
+        if (!cancelled) setInventoryProductOptions([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fromInventory, isNew]);
+
+  function applyInventoryProductToLine(lineId: string, productName: string) {
+    const option = inventoryProductOptions.find((row) => row.name === productName);
+    setLines((current) =>
+      current.map((row) => {
+        if (row.id !== lineId) return row;
+        if (!productName) {
+          return { ...row, product: "", itemName: "", rate: "", quantitySent: "" };
+        }
+        return {
+          ...row,
+          product: productName,
+          itemName: option?.description || row.itemName,
+          rate: option?.rate || row.rate,
+          quantitySent:
+            row.quantitySent.trim() ||
+            (option && option.availableQty > 0 ? "1" : row.quantitySent),
+        };
+      }),
+    );
   }
 
   async function loadOrderContext(orderIdValue: string) {
@@ -522,8 +604,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
           setPoDate((ovf.po_date || "").slice(0, 10));
           setVendorName((ovf.vendor_name || ovf.distributor_name || "").trim());
           setRemarks("Not for Sale, Delivery Purpose Only");
-          const seed = (ovf.ovf_no || "OVF").replace(/\//g, "-").slice(-6);
-          setChallanNumber((current) => current || `CT/23-24/${seed}`);
+          setChallanNumber((current) => current.trim() || peekNextDeliveryChallanNumber());
 
           const orderIdForShip = (orderIdParam || ovf.purchase_order_id || "").trim();
           const needsOrder =
@@ -812,7 +893,12 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   }
 
   function onSave() {
-    if (!challanNumber.trim()) {
+    let numberToSave = challanNumber.trim();
+    if (!numberToSave) {
+      numberToSave = peekNextDeliveryChallanNumber();
+      setChallanNumber(numberToSave);
+    }
+    if (!numberToSave) {
       setLoadError("Challan number is required.");
       return;
     }
@@ -836,7 +922,10 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
     }
     setLoadError(null);
     const existingChallan = recordId ? getDeliveryChallan(recordId) : null;
-    const saved = upsertDeliveryChallan(buildSavePayload());
+    const saved = upsertDeliveryChallan({
+      ...buildSavePayload(),
+      challanNumber: numberToSave,
+    });
     syncOvfTimelineForChallan(saved, {
       ovfId: ovfIdParam,
       isCreate: !existingChallan,
@@ -1187,13 +1276,35 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
                 <tr key={row.id} className="border-b border-border/70 align-top">
                   <td className="px-2 py-2 tabular-nums text-muted-foreground">{index + 1}</td>
                   <td className="px-2 py-2">
-                    <Input
-                      value={row.product}
-                      onChange={(e) => setLineField(row.id, "product", e.target.value)}
-                      className="h-8 min-w-[240px]"
-                      placeholder="Product name"
-                      title={row.product || undefined}
-                    />
+                    {fromInventory && isNew ? (
+                      <FinanceSelect
+                        value={row.product}
+                        onChange={(e) => applyInventoryProductToLine(row.id, e.target.value)}
+                        className="h-8 min-w-[240px]"
+                        aria-label={`Inventory product for line ${index + 1}`}
+                        disabled={isLocked || isOvfPrefilledLines}
+                      >
+                        <option value="">Select inventory item…</option>
+                        {inventoryProductOptions.map((opt) => (
+                          <option key={opt.name} value={opt.name}>
+                            {opt.name}
+                            {opt.availableQty > 0 ? ` (${opt.availableQty} avail.)` : ""}
+                          </option>
+                        ))}
+                        {row.product &&
+                        !inventoryProductOptions.some((opt) => opt.name === row.product) ? (
+                          <option value={row.product}>{row.product}</option>
+                        ) : null}
+                      </FinanceSelect>
+                    ) : (
+                      <Input
+                        value={row.product}
+                        onChange={(e) => setLineField(row.id, "product", e.target.value)}
+                        className="h-8 min-w-[240px]"
+                        placeholder="Product name"
+                        title={row.product || undefined}
+                      />
+                    )}
                   </td>
                   <td className="px-2 py-2">
                     <Input

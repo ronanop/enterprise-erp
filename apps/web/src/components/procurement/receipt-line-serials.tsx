@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Upload } from "lucide-react";
 
 import {
-  RECEIPT_SERIAL_NA,
   resizeSerialSlots,
   serialUnitCount,
 } from "@/utils/receipt-serial-numbers";
@@ -13,7 +12,7 @@ import {
   RECEIPT_SERIAL_FILE_ACCEPT,
 } from "@/utils/receipt-serials-excel";
 import { procurementUi } from "@/components/procurement/procurement-ui";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -219,7 +218,6 @@ export function ReceiptSerialsTable({
               <th className={cn(procurementUi.th, "w-16 text-right")}>Unit</th>
               <th className={cn(procurementUi.th, "w-[11.5rem] text-center")}>Stock / Billing / DC</th>
               <th className={procurementUi.th}>Serial number</th>
-              <th className={cn(procurementUi.th, "w-24 text-center")}>NA</th>
               <th className={cn(procurementUi.th, "w-[7.5rem] text-center")}>Import</th>
             </tr>
           </thead>
@@ -237,7 +235,6 @@ export function ReceiptSerialsTable({
 
               return Array.from({ length: rowCount }, (_, index) => {
                 const value = slots[index] ?? "";
-                const isNa = value.trim().toUpperCase() === RECEIPT_SERIAL_NA;
                 const fractionalOnly = unitCount <= 0;
                 const unitKind = kinds[index] ?? "stock";
                 return (
@@ -308,40 +305,16 @@ export function ReceiptSerialsTable({
                         </span>
                       ) : (
                         <Input
-                          className={cn(
-                            "h-8 w-full min-w-[140px] cursor-text font-mono text-xs transition-colors duration-200",
-                            isNa && "text-muted-foreground",
-                          )}
+                          className="h-8 w-full min-w-[140px] cursor-text font-mono text-xs transition-colors duration-200"
                           value={value}
                           disabled={disabled || lineImporting}
-                          placeholder="Enter serial or use NA"
+                          placeholder="Enter serial number"
                           aria-label={`Serial ${index + 1} for ${line.productLabel}`}
                           onFocus={(e) => {
-                            if (isNa) {
-                              setSlot(line.lineId, slots, index, "");
-                            }
                             e.currentTarget.select();
                           }}
                           onChange={(e) => setSlot(line.lineId, slots, index, e.target.value)}
                         />
-                      )}
-                    </td>
-                    <td className={cn(procurementUi.td, "align-middle text-center")}>
-                      {fractionalOnly ? (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant={isNa ? "secondary" : "outline"}
-                          size="sm"
-                          className="h-8 min-w-[3rem] cursor-pointer px-2 text-xs transition-colors duration-200"
-                          disabled={disabled || lineImporting}
-                          onClick={() =>
-                            setSlot(line.lineId, slots, index, isNa ? "" : RECEIPT_SERIAL_NA)
-                          }
-                        >
-                          NA
-                        </Button>
                       )}
                     </td>
                     {index === 0 ? (

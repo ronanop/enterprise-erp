@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ClipboardList, Package, RefreshCw, ShoppingCart, Truck } from "lucide-react";
@@ -14,6 +14,7 @@ import { formatApiError } from "@/services/api-client";
 import {
   getScmOvfPreview,
   listVendorOptions,
+  updateScmItemPlanVendor,
   type ScmOvfPreview,
   type VendorOption,
 } from "@/services/procurement-service";
@@ -51,6 +52,7 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
   const [preview, setPreview] = useState<ScmOvfPreview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [vendorSaveError, setVendorSaveError] = useState<string | null>(null);
   const [delivery, setDelivery] = useState<"together" | "separate">("together");
   const [shipKind, setShipKind] = useState<OvfShipDocumentKind>("delivery_challan");
   const [bookProductName, setBookProductName] = useState<string | null>(null);
@@ -58,6 +60,8 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
   const [vendors, setVendors] = useState<VendorOption[]>([]);
   /** Per-line distributor override keyed by product+index (defaults to fetched CRM name). */
   const [distributorByLine, setDistributorByLine] = useState<Record<string, string>>({});
+  const [savingLineKey, setSavingLineKey] = useState<string | null>(null);
+  const saveSeqRef = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -170,6 +174,42 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
     return (distributorByLine[key] || line.distributor_name || "").trim();
   }
 
+  async function persistDistributor(
+    line: { product_name: string },
+    index: number,
+    label: string,
+  ) {
+    const lineKey = lineDistributorKey(line.product_name, index);
+    const distributorName = isInStockDistributor(label)
+      ? IN_STOCK_DISTRIBUTOR_LABEL
+      : label.trim();
+    if (!distributorName) return;
+
+    setDistributorByLine((current) => ({
+      ...current,
+      [lineKey]: distributorName,
+    }));
+    setVendorSaveError(null);
+    setSavingLineKey(lineKey);
+    const seq = ++saveSeqRef.current;
+    try {
+      const updated = await updateScmItemPlanVendor(ovfId, {
+        product_name: line.product_name,
+        line_index: index,
+        distributor_name: distributorName,
+      });
+      if (seq !== saveSeqRef.current) return;
+      setPreview(updated);
+      seedDistributorSelections(updated, vendors);
+    } catch (err) {
+      if (seq !== saveSeqRef.current) return;
+      setVendorSaveError(formatApiError(err, "Failed to save vendor selection"));
+      void load();
+    } finally {
+      if (seq === saveSeqRef.current) setSavingLineKey(null);
+    }
+  }
+
   /**
    * All products on this OVF that share the same selected distributor and still need a PO.
    * Create PO opens one combined draft for the whole group — not a single line.
@@ -265,6 +305,11 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
           {error}
         </div>
       ) : null}
+      {vendorSaveError ? (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {vendorSaveError}
+        </div>
+      ) : null}
 
       {loading && !preview ? (
         <div className="rounded-lg border border-border bg-card px-4 py-10 text-center text-sm text-muted-foreground">
@@ -337,14 +382,11 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
                               value={vendorName}
                               vendors={vendors}
                               includeInStock
-                              disabled={!canChangeDistributor}
+                              disabled={!canChangeDistributor || savingLineKey === lineKey}
                               placeholder="Select vendor…"
-                              onChange={(label) =>
-                                setDistributorByLine((current) => ({
-                                  ...current,
-                                  [lineKey]: label,
-                                }))
-                              }
+                              onChange={(label) => {
+                                void persistDistributor(line, index, label);
+                              }}
                             />
                           </td>
                           <td className="px-3 py-2">

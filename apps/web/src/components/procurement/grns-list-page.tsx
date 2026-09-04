@@ -222,7 +222,7 @@ export function GrnsListPage() {
     const stamp = new Date().toISOString().slice(0, 10);
     try {
       const exportRows = await buildGrnExportRowsWithBatches(source, vendors);
-      exportGrnsXlsx(`grns-all-${stamp}.xlsx`, exportRows);
+      await exportGrnsXlsx(`grns-all-${stamp}.xlsx`, exportRows);
     } catch (err) {
       setError(formatApiError(err, "Export failed"));
     }

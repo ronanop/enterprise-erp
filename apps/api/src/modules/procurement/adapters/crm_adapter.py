@@ -59,3 +59,20 @@ class ProcurementCrmAdapter:
             additional_charges=additional_charges,
             finance_cost_pct=finance_cost_pct,
         )
+
+    def update_scm_item_plan_vendor(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        product_name: str,
+        line_index: int,
+        distributor_name: str,
+    ) -> Any:
+        return self._ovfs.update_scm_item_plan_vendor(
+            ctx,
+            ovf_id,
+            product_name=product_name,
+            line_index=line_index,
+            distributor_name=distributor_name,
+        )

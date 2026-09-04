@@ -328,7 +328,7 @@ export function ProcurementReportsPage() {
           data.vendors,
           data.inventory,
         );
-        exportGrnsXlsx(`grn-receipt-status-${stampNow()}.xlsx`, rows);
+        await exportGrnsXlsx(`grn-receipt-status-${stampNow()}.xlsx`, rows);
       },
     },
     {

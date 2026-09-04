@@ -18,6 +18,11 @@ import {
   VENDOR_INVOICE_FILE_ACCEPT,
   validateVendorInvoiceFile,
 } from "@/utils/vendor-invoice-file";
+import {
+  resizeSerialSlots,
+  serialUnitCount,
+  validateSerialSlots,
+} from "@/utils/receipt-serial-numbers";
 
 export type ReceiptSerialDialogLine = {
   lineId: string;
@@ -79,10 +84,30 @@ export function ReceiptSerialsDialog({
   const [mounted, setMounted] = useState(false);
   const [invoiceExtracting, setInvoiceExtracting] = useState(false);
   const [invoiceExtractHint, setInvoiceExtractHint] = useState<string | null>(null);
+  const [localSerialError, setLocalSerialError] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!open) setLocalSerialError(null);
+  }, [open]);
+
+  function handleConfirm() {
+    setLocalSerialError(null);
+    for (const row of lines) {
+      const units = serialUnitCount(row.additional);
+      if (units <= 0) continue;
+      const slots = resizeSerialSlots(serialDraft[row.lineId] || [], units);
+      const serialError = validateSerialSlots(slots, row.additional, row.productLabel);
+      if (serialError) {
+        setLocalSerialError(serialError);
+        return;
+      }
+    }
+    onConfirm();
+  }
 
   useEffect(() => {
     if (!open) return;
@@ -343,9 +368,9 @@ export function ReceiptSerialsDialog({
               </div>
             </div>
 
-            {error ? (
+            {error || localSerialError ? (
               <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                {error}
+                {localSerialError || error}
               </div>
             ) : null}
 
@@ -378,7 +403,7 @@ export function ReceiptSerialsDialog({
             type="button"
             className="cursor-pointer transition-colors duration-200"
             disabled={busy || lines.length === 0}
-            onClick={onConfirm}
+            onClick={handleConfirm}
           >
             {busy ? "Saving…" : "Save receipt"}
           </Button>

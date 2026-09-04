@@ -51,8 +51,10 @@ type PoLineDraft = {
   id: string;
   productName: string;
   description: string;
+  hsnSac: string;
   quantity: number;
   unitCost: number;
+  taxPercentage: string;
   fromStock?: boolean;
 };
 
@@ -142,8 +144,10 @@ function newLine(): PoLineDraft {
     id: `line-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     productName: "",
     description: "",
+    hsnSac: "",
     quantity: 1,
     unitCost: 0,
+    taxPercentage: "18",
   };
 }
 
@@ -191,14 +195,11 @@ export function ProcurementManualCreatePoPage() {
     new Date().toISOString().slice(0, 10),
   );
   const [paymentTerms, setPaymentTerms] = useState("Net 30 days");
-  const [approvedByName, setApprovedByName] = useState("");
   const [nextPo, setNextPo] = useState("");
   const [peekBusy, setPeekBusy] = useState(false);
   const [peekError, setPeekError] = useState<string | null>(null);
 
   const [freightAmount, setFreightAmount] = useState("0");
-  const [financeAmount, setFinanceAmount] = useState("0");
-  const [taxPercentage, setTaxPercentage] = useState("18");
   const [freightTaxable, setFreightTaxable] = useState(false);
 
   const [vendorDialogOpen, setVendorDialogOpen] = useState(false);
@@ -235,6 +236,50 @@ export function ProcurementManualCreatePoPage() {
     [stockRows],
   );
 
+  const selectedVendor = useMemo(
+    () => vendors.find((v) => v.id === vendorId) ?? null,
+    [vendors, vendorId],
+  );
+
+  const selectedVendorEntry = useMemo(() => {
+    if (!selectedVendor) return null;
+    const entries = selectedVendor.addressEntries || [];
+    return (
+      entries.find((e) => e.address.trim() || e.gstNumber.trim()) ||
+      entries[0] ||
+      null
+    );
+  }, [selectedVendor]);
+
+  const vendorBillingAddressText = useMemo(() => {
+    if (!selectedVendor) return "";
+    const entries = (selectedVendor.addressEntries || [])
+      .map((e) => e.address.trim())
+      .filter(Boolean);
+    if (entries.length > 0) return entries.join("\n\n");
+    return (selectedVendor.address || "").trim();
+  }, [selectedVendor]);
+
+  const vendorGstNumber = useMemo(() => {
+    if (!selectedVendor) return "";
+    return (
+      selectedVendorEntry?.gstNumber?.trim() ||
+      selectedVendor.taxNumber?.trim() ||
+      ""
+    );
+  }, [selectedVendor, selectedVendorEntry]);
+
+  const vendorSourceOfSupply = useMemo(
+    () => selectedVendorEntry?.sourceOfSupply?.trim() || "",
+    [selectedVendorEntry],
+  );
+
+  const vendorDestinationOfSupply = useMemo(() => {
+    const fromVendor = selectedVendorEntry?.destinationOfSupply?.trim() || "";
+    if (fromVendor) return fromVendor;
+    return companyPoLocationByEntityCode(entityCode).gstState;
+  }, [selectedVendorEntry, entityCode]);
+
   const allStockSelected =
     stockRows.length > 0 &&
     stockRows.every((row, index) => selectedKeys.has(stockRowKey(row, index)));
@@ -256,8 +301,10 @@ export function ProcurementManualCreatePoPage() {
         id: `stock-line-${idx}-${productName}`,
         productName,
         description: "From inventory stock",
+        hsnSac: "",
         quantity: data.quantity,
         unitCost: data.unitCost,
+        taxPercentage: "18",
         fromStock: true,
       }),
     );
@@ -420,16 +467,29 @@ export function ProcurementManualCreatePoPage() {
     [poLines],
   );
 
+  const itemsGst = useMemo(
+    () =>
+      poLines.reduce((sum, line) => {
+        if (!(line.productName || "").trim()) return sum;
+        const amount = Math.max(0, line.quantity) * Math.max(0, line.unitCost);
+        return sum + (amount * toNumber(line.taxPercentage)) / 100;
+      }, 0),
+    [poLines],
+  );
+
   const freight = toNumber(freightAmount);
-  const finance = toNumber(financeAmount);
-  const taxPct = toNumber(taxPercentage);
-  const taxableBase = freightTaxable ? itemsSubtotal + freight : itemsSubtotal;
-  const gstAmount = (taxableBase * taxPct) / 100;
-  const grandTotal = itemsSubtotal + freight + finance + gstAmount;
+  const freightGst = freightTaxable ? (freight * 18) / 100 : 0;
+  const gstAmount = itemsGst + freightGst;
+  const grandTotal = itemsSubtotal + freight + gstAmount;
 
   function updatePoLine(
     id: string,
-    patch: Partial<Pick<PoLineDraft, "productName" | "description" | "quantity" | "unitCost">>,
+    patch: Partial<
+      Pick<
+        PoLineDraft,
+        "productName" | "description" | "hsnSac" | "quantity" | "unitCost" | "taxPercentage"
+      >
+    >,
   ) {
     setPoLines((current) =>
       current.map((line) => (line.id === id ? { ...line, ...patch } : line)),
@@ -513,9 +573,13 @@ export function ProcurementManualCreatePoPage() {
       const product = (line.productName || "").trim();
       if (!product) continue;
       const description = (line.description || "").trim();
-      const productName = description
+      const hsn = (line.hsnSac || "").trim();
+      let productName = description
         ? `${product} — ${description}`.slice(0, 255)
         : product;
+      if (hsn) {
+        productName = `${productName} | HSN ${hsn}`.slice(0, 255);
+      }
 
       if (line.fromStock) {
         const available = unitsByProduct.get(product) ?? [];
@@ -563,7 +627,7 @@ export function ProcurementManualCreatePoPage() {
         entity_code: entityCode,
         document_date: documentDate,
         payment_terms: paymentTerms,
-        approved_by_name: approvedByName,
+        approved_by_name: null,
         lines,
         stock_unit_ids: stockUnitIds,
         import_line_ids: importLineIds,
@@ -608,21 +672,9 @@ export function ProcurementManualCreatePoPage() {
 
       <section className="space-y-3 rounded-lg border border-border bg-card p-4">
         <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Vendor &amp; references
+          References
         </h2>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <FinanceField label="Entity">
-            <FinanceSelect
-              value={entityCode}
-              onChange={(e) => setEntityCode(e.target.value)}
-              disabled={busy || loading}
-            >
-              {COMPANY_PO_LOCATIONS.map((opt) => (
-                <option key={opt.entityCode} value={opt.entityCode}>{opt.label}</option>
-              ))}
-            </FinanceSelect>
-          </FinanceField>
-
           <FinanceField label="PO number (auto)" error={peekError ?? undefined}>
             <Input
               readOnly
@@ -641,7 +693,23 @@ export function ProcurementManualCreatePoPage() {
             />
           </FinanceField>
 
-          <FinanceField label="Vendor">
+          <FinanceField label="Payment terms">
+            <Input
+              className="h-8"
+              value={paymentTerms}
+              disabled={busy}
+              onChange={(e) => setPaymentTerms(e.target.value)}
+            />
+          </FinanceField>
+        </div>
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-border bg-card p-4">
+        <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Vendor
+        </h2>
+        <div className="space-y-4">
+          <FinanceField label="Vendor" className="max-w-xl">
             <div className="flex gap-2">
               <FinanceSelect
                 value={vendorId}
@@ -668,24 +736,45 @@ export function ProcurementManualCreatePoPage() {
             </div>
           </FinanceField>
 
-          <FinanceField label="Payment terms">
-            <Input
-              className="h-8"
-              value={paymentTerms}
-              disabled={busy}
-              onChange={(e) => setPaymentTerms(e.target.value)}
-            />
-          </FinanceField>
-
-          <FinanceField label="Approved by">
-            <Input
-              className="h-8"
-              value={approvedByName}
-              disabled={busy}
-              placeholder="Name of approver"
-              onChange={(e) => setApprovedByName(e.target.value)}
-            />
-          </FinanceField>
+          {vendorId ? (
+            <div className="space-y-4">
+              <FinanceField label="Vendor billing address">
+                <FinanceTextarea
+                  value={vendorBillingAddressText}
+                  readOnly
+                  rows={5}
+                  placeholder="No address on file"
+                  className="min-h-[7rem] cursor-default resize-none overflow-y-auto bg-muted/30 font-medium text-foreground"
+                />
+              </FinanceField>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <FinanceField label="GST number">
+                  <Input
+                    value={vendorGstNumber || "—"}
+                    readOnly
+                    className="h-8 cursor-default bg-muted/30 font-medium text-foreground"
+                    aria-label="Vendor GST number"
+                  />
+                </FinanceField>
+                <FinanceField label="Source of supply">
+                  <Input
+                    value={vendorSourceOfSupply || "—"}
+                    readOnly
+                    className="h-8 cursor-default bg-muted/30 font-medium text-foreground"
+                    aria-label="Source of supply"
+                  />
+                </FinanceField>
+                <FinanceField label="Destination of supply">
+                  <Input
+                    value={vendorDestinationOfSupply || "—"}
+                    readOnly
+                    className="h-8 cursor-default bg-muted/30 font-medium text-foreground"
+                    aria-label="Destination of supply"
+                  />
+                </FinanceField>
+              </div>
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -693,6 +782,19 @@ export function ProcurementManualCreatePoPage() {
         <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           Our company &amp; addresses
         </h2>
+        <div className="mb-4 max-w-md">
+          <FinanceField label="Entity">
+            <FinanceSelect
+              value={entityCode}
+              onChange={(e) => setEntityCode(e.target.value)}
+              disabled={busy || loading}
+            >
+              {COMPANY_PO_LOCATIONS.map((opt) => (
+                <option key={opt.entityCode} value={opt.entityCode}>{opt.label}</option>
+              ))}
+            </FinanceSelect>
+          </FinanceField>
+        </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-x-6">
           <FinanceField label="Billing address">
             <FinanceTextarea
@@ -798,19 +900,6 @@ export function ProcurementManualCreatePoPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              Tax %
-              <FinanceSelect
-                value={taxPercentage}
-                onChange={(e) => setTaxPercentage(e.target.value)}
-                disabled={busy}
-                className="h-8 w-[88px]"
-              >
-                {TAX_OPTIONS.map((pct) => (
-                  <option key={pct} value={pct}>{pct}%</option>
-                ))}
-              </FinanceSelect>
-            </label>
             <Button
               type="button"
               variant="outline"
@@ -825,13 +914,15 @@ export function ProcurementManualCreatePoPage() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px] text-left text-sm">
+          <table className="w-full min-w-[1100px] text-left text-sm">
             <thead className="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-3 py-2.5">Product</th>
                 <th className="px-3 py-2.5">Description</th>
+                <th className="px-3 py-2.5">HSN/SAC</th>
                 <th className="px-3 py-2.5 text-right">Qty</th>
                 <th className="px-3 py-2.5 text-right">Rate (INR)</th>
+                <th className="px-3 py-2.5 text-right">Tax %</th>
                 <th className="px-3 py-2.5 text-right">Amount</th>
                 <th className="px-3 py-2.5 text-right"> </th>
               </tr>
@@ -862,6 +953,17 @@ export function ProcurementManualCreatePoPage() {
                       }
                     />
                   </td>
+                  <td className="px-3 py-2">
+                    <Input
+                      className="h-8 w-28"
+                      value={line.hsnSac}
+                      disabled={busy}
+                      placeholder="HSN/SAC"
+                      onChange={(e) =>
+                        updatePoLine(line.id, { hsnSac: e.target.value })
+                      }
+                    />
+                  </td>
                   <td className="px-3 py-2 text-right">
                     <Input
                       className="ml-auto h-8 w-20 text-right tabular-nums"
@@ -885,6 +987,20 @@ export function ProcurementManualCreatePoPage() {
                         updatePoLine(line.id, { unitCost: toNumber(e.target.value) })
                       }
                     />
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <FinanceSelect
+                      value={line.taxPercentage}
+                      onChange={(e) =>
+                        updatePoLine(line.id, { taxPercentage: e.target.value })
+                      }
+                      disabled={busy}
+                      className="ml-auto h-8 w-[88px]"
+                    >
+                      {TAX_OPTIONS.map((pct) => (
+                        <option key={pct} value={pct}>{pct}%</option>
+                      ))}
+                    </FinanceSelect>
                   </td>
                   <td className="px-3 py-2 text-right font-mono tabular-nums">
                     {(line.quantity * line.unitCost).toFixed(2)}
@@ -912,7 +1028,7 @@ export function ProcurementManualCreatePoPage() {
       <section className="grid gap-4 rounded-lg border border-border bg-card p-4 lg:grid-cols-2">
         <div className="space-y-3">
           <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Freight &amp; finance
+            Freight
           </h2>
           <div className="grid gap-3 sm:grid-cols-2">
             <FinanceField label="Freight (INR)">
@@ -924,15 +1040,6 @@ export function ProcurementManualCreatePoPage() {
                 onChange={(e) => setFreightAmount(e.target.value)}
               />
             </FinanceField>
-            <FinanceField label="Finance cost (INR)">
-              <Input
-                className="h-8 tabular-nums"
-                inputMode="decimal"
-                value={financeAmount}
-                disabled={busy}
-                onChange={(e) => setFinanceAmount(e.target.value)}
-              />
-            </FinanceField>
           </div>
           <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
             <input
@@ -942,7 +1049,7 @@ export function ProcurementManualCreatePoPage() {
               disabled={busy}
               onChange={(e) => setFreightTaxable(e.target.checked)}
             />
-            Apply GST on freight (items + freight taxable base)
+            Apply GST on freight (18% when taxable)
           </label>
         </div>
         <div className="space-y-2 rounded-md border border-border/60 bg-muted/15 p-4 text-sm">
@@ -955,11 +1062,7 @@ export function ProcurementManualCreatePoPage() {
             <span>{freight.toFixed(2)}</span>
           </div>
           <div className="flex justify-between tabular-nums">
-            <span className="text-muted-foreground">Finance</span>
-            <span>{finance.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between tabular-nums">
-            <span className="text-muted-foreground">GST ({taxPct}%)</span>
+            <span className="text-muted-foreground">GST</span>
             <span>{gstAmount.toFixed(2)}</span>
           </div>
           <div className="flex justify-between border-t border-border/60 pt-2 text-base font-semibold tabular-nums">

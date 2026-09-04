@@ -1021,6 +1021,70 @@ class OvfService:
         )
         return row
 
+    def update_scm_item_plan_vendor(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        product_name: str,
+        line_index: int,
+        distributor_name: str,
+    ) -> CrmOvfLine:
+        """SCM item-plan vendor selection — updates CRM vendor line distributor_name.
+
+        Allowed after share-to-SCM even when the OVF blueprint is locked.
+        """
+        ovf = self.get(ctx, ovf_id)
+        if not ovf.shared_to_scm:
+            raise ConflictException("OVF has not been shared to SCM")
+        if bool(getattr(ovf, "scm_on_hold", False)):
+            raise ConflictException(
+                "Distributor cannot be changed while the OVF is on SCM hold. Unhold first."
+            )
+
+        handoff = self.get_scm_handoff(ctx, ovf_id)
+        vendor_lines = list(handoff.get("vendor_lines") or [])
+        if line_index < 0 or line_index >= len(vendor_lines):
+            raise NotFoundException("OVF vendor line not found for item plan index")
+
+        matched = vendor_lines[line_index]
+        needle = " ".join((product_name or "").strip().lower().split())
+        matched_name = " ".join(str(matched.get("product_name") or "").strip().lower().split())
+        if needle and matched_name and needle != matched_name:
+            # Prefer exact product+index; fall back to first matching product name.
+            fallback = next(
+                (
+                    ln
+                    for ln in vendor_lines
+                    if " ".join(str(ln.get("product_name") or "").strip().lower().split()) == needle
+                ),
+                None,
+            )
+            if fallback is None:
+                raise ConflictException(
+                    f"Item plan line product '{product_name}' does not match vendor line at index {line_index}"
+                )
+            matched = fallback
+
+        line_id = matched.get("line_id")
+        if line_id is None:
+            raise NotFoundException("OVF vendor line id missing")
+
+        dist = (distributor_name or "").strip() or None
+        row = self._lines.update(ctx, UUID(str(line_id)), distributor_name=dist)
+        if row is None:
+            raise NotFoundException("OVF line not found")
+        self._recompute_margin(ctx, ovf_id)
+        self._log(
+            ctx,
+            ovf,
+            ovf.blueprint_state,
+            ovf.blueprint_state,
+            "scm_update_item_plan_vendor",
+            f"line_id={line_id}, product={product_name}, distributor_name={dist}",
+        )
+        return row
+
     def mark_deal_won(self, ctx: TenantContext, ovf_id: UUID, *, deal_won_amount: Decimal | float | str | None) -> CrmOvf:
         ovf = self.get(ctx, ovf_id)
         sales_blueprint_engine.assert_not_locked(ovf)

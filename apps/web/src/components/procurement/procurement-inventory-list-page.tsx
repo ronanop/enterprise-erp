@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Boxes, IndianRupee, Package, Plus, RefreshCw, Upload } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Boxes, IndianRupee, Package, Plus, RefreshCw, Truck, Upload } from "lucide-react";
 
 import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
 import { ProcurementInventoryCharts } from "@/components/procurement/procurement-inventory-charts";
@@ -34,13 +35,13 @@ import {
 import {
   buildProcurementInventoryStockSummary,
   groupGrnStockByProduct,
-  inventoryAddedByLabel,
   isInventoryLedgerRow,
 } from "@/utils/procurement-inventory-report";
 import { InventoryProductDetailDialog } from "@/components/procurement/inventory-product-detail-dialog";
 import { textTokenMatch } from "@/utils/procurement-search";
 
 export function ProcurementInventoryListPage() {
+  const router = useRouter();
   const cachedOnMount = peekProcurementInventoryFromCache();
   const [rows, setRows] = useState<ProcurementInventoryRow[]>(() => cachedOnMount ?? []);
   const [vendors, setVendors] = useState<Record<string, VendorOption>>({});
@@ -211,6 +212,17 @@ export function ProcurementInventoryListPage() {
               variant="outline"
               size="sm"
               className="cursor-pointer transition-colors duration-200"
+              disabled={loading}
+              onClick={() => router.push("/procurement/delivery-challan/new?from=inventory")}
+            >
+              <Truck className="mr-1.5 size-3.5" />
+              Delivery challan
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="cursor-pointer transition-colors duration-200"
               disabled={loading || refreshing}
               onClick={() => void load(true)}
             >
@@ -301,7 +313,6 @@ export function ProcurementInventoryListPage() {
                         <th className={cn(procurementUi.th, "px-4 text-right")}>Vendor price</th>
                         <th className={cn(procurementUi.th, "px-4")}>Serial number</th>
                         <th className={cn(procurementUi.th, "px-4")}>GRN number</th>
-                        <th className={cn(procurementUi.th, "px-4")}>Source</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -368,27 +379,6 @@ export function ProcurementInventoryListPage() {
                                 Reversed
                               </span>
                             ) : null}
-                          </td>
-                          <td className={cn(procurementUi.td, "px-4")}>
-                            <span
-                              className={cn(
-                                "inline-flex shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                                line.addedBy === "po"
-                                  ? "border-sky-200 bg-sky-50 text-sky-800"
-                                  : line.addedBy === "manual"
-                                    ? "border-border/80 bg-muted/60 text-muted-foreground"
-                                    : "border-amber-200 bg-amber-50 text-amber-900",
-                              )}
-                              title={
-                                line.addedBy === "po"
-                                  ? "Received via purchase order / GRN"
-                                  : line.addedBy === "manual"
-                                    ? "Added via Add stock or Excel import"
-                                    : "Includes both PO/GRN and manual stock"
-                              }
-                            >
-                              {inventoryAddedByLabel(line.addedBy)}
-                            </span>
                           </td>
                         </tr>
                       ))}

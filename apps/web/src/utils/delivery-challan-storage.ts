@@ -245,3 +245,25 @@ export function emptyChallanLine(): DeliveryChallanLine {
   };
 }
 
+/** Extract trailing numeric sequence from known challan number patterns. */
+function challanNumberSequence(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^(?:DC\/\d{4}|CT\/\d{2}-\d{2})\/(\d+)$/i);
+  if (match) return Number.parseInt(match[1], 10);
+  const trailing = trimmed.match(/\/(\d+)$/);
+  if (trailing) return Number.parseInt(trailing[1], 10);
+  return null;
+}
+
+/** Next delivery challan number in +1 series (localStorage-backed). */
+export function peekNextDeliveryChallanNumber(now = new Date()): string {
+  const year = now.getFullYear();
+  let maxSeq = 0;
+  for (const row of readAll()) {
+    const seq = challanNumberSequence(row.challanNumber || "");
+    if (seq != null && Number.isFinite(seq) && seq > maxSeq) maxSeq = seq;
+  }
+  return `DC/${year}/${maxSeq + 1}`;
+}
+

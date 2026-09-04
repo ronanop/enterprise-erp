@@ -46,10 +46,27 @@ import { deriveGrnStatus, filterOrdersByPoBucket, parsePoOverviewBucket, countPo
 
 type StatusFilter = "all" | "draft" | "open" | "partial" | "closed" | "cancelled";
 
-function orderCustomerOrApproverLabel(order: ProcOrder): string {
-  const customer = (order.customer_name || "").trim();
-  if (customer) return customer;
-  return (order.approved_by_name || "").trim();
+function formatPoStatusLabel(status: string | null | undefined): string {
+  const raw = (status || "").trim().toLowerCase();
+  if (!raw) return "—";
+  if (raw === "draft") return "Draft";
+  if (raw === "cancelled" || raw === "canceled") return "Cancelled";
+  if (
+    raw === "issued" ||
+    raw === "approved" ||
+    raw === "open" ||
+    raw === "sent" ||
+    raw === "submitted"
+  ) {
+    return "Approved";
+  }
+  if (raw === "partial" || raw === "partially_received") return "Partial";
+  if (raw === "closed" || raw === "received" || raw === "completed") return "Closed";
+  return raw
+    .split(/[_\s]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function parseStatusFilter(value: string | null): StatusFilter {
@@ -385,7 +402,7 @@ export function OrdersListPage() {
                 <th className="px-3 py-3.5 font-bold">Company PO number</th>
                 <th className="px-3 py-3.5 font-bold">PO date</th>
                 <th className="px-3 py-3.5 font-bold">Vendor</th>
-                <th className="px-3 py-3.5 font-bold">Customer</th>
+                <th className="px-3 py-3.5 font-bold">Status</th>
                 <th className="px-3 py-3.5 font-bold">Amount</th>
                 <th className="px-3 py-3.5 font-bold">GRN</th>
               </tr>
@@ -426,7 +443,7 @@ export function OrdersListPage() {
                   <td className="px-3 py-3.5">
                     {vendors[row.vendor_id]?.label || row.vendor_id.slice(0, 8)}
                   </td>
-                  <td className="px-3 py-3.5">{orderCustomerOrApproverLabel(row) || "—"}</td>
+                  <td className="px-3 py-3.5">{formatPoStatusLabel(row.status)}</td>
                   <td className="px-3 py-3.5 tabular-nums">{formatInr(row.total_amount)}</td>
                   <td className="px-3 py-3.5">
                     <Badge variant={grnBadgeVariant(row.grn_status ?? "pending")} className="uppercase">

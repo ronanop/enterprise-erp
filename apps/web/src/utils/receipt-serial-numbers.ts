@@ -14,12 +14,9 @@ export function resizeSerialSlots(prev: string[], count: number): string[] {
   return next;
 }
 
-/** Resize slots; empty values default to NA for new receipt entry. */
+/** Resize slots; empty values stay empty (serial entry is mandatory). */
 export function receiptSerialSlotsWithNaDefaults(prev: string[], count: number): string[] {
-  return resizeSerialSlots(prev, count).map((slot) => {
-    const v = slot.trim();
-    return v ? slot : RECEIPT_SERIAL_NA;
-  });
+  return resizeSerialSlots(prev, count);
 }
 
 export function validateSerialSlots(
@@ -35,16 +32,13 @@ export function validateSerialSlots(
   }
   for (let i = 0; i < units; i += 1) {
     const value = (slots[i] ?? "").trim();
-    if (!value) {
-      return `Serial ${i + 1} for ${productLabel} is required (type a serial or choose NA).`;
+    if (!value || value.toUpperCase() === RECEIPT_SERIAL_NA) {
+      return `Serial ${i + 1} for ${productLabel} is required.`;
     }
   }
   return null;
 }
 
 export function serialSlotsForSave(slots: string[]): string[] {
-  return slots.map((s) => {
-    const v = s.trim();
-    return v.toUpperCase() === RECEIPT_SERIAL_NA ? RECEIPT_SERIAL_NA : v;
-  });
+  return slots.map((s) => s.trim());
 }

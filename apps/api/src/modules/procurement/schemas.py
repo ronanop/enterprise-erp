@@ -655,6 +655,14 @@ class ScmUpdateOvfChargesRequest(BaseModel):
     finance_cost_pct: float = 0
 
 
+class ScmItemPlanVendorUpdateRequest(BaseModel):
+    """Update distributor_name on a CRM OVF vendor line from SCM item plan."""
+
+    product_name: str = Field(min_length=1, max_length=255)
+    line_index: int = Field(ge=0)
+    distributor_name: str = Field(min_length=1, max_length=255)
+
+
 class ScmLineReceiptUpdateRequest(BaseModel):
     quantity_received: float
     grn_status: str | None = None  # pending | partial | delivered
@@ -697,6 +705,8 @@ class ScmVendorPoResponse(BaseModel):
     source_document_type: str | None = None
     source_document_id: UUID | None = None
     company_po_number: str | None = None
+    customer_name: str | None = None
+    customer_po_number: str | None = None
     vendor_total: float = 0
     customer_total: float = 0
     margin_amount: float = 0
@@ -811,6 +821,8 @@ class ScmReceiptBatchResponse(BaseModel):
     sequence: int
     grn_number: str
     receipt_at: datetime | None = None
+    created_by: UUID | None = None
+    created_by_name: str | None = None
     vendor_invoice_number: str | None = None
     vendor_invoice_date: date | None = None
     vendor_invoice_quantity: float | None = None

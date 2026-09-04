@@ -23,6 +23,7 @@ from modules.procurement.schemas import (
     ScmInventoryDescriptionUpdate,
     ScmInventoryImportRequest,
     ScmInventorySerialUpdate,
+    ScmItemPlanVendorUpdateRequest,
     ScmLineReceiptUpdateRequest,
     ScmNextCompanyPoResponse,
     ScmOvfHoldRequest,
@@ -307,6 +308,30 @@ def update_scm_ovf_charges(
     db.commit()
     return APIResponse(
         message="OVF freight and finance updated",
+        data=ScmOvfPreviewResponse.model_validate(row),
+    )
+
+
+@scm_router.patch(
+    "/ovf/{ovf_id}/item-plan-vendor",
+    response_model=APIResponse[ScmOvfPreviewResponse],
+)
+def update_scm_item_plan_vendor(
+    ovf_id: UUID,
+    body: ScmItemPlanVendorUpdateRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:create"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[ScmOvfPreviewResponse]:
+    row = ScmHandoffService(db).update_item_plan_vendor(
+        ctx,
+        ovf_id,
+        product_name=body.product_name,
+        line_index=body.line_index,
+        distributor_name=body.distributor_name,
+    )
+    db.commit()
+    return APIResponse(
+        message="Item plan vendor updated",
         data=ScmOvfPreviewResponse.model_validate(row),
     )
 

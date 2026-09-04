@@ -489,6 +489,8 @@ export type ScmVendorPo = {
   source_document_type: string | null;
   source_document_id: string | null;
   company_po_number?: string | null;
+  customer_name?: string | null;
+  customer_po_number?: string | null;
   vendor_total?: number;
   customer_total?: number;
   margin_amount?: number;
@@ -720,6 +722,22 @@ export async function updateScmOvfCharges(
   return unwrapData(res);
 }
 
+export async function updateScmItemPlanVendor(
+  ovfId: string,
+  body: {
+    product_name: string;
+    line_index: number;
+    distributor_name: string;
+  },
+): Promise<ScmOvfPreview> {
+  const res = await apiClient<ScmOvfPreview>(`${SCM_API}/ovf/${ovfId}/item-plan-vendor`, {
+    method: "PATCH",
+    body,
+  });
+  invalidateScmOvfPreviewCache(ovfId);
+  return unwrapData(res);
+}
+
 export async function createPoFromOvf(
   ovfId: string,
   body: {
@@ -919,6 +937,8 @@ export type ScmReceiptBatch = {
   sequence: number;
   grn_number: string;
   receipt_at: string | null;
+  created_by?: string | null;
+  created_by_name?: string | null;
   vendor_invoice_number?: string | null;
   vendor_invoice_date?: string | null;
   vendor_invoice_quantity?: number | null;
