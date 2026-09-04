@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 _public_bearer = HTTPBearer(
@@ -14,7 +14,7 @@ _public_bearer = HTTPBearer(
 def optional_authentication(
     _credentials: Annotated[
         HTTPAuthorizationCredentials | None,
-        Depends(_public_bearer),
+        Security(_public_bearer),
     ] = None,
 ) -> None:
     """Mark a route as intentionally public while satisfying auth dependency checks."""

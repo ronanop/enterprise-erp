@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import io
 from datetime import date
 from uuid import UUID
@@ -32,19 +31,28 @@ REPORT_TYPES = {
 
 
 def _csv_cell(value: object) -> str:
+    """Neutralize spreadsheet formula injection (CWE-1236)."""
     text = "" if value is None else str(value)
     if text[:1] in {"=", "+", "-", "@", "\t", "\r"}:
         return f"'{text}"
     return text
 
 
+def _csv_escape_field(value: object) -> str:
+    text = _csv_cell(value).replace("\r\n", "\n").replace("\r", "\n")
+    if any(ch in text for ch in (",", '"', "\n")):
+        return '"' + text.replace('"', '""') + '"'
+    return text
+
+
 def _csv_bytes(headers: list[str], rows: list[list]) -> bytes:
     buf = io.StringIO()
     buf.write("\ufeff")  # Excel-friendly UTF-8 BOM
-    writer = csv.writer(buf)
-    writer.writerow([_csv_cell(h) for h in headers])
+    buf.write(",".join(_csv_escape_field(h) for h in headers))
+    buf.write("\n")
     for row in rows:
-        writer.writerow([_csv_cell(cell) for cell in row])
+        buf.write(",".join(_csv_escape_field(cell) for cell in row))
+        buf.write("\n")
     return buf.getvalue().encode("utf-8")
 
 

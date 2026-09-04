@@ -239,9 +239,24 @@ function formatBytes(bytes) {
  * Main validation function
  */
 function validateAsset(assetPath) {
+  let resolvedAsset;
+  try {
+    resolvedAsset = resolveWithinRoot(process.cwd(), assetPath);
+  } catch {
+    return {
+      path: assetPath,
+      filename: path.basename(assetPath),
+      valid: false,
+      issues: [`File path is not allowed: ${assetPath}`],
+      warnings: [],
+      suggestions: [],
+      checks: {},
+    };
+  }
+
   const results = {
-    path: assetPath,
-    filename: path.basename(assetPath),
+    path: resolvedAsset,
+    filename: path.basename(resolvedAsset),
     valid: true,
     issues: [],
     warnings: [],
@@ -250,13 +265,13 @@ function validateAsset(assetPath) {
   };
 
   // Check file exists
-  if (!fs.existsSync(assetPath)) {
+  if (!fs.existsSync(resolvedAsset)) {
     results.valid = false;
     results.issues.push(`File not found: ${assetPath}`);
     return results;
   }
 
-  const filename = path.basename(assetPath);
+  const filename = path.basename(resolvedAsset);
   const extension = path.extname(filename).slice(1).toLowerCase();
 
   // 1. Validate filename
@@ -275,7 +290,7 @@ function validateAsset(assetPath) {
   }
 
   // 3. Validate file size
-  const sizeResult = validateFileSize(assetPath, extension);
+  const sizeResult = validateFileSize(resolvedAsset, extension);
   results.checks.fileSize = sizeResult;
   if (!sizeResult.valid) {
     results.issues.push(...sizeResult.issues);

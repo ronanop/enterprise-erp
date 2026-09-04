@@ -96,15 +96,21 @@ const skipPatterns = [
 /**
  * Get all files recursively
  */
-function getFiles(dir, ignore, files = []) {
+function getFiles(dir, ignore, files = [], rootDir = dir) {
+  const safeRoot = path.resolve(rootDir);
   const entries = fs.readdirSync(dir, { withFileTypes: true });
 
   for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
+    let fullPath;
+    try {
+      fullPath = resolveWithinRoot(safeRoot, path.join(dir, entry.name));
+    } catch {
+      continue;
+    }
 
     if (entry.isDirectory()) {
       if (!ignore.includes(entry.name)) {
-        getFiles(fullPath, ignore, files);
+        getFiles(fullPath, ignore, files, safeRoot);
       }
     } else if (entry.isFile()) {
       const ext = path.extname(entry.name);
@@ -128,7 +134,8 @@ function shouldSkip(filePath) {
  * Scan file for violations
  */
 function scanFile(filePath) {
-  const content = fs.readFileSync(filePath, 'utf-8');
+  const safePath = resolveWithinRoot(process.cwd(), filePath);
+  const content = fs.readFileSync(safePath, 'utf-8');
   const lines = content.split('\n');
   const violations = [];
 

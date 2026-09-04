@@ -37,18 +37,12 @@ function extractHexColors(text) {
  * Parse brand guidelines for color palette
  */
 function parseBrandColors(guidelinesPath) {
-  let resolvedPath;
+  let content;
   try {
-    resolvedPath = resolveWithinRoot(process.cwd(), guidelinesPath);
+    content = readFileWithinRoot(process.cwd(), guidelinesPath);
   } catch {
     return null;
   }
-
-  if (!fs.existsSync(resolvedPath)) {
-    return null;
-  }
-
-  const content = fs.readFileSync(resolvedPath, "utf-8");
 
   const palette = {
     primary: [],

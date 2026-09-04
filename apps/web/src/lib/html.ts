@@ -17,6 +17,18 @@ export function safeAppHref(href: string): string {
   return trimmed;
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Build a same-origin detail href from a validated UUID segment. */
+export function safeEntityHref(basePath: string, id: string): string {
+  const base = basePath.startsWith("/") ? basePath.replace(/\/$/, "") : `/${basePath.replace(/\/$/, "")}`;
+  if (!UUID_RE.test(id)) {
+    return "#";
+  }
+  return safeAppHref(`${base}/${id}`);
+}
+
 /** Open a print preview without injecting a <script> tag into the document. */
 export function openPrintDocument(html: string, width = 1200, height = 800): void {
   const win = window.open("", "_blank", `noopener,noreferrer,width=${width},height=${height}`);

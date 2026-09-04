@@ -49,6 +49,7 @@ def microsoft_config(
 def microsoft_login(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
+    _: Annotated[None, Depends(optional_authentication)],
     return_to: Annotated[str, Query(max_length=200)] = "/organization",
 ) -> RedirectResponse:
     if not MicrosoftOAuthService.is_enabled():
@@ -72,6 +73,7 @@ def microsoft_login(
 def microsoft_callback(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
+    _: Annotated[None, Depends(optional_authentication)],
     code: Annotated[str, Query(min_length=8)],
     state: Annotated[str, Query(min_length=8)],
 ) -> RedirectResponse:

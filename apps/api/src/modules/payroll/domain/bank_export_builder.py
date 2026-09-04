@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import csv
-import io
 from decimal import Decimal
 
 
@@ -14,39 +12,47 @@ def _clean_account(value: str | None) -> str:
 
 
 def _csv_cell(value: object) -> str:
+    """Neutralize spreadsheet formula injection (CWE-1236)."""
     text = "" if value is None else str(value)
     if text[:1] in {"=", "+", "-", "@", "\t", "\r"}:
         return f"'{text}"
     return text
 
 
+def _csv_escape_field(value: object) -> str:
+    text = _csv_cell(value).replace("\r\n", "\n").replace("\r", "\n")
+    if any(ch in text for ch in (",", '"', "\n")):
+        return '"' + text.replace('"', '""') + '"'
+    return text
+
+
 def build_bank_export_csv(rows: list[dict]) -> str:
     """Each row: employee_code, employee_name, account_number, ifsc, bank_name, net_pay."""
-    buf = io.StringIO()
-    writer = csv.writer(buf, lineterminator="\n")
-    writer.writerow(
-        [
-            _csv_cell("employee_code"),
-            _csv_cell("employee_name"),
-            _csv_cell("account_number"),
-            _csv_cell("ifsc"),
-            _csv_cell("bank_name"),
-            _csv_cell("account_holder"),
-            _csv_cell("net_pay"),
-            _csv_cell("payroll_run_line_id"),
-        ]
-    )
+    headers = [
+        "employee_code",
+        "employee_name",
+        "account_number",
+        "ifsc",
+        "bank_name",
+        "account_holder",
+        "net_pay",
+        "payroll_run_line_id",
+    ]
+    lines = [",".join(_csv_escape_field(h) for h in headers)]
     for r in rows:
-        writer.writerow(
-            [
-                _csv_cell(r.get("employee_code") or ""),
-                _csv_cell(r.get("employee_name") or ""),
-                _csv_cell(_clean_account(r.get("account_number"))),
-                _csv_cell((r.get("ifsc") or "").upper()),
-                _csv_cell(r.get("bank_name") or ""),
-                _csv_cell(r.get("account_holder") or ""),
-                _csv_cell(f"{Decimal(str(r.get('net_pay') or 0)):.2f}"),
-                _csv_cell(r.get("payroll_run_line_id") or ""),
-            ]
+        lines.append(
+            ",".join(
+                _csv_escape_field(v)
+                for v in (
+                    r.get("employee_code") or "",
+                    r.get("employee_name") or "",
+                    _clean_account(r.get("account_number")),
+                    (r.get("ifsc") or "").upper(),
+                    r.get("bank_name") or "",
+                    r.get("account_holder") or "",
+                    f"{Decimal(str(r.get('net_pay') or 0)):.2f}",
+                    r.get("payroll_run_line_id") or "",
+                )
+            )
         )
-    return buf.getvalue()
+    return "\n".join(lines) + "\n"

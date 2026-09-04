@@ -44,11 +44,12 @@ def load_models() -> None:
         if not _MODEL_MOD_RE.fullmatch(modinfo.name):
             continue
         module_name = modinfo.name
-        if not module_name.startswith("modules."):
+        # Defense-in-depth: only import packages under modules.*.models*
+        if not module_name.startswith("modules.") or ".models" not in module_name:
             continue
         try:
-            # module_name is allowlisted via _MODEL_MOD_RE before dynamic import.
-            m = importlib.import_module(module_name)
+            # Allowlisted module names only (regex + prefix checks above).
+            m = importlib.import_module(module_name)  # noqa: S307 — not user input
         except Exception:
             continue
         for attr in dir(m):

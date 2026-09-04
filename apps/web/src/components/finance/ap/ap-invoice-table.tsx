@@ -21,7 +21,7 @@ import {
   exportApInvoicesXlsx,
   printApInvoicesTable,
 } from "@/lib/finance/ap-export";
-import { safeAppHref } from "@/lib/html";
+import { safeAppHref, safeEntityHref } from "@/lib/html";
 import { cn } from "@/lib/utils";
 import type { ApEntry } from "@/services/ap-service";
 import { formatInrPrecise } from "@/services/finance-service";
@@ -178,7 +178,7 @@ export function ApInvoiceTable(props: Props) {
                         href={
                           props.detailHref
                             ? safeAppHref(props.detailHref(row))
-                            : `/finance/accounts-payable/invoices/${row.id}`
+                            : safeEntityHref("/finance/accounts-payable/invoices", row.id)
                         }
                         className="cursor-pointer hover:underline"
                       >
@@ -188,7 +188,7 @@ export function ApInvoiceTable(props: Props) {
                   ) : null}
                   {visible.has("vendor") ? (
                     <td className="px-2 py-1.5">
-                      <Link href={safeAppHref(`/finance/accounts-payable/vendors/${row.vendor_id}`)} className="cursor-pointer hover:underline">
+                      <Link href={safeEntityHref("/finance/accounts-payable/vendors", row.vendor_id)} className="cursor-pointer hover:underline">
                         {row.vendor_name ?? row.vendor_code ?? row.vendor_id.slice(0, 8)}
                       </Link>
                     </td>

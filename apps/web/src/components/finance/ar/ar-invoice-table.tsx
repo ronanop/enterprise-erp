@@ -21,7 +21,7 @@ import {
   exportArInvoicesXlsx,
   printArInvoicesTable,
 } from "@/lib/finance/ar-export";
-import { safeAppHref } from "@/lib/html";
+import { safeAppHref, safeEntityHref } from "@/lib/html";
 import { cn } from "@/lib/utils";
 import type { ArEntry } from "@/services/ar-service";
 import { formatInrPrecise } from "@/services/finance-service";
