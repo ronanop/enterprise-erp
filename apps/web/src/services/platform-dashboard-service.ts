@@ -646,12 +646,27 @@ const MODULE_LOADERS: Record<string, () => Promise<ModuleLoaderResult>> = {
     loadGenericOverviewAnalytics(
       "service",
       loadServiceOverview,
-      ["contracts", "workOrders", "assignments", "slas"],
-      (overview) => [
-        { label: "Contracts", value: formatCount((overview.contracts as unknown[]).length) },
-        { label: "Work orders", value: formatCount((overview.workOrders as unknown[]).length) },
-        { label: "Assignments", value: formatCount((overview.assignments as unknown[]).length) },
-      ],
+      ["requestTickets"],
+      (overview) => {
+        const tickets = Array.isArray(overview.requestTickets)
+          ? (overview.requestTickets as unknown[])
+          : [];
+        return [
+          { label: "Tickets", value: formatCount(tickets.length) },
+          {
+            label: "Open",
+            value: formatCount(
+              tickets.filter((row) => {
+                const status =
+                  row && typeof row === "object" && "status" in row
+                    ? String((row as { status?: unknown }).status ?? "").toLowerCase()
+                    : "";
+                return status && !["closed", "resolved", "cancelled", "canceled"].includes(status);
+              }).length,
+            ),
+          },
+        ];
+      },
     ),
   sales: () =>
     loadGenericOverviewAnalytics(

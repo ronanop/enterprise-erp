@@ -13,6 +13,7 @@ from modules.foundation.schemas import (
     ModuleUserCreateRequest,
     ModuleUserOption,
     ModuleUserRecord,
+    ModuleUserServiceRoleUpdateRequest,
 )
 from modules.foundation.service.module_admin_service import ModuleAdminService
 from shared.schemas import APIResponse
@@ -56,9 +57,29 @@ def add_module_member(
     ctx: Annotated[TenantContext, Depends(get_tenant_context)],
     db: Annotated[Session, Depends(get_db)],
 ) -> APIResponse[ModuleUserRecord]:
-    row = ModuleAdminService(db).add_member(ctx, module_key, body.user_id)
+    row = ModuleAdminService(db).add_member(
+        ctx, module_key, body.user_id, service_job_role=body.service_job_role
+    )
     db.commit()
     return APIResponse(message="Module user assigned", data=ModuleUserRecord(**row))
+
+
+@router.patch(
+    "/{module_key}/members/{user_id}/service-role",
+    response_model=APIResponse[ModuleUserRecord],
+)
+def update_module_member_service_role(
+    module_key: str,
+    user_id: UUID,
+    body: ModuleUserServiceRoleUpdateRequest,
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[ModuleUserRecord]:
+    row = ModuleAdminService(db).update_member_service_role(
+        ctx, module_key, user_id, body.service_job_role
+    )
+    db.commit()
+    return APIResponse(message="Service job role updated", data=ModuleUserRecord(**row))
 
 
 @router.delete("/{module_key}/members/{user_id}", response_model=APIResponse[None])

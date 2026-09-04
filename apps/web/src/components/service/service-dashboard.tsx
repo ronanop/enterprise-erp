@@ -145,8 +145,8 @@ export function ServiceDashboard() {
   const supportModes = useMemo(() => supportModeCounts(tickets, linkOpts), [tickets, linkOpts]);
 
   const authBlocked =
-    Boolean(data?.statusCodes.includes(401)) ||
-    (!authenticated && Boolean(data?.errors.length));
+    Boolean(data?.statusCodes?.includes(401)) ||
+    (!authenticated && Boolean(data?.errors?.length));
 
   return (
     <ServicePage>

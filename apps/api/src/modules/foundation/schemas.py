@@ -110,10 +110,17 @@ class ModuleUserRecord(BaseModel):
     email: str
     role: str
     status: str
+    # Service module only: service_engineer | field_engineer
+    service_job_role: str | None = None
 
 
 class ModuleUserCreateRequest(BaseModel):
     user_id: UUID
+    service_job_role: str | None = None
+
+
+class ModuleUserServiceRoleUpdateRequest(BaseModel):
+    service_job_role: str
 
 
 class RoleCreateRequest(BaseModel):

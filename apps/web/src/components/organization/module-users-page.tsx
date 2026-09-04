@@ -16,25 +16,38 @@ import {
   listAssignableModuleUsers,
   listModuleMembers,
   removeModuleMember,
+  updateModuleMemberServiceRole,
   type ModuleUserOption,
   type ModuleUserRecord,
+  type ServiceJobRole,
 } from "@/services/module-users-service";
 
 type Props = {
   moduleKey: string;
 };
 
+const SERVICE_JOB_ROLE_OPTIONS: { value: ServiceJobRole; label: string }[] = [
+  { value: "service_engineer", label: "Service Engineer" },
+  { value: "field_engineer", label: "Field Engineer" },
+];
+
+const selectClassName =
+  "h-9 min-w-[180px] cursor-pointer rounded-lg border border-input bg-background px-2.5 text-sm outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60";
+
 export function ModuleUsersPage({ moduleKey }: Props) {
   const router = useRouter();
   const { user, adminModuleKeys, loading: authLoading } = useAuthUser();
   const allowed = canManageModuleUsers(moduleKey, adminModuleKeys, user?.userType);
   const title = moduleTitle(moduleKey);
+  const isService = moduleKey === "service";
 
   const [members, setMembers] = useState<ModuleUserRecord[]>([]);
   const [options, setOptions] = useState<ModuleUserOption[]>([]);
   const [selectedId, setSelectedId] = useState("");
+  const [selectedJobRole, setSelectedJobRole] = useState<ServiceJobRole>("service_engineer");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -48,6 +61,7 @@ export function ModuleUsersPage({ moduleKey }: Props) {
       setMembers(memberRows);
       setOptions(assignable);
       setSelectedId("");
+      setSelectedJobRole("service_engineer");
     } catch (err) {
       setMembers([]);
       setOptions([]);
@@ -71,12 +85,32 @@ export function ModuleUsersPage({ moduleKey }: Props) {
     setSaving(true);
     setError(null);
     try {
-      await addModuleMember(moduleKey, selectedId);
+      await addModuleMember(
+        moduleKey,
+        selectedId,
+        isService ? selectedJobRole : undefined,
+      );
       await load();
     } catch (err) {
       setError(formatApiError(err, "Could not assign user"));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function changeServiceRole(userId: string, nextRole: ServiceJobRole) {
+    setUpdatingUserId(userId);
+    setError(null);
+    try {
+      const updated = await updateModuleMemberServiceRole(moduleKey, userId, nextRole);
+      setMembers((prev) =>
+        prev.map((row) => (row.user_id === userId ? { ...row, ...updated } : row)),
+      );
+    } catch (err) {
+      setError(formatApiError(err, "Could not update role"));
+      await load();
+    } finally {
+      setUpdatingUserId(null);
     }
   }
 
@@ -105,10 +139,10 @@ export function ModuleUsersPage({ moduleKey }: Props) {
   return (
     <div className="space-y-5">
       <PageHeader
-        title={moduleKey === "service" ? "Service team" : "Users"}
+        title={isService ? "Service team" : "Users"}
         description={
-          moduleKey === "service"
-            ? "As Service Head, assign Entra users as Service Engineers. They get the Service module and can work tickets you assign. Module admins (Service Head) are set by the ERP admin under Organization → Users."
+          isService
+            ? "As Service Head, assign Entra users and set their role to Service Engineer or Field Engineer. Module admins (Service Head) are set by the ERP admin under Organization → Users."
             : `Assign Entra users to ${title}. Assigned users see this module in their ERP menu. Users who already have ${title} are hidden from the dropdown.`
         }
       />
@@ -127,7 +161,7 @@ export function ModuleUsersPage({ moduleKey }: Props) {
             </div>
             <div>
               <p className="text-sm font-semibold text-foreground">
-                {moduleKey === "service" ? "Service engineers" : "Module users"}
+                {isService ? "Service team members" : "Module users"}
               </p>
               <p className="text-[11px] text-muted-foreground">
                 {loading ? "Loading…" : `${members.length} assigned`}
@@ -143,7 +177,7 @@ export function ModuleUsersPage({ moduleKey }: Props) {
               value={selectedId}
               onChange={(e) => setSelectedId(e.target.value)}
               disabled={loading || saving || options.length === 0}
-              className="h-9 min-w-[220px] cursor-pointer rounded-lg border border-input bg-background px-2.5 text-sm outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+              className={`${selectClassName} min-w-[220px]`}
             >
               <option value="">
                 {options.length === 0 ? "No unassigned Entra users" : "Select Entra user…"}
@@ -154,6 +188,26 @@ export function ModuleUsersPage({ moduleKey }: Props) {
                 </option>
               ))}
             </select>
+            {isService ? (
+              <>
+                <label className="sr-only" htmlFor={`${moduleKey}-assign-role`}>
+                  Select role
+                </label>
+                <select
+                  id={`${moduleKey}-assign-role`}
+                  value={selectedJobRole}
+                  onChange={(e) => setSelectedJobRole(e.target.value as ServiceJobRole)}
+                  disabled={loading || saving}
+                  className={selectClassName}
+                >
+                  {SERVICE_JOB_ROLE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </>
+            ) : null}
             <Button
               type="button"
               size="sm"
@@ -192,46 +246,77 @@ export function ModuleUsersPage({ moduleKey }: Props) {
                   </td>
                 </tr>
               ) : (
-                members.map((row) => (
-                  <tr
-                    key={row.user_id}
-                    className="border-b border-border/50 last:border-0 hover:bg-accent/30"
-                  >
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-2.5">
-                        <UserAvatar
-                          displayName={row.display_name}
-                          size="sm"
-                          className="!size-8 !text-[10px]"
-                        />
-                        <span className="font-medium text-foreground">{row.display_name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{row.email}</td>
-                    <td className="px-4 py-2.5">
-                      <Badge variant={row.role === "admin" ? "secondary" : "outline"} className="font-normal">
-                        {row.role === "admin" ? "Module admin" : "User"}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-2.5 capitalize text-muted-foreground">{row.status}</td>
-                    <td className="px-4 py-2.5 text-right">
-                      {row.role === "admin" ? (
-                        <span className="text-xs text-muted-foreground">Assigned by ERP admin</span>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 cursor-pointer"
-                          disabled={saving}
-                          onClick={() => void removeUser(row.user_id)}
-                        >
-                          Remove
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))
+                members.map((row) => {
+                  const jobRole: ServiceJobRole =
+                    row.service_job_role === "field_engineer"
+                      ? "field_engineer"
+                      : "service_engineer";
+                  return (
+                    <tr
+                      key={row.user_id}
+                      className="border-b border-border/50 last:border-0 hover:bg-accent/30"
+                    >
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <UserAvatar
+                            displayName={row.display_name}
+                            size="sm"
+                            className="!size-8 !text-[10px]"
+                          />
+                          <span className="font-medium text-foreground">{row.display_name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{row.email}</td>
+                      <td className="px-4 py-2.5">
+                        {row.role === "admin" ? (
+                          <Badge variant="secondary" className="font-normal">
+                            Module admin
+                          </Badge>
+                        ) : isService ? (
+                          <select
+                            aria-label={`Role for ${row.display_name}`}
+                            value={jobRole}
+                            disabled={saving || updatingUserId === row.user_id}
+                            onChange={(e) =>
+                              void changeServiceRole(
+                                row.user_id,
+                                e.target.value as ServiceJobRole,
+                              )
+                            }
+                            className="h-8 min-w-[160px] cursor-pointer rounded-md border border-input bg-background px-2 text-sm outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                          >
+                            {SERVICE_JOB_ROLE_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <Badge variant="outline" className="font-normal">
+                            User
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 capitalize text-muted-foreground">{row.status}</td>
+                      <td className="px-4 py-2.5 text-right">
+                        {row.role === "admin" ? (
+                          <span className="text-xs text-muted-foreground">Assigned by ERP admin</span>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 cursor-pointer"
+                            disabled={saving || updatingUserId === row.user_id}
+                            onClick={() => void removeUser(row.user_id)}
+                          >
+                            Remove
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

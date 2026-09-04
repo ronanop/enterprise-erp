@@ -11,6 +11,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppTopbar } from "@/components/layout/app-topbar";
 import { ProcurementSidebar } from "@/components/procurement/procurement-workspace-nav";
 import { ProjectsSidebar } from "@/components/projects/projects-workspace-nav";
+import { ServiceSidebar } from "@/components/service/service-workspace-nav";
 import { isHrPath } from "@/config/hr-nav";
 import { useStandaloneChrome } from "@/hooks/use-standalone-chrome";
 
@@ -28,6 +29,7 @@ export function AppShell({ children }: AppShellProps) {
   const isProcurement =
     pathname === "/procurement" || pathname.startsWith("/procurement/");
   const isAssets = pathname === "/assets" || pathname.startsWith("/assets/");
+  const isService = pathname === "/service" || pathname.startsWith("/service/");
 
   return (
     <div className="flex min-h-dvh w-full max-w-[100dvw] overflow-x-clip bg-background">
@@ -39,6 +41,7 @@ export function AppShell({ children }: AppShellProps) {
           {isProjects ? <ProjectsSidebar /> : null}
           {isProcurement ? <ProcurementSidebar /> : null}
           {isAssets ? <AssetsModuleSidebar /> : null}
+          {isService ? <ServiceSidebar /> : null}
         </>
       ) : (
         <AppSidebar />

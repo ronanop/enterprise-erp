@@ -10,9 +10,10 @@
 
 ### Layout Overrides
 
-- **Structure:** App shell + service workspace (page header → KPI strip → delivery funnel → workspace groups → activity panels)
+- **Structure:** App shell with **left Service sidebar** (CRM-style standalone chrome) → page header → KPI/charts → tables
 - **Max Width:** Full workspace (~1400px)
-- **Grid:** 12-col for KPIs; horizontal funnel; dense tables for requests / tickets / work orders / visits
+- **Grid:** 12-col for KPIs; dense tables for request tickets / SLAs / resolved
+- **Navigation:** Left sidebar panes (Dashboard, Request Tickets, Mailbox, Field Engineer, SLAs, Resolved, Users) — not a top tab strip in standalone mode
 - **Do not** use FAQ/docs marketing heroes, Outfit/Work Sans shouty type, or dark themes
 
 ### Spacing Overrides
@@ -36,8 +37,8 @@
 ### Component Overrides
 
 - KPI strip: open requests, open tickets, open work orders, open escalations
-- Secondary nav: Overview · Requests · Tickets · Work Orders · Visits · SLAs · Escalations · Contracts
-- Lifecycle funnel: Request → Ticket → Assignment → Work Order → Visit → Contract
+- Secondary nav: left sidebar — Dashboard · Request Tickets · Mailbox · Field Engineer · SLAs · Resolved · Users
+- Lifecycle funnel: Request → Ticket → Assignment · work on ticket detail
 - Prefer Lucide; sticky headers; `overflow-x-auto` on wide tables
 
 ### Section Order
