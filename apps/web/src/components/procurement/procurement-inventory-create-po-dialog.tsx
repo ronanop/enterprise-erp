@@ -248,7 +248,7 @@ export function ProcurementInventoryCreatePoDialog({
               </FinanceField>
 
               <FinanceField
-                label="PO number (auto)"
+                label="PO number"
                 hint={
                   peekError
                     ? undefined

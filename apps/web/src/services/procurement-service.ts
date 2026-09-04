@@ -558,6 +558,7 @@ export type ProcOrder = {
     last_receipt_delivery_challan_quantity?: number;
     unit_cost: number;
     rate_currency?: string | null;
+    tax_rate?: number;
     line_total: number;
     status: string;
   }>;
@@ -828,7 +829,12 @@ export async function createPoFromInventory(payload: {
   document_date?: string;
   payment_terms?: string | null;
   approved_by_name?: string | null;
-  lines?: Array<{ product_name: string; quantity: number; unit_cost?: number }>;
+  lines?: Array<{
+    product_name: string;
+    quantity: number;
+    unit_cost?: number;
+    tax_rate?: number;
+  }>;
   stock_unit_ids?: string[];
   import_line_ids?: string[];
 }): Promise<ProcOrder> {

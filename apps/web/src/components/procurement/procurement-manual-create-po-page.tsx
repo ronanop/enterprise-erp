@@ -19,9 +19,11 @@ import {
 import { procurementUi } from "@/components/procurement/procurement-ui";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { submitPoFinalizeApproval } from "@/lib/procurement-approvals";
 import { cn } from "@/lib/utils";
 import { ApiClientError, formatApiError } from "@/services/api-client";
 import {
+  collectPoApprovalDocuments,
   createPoFromInventory,
   createVendorOption,
   listProcurementInventory,
@@ -567,7 +569,12 @@ export function ProcurementManualCreatePoPage() {
 
     const stockUnitIds: string[] = [];
     const importLineIds: string[] = [];
-    const lines: Array<{ product_name: string; quantity: number; unit_cost: number }> = [];
+    const lines: Array<{
+      product_name: string;
+      quantity: number;
+      unit_cost: number;
+      tax_rate: number;
+    }> = [];
 
     for (const line of poLines) {
       const product = (line.productName || "").trim();
@@ -580,6 +587,7 @@ export function ProcurementManualCreatePoPage() {
       if (hsn) {
         productName = `${productName} | HSN ${hsn}`.slice(0, 255);
       }
+      const taxRate = Math.max(0, Number(line.taxPercentage) || 0);
 
       if (line.fromStock) {
         const available = unitsByProduct.get(product) ?? [];
@@ -597,6 +605,7 @@ export function ProcurementManualCreatePoPage() {
           product_name: productName,
           quantity: consume.length > 0 ? consume.length : qty,
           unit_cost: Math.max(0, line.unitCost),
+          tax_rate: taxRate,
         });
         continue;
       }
@@ -607,6 +616,7 @@ export function ProcurementManualCreatePoPage() {
         product_name: productName,
         quantity,
         unit_cost: Math.max(0, line.unitCost),
+        tax_rate: taxRate,
       });
     }
 
@@ -632,7 +642,22 @@ export function ProcurementManualCreatePoPage() {
         stock_unit_ids: stockUnitIds,
         import_line_ids: importLineIds,
       });
-      router.push(`/procurement/orders/${order.id}`);
+      // Manual / list Create PO always drafts then queues admin finalize approval.
+      const documents = await collectPoApprovalDocuments({
+        orderId: order.id,
+        ovfId: order.source_document_id,
+      }).catch(() => []);
+      submitPoFinalizeApproval({
+        orderId: order.id,
+        documentNumber: order.document_number,
+        companyPoNumber: order.company_po_number,
+        customerName: order.customer_name,
+        vendorId: order.vendor_id || vendorId,
+        vendorName: selectedVendor?.label || null,
+        ovfId: order.source_document_id,
+        documents,
+      });
+      router.replace(`/procurement/orders/${order.id}?approval=pending`);
     } catch (err) {
       setError(formatApiError(err, "Failed to create purchase order"));
       setBusy(false);
@@ -675,7 +700,7 @@ export function ProcurementManualCreatePoPage() {
           References
         </h2>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          <FinanceField label="PO number (auto)" error={peekError ?? undefined}>
+          <FinanceField label="PO number" error={peekError ?? undefined}>
             <Input
               readOnly
               className="h-8 font-mono text-sm font-medium tabular-nums"

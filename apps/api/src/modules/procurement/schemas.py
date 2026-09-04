@@ -632,6 +632,7 @@ class ScmInventoryPoLineRequest(BaseModel):
     product_name: str = Field(min_length=1, max_length=255)
     quantity: float = Field(gt=0)
     unit_cost: float = Field(ge=0, default=0)
+    tax_rate: float = Field(ge=0, default=0)
 
 
 class ScmCreateInventoryPoRequest(BaseModel):

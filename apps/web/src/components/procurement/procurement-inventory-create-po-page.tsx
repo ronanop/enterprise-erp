@@ -447,7 +447,7 @@ export function ProcurementInventoryCreatePoPage() {
           </FinanceField>
 
           <FinanceField
-            label="PO number (auto)"
+            label="PO number"
             error={peekError ?? undefined}
           >
             <Input

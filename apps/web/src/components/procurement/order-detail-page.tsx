@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
-  Building2,
   Eye,
   FileDown,
   PackageCheck,
@@ -74,6 +73,7 @@ import {
 } from "@/utils/delivery-status-storage";
 import { receiptBatchKey } from "@/utils/delivery-challan-grn";
 import { addPendingGrnChallan } from "@/utils/grn-challan-pending";
+import { splitPoProductFields } from "@/utils/po-fulfillment-metrics";
 import {
   billingQuantityFromUnitKinds,
   deliveryChallanQuantityFromUnitKinds,
@@ -1253,52 +1253,68 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               </SectionCard>
 
               <div className="overflow-hidden rounded-lg border border-border bg-card">
-                <div className="border-b border-border px-3 py-2">
-                  <div className="inline-flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    <Building2 className="size-3.5 text-[#0369A1]" aria-hidden />
-                    Order lines
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+                  <div>
+                    <h2 className="text-sm font-medium tracking-tight text-foreground">
+                      Line items
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Product, description, HSN/SAC, quantity, rate, and tax as saved on this PO.
+                    </p>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[640px] text-left text-sm">
-                    <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
+                  <table className="w-full min-w-[1100px] text-left text-sm">
+                    <thead className="border-b border-border bg-muted/20 text-[11px] uppercase tracking-wide text-muted-foreground">
                       <tr>
-                        <th className="px-3 py-2 font-medium">S No.</th>
-                        <th className="px-3 py-2 font-medium">Product</th>
-                        <th className="px-3 py-2 text-right font-medium">Qty</th>
-                        <th className="px-3 py-2 text-right font-medium">Unit cost</th>
-                        <th className="px-3 py-2 text-right font-medium">Amount</th>
+                        <th className="px-3 py-2.5">Product</th>
+                        <th className="px-3 py-2.5">Description</th>
+                        <th className="px-3 py-2.5">HSN/SAC</th>
+                        <th className="px-3 py-2.5 text-right">Qty</th>
+                        <th className="px-3 py-2.5 text-right">Rate (INR)</th>
+                        <th className="px-3 py-2.5 text-right">Tax %</th>
+                        <th className="px-3 py-2.5 text-right">Amount</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {orderLines.map((ln, index) => (
-                        <tr key={ln.id} className="border-b border-border/70">
-                          <td className="px-3 py-2 tabular-nums text-muted-foreground">
-                            {index + 1}
-                          </td>
-                          <td className="px-3 py-2 font-medium">
-                            {ln.product_name || ln.product_code || "—"}
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums">
-                            {Number(ln.quantity) || 0}
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums">
-                            {formatOrderLineMoney(ln.unit_cost, ln.rate_currency)}
-                          </td>
-                          <td className="px-3 py-2 text-right font-medium tabular-nums">
-                            {formatOrderLineMoney(ln.line_total, ln.rate_currency)}
-                          </td>
-                        </tr>
-                      ))}
+                      {orderLines.map((ln) => {
+                        const fields = splitPoProductFields(ln);
+                        const taxPct = Number(ln.tax_rate) || 0;
+                        return (
+                          <tr key={ln.id} className="border-b border-border/60">
+                            <td className="px-3 py-2.5 font-medium text-foreground">
+                              {fields.productName}
+                            </td>
+                            <td className="px-3 py-2.5 text-muted-foreground">
+                              {fields.description || "—"}
+                            </td>
+                            <td className="px-3 py-2.5 tabular-nums text-muted-foreground">
+                              {fields.hsnSac || "—"}
+                            </td>
+                            <td className="px-3 py-2.5 text-right tabular-nums">
+                              {Number(ln.quantity) || 0}
+                            </td>
+                            <td className="px-3 py-2.5 text-right tabular-nums">
+                              {formatOrderLineMoney(ln.unit_cost, ln.rate_currency)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right tabular-nums">
+                              {taxPct}%
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-medium tabular-nums">
+                              {formatOrderLineMoney(ln.line_total, ln.rate_currency)}
+                            </td>
+                          </tr>
+                        );
+                      })}
                       {lineCount === 0 ? (
                         <tr>
-                          <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
+                          <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                             No line items on this purchase order.
                           </td>
                         </tr>
                       ) : (
                         <tr className="border-t border-border bg-muted/20 font-semibold">
-                          <td colSpan={4} className="px-3 py-2.5 text-right">
+                          <td colSpan={6} className="px-3 py-2.5 text-right">
                             {isUsdOrder(order) ? "Total (USD)" : "Total (INR)"}
                           </td>
                           <td className="px-3 py-2.5 text-right tabular-nums">

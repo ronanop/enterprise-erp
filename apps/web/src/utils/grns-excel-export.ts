@@ -247,7 +247,7 @@ export function buildGrnExportRows(
         Vendor: vendor,
         "Customer name": (order.customer_name || "").trim(),
         "Customer PO number": (order.customer_po_number || "").trim(),
-        "PO Status": batch?.reversed ? `${poStatus} (GRN reversed)` : poStatus,
+        "PO Status": batch?.reversed ? "Partial" : poStatus,
         "GRN Number": grnNumber,
         "GRN Date": grnDate,
         "GRN Maker": grnMaker,

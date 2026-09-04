@@ -4,8 +4,13 @@ export type PoFulfillmentLineInput = {
   id: string;
   product_name?: string | null;
   product_code?: string | null;
+  description?: string | null;
   quantity: number;
   quantity_received: number;
+  unit_cost?: number;
+  tax_rate?: number;
+  line_total?: number;
+  rate_currency?: string | null;
   last_receipt_billing_quantity?: number;
 };
 
@@ -23,6 +28,14 @@ export type PoFulfillmentBatchInput = {
 
 export type PoFulfillmentLineMetrics = {
   lineId: string;
+  productName: string;
+  description: string;
+  hsnSac: string;
+  unitCost: number;
+  taxRate: number;
+  lineTotal: number;
+  rateCurrency: string;
+  /** Combined label kept for callers that still expect a single string. */
   productLabel: string;
   orderedQty: number;
   receivedQty: number;
@@ -48,8 +61,55 @@ function round6(n: number): number {
   return Math.round(n * 1e6) / 1e6;
 }
 
+/** Split stored `product — description | HSN …` names into separate display fields. */
+export function splitPoProductFields(line: {
+  product_name?: string | null;
+  product_code?: string | null;
+  description?: string | null;
+}): {
+  productName: string;
+  description: string;
+  hsnSac: string;
+} {
+  const raw = (line.product_name || line.product_code || "").trim();
+  const explicitDesc = (line.description || "").trim();
+  const hsnMatch = raw.match(/\s*\|\s*HSN\s+(.+)$/i);
+  const hsnSac = hsnMatch ? hsnMatch[1].trim() : "";
+  const withoutHsn = raw.replace(/\s*\|\s*HSN\s+.+$/i, "").trim();
+
+  if (explicitDesc) {
+    const productName =
+      withoutHsn.split(" — ")[0]?.trim() || withoutHsn || "Unnamed product";
+    return {
+      productName,
+      description: explicitDesc,
+      hsnSac,
+    };
+  }
+
+  const sep = " — ";
+  const sepIndex = withoutHsn.indexOf(sep);
+  if (sepIndex >= 0) {
+    const productName = withoutHsn.slice(0, sepIndex).trim() || "Unnamed product";
+    const description = withoutHsn.slice(sepIndex + sep.length).trim();
+    return {
+      productName,
+      description,
+      hsnSac,
+    };
+  }
+
+  return {
+    productName: withoutHsn || "Unnamed product",
+    description: "",
+    hsnSac,
+  };
+}
+
 function productLabel(line: PoFulfillmentLineInput): string {
-  return (line.product_name || line.product_code || "Unnamed product").trim() || "Unnamed product";
+  const { productName, description } = splitPoProductFields(line);
+  if (!description) return productName;
+  return `${productName} — ${description}`;
 }
 
 export function buildPoFulfillmentMetrics(
@@ -84,8 +144,22 @@ export function buildPoFulfillmentMetrics(
         : Math.max(0, Number(ln.last_receipt_billing_quantity) || 0);
     billedQty = round6(Math.min(billedQty, receivedQty));
     const unbilledQty = round6(Math.max(0, receivedQty - billedQty));
+    const { productName, description, hsnSac } = splitPoProductFields(ln);
+    const unitCost = Math.max(0, Number(ln.unit_cost) || 0);
+    const taxRate = Math.max(0, Number(ln.tax_rate) || 0);
+    const lineTotal =
+      Number(ln.line_total) > 0
+        ? Number(ln.line_total)
+        : round6(orderedQty * unitCost * (1 + taxRate / 100));
     return {
       lineId: ln.id,
+      productName,
+      description,
+      hsnSac,
+      unitCost,
+      taxRate,
+      lineTotal,
+      rateCurrency: (ln.rate_currency || "INR").trim().toUpperCase() || "INR",
       productLabel: productLabel(ln),
       orderedQty,
       receivedQty,

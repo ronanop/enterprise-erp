@@ -1123,6 +1123,7 @@ class ScmHandoffService:
                 if qty <= 0:
                     continue
                 unit_cost = float(raw.get("unit_cost") or 0)
+                tax_rate = float(raw.get("tax_rate") or 0)
                 product = product_map[(product_name or "").strip().lower() or "scm line item"]
                 line_payloads.append(
                     {
@@ -1133,6 +1134,7 @@ class ScmHandoffService:
                         "quantity": qty,
                         "uom_id": getattr(product, "uom_id", None) or uom_id,
                         "unit_cost": unit_cost,
+                        "tax_rate": tax_rate,
                     }
                 )
             if not line_payloads:

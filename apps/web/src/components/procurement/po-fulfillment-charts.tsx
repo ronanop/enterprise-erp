@@ -138,11 +138,16 @@ export function PoFulfillmentCharts({
           </p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-[13px]">
+          <table className="w-full min-w-[1100px] text-left text-[13px]">
             <thead className="border-b border-border/70 bg-muted/30 text-[10px] font-bold uppercase tracking-wide text-foreground">
               <tr>
                 <th className="px-3 py-2.5">Product</th>
-                <th className="px-3 py-2.5 text-right">Ordered</th>
+                <th className="px-3 py-2.5">Description</th>
+                <th className="px-3 py-2.5">HSN/SAC</th>
+                <th className="px-3 py-2.5 text-right">Qty</th>
+                <th className="px-3 py-2.5 text-right">Rate (INR)</th>
+                <th className="px-3 py-2.5 text-right">Tax %</th>
+                <th className="px-3 py-2.5 text-right">Amount</th>
                 <th className="px-3 py-2.5 text-right">Received</th>
                 <th className="px-3 py-2.5 text-right">Pending</th>
                 <th className="px-3 py-2.5 text-right">Billed</th>
@@ -152,8 +157,29 @@ export function PoFulfillmentCharts({
             <tbody>
               {metrics.lines.map((row) => (
                 <tr key={row.lineId} className="border-b border-border/50 last:border-0">
-                  <td className="px-3 py-2.5 font-medium text-foreground">{row.productLabel}</td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{formatPoQty(row.orderedQty)}</td>
+                  <td className="px-3 py-2.5 font-medium text-foreground">{row.productName}</td>
+                  <td className="px-3 py-2.5 text-muted-foreground">
+                    {row.description || "—"}
+                  </td>
+                  <td className="px-3 py-2.5 tabular-nums text-muted-foreground">
+                    {row.hsnSac || "—"}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">
+                    {formatPoQty(row.orderedQty)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">
+                    {row.unitCost.toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{row.taxRate}%</td>
+                  <td className="px-3 py-2.5 text-right font-medium tabular-nums">
+                    {row.lineTotal.toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </td>
                   <td className="px-3 py-2.5 text-right tabular-nums text-sky-800">
                     {formatPoQty(row.receivedQty)}
                   </td>
