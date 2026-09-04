@@ -155,6 +155,21 @@ class SourceKpiKey(str, Enum):
     FINANCE_CASH_POSITION = "finance.cash_position"
     FINANCE_AR_AGING_TOTAL = "finance.ar_aging_total"
     FINANCE_AP_AGING_TOTAL = "finance.ap_aging_total"
+    SALES_INVOICE_COUNT = "sales.invoice_count"
+    SALES_ORDER_COUNT = "sales.order_count"
+    SALES_INVOICED_TOTAL = "sales.invoiced_total"
+    INVENTORY_ON_HAND_QTY = "inventory.on_hand_qty"
+    INVENTORY_AVAILABLE_QTY = "inventory.available_qty"
+    INVENTORY_BALANCE_ROWS = "inventory.balance_rows"
+    MFG_PRODUCTION_ORDER_COUNT = "mfg.production_order_count"
+    MFG_PLANNED_QTY = "mfg.planned_qty"
+    MFG_SCRAP_COUNT = "mfg.scrap_count"
+    QUALITY_NCR_COUNT = "quality.ncr_count"
+    QUALITY_NCR_OPEN_COUNT = "quality.ncr_open_count"
+    QUALITY_INCOMING_INSPECTION_COUNT = "quality.incoming_inspection_count"
+    HELPDESK_TICKET_COUNT = "helpdesk.ticket_count"
+    HELPDESK_OPEN_TICKET_COUNT = "helpdesk.open_ticket_count"
+    HELPDESK_INCIDENT_COUNT = "helpdesk.incident_count"
 
 
 class AnalyticsEntityType(str, Enum):

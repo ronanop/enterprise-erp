@@ -5484,6 +5484,96 @@ def seed_pilot_kpis(db, tenant_id, company_id, branch_id, admin_id, employees):
             "finance.ap_aging_total",
             Decimal("30000"),
         ),
+        (
+            "SINV",
+            "Sales Invoices",
+            "sales.invoice_count",
+            Decimal("10"),
+        ),
+        (
+            "SORD",
+            "Sales Orders",
+            "sales.order_count",
+            Decimal("10"),
+        ),
+        (
+            "SINVT",
+            "Sales Invoiced Total",
+            "sales.invoiced_total",
+            Decimal("100000"),
+        ),
+        (
+            "INVOH",
+            "Inventory On Hand",
+            "inventory.on_hand_qty",
+            Decimal("200"),
+        ),
+        (
+            "INVAV",
+            "Inventory Available",
+            "inventory.available_qty",
+            Decimal("200"),
+        ),
+        (
+            "INVROW",
+            "Inventory Balance Rows",
+            "inventory.balance_rows",
+            Decimal("20"),
+        ),
+        (
+            "MFGWO",
+            "Production Orders",
+            "mfg.production_order_count",
+            Decimal("5"),
+        ),
+        (
+            "MFGPL",
+            "Planned Production Qty",
+            "mfg.planned_qty",
+            Decimal("100"),
+        ),
+        (
+            "MFGSC",
+            "Scrap Documents",
+            "mfg.scrap_count",
+            Decimal("5"),
+        ),
+        (
+            "QMNCR",
+            "NCR Count",
+            "quality.ncr_count",
+            Decimal("10"),
+        ),
+        (
+            "QMNCO",
+            "Open NCRs",
+            "quality.ncr_open_count",
+            Decimal("10"),
+        ),
+        (
+            "QMIQC",
+            "Incoming Inspections",
+            "quality.incoming_inspection_count",
+            Decimal("10"),
+        ),
+        (
+            "HDTKT",
+            "Helpdesk Tickets",
+            "helpdesk.ticket_count",
+            Decimal("10"),
+        ),
+        (
+            "HDOPN",
+            "Open Helpdesk Tickets",
+            "helpdesk.open_ticket_count",
+            Decimal("10"),
+        ),
+        (
+            "HDINC",
+            "Helpdesk Incidents",
+            "helpdesk.incident_count",
+            Decimal("10"),
+        ),
     ]
     for code, name, source_key, target in specs:
         row = ensure(

@@ -96,4 +96,34 @@ class KpiService:
             return self._integration.get_ar_aging(ctx, company_id)
         if key == SourceKpiKey.FINANCE_AP_AGING_TOTAL.value:
             return self._integration.get_ap_aging(ctx, company_id)
+        if key == SourceKpiKey.SALES_INVOICE_COUNT.value:
+            return self._integration.sales_invoice_count(ctx, company_id)
+        if key == SourceKpiKey.SALES_ORDER_COUNT.value:
+            return self._integration.sales_order_count(ctx, company_id)
+        if key == SourceKpiKey.SALES_INVOICED_TOTAL.value:
+            return self._integration.sales_invoiced_total(ctx, company_id)
+        if key == SourceKpiKey.INVENTORY_ON_HAND_QTY.value:
+            return self._integration.inventory_on_hand_qty(ctx, company_id)
+        if key == SourceKpiKey.INVENTORY_AVAILABLE_QTY.value:
+            return self._integration.inventory_available_qty(ctx, company_id)
+        if key == SourceKpiKey.INVENTORY_BALANCE_ROWS.value:
+            return self._integration.inventory_balance_rows(ctx, company_id)
+        if key == SourceKpiKey.MFG_PRODUCTION_ORDER_COUNT.value:
+            return self._integration.mfg_production_order_count(ctx, company_id)
+        if key == SourceKpiKey.MFG_PLANNED_QTY.value:
+            return self._integration.mfg_planned_qty(ctx, company_id)
+        if key == SourceKpiKey.MFG_SCRAP_COUNT.value:
+            return self._integration.mfg_scrap_count(ctx, company_id)
+        if key == SourceKpiKey.QUALITY_NCR_COUNT.value:
+            return self._integration.quality_ncr_count(ctx, company_id)
+        if key == SourceKpiKey.QUALITY_NCR_OPEN_COUNT.value:
+            return self._integration.quality_ncr_open_count(ctx, company_id)
+        if key == SourceKpiKey.QUALITY_INCOMING_INSPECTION_COUNT.value:
+            return self._integration.quality_incoming_inspection_count(ctx, company_id)
+        if key == SourceKpiKey.HELPDESK_TICKET_COUNT.value:
+            return self._integration.helpdesk_ticket_count(ctx, company_id)
+        if key == SourceKpiKey.HELPDESK_OPEN_TICKET_COUNT.value:
+            return self._integration.helpdesk_open_ticket_count(ctx, company_id)
+        if key == SourceKpiKey.HELPDESK_INCIDENT_COUNT.value:
+            return self._integration.helpdesk_incident_count(ctx, company_id)
         raise UnknownKpiSource(f"Unsupported source_kpi_key: {key or '(empty)'}")
