@@ -5482,6 +5482,66 @@ def seed_pilot_kpis(db, tenant_id, company_id, branch_id, admin_id, employees):
             row.source_kpi_key = source_key
             row.kpi_name = name
 
+    dashboard = (
+        db.execute(
+            select(BiDashboard).where(
+                BiDashboard.tenant_id == tenant_id,
+                BiDashboard.company_id == company_id,
+                BiDashboard.dashboard_code == "EXEC",
+            )
+        )
+        .scalars()
+        .first()
+    )
+    headcount = (
+        db.execute(
+            select(BiKpi).where(
+                BiKpi.tenant_id == tenant_id,
+                BiKpi.company_id == company_id,
+                BiKpi.kpi_code == "HCNT",
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if dashboard is not None and headcount is not None:
+        ensure(
+            db,
+            BiDashboardWidget,
+            {"dashboard_id": dashboard.id, "widget_code": "WGT-HCNT"},
+            {
+                "tenant_id": tenant_id,
+                "company_id": company_id,
+                "branch_id": branch_id,
+                "widget_title": "Headcount",
+                "widget_type": "kpi_tile",
+                "kpi_id": headcount.id,
+                "config_json": {"source_kpi_key": "org.headcount_by_department"},
+                "sequence_no": 2,
+                "status": "active",
+                "created_by": admin_id,
+                "updated_by": admin_id,
+            },
+        )
+        ensure(
+            db,
+            BiDashboardWidget,
+            {"dashboard_id": dashboard.id, "widget_code": "WGT-HCNT-CHART"},
+            {
+                "tenant_id": tenant_id,
+                "company_id": company_id,
+                "branch_id": branch_id,
+                "widget_title": "Headcount by department",
+                "widget_type": "chart",
+                "kpi_id": headcount.id,
+                "config_json": {"source_kpi_key": "org.headcount_by_department"},
+                "sequence_no": 3,
+                "status": "active",
+                "created_by": admin_id,
+                "updated_by": admin_id,
+            },
+        )
+
 
 def seed_integration(db, tenant_id, company_id, admin_id, employees):
     system = ensure(

@@ -43,3 +43,8 @@ export function useAnalyticsKpis(): {
 export function findKpiBySourceKey(kpis: AnalyticsKpi[], sourceKpiKey: string): AnalyticsKpi | undefined {
   return kpis.find((row) => row.source_kpi_key === sourceKpiKey);
 }
+
+export function findKpiById(kpis: AnalyticsKpi[], kpiId: string | null | undefined): AnalyticsKpi | undefined {
+  if (!kpiId) return undefined;
+  return kpis.find((row) => row.id === kpiId);
+}
