@@ -141,8 +141,13 @@ function ProjectAlertBody({ alert }: { alert: ProjectStageSaveAlert }) {
           <span className="font-medium">Remarks:</span> {alert.remarks}
         </p>
       ) : null}
+      {alert.yes_answers?.length ? (
+        <p className="text-xs text-emerald-800">
+          <span className="font-medium">Marked Yes:</span> {alert.yes_answers.join(", ")}
+        </p>
+      ) : null}
       {alert.no_answers.length > 0 ? (
-        <p className="text-xs text-foreground/90">
+        <p className="text-xs text-red-800">
           <span className="font-medium">Marked No:</span> {alert.no_answers.join(", ")}
         </p>
       ) : null}
@@ -163,7 +168,7 @@ function CrmAlertBody({ item }: { item: CrmBellItem }) {
 export function AppTopbarNotifications() {
   const pathname = usePathname() ?? "";
   const mode = resolveMode(pathname);
-  const { signedIn, projectModuleAdmin, loading: authLoading } = useAuthUser();
+  const { signedIn, loading: authLoading } = useAuthUser();
 
   const [open, setOpen] = useState(false);
   const [projectAlerts, setProjectAlerts] = useState<ProjectStageSaveAlert[]>([]);
@@ -178,7 +183,7 @@ export function AppTopbarNotifications() {
   const toastRef = useRef<HTMLDivElement>(null);
   const crmInboxRef = useRef<CrmApprovalInboxItem[]>([]);
 
-  const projectsEnabled = mode === "projects" && signedIn && projectModuleAdmin;
+  const projectsEnabled = mode === "projects" && signedIn;
   const crmEnabled = mode === "crm" && signedIn;
   const enabled = projectsEnabled || crmEnabled;
 

@@ -150,6 +150,12 @@ export type Project = AuditFields & {
   health_status: string | null;
   description: string | null;
   workflow_status: string | null;
+  /** Current in-progress site workflow stage key (from API enrichment). */
+  current_stage?: string | null;
+  /** Human label for current_stage. */
+  current_stage_label?: string | null;
+  /** Assignee name for the current in-progress stage. */
+  current_stage_owner_name?: string | null;
 };
 
 export type ProjectFormInput = {
@@ -657,6 +663,7 @@ export type ProjectStageSaveAlert = {
   progress_status_label: string;
   message: string;
   remarks: string | null;
+  yes_answers: string[];
   no_answers: string[];
   site_name: string | null;
   document_number: string | null;

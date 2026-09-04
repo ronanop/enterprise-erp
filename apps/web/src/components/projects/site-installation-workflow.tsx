@@ -313,78 +313,123 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
     return "—";
   };
 
-  const stageDates: Array<{ step: string; item: string; date: string; completedBy: string }> = [
+  const stageDates: Array<{
+    step: string;
+    item: string;
+    date: string;
+    completedBy: string;
+    answer: "yes" | "no";
+  }> = [
     {
       step: "Survey",
       item: "Space Available",
       date: displayDate(site.space_available_date),
       completedBy: completedByForStep("Survey"),
+      answer: site.space_available ? "yes" : "no",
     },
     {
       step: "Survey",
       item: "Power Available",
       date: displayDate(site.power_available_date),
       completedBy: completedByForStep("Survey"),
+      answer: site.power_available ? "yes" : "no",
     },
     {
       step: "Survey",
       item: "Survey Completed",
       date: displayDate(site.survey_completed_date),
       completedBy: completedByForStep("Survey"),
+      answer: site.survey_completed ? "yes" : "no",
+    },
+    ...(hasServer
+      ? [
+          {
+            step: "SCM / Logistics",
+            item: "Server WH Delivery",
+            date: displayDate(site.server_wh_delivery_date),
+            completedBy: completedByForStep("SCM / Logistics"),
+            answer: (site.server_wh_delivery_date ? "yes" : "no") as "yes" | "no",
+          },
+        ]
+      : []),
+    ...(hasRack
+      ? [
+          {
+            step: "SCM / Logistics",
+            item: "Rack WH Delivery",
+            date: displayDate(site.rack_wh_delivery_date),
+            completedBy: completedByForStep("SCM / Logistics"),
+            answer: (site.rack_wh_delivery_date ? "yes" : "no") as "yes" | "no",
+          },
+        ]
+      : []),
+    {
+      step: "SCM / Logistics",
+      item: "PDU WH Delivery",
+      date: displayDate(site.pdu_wh_delivery_date),
+      completedBy: completedByForStep("SCM / Logistics"),
+      answer: site.pdu_wh_delivery_date ? "yes" : "no",
     },
     {
       step: "Onsite Delivery",
       item: "MO Request",
       date: displayDate(site.mo_request_date),
       completedBy: completedByForStep("Onsite Delivery"),
+      answer: site.mo_request ? "yes" : "no",
     },
     ...(hasServer
       ? [
-        {
-          step: "Onsite Delivery",
-          item: "Server On-site Delivery",
-          date: displayDate(site.server_on_site_delivery_date),
-          completedBy: completedByForStep("Onsite Delivery"),
-        },
-      ]
+          {
+            step: "Onsite Delivery",
+            item: "Server On-site Delivery",
+            date: displayDate(site.server_on_site_delivery_date),
+            completedBy: completedByForStep("Onsite Delivery"),
+            answer: (site.server_on_site_delivery_date ? "yes" : "no") as "yes" | "no",
+          },
+        ]
       : []),
     ...(hasRack
       ? [
-        {
-          step: "Onsite Delivery",
-          item: "Rack On-site Delivery",
-          date: displayDate(site.rack_on_site_delivery_date),
-          completedBy: completedByForStep("Onsite Delivery"),
-        },
-      ]
+          {
+            step: "Onsite Delivery",
+            item: "Rack On-site Delivery",
+            date: displayDate(site.rack_on_site_delivery_date),
+            completedBy: completedByForStep("Onsite Delivery"),
+            answer: (site.rack_on_site_delivery_date ? "yes" : "no") as "yes" | "no",
+          },
+        ]
       : []),
     {
       step: "Onsite Delivery",
       item: "PDU On-site Delivery",
       date: displayDate(site.pdu_on_site_delivery_date),
       completedBy: completedByForStep("Onsite Delivery"),
+      answer: site.pdu_on_site_delivery_date ? "yes" : "no",
     },
     {
       step: "Material Handover",
       item: "IM Material",
       date: displayDate(site.im_material_date),
       completedBy: completedByForStep("Material Handover"),
+      answer: site.im_material ? "yes" : "no",
     },
     ...(rackOnly
       ? []
       : [
-        {
-          step: "Material Handover",
-          item: "Power-on Material",
-          date: displayDate(site.power_on_material_date),
-          completedBy: completedByForStep("Material Handover"),
-        },
-      ]),
+          {
+            step: "Material Handover",
+            item: "Power-on Material",
+            date: displayDate(site.power_on_material_date),
+            completedBy: completedByForStep("Material Handover"),
+            answer: (site.power_on_material ? "yes" : "no") as "yes" | "no",
+          },
+        ]),
     {
       step: "Material Handover",
       item: "Material Handover",
       date: displayDate(site.material_handover_date),
       completedBy: completedByForStep("Material Handover"),
+      answer: site.material_handover_done ? "yes" : "no",
     },
     {
       step: installStep,
@@ -395,108 +440,123 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
           : "Server Stacking",
       date: displayDate(site.rack_server_stacking_date),
       completedBy: completedByForStep(installStep),
+      answer: site.rack_server_stacking_done ? "yes" : "no",
     },
     ...(rackOnly || !hasServer
       ? []
       : [
-        {
-          step: installStep,
-          item: hasRack ? "Rack + Server Power On" : "Server Power On",
-          date: displayDate(site.rack_server_power_on_date),
-          completedBy: completedByForStep(installStep),
-        },
-        {
-          step: installStep,
-          item: "DAC / ILO Cabling",
-          date: displayDate(site.dac_ilo_cabling_date),
-          completedBy: completedByForStep(installStep),
-        },
-      ]),
+          {
+            step: installStep,
+            item: hasRack ? "Rack + Server Power On" : "Server Power On",
+            date: displayDate(site.rack_server_power_on_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.rack_server_power_on_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "DAC / ILO Cabling",
+            date: displayDate(site.dac_ilo_cabling_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.dac_ilo_cabling_done ? "yes" : "no") as "yes" | "no",
+          },
+        ]),
     ...(hasBios
       ? [
-        {
-          step: installStep,
-          item: "BIOS Configuration",
-          date: displayDate(site.bios_configuration_date),
-          completedBy: completedByForStep(installStep),
-        },
-        {
-          step: installStep,
-          item: "Firmware Configuration",
-          date: displayDate(site.firmware_config_date),
-          completedBy: completedByForStep(installStep),
-        },
-        {
-          step: installStep,
-          item: "LLD",
-          date: displayDate(site.lld_date),
-          completedBy: completedByForStep(installStep),
-        },
-      ]
+          {
+            step: installStep,
+            item: "LLD",
+            date: displayDate(site.lld_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.lld_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "BIOS Configuration",
+            date: displayDate(site.bios_configuration_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.bios_configuration_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "Firmware Configuration",
+            date: displayDate(site.firmware_config_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.firmware_config_done ? "yes" : "no") as "yes" | "no",
+          },
+        ]
       : []),
     ...(hasOs
       ? [
-        {
-          step: installStep,
-          item: "OS Installation",
-          date: displayDate(site.os_installation_date),
-          completedBy: completedByForStep(installStep),
-        },
-        {
-          step: installStep,
-          item: "VM Installation",
-          date: displayDate(site.vm_installation_date),
-          completedBy: completedByForStep(installStep),
-        },
-        {
-          step: installStep,
-          item: "N/W Configuration",
-          date: displayDate(site.nw_config_date),
-          completedBy: completedByForStep(installStep),
-        },
-        {
-          step: installStep,
-          item: "Tools Integration",
-          date: displayDate(site.tools_integration_date),
-          completedBy: completedByForStep(installStep),
-        },
-        {
-          step: installStep,
-          item: "MBSS",
-          date: displayDate(site.mbss_date),
-          completedBy: completedByForStep(installStep),
-        },
-        {
-          step: installStep,
-          item: "VASCAN",
-          date: displayDate(site.vascan_date),
-          completedBy: completedByForStep(installStep),
-        },
-      ]
+          {
+            step: installStep,
+            item: "OS Installation",
+            date: displayDate(site.os_installation_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.os_installation_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "VM Installation",
+            date: displayDate(site.vm_installation_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.vm_installation_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "N/W Configuration",
+            date: displayDate(site.nw_config_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.nw_config_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "Tools Integration",
+            date: displayDate(site.tools_integration_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.tools_integration_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "MBSS",
+            date: displayDate(site.mbss_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.mbss_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "VASCAN",
+            date: displayDate(site.vascan_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.vascan_done ? "yes" : "no") as "yes" | "no",
+          },
+        ]
       : []),
     {
       step: "Acceptance",
       item: "Handover to Application Team",
       date: displayDate(site.handover_to_cloud_date),
       completedBy: completedByForStep("Acceptance"),
+      answer: site.handover_to_cloud_done ? "yes" : "no",
     },
     ...(rackOnly
       ? []
       : [
-        {
-          step: "Acceptance",
-          item: "HW-AT Request",
-          date: displayDate(site.hwat_request_date),
-          completedBy: completedByForStep("Acceptance"),
-        },
-        {
-          step: "Acceptance",
-          item: "HW-AT Sign-off",
-          date: displayDate(site.hwat_signoff_date),
-          completedBy: completedByForStep("Acceptance"),
-        },
-      ]),
-  ].filter((row) => row.date !== "—");
+          {
+            step: "Acceptance",
+            item: "HW-AT Request",
+            date: displayDate(site.hwat_request_date),
+            completedBy: completedByForStep("Acceptance"),
+            answer: (site.hwat_request_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: "Acceptance",
+            item: "HW-AT Sign-off",
+            date: displayDate(site.hwat_signoff_date),
+            completedBy: completedByForStep("Acceptance"),
+            answer: (site.hwat_signoff_received ? "yes" : "no") as "yes" | "no",
+          },
+        ]),
+  ];
 
   return (
     <ProjectsSection
@@ -761,6 +821,7 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
               <tr className="border-b border-border/70 bg-muted/20 text-[11px] uppercase tracking-wide text-muted-foreground">
                 <th className="px-3 py-2 font-medium">Step</th>
                 <th className="px-3 py-2 font-medium">Checkpoint</th>
+                <th className="px-3 py-2 font-medium">Yes / No</th>
                 <th className="px-3 py-2 font-medium">Completed By</th>
                 <th className="px-3 py-2 font-medium">Date Completed</th>
               </tr>
@@ -773,15 +834,38 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
                     className="border-b border-border/50 last:border-0"
                   >
                     <td className="px-3 py-2 font-medium text-foreground">{row.step}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{row.item}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={cn(
+                          "inline-flex rounded-md border px-2 py-0.5 text-xs font-medium",
+                          row.answer === "yes"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                            : "border-red-200 bg-red-50 text-red-800",
+                        )}
+                      >
+                        {row.item}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={cn(
+                          "inline-flex min-w-10 justify-center rounded-md border px-2 py-0.5 text-xs font-semibold uppercase tracking-wide",
+                          row.answer === "yes"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                            : "border-red-200 bg-red-50 text-red-800",
+                        )}
+                      >
+                        {row.answer === "yes" ? "Yes" : "No"}
+                      </span>
+                    </td>
                     <td className="px-3 py-2 text-muted-foreground">{row.completedBy}</td>
                     <td className="px-3 py-2 text-muted-foreground">{row.date}</td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={4} className="px-3 py-3 text-xs text-muted-foreground">
-                    No step dates filled yet.
+                  <td colSpan={5} className="px-3 py-3 text-xs text-muted-foreground">
+                    No checkpoints for this delivery type.
                   </td>
                 </tr>
               )}

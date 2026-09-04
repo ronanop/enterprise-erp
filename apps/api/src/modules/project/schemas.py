@@ -108,6 +108,10 @@ class ProjectResponse(OrmModel):
     branch_id: UUID
     created_at: datetime | None = None
     version: int
+    # Site workflow enrichment for portfolio list
+    current_stage: str | None = None
+    current_stage_label: str | None = None
+    current_stage_owner_name: str | None = None
 
 
 class ProjectPoQueueItem(BaseModel):
@@ -1368,6 +1372,7 @@ class ProjectStageSaveAlertItem(BaseModel):
     progress_status_label: str
     message: str
     remarks: str | None = None
+    yes_answers: list[str] = Field(default_factory=list)
     no_answers: list[str] = Field(default_factory=list)
     site_name: str | None = None
     document_number: str | None = None

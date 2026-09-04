@@ -63,7 +63,7 @@ export function ProjectsRecordList<T extends { id: string }>({
   icon?: LucideIcon;
   newHref?: string;
   newLabel?: string;
-  headerActions?: ReactNode;
+  headerActions?: ReactNode | ((ctx: { rows: T[]; loading: boolean }) => ReactNode);
   searchPlaceholder?: string;
   emptyMessage: string;
   loadingMessage?: string;
@@ -119,6 +119,11 @@ export function ProjectsRecordList<T extends { id: string }>({
     [filtered, sortBy, sortDir, accessors],
   );
 
+  const resolvedHeaderActions =
+    typeof headerActions === "function"
+      ? headerActions({ rows: sorted, loading })
+      : headerActions;
+
   return (
     <ProjectsPage>
       <PageHeader
@@ -126,7 +131,7 @@ export function ProjectsRecordList<T extends { id: string }>({
         description={description}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {headerActions}
+            {resolvedHeaderActions}
             <Button
               type="button"
               variant="outline"

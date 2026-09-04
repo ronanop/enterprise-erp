@@ -304,6 +304,19 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
       if (showBios) {
         configFields.push(
           {
+            name: "lld_done",
+            label: "LLD Availability",
+            type: "yesno",
+            clearFieldsOnChange: ["lld_date"],
+          },
+          {
+            name: "lld_date",
+            label: "LLD Date",
+            type: "date",
+            required: true,
+            visibleWhen: (v) => v.lld_done === "true",
+          },
+          {
             name: "bios_configuration_done",
             label: "BIOS Configuration",
             type: "yesno",
@@ -328,19 +341,6 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
             type: "date",
             required: true,
             visibleWhen: (v) => v.firmware_config_done === "true",
-          },
-          {
-            name: "lld_done",
-            label: "LLD Availability",
-            type: "yesno",
-            clearFieldsOnChange: ["lld_date"],
-          },
-          {
-            name: "lld_date",
-            label: "LLD Date",
-            type: "date",
-            required: true,
-            visibleWhen: (v) => v.lld_done === "true",
           },
         );
       }
@@ -429,8 +429,8 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
       sectionsOut.push({
         title: "Configuration",
         subtitle: showOs
-          ? "BIOS · Firmware · LLD · OS · VM · N/W · Tools · MBSS · VASCAN"
-          : "BIOS · Firmware · LLD",
+          ? "LLD · BIOS · Firmware · OS · VM · N/W · Tools · MBSS · VASCAN"
+          : "LLD · BIOS · Firmware",
         icon: Wrench,
         fields: configFields,
       });

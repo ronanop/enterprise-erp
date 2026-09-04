@@ -280,9 +280,9 @@ STAGE_CHECKLIST_NO_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
         ("rack_server_stacking_done", "Rack / Server Stacking"),
         ("rack_server_power_on_done", "Rack / Server Power On"),
         ("dac_ilo_cabling_done", "DAC / ILO Cabling"),
+        ("lld_done", "LLD Availability"),
         ("bios_configuration_done", "BIOS Configuration"),
         ("firmware_config_done", "Firmware Configuration"),
-        ("lld_done", "LLD Availability"),
         ("os_installation_done", "OS Installation"),
         ("vm_installation_done", "VM Installation"),
         ("nw_config_done", "N/W Configuration"),
@@ -581,6 +581,7 @@ def _assert_installation_and_config_gates(record: Any, delivery: str) -> None:
         )
 
     if delivery_includes_bios(delivery):
+        _require_true_with_date(record, "lld_done", "lld_date", "LLD")
         _require_true_with_date(
             record,
             "bios_configuration_done",
@@ -593,7 +594,6 @@ def _assert_installation_and_config_gates(record: Any, delivery: str) -> None:
             "firmware_config_date",
             "Firmware Configuration",
         )
-        _require_true_with_date(record, "lld_done", "lld_date", "LLD")
     if delivery_includes_os(delivery):
         _require_true_with_date(
             record, "os_installation_done", "os_installation_date", "OS Installation"

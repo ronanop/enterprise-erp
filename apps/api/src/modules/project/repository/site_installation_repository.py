@@ -40,6 +40,18 @@ class SiteInstallationRepository(PrjScopedRepository):
         stmt = self.apply_prj_filter(stmt, PrjSiteInstallation, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 
+    def list_by_project_ids(
+        self, ctx: TenantContext, project_ids: list[UUID]
+    ) -> list[PrjSiteInstallation]:
+        if not project_ids:
+            return []
+        stmt = select(PrjSiteInstallation).where(
+            PrjSiteInstallation.project_id.in_(project_ids),
+            PrjSiteInstallation.is_deleted.is_(False),
+        )
+        stmt = self.apply_prj_filter(stmt, PrjSiteInstallation, ctx, branch_scoped=False)
+        return list(self.db.scalars(stmt).all())
+
     def create(self, ctx: TenantContext, **fields) -> PrjSiteInstallation:
         row = PrjSiteInstallation(
             id=uuid4(),

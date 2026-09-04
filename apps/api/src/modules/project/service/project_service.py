@@ -11,15 +11,18 @@ from sqlalchemy.orm import Session
 from core.exceptions import AppException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
+from modules.master_data.models.employee import MasterEmployee
 from modules.master_data.models.party import MasterCustomer
 from modules.project.adapters.master_data_port import ProjectMasterDataAdapter
 from modules.project.domain.enums import PrjEntityType, SiteInstallationStatus, SiteWorkflowStage
 from modules.project.models import PrjProject
+from modules.project.models.site_installation import PrjSiteInstallation
 from modules.project.repository.project_repository import ProjectRepository
 from modules.project.repository.site_installation_repository import SiteInstallationRepository
 from modules.project.schemas import ProjectResponse
 from modules.project.service.document_number_service import DocumentNumberService
 from modules.project.service.engines import ProjectEngine
+from modules.project.service.engines import site_installation_engine as site_engine
 from modules.project.service.project_assignment_scope import ProjectAssignmentScope
 from modules.project.service.project_module_admin import ProjectModuleAdminService
 from modules.project.service.project_scope_validator import ProjectScopeValidator
@@ -28,6 +31,7 @@ from modules.project.service.project_scope_validator import ProjectScopeValidato
 class ProjectService:
     def __init__(self, db: Session) -> None:
         self._repo = ProjectRepository(db)
+        self._sites = SiteInstallationRepository(db)
         self._scope = ProjectScopeValidator(db)
         self._numbers = DocumentNumberService(db)
         self._engine = ProjectEngine()
@@ -66,6 +70,18 @@ class ProjectService:
                 and (row.customer_id is None or row.customer_id not in names)
             },
         )
+        sites_by_project = {
+            site.project_id: site
+            for site in self._sites.list_by_project_ids(ctx, [row.id for row in rows])
+        }
+        owner_ids: set[UUID] = set()
+        for row in rows:
+            site = sites_by_project.get(row.id)
+            owner_id = self._current_stage_owner_id(row, site)
+            if owner_id is not None:
+                owner_ids.add(owner_id)
+        owner_names = self._employee_names_by_id(ctx, owner_ids)
+
         out: list[ProjectResponse] = []
         for row in rows:
             payload = ProjectResponse.model_validate(row)
@@ -74,7 +90,96 @@ class ProjectService:
                 name = names.get(row.customer_id)
             if not name and row.proc_order_id is not None:
                 name = po_names.get(row.proc_order_id)
-            out.append(payload.model_copy(update={"customer_name": name}))
+            site = sites_by_project.get(row.id)
+            stage, stage_label, owner_id = self._current_stage_info(row, site)
+            owner_name = owner_names.get(owner_id) if owner_id else None
+            out.append(
+                payload.model_copy(
+                    update={
+                        "customer_name": name,
+                        "current_stage": stage,
+                        "current_stage_label": stage_label,
+                        "current_stage_owner_name": owner_name,
+                    }
+                )
+            )
+        return out
+
+    def _current_stage_info(
+        self,
+        project: PrjProject,
+        site: PrjSiteInstallation | None,
+    ) -> tuple[str | None, str | None, UUID | None]:
+        if project.status in {
+            "completed",
+            "closed",
+            "cancelled",
+        }:
+            label = "Completed" if project.status == "completed" else project.status.title()
+            return project.status, label, None
+        if site is None:
+            return None, None, None
+        stage = (site.workflow_stage or "").strip().lower() or None
+        if not stage:
+            return None, None, None
+        if stage == "configuration":
+            stage = SiteWorkflowStage.INSTALLATION.value
+        if stage == "assignment":
+            stage = SiteWorkflowStage.SURVEY.value
+        if stage == "onsite":
+            stage = SiteWorkflowStage.ONSITE_DELIVERY.value
+        label = site_engine.STAGE_LABELS.get(stage, stage.replace("_", " ").title())
+        if stage == SiteWorkflowStage.INSTALLATION.value:
+            delivery = getattr(site, "delivery_type", None) or ""
+            if delivery == "rack_only":
+                label = "Installation"
+        owner_id = self._current_stage_owner_id(project, site, stage=stage)
+        return stage, label, owner_id
+
+    def _current_stage_owner_id(
+        self,
+        project: PrjProject,
+        site: PrjSiteInstallation | None,
+        *,
+        stage: str | None = None,
+    ) -> UUID | None:
+        if site is None:
+            return None
+        stage_key = stage or (site.workflow_stage or "").strip().lower()
+        if stage_key == "configuration":
+            stage_key = SiteWorkflowStage.INSTALLATION.value
+        if stage_key == "assignment":
+            stage_key = SiteWorkflowStage.SURVEY.value
+        if stage_key == "onsite":
+            stage_key = SiteWorkflowStage.ONSITE_DELIVERY.value
+        if stage_key in {SiteWorkflowStage.INTAKE.value, SiteWorkflowStage.COMPLETED.value}:
+            return project.project_manager_employee_id if stage_key == SiteWorkflowStage.INTAKE.value else None
+        field = site_engine.STAGE_ASSIGNEE_FIELDS.get(stage_key)
+        if not field:
+            return project.project_manager_employee_id
+        return getattr(site, field, None) or None
+
+    def _employee_names_by_id(
+        self,
+        ctx: TenantContext,
+        employee_ids: set[UUID],
+    ) -> dict[UUID, str]:
+        if not employee_ids:
+            return {}
+        stmt = select(
+            MasterEmployee.id,
+            MasterEmployee.first_name,
+            MasterEmployee.last_name,
+        ).where(
+            MasterEmployee.tenant_id == ctx.tenant_id,
+            MasterEmployee.is_deleted.is_(False),
+            MasterEmployee.id.in_(employee_ids),
+        )
+        out: dict[UUID, str] = {}
+        for emp_id, first, last in self._db.execute(stmt).all():
+            label = f"{first or ''} {last or ''}".strip()
+            if label:
+                out[emp_id] = label
         return out
 
     def _customer_names_by_id(

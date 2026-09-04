@@ -3,6 +3,22 @@ import writeXlsxFile from "write-excel-file/browser";
 
 export type SpreadsheetRow = Record<string, string | number | boolean | null | undefined>;
 
+/** Cell value or styled cell for write-excel-file. */
+export type SpreadsheetCellValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | {
+      value: string | number | boolean | null;
+      type?: typeof String | typeof Number | typeof Boolean | typeof Date | "Formula";
+      backgroundColor?: string;
+      textColor?: string;
+      fontWeight?: "bold";
+      align?: "left" | "center" | "right";
+    };
+
 export function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -53,6 +69,18 @@ function rowsToSheetCells(rows: SpreadsheetRow[]) {
   ];
 }
 
+function normalizeSheetCell(cell: SpreadsheetCellValue) {
+  if (cell == null) return null;
+  if (typeof cell === "object" && "value" in cell) {
+    return {
+      ...cell,
+      value: cell.value == null ? null : cell.value,
+    };
+  }
+  if (typeof cell === "boolean" || typeof cell === "number") return cell;
+  return String(cell);
+}
+
 export async function downloadXlsx(
   filename: string,
   sheets: { name: string; rows: SpreadsheetRow[] }[],
@@ -61,6 +89,24 @@ export async function downloadXlsx(
     sheets.map((s) => ({
       sheet: s.name.slice(0, 31),
       data: rowsToSheetCells(s.rows),
+    })),
+  );
+  const blob = await result.toBlob();
+  downloadBlob(filename, blob);
+}
+
+/** Download XLSX from a cell matrix (supports backgroundColor / textColor on cells). */
+export async function downloadXlsxMatrix(
+  filename: string,
+  sheets: { name: string; data: SpreadsheetCellValue[][] }[],
+) {
+  const result = await writeXlsxFile(
+    sheets.map((s) => ({
+      sheet: s.name.slice(0, 31),
+      data:
+        s.data.length === 0
+          ? [[""]]
+          : s.data.map((row) => row.map((cell) => normalizeSheetCell(cell))),
     })),
   );
   const blob = await result.toBlob();

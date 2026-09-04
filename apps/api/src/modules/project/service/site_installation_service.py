@@ -5,11 +5,13 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from core.exceptions import ConflictException, ForbiddenException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
+from modules.master_data.models.employee import MasterEmployee
 from modules.project.domain.enums import (
     PrjEntityType,
     ProjectPhaseStatus,
@@ -37,6 +39,10 @@ from modules.project.repository.project_notification_repository import (
 from modules.project.service.project_assignment_scope import ProjectAssignmentScope
 from modules.project.service.project_module_admin import ProjectModuleAdminService
 from modules.project.service.project_scope_validator import ProjectScopeValidator
+
+# Temporary SCM step owner for testing (swap later).
+SCM_HEAD_EMAIL = "moksh@cachedigitech.com"
+SCM_HEAD_EMPLOYEE_ID = UUID("48e464b4-36b9-4bfe-945b-683cda39bed2")
 
 
 class SiteInstallationService:
@@ -450,23 +456,25 @@ class SiteInstallationService:
         return engine.PROGRESS_STATUS_LABELS.get(status, status.replace("_", " ").title())
 
     @staticmethod
-    def _collect_no_labels(
+    def _collect_checkpoint_answers(
         before: PrjSiteInstallation,
         after: PrjSiteInstallation,
         fields: dict,
         stage_key: str,
-    ) -> list[str]:
-        labels: list[str] = []
+    ) -> tuple[list[str], list[str]]:
+        """Return newly answered Yes and No checklist labels for this save."""
+        yes_labels: list[str] = []
+        no_labels: list[str] = []
         for field_name, label in engine.STAGE_CHECKLIST_NO_FIELDS.get(stage_key, ()):
             if field_name not in fields:
                 continue
-            if getattr(after, field_name, None) is not False:
-                continue
-            # Only newly answered No (matches prior client notify_no_answers behavior)
-            if getattr(before, field_name, None) is False:
-                continue
-            labels.append(label)
-        return labels
+            after_val = getattr(after, field_name, None)
+            before_val = getattr(before, field_name, None)
+            if after_val is True and before_val is not True:
+                yes_labels.append(label)
+            elif after_val is False and before_val is not False:
+                no_labels.append(label)
+        return yes_labels, no_labels
 
     def _actor_display_name(self, ctx: TenantContext) -> str:
         if ctx.user_id is None:
@@ -495,9 +503,10 @@ class SiteInstallationService:
         fields: dict,
         stage_key: str | None,
     ) -> None:
-        """Fan-out stage-save alerts to Project module admins (skip when admin is saver)."""
+        """Fan-out stage-save alerts to Project module admins and the project manager."""
         if stage_key is None:
             return
+        # Module admins editing as admin do not alert themselves / peers for their own edits
         if self._module_admin.is_admin(ctx):
             return
         # Only notify for actual stage owner work (progress / remarks / checklist)
@@ -514,8 +523,8 @@ class SiteInstallationService:
         if not relevant:
             return
 
-        admins = self._module_admin.list_admin_recipients(ctx.tenant_id)
-        if not admins:
+        recipients = self._stage_save_alert_recipients(ctx, project)
+        if not recipients:
             return
 
         progress_raw = None
@@ -536,7 +545,9 @@ class SiteInstallationService:
             if isinstance(raw, str) and raw.strip():
                 remarks = raw.strip()
 
-        no_labels = self._collect_no_labels(before, after, fields, stage_key)
+        yes_labels, no_labels = self._collect_checkpoint_answers(
+            before, after, fields, stage_key
+        )
         saved_at = after.updated_at or datetime.now(timezone.utc)
         if saved_at.tzinfo is None:
             saved_at = saved_at.replace(tzinfo=timezone.utc)
@@ -549,7 +560,15 @@ class SiteInstallationService:
             else f"/projects/projects/{after.project_id}"
         )
 
-        message = f"{stage_label} has been marked {progress_label} on site {site_name}."
+        bits: list[str] = []
+        if yes_labels:
+            bits.append(f"Yes: {', '.join(yes_labels)}")
+        if no_labels:
+            bits.append(f"No: {', '.join(no_labels)}")
+        if bits:
+            message = f"{stage_label} checkpoints updated on site {site_name} — {'; '.join(bits)}."
+        else:
+            message = f"{stage_label} has been marked {progress_label} on site {site_name}."
         payload_base = {
             "kind": "site_stage_saved",
             "stage": stage_key,
@@ -564,6 +583,7 @@ class SiteInstallationService:
             "form_path": form_path,
             "message": message,
             "remarks": remarks,
+            "yes_answers": yes_labels,
             "no_answers": no_labels,
             "saved_at": saved_at.isoformat(),
             "actor_user_id": str(ctx.user_id) if ctx.user_id else None,
@@ -571,21 +591,21 @@ class SiteInstallationService:
         }
 
         notif_svc = NotificationService(self._db)
-        for admin in admins:
+        for recipient in recipients:
             notif_svc.create(
                 ctx,
                 company_id=after.company_id,
                 branch_id=after.branch_id,
                 project_id=after.project_id,
                 notification_type="other",
-                recipient_user_id=admin.user_id,
-                recipient_employee_id=admin.employee_id,
+                recipient_user_id=recipient.user_id,
+                recipient_employee_id=recipient.employee_id,
                 payload_json=dict(payload_base),
                 delivery_status="sent",
                 sent_at=datetime.now(timezone.utc),
                 status="active",
             )
-            self._maybe_email_stage_saved(ctx, admin.email, payload_base)
+            self._maybe_email_stage_saved(ctx, recipient.email, payload_base)
 
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
@@ -593,6 +613,79 @@ class SiteInstallationService:
             entity_id=after.id,
             operation=f"stage_saved_alert:{stage_key}",
             performed_by=ctx.user_id,
+        )
+
+    def _stage_save_alert_recipients(
+        self,
+        ctx: TenantContext,
+        project: PrjProject,
+    ) -> list:
+        """Module admins + project manager (excluding the actor)."""
+        from modules.project.service.project_module_admin import ProjectModuleAdminRecipient
+
+        by_user: dict[UUID, ProjectModuleAdminRecipient] = {}
+        for admin in self._module_admin.list_admin_recipients(ctx.tenant_id):
+            by_user[admin.user_id] = admin
+
+        pm_id = project.project_manager_employee_id
+        if pm_id is not None:
+            pm = self._resolve_employee_recipient(ctx, pm_id)
+            if pm is not None:
+                by_user[pm.user_id] = pm
+
+        actor_id = ctx.user_id
+        return [r for r in by_user.values() if actor_id is None or r.user_id != actor_id]
+
+    def _resolve_employee_recipient(self, ctx: TenantContext, employee_id: UUID):
+        """Map master employee → active foundation user for alert delivery."""
+        from sqlalchemy import select
+
+        from modules.foundation.models.security import SecUser
+        from modules.master_data.models.employee import MasterEmployee
+        from modules.project.service.project_module_admin import ProjectModuleAdminRecipient
+
+        employee = self._db.scalar(
+            select(MasterEmployee).where(
+                MasterEmployee.id == employee_id,
+                MasterEmployee.tenant_id == ctx.tenant_id,
+                MasterEmployee.is_deleted.is_(False),
+            )
+        )
+        if employee is None:
+            return None
+
+        user = None
+        if employee.user_id is not None:
+            user = self._db.scalar(
+                select(SecUser).where(
+                    SecUser.id == employee.user_id,
+                    SecUser.tenant_id == ctx.tenant_id,
+                    SecUser.is_deleted.is_(False),
+                    SecUser.status == "active",
+                )
+            )
+        if user is None and employee.email:
+            email = employee.email.strip().lower()
+            if email:
+                from sqlalchemy import func
+
+                user = self._db.scalar(
+                    select(SecUser).where(
+                        SecUser.tenant_id == ctx.tenant_id,
+                        SecUser.is_deleted.is_(False),
+                        SecUser.status == "active",
+                        func.lower(SecUser.email) == email,
+                    )
+                )
+        if user is None:
+            return None
+        return ProjectModuleAdminRecipient(
+            user_id=user.id,
+            email=(user.email or employee.email or "").strip().lower(),
+            display_name=(user.display_name or "").strip()
+            or f"{employee.first_name or ''} {employee.last_name or ''}".strip()
+            or "Project Manager",
+            employee_id=employee.id,
         )
 
     def _maybe_email_stage_saved(
@@ -612,6 +705,7 @@ class SiteInstallationService:
         actor = str(payload.get("actor_name") or "Assignee")
         saved_at = str(payload.get("saved_at") or "")
         remarks = payload.get("remarks")
+        yes_answers = payload.get("yes_answers") or []
         no_answers = payload.get("no_answers") or []
         form_path = str(payload.get("form_path") or "/projects")
         deep_link = f"{settings.frontend_url.rstrip('/')}{form_path}"
@@ -622,6 +716,9 @@ class SiteInstallationService:
         ]
         if remarks:
             lines.append(f"<p>Remarks: {remarks}</p>")
+        if yes_answers:
+            joined = ", ".join(str(x) for x in yes_answers)
+            lines.append(f"<p>Marked Yes: {joined}</p>")
         if no_answers:
             joined = ", ".join(str(x) for x in no_answers)
             lines.append(f"<p>Marked No: {joined}</p>")
@@ -647,8 +744,8 @@ class SiteInstallationService:
             pass
 
     def list_stage_save_alerts(self, ctx: TenantContext, *, limit: int = 50) -> list[dict]:
-        """Project module admins: stage-save alerts addressed to the signed-in user."""
-        if not self._module_admin.is_admin(ctx) or ctx.user_id is None:
+        """Stage-save alerts addressed to the signed-in user (admins and project managers)."""
+        if ctx.user_id is None:
             return []
         cid = self._scope.resolve_company_id(ctx, None)
         rows = ProjectNotificationRepository(self._db).list_site_stage_save_alert_rows(
@@ -657,8 +754,8 @@ class SiteInstallationService:
         return [self._stage_save_alert_dict(row) for row in rows]
 
     def mark_stage_save_alert_read(self, ctx: TenantContext, notification_id: UUID) -> dict:
-        if not self._module_admin.is_admin(ctx) or ctx.user_id is None:
-            raise ForbiddenException("Only Project module admins can manage stage alerts")
+        if ctx.user_id is None:
+            raise ForbiddenException("Sign in to manage stage alerts")
         repo = ProjectNotificationRepository(self._db)
         row = repo.get(ctx, notification_id)
         if row is None or row.recipient_user_id != ctx.user_id:
@@ -674,6 +771,9 @@ class SiteInstallationService:
     @staticmethod
     def _stage_save_alert_dict(row) -> dict:
         payload = row.payload_json if isinstance(row.payload_json, dict) else {}
+        yes_answers = payload.get("yes_answers") or []
+        if not isinstance(yes_answers, list):
+            yes_answers = []
         no_answers = payload.get("no_answers") or []
         if not isinstance(no_answers, list):
             no_answers = []
@@ -703,6 +803,7 @@ class SiteInstallationService:
             ),
             "message": str(payload.get("message") or ""),
             "remarks": payload.get("remarks"),
+            "yes_answers": [str(x) for x in yes_answers if str(x).strip()],
             "no_answers": [str(x) for x in no_answers if str(x).strip()],
             "site_name": payload.get("site_name"),
             "document_number": payload.get("document_number"),
@@ -746,6 +847,13 @@ class SiteInstallationService:
             and getattr(row, "survey_assigned_date", None) is None
         ):
             updates["survey_assigned_date"] = date.today()
+        # Auto-assign SCM to temporary SCM head when Survey completes / SCM is entered
+        if final_stage == SiteWorkflowStage.SCM.value:
+            scm_owner = self._resolve_scm_head_employee_id(ctx)
+            if scm_owner is not None and not getattr(row, "scm_assignee_employee_id", None):
+                updates["scm_assignee_employee_id"] = scm_owner
+            if getattr(row, "scm_assigned_date", None) is None:
+                updates["scm_assigned_date"] = date.today()
         # Auto-assign Onsite Delivery to the Project Manager when SCM completes
         if action == "complete_scm" and project.project_manager_employee_id:
             if not getattr(row, "onsite_delivery_assignee_employee_id", None):
@@ -782,6 +890,26 @@ class SiteInstallationService:
             performed_by=ctx.user_id,
         )
         return updated
+
+    def _resolve_scm_head_employee_id(self, ctx: TenantContext) -> UUID | None:
+        """Temporary SCM owner for testing — prefer known employee id, else email."""
+        by_id = self._db.scalar(
+            select(MasterEmployee.id).where(
+                MasterEmployee.tenant_id == ctx.tenant_id,
+                MasterEmployee.is_deleted.is_(False),
+                MasterEmployee.id == SCM_HEAD_EMPLOYEE_ID,
+            )
+        )
+        if by_id is not None:
+            return by_id
+        email = SCM_HEAD_EMAIL.strip().lower()
+        return self._db.scalar(
+            select(MasterEmployee.id).where(
+                MasterEmployee.tenant_id == ctx.tenant_id,
+                MasterEmployee.is_deleted.is_(False),
+                func.lower(MasterEmployee.email) == email,
+            )
+        )
 
     def follow_up_stage(
         self,
