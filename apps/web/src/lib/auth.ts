@@ -37,6 +37,7 @@ export function redirectToLogin(): void {
   const next = `${path}${window.location.search}`;
   window.location.assign(`/login?next=${encodeURIComponent(next)}`);
 }
+
 /** Best-effort JWT `sub` for UI-only checks (SoD hints). Not a security boundary. */
 export function getAccessTokenUserId(): string | null {
   const token = getAccessToken();

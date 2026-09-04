@@ -1,5 +1,7 @@
 """Training services."""
 
+from __future__ import annotations
+
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -69,11 +71,53 @@ class TrainingService:
         return row
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
+        employee_ids = fields.pop("employee_ids", None)
         self.get(ctx, row_id)
         row = self._repo.update(ctx, row_id, **fields)
         if row is None:
             raise NotFoundException("Training not found")
+        if employee_ids is not None:
+            self._sync_attendees(ctx, row, employee_ids)
         return row
+
+    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        row = self.get(ctx, row_id)
+        for rec in self._attendance.list_for_training(ctx, row_id):
+            self._attendance.soft_delete(ctx, rec.id)
+        if not self._repo.soft_delete(ctx, row_id):
+            raise NotFoundException("Training not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_training",
+            entity_id=row.id,
+            operation="delete",
+            performed_by=ctx.user_id,
+            old_value={"training_code": row.training_code, "training_name": row.training_name},
+        )
+
+    def _sync_attendees(self, ctx: TenantContext, row: HrTraining, employee_ids: list[UUID]) -> None:
+        wanted = {UUID(str(emp_id)) for emp_id in employee_ids}
+        existing = self._attendance.list_for_training(ctx, row.id, include_deleted=True)
+        by_emp = {rec.employee_id: rec for rec in existing}
+        branch_id = row.branch_id
+        for emp_id in wanted:
+            rec = by_emp.get(emp_id)
+            if rec is None:
+                if not branch_id:
+                    continue
+                self._master.get_employee(ctx, emp_id)
+                self._attendance.create(
+                    ctx,
+                    company_id=row.company_id,
+                    branch_id=branch_id,
+                    training_id=row.id,
+                    employee_id=emp_id,
+                )
+            elif rec.is_deleted:
+                self._attendance.restore(ctx, rec.id)
+        for emp_id, rec in by_emp.items():
+            if emp_id not in wanted and not rec.is_deleted:
+                self._attendance.soft_delete(ctx, rec.id)
 
     def assign(
         self,

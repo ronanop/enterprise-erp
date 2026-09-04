@@ -424,17 +424,7 @@ export function AppTopbarNotifications() {
   }, [crmAlerts]);
 
   if (!enabled) {
-    return (
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Notifications"
-        disabled
-        className="text-muted-foreground"
-      >
-        <Bell className="size-4" />
-      </Button>
-    );
+    return null;
   }
 
   const panelWidth = Math.min(

@@ -416,14 +416,17 @@
     width: 10px;
     height: 10px;
   }
+
   .erp-scroll::-webkit-scrollbar-track {
     background: oklch(0.93 0.01 220);
     border-radius: 999px;
   }
+
   .erp-scroll::-webkit-scrollbar-thumb {
     background: oklch(0.62 0.03 220);
     border-radius: 999px;
   }
+
   .erp-scroll::-webkit-scrollbar-thumb:hover {
     background: oklch(0.5 0.04 220);
   }

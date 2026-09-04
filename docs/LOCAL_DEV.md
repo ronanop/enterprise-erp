@@ -46,8 +46,9 @@ copy .env.example .env.local   # first time only
 npm run dev
 ```
 
-- If Turbopack panics or 404 on `/login`: stop dev, then `npm run dev:clean`
-- Stable alternative: `npm run dev:webpack`
+- `npm run dev` uses **webpack** (avoids the Next.js 16 Turbopack `Next.js package not found` HMR panic on Windows).
+- If the overlay/cache is stale: stop dev, then `npm run dev:clean`
+- Turbopack (optional, currently panics): `npm run dev:turbo`
 - Or from repo root: `.\scripts\dev-web.ps1`
 
 Dev server binds to **0.0.0.0** (LAN-accessible). After `npm run dev`, use the **Network** URL shown in the terminal (e.g. `http://192.168.x.x:3000`).

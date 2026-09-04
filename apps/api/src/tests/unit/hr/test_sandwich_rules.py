@@ -65,6 +65,23 @@ def test_sandwich_not_applied_when_approved_leave_covers_flanks():
     assert dates == set()
 
 
+def test_sandwich_applies_when_approved_leave_covers_flanks_if_trigger_is_leave():
+    fri = date(2026, 7, 24)
+    sat = date(2026, 7, 25)
+    sun = date(2026, 7, 26)
+    mon = date(2026, 7, 27)
+    dates = sandwich_lop_dates(
+        date(2026, 7, 20),
+        date(2026, 7, 31),
+        is_non_working=_weekend,
+        attendance_status_by_date={fri: "absent", mon: "absent"},
+        approved_leave_dates={fri, mon},
+        as_of=mon,
+        trigger="approved_leave",
+    )
+    assert dates == {sat, sun}
+
+
 def test_sandwich_not_applied_when_one_flank_is_present():
     fri = date(2026, 7, 24)
     mon = date(2026, 7, 27)

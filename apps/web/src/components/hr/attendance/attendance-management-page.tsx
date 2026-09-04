@@ -75,7 +75,7 @@ export function AttendanceManagementPage() {
   const [filters, setFilters] = useState<AttendanceFilters>(() => emptyAttendanceFilters(todayIso()));
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [view, setView] = useState<ViewMode>("table");
+  const [view, setView] = useState<ViewMode>("employee");
   const [statsBucket, setStatsBucket] = useState<AttendanceStatBucket | null>(null);
   const [markOpen, setMarkOpen] = useState(false);
   const [correctionRecord, setCorrectionRecord] = useState<AttendanceRecord | null>(null);
@@ -214,45 +214,49 @@ export function AttendanceManagementPage() {
         <EmsSkeleton />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {STAT_CARDS.map((card) => {
-              const active = statsBucket === card.key;
-              return (
-                <button
-                  key={card.key}
-                  type="button"
-                  onClick={() => selectStatCard(card.key)}
-                  aria-pressed={active}
-                  className={cn(
-                    "cursor-pointer rounded-xl border bg-card px-3 py-2.5 text-left shadow-sm transition-all duration-200",
-                    "hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                    active ? "border-primary/50 ring-1 ring-primary/20" : "border-border/70",
-                  )}
-                >
-                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                    {card.label}
-                  </p>
-                  <p className="mt-0.5 text-xl font-semibold">{stats[card.key]}</p>
-                </button>
-              );
-            })}
-          </div>
+          {view !== "employee" ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {STAT_CARDS.map((card) => {
+                  const active = statsBucket === card.key;
+                  return (
+                    <button
+                      key={card.key}
+                      type="button"
+                      onClick={() => selectStatCard(card.key)}
+                      aria-pressed={active}
+                      className={cn(
+                        "cursor-pointer rounded-xl border bg-card px-3 py-2.5 text-left shadow-sm transition-all duration-200",
+                        "hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                        active ? "border-primary/50 ring-1 ring-primary/20" : "border-border/70",
+                      )}
+                    >
+                      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                        {card.label}
+                      </p>
+                      <p className="mt-0.5 text-xl font-semibold">{stats[card.key]}</p>
+                    </button>
+                  );
+                })}
+              </div>
 
-          {statsBucket ? (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span>Filtered by card:</span>
-              <span className="font-medium text-foreground">{STAT_LABELS[statsBucket]}</span>
-              <span>
-                · {filtered.length} record{filtered.length === 1 ? "" : "s"} (today)
-              </span>
-              <button
-                type="button"
-                className="cursor-pointer font-medium text-primary transition-colors duration-200 hover:underline"
-                onClick={() => setStatsBucket(null)}
-              >
-                Clear
-              </button>
-            </div>
+              {statsBucket ? (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>Filtered by card:</span>
+                  <span className="font-medium text-foreground">{STAT_LABELS[statsBucket]}</span>
+                  <span>
+                    · {filtered.length} record{filtered.length === 1 ? "" : "s"} (today)
+                  </span>
+                  <button
+                    type="button"
+                    className="cursor-pointer font-medium text-primary transition-colors duration-200 hover:underline"
+                    onClick={() => setStatsBucket(null)}
+                  >
+                    Clear
+                  </button>
+                </div>
+              ) : null}
+            </>
           ) : null}
 
           <HrUnderlineTabs

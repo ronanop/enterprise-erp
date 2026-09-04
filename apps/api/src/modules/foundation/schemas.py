@@ -247,7 +247,6 @@ class NotificationUnreadCountResponse(BaseModel):
     unread_count: int
 
 
-
 class SettingUpsertRequest(BaseModel):
     setting_value: str
     value_type: str = "string"

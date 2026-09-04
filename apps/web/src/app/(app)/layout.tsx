@@ -9,7 +9,9 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <Suspense fallback={null}>
       <AuthGate>
-        <AppShell>{children}</AppShell>
+        <AuthSessionGuard>
+          <AppShell>{children}</AppShell>
+        </AuthSessionGuard>
       </AuthGate>
     </Suspense>
   );

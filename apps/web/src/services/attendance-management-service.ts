@@ -277,9 +277,14 @@ function defaultExtension(partial?: Partial<AttendanceExtension>): AttendanceExt
   };
 }
 
+type EmpLookup = Map<
+  string,
+  { name: string; code: string; dept: string; deptId: string; desig: string; manager: string }
+>;
+
 function mergeRow(
   row: HrRow,
-  empMap: Map<string, { name: string; code: string; dept: string; deptId: string; desig: string; manager: string }>,
+  empMap: EmpLookup,
   shiftMap: Map<string, string>,
   ext: AttendanceExtension,
   savedOverride: boolean,
@@ -343,58 +348,13 @@ function mergeRow(
   };
 }
 
-export type AttendanceDirectory = {
-  records: AttendanceRecord[];
-  options: {
-    branches: { id: string; label: string }[];
-    departments: { id: string; label: string }[];
-    shifts: { id: string; label: string }[];
-    managers: { id: string; label: string }[];
-    employees: { id: string; label: string; code: string; departmentId: string; designation: string; managerId: string }[];
-  };
-};
-
-export async function loadAttendanceDirectory(): Promise<AttendanceDirectory> {
-  const [attRows, empDir, branchRows, departmentRows, shiftRowsRaw] = await Promise.all([
-    listAllRows("/hr/attendance"),
-    loadEmployeeDirectory().catch(() => ({
-      records: [],
-      options: { branches: [], departments: [], designations: [], managers: [], shifts: [] },
-      errors: [],
-    })),
-    listAllRows("/branches"),
-    listAllRows("/departments"),
-    listAllRows("/hr/shifts"),
-  ]);
-
+function recordsFromRows(
+  attRows: HrRow[],
+  empMap: EmpLookup,
+  shiftMap: Map<string, string>,
+): AttendanceRecord[] {
   const extensions = loadExtensions();
-
-  const empMap = new Map<
-    string,
-    { name: string; code: string; dept: string; deptId: string; desig: string; manager: string }
-  >();
-  for (const e of empDir.records) {
-    empMap.set(e.id, {
-      name: e.displayName,
-      code: e.employeeCode,
-      dept: e.departmentName,
-      deptId: e.departmentId,
-      desig: e.designationName,
-      manager: e.reportingManagerName,
-    });
-  }
-
-  const shiftMap = new Map(
-    shiftRowsRaw.map((s) => [String(s.id), String(s.shift_name ?? s.shift_code ?? s.id)]),
-  );
-
-  const asOpts = (arr: HrRow[], labelKeys: string[]) =>
-    arr.map((r) => ({
-      id: String(r.id),
-      label: String(labelKeys.map((k) => r[k]).find(Boolean) ?? r.id),
-    }));
-
-  const records = attRows
+  return attRows
     .map((row) => {
       const id = String(row.id);
       const emp = empMap.get(String(row.employee_id));
@@ -427,9 +387,56 @@ export async function loadAttendanceDirectory(): Promise<AttendanceDirectory> {
       if (byDate !== 0) return byDate;
       return a.extension.employeeName.localeCompare(b.extension.employeeName);
     });
+}
+
+export type AttendanceDirectory = {
+  records: AttendanceRecord[];
+  options: {
+    branches: { id: string; label: string }[];
+    departments: { id: string; label: string }[];
+    shifts: { id: string; label: string }[];
+    managers: { id: string; label: string }[];
+    employees: { id: string; label: string; code: string; departmentId: string; designation: string; managerId: string }[];
+  };
+};
+
+export async function loadAttendanceDirectory(): Promise<AttendanceDirectory> {
+  const [attRows, empDir, branchRows, departmentRows, shiftRowsRaw] = await Promise.all([
+    listAllRows("/hr/attendance"),
+    loadEmployeeDirectory().catch(() => ({
+      records: [],
+      options: { branches: [], departments: [], designations: [], managers: [], shifts: [] },
+      errors: [],
+    })),
+    listAllRows("/branches"),
+    listAllRows("/departments"),
+    listAllRows("/hr/shifts"),
+  ]);
+
+  const empMap: EmpLookup = new Map();
+  for (const e of empDir.records) {
+    empMap.set(e.id, {
+      name: e.displayName,
+      code: e.employeeCode,
+      dept: e.departmentName,
+      deptId: e.departmentId,
+      desig: e.designationName,
+      manager: e.reportingManagerName,
+    });
+  }
+
+  const shiftMap = new Map(
+    shiftRowsRaw.map((s) => [String(s.id), String(s.shift_name ?? s.shift_code ?? s.id)]),
+  );
+
+  const asOpts = (arr: HrRow[], labelKeys: string[]) =>
+    arr.map((r) => ({
+      id: String(r.id),
+      label: String(labelKeys.map((k) => r[k]).find(Boolean) ?? r.id),
+    }));
 
   return {
-    records,
+    records: recordsFromRows(attRows, empMap, shiftMap),
     options: {
       branches: asOpts(branchRows, ["branch_name", "name", "branch_code"]),
       departments: asOpts(departmentRows, ["department_name", "name", "department_code"]),
@@ -445,6 +452,36 @@ export async function loadAttendanceDirectory(): Promise<AttendanceDirectory> {
       })),
     },
   };
+}
+
+export async function loadAttendanceForEmployee(
+  employeeId: string,
+  directory?: AttendanceDirectory | null,
+): Promise<AttendanceRecord[]> {
+  const attRows: HrRow[] = [];
+  for (let page = 1; page <= 30; page += 1) {
+    const res = await resourceService
+      .list("/hr/attendance", { page, page_size: 200, employee_id: employeeId })
+      .catch(() => ({ data: [] }));
+    const rows = (Array.isArray(res.data) ? res.data : []) as HrRow[];
+    attRows.push(...rows);
+    if (rows.length < 200) break;
+  }
+
+  const empMap: EmpLookup = new Map();
+  for (const e of directory?.options.employees ?? []) {
+    empMap.set(e.id, {
+      name: e.label,
+      code: e.code,
+      dept: "",
+      deptId: e.departmentId,
+      desig: e.designation,
+      manager: "",
+    });
+  }
+
+  const shiftMap = new Map((directory?.options.shifts ?? []).map((s) => [s.id, s.label]));
+  return recordsFromRows(attRows, empMap, shiftMap);
 }
 
 export function filterAttendanceRecords(

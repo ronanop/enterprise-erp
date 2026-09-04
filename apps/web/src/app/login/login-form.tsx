@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -16,6 +16,17 @@ import { ApiClientError, authService } from "@/services/api-client";
 import { env } from "@/utils/env";
 import { cn } from "@/lib/utils";
 
+function MicrosoftIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 21 21" aria-hidden>
+      <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+      <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+    </svg>
+  );
+}
+
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -23,12 +34,25 @@ export function LoginForm() {
   const [password, setPassword] = useState(env.demoPassword || DEMO_PASSWORD);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [microsoftEnabled, setMicrosoftEnabled] = useState<boolean | null>(null);
 
   function selectAccount(nextEmail: string) {
     setEmail(nextEmail);
     setPassword(DEMO_PASSWORD);
     setError(null);
   }
+
+  useEffect(() => {
+    const oauthError = searchParams.get("error");
+    if (oauthError) setError(oauthError);
+  }, [searchParams]);
+
+  useEffect(() => {
+    void authService
+      .microsoftConfig()
+      .then((res) => setMicrosoftEnabled(Boolean(res.data?.enabled)))
+      .catch(() => setMicrosoftEnabled(false));
+  }, []);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -125,6 +149,22 @@ export function LoginForm() {
               <Button type="submit" className="h-10 w-full font-medium" disabled={loading}>
                 {loading ? "Signing in…" : "Sign in"}
               </Button>
+              {microsoftEnabled ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-10 w-full cursor-pointer gap-2 font-medium"
+                  onClick={() => {
+                    const next = searchParams.get("next")?.startsWith("/")
+                      ? searchParams.get("next")!
+                      : "/";
+                    window.location.href = authService.microsoftLoginUrl(next);
+                  }}
+                >
+                  <MicrosoftIcon className="size-4" />
+                  Sign in with Microsoft
+                </Button>
+              ) : null}
               <Link
                 href="/"
                 className="block text-center text-sm text-muted-foreground transition-colors hover:text-foreground"

@@ -40,17 +40,12 @@ def get_tenant_context(
     except redis.ConnectionError:
         cached = None
 
-    user_id = UUID(payload["sub"])
-    tenant_id = UUID(payload["tenant_id"])
-    user_type = str(payload["user_type"])
-    user_row = db.get(SecUser, user_id)
-    if user_row is not None and user_row.user_type:
-        user_type = user_row.user_type
-
     if cached is None:
+        # Rehydrate Redis from the active DB session instead of hard-failing
+        # when the cache TTL elapsed while the JWT/session are still valid.
         cached = {
-            "user_id": str(user_id),
-            "tenant_id": str(tenant_id),
+            "user_id": str(payload["sub"]),
+            "tenant_id": str(payload["tenant_id"]),
         }
         try:
             store.set_session(session_id, cached)
@@ -61,9 +56,14 @@ def get_tenant_context(
             store.touch_session(session_id)
         except redis.ConnectionError:
             pass
-
     company_id = UUID(cached["company_id"]) if cached.get("company_id") else None
     branch_id = UUID(cached["branch_id"]) if cached.get("branch_id") else None
+    user_id = UUID(payload["sub"])
+    tenant_id = UUID(payload["tenant_id"])
+    user_type = str(payload["user_type"])
+    user_row = db.get(SecUser, user_id)
+    if user_row is not None and user_row.user_type:
+        user_type = user_row.user_type
 
     if not company_id:
         from modules.foundation.service.org_context_service import OrgContextService
@@ -216,7 +216,6 @@ def require_any_permission(*permission_codes: str) -> Callable:
         raise ForbiddenException(f"Missing permission: one of {codes}")
 
     return _checker
-
 
 
 def get_client_ip(request: Request) -> str | None:

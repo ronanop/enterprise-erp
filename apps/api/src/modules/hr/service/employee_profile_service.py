@@ -3,12 +3,14 @@
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import NotFoundException, conflict_from_integrity
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.hr.adapters.master_data_port import HrMasterDataAdapter
+from modules.hr.domain.enums import normalize_active_inactive
 from modules.hr.domain.kyc_validators import normalize_kyc_fields
 from modules.hr.repository.employee_profile_repository import EmployeeProfileRepository
 from modules.hr.schemas import EmployeeProfileResponse
@@ -78,13 +80,19 @@ class EmployeeProfileService:
         self._scope.validate_branch_access(ctx, branch_id)
         self._master.get_employee(ctx, employee_id)
         fields = normalize_kyc_fields(fields)
-        row = self._repo.create(
-            ctx,
-            company_id=cid,
-            branch_id=branch_id,
-            employee_id=employee_id,
-            **fields,
-        )
+        if "status" in fields and fields["status"] is not None:
+            fields["status"] = normalize_active_inactive(str(fields["status"]))
+        try:
+            row = self._repo.create(
+                ctx,
+                company_id=cid,
+                branch_id=branch_id,
+                employee_id=employee_id,
+                **fields,
+            )
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise conflict_from_integrity(exc) from exc
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="hr_employee_profile",
@@ -98,9 +106,17 @@ class EmployeeProfileService:
         orm = self._repo.get(ctx, row_id)
         if orm is None:
             raise NotFoundException("Employee profile not found")
-        self._engine.validate_writable(orm)
+        status_only = set(fields.keys()) <= {"status"}
+        if not status_only:
+            self._engine.validate_writable(orm)
         fields = normalize_kyc_fields(fields)
-        updated = self._repo.update(ctx, row_id, **fields)
+        if "status" in fields and fields["status"] is not None:
+            fields["status"] = normalize_active_inactive(str(fields["status"]))
+        try:
+            updated = self._repo.update(ctx, row_id, **fields)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise conflict_from_integrity(exc) from exc
         if updated is None:
             raise NotFoundException("Employee profile not found")
         return self._enrich(updated)

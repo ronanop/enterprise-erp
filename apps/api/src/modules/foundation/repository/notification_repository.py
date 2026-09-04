@@ -216,7 +216,6 @@ class NotificationRepository(TenantScopedRepository):
         )
         return list(self.db.scalars(stmt).all())
 
-
     def unread_count(self, *, tenant_id: UUID, user_id: UUID) -> int:
         count = self.db.scalar(
             select(func.count())

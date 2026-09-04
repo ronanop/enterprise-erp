@@ -42,7 +42,15 @@ function formatShort(iso: string): string {
   return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-/** Count Monday–Friday days in an inclusive date range. */
+export const SALARY_DAY_BASIS = 30;
+
+/** Employee PF is a fixed monthly statutory amount — never scaled by LOP / payable days. */
+export function isPfDeductionLabel(label: string): boolean {
+  const n = label.trim().toLowerCase();
+  return n === "pf" || n === "employee pf" || n.includes("provident");
+}
+
+/** Count Monday–Friday days in an inclusive date range (display only — not salary N). */
 export function countWeekdaysInRange(start: string, end: string): number {
   let cur = parseIso(start);
   const last = parseIso(end);
@@ -75,7 +83,7 @@ export function buildPayrollCycle(anchorMonth: string, cutoverDay = 20): Payroll
     start,
     end,
     label: `${formatShort(start)} – ${formatShort(end)}`,
-    workingDays: countWeekdaysInRange(start, end),
+    workingDays: SALARY_DAY_BASIS,
   };
 }
 

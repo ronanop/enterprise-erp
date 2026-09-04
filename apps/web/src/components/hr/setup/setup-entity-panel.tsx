@@ -542,7 +542,7 @@ export function SetupEntityPanel({
             }
           } else if (type === "archive") {
             await resourceService.update(tab.apiPath, id, {
-              status: statusActions?.archive ?? "archived",
+              status: statusActions?.archive ?? "inactive",
             });
           } else if (type === "deactivate") {
             await resourceService.update(tab.apiPath, id, {

@@ -72,7 +72,7 @@ function approvalAttachmentCategory(state: string | null | undefined): string | 
   }
 }
 
-const CUSTOM_ACTIONS = ["create_quote", "quote_accepted", "create_ovf"];
+const CUSTOM_ACTIONS = ["quote_accepted"];
 
 /** Quote follow-on actions to surface on the opportunity BlueprintActions strip. */
 const QUOTE_STAGE_ACTIONS: Record<string, string[]> = {
@@ -106,7 +106,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [banner, setBanner] = useState<{ text: string; tone: "success" | "error" } | null>(null);
+  const [banner, setBanner] = useState<{ text: string; tone: "error" } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -159,8 +159,16 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
     setBusy(true);
     setBanner(null);
     try {
+      if (action === "create_quote") {
+        onCreateQuote();
+        return;
+      }
       const accepted = quotes.find((q) => q.quote_stage === "accepted");
       const quote = accepted ?? quotes[0];
+      if (action === "create_ovf" && quote) {
+        onCreateOvf(quote);
+        return;
+      }
       const quoteFollowOn = quote ? (QUOTE_STAGE_ACTIONS[quote.quote_stage] ?? []) : [];
       const ovf = ovfs[0];
       if (ovf && OVF_FOLLOW_ON.has(action)) {
@@ -200,7 +208,6 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
       } else {
         await applyOpportunityAction(opportunityId, action, payload);
       }
-      setBanner({ text: `Action "${action.replaceAll("_", " ")}" applied.`, tone: "success" });
       await load();
     } catch (err) {
       const message =
@@ -288,7 +295,13 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
       ? (OVF_STAGE_ACTIONS[existingOvf.blueprint_state] ?? [])
       : [];
   const blueprintActions = Array.from(
-    new Set([...blueprint.allowed_actions, ...quoteFollowOnActions, ...ovfFollowOnActions]),
+    new Set([
+      ...blueprint.allowed_actions,
+      ...quoteFollowOnActions,
+      ...ovfFollowOnActions,
+      ...(canCreateQuote ? ["create_quote"] : []),
+      ...(canCreateOvf ? ["create_ovf"] : []),
+    ]),
   );
 
   async function onOpenReviewAttachment() {
@@ -357,22 +370,6 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
                     href={`/crm/companies/${opp.company_account_id}/leads/${opp.lead_id}/edit`}
                   />
                 ) : null}
-                {canCreateQuote ? (
-                  <Button type="button" size="sm" className="cursor-pointer" disabled={busy} onClick={onCreateQuote}>
-                    <Plus className="size-3.5" /> Create Quote
-                  </Button>
-                ) : null}
-                {canCreateOvf && acceptedQuote ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="cursor-pointer"
-                    disabled={busy}
-                    onClick={() => onCreateOvf(acceptedQuote)}
-                  >
-                    <Plus className="size-3.5" /> Create OVF
-                  </Button>
-                ) : null}
                 <CrmRecordActionsMenu
                   entityType="opportunity"
                   entityId={opp.id}
@@ -388,15 +385,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
             }
           />
 
-          {banner ? (
-            banner.tone === "error" ? (
-              <CrmErrorBanner>{banner.text}</CrmErrorBanner>
-            ) : (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-950">
-                {banner.text}
-              </div>
-            )
-          ) : null}
+          {banner ? <CrmErrorBanner>{banner.text}</CrmErrorBanner> : null}
           {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
           <BlueprintActions

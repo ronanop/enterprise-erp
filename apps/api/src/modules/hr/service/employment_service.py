@@ -2,13 +2,14 @@
 
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from core.exceptions import ConflictException, NotFoundException
+from core.exceptions import ConflictException, NotFoundException, conflict_from_integrity
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.hr.adapters.master_data_port import HrMasterDataAdapter
-from modules.hr.domain.enums import EmploymentStatus, HrEntityType
+from modules.hr.domain.enums import EmploymentStatus, HrEntityType, normalize_employment_status
 from modules.hr.domain.exceptions import InvalidEmploymentState
 from modules.hr.models import HrEmployment
 from modules.hr.repository.employment_repository import EmploymentRepository
@@ -44,7 +45,8 @@ class EmploymentService:
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
         self._master.get_employee(ctx, employee_id)
-        status = fields.get("status", EmploymentStatus.DRAFT.value)
+        status = normalize_employment_status(fields.get("status", EmploymentStatus.DRAFT.value))
+        fields["status"] = status
         if status in EmploymentEngine.ACTIVE_SET:
             self._ensure_single_active(ctx, cid, employee_id)
         doc = self._numbers.generate(HrEntityType.EMPLOYMENT, cid, HrEmployment, "document_number")
@@ -80,7 +82,13 @@ class EmploymentService:
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
         prev = self.get(ctx, row_id)
         prev_mgmt = prev.management_group_id
-        row = self._repo.update(ctx, row_id, **fields)
+        if "status" in fields and fields["status"] is not None:
+            fields["status"] = normalize_employment_status(str(fields["status"]))
+        try:
+            row = self._repo.update(ctx, row_id, **fields)
+        except IntegrityError as exc:
+            self._db.rollback()
+            raise conflict_from_integrity(exc) from exc
         if row is None:
             raise NotFoundException("Employment not found")
         if row.management_group_id and row.management_group_id != prev_mgmt:
@@ -355,6 +363,9 @@ class EmploymentService:
         )
 
     def _sync_master_status(self, ctx: TenantContext, employee_id: UUID, status: str) -> None:
+        from modules.master_data.domain.enums import normalize_employee_status
+
+        status = normalize_employee_status(status)
         try:
             self._master.update_employee_status(ctx, employee_id, status)
         except AttributeError:

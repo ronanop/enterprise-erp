@@ -22,8 +22,21 @@ def iter_dates_inclusive(start: date, end: date) -> Iterable[date]:
         d += timedelta(days=1)
 
 
+FIXED_SALARY_DAYS = Decimal("30")
+
+
 def calendar_days_in_period(start: date, end: date) -> int:
     return sum(1 for _ in iter_dates_inclusive(start, end))
+
+
+def payable_days_from_lop(
+    lop_days: Decimal,
+    *,
+    period_days: Decimal = FIXED_SALARY_DAYS,
+) -> Decimal:
+    """Salary payable days = N − LOP, floored at zero."""
+    paid = Decimal(str(period_days or 0)) - Decimal(str(lop_days or 0))
+    return paid if paid > 0 else Decimal("0")
 
 
 def is_scheduled_working_day(

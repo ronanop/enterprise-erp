@@ -29,7 +29,6 @@ import {
   type CustomerChargeRow,
   type VendorChargeRow,
 } from "@/components/crm/sales/ovf-order-lines-section";
-import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
@@ -101,7 +100,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
   const [ovfApproverName, setOvfApproverName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [banner, setBanner] = useState<{ text: string; tone: "success" | "error" } | null>(null);
+  const [banner, setBanner] = useState<{ text: string; tone: "error" } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -194,7 +193,6 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       } else {
         await applyOvfAction(ovfId, action, payload);
       }
-      setBanner({ text: `Action "${action.replaceAll("_", " ")}" applied.`, tone: "success" });
       await load();
     } catch (err) {
       const message = err instanceof ApiClientError ? err.message : `Failed to ${action}`;
@@ -364,15 +362,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         </p>
       ) : null}
 
-      {banner ? (
-        banner.tone === "error" ? (
-          <CrmErrorBanner>{banner.text}</CrmErrorBanner>
-        ) : (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-950">
-            {banner.text}
-          </div>
-        )
-      ) : null}
+      {banner ? <CrmErrorBanner>{banner.text}</CrmErrorBanner> : null}
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
       <BlueprintActions
@@ -407,9 +397,6 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
           <CrmDetailItem label="Delivery Period">{textOrDash(ovf.delivery_period)}</CrmDetailItem>
           <CrmDetailItem label="OVF No.">{ovf.ovf_no}</CrmDetailItem>
           <CrmDetailItem label="OVF sent to SCM team">{ovf.shared_to_scm ? "Yes" : "No"}</CrmDetailItem>
-          <CrmDetailItem label="Approval Status">
-            <FinanceStatusBadge status={ovf.approval_status} />
-          </CrmDetailItem>
           <CrmDetailItem label="OVF Approver">{textOrDash(ovfApproverName)}</CrmDetailItem>
           <CrmDetailItem label="Opportunity">
             {opportunity ? (

@@ -27,7 +27,6 @@ export function AppShell({ children }: AppShellProps) {
   const hrMode = isHrPath(pathname);
   const { dark } = useHrmsColorMode();
   const lockPageScroll = pathname === "/hr/edoc" || pathname.startsWith("/hr/edoc/");
-
   const isCrm = pathname === "/crm" || pathname.startsWith("/crm/");
   const isProjects = pathname === "/projects" || pathname.startsWith("/projects/");
   const isProcurement =
@@ -37,7 +36,7 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <div
       className={cn(
-        "flex h-dvh min-h-dvh w-full max-w-[100dvw] overflow-hidden bg-background",
+        "flex h-dvh w-full max-w-[100dvw] overflow-hidden overflow-x-clip bg-background",
         hrMode && "hrms-theme",
         hrMode && dark && "dark",
       )}
@@ -55,16 +54,16 @@ export function AppShell({ children }: AppShellProps) {
         <AppSidebar />
       )}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip">
-        <AppTopbar />
+        {hrMode ? null : <AppTopbar />}
         <main
           className={cn(
-            "min-h-0 flex-1 px-4 py-4 sm:px-6 lg:px-8",
+            "min-h-0 min-w-0 flex-1 overflow-x-clip px-4 py-4 sm:px-6 lg:px-8",
             lockPageScroll ? "flex flex-col overflow-hidden" : "erp-scroll overflow-y-auto",
           )}
         >
           <div
             className={cn(
-              "mx-auto w-full animate-in fade-in-0 duration-300",
+              "mx-auto w-full min-w-0 animate-in fade-in-0 duration-300",
               pathname === "/hr" ? "max-w-[1680px]" : "max-w-[1400px]",
               lockPageScroll && "flex min-h-0 flex-1 flex-col overflow-hidden",
             )}
@@ -72,14 +71,6 @@ export function AppShell({ children }: AppShellProps) {
             {children}
           </div>
         </main>
-        {hrMode ? (
-          <footer className="border-t border-border/70 bg-card/40 px-4 py-3 text-[11px] text-muted-foreground sm:px-6">
-            <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-2">
-              <span className="font-medium tracking-tight">HRMS workspace</span>
-              <span>Workforce · Leave · Attendance · Talent · Hire · Pay</span>
-            </div>
-          </footer>
-        ) : null}
       </div>
       <ElevenLabsConvaiWidget />
     </div>

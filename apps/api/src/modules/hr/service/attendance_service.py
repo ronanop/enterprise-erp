@@ -24,9 +24,14 @@ class AttendanceService:
         self._audit = AuditService(db)
         self._policy = AttendancePolicyApplyService(db)
 
-    def list(self, ctx: TenantContext, company_id: UUID | None = None):
+    def list(
+        self,
+        ctx: TenantContext,
+        company_id: UUID | None = None,
+        employee_id: UUID | None = None,
+    ):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_rows(ctx, cid)
+        return self._repo.list_rows(ctx, cid, employee_id=employee_id)
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)

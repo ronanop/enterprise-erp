@@ -15,6 +15,33 @@ class EmployeeStatus(str, Enum):
     EX_EMPLOYEE = "ex_employee"
 
 
+# UI / HR lifecycle labels that are not stored on master_employee.
+_EMPLOYEE_STATUS_ALIASES: dict[str, str] = {
+    "archived": EmployeeStatus.EX_EMPLOYEE.value,
+    "inactive": EmployeeStatus.TERMINATED.value,
+    "notice": EmployeeStatus.NOTICE_PERIOD.value,
+    "separated": EmployeeStatus.RESIGNED.value,
+    "ended": EmployeeStatus.EX_EMPLOYEE.value,
+    "cancelled": EmployeeStatus.TERMINATED.value,
+    "confirmed": EmployeeStatus.ACTIVE.value,
+}
+
+
+def normalize_employee_status(status: str) -> str:
+    """Map UI lifecycle values onto ck_master_employee_status."""
+    raw = status.strip().lower()
+    mapped = _EMPLOYEE_STATUS_ALIASES.get(raw, raw)
+    allowed = {item.value for item in EmployeeStatus}
+    if mapped not in allowed:
+        from core.exceptions import ConflictException
+
+        raise ConflictException(
+            f"Invalid employee status '{status}'. "
+            f"Allowed: {', '.join(sorted(allowed))}."
+        )
+    return mapped
+
+
 class CustomerType(str, Enum):
     INDIVIDUAL = "individual"
     CORPORATE = "corporate"

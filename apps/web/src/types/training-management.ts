@@ -18,7 +18,9 @@ export type TrainingProgram = {
   notes: string;
   status: string;
   version: number;
+  branchId: string;
   attendeeCount: number;
+  attendeeIds: string[];
 };
 
 export type TrainingRoom = {

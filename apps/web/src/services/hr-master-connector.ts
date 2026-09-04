@@ -35,6 +35,9 @@ export type HrMasterOption = {
   shiftId?: string;
   shiftName?: string;
   bankAccount?: string;
+  bankName?: string;
+  bankIfsc?: string;
+  accountNumber?: string;
   monthlyCtc?: number;
   email?: string;
 };
@@ -84,6 +87,9 @@ function recordToOption(r: EmployeeRecord): HrMasterOption {
     bankAccount: r.extension?.bank?.accountNumber
       ? `XXXX${String(r.extension.bank.accountNumber).slice(-4)}`
       : undefined,
+    bankName: r.extension?.bank?.bankName || undefined,
+    bankIfsc: r.extension?.bank?.ifsc || undefined,
+    accountNumber: r.extension?.bank?.accountNumber || undefined,
     monthlyCtc: sal?.ctc ? Number(sal.ctc) || undefined : undefined,
     email: r.officialEmail,
   };

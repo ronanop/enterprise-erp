@@ -113,7 +113,6 @@ export function PageHeader({
           {actions}
         </div>
       ) : null}
-      </div>
     </div>
   );
 }

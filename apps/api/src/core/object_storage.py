@@ -2,6 +2,10 @@
 
 Object keys are namespaced as ``{module}/...`` so HRMS, payroll, CRM, and
 other modules share one bucket without mixing blobs.
+
+CRM attachments still use local disk via ``CRM_UPLOAD_ROOT`` unless
+``STORAGE_BACKEND=minio``. When object storage is enabled, use this module
+for modules that upload to MinIO.
 """
 
 from __future__ import annotations
@@ -120,4 +124,6 @@ def storage_diagnostics() -> dict[str, object]:
         "minio_endpoint": settings.minio_endpoint.strip() or None,
         "minio_bucket": settings.minio_bucket,
         "minio_secure": settings.minio_secure,
+        "storage_backend": settings.storage_backend,
+        "minio_enabled": is_enabled(),
     }

@@ -9,7 +9,6 @@ import {
   Building2,
   FileText,
   MapPin,
-  Plus,
   Scale,
 } from "lucide-react";
 
@@ -33,18 +32,19 @@ import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
 import { CrmRecordActionsMenu } from "@/components/crm/sales/crm-record-actions-menu";
 import { normalizeQuoteServiceType } from "@/lib/crm/lead-product-options";
 import { QuoteLineTable } from "@/components/crm/sales/quote-line-table";
-import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { cloneQuoteRecord, printQuotePreview } from "@/lib/crm/crm-record-actions";
 import { ApiClientError } from "@/services/api-client";
 import {
+  applyOpportunityAction,
   applyQuoteAction,
   approveQuoteInternally,
   deleteQuote,
   formatInr,
   fullName,
   getOpportunity,
+  getOpportunityBlueprint,
   getQuote,
   getQuoteBlueprint,
   getQuoteMargin,
@@ -76,13 +76,14 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const [margin, setMargin] = useState<QuoteMarginSummary | null>(null);
   const [lines, setLines] = useState<QuoteLine[]>([]);
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
+  const [oppBlueprint, setOppBlueprint] = useState<BlueprintState | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [existingOvf, setExistingOvf] = useState<Ovf | null>(null);
   const [hasVendorQuote, setHasVendorQuote] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [banner, setBanner] = useState<{ text: string; tone: "success" | "error" } | null>(null);
+  const [banner, setBanner] = useState<{ text: string; tone: "error" } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -102,11 +103,13 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       setLines(lineRows);
       setAttachments(attachmentRows);
       setHasVendorQuote(attachmentRows.some((row) => row.category === "vendor_quote"));
-      const [opp, ovfRows] = await Promise.all([
+      const [opp, ovfRows, oppBp] = await Promise.all([
         getOpportunity(quoteRow.opportunity_id).catch(() => null),
         listOvfs({ opportunity_id: quoteRow.opportunity_id }).catch(() => []),
+        getOpportunityBlueprint(quoteRow.opportunity_id).catch(() => null),
       ]);
       setOpportunity(opp);
+      setOppBlueprint(oppBp);
       setContacts(
         opp?.company_account_id
           ? await listContacts(opp.company_account_id).catch(() => [] as Contact[])
@@ -130,6 +133,29 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
     setBusy(true);
     setError(null);
     try {
+      if (action === "create_ovf") {
+        router.push(`/crm/quotes/${quoteId}/ovf/new`);
+        return;
+      }
+      const oppActions = new Set([
+        "attach_po",
+        "send_po_approval",
+        "lost",
+        "attach_boq",
+        "attach_sow",
+        "send_boq_approval",
+        "send_sow_approval",
+        "skip_sow",
+        "deal_reg",
+        "oem_received",
+        "attach_oem_quote",
+        "create_ovf",
+      ]);
+      if (opportunity && oppActions.has(action)) {
+        await applyOpportunityAction(opportunity.id, action, payload);
+        await load();
+        return;
+      }
       if (action === "send_for_approval") {
         const assignedUserId = payload.assigned_user_id;
         const assignedUserIds = Array.isArray(payload.assigned_user_ids)
@@ -149,7 +175,6 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       } else {
         await applyQuoteAction(quoteId, action, payload);
       }
-      setBanner({ text: `Action "${action.replaceAll("_", " ")}" applied.`, tone: "success" });
       await load();
     } catch (err) {
       const message = err instanceof ApiClientError ? err.message : `Failed to ${action}`;
@@ -201,11 +226,28 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
     opportunity?.blueprint_state === "ovf_ready" &&
     Boolean(opportunity.customer_po_approved);
 
+  const oppTransitionActions =
+    quote.quote_stage === "accepted" && oppBlueprint
+      ? oppBlueprint.allowed_actions.filter(
+          (action) =>
+            action !== "create_quote" &&
+            action !== "quote_accepted" &&
+            !blueprint.allowed_actions.includes(action),
+        )
+      : [];
+
+  const blueprintActions = Array.from(
+    new Set([
+      ...blueprint.allowed_actions,
+      ...oppTransitionActions,
+      ...(canCreateOvf ? ["create_ovf"] : []),
+    ]),
+  );
+
   async function onPrintPreview() {
     const q = quote;
     if (!q) return;
     await printQuotePreview(q, lines);
-    setBanner({ text: "Quote PDF exported.", tone: "success" });
   }
 
   return (
@@ -224,16 +266,8 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         description={quote.subject ?? "Customer quotation"}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <FinanceStatusBadge status={quote.approval_status} />
             <CrmDetailEditLink href={`/crm/quotes/${quote.id}/edit`} />
-            {canCreateOvf ? (
-              <Link
-                href={`/crm/quotes/${quote.id}/ovf/new`}
-                className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
-              >
-                <Plus className="size-3.5" /> Create OVF
-              </Link>
-            ) : existingOvf ? (
+            {existingOvf ? (
               <Link
                 href={`/crm/ovf/${existingOvf.id}`}
                 className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted/60"
@@ -274,15 +308,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         </p>
       ) : null}
 
-      {banner ? (
-        banner.tone === "error" ? (
-          <CrmErrorBanner>{banner.text}</CrmErrorBanner>
-        ) : (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-950">
-            {banner.text}
-          </div>
-        )
-      ) : null}
+      {banner ? <CrmErrorBanner>{banner.text}</CrmErrorBanner> : null}
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
       {nearingSubmit ? (
@@ -295,8 +321,8 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       ) : null}
 
       <BlueprintActions
-        allowedActions={blueprint.allowed_actions}
-        locked={blueprint.locked}
+        allowedActions={blueprintActions}
+        locked={blueprint.locked && oppTransitionActions.length === 0}
         currentStageLabel={resolveSalesStageLabel({
           entityType: "quote",
           blueprintState: blueprint.state,

@@ -289,14 +289,14 @@ export function HrSuperadminPage() {
         const row = await assignHrAdmin(employeeId, emp?.companyId ? [emp.companyId] : []);
         if (row.temporary_password) {
           showIssued(row.display_name, row.email, row.temporary_password);
-          toast(`${row.display_name} now has HR module access. Copy the generated password below.`);
+          toast(`${row.display_name} is now HR Admin with module access. Copy the generated password below.`);
           setTab("passwords");
         } else {
-          toast(`${row.display_name} now has HR module access`);
+          toast(`${row.display_name} is now HR Admin with module access`);
         }
       } else {
         await revokeHrAdmin(employeeId);
-        toast("HR module access revoked. That user has been signed out.");
+        toast("HR Admin / module access revoked. That user has been signed out.");
       }
       await Promise.all([reload(), reloadLogs()]);
     } catch (err) {
@@ -311,7 +311,7 @@ export function HrSuperadminPage() {
     if (next) current.add(companyId);
     else current.delete(companyId);
     if (current.size === 0) {
-      toast("Keep at least one entity, or turn off HR access", "error");
+      toast("Keep at least one entity, or turn off HR Admin / module access", "error");
       return;
     }
     setBusyId(`entity:${employeeId}:${companyId}`);
@@ -352,7 +352,7 @@ export function HrSuperadminPage() {
       <div className="p-6">
         <HrEmptyState
           title="Superadmin Panel"
-          description="Only HR module admins (assigned from Organization Users) can manage HR module users here."
+          description="Only the HRMS Superadmin can assign HR Admins and HR module users. This page is hidden from HR Admin users."
         />
       </div>
     );
@@ -363,7 +363,7 @@ export function HrSuperadminPage() {
       <SetupToastHost />
       <PageHeader
         title="Superadmin Panel"
-        description="Grant HR module access to employees. Users see HRMS in their ERP menu with standard (non-admin) permissions."
+        description="Assign HR Admins, grant HR module access, choose which entities they can manage (one or many), generate login passwords, and review activity logs."
       />
 
       {issued ? (
@@ -426,8 +426,8 @@ export function HrSuperadminPage() {
             <>
               <PanelHeader
                 icon={Shield}
-                title={`Assigned HR users (${admins.length})`}
-                caption="Employees with HR module access. They see HRMS in their ERP menu with member permissions for the entities below."
+                title={`Assigned HR Admins (${admins.length})`}
+                caption="Employees with HR Admin / module access. They see HRMS in their ERP menu. Toggle entities (one or many). Turn off HR Admin to revoke access and sign them out."
               >
                 <Input
                   value={query}
@@ -440,8 +440,8 @@ export function HrSuperadminPage() {
                 <HrLoadingBlock label="Loading employees…" />
               ) : assignedRows.length === 0 ? (
                 <HrEmptyState
-                  title="No HR module users yet"
-                  description="Turn on HR access for an employee in the list below."
+                  title="No HR Admins yet"
+                  description="Turn on HR Admin for an employee in the list below."
                 />
               ) : (
                 <div className="mb-6 overflow-auto rounded-xl border border-border/70">
@@ -451,7 +451,7 @@ export function HrSuperadminPage() {
                         <th className="px-3 py-2.5 font-medium">Employee</th>
                         <th className="px-3 py-2.5 font-medium">Designation</th>
                         <th className="px-3 py-2.5 font-medium">Entities</th>
-                        <th className="px-3 py-2.5 text-right font-medium">HR access</th>
+                        <th className="px-3 py-2.5 text-right font-medium">HR Admin</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -477,7 +477,11 @@ export function HrSuperadminPage() {
                               <p className="text-foreground">
                                 {entityNames.length ? entityNames.join(", ") : "—"}
                               </p>
-                              {entities.length > 0 ? (
+                              {entities.length === 0 ? (
+                                <p className="mt-2 text-xs text-muted-foreground">
+                                  No companies found. Add them in HR Setup → Legal Entities.
+                                </p>
+                              ) : (
                                 <ul className="mt-2 space-y-1">
                                   {entities.map((entity) => {
                                     const on = assigned.has(entity.id);
@@ -487,12 +491,17 @@ export function HrSuperadminPage() {
                                         key={entity.id}
                                         className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2 py-1"
                                       >
-                                        <span className="truncate text-[11px]">{entity.company_name}</span>
+                                        <span className="min-w-0 truncate text-[11px]">
+                                          {entity.company_name}
+                                          {entity.legal_name && entity.legal_name !== entity.company_name
+                                            ? ` · ${entity.legal_name}`
+                                            : ""}
+                                        </span>
                                         <ToggleSwitch
                                           compact
                                           checked={on}
                                           disabled={busyId === admin.employee_id || entityBusy}
-                                          label={on ? "On" : "Off"}
+                                          label={on ? "Assigned" : "Assign"}
                                           onChange={(next) =>
                                             void onToggleEntity(admin.employee_id, entity.id, next)
                                           }
@@ -501,14 +510,14 @@ export function HrSuperadminPage() {
                                     );
                                   })}
                                 </ul>
-                              ) : null}
+                              )}
                             </td>
                             <td className="px-3 py-3">
                               <div className="flex justify-end">
                                 <ToggleSwitch
                                   checked
                                   disabled={busyId === admin.employee_id}
-                                  label="HR access"
+                                  label="HR Admin"
                                   onChange={(next) => void onToggleHr(admin.employee_id, next)}
                                 />
                               </div>
@@ -524,7 +533,7 @@ export function HrSuperadminPage() {
               <PanelHeader
                 icon={UserPlus}
                 title="Employees"
-                caption="Turn on HR access to add HRMS to the user's ERP menu (member permissions)."
+                caption="Turn on HR Admin to grant access and add HRMS to the user's ERP menu. Then toggle entities in the assigned list above."
               />
               {!loading && filtered.length === 0 ? (
                 <HrEmptyState title="No employees match" description="Try a different search." />
@@ -539,7 +548,7 @@ export function HrSuperadminPage() {
                         <ToggleSwitch
                           checked={false}
                           disabled={busyId === emp.id}
-                          label="Grant HR"
+                          label="Assign HR"
                           onChange={(next) => void onToggleHr(emp.id, next)}
                         />
                       </PersonRow>
@@ -554,13 +563,13 @@ export function HrSuperadminPage() {
             <>
               <PanelHeader
                 icon={KeyRound}
-                title={`HR module passwords (${admins.length})`}
+                title={`HR Admin / module passwords (${admins.length})`}
                 caption="Turn on Generate to create a random login password. It is shown once above."
               />
               {admins.length === 0 ? (
                 <HrEmptyState
-                  title="No HR module users yet"
-                  description="Grant HR access to an employee first, then generate their password here."
+                  title="No HR Admins yet"
+                  description="Assign someone as HR Admin first, then generate their password here."
                 />
               ) : (
                 <ul>
@@ -667,4 +676,3 @@ export function HrSuperadminPage() {
     </div>
   );
 }
-

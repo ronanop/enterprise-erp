@@ -3,12 +3,13 @@
 from datetime import date
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from core.exceptions import ConflictException, NotFoundException
+from core.exceptions import ConflictException, NotFoundException, conflict_from_integrity
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
-from modules.master_data.domain.enums import MasterEntityType
+from modules.master_data.domain.enums import MasterEntityType, normalize_employee_status
 from modules.master_data.models.employee import MasterEmployee
 from modules.master_data.repository.employee_repository import EmployeeRepository
 from modules.master_data.service.code_generator_service import CodeGeneratorService
@@ -165,7 +166,14 @@ class EmployeeService:
             )
             fields["employee_code"] = str(fields["employee_code"]).strip().upper()
 
-        updated = self._repo.update(ctx, employee_id, **fields)
+        if "status" in fields and fields["status"] is not None:
+            fields["status"] = normalize_employee_status(str(fields["status"]))
+
+        try:
+            updated = self._repo.update(ctx, employee_id, **fields)
+        except IntegrityError as exc:
+            self._repo.db.rollback()
+            raise conflict_from_integrity(exc) from exc
         if updated is None:
             raise NotFoundException("Employee not found")
         self._audit.log_entity_change(

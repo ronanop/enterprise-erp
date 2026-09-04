@@ -1,7 +1,10 @@
 /** Client-safe environment configuration with API URL fallback. */
 
-const PRIMARY_API_URL =
-  process.env.NEXT_PUBLIC_API_URL?.trim() || "http://localhost:8000/api/v1";
+/** Same-origin `/api/v1` in dev (Next.js proxy) avoids browser CORS. Override with NEXT_PUBLIC_API_URL. */
+const defaultApiUrl =
+  process.env.NODE_ENV === "development" ? "/api/v1" : "http://localhost:8000/api/v1";
+
+const PRIMARY_API_URL = process.env.NEXT_PUBLIC_API_URL?.trim() || defaultApiUrl;
 const FALLBACK_API_URL =
   process.env.NEXT_PUBLIC_API_URL_FALLBACK?.trim() || "http://127.0.0.1:8000/api/v1";
 
@@ -101,10 +104,8 @@ export function setApiUrl(url: string): void {
   storeApiUrl(activeApiUrl);
 }
 
-const defaultApiUrl =
-  process.env.NODE_ENV === "development" ? "/api/v1" : "http://localhost:8000/api/v1";
-
 export const env = {
+  /** Active API base (probed). Same-origin `/api/v1` in dev unless NEXT_PUBLIC_API_URL is set. */
   get apiUrl() {
     return activeApiUrl;
   },

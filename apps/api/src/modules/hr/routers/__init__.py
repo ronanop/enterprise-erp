@@ -995,8 +995,12 @@ def list_attendance(
     db: Annotated[Session, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
+    employee_id: UUID | None = None,
 ):
-    return APIResponse(message="OK", data=paginate(AttendanceService(db).list(ctx, company_id), pagination))
+    return APIResponse(
+        message="OK",
+        data=paginate(AttendanceService(db).list(ctx, company_id, employee_id), pagination),
+    )
 
 
 @attendance_router.post("", response_model=APIResponse[AttendanceResponse])
@@ -1805,6 +1809,16 @@ def update_training(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=TrainingService(db).update(ctx, row_id, **extract_update_fields(body)))
+
+
+@training_router.delete("/{row_id}", response_model=APIResponse[None])
+def delete_training(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.training:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    TrainingService(db).delete(ctx, row_id)
+    return APIResponse(message="Deleted", data=None)
 
 
 @training_router.post("/{row_id}/assign", response_model=APIResponse[TrainingAttendanceResponse])

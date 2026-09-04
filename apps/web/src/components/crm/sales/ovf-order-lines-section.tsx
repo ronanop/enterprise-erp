@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useRef } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -520,6 +520,12 @@ export function validateChargeAttachments(
     return "Add Quote * is required for Vendor Charges (upload at least one file on any product row).";
   }
 
+  for (const row of vendorRows) {
+    if ((row.product_name.trim() || row.vendor_name.trim()) && !row.vendor_name.trim()) {
+      return "Distributor Name is required for each vendor charge row.";
+    }
+  }
+
   return null;
 }
 
@@ -766,6 +772,11 @@ export function OvfOrderLinesSection({
     onCustomerRowsChange([...customerRows, emptyCustomerRow()]);
   }
 
+  function onRemoveCustomerRow(key: string) {
+    if (disabled || !onCustomerRowsChange) return;
+    onCustomerRowsChange(customerRows.filter((row) => row.key !== key));
+  }
+
   function onAddVendorRow() {
     if (disabled || !onVendorRowsChange) return;
     onVendorRowsChange([...vendorRows, emptyVendorRow()]);
@@ -810,12 +821,13 @@ export function OvfOrderLinesSection({
                 <th className={thClass("min-w-[180px]")}>
                   Add PO <span className="text-destructive">*</span>
                 </th>
+                {!disabled ? <th className={thClass("w-10")} aria-label="Remove row" /> : null}
               </tr>
             </thead>
             <tbody>
               {customerRows.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
+                  <td colSpan={disabled ? 9 : 10} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
                     No customer charge rows. Click + Add row to create one.
                   </td>
                 </tr>
@@ -903,6 +915,20 @@ export function OvfOrderLinesSection({
                         }
                       />
                     </td>
+                    {!disabled ? (
+                      <td className={tdClass("text-center")}>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="size-7 cursor-pointer text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          aria-label="Delete row"
+                          onClick={() => onRemoveCustomerRow(row.key)}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))
               )}
@@ -939,7 +965,9 @@ export function OvfOrderLinesSection({
                 <th className={thClass("min-w-[90px]")}>GST ({GST_PCT}%)</th>
                 <th className={thClass("min-w-[140px]")}>Total Amount in GST</th>
                 <th className={thClass("min-w-[150px]")}>Total Amount with GST</th>
-                <th className={thClass("min-w-[140px]")}>Distributor Name</th>
+                <th className={thClass("min-w-[140px]")}>
+                  Distributor Name <span className="text-destructive">*</span>
+                </th>
                 <th className={thClass("min-w-[130px]")}>Contact Person</th>
                 <th className={thClass("min-w-[130px]")}>Contact Number.</th>
                 <th className={thClass("min-w-[180px]")}>

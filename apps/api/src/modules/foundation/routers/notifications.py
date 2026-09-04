@@ -94,6 +94,8 @@ def _template_dict(t) -> dict:
         "locale": t.locale,
         "is_active": t.is_active,
     }
+
+
 @router.get("/templates", response_model=APIResponse[list])
 def list_templates(
     ctx: Annotated[TenantContext, Depends(require_permission("foundation.notification:read"))],

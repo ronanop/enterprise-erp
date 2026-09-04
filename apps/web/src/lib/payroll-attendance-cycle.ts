@@ -1,7 +1,19 @@
-import type { AttendanceRecord, AttendanceStatusCode } from "@/types/attendance-management";
+import type { AttendanceRecord } from "@/types/attendance-management";
 import type { LeaveRequestRecord } from "@/types/leave-management";
 import type { PayrollEmployeeAttendance } from "@/types/payroll-management";
 import type { PayrollCycle } from "@/lib/payroll-cycle";
+import { SALARY_DAY_BASIS } from "@/lib/payroll-cycle";
+
+export function splitPresentAndHalf(presentDays: number, halfDays = 0): { present: number; half: number } {
+  let half = halfDays;
+  let present = presentDays;
+  if (presentDays % 1 !== 0) {
+    const frac = Math.round((presentDays - Math.floor(presentDays)) * 2) / 2;
+    if (!half) half = Math.round(frac * 2);
+    present = Math.round((presentDays - half * 0.5) * 10) / 10;
+  }
+  return { present, half };
+}
 
 export type PayrollAttendanceEmployeeRef = {
   employeeId: string;
@@ -39,12 +51,13 @@ function leaveDaysInCycle(req: LeaveRequestRecord, cycle: PayrollCycle): number 
   return eachDay(overlapStart, overlapEnd).length;
 }
 
-function presentWeight(status: AttendanceStatusCode): number {
+function presentWeight(status: string): number {
   switch (status) {
     case "present":
     case "late":
     case "work_from_home":
     case "early_exit":
+    case "on_duty":
       return 1;
     case "half_day":
       return 0.5;
@@ -99,7 +112,7 @@ export function summarizePayrollAttendance(
       else if (r.status === "absent") absentDays += 1;
       else if (r.status === "leave") leaveFromAtt += 1;
       else if (r.status === "holiday") holidays += 1;
-      else if (r.status === "weekend") weeklyOff += 1;
+      else if (r.status === "weekend" || r.status === "week_off") weeklyOff += 1;
     }
 
     const leaveFromRequests =
@@ -107,31 +120,27 @@ export function summarizePayrollAttendance(
       leaveByEmployee.get(emp.employeeId) ??
       0;
     const leaveDays = Math.max(leaveFromAtt, leaveFromRequests);
-
-    const presentWeighted = presentDays + halfDays * 0.5;
-    const workingDaysInCycle = cycle.workingDays;
-    const payableDays = Math.min(
-      workingDaysInCycle,
-      Math.round((presentWeighted + leaveDays) * 10) / 10,
-    );
+    const lopDays = Math.round((absentDays + halfDays * 0.5) * 10) / 10;
+    const periodDays = SALARY_DAY_BASIS;
+    const payableDays = Math.max(0, Math.round((periodDays - lopDays) * 10) / 10);
     const attendanceFactor =
-      workingDaysInCycle > 0
-        ? Math.min(1, Math.max(0, payableDays / workingDaysInCycle))
-        : 1;
+      periodDays > 0 ? Math.min(1, Math.max(0, payableDays / periodDays)) : 1;
 
     return {
       employeeId: emp.employeeId,
       employeeCode: emp.employeeCode,
       employeeName: emp.employeeName,
       department: emp.department,
-      presentDays: Math.round(presentWeighted * 10) / 10,
+      presentDays,
       leaveDays,
       absentDays,
       halfDays,
       holidays,
       weeklyOff,
+      lopDays,
       payableDays,
-      workingDaysInCycle,
+      workingDaysInCycle: periodDays,
+      periodDays,
       attendanceFactor: Math.round(attendanceFactor * 1000) / 1000,
     };
   });

@@ -1,4 +1,4 @@
-"""Assign HR module users (members) from the HRMS module admin panel."""
+"""Promote / revoke HR Admins and assign HR module users from the HRMS Superadmin Panel."""
 
 from __future__ import annotations
 
@@ -132,7 +132,7 @@ class HrSuperadminService:
             assigned_by=assigned_by,
         )
 
-    def _revoke_role_link(self, tenant_id: UUID, user_id: UUID, role_code: str) -> None:
+    def _revoke_role_link(self, tenant_id: UUID, user_id: UUID, role_code: str, revoked_by: UUID | None = None) -> None:
         role = self._db.scalar(
             select(SecRole).where(
                 SecRole.tenant_id == tenant_id,
@@ -146,6 +146,7 @@ class HrSuperadminService:
             tenant_id=tenant_id,
             user_id=user_id,
             role_id=role.id,
+            revoked_by=revoked_by,
         )
 
     def _employee(self, ctx: TenantContext, employee_id: UUID) -> MasterEmployee:
@@ -271,7 +272,36 @@ class HrSuperadminService:
         ]
 
     def list_admins(self, ctx: TenantContext) -> list[HrAdminRecord]:
-        rows = self._db.execute(
+        seen: set[UUID] = set()
+        combined: list[tuple[MasterEmployee, SecUser]] = []
+
+        role = self._db.scalar(
+            select(SecRole).where(
+                SecRole.tenant_id == ctx.tenant_id,
+                SecRole.role_code == HR_ADMIN_ROLE_CODE,
+                SecRole.is_deleted.is_(False),
+            )
+        )
+        if role is not None:
+            role_rows = self._db.execute(
+                select(MasterEmployee, SecUser)
+                .join(SecUser, SecUser.id == MasterEmployee.user_id)
+                .join(SecUserRole, SecUserRole.user_id == SecUser.id)
+                .where(
+                    MasterEmployee.tenant_id == ctx.tenant_id,
+                    MasterEmployee.is_deleted.is_(False),
+                    SecUser.is_deleted.is_(False),
+                    SecUserRole.role_id == role.id,
+                )
+                .order_by(MasterEmployee.first_name, MasterEmployee.last_name)
+            ).all()
+            for emp, user in role_rows:
+                if emp.id in seen:
+                    continue
+                seen.add(emp.id)
+                combined.append((emp, user))
+
+        module_rows = self._db.execute(
             select(MasterEmployee, SecUser)
             .join(SecUser, SecUser.id == MasterEmployee.user_id)
             .join(SecUserModule, SecUserModule.user_id == SecUser.id)
@@ -284,7 +314,14 @@ class HrSuperadminService:
             )
             .order_by(MasterEmployee.first_name, MasterEmployee.last_name)
         ).all()
-        return [self._to_record(emp, user, login_created=False) for emp, user in rows]
+        for emp, user in module_rows:
+            if emp.id in seen:
+                continue
+            seen.add(emp.id)
+            combined.append((emp, user))
+
+        combined.sort(key=lambda pair: (pair[0].first_name or "", pair[0].last_name or ""))
+        return [self._to_record(emp, user, login_created=False) for emp, user in combined]
 
     def _assert_not_superadmin(self, ctx: TenantContext, user: SecUser) -> None:
         if user.user_type == "super_admin":
@@ -306,6 +343,23 @@ class HrSuperadminService:
             if super_link:
                 raise AppException("Cannot assign HR Admin to a Superadmin account")
 
+    def _require_hr_admin(self, ctx: TenantContext, emp: MasterEmployee) -> SecUser:
+        if not emp.user_id:
+            raise AppException("Employee has no login account")
+        user = self._db.get(SecUser, emp.user_id)
+        if user is None or user.is_deleted:
+            raise NotFoundException("Login user not found")
+        role = self._role(ctx.tenant_id, HR_ADMIN_ROLE_CODE)
+        link = self._db.scalar(
+            select(SecUserRole).where(
+                SecUserRole.user_id == user.id,
+                SecUserRole.role_id == role.id,
+            )
+        )
+        if link is None:
+            raise AppException("Employee is not an HR Admin")
+        return user
+
     def _require_hr_member(self, ctx: TenantContext, emp: MasterEmployee) -> SecUser:
         if not emp.user_id:
             raise AppException("Employee has no login account")
@@ -315,6 +369,18 @@ class HrSuperadminService:
         if not self._is_hr_module_member(ctx.tenant_id, user.id):
             raise AppException("Employee is not assigned to the HR module")
         return user
+
+    def _require_hr_admin_or_member(self, ctx: TenantContext, emp: MasterEmployee) -> SecUser:
+        if not emp.user_id:
+            raise AppException("Employee has no login account")
+        user = self._db.get(SecUser, emp.user_id)
+        if user is None or user.is_deleted:
+            raise NotFoundException("Login user not found")
+        if self._has_role(ctx.tenant_id, user.id, HR_ADMIN_ROLE_CODE):
+            return user
+        if self._is_hr_module_member(ctx.tenant_id, user.id):
+            return user
+        raise AppException("Employee is not an HR Admin or HR module assignee")
 
     def _apply_password(self, ctx: TenantContext, user: SecUser, password: str) -> None:
         user.password_hash = PasswordHasher.hash_password(password)
@@ -344,7 +410,7 @@ class HrSuperadminService:
         if user is None or user.is_deleted:
             email = (emp.email or "").strip().lower()
             if not email:
-                raise AppException("Employee has no email — cannot create HR module login")
+                raise AppException("Employee has no email — cannot create an HR Admin login")
             existing = self._db.scalar(
                 select(SecUser).where(
                     SecUser.tenant_id == ctx.tenant_id,
@@ -380,31 +446,24 @@ class HrSuperadminService:
             )
 
         existing = self._modules.get_assignment(ctx.tenant_id, user.id, HR_MODULE_KEY)
-        if existing is not None:
-            if existing.role == MODULE_ROLE_ADMIN:
-                raise AppException("User is already an HR module admin from Organization Users")
-            if existing.role == MODULE_ROLE_MEMBER:
-                applied = self._apply_entity_scopes(
-                    ctx,
-                    user.id,
-                    self._resolve_company_ids(ctx, emp, company_ids),
-                    default_company_id=emp.company_id,
-                )
-                return self._to_record(
-                    emp,
-                    user,
-                    login_created=login_created,
-                    temporary_password=temporary_password,
-                    company_ids=applied,
-                )
-        else:
+        if existing is not None and existing.role == MODULE_ROLE_ADMIN:
+            raise AppException("User is already an HR module admin from Organization Users")
+
+        role = self._role(ctx.tenant_id, HR_ADMIN_ROLE_CODE)
+        self._users.assign_role(
+            tenant_id=ctx.tenant_id,
+            user_id=user.id,
+            role_id=role.id,
+            assigned_by=ctx.user_id,
+        )
+
+        if existing is None:
             self._modules.add_member(
                 tenant_id=ctx.tenant_id,
                 user_id=user.id,
                 module_key=HR_MODULE_KEY,
                 assigned_by=ctx.user_id,
             )
-
         if not self._has_role(ctx.tenant_id, user.id, HR_ADMIN_ROLE_CODE):
             self._ensure_role_link(
                 tenant_id=ctx.tenant_id,
@@ -441,7 +500,7 @@ class HrSuperadminService:
         company_ids: list[UUID],
     ) -> HrAdminRecord:
         emp = self._employee(ctx, employee_id)
-        user = self._require_hr_member(ctx, emp)
+        user = self._require_hr_admin_or_member(ctx, emp)
         ids = self._resolve_company_ids(ctx, emp, company_ids, require_nonempty=True)
         previous = set(self._company_ids_for_user(user.id))
         applied = self._apply_entity_scopes(
@@ -453,7 +512,7 @@ class HrSuperadminService:
 
     def reset_password(self, ctx: TenantContext, employee_id: UUID) -> HrAdminPasswordResponse:
         emp = self._employee(ctx, employee_id)
-        user = self._require_hr_member(ctx, emp)
+        user = self._require_hr_admin_or_member(ctx, emp)
         password = generate_hr_login_password()
         self._apply_password(ctx, user, password)
         return HrAdminPasswordResponse(
@@ -473,11 +532,26 @@ class HrSuperadminService:
                 "Cannot revoke Organization-assigned HR module admin from this panel"
             )
 
+        role = self._db.scalar(
+            select(SecRole).where(
+                SecRole.tenant_id == ctx.tenant_id,
+                SecRole.role_code == HR_ADMIN_ROLE_CODE,
+                SecRole.is_deleted.is_(False),
+            )
+        )
+        if role is not None:
+            self._users.revoke_role(
+                tenant_id=ctx.tenant_id,
+                user_id=emp.user_id,
+                role_id=role.id,
+                revoked_by=ctx.user_id,
+            )
+
         row = self._modules.get_assignment(ctx.tenant_id, emp.user_id, HR_MODULE_KEY)
         if row is not None and row.role == MODULE_ROLE_MEMBER:
             self._modules.delete_assignment(row)
 
-        self._revoke_role_link(ctx.tenant_id, emp.user_id, HR_MEMBER_ROLE_CODE)
+        self._revoke_role_link(ctx.tenant_id, emp.user_id, HR_MEMBER_ROLE_CODE, revoked_by=ctx.user_id)
         home = [emp.company_id] if emp.company_id else []
         self._apply_entity_scopes(
             ctx, emp.user_id, home, default_company_id=emp.company_id
@@ -485,6 +559,12 @@ class HrSuperadminService:
         self._rbac.invalidate_user(emp.user_id)
         self._users.revoke_all_sessions(
             ctx.tenant_id, emp.user_id, revoked_by=ctx.user_id
+        )
+        self._audit.log_security_event(
+            tenant_id=ctx.tenant_id,
+            event_type="hr.hr_admin.revoked",
+            user_id=emp.user_id,
+            details_json={"by": str(ctx.user_id), "employee_id": str(emp.id)},
         )
         self._audit.log_security_event(
             tenant_id=ctx.tenant_id,

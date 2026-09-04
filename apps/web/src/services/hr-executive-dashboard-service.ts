@@ -325,7 +325,6 @@ function peopleFromHrOverview(overview: HrOverview): {
   const empById = new Map(people.map((p) => [String(p.emp.id), p.emp]));
   return { people, empById };
 }
-}
 
 function buildStats(
   overview: HrOverview,
@@ -1223,11 +1222,11 @@ export async function loadHrExecutiveDashboard(
     };
   }
 
-  const directoryPeopleResult =
+  const directoryPeople =
     directoryRecords.length > 0
       ? peopleFromDirectory(directoryRecords)
       : peopleFromHrOverview(overview);
-  const { people, empById } = directoryPeopleResult;
+  const { people, empById } = directoryPeople;
   const stats = buildStats(overview, people, recruitment, onboardingInProcess);
   const approvals = [
     ...buildApprovals(overview, empById, recruitment),

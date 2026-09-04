@@ -5,6 +5,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     ForeignKey,
@@ -51,12 +52,24 @@ class PayPayrollPolicy(Base, *PayMasterMixin):
             name="ck_pay_policy_denominator",
         ),
         CheckConstraint(
-            "pf_mode IN ('fixed_split','fixed_total','statutory_percent')",
+            "pf_mode IN ('fixed_split','fixed_total','statutory_percent','percentage')",
             name="ck_pay_policy_pf_mode",
         ),
         CheckConstraint(
             "net_pay_formula IN ('gross_minus_fixed_pf_total','gross_minus_employee_pf_only')",
             name="ck_pay_policy_net_formula",
+        ),
+        CheckConstraint(
+            "pf_on_lop IN ('fixed','prorated','percentage_of_pf_wage')",
+            name="ck_pay_policy_pf_on_lop",
+        ),
+        CheckConstraint(
+            "sandwich_off_becomes IN ('lop','leave')",
+            name="ck_pay_policy_sandwich_outcome",
+        ),
+        CheckConstraint(
+            "sandwich_triggers IN ('unauthorized_absence','approved_leave','both')",
+            name="ck_pay_policy_sandwich_trigger",
         ),
         {"schema": "payroll"},
     )
@@ -90,6 +103,14 @@ class PayPayrollPolicy(Base, *PayMasterMixin):
     pf_employee_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     pf_employer_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     pf_total_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    pf_employee_percent: Mapped[Decimal | None] = mapped_column(Numeric(9, 4), nullable=True)
+    pf_employer_percent: Mapped[Decimal | None] = mapped_column(Numeric(9, 4), nullable=True)
+    pf_wage_ceiling: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    pf_on_lop: Mapped[str] = mapped_column(String(40), nullable=False, default="fixed")
+
+    sandwich_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    sandwich_off_becomes: Mapped[str] = mapped_column(String(20), nullable=False, default="lop")
+    sandwich_triggers: Mapped[str] = mapped_column(String(40), nullable=False, default="unauthorized_absence")
 
     net_pay_formula: Mapped[str] = mapped_column(String(50), nullable=False)
     attendance_rules_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

@@ -5,6 +5,7 @@ from modules.payroll.domain.payroll_day_ledger import (
     calendar_days_in_period,
     is_scheduled_working_day,
     lop_from_attendance_records,
+    payable_days_from_lop,
 )
 
 
@@ -38,3 +39,4 @@ def test_lop_from_attendance():
     assert lop_from_attendance_records(
         rows, lop_statuses={"absent"}, half_lop_statuses={"half_day"}
     ) == Decimal("1.5")
+    assert payable_days_from_lop(Decimal("1.5")) == Decimal("28.5")

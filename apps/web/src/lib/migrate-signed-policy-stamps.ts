@@ -47,13 +47,13 @@ export async function migrateSignedPolicyStampFormat(
               candidateName: c.candidateName,
             });
             await saveSignedPolicyDocsForCase(c.id, stamped);
-          } catch (err) {
+          } catch {
             devWarn(`Could not re-stamp policies for case ${c.id}`);
           }
         }
 
         await idbSetJson(FORMAT_KEY, SIGNED_POLICY_STAMP_FORMAT);
-      } catch (err) {
+      } catch {
         devWarn("Signed policy stamp migration failed");
         migratePromise = null;
       }

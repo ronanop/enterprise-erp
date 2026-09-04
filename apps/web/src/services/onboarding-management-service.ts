@@ -19,25 +19,8 @@ import {
   stripSignedDocPayloads,
 } from "@/lib/onboarding-signed-docs-store";
 import { migrateSignedPolicyStampFormat } from "@/lib/migrate-signed-policy-stamps";
-import { devError, devWarn } from "@/lib/dev-log";
+import { devError } from "@/lib/dev-log";
 import { timingSafeEqual } from "@/lib/timing-safe";
-
-function findCaseByToken(cases: OnboardingCase[], token: string): OnboardingCase | undefined {
-  return cases.find(
-    (row) => typeof row.invitation?.token === "string" && timingSafeEqual(row.invitation.token, token),
-  );
-}
-
-function findCaseIndexByToken(cases: OnboardingCase[], token: string): number {
-  return cases.findIndex(
-    (row) => typeof row.invitation?.token === "string" && timingSafeEqual(row.invitation.token, token),
-  );
-}
-
-export function portalSessionMatches(token: string): boolean {
-  const session = getPortalSession();
-  return Boolean(session?.token && timingSafeEqual(session.token, token));
-}
 import {
   DEFAULT_MANAGER_CHECKLIST,
   POST_JOIN_HR_CHECKLIST,
@@ -780,7 +763,21 @@ export function clearPortalSession(): void {
   sessionStorage.removeItem(PORTAL_SESSION_KEY);
 }
 
+function findCaseByToken(cases: OnboardingCase[], token: string): OnboardingCase | undefined {
+  return cases.find(
+    (row) => typeof row.invitation?.token === "string" && timingSafeEqual(row.invitation.token, token),
+  );
+}
 
+function findCaseIndexByToken(cases: OnboardingCase[], token: string): number {
+  return cases.findIndex(
+    (row) => typeof row.invitation?.token === "string" && timingSafeEqual(row.invitation.token, token),
+  );
+}
+
+export function portalSessionMatches(token: string): boolean {
+  const session = getPortalSession();
+  return Boolean(session?.token && timingSafeEqual(session.token, token));
 }
 
 export async function loginOnboardingPortal(
@@ -984,11 +981,7 @@ export async function savePortalProgress(
 
 export async function submitPortal(token: string, portal: PortalPayload): Promise<OnboardingCase | null> {
   const all = loadCases();
-<<<<<<< HEAD
-  const idx = all.findIndex((x) => x.invitation?.token === token);
-=======
   const idx = findCaseIndexByToken(all, token);
->>>>>>> 5b35135407877adf8d68c23880d984dcde9c8cfd
   const caseId = idx >= 0 ? all[idx].id : null;
 
   let portalForStorage = portal;
@@ -1004,12 +997,8 @@ export async function submitPortal(token: string, portal: PortalPayload): Promis
           signedDocuments: stripSignedDocPayloads(signedFull),
         },
       };
-    } catch (err) {
-<<<<<<< HEAD
-      console.error("Failed to persist signed policy PDFs", err);
-=======
+    } catch {
       devError("Failed to persist signed policy PDFs");
->>>>>>> 5b35135407877adf8d68c23880d984dcde9c8cfd
     }
   }
 

@@ -63,6 +63,7 @@ function formatNotificationWhen(iso: string): string {
   if (!relative || relative === absolute) return absolute;
   return `${absolute} · ${relative}`;
 }
+
 export function GlobalNotificationBell({ variant = "topbar", className }: Props) {
   const [open, setOpen] = useState(false);
   const [panelStyle, setPanelStyle] = useState<CSSProperties>({});

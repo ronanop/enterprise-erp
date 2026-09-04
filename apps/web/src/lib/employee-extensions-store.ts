@@ -1,6 +1,6 @@
 import { idbGetJson, idbSetJson } from "@/lib/client-idb-json-store";
-import type { EmployeeExtension } from "@/types/employee-management";
 import { devError } from "@/lib/dev-log";
+import type { EmployeeExtension } from "@/types/employee-management";
 
 export const EMPLOYEE_EXTENSIONS_STORAGE_KEY = "erp_employee_extensions_v1";
 
@@ -76,7 +76,7 @@ export function setEmployeeExtension(employeeId: string, ext: EmployeeExtension)
       await idbSetJson(EMPLOYEE_EXTENSIONS_STORAGE_KEY, snapshot);
       clearLocalStorageExtensions();
     })
-    .catch((err) => {
+    .catch(() => {
       devError("Failed to persist employee extensions to IndexedDB");
     });
 }

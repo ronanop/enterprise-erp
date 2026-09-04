@@ -22,6 +22,8 @@ def test_bank_export_csv_header_and_row():
     assert "123456789012" in lines[1]
     assert "SBIN0001234" in lines[1]
     assert "26300.00" in lines[1]
+
+
 def test_bank_export_csv_formula_injection_sanitized():
     csv_text = build_bank_export_csv(
         [

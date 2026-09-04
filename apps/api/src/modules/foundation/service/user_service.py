@@ -206,9 +206,13 @@ class UserService:
                 )
             ).all()
         )
-        for link in links:
-            self._repo.db.delete(link)
-        self._repo.db.flush()
+        if not links:
+            if not self._repo.revoke_role(user_id=user_id, role_id=role_id):
+                return
+        else:
+            for link in links:
+                self._repo.db.delete(link)
+            self._repo.db.flush()
         self._rbac.invalidate_user(user_id)
         self._audit.log_entity_change(
             tenant_id=tenant_id,

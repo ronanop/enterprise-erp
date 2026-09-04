@@ -5,13 +5,14 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { LogIn, LogOut, Search } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { CrmGlobalSearch } from "@/components/crm/crm-global-search";
+import { AppTopbarNotifications } from "@/components/layout/app-topbar-notifications";
 import { CompanyContextBadge } from "@/components/layout/company-context-badge";
 import { GlobalNotificationBell } from "@/components/layout/global-notification-bell";
 import { ProjectsGlobalSearch } from "@/components/projects/projects-global-search";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { hrNavGroups, isHrPath } from "@/config/hr-nav";
 import { useHealthCheck } from "@/hooks/use-health-check";
 import { clearTokens, isAuthenticated } from "@/lib/auth";
@@ -29,26 +30,16 @@ function readProfileName(): string {
   }
 }
 
-function workspaceSubtitle(pathname: string, signedIn: boolean): string {
-  if (!signedIn) return "Guest · sign in for protected APIs";
-  if (pathname === "/crm" || pathname.startsWith("/crm/")) return "Sales CRM · secure session";
-  if (pathname === "/projects" || pathname.startsWith("/projects/")) {
-    return "Projects · secure session";
-  }
-  return "Signed in · secure session";
-}
-
 export function AppTopbar() {
   const pathname = usePathname();
   const router = useRouter();
   const hrMode = isHrPath(pathname);
-  const isCrm = pathname === "/crm" || pathname.startsWith("/crm/");
-  const isProjects = pathname === "/projects" || pathname.startsWith("/projects/");
-
   const { data, loading, error } = useHealthCheck();
   const [signedIn, setSignedIn] = useState(false);
   const [profileName, setProfileName] = useState("HR Manager");
   const [navQuery, setNavQuery] = useState("");
+  const isCrm = pathname === "/crm" || pathname.startsWith("/crm/");
+  const isProjects = pathname === "/projects" || pathname.startsWith("/projects/");
 
   useEffect(() => {
     setSignedIn(isAuthenticated());
@@ -95,18 +86,6 @@ export function AppTopbar() {
         hrMode && "shadow-[0_1px_0_rgb(155_91_184_/_8%)]",
       )}
     >
-      <div className="min-w-0 shrink-0 sm:w-44">
-        <Link
-          href="/"
-          className="block cursor-pointer truncate text-sm font-medium tracking-tight transition-opacity duration-200 hover:opacity-80"
-        >
-          {hrMode ? "HRMS" : "Workspace"}
-        </Link>
-        <p className="truncate text-xs text-muted-foreground">
-          {workspaceSubtitle(pathname, signedIn)}
-        </p>
-      </div>
-
       {isCrm ? (
         <CrmGlobalSearch className="min-w-0 flex-1" />
       ) : isProjects ? (
@@ -163,6 +142,7 @@ export function AppTopbar() {
           {healthLabel}
         </Badge>
         {signedIn ? <GlobalNotificationBell variant="topbar" /> : null}
+        <AppTopbarNotifications />
         {hrMode && signedIn ? (
           <div className="hidden h-9 items-center gap-2 rounded-xl border border-border/70 bg-muted/40 px-2.5 text-xs lg:flex">
             <span className="flex size-6 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">

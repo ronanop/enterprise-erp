@@ -298,17 +298,67 @@ function mapLifecycle(
   if (raw === "onboarding" || raw === "draft") return "onboarding";
   if (raw === "notice" || raw === "notice_period") return "notice";
   if (raw === "resigned") return "resigned";
-  if (raw === "archived") return "archived";
+  if (raw === "archived" || raw === "ex_employee") return "archived";
   if (
     raw === "inactive" ||
     raw === "separated" ||
-    raw === "ex_employee" ||
+    raw === "terminated" ||
     raw === "ended" ||
     raw === "cancelled"
   ) {
     return "inactive";
   }
   return "inactive";
+}
+
+/** master.master_employee.status — ck_master_employee_status */
+function toMasterEmployeeStatus(lifecycle: EmployeeRecord["lifecycleStatus"]): string {
+  switch (lifecycle) {
+    case "onboarding":
+      return "onboarding";
+    case "probation":
+      return "probation";
+    case "notice":
+      return "notice_period";
+    case "resigned":
+      return "resigned";
+    case "inactive":
+      return "terminated";
+    case "archived":
+      return "ex_employee";
+    default:
+      return "active";
+  }
+}
+
+/** hr.hr_employment.status — ck_hr_empl_status */
+function toEmploymentStatus(lifecycle: EmployeeRecord["lifecycleStatus"]): string {
+  switch (lifecycle) {
+    case "onboarding":
+      return "onboarding";
+    case "probation":
+      return "probation";
+    case "notice":
+      return "notice_period";
+    case "resigned":
+      return "separated";
+    case "inactive":
+      return "ended";
+    case "archived":
+      return "ex_employee";
+    default:
+      return "active";
+  }
+}
+
+/** hr.hr_employee_profile.status — ck_hr_profile_status */
+function toProfileStatus(lifecycle: EmployeeRecord["lifecycleStatus"]): "active" | "inactive" {
+  return lifecycle === "active" ||
+    lifecycle === "onboarding" ||
+    lifecycle === "probation" ||
+    lifecycle === "notice"
+    ? "active"
+    : "inactive";
 }
 
 function mergeRow(
@@ -1239,7 +1289,7 @@ export async function applyOnboardingPortalToEmployee(
             personal_email: draft.personal.personalEmail || null,
             permanent_address_json: addressToJson(draft.personal.permanentAddress),
             current_address_json: addressToJson(draft.personal.currentAddress),
-            status: draft.employment.lifecycleStatus || "active",
+            status: toProfileStatus(draft.employment.lifecycleStatus || "active"),
           },
         }).catch(() => undefined);
       }
@@ -1313,7 +1363,7 @@ export async function createEmployeeFromWizard(
       employee_id: employeeId,
       employment_type: employmentType,
       date_of_joining: joiningDate,
-      status: draft.employment.lifecycleStatus || "active",
+      status: toEmploymentStatus(draft.employment.lifecycleStatus || "active"),
       payroll_eligible: true,
       lifecycle_source: "direct_add",
       management_group_id: managementGroupId || null,
@@ -1352,7 +1402,7 @@ export async function createEmployeeFromWizard(
       bank_ifsc: draft.bank.ifsc || null,
       bank_name: draft.bank.bankName || null,
       bank_account_holder: draft.bank.accountHolderName || null,
-      status: draft.employment.lifecycleStatus || "active",
+      status: toProfileStatus(draft.employment.lifecycleStatus || "active"),
     },
   }).catch(() => null);
 
@@ -1485,10 +1535,7 @@ export async function updateEmployeeRecord(  record: EmployeeRecord,
       branch_id: nextExt.employment.branchId || record.branchId,
       department_id: nextExt.employment.departmentId || record.departmentId,
       reporting_manager_id: nextExt.employment.reportingManagerId || null,
-      status:
-        nextExt.employment.lifecycleStatus === "archived"
-          ? "archived"
-          : nextExt.employment.lifecycleStatus,
+      status: toMasterEmployeeStatus(nextExt.employment.lifecycleStatus),
     },
   });
 
@@ -1525,21 +1572,12 @@ export async function updateEmployeeRecord(  record: EmployeeRecord,
             }),
           }
         : null,
-      status: nextExt.employment.lifecycleStatus,
+      status: toProfileStatus(nextExt.employment.lifecycleStatus),
     }).catch(() => undefined);
   }
 
   if (record.employmentId && patch.employment) {
     const ctc = Number(nextExt.salary.ctc);
-    const employmentStatus = {
-      active: "active",
-      onboarding: "onboarding",
-      probation: "probation",
-      notice: "notice_period",
-      resigned: "separated",
-      archived: "ex_employee",
-      inactive: "ended",
-    }[nextExt.employment.lifecycleStatus];
     await resourceService
       .update("/hr/employment", record.employmentId, {
         version: record.employmentVersion,
@@ -1548,7 +1586,7 @@ export async function updateEmployeeRecord(  record: EmployeeRecord,
         work_location_text: nextExt.employment.location || null,
         management_group_id: uuidOrNull(nextExt.employment.managementGroupId),
         ctc_amount: Number.isFinite(ctc) && ctc > 0 ? ctc : null,
-        status: employmentStatus,
+        status: toEmploymentStatus(nextExt.employment.lifecycleStatus),
       })
       .catch(() => undefined);
   }
@@ -1579,9 +1617,27 @@ export async function setEmployeeLifecycleStatus(
     method: "PUT",
     body: {
       version: record.masterVersion,
-      status: status === "archived" ? "archived" : status,
+      status: toMasterEmployeeStatus(status),
     },
   });
+
+  if (record.employmentId) {
+    await resourceService
+      .update("/hr/employment", record.employmentId, {
+        version: record.employmentVersion,
+        status: toEmploymentStatus(status),
+      })
+      .catch(() => undefined);
+  }
+
+  if (record.profileId) {
+    await resourceService
+      .update("/hr/employee-profiles", record.profileId, {
+        version: record.profileVersion,
+        status: toProfileStatus(status),
+      })
+      .catch(() => undefined);
+  }
 
   appendActivity({
     employeeId: record.id,

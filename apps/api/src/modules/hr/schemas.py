@@ -907,6 +907,7 @@ class TrainingCreate(BaseModel):
 
 
 class TrainingUpdate(BaseModel):
+    branch_id: UUID | None = None
     training_name: str | None = None
     training_type: str | None = None
     trainer_name: str | None = None
@@ -920,6 +921,7 @@ class TrainingUpdate(BaseModel):
     recurrence_rule: str | None = None
     notes: str | None = None
     status: str | None = None
+    employee_ids: list[UUID] | None = None
     version: int | None = None
 
 

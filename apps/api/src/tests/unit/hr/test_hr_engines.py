@@ -55,3 +55,13 @@ def test_leave_balance_usage():
     engine.apply_usage(row, Decimal("2"))
     assert row.used == Decimal("2")
     assert row.closing_balance == Decimal("8")
+
+
+def test_normalize_employment_and_profile_status() -> None:
+    from modules.hr.domain.enums import normalize_active_inactive, normalize_employment_status
+
+    assert normalize_employment_status("archived") == "ex_employee"
+    assert normalize_employment_status("inactive") == "ended"
+    assert normalize_employment_status("notice") == "notice_period"
+    assert normalize_active_inactive("archived") == "inactive"
+    assert normalize_active_inactive("probation") == "active"

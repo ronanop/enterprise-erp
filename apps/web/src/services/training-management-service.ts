@@ -98,10 +98,14 @@ export async function loadTrainingDirectory(): Promise<TrainingDirectory> {
   const roomMap = new Map(
     rooms.map((r) => [String(r.id), String(r.room_name ?? r.room_code ?? r.id)]),
   );
-  const attendeeCount = new Map<string, number>();
+  const attendeeIds = new Map<string, string[]>();
   for (const a of attendance) {
     const tid = String(a.training_id);
-    attendeeCount.set(tid, (attendeeCount.get(tid) ?? 0) + 1);
+    const eid = String(a.employee_id ?? "");
+    if (!eid) continue;
+    const ids = attendeeIds.get(tid) ?? [];
+    ids.push(eid);
+    attendeeIds.set(tid, ids);
   }
 
   return {
@@ -123,7 +127,9 @@ export async function loadTrainingDirectory(): Promise<TrainingDirectory> {
       notes: String(row.notes ?? ""),
       status: String(row.status ?? "planned"),
       version: Number(row.version ?? 1),
-      attendeeCount: attendeeCount.get(String(row.id)) ?? 0,
+      branchId: String(row.branch_id ?? ""),
+      attendeeIds: attendeeIds.get(String(row.id)) ?? [],
+      attendeeCount: (attendeeIds.get(String(row.id)) ?? []).length,
     })),
     rooms: rooms.map((row) => ({
       id: String(row.id),
@@ -218,7 +224,7 @@ export async function createTrainingRoom(input: {
   });
 }
 
-export async function createTrainingProgram(input: {
+export type TrainingProgramInput = {
   branchId: string;
   name: string;
   type: string;
@@ -232,10 +238,13 @@ export async function createTrainingProgram(input: {
   isRecurring: boolean;
   recurrenceRule: string;
   notes: string;
+  status?: string;
   employeeIds: string[];
   employeeLabels: { id: string; label: string }[];
-}): Promise<void> {
-  await resourceService.create("/hr/training", {
+};
+
+function trainingPayload(input: TrainingProgramInput) {
+  return {
     branch_id: input.branchId || null,
     training_name: input.name,
     training_type: input.type,
@@ -249,10 +258,12 @@ export async function createTrainingProgram(input: {
     is_recurring: input.isRecurring,
     recurrence_rule: input.isRecurring ? input.recurrenceRule : "none",
     notes: input.notes || null,
-    status: "planned",
+    status: input.status || "planned",
     employee_ids: input.employeeIds,
-  });
+  };
+}
 
+function queueEnrollmentNotices(input: TrainingProgramInput) {
   if (input.startDate && input.employeeLabels.length) {
     queueTrainingNotifications(
       input.employeeLabels.map((e) => ({
@@ -268,6 +279,19 @@ export async function createTrainingProgram(input: {
       })),
     );
   }
+}
+
+export async function createTrainingProgram(input: TrainingProgramInput): Promise<void> {
+  await resourceService.create("/hr/training", trainingPayload(input));
+  queueEnrollmentNotices(input);
+}
+
+export async function updateTrainingProgram(id: string, input: TrainingProgramInput): Promise<void> {
+  await resourceService.update("/hr/training", id, trainingPayload(input));
+}
+
+export async function deleteTrainingProgram(id: string): Promise<void> {
+  await resourceService.delete("/hr/training", id);
 }
 
 export async function createMeetingRequest(input: {

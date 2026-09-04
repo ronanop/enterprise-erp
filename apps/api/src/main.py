@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -15,17 +16,17 @@ from shared.router import api_v1_router
 
 
 @asynccontextmanager
-async def lifespan(application: FastAPI):
+async def lifespan(application: FastAPI) -> AsyncIterator[None]:
     setup_logging()
     from core.infra_health import log_infrastructure_connections
     from core.object_storage import ensure_bucket, is_enabled
 
-    log_infrastructure_connections()
     if is_enabled():
         try:
             ensure_bucket()
         except Exception:
             pass
+    log_infrastructure_connections()
     async with mcp_lifespan(application):
         yield
 
@@ -42,6 +43,10 @@ def create_app() -> FastAPI:
     application.add_middleware(RequestContextMiddleware)
 
     cors_origins = list(settings.cors_origins)
+    lan_origin_regex = (
+        r"https?://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|"
+        r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?"
+    )
     if settings.is_development:
         for origin in (
             "http://localhost:3000",
@@ -62,7 +67,7 @@ def create_app() -> FastAPI:
     if settings.cors_origin_regex:
         cors_kwargs["allow_origin_regex"] = settings.cors_origin_regex
     elif settings.is_development:
-        cors_kwargs["allow_origin_regex"] = r"https?://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?"
+        cors_kwargs["allow_origin_regex"] = lan_origin_regex
 
     application.add_middleware(CORSMiddleware, **cors_kwargs)
 

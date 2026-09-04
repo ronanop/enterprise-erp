@@ -164,6 +164,16 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
     label: "Mark Deal Won",
     fields: [{ key: "deal_won_amount", label: "Deal Won Amount (₹)", type: "number", required: true }],
   },
+  create_quote: {
+    label: "Create Quote",
+    fields: [],
+    description: "Open the quote editor for this opportunity.",
+  },
+  create_ovf: {
+    label: "Create OVF",
+    fields: [],
+    description: "Create an order value form from the accepted quote.",
+  },
 };
 
 const BLUE_ACTION_BUTTON_CLASS =
@@ -183,6 +193,14 @@ const ATTACH_ACTIONS = new Set([
 const OEM_QUOTE_ACTIONS = new Set(["oem_received", "attach_oem_quote"]);
 
 const QUOTE_FLOW_ACTIONS = new Set(["send_to_customer", "accept", "negotiate", "follow_up"]);
+
+const PRIMARY_FLOW_ACTIONS = new Set([
+  "convert",
+  "create_quote",
+  "create_ovf",
+  "share_to_scm",
+  "deal_won",
+]);
 
 const APPROVAL_ACTIONS = new Set([
   "send_boq_approval",
@@ -325,8 +343,11 @@ export function BlueprintActions({
 
   function openAction(action: string) {
     const config = resolveConfig(action);
-    // Convert uses lead defaults and should not open a form popup.
-    if (action === "convert" && config.fields.length === 0) {
+    // Convert / navigation actions run immediately without a form popup.
+    if (
+      config.fields.length === 0 &&
+      (action === "convert" || action === "create_quote" || action === "create_ovf")
+    ) {
       void runImmediate(action);
       return;
     }
@@ -483,9 +504,10 @@ export function BlueprintActions({
           const isLost = action === "lost";
           const isOemQuote = OEM_QUOTE_ACTIONS.has(action);
           const isQuoteFlow = QUOTE_FLOW_ACTIONS.has(action);
+          const isPrimaryFlow = PRIMARY_FLOW_ACTIONS.has(action);
           const colorClass = isLost
             ? LOST_BUTTON_CLASS
-            : isAttach || isApproval || isOemQuote || isQuoteFlow
+            : isAttach || isApproval || isOemQuote || isQuoteFlow || isPrimaryFlow
               ? BLUE_ACTION_BUTTON_CLASS
               : undefined;
           const variant = colorClass ? "outline" : config.tone === "destructive" ? "destructive" : "outline";

@@ -40,9 +40,10 @@ function normalizeRows(data: unknown): PayrollRow[] {
 
 async function safeList(
   apiPath: string,
+  query?: Record<string, string | number | boolean | null | undefined>,
 ): Promise<{ rows: PayrollRow[]; error?: string; status?: number }> {
   try {
-    const response = await resourceService.list(apiPath);
+    const response = await resourceService.list(apiPath, query);
     return { rows: normalizeRows(response.data) };
   } catch (err) {
     if (err instanceof ApiClientError) {
@@ -50,6 +51,19 @@ async function safeList(
     }
     return { rows: [], error: `Failed to load ${apiPath}`, status: 500 };
   }
+}
+
+export async function listAllPayrollRows(
+  apiPath: string,
+  query?: Record<string, string | number | boolean | null | undefined>,
+): Promise<PayrollRow[]> {
+  const all: PayrollRow[] = [];
+  for (let page = 1; page <= 30; page += 1) {
+    const { rows } = await safeList(apiPath, { ...query, page, page_size: 200 });
+    all.push(...rows);
+    if (rows.length < 200) break;
+  }
+  return all;
 }
 
 export function formatInr(value: number): string {
@@ -115,9 +129,9 @@ export async function loadPayrollOverview(): Promise<PayrollOverview> {
     summaries,
   ] = await Promise.all([
     safeList("/payroll/payroll-periods"),
-    safeList("/payroll/salary-structures"),
+    safeList("/payroll/salary-structures", { page_size: 200 }),
     safeList("/payroll/salary-components"),
-    safeList("/payroll/employee-salaries"),
+    safeList("/payroll/employee-salaries", { page_size: 200 }),
     safeList("/payroll/earning-types"),
     safeList("/payroll/deduction-types"),
     safeList("/payroll/tax-configurations"),

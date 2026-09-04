@@ -518,6 +518,7 @@ class AssetAssignmentCreate(BaseModel):
     delivery_challan_signature_status: str | None = None
     assignment_remarks: str | None = Field(default=None, max_length=4000)
     component_ids: list[UUID] | None = None
+    status: str | None = None
 
 
 class AssetAssignmentUpdate(BaseModel):
@@ -536,7 +537,8 @@ class AssetAssignmentUpdate(BaseModel):
     delivery_challan_signature_status: str | None = None
     assignment_remarks: str | None = Field(default=None, max_length=4000)
     component_ids: list[UUID] | None = None
-    version: int | None = None
+    status: str | None = None
+    version: int
 
 
 class AssetAssignmentReturnRequest(BaseModel):
@@ -544,6 +546,7 @@ class AssetAssignmentReturnRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=500)
     return_remarks: str | None = Field(default=None, max_length=4000)
     component_returns: list[AssignmentComponentReturnLine] | None = None
+
 
 class AssetAssignmentResponse(OrmModel):
     id: UUID

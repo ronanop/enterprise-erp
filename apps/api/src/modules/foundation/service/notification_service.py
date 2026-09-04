@@ -278,7 +278,11 @@ class NotificationService:
         try:
             send_notification_task.delay(str(event_id), str(delivery_id))
         except Exception:  # noqa: BLE001 — fall back to sync if broker unavailable
-            EmailDeliveryEngine(self._db).deliver(event_id, delivery_id)
+            try:
+                send_notification_task(str(event_id), str(delivery_id))
+            except Exception:  # noqa: BLE001
+                EmailDeliveryEngine(self._db).deliver(event_id, delivery_id)
+
     def list_inbox(
         self, *, tenant_id: UUID, user_id: UUID | None, limit: int = 50
     ) -> list[NotificationInboxItem]:
@@ -336,6 +340,8 @@ class NotificationService:
         if row.read_at is None:
             row.read_at = utcnow()
         row.status = "read"
+
+    @staticmethod
     def _to_inbox_item(row: NtfEvent) -> NotificationInboxItem:
         payload = row.payload_json if isinstance(row.payload_json, dict) else {}
         kind = str(payload.get("kind") or row.event_type or "info")

@@ -146,6 +146,7 @@ export async function apiClient<T>(
     redirectToLogin();
     throw new ApiClientError("No active session. Please sign in.", 401);
   }
+
   await ensureApiBase();
 
   let response: Response;
@@ -176,23 +177,33 @@ export async function apiClient<T>(
   try {
     payload = (await response.json()) as ApiResponse<T> | ErrorResponse;
   } catch {
-    throw new ApiClientError("Invalid API response", response.status);
+    const hint =
+      response.status >= 500
+        ? `Server error (${response.status}). Check that the API is running and try again.`
+        : response.status === 0 || !response.status
+          ? "Cannot reach API. Check that the backend is running on port 8000."
+          : `Invalid API response (${response.status})`;
+    throw new ApiClientError(hint, response.status);
   }
 
-  if (response.status === 401 && auth) {
+  if (auth && response.status === 401) {
     if (!_retried) {
       const refreshed = await refreshAccessToken();
       if (refreshed) {
         return apiClient<T>(path, { ...options, _retried: true });
       }
     }
+    clearTokens();
+    redirectToLogin();
+    throw new ApiClientError(
+      (payload as ErrorResponse).message ?? "Session expired. Please sign in again.",
+      401,
+      (payload as ErrorResponse).errors ?? [],
+    );
   }
 
   if (!response.ok || payload.success === false) {
     const errorPayload = payload as ErrorResponse;
-    if (auth && response.status === 401) {
-      clearTokens();
-    }
     throw new ApiClientError(
       errorPayload.message ?? "API request failed",
       response.status,
@@ -455,6 +466,7 @@ export async function downloadApiFile(
     redirectToLogin();
     throw new ApiClientError("No active session. Please sign in.", 401);
   }
+
   await ensureApiBase();
 
   let response: Response;
@@ -486,6 +498,7 @@ export async function downloadApiFile(
       }
     }
     clearTokens();
+    redirectToLogin();
     throw new ApiClientError("Session expired. Please sign in again.", 401);
   }
 

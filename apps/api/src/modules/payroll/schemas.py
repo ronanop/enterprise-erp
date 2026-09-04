@@ -59,7 +59,18 @@ class SalaryStructureCreate(BaseModel):
     effective_from: date
     effective_to: date | None = None
     currency_code: str = "INR"
-    status: str | None = "active"
+    status: str | None = "draft"
+    gross_ctc: Decimal = Decimal("0")
+    basic_percent: Decimal = Decimal("0.6000")
+    hra_percent_of_basic: Decimal = Decimal("0.5000")
+    telephone_allowance: Decimal = Decimal("0")
+    employer_contribution: Decimal = Decimal("1800")
+    pf_percent: Decimal = Decimal("0.1200")
+    pf_wage_ceiling: Decimal = Decimal("15000")
+    pf_fixed_ceiling: Decimal = Decimal("1800")
+    edli_admin_amount: Decimal = Decimal("100")
+    esi_percent: Decimal = Decimal("0.0075")
+    esi_monthly_ceiling: Decimal = Decimal("21000")
 
 class SalaryStructureUpdate(BaseModel):
     structure_name: str | None = None
@@ -68,6 +79,17 @@ class SalaryStructureUpdate(BaseModel):
     currency_code: str | None = None
     status: str | None = None
     version: int | None = None
+    gross_ctc: Decimal | None = None
+    basic_percent: Decimal | None = None
+    hra_percent_of_basic: Decimal | None = None
+    telephone_allowance: Decimal | None = None
+    employer_contribution: Decimal | None = None
+    pf_percent: Decimal | None = None
+    pf_wage_ceiling: Decimal | None = None
+    pf_fixed_ceiling: Decimal | None = None
+    edli_admin_amount: Decimal | None = None
+    esi_percent: Decimal | None = None
+    esi_monthly_ceiling: Decimal | None = None
 
 class SalaryStructureResponse(OrmModel):
     id: UUID
@@ -80,6 +102,21 @@ class SalaryStructureResponse(OrmModel):
     status: str
     company_id: UUID
     version: int
+    gross_ctc: Decimal = Decimal("0")
+    basic_percent: Decimal = Decimal("0.6000")
+    hra_percent_of_basic: Decimal = Decimal("0.5000")
+    telephone_allowance: Decimal = Decimal("0")
+    employer_contribution: Decimal = Decimal("1800")
+    basic_amount: Decimal = Decimal("0")
+    hra_amount: Decimal = Decimal("0")
+    special_allowance: Decimal = Decimal("0")
+    ctc_amount: Decimal = Decimal("0")
+    pf_percent: Decimal = Decimal("0.1200")
+    pf_wage_ceiling: Decimal = Decimal("15000")
+    pf_fixed_ceiling: Decimal = Decimal("1800")
+    edli_admin_amount: Decimal = Decimal("100")
+    esi_percent: Decimal = Decimal("0.0075")
+    esi_monthly_ceiling: Decimal = Decimal("21000")
 
 class SalaryComponentCreate(BaseModel):
     company_id: UUID | None = None
@@ -168,6 +205,8 @@ class EmployeeSalaryResponse(OrmModel):
     company_id: UUID
     branch_id: UUID
     version: int
+    employee_name: str | None = None
+    employee_code: str | None = None
 
 
 class EmployeeSalaryComponentCreate(BaseModel):
@@ -619,8 +658,8 @@ class PayrollPolicyCreate(BaseModel):
     payroll_cycle_start_day: int = 20
     leave_cycle_type: str = "calendar_month"
     leave_balance_credit_timing: str = "after_calendar_month_end"
-    salary_proration_mode: str = "per_day_x_over_n"
-    period_day_denominator: str = "shift_scheduled_days"
+    salary_proration_mode: str = "fixed_30_day_factor"
+    period_day_denominator: str = "fixed_30"
     lop_source: str = "attendance"
     basic_percent: Decimal = Decimal("0.6000")
     hra_percent_of_basic: Decimal = Decimal("0.5000")
@@ -628,7 +667,14 @@ class PayrollPolicyCreate(BaseModel):
     pf_employee_amount: Decimal | None = Decimal("1800")
     pf_employer_amount: Decimal | None = Decimal("1900")
     pf_total_amount: Decimal | None = Decimal("3700")
-    net_pay_formula: str = "gross_minus_fixed_pf_total"
+    pf_employee_percent: Decimal | None = Decimal("0.1200")
+    pf_employer_percent: Decimal | None = Decimal("0.1200")
+    pf_wage_ceiling: Decimal | None = Decimal("15000")
+    pf_on_lop: str = "fixed"
+    sandwich_enabled: bool = False
+    sandwich_off_becomes: str = "lop"
+    sandwich_triggers: str = "unauthorized_absence"
+    net_pay_formula: str = "gross_minus_employee_pf_only"
     attendance_rules_json: dict | None = None
     notes: str | None = None
 
@@ -651,6 +697,13 @@ class PayrollPolicyUpdate(BaseModel):
     pf_employee_amount: Decimal | None = None
     pf_employer_amount: Decimal | None = None
     pf_total_amount: Decimal | None = None
+    pf_employee_percent: Decimal | None = None
+    pf_employer_percent: Decimal | None = None
+    pf_wage_ceiling: Decimal | None = None
+    pf_on_lop: str | None = None
+    sandwich_enabled: bool | None = None
+    sandwich_off_becomes: str | None = None
+    sandwich_triggers: str | None = None
     net_pay_formula: str | None = None
     attendance_rules_json: dict | None = None
     notes: str | None = None
@@ -678,6 +731,13 @@ class PayrollPolicyResponse(OrmModel):
     pf_employee_amount: Decimal | None
     pf_employer_amount: Decimal | None
     pf_total_amount: Decimal | None
+    pf_employee_percent: Decimal | None = None
+    pf_employer_percent: Decimal | None = None
+    pf_wage_ceiling: Decimal | None = None
+    pf_on_lop: str = "fixed"
+    sandwich_enabled: bool = False
+    sandwich_off_becomes: str = "lop"
+    sandwich_triggers: str = "unauthorized_absence"
     net_pay_formula: str
     attendance_rules_json: dict | None
     notes: str | None

@@ -60,11 +60,7 @@ class Settings(BaseSettings):
             return "postgresql+psycopg://" + value.removeprefix("postgres://")
         return value
 
-    redis_url: str = Field(default="redis://172.16.200.26:6379/0", alias="REDIS_URL")
-    redis_url_fallback: str = Field(
-        default="redis://localhost:6379/0",
-        alias="REDIS_URL_FALLBACK",
-    )
+    redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
     celery_broker_url: str = Field(
         default="amqp://erp:erp_dev_password@172.16.200.26:5672//",
         alias="CELERY_BROKER_URL",
@@ -80,26 +76,6 @@ class Settings(BaseSettings):
     celery_result_backend_fallback: str = Field(
         default="redis://localhost:6379/1",
         alias="CELERY_RESULT_BACKEND_FALLBACK",
-    )
-
-    minio_endpoint: str = Field(default="172.16.200.26:9000", alias="MINIO_ENDPOINT")
-    minio_endpoint_fallback: str = Field(
-        default="localhost:9000",
-        alias="MINIO_ENDPOINT_FALLBACK",
-    )
-    minio_root_user: str = Field(default="erp_minio", alias="MINIO_ROOT_USER")
-    minio_root_password: str = Field(default="erp_minio_password", alias="MINIO_ROOT_PASSWORD")
-    minio_bucket: str = Field(default="erp-documents", alias="MINIO_BUCKET")
-    minio_secure: bool = Field(default=False, alias="MINIO_SECURE")
-    storage_backend: str = Field(default="local", alias="STORAGE_BACKEND")
-
-    opensearch_url: str = Field(
-        default="http://172.16.200.26:9200",
-        alias="OPENSEARCH_URL",
-    )
-    opensearch_url_fallback: str = Field(
-        default="http://localhost:9200",
-        alias="OPENSEARCH_URL_FALLBACK",
     )
 
     cors_origins: list[str] = Field(
@@ -122,6 +98,26 @@ class Settings(BaseSettings):
     project_tracker_upload_root: str = Field(
         default="",
         alias="PROJECT_TRACKER_UPLOAD_ROOT",
+    )
+
+    minio_endpoint: str = Field(default="172.16.200.26:9000", alias="MINIO_ENDPOINT")
+    minio_endpoint_fallback: str = Field(
+        default="localhost:9000",
+        alias="MINIO_ENDPOINT_FALLBACK",
+    )
+    minio_root_user: str = Field(default="erp_minio", alias="MINIO_ROOT_USER")
+    minio_root_password: str = Field(default="erp_minio_password", alias="MINIO_ROOT_PASSWORD")
+    minio_bucket: str = Field(default="erp-documents", alias="MINIO_BUCKET")
+    minio_secure: bool = Field(default=False, alias="MINIO_SECURE")
+    storage_backend: str = Field(default="local", alias="STORAGE_BACKEND")
+
+    opensearch_url: str = Field(
+        default="http://172.16.200.26:9200",
+        alias="OPENSEARCH_URL",
+    )
+    opensearch_url_fallback: str = Field(
+        default="http://localhost:9200",
+        alias="OPENSEARCH_URL_FALLBACK",
     )
 
     jwt_secret_key: str = Field(default="change-me-in-production", alias="JWT_SECRET_KEY")

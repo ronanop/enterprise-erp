@@ -36,7 +36,6 @@ from shared.schemas import APIResponse
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-<<<<<<< HEAD
 @router.get("/ess/captcha", response_model=APIResponse[EssCaptchaChallengeResponse])
 def ess_captcha() -> APIResponse[EssCaptchaChallengeResponse]:
     from security.ess_login_captcha import captcha_enabled, issue_challenge
@@ -71,7 +70,8 @@ def ess_login(
     )
     db.commit()
     return APIResponse(message="Login successful", data=TokenResponse(**result))
-=======
+
+
 @router.get("/microsoft/config", response_model=APIResponse[MicrosoftLoginConfigResponse])
 def microsoft_config() -> APIResponse[MicrosoftLoginConfigResponse]:
     """Public: exposes only whether Microsoft SSO is enabled (no secrets)."""
@@ -149,7 +149,6 @@ def microsoft_exchange(
         message="Microsoft sign-in successful",
         data=TokenResponse(**token_payload),
     )
->>>>>>> 5b35135407877adf8d68c23880d984dcde9c8cfd
 
 
 @router.post("/login", response_model=APIResponse[TokenResponse])
@@ -217,6 +216,17 @@ def me(
 ) -> APIResponse[dict]:
     rbac = RBACService(db)
     permissions = sorted(rbac.get_user_permissions(ctx.user_id, ctx.tenant_id))
+    role_codes = list(
+        db.scalars(
+            select(SecRole.role_code)
+            .join(SecUserRole, SecUserRole.role_id == SecRole.id)
+            .where(
+                SecUserRole.user_id == user.id,
+                SecRole.tenant_id == ctx.tenant_id,
+                SecRole.is_deleted.is_(False),
+            )
+        ).all()
+    )
     service = UserService(db)
     user_entity = service.get_user(ctx.tenant_id, ctx.user_id)
     user_entity.user_type = resolve_session_user_type(
@@ -231,7 +241,7 @@ def me(
         "user": UserService.to_response(user_entity),
         "permissions": permissions,
         "user_type": user_entity.user_type,
-        "role_codes": user_entity.role_codes,
+        "role_codes": role_codes,
         "module_keys": module_keys,
         "admin_module_keys": admin_module_keys,
     }

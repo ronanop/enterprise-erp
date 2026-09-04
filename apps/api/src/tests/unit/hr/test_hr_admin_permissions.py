@@ -24,6 +24,8 @@ def test_hr_employee_includes_scoped_workspace_reads() -> None:
     assert "master.employee:read" in HR_EMPLOYEE_PERMISSIONS
     assert "organization.department:read" in HR_EMPLOYEE_PERMISSIONS
     assert "hr.superadmin:manage" not in HR_EMPLOYEE_PERMISSIONS
+
+
 def test_generated_hr_login_password_meets_policy() -> None:
     from security.password import validate_password_policy
     from modules.hr.service.superadmin_service import generate_hr_login_password

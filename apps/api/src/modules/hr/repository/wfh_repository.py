@@ -22,7 +22,7 @@ class WfhRequestRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrWfhRequest, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID | None = None):
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
         stmt = select(HrWfhRequest).where(HrWfhRequest.is_deleted.is_(False))
         if company_id is not None:
             stmt = stmt.where(HrWfhRequest.company_id == company_id)

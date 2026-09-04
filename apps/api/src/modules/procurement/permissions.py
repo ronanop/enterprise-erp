@@ -77,6 +77,13 @@ PROC_PERMISSIONS: list[tuple[str, str, str, str]] = [
     ("procurement.report:export", "procurement.report", "export", "procurement"),
 ]
 
+# Master-data vendor lookups required for PO creation, SCM handoff, and vendor registry.
+PROC_MASTER_VENDOR_PERMISSIONS = [
+    "master.vendor:read",
+    "master.vendor:create",
+    "master.vendor:update",
+]
+
 BUYER_PERMISSIONS = [
     "procurement.requisition:read",
     "procurement.requisition:create",
@@ -113,20 +120,25 @@ BUYER_PERMISSIONS = [
     "procurement.contract:read",
     "procurement.performance:read",
     "procurement.report:read",
-]
+] + PROC_MASTER_VENDOR_PERMISSIONS
 
-PROCUREMENT_MANAGER_PERMISSIONS = BUYER_PERMISSIONS + [
-    "procurement.requisition:delete",
-    "procurement.requisition:approve",
-    "procurement.order:approve",
-    "procurement.order:cancel",
-    "procurement.return:approve",
-    "procurement.contract:create",
-    "procurement.contract:update",
-    "procurement.contract:submit",
-    "procurement.contract:approve",
-    "procurement.report:export",
-]
+PROCUREMENT_MANAGER_PERMISSIONS = list(
+    dict.fromkeys(
+        BUYER_PERMISSIONS
+        + [
+            "procurement.requisition:delete",
+            "procurement.requisition:approve",
+            "procurement.order:approve",
+            "procurement.order:cancel",
+            "procurement.return:approve",
+            "procurement.contract:create",
+            "procurement.contract:update",
+            "procurement.contract:submit",
+            "procurement.contract:approve",
+            "procurement.report:export",
+        ]
+    )
+)
 
 FINANCE_REVIEWER_PERMISSIONS = [
     "procurement.invoice:read",
@@ -138,4 +150,5 @@ FINANCE_REVIEWER_PERMISSIONS = [
     "procurement.return:post",
     "procurement.report:read",
     "procurement.report:export",
+    "master.vendor:read",
 ]
