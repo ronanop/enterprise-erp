@@ -196,7 +196,7 @@ export const hrNavGroups: HrNavGroup[] = [
         title: "Superadmin Panel",
         href: "/hr/superadmin",
         icon: Shield,
-        description: "Assign HR Admins — visible only to HRMS Superadmin",
+        description: "Assign HR module users — visible only to HR module admins",
         superAdminOnly: true,
       },
     ],

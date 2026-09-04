@@ -38,6 +38,18 @@ class AstAssetLocation(Base, *AstDetailMixin):
     )
     location_label: Mapped[str] = mapped_column(String(255), nullable=False)
     org_location_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    location_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("asset.ast_location.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    building_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("asset.ast_building.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     effective_from: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     effective_to: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)

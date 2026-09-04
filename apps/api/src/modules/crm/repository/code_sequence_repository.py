@@ -14,6 +14,9 @@ class CodeSequenceRepository:
         self.db = db
 
     def next_code(self, entity: CrmEntityType, company_id: UUID, model, code_column: str) -> str:
+        if entity == CrmEntityType.COMPANY:
+            return self._next_company_account_number(company_id, model, code_column)
+
         prefix, width = CODE_PREFIXES[entity]
         year = datetime.now(timezone.utc).year
         full_prefix = f"{prefix}{year}-"
@@ -36,3 +39,27 @@ class CodeSequenceRepository:
             if nums:
                 seq = max(nums) + 1
         return f"{full_prefix}{seq:0{width}d}"
+
+    def _next_company_account_number(self, company_id: UUID, model, code_column: str) -> str:
+        """Sales account numbers: COMP-01, COMP-02, … (per org company scope)."""
+        prefix, width = CODE_PREFIXES[CrmEntityType.COMPANY]
+        stmt = select(getattr(model, code_column)).where(
+            model.company_id == company_id,
+            getattr(model, code_column).like(f"{prefix}%"),
+        )
+        existing = list(self.db.scalars(stmt).all())
+        seq = 1
+        if existing:
+            nums: list[int] = []
+            for code in existing:
+                text = str(code)
+                if not text.startswith(prefix):
+                    continue
+                suffix = text[len(prefix) :]
+                try:
+                    nums.append(int(suffix))
+                except ValueError:
+                    continue
+            if nums:
+                seq = max(nums) + 1
+        return f"{prefix}{seq:0{width}d}"

@@ -148,7 +148,7 @@ export function ArReceiptDialog({
         className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border/80 bg-card p-4 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-sm font-medium tracking-tight">Record receipt</h2>
+        <h2 className="text-base font-extrabold tracking-tight">Record receipt</h2>
         <p className="mt-1 text-xs text-muted-foreground">Customer payment receipt with optional invoice allocation.</p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -228,7 +228,7 @@ export function ArReverseReceiptDialog({ open, receipt, onClose, onDone }: Rever
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4" role="presentation" onClick={onClose}>
       <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-xl border border-border/80 bg-card p-4 shadow-lg" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-sm font-medium tracking-tight">Reverse receipt?</h2>
+        <h2 className="text-base font-extrabold tracking-tight">Reverse receipt?</h2>
         <p className="mt-1 text-xs text-muted-foreground">
           {receipt ? `Reverses receipt ${receipt.document_number}.` : ""}
         </p>

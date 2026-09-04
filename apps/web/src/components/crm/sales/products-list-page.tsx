@@ -1,9 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Plus, RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Package, Plus } from "lucide-react";
 
+import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { FinanceField, FinanceSelect } from "@/components/finance/journals/finance-form-field";
+import {
+  RequiredFieldsDialog,
+  missingRequiredMessage,
+} from "@/components/crm/sales/required-fields-dialog";
+import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
+import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -23,16 +30,27 @@ const EMPTY: ProductFormInput = {
   status: "active",
 };
 
-export function ProductsListPage() {
+type SortKey = "product_code" | "product_name" | "product_type" | "hsn_sac" | "unit_price" | "status";
+
+export function ProductsListPage({
+  companyAccountId,
+  embedded,
+}: {
+  companyAccountId?: string;
+  embedded?: boolean;
+} = {}) {
   const [rows, setRows] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("product_name");
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState<ProductFormInput>(EMPTY);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [mandateOpen, setMandateOpen] = useState(false);
+  const [mandateMessage, setMandateMessage] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -58,8 +76,12 @@ export function ProductsListPage() {
   }
 
   async function onSave() {
-    if (!form.product_name.trim() || !form.product_type) {
-      setFormError("Product name and type are required.");
+    const missing: string[] = [];
+    if (!form.product_name.trim()) missing.push("Product Name");
+    if (!form.product_type) missing.push("Product Type");
+    if (missing.length > 0) {
+      setMandateMessage(missingRequiredMessage(missing));
+      setMandateOpen(true);
       return;
     }
     setSaving(true);
@@ -79,55 +101,72 @@ export function ProductsListPage() {
     }
   }
 
-  const filtered = rows.filter((r) => {
+  const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return r.product_name.toLowerCase().includes(q) || r.product_code.toLowerCase().includes(q);
-  });
+    if (!q) return rows;
+    return rows.filter(
+      (r) => r.product_name.toLowerCase().includes(q) || r.product_code.toLowerCase().includes(q),
+    );
+  }, [rows, query]);
+
+  const sorted = useMemo(
+    () =>
+      sortRows(filtered, sortBy, sortDir, {
+        product_code: (r) => r.product_code,
+        product_name: (r) => r.product_name,
+        product_type: (r) => r.product_type,
+        hsn_sac: (r) => r.hsn_sac,
+        unit_price: (r) => r.unit_price,
+        status: (r) => r.status,
+      }),
+    [filtered, sortBy, sortDir],
+  );
+
+  const actions = (
+    <Button type="button" size="sm" className="cursor-pointer" onClick={openCreate}>
+      <Plus className="size-3.5" /> New Product
+    </Button>
+  );
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="Products"
-        description="Product / SKU catalog used on Quote and OVF lines."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-            <Button type="button" size="sm" className="cursor-pointer" onClick={openCreate}>
-              <Plus className="size-3.5" /> New Product
-            </Button>
-          </div>
-        }
-      />
-
-      {error ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {error}
-        </div>
+    <CrmPage>
+      {!embedded ? (
+        <PageHeader
+          title="Products"
+          description="Product / SKU catalog used on Quote and OVF lines."
+          actions={actions}
+        />
       ) : null}
 
-      <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-medium tracking-tight">Products</h2>
-            <Badge variant="secondary">{filtered.length} shown</Badge>
-          </div>
-          <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search products…" className="h-8 max-w-xs" />
-        </div>
+      {companyAccountId ? (
+        <CrmInfoBanner>Product catalog is shared across companies.</CrmInfoBanner>
+      ) : null}
+
+      {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
+
+      <CrmListPanel>
+        <CrmListToolbar
+          title="Products"
+          icon={Package}
+          count={sorted.length}
+          actions={embedded ? actions : null}
+          search={{
+            value: query,
+            onChange: setQuery,
+            placeholder: "Search products…",
+          }}
+        />
 
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
-                <th className="px-4 py-2.5">Product Code</th>
-                <th className="px-4 py-2.5">Name</th>
-                <th className="px-4 py-2.5">Type</th>
-                <th className="px-4 py-2.5">HSN/SAC</th>
-                <th className="px-4 py-2.5">Unit Price</th>
-                <th className="px-4 py-2.5">Status</th>
+              <tr className={CRM_TABLE_HEAD_ROW}>
+                <CrmSortableTh label="Product Code" sortKey="product_code" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Name" sortKey="product_name" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Type" sortKey="product_type" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="HSN/SAC" sortKey="hsn_sac" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Unit Price" sortKey="unit_price" activeKey={sortBy} dir={sortDir} onSort={onSort} />
+                <CrmSortableTh label="Status" sortKey="status" activeKey={sortBy} dir={sortDir} onSort={onSort} />
               </tr>
             </thead>
             <tbody>
@@ -137,14 +176,14 @@ export function ProductsListPage() {
                     Loading products…
                   </td>
                 </tr>
-              ) : filtered.length === 0 ? (
+              ) : sorted.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
                     No products yet. Use “New Product” to add one.
                   </td>
                 </tr>
               ) : (
-                filtered.map((row) => (
+                sorted.map((row) => (
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                     <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">{row.product_code}</td>
                     <td className="px-4 py-2.5 font-medium text-foreground">{row.product_name}</td>
@@ -164,7 +203,7 @@ export function ProductsListPage() {
             </tbody>
           </table>
         </div>
-      </div>
+      </CrmListPanel>
 
       {dialogOpen ? (
         <div
@@ -178,7 +217,7 @@ export function ProductsListPage() {
             className="w-full max-w-lg rounded-xl border border-border/80 bg-card p-5 shadow-lg"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-sm font-medium tracking-tight">New Product</h2>
+            <h2 className="text-base font-extrabold tracking-tight">New Product</h2>
 
             {formError ? (
               <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
@@ -234,6 +273,12 @@ export function ProductsListPage() {
           </div>
         </div>
       ) : null}
-    </div>
+
+      <RequiredFieldsDialog
+        open={mandateOpen}
+        message={mandateMessage}
+        onClose={() => setMandateOpen(false)}
+      />
+    </CrmPage>
   );
 }

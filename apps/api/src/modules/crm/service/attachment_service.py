@@ -13,27 +13,68 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from core import object_storage
+from core.config import settings
 from core.exceptions import NotFoundException
 from modules.crm.repository.attachment_repository import AttachmentRepository
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.foundation.domain.value_objects import TenantContext
 
-UPLOAD_ROOT = Path(__file__).resolve().parents[4] / "var" / "crm-attachments"
+def _upload_root() -> Path:
+    return settings.resolved_crm_upload_root
 
 
 class AttachmentService:
     def __init__(self, db: Session) -> None:
+        self._db = db
         self._repo = AttachmentRepository(db)
         self._scope = CrmScopeValidator(db)
 
     def list_for_entity(self, ctx: TenantContext, entity_type: str, entity_id: UUID):
         return self._repo.list_for_entity(ctx, entity_type, entity_id)
 
+    def list_by_category(
+        self,
+        ctx: TenantContext,
+        *,
+        category: str | None = None,
+        company_id: UUID | None = None,
+    ):
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        return self._repo.list_by_category(ctx, cid, category=category)
+
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)
         if row is None:
             raise NotFoundException("Attachment not found")
         return row
+
+    def resolve_file_path(self, ctx: TenantContext, row_id: UUID) -> tuple[Path, str, str | None]:
+        """Return (path, file_name, content_type) for streaming download."""
+        row = self.get(ctx, row_id)
+        path = Path(row.file_path)
+        if not path.is_file():
+            # Fallback: file may have been stored relative to the upload root.
+            candidate = _upload_root() / path.name
+            if candidate.is_file():
+                path = candidate
+            else:
+                raise NotFoundException("Attachment file is missing on disk")
+        return path, row.file_name, row.content_type
+
+    def remove_entity_attachments_by_category(
+        self,
+        ctx: TenantContext,
+        entity_type: str,
+        entity_id: UUID,
+        category: str,
+    ) -> int:
+        removed = 0
+        for row in self.list_for_entity(ctx, entity_type, entity_id):
+            if row.category != category:
+                continue
+            self.delete(ctx, row.id)
+            removed += 1
+        return removed
 
     def create(
         self,
@@ -43,6 +84,7 @@ class AttachmentService:
         entity_id: UUID,
         file_name: str,
         category: str = "other",
+        source: str = "upload",
         branch_id: UUID,
         company_id: UUID | None = None,
         file_path: str | None = None,
@@ -61,15 +103,17 @@ class AttachmentService:
                 key = object_storage.module_key("crm", "attachments", str(cid), stored_name)
                 stored_path = object_storage.put_bytes(key, raw, content_type)
             else:
-                UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
-                dest = UPLOAD_ROOT / stored_name
+                upload_root = _upload_root()
+                upload_root.mkdir(parents=True, exist_ok=True)
+                dest = upload_root / stored_name
                 dest.write_bytes(raw)
                 stored_path = str(dest)
+            source = "upload"
 
         if not stored_path:
             raise NotFoundException("Either file_path or content_base64 must be provided")
 
-        return self._repo.create(
+        row = self._repo.create(
             ctx,
             company_id=cid,
             branch_id=branch_id,
@@ -80,5 +124,32 @@ class AttachmentService:
             content_type=content_type,
             size=size,
             category=category,
+            source=source,
             uploaded_by=ctx.user_id,
+        )
+        if entity_type == "opportunity":
+            self._sync_opportunity_attachment_flags(ctx, entity_id)
+        return row
+
+    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        row = self.get(ctx, row_id)
+        entity_type = row.entity_type
+        entity_id = row.entity_id
+        if not self._repo.delete(ctx, row_id):
+            raise NotFoundException("Attachment not found")
+        if entity_type == "opportunity":
+            self._sync_opportunity_attachment_flags(ctx, entity_id)
+
+    def _sync_opportunity_attachment_flags(self, ctx: TenantContext, opportunity_id: UUID) -> None:
+        from modules.crm.repository.opportunity_repository import OpportunityRepository
+
+        rows = self._repo.list_for_entity(ctx, "opportunity", opportunity_id)
+        categories = {r.category for r in rows}
+        OpportunityRepository(self._db).update(
+            ctx,
+            opportunity_id,
+            boq_attached="boq" in categories,
+            sow_attached="sow" in categories,
+            oem_quote_attached="oem_quote" in categories,
+            customer_po_attached="customer_po" in categories,
         )

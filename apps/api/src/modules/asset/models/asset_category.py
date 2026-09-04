@@ -23,6 +23,10 @@ class AstAssetCategory(Base, *AstMasterMixin):
             "status IN ('active','inactive')",
             name="ck_ast_asset_category_status",
         ),
+        CheckConstraint(
+            "asset_domain IS NULL OR asset_domain IN ('IT','NON_IT')",
+            name="ck_ast_asset_category_domain",
+        ),
         {"schema": "asset"},
     )
 
@@ -37,6 +41,8 @@ class AstAssetCategory(Base, *AstMasterMixin):
 
     category_code: Mapped[str] = mapped_column(String(50), nullable=False)
     category_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # NULL = usable by both domains; existing rows backfilled to IT
+    asset_domain: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)
     default_useful_life_months: Mapped[int | None] = mapped_column(Integer, nullable=True)
     default_depreciation_method: Mapped[str | None] = mapped_column(String(40), nullable=True)
     gl_asset_account_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)

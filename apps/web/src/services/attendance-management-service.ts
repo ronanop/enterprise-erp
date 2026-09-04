@@ -1,6 +1,7 @@
 import { resourceService } from "@/services/api-client";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import type { HrRow } from "@/services/hr-service";
+import { devError, devWarn } from "@/lib/dev-log";
 import type {
   AttendanceAuditEntry,
   AttendanceCorrection,
@@ -188,7 +189,7 @@ export async function submitCorrection(
       if (apiId) item.id = apiId;
     }
   } catch (err) {
-    console.warn("Attendance correction API failed; local cache kept", err);
+    devWarn("Attendance correction API failed; local cache kept");
   }
 
   const all = readJson<AttendanceCorrection[]>(CORRECTIONS_KEY, []);

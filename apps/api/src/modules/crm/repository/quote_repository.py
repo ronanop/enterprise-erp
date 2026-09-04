@@ -33,6 +33,7 @@ class QuoteRepository(CrmScopedRepository):
         if opportunity_id is not None:
             stmt = stmt.where(CrmQuote.opportunity_id == opportunity_id)
         stmt = self.apply_crm_filter(stmt, CrmQuote, ctx, branch_scoped=True)
+        stmt = stmt.order_by(CrmQuote.created_at.desc())
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> CrmQuote:
@@ -59,6 +60,18 @@ class QuoteRepository(CrmScopedRepository):
         row.version = int(row.version or 1) + 1
         self.db.flush()
         return row
+
+    def soft_delete(self, ctx: TenantContext, row_id: UUID) -> bool:
+        row = self.get(ctx, row_id)
+        if row is None:
+            return False
+        row.is_deleted = True
+        row.deleted_at = utcnow()
+        row.deleted_by = ctx.user_id
+        row.updated_at = utcnow()
+        row.updated_by = ctx.user_id
+        self.db.flush()
+        return True
 
 
 class QuoteLineRepository(CrmScopedRepository):

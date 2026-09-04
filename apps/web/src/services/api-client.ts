@@ -5,7 +5,7 @@ import {
   redirectToLogin,
   setTokens,
 } from "@/lib/auth";
-import { env } from "@/utils/env";
+import { env, getApiUrl, resolveApiUrl, setApiUrl } from "@/utils/env";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { clearStoredOrgContext } from "@/lib/org-context-storage";
 import type { ApiResponse, ErrorResponse, TokenData, UserProfile } from "@/types/api";
@@ -26,16 +26,35 @@ export class ApiClientError extends Error {
   }
 }
 
+export function formatApiError(err: unknown, fallback: string): string {
+  if (err instanceof ApiClientError) {
+    if (err.errors.length > 0) {
+      return `${err.message}: ${err.errors.join("; ")}`;
+    }
+    return err.message;
+  }
+  if (err instanceof Error && err.message.trim()) {
+    return err.message;
+  }
+  return fallback;
+}
+
 type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
   auth?: boolean;
   query?: Record<string, string | number | boolean | null | undefined>;
-  /** Internal: skip refresh retry after a 401. */
+  /** Internal: skip one refresh retry to avoid loops. */
   _retried?: boolean;
+  /** Internal: skip one API-base failover retry. */
+  _apiFailover?: boolean;
 };
 
-function buildUrl(path: string, query?: RequestOptions["query"]): string {
-  const base = `${env.apiUrl}${path}`;
+function buildUrl(
+  path: string,
+  query?: RequestOptions["query"],
+  baseUrl: string = getApiUrl(),
+): string {
+  const base = `${baseUrl}${path}`;
   if (!query) return base;
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(query)) {
@@ -46,8 +65,24 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
   return qs ? `${base}?${qs}` : base;
 }
 
-/** Single in-flight refresh so parallel 401s share one token rotation. */
 let refreshInFlight: Promise<boolean> | null = null;
+let apiBaseReady: Promise<string> | null = null;
+
+function ensureApiBase(): Promise<string> {
+  if (!apiBaseReady) {
+    apiBaseReady = resolveApiUrl().catch(() => getApiUrl());
+  }
+  return apiBaseReady;
+}
+
+async function failoverApiBase(): Promise<void> {
+  const before = getApiUrl();
+  const resolved = await resolveApiUrl(true);
+  if (resolved === before && env.apiUrlFallback !== before) {
+    setApiUrl(env.apiUrlFallback);
+  }
+  apiBaseReady = Promise.resolve(getApiUrl());
+}
 
 async function refreshAccessToken(): Promise<boolean> {
   if (refreshInFlight) return refreshInFlight;
@@ -57,6 +92,7 @@ async function refreshAccessToken(): Promise<boolean> {
     if (!refreshToken) return false;
 
     try {
+      await ensureApiBase();
       const response = await fetchWithRetry(buildUrl("/auth/refresh"), {
         method: "POST",
         headers: {
@@ -102,7 +138,7 @@ export async function apiClient<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<ApiResponse<T>> {
-  const { body, headers, auth = true, query, _retried = false, ...rest } = options;
+  const { body, headers, auth = true, query, _retried, _apiFailover, ...rest } = options;
   const token = auth ? getAccessToken() : null;
 
   if (auth && !token) {
@@ -110,6 +146,7 @@ export async function apiClient<T>(
     redirectToLogin();
     throw new ApiClientError("No active session. Please sign in.", 401);
   }
+  await ensureApiBase();
 
   let response: Response;
   try {
@@ -125,10 +162,21 @@ export async function apiClient<T>(
       cache: "no-store",
     });
   } catch {
+    if (!_apiFailover) {
+      await failoverApiBase();
+      return apiClient<T>(path, { ...options, _apiFailover: true });
+    }
     throw new ApiClientError(
-      "Cannot reach API. Check that the backend is running on port 8000.",
+      "Cannot reach the API. Confirm the backend is running on port 8000.",
       0,
     );
+  }
+
+  let payload: ApiResponse<T> | ErrorResponse;
+  try {
+    payload = (await response.json()) as ApiResponse<T> | ErrorResponse;
+  } catch {
+    throw new ApiClientError("Invalid API response", response.status);
   }
 
   if (response.status === 401 && auth) {
@@ -138,9 +186,68 @@ export async function apiClient<T>(
         return apiClient<T>(path, { ...options, _retried: true });
       }
     }
+  }
+
+  if (!response.ok || payload.success === false) {
+    const errorPayload = payload as ErrorResponse;
+    if (auth && response.status === 401) {
+      clearTokens();
+    }
+    throw new ApiClientError(
+      errorPayload.message ?? "API request failed",
+      response.status,
+      errorPayload.errors ?? [],
+    );
+  }
+
+  return payload as ApiResponse<T>;
+}
+
+async function parseErrorMessage(response: Response): Promise<string> {
+  try {
+    const payload = (await response.json()) as ErrorResponse;
+    return payload.message ?? "API request failed";
+  } catch {
+    return "API request failed";
+  }
+}
+
+/** Multipart upload. Do not set Content-Type — the browser must supply the boundary. */
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+  options: { _retried?: boolean; _apiFailover?: boolean } = {},
+): Promise<ApiResponse<T>> {
+  const token = getAccessToken();
+  await ensureApiBase();
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path), {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+      cache: "no-store",
+    });
+  } catch {
+    if (!options._apiFailover) {
+      await failoverApiBase();
+      return apiUpload<T>(path, formData, { ...options, _apiFailover: true });
+    }
+    throw new ApiClientError(
+      "Cannot reach the API. Confirm the backend is running on port 8000.",
+      0,
+    );
+  }
+
+  if (response.status === 401 && !options._retried) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      return apiUpload<T>(path, formData, { _retried: true });
+    }
     clearTokens();
-    redirectToLogin();
-    throw new ApiClientError("Session expired. Please sign in again.", 401);
   }
 
   let payload: ApiResponse<T> | ErrorResponse;
@@ -164,8 +271,77 @@ export async function apiClient<T>(
       errorPayload.errors ?? [],
     );
   }
-
   return payload as ApiResponse<T>;
+}
+
+export type BlobFetchResult =
+  | { kind: "legacy"; externalUrl: string }
+  | { kind: "file"; blob: Blob; contentType: string; filename: string };
+
+export async function apiGetBlob(
+  path: string,
+  query?: RequestOptions["query"],
+  options: { _retried?: boolean; _apiFailover?: boolean } = {},
+): Promise<BlobFetchResult> {
+  const token = getAccessToken();
+  await ensureApiBase();
+  let response: Response;
+  try {
+    response = await fetch(buildUrl(path, query), {
+      method: "GET",
+      headers: {
+        Accept: "application/pdf,image/jpeg,image/png,application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      cache: "no-store",
+    });
+  } catch {
+    if (!options._apiFailover) {
+      await failoverApiBase();
+      return apiGetBlob(path, query, { ...options, _apiFailover: true });
+    }
+    throw new ApiClientError(
+      "Cannot reach the API. Confirm the backend is running on port 8000.",
+      0,
+    );
+  }
+
+  if (response.status === 401 && !options._retried) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      return apiGetBlob(path, query, { _retried: true });
+    }
+    clearTokens();
+    throw new ApiClientError(await parseErrorMessage(response), 401);
+  }
+
+  if (!response.ok) {
+    throw new ApiClientError(await parseErrorMessage(response), response.status);
+  }
+
+  const contentType = (response.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("application/json")) {
+    const payload = (await response.json()) as ApiResponse<{
+      is_legacy?: boolean;
+      external_url?: string;
+    }>;
+    const url = payload.data?.external_url;
+    if (payload.data?.is_legacy && url) {
+      return { kind: "legacy", externalUrl: url };
+    }
+    throw new ApiClientError(payload.message ?? "Document is not available for preview", 400);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") || "";
+  const match = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"/i.exec(disposition);
+  const filename = decodeURIComponent(match?.[1] || match?.[2] || "document");
+  return {
+    kind: "file",
+    blob,
+    contentType: response.headers.get("content-type") || blob.type || "application/octet-stream",
+    filename,
+  };
 }
 
 export const healthService = {
@@ -196,6 +372,25 @@ export const authService = {
       clearTokens();
     }
   },
+  microsoftConfig: () =>
+    apiClient<{ enabled: boolean; authorization_path: string }>("/auth/microsoft/config", {
+      auth: false,
+    }),
+  microsoftLoginUrl: (returnTo = "/organization") => {
+    const path = `/auth/microsoft/login?return_to=${encodeURIComponent(returnTo)}`;
+    return `${getApiUrl()}${path}`;
+  },
+  exchangeMicrosoftCode: (code: string) =>
+    apiClient<TokenData>("/auth/microsoft/exchange", {
+      method: "POST",
+      auth: false,
+      body: { code },
+    }).then((res) => {
+      if (res.data?.access_token) {
+        setTokens(res.data.access_token, res.data.refresh_token);
+      }
+      return res;
+    }),
 };
 
 export const contextService = {
@@ -252,6 +447,7 @@ export async function downloadApiFile(
   query?: Record<string, string | number | boolean | null | undefined>,
   fallbackName = "export.bin",
   _retried = false,
+  _apiFailover = false,
 ): Promise<void> {
   const token = getAccessToken();
   if (!token) {
@@ -259,6 +455,7 @@ export async function downloadApiFile(
     redirectToLogin();
     throw new ApiClientError("No active session. Please sign in.", 401);
   }
+  await ensureApiBase();
 
   let response: Response;
   try {
@@ -271,8 +468,12 @@ export async function downloadApiFile(
       cache: "no-store",
     });
   } catch {
+    if (!_apiFailover) {
+      await failoverApiBase();
+      return downloadApiFile(path, query, fallbackName, _retried, true);
+    }
     throw new ApiClientError(
-      "Cannot reach API. Check that the backend is running on port 8000.",
+      "Cannot reach the API. Confirm the backend is running on port 8000.",
       0,
     );
   }
@@ -281,11 +482,10 @@ export async function downloadApiFile(
     if (!_retried) {
       const refreshed = await refreshAccessToken();
       if (refreshed) {
-        return downloadApiFile(path, query, fallbackName, true);
+        return downloadApiFile(path, query, fallbackName, true, _apiFailover);
       }
     }
     clearTokens();
-    redirectToLogin();
     throw new ApiClientError("Session expired. Please sign in again.", 401);
   }
 

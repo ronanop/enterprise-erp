@@ -36,6 +36,10 @@ class CrmQuote(Base, *CrmTransactionMixin):
             "approval_status IN ('not_required','pending','approved','rejected')",
             name="ck_crm_quote_approval_status",
         ),
+        CheckConstraint(
+            "amc_warranty IS NULL OR amc_warranty IN ('none','yes','no')",
+            name="ck_crm_quote_amc_warranty",
+        ),
         {"schema": "crm"},
     )
 
@@ -58,6 +62,10 @@ class CrmQuote(Base, *CrmTransactionMixin):
         nullable=True,
     )
     subject: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    project_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    account_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    service_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    owner_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     valid_until: Mapped[date | None] = mapped_column(Date, nullable=True)
     quote_no: Mapped[str] = mapped_column(String(50), nullable=False)
     quote_revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
@@ -71,7 +79,20 @@ class CrmQuote(Base, *CrmTransactionMixin):
     entity_gst: Mapped[str | None] = mapped_column(String(30), nullable=True)
     entity_contact: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
+    amc_warranty: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    amc_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    amc_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    billing_street: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    billing_city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    billing_state: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    billing_zip: Mapped[str | None] = mapped_column(String(20), nullable=True)
     billing_country: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+    shipping_street: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    shipping_city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    shipping_state: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    shipping_zip: Mapped[str | None] = mapped_column(String(20), nullable=True)
     shipping_country: Mapped[str | None] = mapped_column(String(100), nullable=True)
     freight: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
     grand_total: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)

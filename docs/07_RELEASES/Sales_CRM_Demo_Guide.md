@@ -391,8 +391,8 @@ fully wired to the live `/crm/*` API surface above.)
 1. **Company** → *New Company* → fill Account Info + Billing Address
    (required) → *Copy from Billing* can pre-fill Shipping → Save. Open the
    company's detail page — it is the **only** place with a *Create Lead*
-   button (disabled with a tooltip if an open lead already exists or the
-   account isn't active).
+   button. Active companies can create multiple leads; the button is disabled
+   only when the account is inactive.
 2. **Create Lead** → the form prefills from the company (name, email,
    billing address) inside a "Synced from Company" banner; pick a product
    type (Hardware / Software / Others — Others reveals a free-text field),
@@ -452,7 +452,7 @@ Products · Calls (stub) · KYC (stub)**
 
 | Step | Where | What to do |
 |---|---|---|
-| 1. Create/open account | **Company** → list → row or "New Company" | 2-col Account Info + billing/shipping address form (billing required, "Copy to shipping" button) + Description. The company detail page is the **only** place with a "Create Lead" button — disabled with a tooltip if an open lead already exists or the account isn't active. |
+| 1. Create/open account | **Company** → list → row or "New Company" | 2-col Account Info + billing/shipping address form (billing required, "Copy to shipping" button) + Description. The company detail page is the **only** place with a "Create Lead" button; active companies can create multiple leads, and inactive accounts keep the button disabled. |
 | 2. Create lead | Company detail → **Create Lead** | Pre-fills company/branch; pick Lead Source + Owner; product cascade (Hardware / Software / Others free-text). |
 | 3. Convert or lose | **Leads** → lead detail | Deal timeline stepper (Company → Lead → Opportunity → Quote → OVF → Won). "Convert to Opportunity" opens a dialog requiring Pipeline + remark; "Mark Lost" is available until Won. |
 | 4. Run the opportunity blueprint | **Opportunities** → opportunity detail (no "New" button on the list — banner explains conversion is Lead-only) | Blueprint action bar renders only the buttons allowed by `GET .../blueprint` (Attach BOQ → Send to Pre-sales → SOW/Skip → Deal Reg → OEM Received → Attach OEM Quote → **Create Quote** (gated, only appears once OEM quote is attached) → …→ Attach PO → Send to Accounts/Management → **Create OVF** (gated on accepted quote) → Deal Won). "Lost" stays available until Won. File-based actions open a small file picker and upload as base64 via the Attachments API. |

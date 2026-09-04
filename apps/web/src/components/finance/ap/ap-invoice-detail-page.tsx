@@ -269,7 +269,7 @@ export function ApInvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
       </div>
 
       <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-        <h3 className="text-sm font-medium tracking-tight">Vendor &amp; Document</h3>
+        <h3 className="text-base font-extrabold tracking-tight">Vendor &amp; Document</h3>
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-[11px] text-muted-foreground uppercase">Vendor</dt>
@@ -289,7 +289,7 @@ export function ApInvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
 
       <div className="rounded-xl border border-border/80 bg-card shadow-sm">
         <div className="border-b border-border/70 px-3 py-2.5">
-          <h3 className="text-sm font-medium tracking-tight">Invoice Lines</h3>
+          <h3 className="text-base font-extrabold tracking-tight">Invoice Lines</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
@@ -316,7 +316,7 @@ export function ApInvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
       {payments.length > 0 ? (
         <div className="rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="border-b border-border/70 px-3 py-2.5">
-            <h3 className="text-sm font-medium tracking-tight">Payments &amp; Allocations</h3>
+            <h3 className="text-base font-extrabold tracking-tight">Payments &amp; Allocations</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-sm">
@@ -348,7 +348,7 @@ export function ApInvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
       ) : null}
 
       <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-        <h3 className="text-sm font-medium tracking-tight">Ledger Impact</h3>
+        <h3 className="text-base font-extrabold tracking-tight">Ledger Impact</h3>
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
           <div>
             <dt className="text-[11px] text-muted-foreground uppercase">Journal</dt>
@@ -367,7 +367,7 @@ export function ApInvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
       </div>
 
       <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-        <h3 className="mb-2 text-sm font-medium tracking-tight">Audit Timeline</h3>
+        <h3 className="mb-2 text-base font-extrabold tracking-tight">Audit Timeline</h3>
         <JournalAuditTimeline events={auditEvents} resolveUser={resolve} />
       </div>
 

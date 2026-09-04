@@ -13,10 +13,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import ConflictException, NotFoundException
+from core.exceptions import AppException, ConflictException, NotFoundException
 from modules.crm.domain.enums import CrmEntityType, LeadStatus
 from modules.crm.models import CrmCompany
 from modules.crm.repository.company_repository import CompanyRepository
+from modules.crm.service.crm_module_admin import CrmModuleAdminService
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.foundation.domain.value_objects import TenantContext
@@ -30,6 +31,7 @@ class CompanyService:
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
         self._audit = AuditService(db)
+        self._crm_admin = CrmModuleAdminService(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -40,6 +42,10 @@ class CompanyService:
         if row is None:
             raise NotFoundException("Company account not found")
         return row
+
+    def peek_next_account_number(self, ctx: TenantContext, company_id: UUID | None = None) -> str:
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        return self._numbers.generate(CrmEntityType.COMPANY, cid, CrmCompany, "account_number")
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields) -> CrmCompany:
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -65,6 +71,21 @@ class CompanyService:
             raise NotFoundException("Company account not found")
         return row
 
+    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        self._crm_admin.ensure_admin(ctx)
+        existing = self.get(ctx, row_id)
+        if existing.locked:
+            raise ConflictException("Company account is locked pending approval")
+        if not self._repo.soft_delete(ctx, row_id):
+            raise NotFoundException("Company account not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="crm_company",
+            entity_id=row_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
+
     def create_lead(self, ctx: TenantContext, company_account_id: UUID, *, branch_id: UUID, **lead_fields):
         """The ONLY supported path to create a sales-process lead (rule #1)."""
         account = self.get(ctx, company_account_id)
@@ -82,10 +103,36 @@ class CompanyService:
         lead_fields["email"] = lead_fields.get("email") or account.customer_email
         lead_fields["mobile"] = lead_fields.get("mobile") or account.phone or ""
         lead_fields["industry"] = lead_fields.get("industry") or account.industry
+        lead_fields["street"] = lead_fields.get("street") or account.billing_street
+        lead_fields["city"] = lead_fields.get("city") or account.billing_city
+        lead_fields["state"] = lead_fields.get("state") or account.billing_state
+        lead_fields["zip"] = lead_fields.get("zip") or account.billing_code
+        lead_fields["country"] = lead_fields.get("country") or account.billing_country
+        lead_fields["entity_name"] = lead_fields.get("entity_name") or account.customer_name
+        lead_fields["entity_email"] = lead_fields.get("entity_email") or account.customer_email
+        lead_fields["entity_contact"] = lead_fields.get("entity_contact") or account.phone
+        if not lead_fields.get("entity_address"):
+            billing_address = ", ".join(
+                str(value)
+                for value in (
+                    account.billing_street,
+                    account.billing_city,
+                    account.billing_state,
+                    account.billing_code,
+                    account.billing_country,
+                )
+                if value
+            )
+            lead_fields["entity_address"] = billing_address or None
         lead_fields["assigned_date"] = lead_fields.get("assigned_date") or date.today()
         lead_fields["status"] = LeadStatus.NEW.value
         lead_fields["company_account_id"] = company_account_id
         lead_fields["blueprint_state"] = "open"
+
+        oem_name = (lead_fields.get("oem_name") or "").strip()
+        if not oem_name:
+            raise AppException("OEM name is required")
+        lead_fields["oem_name"] = oem_name
 
         return LeadService(self._db).create(
             ctx,

@@ -16,6 +16,7 @@ from modules.project.service.engines.project_status_history_engine import Projec
 from modules.project.service.engines.project_task_engine import ProjectTaskEngine
 from modules.project.service.engines.resource_allocation_engine import ResourceAllocationEngine
 from modules.project.service.engines.resource_plan_engine import ResourcePlanEngine
+from modules.project.service.engines import site_installation_engine
 from modules.project.service.engines.task_assignment_engine import TaskAssignmentEngine
 from modules.project.service.engines.task_dependency_engine import TaskDependencyEngine
 from modules.project.service.engines.timesheet_engine import TimesheetEngine
@@ -42,4 +43,5 @@ __all__ = [
     "ProjectStatusHistoryEngine",
     "ProjectNotificationEngine",
     "ProjectReportEngine",
+    "site_installation_engine",
 ]

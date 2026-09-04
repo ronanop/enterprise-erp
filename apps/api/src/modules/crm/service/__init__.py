@@ -17,7 +17,7 @@ from modules.crm.service.campaign_service import CampaignService
 from modules.crm.service.company_service import CompanyService
 from modules.crm.service.contact_service import ContactService
 from modules.crm.service.feedback_service import CustomerSatisfactionService, FeedbackService
-from modules.crm.service.integration_service import CRMIntegrationService
+from modules.crm.service.kyc_record_service import KycRecordService
 from modules.crm.service.lead_service import (
     LeadActivityService,
     LeadAssignmentService,
@@ -29,6 +29,7 @@ from modules.crm.service.opportunity_service import (
     OpportunityStageService,
     PipelineService,
 )
+from modules.crm.service.opportunity_timeline_service import OpportunityTimelineService
 from modules.crm.service.ovf_service import OvfService
 from modules.crm.service.product_service import ProductService
 from modules.crm.service.quote_service import QuoteService
@@ -49,6 +50,7 @@ __all__ = [
     "FeedbackService",
     "FollowupService",
     "InteractionService",
+    "KycRecordService",
     "LeadActivityService",
     "LeadAssignmentService",
     "LeadService",
@@ -57,6 +59,7 @@ __all__ = [
     "OpportunityBlueprintService",
     "OpportunityService",
     "OpportunityStageService",
+    "OpportunityTimelineService",
     "OvfService",
     "PipelineService",
     "ProductService",

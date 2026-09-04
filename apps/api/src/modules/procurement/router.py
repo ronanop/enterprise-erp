@@ -12,10 +12,12 @@ from modules.procurement.routers import (
     requisitions_router,
     returns_router,
     rfqs_router,
+    scm_router,
     vendor_quotations_router,
 )
 
 procurement_router = APIRouter(prefix="/procurement")
+procurement_router.include_router(scm_router)
 procurement_router.include_router(requisitions_router)
 procurement_router.include_router(rfqs_router)
 procurement_router.include_router(vendor_quotations_router)

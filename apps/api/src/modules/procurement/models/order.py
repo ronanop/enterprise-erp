@@ -1,18 +1,21 @@
 """Procurement purchase order ORM models."""
 
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
+    DateTime,
     ForeignKey,
+    Integer,
     Numeric,
     SmallInteger,
     String,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.base import Base
@@ -82,6 +85,23 @@ class ProcOrderHeader(Base, *ProcTransactionMixin):
     source_module: Mapped[str | None] = mapped_column(String(50), nullable=True)
     source_document_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     source_document_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    # Entity-based company PO number, e.g. PO/CDT/001 (assigned on finalize).
+    company_po_number: Mapped[str | None] = mapped_column(String(50), nullable=True, index=True)
+    entity_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # Groups receipt saves so GRN PDF shows only the latest receipt batch.
+    current_receipt_batch_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
+    current_receipt_batch_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Sequential GRN docs per PO: PO/CDT/002/001, /002, …
+    grn_sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    current_grn_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # Finance / sales approver for POs created outside CRM OVF (shown on PO lists & PDF).
+    approved_by_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Manual CACHE order reference printed on PO PDF (optional).
+    order_ref_cache: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     lines: Mapped[list["ProcOrderLine"]] = relationship(
         back_populates="order_header",
@@ -124,6 +144,8 @@ class ProcOrderLine(Base, *ProcTransactionMixin):
         nullable=False,
     )
     unit_cost: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False)
+    # INR lines roll into PO totals/GST. USD is informational on the PO only.
+    rate_currency: Mapped[str] = mapped_column(String(3), nullable=False, default="INR")
     discount_percent: Mapped[float] = mapped_column(Numeric(8, 4), nullable=False, default=0)
     discount_amount: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False, default=0)
     tax_id: Mapped[UUID | None] = mapped_column(
@@ -138,5 +160,21 @@ class ProcOrderLine(Base, *ProcTransactionMixin):
     quantity_invoiced: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False, default=0)
     quantity_returned: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False, default=0)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="open")
+    # Qty recorded in the most recent receipt save for this line (GRN PDF uses this).
+    last_receipt_qty: Mapped[float] = mapped_column(Numeric(18, 4), nullable=False, default=0)
+    last_receipt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_receipt_batch_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
+    # One entry per unit in last_receipt_qty (use "NA" when not tracked).
+    last_receipt_serial_numbers: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    # Whether the last receipt for this line is flagged for vendor invoice billing.
+    last_receipt_billing: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    last_receipt_billing_quantity: Mapped[float] = mapped_column(
+        Numeric(18, 4), nullable=False, default=0
+    )
+    last_receipt_delivery_challan_quantity: Mapped[float] = mapped_column(
+        Numeric(18, 4), nullable=False, default=0
+    )
 
     order_header: Mapped[ProcOrderHeader] = relationship(back_populates="lines")

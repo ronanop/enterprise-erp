@@ -27,6 +27,7 @@ class ContactRepository(CrmScopedRepository):
         if company_account_id is not None:
             stmt = stmt.where(CrmContact.company_account_id == company_account_id)
         stmt = self.apply_crm_filter(stmt, CrmContact, ctx, branch_scoped=True)
+        stmt = stmt.order_by(CrmContact.created_at.desc())
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> CrmContact:

@@ -25,7 +25,32 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         request.state.request_id = request_id
         start = time.perf_counter()
 
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            origin = request.headers.get("origin")
+            headers: dict[str, str] = {"X-Request-ID": request_id}
+            if origin:
+                headers["Access-Control-Allow-Origin"] = origin
+                headers["Access-Control-Allow-Credentials"] = "true"
+                headers["Vary"] = "Origin"
+            duration_ms = (time.perf_counter() - start) * 1000
+            logger.exception(
+                "request failed",
+                extra={
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": 500,
+                    "duration_ms": round(duration_ms, 2),
+                },
+            )
+            return Response(
+                content=b'{"success":false,"message":"Internal server error","errors":[]}',
+                status_code=500,
+                media_type="application/json",
+                headers=headers,
+            )
         duration_ms = (time.perf_counter() - start) * 1000
 
         logger.info(

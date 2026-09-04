@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from modules.agent_read.router import agent_read_router
 from modules.analytics.router import analytics_router
 from modules.asset.router import asset_router
 from modules.crm.router import crm_router
@@ -17,6 +18,7 @@ from modules.hr.routers.digital_onboarding import public_onboarding_router
 from modules.integration.router import integration_router
 from modules.inventory.router import inventory_router
 from modules.manufacturing.router import manufacturing_router
+from modules.marketing.router import marketing_router
 from modules.master_data.router import master_data_router
 from modules.organization.router import organization_router
 from modules.payroll.router import payroll_router
@@ -27,6 +29,7 @@ from modules.quality.router import quality_router
 from modules.recruitment.router import recruitment_router
 from modules.sales.router import sales_router
 from modules.service.router import service_router
+from modules.voice_agent.router import voice_agent_router
 from shared.health import router as health_router
 
 api_v1_router = APIRouter()
@@ -53,8 +56,11 @@ api_v1_router.include_router(project_router)
 api_v1_router.include_router(service_router)
 api_v1_router.include_router(helpdesk_router)
 api_v1_router.include_router(document_router)
+api_v1_router.include_router(marketing_router)
 api_v1_router.include_router(grc_router)
 api_v1_router.include_router(analytics_router)
 api_v1_router.include_router(integration_router)
 api_v1_router.include_router(ecommerce_router)
 api_v1_router.include_router(portal_router)
+api_v1_router.include_router(voice_agent_router)
+api_v1_router.include_router(agent_read_router)

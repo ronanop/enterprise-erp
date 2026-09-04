@@ -19,11 +19,10 @@ class ShiftRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrShift, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrShift).where(
-            HrShift.company_id == company_id,
-            HrShift.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrShift).where(HrShift.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrShift.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrShift, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 

@@ -16,6 +16,7 @@ from modules.project.service.project_service import ProjectService
 from modules.project.service.resource_allocation_service import ResourceAllocationService
 from modules.project.service.resource_planning_service import ResourcePlanningService
 from modules.project.service.risk_service import RiskService
+from modules.project.service.site_installation_service import SiteInstallationService
 from modules.project.service.status_history_service import StatusHistoryService
 from modules.project.service.task_assignment_service import TaskAssignmentService
 from modules.project.service.task_dependency_service import TaskDependencyService
@@ -40,6 +41,7 @@ __all__ = [
     "ResourceAllocationService",
     "ResourcePlanningService",
     "RiskService",
+    "SiteInstallationService",
     "StatusHistoryService",
     "TaskAssignmentService",
     "TaskDependencyService",

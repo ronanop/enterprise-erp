@@ -54,7 +54,7 @@ export function CoaCommentsPanel({ items, resolveUser, onSubmit, readOnly }: Pro
 
   return (
     <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-      <h3 className="text-sm font-medium tracking-tight">Comments</h3>
+      <h3 className="text-base font-extrabold tracking-tight">Comments</h3>
       <div className="mt-3 space-y-2">
         {sorted.length === 0 ? (
           <p className="text-xs text-muted-foreground">No comments yet.</p>

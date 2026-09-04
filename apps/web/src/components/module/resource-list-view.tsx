@@ -32,6 +32,16 @@ const REF_KEYS = new Set([
   "journal_number",
   "request_number",
   "channel_number",
+  "policy_number",
+  "risk_number",
+  "capa_number",
+  "assessment_number",
+  "framework_code",
+  "requirement_code",
+  "audit_number",
+  "incident_number",
+  "exception_number",
+  "control_number",
 ]);
 
 function normalizeRows(data: unknown): Record<string, unknown>[] {
@@ -296,7 +306,7 @@ export function ResourceListView({
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3.5 sm:px-5">
           <div className="min-w-0 space-y-0.5">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-sm font-medium tracking-tight">Records</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Records</h2>
               <Badge variant="secondary">{filtered.length} shown</Badge>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -336,8 +346,8 @@ export function ResourceListView({
               ) : null}
               {status === 403 && authenticated ? (
                 <p className="text-sm text-muted-foreground">
-                  Your role is missing this permission. Sign out and sign back in as{" "}
-                  <code className="rounded bg-muted px-1">admin@example.com</code>.
+                  Your role is missing this permission. Sign out and sign back in with a Microsoft
+                  account that has this module assigned, or ask an administrator to grant access.
                 </p>
               ) : null}
             </div>

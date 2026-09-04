@@ -6,8 +6,11 @@ import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import { navigation } from "@/config/navigation";
+import { filterNavigationGroups, hasModuleAssignments } from "@/lib/module-access";
+import { SidebarAccountSection } from "@/components/layout/sidebar-account-section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { cn } from "@/lib/utils";
 import { env } from "@/utils/env";
 
@@ -20,11 +23,26 @@ export function AppSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
+  const { user, loading: userLoading, signedIn, moduleKeys } = useAuthUser();
+
+  const hasModules = hasModuleAssignments(moduleKeys, user?.userType);
+
+  const navGroups = useMemo(() => {
+    if (userLoading) {
+      return navigation
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => item.href === "/"),
+        }))
+        .filter((group) => group.items.length > 0);
+    }
+    return filterNavigationGroups(navigation, moduleKeys, user?.userType);
+  }, [moduleKeys, user?.userType, userLoading]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return navigation;
-    return navigation
+    if (!q) return navGroups;
+    return navGroups
       .map((group) => ({
         ...group,
         items: group.items.filter(
@@ -34,29 +52,36 @@ export function AppSidebar() {
         ),
       }))
       .filter((group) => group.items.length > 0);
-  }, [query]);
+  }, [query, navGroups]);
 
   return (
     <aside
       data-slot="app-sidebar"
+      data-erp-primary-sidebar
       className={cn(
         "sticky top-0 z-20 flex h-dvh shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200",
         collapsed ? "w-[72px]" : "w-[260px]",
       )}
     >
-      <div className={cn("flex items-center gap-3 px-4 py-5", collapsed && "justify-center px-2")}>
-        <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-[11px] font-semibold tracking-wide text-sidebar-primary-foreground shadow-sm">
-          ERP
-        </div>
-        {!collapsed ? (
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
-              {env.appName}
-            </p>
-            <p className="truncate text-[11px] text-sidebar-foreground/55">23 modules · live API</p>
+      {signedIn ? (
+        <SidebarAccountSection collapsed={collapsed} className="!px-4 !py-5" />
+      ) : (
+        <div className={cn("flex items-center gap-3 px-4 py-5", collapsed && "justify-center px-2")}>
+          <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-[11px] font-semibold tracking-wide text-sidebar-primary-foreground shadow-sm">
+            ERP
           </div>
-        ) : null}
-      </div>
+          {!collapsed ? (
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
+                {env.appName}
+              </p>
+              <p className="truncate text-[11px] text-sidebar-foreground/55">
+                {userLoading ? "Loading session…" : "23 modules · live API"}
+              </p>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {!collapsed ? (
         <div className="px-3 pb-3">
@@ -74,6 +99,11 @@ export function AppSidebar() {
       ) : null}
 
       <nav className="erp-scroll flex-1 overflow-y-auto px-2.5 py-2">
+        {!collapsed && signedIn && !userLoading && !hasModules ? (
+          <div className="mb-4 rounded-lg border border-sidebar-border/80 bg-white/5 px-3 py-2.5 text-[12px] leading-relaxed text-sidebar-foreground/70">
+            No modules assigned. Contact your ERP administrator to get access.
+          </div>
+        ) : null}
         {filtered.map((group) => (
           <div key={group.title} className="mb-5">
             {!collapsed ? (
@@ -85,10 +115,15 @@ export function AppSidebar() {
               {group.items.map((item) => {
                 const active = isActivePath(pathname, item.href);
                 const Icon = item.icon;
+                // Operations modules open in a new tab; foundation/org/master-data navigate in-app.
+                const href = item.href;
                 return (
                   <li key={item.href}>
                     <Link
-                      href={item.href}
+                      href={href}
+                      {...(item.inApp
+                        ? {}
+                        : { target: "_blank", rel: "noopener noreferrer" })}
                       title={item.title}
                       className={cn(
                         "group relative flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors",

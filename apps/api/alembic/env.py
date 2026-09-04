@@ -29,6 +29,7 @@ import modules.asset.models  # noqa: F401 — register ORM metadata
 import modules.service.models  # noqa: F401 — register ORM metadata
 import modules.helpdesk.models  # noqa: F401 — register ORM metadata
 import modules.document.models  # noqa: F401 — register ORM metadata
+import modules.marketing.models  # noqa: F401 — register ORM metadata
 import modules.grc.models  # noqa: F401 — register ORM metadata
 import modules.analytics.models  # noqa: F401 — register ORM metadata
 import modules.integration.models  # noqa: F401 — register ORM metadata
@@ -72,6 +73,8 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
+            # One transaction per revision so a later failure does not wipe
+            # earlier schema work on PostgreSQL.
             transaction_per_migration=True,
         )
 

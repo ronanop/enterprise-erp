@@ -21,7 +21,7 @@ export function FinanceAgingBars({ title, summary }: FinanceAgingBarsProps) {
   return (
     <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between gap-2">
-        <h3 className="text-sm font-medium tracking-tight">{title}</h3>
+        <h3 className="text-base font-extrabold tracking-tight">{title}</h3>
         <p className="font-mono text-xs text-muted-foreground tabular-nums">{formatInr(total)}</p>
       </div>
       <ul className="space-y-2.5">

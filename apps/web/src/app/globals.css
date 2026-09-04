@@ -127,15 +127,23 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   html {
     @apply font-sans;
     scroll-behavior: smooth;
+    overflow-x: clip;
+    /* ~90% UI density via rem — keeps viewport/layout intact (no zoom gaps) */
+    font-size: 90%;
   }
+
   body {
     @apply bg-background font-sans text-foreground antialiased;
     font-weight: 400;
     letter-spacing: -0.011em;
+    min-width: 0;
+    overflow-x: clip;
   }
+
   h1,
   h2,
   h3,
@@ -146,6 +154,7 @@
     font-weight: 500;
     letter-spacing: -0.03em;
   }
+
   ::selection {
     background: oklch(0.72 0.1 190 / 28%);
   }
@@ -402,6 +411,7 @@
     scrollbar-width: thin;
     scrollbar-color: oklch(0.62 0.03 220) oklch(0.93 0.01 220);
   }
+
   .erp-scroll::-webkit-scrollbar {
     width: 10px;
     height: 10px;

@@ -8,7 +8,7 @@ from alembic import op
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
-from modules.crm.models.opportunity import CrmOpportunity  # noqa: F401
+from modules.crm.models.opportunity import CrmOpportunity  # noqa: F401,E402
 
 revision: str = "0143_crm_opportunity"
 down_revision: str | None = "0142_crm_lead_activity"

@@ -7,7 +7,7 @@ import "./globals.css";
 const jakartaSans = Plus_Jakarta_Sans({
   variable: "--font-jakarta-sans",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
+  weight: ["300", "400", "500", "600", "700", "800"],
   display: "swap",
 });
 
@@ -35,7 +35,10 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       {/* suppressHydrationWarning: browser extensions (e.g. QuillBot) inject attrs like data-qb-installed */}
-      <body className="flex min-h-full flex-col font-sans" suppressHydrationWarning>
+      <body
+        className="flex min-h-full min-w-0 flex-col overflow-x-clip font-sans"
+        suppressHydrationWarning
+      >
         {process.env.NODE_ENV === "development" ? <DevExtensionNoiseFilter /> : null}
         {children}
       </body>

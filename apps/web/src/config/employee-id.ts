@@ -50,13 +50,17 @@ export function consumeEmployeeSequence(): number {
 export function syncSequenceFromCodes(existingCodes: string[]): void {
   let max = 0;
   const cfg = loadEmployeeIdConfig();
+  const prefix = `${cfg.prefix}-`;
   for (const code of existingCodes) {
-    const m =
-      cfg.mode === "comp_emp"
-        ? code.match(/EMP(\d+)$/i)
-        : code.match(new RegExp(`^${cfg.prefix}-(\\d+)$`, "i"));
-    if (m) {
-      max = Math.max(max, Number.parseInt(m[1], 10));
+    let digits: string | null = null;
+    if (cfg.mode === "comp_emp") {
+      const idx = code.toUpperCase().lastIndexOf("EMP");
+      if (idx >= 0) digits = code.slice(idx + 3);
+    } else if (code.toUpperCase().startsWith(prefix.toUpperCase())) {
+      digits = code.slice(prefix.length);
+    }
+    if (digits && /^\d+$/.test(digits)) {
+      max = Math.max(max, Number.parseInt(digits, 10));
     }
   }
   if (max > 0) {

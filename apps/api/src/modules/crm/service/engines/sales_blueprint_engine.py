@@ -5,8 +5,8 @@ existing (coarse) ``status`` / ``current_stage`` columns already used by the
 legacy CRM lead & opportunity flows:
 
     LEAD:        open -> converted | lost
-    OPPORTUNITY: open -> boq_pending -> boq_approval -> sow_optional ->
-                 deal_reg -> oem_pending -> oem_attached -> quote_ready ->
+    OPPORTUNITY: open -> boq_pending -> boq_approval -> deal_reg ->
+                 oem_pending -> oem_attached -> quote_ready ->
                  quote_in_progress -> po_pending -> po_approval ->
                  ovf_ready -> won | lost
     QUOTE:       draft -> internal_approval -> approved_internal ->
@@ -41,19 +41,69 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
         "lost": {},
     },
     OPPORTUNITY: {
-        "open": {"attach_boq": "boq_pending", "lost": "lost"},
-        "boq_pending": {
+        "open": {
             "attach_boq": "boq_pending",
-            "send_boq_approval": "boq_approval",
+            "attach_sow": "boq_pending",
+            "attach_contract": "cloud_docs",
+            "send_cloud_discount_approval": "cloud_discount_approval",
             "lost": "lost",
         },
-        "boq_approval": {"approve_boq": "sow_optional", "reject_boq": "boq_pending", "lost": "lost"},
+        "cloud_docs": {
+            "attach_contract": "cloud_docs",
+            "send_cloud_discount_approval": "cloud_discount_approval",
+            "lost": "lost",
+        },
+        "cloud_discount_approval": {
+            "approve_cloud_discount": "cloud_onboarding",
+            "reject_cloud_discount": "cloud_docs",
+            "lost": "lost",
+        },
+        "map_oem_pending": {
+            "attach_oem_quote": "cloud_onboarding",
+            "skip_map_oem_quote": "cloud_onboarding",
+            "lost": "lost",
+        },
+        "cloud_onboarding": {
+            "mark_onboarding_done": "won",
+            "lost": "lost",
+        },
+        "boq_pending": {
+            "attach_boq": "boq_pending",
+            "attach_sow": "boq_pending",
+            "send_boq_approval": "boq_approval",
+            "send_sow_approval": "sow_approval",
+            # Gated in BlueprintService until BOQ or SOW is approved.
+            "deal_reg": "oem_pending",
+            "lost": "lost",
+        },
+        "boq_approval": {
+            "approve_boq": "deal_reg",
+            "reject_boq": "boq_pending",
+            # Legacy: older builds routed send_sow_approval into boq_approval.
+            "approve_sow": "deal_reg",
+            "reject_sow": "boq_pending",
+            "lost": "lost",
+        },
+        "sow_approval": {
+            "approve_sow": "deal_reg",
+            "reject_sow": "boq_pending",
+            "lost": "lost",
+        },
+        # Backward-compatible exit for opportunities already persisted in the
+        # former standalone SOW stage.
         "sow_optional": {
             "attach_sow": "deal_reg",
             "skip_sow": "deal_reg",
             "lost": "lost",
         },
-        "deal_reg": {"deal_reg": "oem_pending", "lost": "lost"},
+        "deal_reg": {
+            "attach_boq": "deal_reg",
+            "attach_sow": "deal_reg",
+            "deal_reg": "oem_pending",
+            "lost": "lost",
+            "send_boq_approval": "boq_approval",
+            "send_sow_approval": "sow_approval",
+        },
         "oem_pending": {"oem_received": "oem_attached", "lost": "lost"},
         "oem_attached": {"attach_oem_quote": "quote_ready", "lost": "lost"},
         "quote_ready": {"create_quote": "quote_in_progress", "lost": "lost"},
@@ -69,13 +119,11 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
         "lost": {},
     },
     QUOTE: {
-        # ``approve_internally`` is reachable straight from "draft" for the
-        # healthy-margin fast path (QuoteService.approve_internally without
-        # ``force``); it is also reachable from "internal_approval" once
-        # Management resumes a "send for approval" My Jobs decision.
+        # Self-serve quote UI only offers Send for Approval from draft.
+        # ``approve_internally`` / ``reject_internally`` run via My Jobs after
+        # the quote is locked in ``internal_approval``.
         "draft": {
             "send_for_approval": "internal_approval",
-            "approve_internally": "approved_internal",
             "lost": "lost",
         },
         "internal_approval": {

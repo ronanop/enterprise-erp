@@ -8,6 +8,7 @@ from modules.grc.routers import (
     audits_router,
     compliance_assessments_router,
     compliance_frameworks_router,
+    compliance_monitor_router,
     compliance_requirements_router,
     control_tests_router,
     controls_router,
@@ -15,6 +16,7 @@ from modules.grc.routers import (
     exceptions_router,
     incidents_router,
     notifications_router,
+    overview_router,
     policies_router,
     policy_acknowledgements_router,
     policy_versions_router,
@@ -26,6 +28,8 @@ from modules.grc.routers import (
 )
 
 grc_router = APIRouter(prefix="/grc")
+grc_router.include_router(overview_router)
+grc_router.include_router(compliance_monitor_router)
 grc_router.include_router(policies_router)
 grc_router.include_router(policy_versions_router)
 grc_router.include_router(policy_acknowledgements_router)

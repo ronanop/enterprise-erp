@@ -19,7 +19,7 @@ class AstAssetWarranty(Base, *AstDetailMixin):
             name="ck_ast_asset_warranty_type",
         ),
         CheckConstraint(
-            "status IN ('active','expired','void')",
+            "status IN ('draft','active','extended','expired','void')",
             name="ck_ast_asset_warranty_status",
         ),
         CheckConstraint("end_date >= start_date", name="ck_ast_asset_warranty_dates"),
@@ -51,4 +51,4 @@ class AstAssetWarranty(Base, *AstDetailMixin):
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     coverage_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(30), nullable=False, default="active", index=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)

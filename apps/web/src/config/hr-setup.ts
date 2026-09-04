@@ -268,10 +268,12 @@ export function getSetupTab(sectionId: string, tabId: string | null | undefined)
 
 export function nextCode(prefix: string, existing: string[]): string {
   let max = 0;
-  const re = new RegExp(`^${prefix}-(\\d+)$`, "i");
+  const head = `${prefix}-`.toLowerCase();
   for (const code of existing) {
-    const m = code.match(re);
-    if (m) max = Math.max(max, Number(m[1]));
+    const lower = code.toLowerCase();
+    if (!lower.startsWith(head)) continue;
+    const suffix = lower.slice(head.length);
+    if (/^\d+$/.test(suffix)) max = Math.max(max, Number(suffix));
   }
   return `${prefix}-${String(max + 1).padStart(3, "0")}`;
 }

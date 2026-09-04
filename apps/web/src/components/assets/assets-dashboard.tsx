@@ -47,7 +47,11 @@ function recentAssets(rows: AssetsRow[], limit = 6): AssetsRow[] {
 export function AssetsDashboard() {
   const [data, setData] = useState<AssetsOverview | null>(null);
   const [loading, setLoading] = useState(true);
-  const authenticated = typeof window !== "undefined" ? isAuthenticated() : false;
+  const [authenticated, setAuthenticated] = useState(false);
+
+  useEffect(() => {
+    setAuthenticated(isAuthenticated());
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);

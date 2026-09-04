@@ -1,20 +1,30 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Paperclip } from "lucide-react";
 
+import { ApproverMultiSelect } from "@/components/crm/sales/approver-multi-select";
 import { FinanceField, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
-import { fileToBase64, type BlueprintActionPayload } from "@/services/sales-crm-service";
+import { fileToBase64, listCrmApprovalUsers, type BlueprintActionPayload } from "@/services/sales-crm-service";
 
-type FieldType = "text" | "textarea" | "date" | "number" | "file";
+type FieldType = "text" | "textarea" | "date" | "number" | "file" | "approver";
 
 type FieldConfig = {
-  key: "remark" | "remarks" | "reason" | "deal_reg_number" | "valid_until" | "deal_won_amount" | "file_name";
+  key:
+  | "remark"
+  | "remarks"
+  | "reason"
+  | "deal_reg_number"
+  | "valid_until"
+  | "deal_won_amount"
+  | "onboarding_date"
+  | "file_name"
+  | "assigned_user_id";
   label: string;
   type: FieldType;
   required?: boolean;
@@ -27,33 +37,81 @@ type ActionConfig = {
   fields: FieldConfig[];
 };
 
-const REMARK_FIELD: FieldConfig = { key: "remarks", label: "Remarks", type: "textarea" };
 const REMARK_FIELD_ALT: FieldConfig = { key: "remark", label: "Remark", type: "textarea" };
+
+const SEND_APPROVAL_ACTIONS = new Set([
+  "send_boq_approval",
+  "send_sow_approval",
+  "send_po_approval",
+  "send_for_approval",
+  "send_cloud_discount_approval",
+]);
+
+const APPROVAL_DIALOG_FIELDS: FieldConfig[] = [
+  { key: "assigned_user_id", label: "Approvers", type: "approver", required: true },
+  { key: "remarks", label: "Remarks", type: "textarea", required: true },
+];
+
+const APPROVAL_ADMIN_NOTE =
+  "A copy is also sent to tenant admins. Any selected approver or an admin can decide in My Jobs.";
 
 const ACTION_CONFIG: Record<string, ActionConfig> = {
   convert: {
     label: "Convert to Opportunity",
     fields: [],
-    description: "Handled via the dedicated Convert dialog.",
+    description: "Converts immediately using lead defaults.",
   },
   lost: {
-    label: "Mark Lost",
+    label: "Lost Deal",
     tone: "destructive",
     fields: [{ key: "reason", label: "Lost reason", type: "textarea", required: true }],
     description: "Available until the deal is Won.",
   },
   attach_boq: {
     label: "Attach BOQ",
-    fields: [{ key: "file_name", label: "BOQ file", type: "file", required: true }],
+    fields: [{ key: "file_name", label: "BOQ files", type: "file", required: true }],
+  },
+  attach_contract: {
+    label: "Attach Contract",
+    fields: [{ key: "file_name", label: "Contract file", type: "file", required: true }],
+    description: "Optional for cloud deals — customer contract or invoice evidence.",
+  },
+  send_cloud_discount_approval: {
+    label: "Send Cloud Discount for Approval",
+    fields: APPROVAL_DIALOG_FIELDS,
+    description: `Routes MRR, ARR, customer discount, and profitability to Management via My Jobs. ${APPROVAL_ADMIN_NOTE}`,
+  },
+  skip_map_oem_quote: {
+    label: "Skip MAP OEM Quote",
+    fields: [],
+    description: "Continue to onboarding when migration quote is not available yet.",
+  },
+  mark_onboarding_done: {
+    label: "Mark Onboarding Done",
+    fields: [
+      {
+        key: "onboarding_date",
+        label: "Date of onboarding",
+        type: "date",
+        required: true,
+      },
+    ],
+    description:
+      "Customer is onboarded on the payer account — closes the opportunity for sales; billing continues monthly.",
   },
   send_boq_approval: {
     label: "Send BOQ for Approval",
-    fields: [REMARK_FIELD],
-    description: "Routes to the Pre-sales team via My Jobs.",
+    fields: APPROVAL_DIALOG_FIELDS,
+    description: `Routes the attached BOQ to the Pre-sales team via My Jobs. ${APPROVAL_ADMIN_NOTE}`,
   },
   attach_sow: {
     label: "Attach SOW",
-    fields: [{ key: "file_name", label: "SOW file", type: "file", required: true }],
+    fields: [{ key: "file_name", label: "SOW files", type: "file", required: true }],
+  },
+  send_sow_approval: {
+    label: "Send SOW for Approval",
+    fields: APPROVAL_DIALOG_FIELDS,
+    description: `Routes the attached SOW to the Pre-sales team via My Jobs. ${APPROVAL_ADMIN_NOTE}`,
   },
   skip_sow: { label: "Skip SOW", fields: [] },
   deal_reg: {
@@ -64,6 +122,8 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   attach_oem_quote: {
     label: "Attach OEM Quote",
     fields: [{ key: "file_name", label: "OEM quote file", type: "file", required: true }],
+    description:
+      "Hardware: OEM vendor quote. Cloud MAP migration: AWS migration quotation from the OEM.",
   },
   attach_po: {
     label: "Attach Customer PO",
@@ -71,12 +131,13 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   },
   send_po_approval: {
     label: "Send PO for Approval",
-    fields: [REMARK_FIELD],
-    description: "Routes to the Management team via My Jobs.",
+    fields: APPROVAL_DIALOG_FIELDS,
+    description: `Routes the customer PO to the Management team via My Jobs. ${APPROVAL_ADMIN_NOTE}`,
   },
   send_for_approval: {
     label: "Send for Approval",
-    fields: [REMARK_FIELD],
+    fields: APPROVAL_DIALOG_FIELDS,
+    description: `Routes this record for approval via My Jobs. ${APPROVAL_ADMIN_NOTE}`,
   },
   approve_internally: {
     label: "Approve Internally",
@@ -84,20 +145,18 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   },
   reject_internally: {
     label: "Reject",
-    tone: "destructive",
     fields: [{ key: "remark", label: "Rejection remark", type: "textarea", required: true }],
   },
   send_to_customer: {
-    label: "Send to Customer",
-    fields: [{ key: "valid_until", label: "Valid until", type: "date" }],
+    label: "Quotation send to customer",
+    fields: [],
   },
   negotiate: { label: "Move to Negotiation", fields: [REMARK_FIELD_ALT] },
   follow_up: { label: "Move to Follow-up", fields: [REMARK_FIELD_ALT] },
-  accept: { label: "Mark Accepted", fields: [REMARK_FIELD_ALT] },
+  accept: { label: "Quote Accepted", fields: [REMARK_FIELD_ALT] },
   approve: { label: "Approve", fields: [REMARK_FIELD_ALT] },
   reject: {
     label: "Reject",
-    tone: "destructive",
     fields: [{ key: "remark", label: "Rejection remark", type: "textarea", required: true }],
   },
   share_to_scm: { label: "Share to SCM", fields: [] },
@@ -107,32 +166,184 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   },
 };
 
+const BLUE_ACTION_BUTTON_CLASS =
+  "border-blue-900 bg-blue-800 font-bold text-white hover:bg-blue-900 hover:text-white dark:border-blue-700 dark:bg-blue-800 dark:text-white dark:hover:bg-blue-700";
+
+const LOST_BUTTON_CLASS =
+  "border-red-800 bg-red-700 font-bold text-white hover:bg-red-800 hover:text-white dark:border-red-600 dark:bg-red-700 dark:text-white dark:hover:bg-red-600";
+
+const ATTACH_ACTIONS = new Set([
+  "attach_boq",
+  "attach_sow",
+  "attach_oem_quote",
+  "attach_po",
+  "attach_contract",
+]);
+
+const OEM_QUOTE_ACTIONS = new Set(["oem_received", "attach_oem_quote"]);
+
+const QUOTE_FLOW_ACTIONS = new Set(["send_to_customer", "accept", "negotiate", "follow_up"]);
+
+const APPROVAL_ACTIONS = new Set([
+  "send_boq_approval",
+  "send_sow_approval",
+  "send_po_approval",
+  "send_for_approval",
+  "send_cloud_discount_approval",
+]);
+
+const QUOTE_OVF_APPROVAL_EMAILS = [
+  "shraddha@cachedigitech.com",
+  "vinod@cachedigitech.com",
+  "prarthana@cachedigitech.com",
+] as const;
+
+const CUSTOMER_PO_APPROVAL_EMAILS = [
+  "accounts@cachedigitech.com",
+  "navneet.kumar@cachedigitech.com",
+] as const;
+
+function pinnedApproverEmailsForAction(action: string): readonly string[] {
+  if (action === "send_po_approval") return CUSTOMER_PO_APPROVAL_EMAILS;
+  if (action === "send_for_approval") return QUOTE_OVF_APPROVAL_EMAILS;
+  return [];
+}
+
+function resolvePinnedApproverIds(
+  action: string,
+  approvalUsers: { id: string; email: string }[],
+): string[] {
+  const emails = pinnedApproverEmailsForAction(action);
+  if (emails.length === 0) return [];
+  const wanted = new Set(emails.map((email) => email.toLowerCase()));
+  return approvalUsers
+    .filter((user) => wanted.has(user.email.trim().toLowerCase()))
+    .map((user) => user.id);
+}
+
+function mergeApproverSelection(
+  next: string[],
+  pinnedIds: string[],
+): string[] {
+  const merged = new Set(next);
+  for (const id of pinnedIds) merged.add(id);
+  return [...merged];
+}
+
 type Props = {
   allowedActions: string[];
   locked?: boolean;
+  /** Human-readable current blueprint stage (28-stage sales flow). */
+  currentStageLabel?: string | null;
   /** Actions rendered elsewhere by the parent (e.g. gated Create Quote / Create OVF CTAs). */
   excludeActions?: string[];
+  actionLabelOverrides?: Partial<Record<string, string>>;
+  actionDispatchOverrides?: Partial<Record<string, string>>;
+  defaultValues?: Partial<Record<string, string | number | null>>;
   onAction: (action: string, payload: BlueprintActionPayload) => Promise<void>;
   disabled?: boolean;
 };
 
-export function BlueprintActions({ allowedActions, locked, excludeActions, onAction, disabled }: Props) {
+export function BlueprintActions({
+  allowedActions,
+  locked,
+  currentStageLabel,
+  excludeActions,
+  actionLabelOverrides,
+  actionDispatchOverrides,
+  defaultValues,
+  onAction,
+  disabled,
+}: Props) {
   const exclude = new Set(excludeActions ?? []);
-  const visibleActions = allowedActions.filter((a) => ACTION_CONFIG[a] && !exclude.has(a));
+  const visibleActions = allowedActions.filter((a) => !exclude.has(a));
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
+  const [approverIds, setApproverIds] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [approvalUsers, setApprovalUsers] = useState<
+    { id: string; label: string; name: string; email: string }[]
+  >([]);
 
-  if (locked || visibleActions.length === 0) return null;
+  useEffect(() => {
+    let cancelled = false;
+    void listCrmApprovalUsers()
+      .then((rows) => {
+        if (cancelled) return;
+        setApprovalUsers(
+          rows.map((row) => ({
+            id: row.id,
+            name: row.display_name,
+            email: row.email,
+            label: `${row.display_name} (${row.email})`,
+          })),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setApprovalUsers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!currentStageLabel && visibleActions.length === 0) return null;
+
+  function resolveConfig(action: string): ActionConfig {
+    const base =
+      ACTION_CONFIG[action] ?? {
+        label: action.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+        fields: [REMARK_FIELD_ALT],
+      };
+    if (SEND_APPROVAL_ACTIONS.has(action)) {
+      return {
+        ...base,
+        fields: APPROVAL_DIALOG_FIELDS,
+        description: base.description ?? APPROVAL_ADMIN_NOTE,
+      };
+    }
+    return base;
+  }
+
+  async function runImmediate(action: string) {
+    const dispatchAction = actionDispatchOverrides?.[action] ?? action;
+    setBusy(true);
+    setError(null);
+    try {
+      await onAction(dispatchAction, {});
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : `Failed to ${dispatchAction}`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function openAction(action: string) {
+    const config = resolveConfig(action);
+    // Convert uses lead defaults and should not open a form popup.
+    if (action === "convert" && config.fields.length === 0) {
+      void runImmediate(action);
+      return;
+    }
+    const pinnedIds = resolvePinnedApproverIds(action, approvalUsers);
     setActiveAction(action);
-    setValues({});
+    setValues(
+      Object.fromEntries(
+        config.fields.flatMap((field) => {
+          if (field.type === "approver") return [];
+          const value = defaultValues?.[field.key];
+          return value === null || value === undefined ? [] : [[field.key, String(value)]];
+        }),
+      ),
+    );
+    setApproverIds(pinnedIds);
     setFile(null);
+    setFiles([]);
     setError(null);
   }
 
@@ -140,79 +351,166 @@ export function BlueprintActions({ allowedActions, locked, excludeActions, onAct
     if (busy) return;
     setActiveAction(null);
     setValues({});
+    setApproverIds([]);
     setFile(null);
+    setFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
     setError(null);
   }
 
   async function confirm() {
     if (!activeAction) return;
-    const config = ACTION_CONFIG[activeAction];
+    const config = resolveConfig(activeAction);
+    const dispatchAction = actionDispatchOverrides?.[activeAction] ?? activeAction;
+    const isMultiFile =
+      dispatchAction === "attach_boq" ||
+      dispatchAction === "attach_sow" ||
+      dispatchAction === "attach_oem_quote" ||
+      dispatchAction === "attach_po" ||
+      dispatchAction === "attach_contract";
     for (const field of config.fields) {
+      if (field.required && field.type === "approver") {
+        if (approverIds.length === 0) {
+          setError(`${field.label} is required`);
+          return;
+        }
+        continue;
+      }
       if (field.required && field.type !== "file" && !values[field.key]?.trim()) {
         setError(`${field.label} is required`);
         return;
       }
-      if (field.required && field.type === "file" && !file) {
-        setError(`${field.label} is required`);
-        return;
+      if (field.required && field.type === "file") {
+        if (isMultiFile && files.length === 0) {
+          setError(`${field.label} is required`);
+          return;
+        }
+        if (!isMultiFile && !file) {
+          setError(`${field.label} is required`);
+          return;
+        }
       }
     }
 
     setBusy(true);
     setError(null);
     try {
-      const payload: BlueprintActionPayload = {};
+      const payloadBase: BlueprintActionPayload = {};
       for (const field of config.fields) {
-        if (field.type === "file") continue;
+        if (field.type === "file" || field.type === "approver") continue;
         const raw = values[field.key];
         if (!raw) continue;
-        if (field.key === "deal_won_amount") payload.deal_won_amount = Number(raw);
-        else if (field.key === "valid_until") payload.valid_until = raw;
-        else (payload as Record<string, string>)[field.key] = raw;
+        if (field.key === "deal_won_amount") payloadBase.deal_won_amount = Number(raw);
+        else if (field.key === "valid_until") payloadBase.valid_until = raw;
+        else if (field.key === "onboarding_date") payloadBase.onboarding_date = raw;
+        else (payloadBase as Record<string, string>)[field.key] = raw;
+      }
+      if (approverIds.length > 0) {
+        payloadBase.assigned_user_ids = approverIds;
+        payloadBase.assigned_user_id = approverIds[0];
       }
       if (activeAction === "lost" && values.reason) {
-        payload.remark = values.reason;
+        payloadBase.remark = values.reason;
       }
-      if (file) {
-        payload.file_name = file.name;
-        payload.content_type = file.type || "application/octet-stream";
-        payload.content_base64 = await fileToBase64(file);
+      const uploadList = isMultiFile ? files : file ? [file] : [];
+      if (uploadList.length > 0) {
+        for (const upload of uploadList) {
+          await onAction(dispatchAction, {
+            ...payloadBase,
+            file_name: upload.name,
+            content_type: upload.type || "application/octet-stream",
+            content_base64: await fileToBase64(upload),
+          });
+        }
+      } else {
+        await onAction(dispatchAction, payloadBase);
       }
-      await onAction(activeAction, payload);
       close();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : `Failed to ${activeAction}`);
+      setError(err instanceof ApiClientError ? err.message : `Failed to ${dispatchAction}`);
     } finally {
       setBusy(false);
     }
   }
 
-  const activeConfig = activeAction ? ACTION_CONFIG[activeAction] : null;
+  const activeConfig = activeAction ? resolveConfig(activeAction) : null;
+  const activePinnedApproverIds = activeAction
+    ? resolvePinnedApproverIds(activeAction, approvalUsers)
+    : [];
+  const orderedActions = [...visibleActions].sort((a, b) => {
+    const rank = (action: string) => {
+      if (action === "attach_sow") return 0;
+      if (action === "attach_boq") return 1;
+      if (action === "send_boq_approval") return 2;
+      if (action === "send_sow_approval") return 3;
+      if (action === "deal_reg") return 4;
+      if (action === "send_to_customer") return 5;
+      if (action === "accept") return 6;
+      if (action === "negotiate") return 7;
+      if (action === "follow_up") return 8;
+      if (action === "attach_po") return 9;
+      if (action === "send_po_approval") return 10;
+      if (action === "lost") return 20;
+      return 15;
+    };
+    return rank(a) - rank(b);
+  });
+
+  const showTransitions = visibleActions.length > 0;
 
   return (
     <div className="space-y-2">
+      {currentStageLabel ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+            Current State
+          </span>
+          <Badge className="rounded-full border-transparent bg-blue-600 px-3 py-0.5 text-xs font-semibold text-white hover:bg-blue-600">
+            {currentStageLabel}
+          </Badge>
+        </div>
+      ) : null}
+      {showTransitions ? (
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-          Blueprint actions
+          Transitions
         </span>
-        {visibleActions.map((action) => {
-          const config = ACTION_CONFIG[action];
+        {orderedActions.map((action, index) => {
+          const config = resolveConfig(action);
+          const label = actionLabelOverrides?.[action] ?? config.label;
+          const isAttach = ATTACH_ACTIONS.has(action);
+          const isApproval = APPROVAL_ACTIONS.has(action);
+          const isLost = action === "lost";
+          const isOemQuote = OEM_QUOTE_ACTIONS.has(action);
+          const isQuoteFlow = QUOTE_FLOW_ACTIONS.has(action);
+          const colorClass = isLost
+            ? LOST_BUTTON_CLASS
+            : isAttach || isApproval || isOemQuote || isQuoteFlow
+              ? BLUE_ACTION_BUTTON_CLASS
+              : undefined;
+          const variant = colorClass ? "outline" : config.tone === "destructive" ? "destructive" : "outline";
           return (
-            <Button
-              key={action}
-              type="button"
-              size="sm"
-              variant={config.tone === "destructive" ? "destructive" : "outline"}
-              className="cursor-pointer"
-              disabled={disabled}
-              onClick={() => openAction(action)}
-            >
-              {config.label}
-            </Button>
+            <Fragment key={action}>
+              {action === "attach_boq" && orderedActions[index - 1] === "attach_sow" ? (
+                <span className="text-xs font-medium text-muted-foreground" aria-hidden="true">
+                  or
+                </span>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant={variant}
+                className={["cursor-pointer", colorClass].filter(Boolean).join(" ")}
+                disabled={disabled || (locked && action !== "lost")}
+                onClick={() => openAction(action)}
+              >
+                {label}
+              </Button>
+            </Fragment>
           );
         })}
       </div>
+      ) : null}
 
       <ConfirmDialog
         open={Boolean(activeAction && activeConfig)}
@@ -221,64 +519,124 @@ export function BlueprintActions({ allowedActions, locked, excludeActions, onAct
         tone={activeConfig?.tone}
         confirmLabel={activeConfig?.label}
         busy={busy}
+        contentClassName={
+          activeAction && SEND_APPROVAL_ACTIONS.has(activeAction) ? "max-w-lg" : undefined
+        }
         onCancel={close}
         onConfirm={() => void confirm()}
       >
         {activeConfig && activeConfig.fields.length > 0 ? (
-          <div className="mt-3 space-y-3">
+          <div className="space-y-4">
             {activeConfig.fields.map((field) => (
               <FinanceField
                 key={field.key}
                 label={field.required ? `${field.label} *` : field.label}
+                className="space-y-2"
               >
                 {field.type === "textarea" ? (
                   <FinanceTextarea
                     value={values[field.key] ?? ""}
                     onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
+                    className="min-h-[88px] rounded-lg border-slate-200 bg-white text-[13px] shadow-none placeholder:text-slate-400 focus-visible:border-sky-400 focus-visible:ring-2 focus-visible:ring-sky-200/80"
+                    placeholder={`Add ${field.label.toLowerCase()}…`}
+                  />
+                ) : field.type === "approver" ? (
+                  <ApproverMultiSelect
+                    options={approvalUsers}
+                    value={approverIds}
+                    lockedIds={activePinnedApproverIds}
+                    onChange={(ids) => setApproverIds(mergeApproverSelection(ids, activePinnedApproverIds))}
                   />
                 ) : field.type === "file" ? (
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="cursor-pointer"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      <Paperclip className="size-3.5" />
-                      Choose file
-                    </Button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      className="sr-only"
-                      onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                    />
-                    <span className="min-w-0 max-w-full truncate text-xs text-muted-foreground">
-                      {file?.name ?? "No file selected"}
-                    </span>
+                  <div className="flex min-w-0 flex-col gap-1.5">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 cursor-pointer border-slate-200 bg-white transition-colors duration-200 hover:bg-slate-50"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Paperclip className="size-3.5" />
+                        Choose file
+                        {activeAction === "attach_boq" ||
+                          activeAction === "attach_sow" ||
+                          activeAction === "attach_oem_quote" ||
+                          activeAction === "attach_po" ||
+                          activeAction === "attach_contract"
+                          ? "s"
+                          : ""}
+                      </Button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple={
+                          activeAction === "attach_boq" ||
+                          activeAction === "attach_sow" ||
+                          activeAction === "attach_oem_quote" ||
+                          activeAction === "attach_po" ||
+                          activeAction === "attach_contract"
+                        }
+                        className="sr-only"
+                        onChange={(e) => {
+                          const selected = Array.from(e.target.files ?? []);
+                          if (
+                            activeAction === "attach_boq" ||
+                            activeAction === "attach_sow" ||
+                            activeAction === "attach_oem_quote" ||
+                            activeAction === "attach_po" ||
+                            activeAction === "attach_contract"
+                          ) {
+                            setFiles(selected);
+                            setFile(selected[0] ?? null);
+                          } else {
+                            setFile(selected[0] ?? null);
+                            setFiles(selected[0] ? [selected[0]] : []);
+                          }
+                        }}
+                      />
+                      <span className="min-w-0 max-w-full truncate text-xs text-slate-500">
+                        {files.length > 1
+                          ? `${files.length} files selected`
+                          : file?.name ?? "No file selected"}
+                      </span>
+                    </div>
+                    {files.length > 1 ? (
+                      <ul className="space-y-0.5 text-[11px] text-slate-500">
+                        {files.map((f) => (
+                          <li key={f.name} className="truncate">
+                            {f.name}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </div>
                 ) : (
                   <Input
                     type={field.type}
                     value={values[field.key] ?? ""}
                     onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
+                    className="h-10 rounded-lg border-slate-200 bg-white text-sm shadow-none focus-visible:border-sky-400 focus-visible:ring-2 focus-visible:ring-sky-200/80"
                   />
                 )}
               </FinanceField>
             ))}
           </div>
         ) : null}
-        {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
+        {error ? <p className="mt-3 text-xs text-destructive">{error}</p> : null}
       </ConfirmDialog>
     </div>
   );
 }
 
-export function BlueprintStateBadge({ state }: { state: string }) {
+export function BlueprintStateBadge({ state, label }: { state?: string; label?: string }) {
+  const text =
+    label?.trim() ||
+    state?.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) ||
+    "—";
   return (
-    <Badge variant="outline" className="font-medium capitalize">
-      {state.replaceAll("_", " ") || "—"}
+    <Badge className="rounded-full border-transparent bg-blue-600 px-3 py-0.5 text-xs font-semibold text-white hover:bg-blue-600">
+      {text}
     </Badge>
   );
 }

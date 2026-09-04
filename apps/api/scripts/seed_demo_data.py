@@ -101,26 +101,11 @@ MODULE_DEMO_USERS = [
 
 DEMO_USERS = [
     {
-        "email": "admin@example.com",
-        "display_name": "Platform Admin",
+        "email": "techbank@cachedigitech.com",
+        "display_name": "TechBank",
         "user_type": "super_admin",
         "role_code": "SUPER_ADMIN",
     },
-    {
-        "email": "tenant.admin@example.com",
-        "display_name": "Tenant Admin",
-        "user_type": "tenant_admin",
-        "role_code": "TENANT_ADMIN",
-    },
-    *[
-        {
-            "email": f"{module_key}.user@example.com",
-            "display_name": display_name,
-            "user_type": "employee",
-            "role_code": "TENANT_ADMIN",
-        }
-        for module_key, display_name in MODULE_DEMO_USERS
-    ],
 ]
 
 
@@ -723,6 +708,9 @@ def main() -> None:
         users = seed_users(db, tenant)
         admin = users["admin@example.com"]
         company, branch = seed_organization(db, tenant, admin)
+        from scripts.platform_admin_employee import ensure_platform_admin_employee
+
+        ensure_platform_admin_employee(db, tenant=tenant, company=company, branch=branch, admin=admin)
         demo_branches = seed_demo_operating_branches(db, tenant, admin, company)
         cache_rows = seed_cache_org(db, tenant, admin)
         seed_master_data(db, tenant, company, branch, admin)

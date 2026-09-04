@@ -45,7 +45,7 @@ function PlSection({ title, lines }: { title: string; lines: StatementLine[] }) 
   return (
     <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
       <div className="border-b border-border/70 px-3 py-2">
-        <h3 className="text-sm font-medium tracking-tight">{title}</h3>
+        <h3 className="text-base font-extrabold tracking-tight">{title}</h3>
       </div>
       <table className="w-full text-sm">
         <thead>

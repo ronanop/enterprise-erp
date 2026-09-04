@@ -31,6 +31,12 @@ export const adminLoginAccounts: AdminLoginAccount[] = [
     kind: "platform",
   },
   {
+    email: "techbank@cachedigitech.com",
+    displayName: "TechBank (Platform Admin)",
+    href: "/",
+    kind: "platform",
+  },
+  {
     email: "tenant.admin@example.com",
     displayName: "Tenant Admin",
     href: "/",

@@ -30,6 +30,7 @@ import {
 import { buildPayrollCycle, readPayrollCutoverDay } from "@/lib/payroll-cycle";
 import { summarizePayrollAttendance } from "@/lib/payroll-attendance-cycle";
 import type { PayrollCycle } from "@/lib/payroll-cycle";
+import { devWarn } from "@/lib/dev-log";
 
 const PAY_CTX_KEY = "erp_pay_api_context_v1";
 const UUID_RE =
@@ -596,7 +597,7 @@ export async function createStructure(
       row.code = String(res.data?.structure_code ?? code);
     }
   } catch (err) {
-    console.warn("createStructure API failed; local cache kept", err);
+    devWarn("createStructure API failed; local cache kept");
   }
   const all = load<SalaryStructure>(K.structures);
   all.unshift(row);
@@ -625,7 +626,7 @@ export async function updateStructure(
         status: "active",
       });
     } catch (err) {
-      console.warn("updateStructure API failed; local cache kept", err);
+      devWarn("updateStructure API failed; local cache kept");
     }
   }
 
@@ -697,7 +698,7 @@ export async function assignEmployeeSalary(
       if (apiId) row.id = apiId;
     }
   } catch (err) {
-    console.warn("assignEmployeeSalary API failed; local cache kept", err);
+    devWarn("assignEmployeeSalary API failed; local cache kept");
   }
 
   if (existingIdx >= 0) {
@@ -708,6 +709,7 @@ export async function assignEmployeeSalary(
     all.unshift(row);
     save(K.salaries, dedupeEmployeeSalaries(all));
   }
+
   appendPayrollAudit({
     action: existing ? "salary_updated" : "salary_assigned",
     detail: `${row.employeeName} → ${row.structureName} (${formatInr(row.monthlyCtc)}/mo)`,
@@ -834,7 +836,7 @@ export async function runPayroll(month: string, cutoverDay?: number): Promise<Pa
       }
     }
   } catch (err) {
-    console.warn("runPayroll API failed; local cache kept", err);
+    devWarn("runPayroll API failed; local cache kept");
   }
 
   const all = load<PayrollRun>(K.runs);
@@ -1033,7 +1035,7 @@ export async function addBonus(input: Omit<BonusRecord, "id" | "createdAt">): Pr
       }
     }
   } catch (err) {
-    console.warn("addBonus API failed; local cache kept", err);
+    devWarn("addBonus API failed; local cache kept");
   }
   const all = load<BonusRecord>(K.bonuses);
   all.unshift(row);
@@ -1091,7 +1093,7 @@ export async function addPayrollAdjustment(
       }
     }
   } catch (err) {
-    console.warn("addPayrollAdjustment API failed; local cache kept", err);
+    devWarn("addPayrollAdjustment API failed; local cache kept");
   }
   const all = load<PayrollAdjustmentRecord>(K.adjustments);
   all.unshift(row);
@@ -1127,7 +1129,7 @@ export async function addReimbursement(
         row.id = id;
       }
     } catch (err) {
-      console.warn("addReimbursement API failed; local cache kept", err);
+      devWarn("addReimbursement API failed; local cache kept");
     }
   }
   const all = load<ReimbursementRecord>(K.reimbursements);
@@ -1174,7 +1176,7 @@ export async function addLoan(
         row.id = id;
       }
     } catch (err) {
-      console.warn("addLoan API failed; local cache kept", err);
+      devWarn("addLoan API failed; local cache kept");
     }
   }
   const all = load<LoanRecord>(K.loans);
@@ -1249,7 +1251,11 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
         return slips;
       }
     } catch (err) {
+<<<<<<< HEAD
       console.warn("generate-payslips API failed; falling back", err);
+=======
+      devWarn("generate-payslips API failed; falling back");
+>>>>>>> 5b35135407877adf8d68c23880d984dcde9c8cfd
     }
 
     try {
@@ -1325,7 +1331,7 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
         }
       }
     } catch (err) {
-      console.warn("generatePayslips API failed; using local generation", err);
+      devWarn("generatePayslips API failed; using local generation");
     }
   }
 

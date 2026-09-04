@@ -1344,6 +1344,23 @@ def seed_crm(db, tenant_id, company_id, branch_id, admin_id, employees, customer
             "updated_by": admin_id,
         },
     )
+    for code, name in [
+        ("PHONE", "Phone"),
+        ("EMAIL", "Email"),
+        ("VERBAL", "Verbal Communication"),
+        ("REF", "Reference"),
+    ]:
+        ensure(
+            db,
+            CrmLeadSource,
+            {"tenant_id": tenant_id, "company_id": company_id, "source_code": code},
+            {
+                "source_name": name,
+                "status": "active",
+                "created_by": admin_id,
+                "updated_by": admin_id,
+            },
+        )
     pipeline = ensure(
         db,
         CrmPipeline,
@@ -6228,6 +6245,11 @@ def main() -> None:
 
         print("Seeding organization…")
         dept, _bu, loc, cc, _pc = seed_org(db, tenant.id, company.id, branch.id, admin.id)
+        from scripts.platform_admin_employee import ensure_platform_admin_employee
+
+        ensure_platform_admin_employee(
+            db, tenant=tenant, company=company, branch=branch, admin=admin
+        )
         print("Seeding master data…")
         (
             uom,

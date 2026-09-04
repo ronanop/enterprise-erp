@@ -139,7 +139,7 @@ export function ArInvoiceFormDialog({ open, entry, onClose, onSaved }: Props) {
         className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border/80 bg-card p-4 shadow-lg"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-sm font-medium tracking-tight">{isEdit ? "Edit invoice" : "Create invoice"}</h2>
+        <h2 className="text-base font-extrabold tracking-tight">{isEdit ? "Edit invoice" : "Create invoice"}</h2>
         <p className="mt-1 text-xs text-muted-foreground">Customer ledger invoice / debit note entry.</p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2">

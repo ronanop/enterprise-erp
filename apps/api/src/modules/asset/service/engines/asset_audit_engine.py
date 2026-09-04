@@ -1,11 +1,7 @@
-"""AssetAudit lifecycle engine."""
+"""AssetAudit lifecycle engine (FP-ASSET-008)."""
 
-from modules.asset.domain.enums import (
-    AssetAuditStatus,
-)
-from modules.asset.domain.exceptions import (
-    InvalidAssetAuditState,
-)
+from modules.asset.domain.enums import AssetAuditStatus
+from modules.asset.domain.exceptions import InvalidAssetAuditState
 
 
 class AssetAuditEngine:
@@ -25,5 +21,6 @@ class AssetAuditEngine:
     def cancel(self, row) -> None:
         if row.status == AssetAuditStatus.COMPLETED.value:
             raise InvalidAssetAuditState("Completed audits cannot be cancelled")
+        if row.status == AssetAuditStatus.CANCELLED.value:
+            raise InvalidAssetAuditState("Audit is already cancelled")
         row.status = AssetAuditStatus.CANCELLED.value
-

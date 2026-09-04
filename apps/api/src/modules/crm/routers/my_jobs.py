@@ -3,17 +3,39 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from modules.crm.dependencies import PaginationParams, get_db, get_pagination, paginate
-from modules.crm.schemas import ApprovalTaskDecisionRequest, ApprovalTaskResponse
+from modules.crm.schemas import ApprovalTaskDecisionRequest, ApprovalTaskResponse, CrmApprovalUserOption
 from modules.crm.service import ApprovalTaskService
 from modules.foundation.dependencies import require_permission
 from modules.foundation.domain.value_objects import TenantContext
 from shared.schemas import APIResponse
 
 my_jobs_router = APIRouter(prefix="/my-jobs", tags=["CRM - My Jobs"])
+
+
+@my_jobs_router.get("/approval-users", response_model=APIResponse[list[CrmApprovalUserOption]])
+def list_approval_users(
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.my_jobs:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    rows = ApprovalTaskService(db).list_approval_user_options(ctx)
+    return APIResponse(
+        message="OK",
+        data=[CrmApprovalUserOption(**row) for row in rows],
+    )
+
+
+@my_jobs_router.get("/inbox", response_model=APIResponse[list[dict]])
+def list_approval_inbox(
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.my_jobs:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    limit: Annotated[int, Query(ge=1, le=100)] = 30,
+):
+    rows = ApprovalTaskService(db).list_inbox_for_user(ctx, limit=limit)
+    return APIResponse(message="OK", data=rows)
 
 
 @my_jobs_router.get("", response_model=APIResponse[list[ApprovalTaskResponse]])

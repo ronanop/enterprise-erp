@@ -1,11 +1,7 @@
-"""AssetMaintenancePlan lifecycle engine."""
+"""AssetMaintenancePlan lifecycle engine (FP-ASSET-011)."""
 
-from modules.asset.domain.enums import (
-    AssetMaintenancePlanStatus,
-)
-from modules.asset.domain.exceptions import (
-    InvalidAssetMaintenancePlanState,
-)
+from modules.asset.domain.enums import AssetMaintenancePlanStatus
+from modules.asset.domain.exceptions import InvalidAssetMaintenancePlanState
 
 
 class AssetMaintenancePlanEngine:
@@ -19,6 +15,17 @@ class AssetMaintenancePlanEngine:
             raise InvalidAssetMaintenancePlanState("Only active plans can be paused")
         row.status = AssetMaintenancePlanStatus.PAUSED.value
 
-    def close(self, row) -> None:
-        row.status = AssetMaintenancePlanStatus.CLOSED.value
+    def resume(self, row) -> None:
+        if row.status != AssetMaintenancePlanStatus.PAUSED.value:
+            raise InvalidAssetMaintenancePlanState("Only paused plans can be resumed")
+        row.status = AssetMaintenancePlanStatus.ACTIVE.value
 
+    def close(self, row) -> None:
+        if row.status not in {
+            AssetMaintenancePlanStatus.ACTIVE.value,
+            AssetMaintenancePlanStatus.PAUSED.value,
+        }:
+            raise InvalidAssetMaintenancePlanState(
+                "Only active or paused plans can be closed"
+            )
+        row.status = AssetMaintenancePlanStatus.CLOSED.value

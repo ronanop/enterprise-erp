@@ -49,7 +49,7 @@ export function FiscalImportPanel({ onImported }: Props) {
     <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h3 className="text-sm font-medium tracking-tight">Import / Export</h3>
+          <h3 className="text-base font-extrabold tracking-tight">Import / Export</h3>
           <p className="mt-1 text-xs text-muted-foreground">CSV import with validation summary. Export via list toolbar.</p>
         </div>
         <div className="flex gap-2">

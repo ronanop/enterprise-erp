@@ -110,3 +110,14 @@ def ping() -> bool:
         return True
     except Exception:
         return False
+
+
+def storage_diagnostics() -> dict[str, object]:
+    """Safe summary for health/admin endpoints (no secrets)."""
+    return {
+        "crm_upload_root": str(settings.resolved_crm_upload_root),
+        "minio_configured": settings.minio_configured,
+        "minio_endpoint": settings.minio_endpoint.strip() or None,
+        "minio_bucket": settings.minio_bucket,
+        "minio_secure": settings.minio_secure,
+    }

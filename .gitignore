@@ -3,6 +3,10 @@
 .env.local
 .env.*.local
 
+# Local CRM uploads (not for repo)
+apps/api/var/crm-attachments/*
+!apps/api/var/crm-attachments/.gitkeep
+
 # Python
 __pycache__/
 *.py[cod]
@@ -47,6 +51,14 @@ docker-data/
 *.log
 logs/
 
+# Local build debug output
+build-output*.txt
+
 # Alembic
 # Keep versions tracked; ignore local scratch
 alembic/versions/*.pyc
+
+# Local VAPT / security scan reports (not for repo)
+docs/security/
+
+apps/api/var/crm-attachments/

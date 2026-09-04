@@ -17,8 +17,12 @@ class AstAssetReport(Base, *AstDetailMixin):
     __table_args__ = (
         UniqueConstraint("company_id", "report_code", name="uk_ast_asset_report_code"),
         CheckConstraint(
-            "report_type IN ('register','depreciation_schedule','utilization',"
-            "'maintenance_due','insurance_expiry','audit_variance')",
+            "report_type IN ("
+            "'register','depreciation_schedule','utilization',"
+            "'maintenance_due','insurance_expiry','audit_variance',"
+            "'warranty_expiry','allocation','transfer','disposal',"
+            "'documents','checklists','meters','notifications'"
+            ")",
             name="ck_ast_asset_report_type",
         ),
         CheckConstraint(

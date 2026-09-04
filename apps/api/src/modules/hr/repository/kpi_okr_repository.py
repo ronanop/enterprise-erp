@@ -20,8 +20,10 @@ class KpiRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrKpi, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrKpi).where(HrKpi.company_id == company_id, HrKpi.is_deleted.is_(False))
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrKpi).where(HrKpi.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrKpi.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrKpi, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 
@@ -76,12 +78,14 @@ class OkrRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrOkr, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
         stmt = (
             select(HrOkr)
             .options(selectinload(HrOkr.key_results))
-            .where(HrOkr.company_id == company_id, HrOkr.is_deleted.is_(False))
+            .where(HrOkr.is_deleted.is_(False))
         )
+        if company_id is not None:
+            stmt = stmt.where(HrOkr.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrOkr, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 

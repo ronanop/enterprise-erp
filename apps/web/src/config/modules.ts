@@ -21,6 +21,8 @@ export type ErpModule = {
   icon:
     | "dashboard"
     | "shield"
+    | "mail"
+    | "voice"
     | "building"
     | "boxes"
     | "wallet"
@@ -38,6 +40,7 @@ export type ErpModule = {
     | "service"
     | "helpdesk"
     | "document"
+    | "marketing"
     | "grc"
     | "analytics"
     | "integration"
@@ -84,6 +87,79 @@ export const erpModules: ErpModule[] = [
       },
       { key: "audit", title: "Audit", description: "Audit logs and events", apiPath: "/audit/logs" },
       { key: "settings", title: "Settings", description: "System settings", apiPath: "/settings" },
+    ],
+  },
+  {
+    key: "email",
+    title: "Email",
+    description: "Graph-powered email notifications, templates, and delivery logs.",
+    href: "/email",
+    group: "foundation",
+    icon: "mail",
+    resources: [
+      {
+        key: "overview",
+        title: "Overview",
+        description: "Provider status and delivery KPIs",
+        apiPath: "/notifications/email/overview",
+        listable: false,
+      },
+      {
+        key: "compose",
+        title: "Compose",
+        description: "Send an email via Microsoft Graph",
+        apiPath: "/notifications/email/send",
+        listable: false,
+      },
+      {
+        key: "templates",
+        title: "Templates",
+        description: "Email notification templates",
+        apiPath: "/notifications/templates",
+      },
+      {
+        key: "deliveries",
+        title: "Deliveries",
+        description: "Email delivery attempts and status",
+        apiPath: "/notifications/deliveries",
+      },
+      {
+        key: "events",
+        title: "Events",
+        description: "Notification events queue",
+        apiPath: "/notifications/events",
+      },
+    ],
+  },
+  {
+    key: "voice-agent",
+    title: "Voice assistant",
+    description: "ElevenLabs conversational AI — voice and chat with ERP client tools.",
+    href: "/voice-agent",
+    group: "foundation",
+    icon: "voice",
+    resources: [
+      {
+        key: "signed-url",
+        title: "Signed URL",
+        description: "Private agent WebSocket authorization",
+        apiPath: "/voice-agent/signed-url",
+        listable: false,
+      },
+      {
+        key: "agent-leads",
+        title: "Agent leads API",
+        description: "Stub lead lookup for server tools",
+        apiPath: "/leads",
+        listable: false,
+      },
+      {
+        key: "agent-orders",
+        title: "Agent orders API",
+        description: "Stub order lookup for server tools",
+        apiPath: "/orders",
+        listable: false,
+      },
     ],
   },
   {
@@ -304,11 +380,18 @@ export const erpModules: ErpModule[] = [
   {
     key: "procurement",
     title: "Procurement",
-    description: "Procure-to-pay: requisitions, RFQs, POs, GRNs, vendor invoices, contracts.",
+    description: "SCM: OVF queue → vendor PO → GRN, plus full procure-to-pay.",
     href: "/procurement",
     group: "operations",
     icon: "truck",
     resources: [
+      {
+        key: "scm",
+        title: "SCM Queue",
+        description: "Finance-approved OVFs awaiting vendor PO",
+        apiPath: "/procurement/scm/queue",
+        listable: true,
+      },
       {
         key: "requisitions",
         title: "Requisitions",
@@ -336,7 +419,7 @@ export const erpModules: ErpModule[] = [
       {
         key: "orders",
         title: "Purchase Orders",
-        description: "Committed purchase orders",
+        description: "All vendor POs — draft, issued, and GRN status",
         apiPath: "/procurement/orders",
       },
       {
@@ -346,10 +429,29 @@ export const erpModules: ErpModule[] = [
         apiPath: "/procurement/grns",
       },
       {
+        key: "delivery-challan",
+        title: "Delivery Challan",
+        description: "Customer delivery challans after GRN",
+        apiPath: "/procurement/delivery-challan",
+      },
+      {
+        key: "delivery-status",
+        title: "Delivery Status",
+        description: "Shipment and delivery tracking",
+        apiPath: "/procurement/delivery-status",
+      },
+      {
         key: "invoices",
         title: "Vendor Invoices",
         description: "AP invoices and balances",
         apiPath: "/procurement/invoices",
+      },
+      {
+        key: "vendors",
+        title: "Vendors",
+        description: "Vendor master list and add vendor",
+        apiPath: "/vendors",
+        listable: true,
       },
       {
         key: "returns",
@@ -670,18 +772,6 @@ export const erpModules: ErpModule[] = [
         title: "Products",
         description: "Product / SKU catalog for quote and OVF lines",
         apiPath: "/crm/products",
-      },
-      {
-        key: "calls",
-        title: "Calls",
-        description: "Call logging (coming soon)",
-        apiPath: "/crm/call-logs",
-      },
-      {
-        key: "kyc",
-        title: "KYC",
-        description: "Customer KYC verification (coming soon)",
-        apiPath: "/crm/kyc",
       },
       {
         key: "lead-sources",
@@ -1187,66 +1277,89 @@ export const erpModules: ErpModule[] = [
   },
   {
     key: "assets",
-    title: "Assets",
+    title: "Asset Management",
     description:
-      "Fixed-asset lifecycle — register, custody, warranty, maintenance, depreciation, disposal, and audits.",
+      "Physical asset lifecycle — registration, tracking, assignment, maintenance, QR, and reporting.",
     href: "/assets",
     group: "operations",
     icon: "asset",
     resources: [
       {
-        key: "asset-categories",
-        title: "Categories",
-        description: "Asset category taxonomy",
-        apiPath: "/assets/asset-categories",
-      },
-      {
         key: "assets",
-        title: "Assets",
+        title: "All Assets",
         description: "Operational asset register",
         apiPath: "/assets/assets",
       },
       {
-        key: "asset-components",
-        title: "Components",
-        description: "Sub-assemblies and parts",
-        apiPath: "/assets/asset-components",
+        key: "incoming-assets",
+        title: "Incoming Assets",
+        description: "IT receiving for Procurement GRN lines",
+        apiPath: "/assets/incoming-assets",
+      },
+      {
+        key: "incoming-assets-qc",
+        title: "Incoming QC",
+        description: "QC accept/reject for arrived incoming assets",
+        apiPath: "/assets/incoming-assets/qc",
+      },
+      {
+        key: "asset-registration",
+        title: "Pending Registration",
+        description: "Register QC-accepted incoming units as assets",
+        apiPath: "/assets/registration-queue",
+      },
+      {
+        key: "assets-new",
+        title: "Add Asset",
+        description: "Register a new asset",
+        apiPath: "/assets/assets",
+        listable: false,
+      },
+      {
+        key: "asset-categories",
+        title: "Categories",
+        description: "Asset category taxonomy (internal)",
+        apiPath: "/assets/asset-categories",
+        listable: false,
+      },
+      {
+        key: "asset-types",
+        title: "Asset Types",
+        description: "IT asset type master (CRUD)",
+        apiPath: "/assets/asset-types",
+        listable: false,
+      },
+      {
+        key: "locations",
+        title: "Locations",
+        description: "IT Location → Building master",
+        apiPath: "/assets/site-locations",
+        listable: false,
+      },
+      {
+        key: "departments",
+        title: "Departments",
+        description: "Departments (organization master)",
+        apiPath: "/departments",
+        listable: false,
       },
       {
         key: "asset-assignments",
-        title: "Assignments",
-        description: "Custodian assignments",
+        title: "Asset Assignment",
+        description: "Custodian assignments and returns",
         apiPath: "/assets/asset-assignments",
+      },
+      {
+        key: "asset-dc-challans",
+        title: "DC Challan",
+        description: "Delivery challan tracking for employee issues",
+        apiPath: "/assets/asset-dc-challans",
       },
       {
         key: "asset-transfers",
         title: "Transfers",
-        description: "Location / branch moves",
+        description: "Asset transfer documents",
         apiPath: "/assets/asset-transfers",
-      },
-      {
-        key: "asset-locations",
-        title: "Locations",
-        description: "Location history trail",
-        apiPath: "/assets/asset-locations",
-      },
-      {
-        key: "asset-warranties",
-        title: "Warranties",
-        description: "Warranty coverage",
-        apiPath: "/assets/asset-warranties",
-      },
-      {
-        key: "asset-insurances",
-        title: "Insurance",
-        description: "Insurance policies",
-        apiPath: "/assets/asset-insurances",
-      },
-      {
-        key: "maintenance-plans",
-        title: "Maintenance Plans",
-        description: "Preventive schedules",
-        apiPath: "/assets/maintenance-plans",
       },
       {
         key: "asset-maintenances",
@@ -1257,26 +1370,106 @@ export const erpModules: ErpModule[] = [
       {
         key: "asset-depreciations",
         title: "Depreciation",
-        description: "Depreciation runs",
+        description: "Depreciation runs and postings",
         apiPath: "/assets/asset-depreciations",
       },
       {
         key: "asset-disposals",
         title: "Disposals",
-        description: "Disposal & write-off",
+        description: "Asset disposal documents",
         apiPath: "/assets/asset-disposals",
+      },
+      {
+        key: "asset-revaluations",
+        title: "Revaluation",
+        description: "Asset revaluation documents",
+        apiPath: "/assets/asset-revaluations",
       },
       {
         key: "asset-audits",
         title: "Audits",
-        description: "Physical verification",
+        description: "Physical verification and audits",
         apiPath: "/assets/asset-audits",
+      },
+      {
+        key: "asset-warranties",
+        title: "Warranties",
+        description: "Warranty coverage records",
+        apiPath: "/assets/asset-warranties",
+      },
+      {
+        key: "asset-insurances",
+        title: "Insurance",
+        description: "Insurance policies for assets",
+        apiPath: "/assets/asset-insurances",
+      },
+      {
+        key: "asset-components",
+        title: "Components",
+        description: "Asset component breakdown",
+        apiPath: "/assets/asset-components",
+      },
+      {
+        key: "asset-locations",
+        title: "Asset Locations",
+        description: "Asset-specific location assignments",
+        apiPath: "/assets/asset-locations",
+      },
+      {
+        key: "maintenance-plans",
+        title: "Maintenance Plans",
+        description: "Preventive maintenance schedules",
+        apiPath: "/assets/maintenance-plans",
+      },
+      {
+        key: "service-histories",
+        title: "Service History",
+        description: "Completed service events",
+        apiPath: "/assets/service-histories",
+      },
+      {
+        key: "asset-checklists",
+        title: "Checklists",
+        description: "Inspection and audit checklists",
+        apiPath: "/assets/asset-checklists",
       },
       {
         key: "meter-readings",
         title: "Meter Readings",
-        description: "Usage meters",
+        description: "Usage and meter capture",
         apiPath: "/assets/meter-readings",
+      },
+      {
+        key: "asset-documents",
+        title: "Documents",
+        description: "Asset document attachments",
+        apiPath: "/assets/asset-documents",
+      },
+      {
+        key: "asset-notifications",
+        title: "Notifications",
+        description: "Asset notification rules",
+        apiPath: "/assets/asset-notifications",
+      },
+      {
+        key: "qr-barcode",
+        title: "QR / Barcode",
+        description: "Generate and scan asset labels",
+        apiPath: "/assets/assets",
+        listable: false,
+      },
+      {
+        key: "reports",
+        title: "Reports",
+        description: "Inventory, assignment, and maintenance reports",
+        apiPath: "/assets/reports",
+      },
+      {
+        key: "settings",
+        title: "Settings",
+        description: "Asset module preferences",
+        apiPath: "/assets/assets",
+        listable: false,
       },
     ],
   },
@@ -1548,6 +1741,95 @@ export const erpModules: ErpModule[] = [
     ],
   },
   {
+    key: "marketing",
+    title: "Marketing & Social",
+    description:
+      "Marketing operations — campaigns, tasks, AI studio, Microsoft 365, workload analytics, and publishing.",
+    href: "/marketing",
+    group: "operations",
+    icon: "marketing",
+    resources: [
+      {
+        key: "campaigns",
+        title: "Campaigns",
+        description: "Marketing campaigns",
+        apiPath: "/marketing/campaigns",
+      },
+      {
+        key: "content-requests",
+        title: "Content Requests",
+        description: "AI generation requests",
+        apiPath: "/marketing/content-requests",
+      },
+      {
+        key: "content",
+        title: "Generated Content",
+        description: "Drafts and scored content",
+        apiPath: "/marketing/content",
+      },
+      {
+        key: "research",
+        title: "Research",
+        description: "Topic research reports",
+        apiPath: "/marketing/research",
+      },
+      {
+        key: "trends",
+        title: "Trends",
+        description: "Trend discovery",
+        apiPath: "/marketing/trends",
+      },
+      {
+        key: "brand-voices",
+        title: "Brand Voice",
+        description: "Brand voice profiles",
+        apiPath: "/marketing/brand-voices",
+      },
+      {
+        key: "platforms",
+        title: "Platforms",
+        description: "Channel catalog",
+        apiPath: "/marketing/platforms",
+      },
+      {
+        key: "social-accounts",
+        title: "Social Accounts",
+        description: "Connected social accounts",
+        apiPath: "/marketing/social-accounts",
+      },
+      {
+        key: "calendar",
+        title: "Calendar",
+        description: "Publishing calendar",
+        apiPath: "/marketing/calendar",
+      },
+      {
+        key: "competitors",
+        title: "Competitors",
+        description: "Competitor watchlist",
+        apiPath: "/marketing/competitors",
+      },
+      {
+        key: "publish-jobs",
+        title: "Publish Jobs",
+        description: "Outbound publish queue",
+        apiPath: "/marketing/publish-jobs",
+      },
+      {
+        key: "pillars",
+        title: "Content Pillars",
+        description: "Strategic content themes",
+        apiPath: "/marketing/pillars",
+      },
+      {
+        key: "tasks",
+        title: "Tasks",
+        description: "Nested campaign tasks",
+        apiPath: "/marketing/tasks",
+      },
+    ],
+  },
+  {
     key: "grc",
     title: "GRC",
     description:
@@ -1567,6 +1849,12 @@ export const erpModules: ErpModule[] = [
         title: "Policy Versions",
         description: "Policy version history",
         apiPath: "/grc/policy-versions",
+      },
+      {
+        key: "policy-acknowledgements",
+        title: "Policy Acknowledgements",
+        description: "Employee policy acknowledgements",
+        apiPath: "/grc/policy-acknowledgements",
       },
       {
         key: "controls",
@@ -1609,6 +1897,12 @@ export const erpModules: ErpModule[] = [
         title: "Compliance Frameworks",
         description: "Standards & frameworks",
         apiPath: "/grc/compliance-frameworks",
+      },
+      {
+        key: "compliance-requirements",
+        title: "Compliance Requirements",
+        description: "Regulatory obligations catalog",
+        apiPath: "/grc/compliance-requirements",
       },
       {
         key: "compliance-assessments",

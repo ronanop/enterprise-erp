@@ -23,7 +23,7 @@ export function ManufacturingPipelineFunnel({
   return (
     <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between gap-2">
-        <h2 className="text-sm font-medium tracking-tight">Production pipeline</h2>
+        <h2 className="text-base font-extrabold tracking-tight">Production pipeline</h2>
         <p className="text-[11px] text-muted-foreground">Order → Scrap (FRD-13)</p>
       </div>
       <ol className="grid gap-2 sm:grid-cols-5">

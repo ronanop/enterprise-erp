@@ -14,9 +14,9 @@ class OvfRepository(CrmScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
-    def get(self, ctx: TenantContext, row_id: UUID) -> CrmOvf | None:
+    def get(self, ctx: TenantContext, row_id: UUID, *, branch_scoped: bool = True) -> CrmOvf | None:
         stmt = select(CrmOvf).where(CrmOvf.id == row_id, CrmOvf.is_deleted.is_(False))
-        stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=True)
+        stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=branch_scoped)
         return self.db.scalar(stmt)
 
     def list_ovfs(
@@ -32,6 +32,26 @@ class OvfRepository(CrmScopedRepository):
         )
         if opportunity_id is not None:
             stmt = stmt.where(CrmOvf.opportunity_id == opportunity_id)
+        stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=True)
+        stmt = stmt.order_by(CrmOvf.created_at.desc())
+        return list(self.db.scalars(stmt).all())
+
+    def list_shared_to_scm(self, ctx: TenantContext, company_id: UUID) -> list[CrmOvf]:
+        """OVFs Finance/Sales shared to SCM (approved commercial lock)."""
+        stmt = select(CrmOvf).where(
+            CrmOvf.company_id == company_id,
+            CrmOvf.is_deleted.is_(False),
+            CrmOvf.shared_to_scm.is_(True),
+            CrmOvf.blueprint_state.in_(("shared_scm", "deal_won")),
+        )
+        stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=True)
+        stmt = stmt.order_by(CrmOvf.updated_at.desc())
+        return list(self.db.scalars(stmt).all())
+
+    def list_by_ids(self, ctx: TenantContext, row_ids: list[UUID]) -> list[CrmOvf]:
+        if not row_ids:
+            return []
+        stmt = select(CrmOvf).where(CrmOvf.id.in_(row_ids), CrmOvf.is_deleted.is_(False))
         stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 
@@ -60,6 +80,18 @@ class OvfRepository(CrmScopedRepository):
         self.db.flush()
         return row
 
+    def soft_delete(self, ctx: TenantContext, row_id: UUID) -> bool:
+        row = self.get(ctx, row_id)
+        if row is None:
+            return False
+        row.is_deleted = True
+        row.deleted_at = utcnow()
+        row.deleted_by = ctx.user_id
+        row.updated_at = utcnow()
+        row.updated_by = ctx.user_id
+        self.db.flush()
+        return True
+
 
 class OvfLineRepository(CrmScopedRepository):
     def __init__(self, db: Session) -> None:
@@ -74,7 +106,12 @@ class OvfLineRepository(CrmScopedRepository):
         stmt = select(CrmOvfLine).where(
             CrmOvfLine.ovf_id == ovf_id,
             CrmOvfLine.is_deleted.is_(False),
-        ).order_by(CrmOvfLine.side, CrmOvfLine.line_no)
+        ).order_by(
+            CrmOvfLine.side,
+            CrmOvfLine.line_no,
+            CrmOvfLine.created_at,
+            CrmOvfLine.id,
+        )
         stmt = self.apply_crm_filter(stmt, CrmOvfLine, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 
@@ -87,5 +124,17 @@ class OvfLineRepository(CrmScopedRepository):
             **fields,
         )
         self.db.add(row)
+        self.db.flush()
+        return row
+
+    def update(self, ctx: TenantContext, row_id: UUID, **fields) -> CrmOvfLine | None:
+        row = self.get(ctx, row_id)
+        if row is None:
+            return None
+        for k, v in fields.items():
+            setattr(row, k, v)
+        row.updated_at = utcnow()
+        row.updated_by = ctx.user_id
+        row.version = int(row.version or 1) + 1
         self.db.flush()
         return row
