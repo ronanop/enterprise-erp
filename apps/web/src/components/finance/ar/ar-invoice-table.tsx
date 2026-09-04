@@ -178,7 +178,7 @@ export function ArInvoiceTable(props: Props) {
                         href={
                           props.detailHref
                             ? safeAppHref(props.detailHref(row))
-                            : `/finance/accounts-receivable/invoices/${row.id}`
+                            : safeEntityHref("/finance/accounts-receivable/invoices", row.id)
                         }
                         className="cursor-pointer hover:underline"
                       >
@@ -188,7 +188,7 @@ export function ArInvoiceTable(props: Props) {
                     ) : null}
                     {visible.has("customer") ? (
                       <td className="px-2 py-1.5">
-                        <Link href={safeAppHref(`/finance/accounts-receivable/customers/${row.customer_id}`)} className="cursor-pointer hover:underline">
+                        <Link href={safeEntityHref("/finance/accounts-receivable/customers", row.customer_id)} className="cursor-pointer hover:underline">
                           {row.customer_name ?? row.customer_code ?? row.customer_id.slice(0, 8)}
                         </Link>
                       </td>
