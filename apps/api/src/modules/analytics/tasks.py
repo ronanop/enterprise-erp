@@ -144,3 +144,23 @@ def retry_failed_refresh() -> dict:
         }
     finally:
         db.close()
+
+
+@celery_app.task(name="analytics.kpi_daily_snapshot")
+def kpi_daily_snapshot(as_of: str | None = None) -> dict:
+    from datetime import date
+
+    from database.session import SessionLocal
+    from modules.analytics.service.kpi_snapshot_service import KpiDailySnapshotService
+
+    day = date.fromisoformat(as_of) if as_of else date.today()
+    db = SessionLocal()
+    try:
+        result = KpiDailySnapshotService(db).capture_all(day)
+        db.commit()
+        return result
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { ModuleDetailGrid, ModuleDetailPage, ModuleDetailSection, textOrDash } from "@/components/module/module-detail-ui";
 import { ApiClientError } from "@/services/api-client";
@@ -42,6 +43,11 @@ export function ExecutiveKpiDetailPage() {
   }, [kpiId]);
 
   const backHref = `/analytics/executive/${from}`;
+  const history = detail?.history ?? [];
+  const reducedMotion = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  }, []);
 
   return (
     <ModuleDetailPage
@@ -85,6 +91,28 @@ export function ExecutiveKpiDetailPage() {
               </table>
             )}
           </ModuleDetailSection>
+          {history.length > 1 ? (
+            <ModuleDetailSection title="Trend">
+              <div className="h-52 w-full min-w-0" role="img" aria-label="KPI history trend">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={history} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    <Line
+                      type="monotone"
+                      dataKey="value"
+                      stroke="#0369A1"
+                      strokeWidth={2}
+                      dot={{ r: 3 }}
+                      isAnimationActive={!reducedMotion}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </ModuleDetailSection>
+          ) : null}
           <Link href={backHref} className="text-sm font-medium text-primary hover:underline">
             Back to {from.toUpperCase()}
           </Link>

@@ -84,6 +84,7 @@ def test_detail_headcount_includes_department_breakdown():
     assert detail["current_value"] == Decimal("8")
     assert detail["breakdown"][0]["dimension_label"] == "Human Resources"
     assert detail["breakdown"][0]["value"] == 8
+    assert detail["history"] == []
 
 
 def test_master_customers_breakdown_empty():

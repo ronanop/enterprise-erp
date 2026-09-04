@@ -16,6 +16,7 @@ from modules.analytics.service.analytics_number_service import AnalyticsNumberSe
 from modules.analytics.service.analytics_scope_validator import AnalyticsScopeValidator
 from modules.analytics.service.engines import KpiEngine
 from modules.analytics.service.integration_service import AnalyticsIntegrationService
+from modules.analytics.service.kpi_snapshot_service import KpiDailySnapshotService
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 
@@ -28,6 +29,7 @@ class KpiService:
         self._engine = KpiEngine()
         self._audit = AuditService(db)
         self._integration = AnalyticsIntegrationService(db)
+        self._snapshots = KpiDailySnapshotService(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -72,11 +74,16 @@ class KpiService:
         current = row.current_value
         if current is None:
             current = Decimal(total)
+        history = []
+        snapshots = getattr(self, "_snapshots", None)
+        if snapshots is not None:
+            history = snapshots.history_for_kpi(ctx, row.company_id, row.id)
         return {
             "kpi_code": row.kpi_code,
             "current_value": current,
             "target_value": row.target_value,
             "breakdown": breakdown,
+            "history": history,
         }
 
     def _aggregate(self, ctx: TenantContext, row: BiKpi) -> tuple[int, list[dict]]:

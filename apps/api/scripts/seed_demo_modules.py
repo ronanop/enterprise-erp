@@ -5657,6 +5657,24 @@ def seed_pilot_kpis(db, tenant_id, company_id, branch_id, admin_id, employees):
         )
 
 
+    ensure(
+        db,
+        BiDataset,
+        {"tenant_id": tenant_id, "company_id": company_id, "dataset_code": "KPI-DAILY"},
+        {
+            "dataset_number": "DS-KPI-DAILY",
+            "dataset_name": "KPI daily history",
+            "dataset_type": "operational",
+            "description": "One JSON payload per company-day of computed KPI values",
+            "owner_employee_id": owner_id,
+            "grain_description": "One snapshot row per company per day",
+            "status": "active",
+            "created_by": admin_id,
+            "updated_by": admin_id,
+        },
+    )
+
+
 def seed_integration(db, tenant_id, company_id, admin_id, employees):
     system = ensure(
         db,

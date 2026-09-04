@@ -224,11 +224,16 @@ class KpiBreakdownItem(BaseModel):
     dimension_label: str
     value: Decimal
 
+class KpiHistoryItem(BaseModel):
+    date: date
+    value: Decimal
+
 class KpiDetailResponse(BaseModel):
     kpi_code: str
     current_value: Decimal | None
     target_value: Decimal | None
     breakdown: list[KpiBreakdownItem]
+    history: list[KpiHistoryItem] = []
 
 class KpiResponse(OrmModel):
     id: UUID

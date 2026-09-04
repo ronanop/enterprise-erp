@@ -1,5 +1,6 @@
 """Celery application configuration."""
 
+from celery.schedules import crontab
 from celery import Celery
 
 from core.config import settings
@@ -22,11 +23,27 @@ celery_app.conf.update(
     beat_schedule={
         "hr-attendance-auto-absent": {
             "task": "hr.attendance_auto_absent",
-            "schedule": 3600.0,  # hourly; safe if idempotent per day
+            "schedule": 3600.0,
         },
         "hr-attendance-auto-lock": {
             "task": "hr.attendance_auto_lock",
             "schedule": 3600.0,
+        },
+        "quality-spc-out-of-control-alert": {
+            "task": "quality.spc_out_of_control_alert",
+            "schedule": 3600.0,
+        },
+        "quality-ppap-pending-approval-alerts": {
+            "task": "quality.ppap_pending_approval_alerts",
+            "schedule": 3600.0,
+        },
+        "quality-scar-overdue-alerts": {
+            "task": "quality.scar_overdue_alerts",
+            "schedule": 3600.0,
+        },
+        "analytics-kpi-daily-snapshot": {
+            "task": "analytics.kpi_daily_snapshot",
+            "schedule": crontab(hour=1, minute=0),
         },
     },
 )

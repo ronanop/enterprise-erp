@@ -202,11 +202,17 @@ export type AnalyticsKpiBreakdown = {
   value: number;
 };
 
+export type AnalyticsKpiHistoryPoint = {
+  date: string;
+  value: number;
+};
+
 export type AnalyticsKpiDetail = {
   kpi_code: string;
   current_value: number | null;
   target_value: number | null;
   breakdown: AnalyticsKpiBreakdown[];
+  history: AnalyticsKpiHistoryPoint[];
 };
 
 /** Returns null for missing/invalid values — never coerces to 0. */
@@ -275,11 +281,23 @@ export async function getAnalyticsKpiDetail(id: string): Promise<AnalyticsKpiDet
             item.dimension_label !== "" && item.value != null,
         )
     : [];
+  const historyRaw = (row as AnalyticsKpiDetail & { history?: unknown }).history;
+  const history = Array.isArray(historyRaw)
+    ? historyRaw
+        .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+        .map((item) => {
+          const value = parseNullableNumber(item.value);
+          const date = item.date != null ? String(item.date) : "";
+          return { date, value };
+        })
+        .filter((item): item is AnalyticsKpiHistoryPoint => item.date !== "" && item.value != null)
+    : [];
   return {
     kpi_code: row.kpi_code,
     current_value: parseNullableNumber(row.current_value),
     target_value: parseNullableNumber(row.target_value),
     breakdown,
+    history,
   };
 }
 
