@@ -88,4 +88,12 @@ class KpiService:
             return self._integration.count_active_customers(ctx, company_id), []
         if key == SourceKpiKey.MASTER_ACTIVE_VENDORS.value:
             return self._integration.count_active_vendors(ctx, company_id), []
+        if key == SourceKpiKey.FINANCE_TOTAL_REVENUE.value:
+            return self._integration.get_total_revenue(ctx, company_id)
+        if key == SourceKpiKey.FINANCE_CASH_POSITION.value:
+            return self._integration.get_cash_position(ctx, company_id)
+        if key == SourceKpiKey.FINANCE_AR_AGING_TOTAL.value:
+            return self._integration.get_ar_aging(ctx, company_id)
+        if key == SourceKpiKey.FINANCE_AP_AGING_TOTAL.value:
+            return self._integration.get_ap_aging(ctx, company_id)
         raise UnknownKpiSource(f"Unsupported source_kpi_key: {key or '(empty)'}")

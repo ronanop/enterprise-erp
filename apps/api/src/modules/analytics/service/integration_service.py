@@ -42,3 +42,15 @@ class AnalyticsIntegrationService:
 
     def count_active_vendors(self, ctx: TenantContext, company_id: UUID) -> int:
         return self._master.count_active_vendors(ctx, company_id)
+
+    def get_total_revenue(self, ctx: TenantContext, company_id: UUID):
+        return self._finance.get_total_revenue(ctx, company_id)
+
+    def get_cash_position(self, ctx: TenantContext, company_id: UUID):
+        return self._finance.get_cash_position(ctx, company_id)
+
+    def get_ar_aging(self, ctx: TenantContext, company_id: UUID):
+        return self._finance.get_ar_aging(ctx, company_id)
+
+    def get_ap_aging(self, ctx: TenantContext, company_id: UUID):
+        return self._finance.get_ap_aging(ctx, company_id)

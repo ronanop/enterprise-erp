@@ -5460,6 +5460,30 @@ def seed_pilot_kpis(db, tenant_id, company_id, branch_id, admin_id, employees):
             "master.active_vendors",
             Decimal("20"),
         ),
+        (
+            "REV",
+            "Total Revenue",
+            "finance.total_revenue",
+            Decimal("100000"),
+        ),
+        (
+            "CASH",
+            "Cash Position",
+            "finance.cash_position",
+            Decimal("100000"),
+        ),
+        (
+            "ARAGE",
+            "AR Aging Total",
+            "finance.ar_aging_total",
+            Decimal("50000"),
+        ),
+        (
+            "APAGE",
+            "AP Aging Total",
+            "finance.ap_aging_total",
+            Decimal("30000"),
+        ),
     ]
     for code, name, source_key, target in specs:
         row = ensure(

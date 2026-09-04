@@ -151,6 +151,10 @@ class SourceKpiKey(str, Enum):
     ORG_HEADCOUNT_BY_DEPARTMENT = "org.headcount_by_department"
     MASTER_ACTIVE_CUSTOMERS = "master.active_customers"
     MASTER_ACTIVE_VENDORS = "master.active_vendors"
+    FINANCE_TOTAL_REVENUE = "finance.total_revenue"
+    FINANCE_CASH_POSITION = "finance.cash_position"
+    FINANCE_AR_AGING_TOTAL = "finance.ar_aging_total"
+    FINANCE_AP_AGING_TOTAL = "finance.ap_aging_total"
 
 
 class AnalyticsEntityType(str, Enum):

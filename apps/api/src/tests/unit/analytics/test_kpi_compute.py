@@ -37,6 +37,18 @@ class _FakeIntegration:
     def count_active_vendors(self, ctx, company_id):
         return 2
 
+    def get_total_revenue(self, ctx, company_id):
+        return Decimal("50000"), []
+
+    def get_cash_position(self, ctx, company_id):
+        return Decimal("0"), [{"dimension_label": "Cash", "value": Decimal("0")}]
+
+    def get_ar_aging(self, ctx, company_id):
+        return Decimal("50000"), [{"dimension_label": "Unbucketed", "value": Decimal("50000")}]
+
+    def get_ap_aging(self, ctx, company_id):
+        return Decimal("30000"), []
+
 
 def _svc(row) -> KpiService:
     svc = KpiService.__new__(KpiService)
@@ -86,6 +98,19 @@ def test_master_customers_breakdown_empty():
     detail = _svc(row).get_detail(SimpleNamespace(), row.id)
     assert detail["current_value"] == Decimal("3")
     assert detail["breakdown"] == []
+
+
+def test_finance_revenue_compute():
+    row = SimpleNamespace(
+        id=uuid4(),
+        company_id=uuid4(),
+        kpi_code="REV",
+        source_kpi_key="finance.total_revenue",
+        current_value=None,
+        target_value=None,
+    )
+    updated = _svc(row).compute_current_value(SimpleNamespace(), row.id)
+    assert updated.current_value == Decimal("50000")
 
 
 def test_unknown_source_raises():
