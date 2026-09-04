@@ -9,6 +9,13 @@ import {
   ShieldCheck,
   SquarePen,
 } from "lucide-react";
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -417,6 +424,9 @@ export function AssetRevaluationWorkspace() {
               <table className="min-w-full text-sm">
                 <thead className="bg-muted/40 text-left">
                   <tr>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
                     <th scope="col" className="px-3 py-2 font-medium">
                       Document
                     </th>
@@ -434,18 +444,18 @@ export function AssetRevaluationWorkspace() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={4}>
+                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={5}>
                         <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                       </td>
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={4}>
+                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={5}>
                         No revaluations found.
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row) => {
+                    rows.map((row, index) => {
                       const asset = assetMap.get(row.asset_id);
                       const isSelected = selected?.id === row.id;
                       return (
@@ -456,6 +466,7 @@ export function AssetRevaluationWorkspace() {
                           }`}
                           onClick={() => setSelected(row)}
                         >
+                          <td className={tableSerialCellClassName()}>{tableRowSerial(page, pageSize, index)}</td>
                           <td className="px-3 py-2 font-mono text-xs">{row.document_number}</td>
                           <td className="px-3 py-2">
                             <div className="font-medium">{asset?.asset_name ?? row.asset_id}</div>

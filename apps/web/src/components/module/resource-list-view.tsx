@@ -17,6 +17,8 @@ interface ResourceListViewProps {
   title: string;
   description: string;
   apiPath: string;
+  /** When true, prepend a # serial column (1…n for the filtered list). */
+  showRowSerial?: boolean;
 }
 
 const UUID_RE =
@@ -217,6 +219,7 @@ export function ResourceListView({
   title,
   description,
   apiPath,
+  showRowSerial = false,
 }: ResourceListViewProps) {
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
@@ -348,6 +351,11 @@ export function ResourceListView({
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead>
                   <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+                    {showRowSerial ? (
+                      <th className="w-10 px-3 py-3 text-center font-medium tabular-nums" scope="col">
+                        #
+                      </th>
+                    ) : null}
                     {columns.length > 0 ? (
                       columns.map((col) => (
                         <th key={col} className="px-5 py-3 font-medium">
@@ -363,7 +371,7 @@ export function ResourceListView({
                   {filtered.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={Math.max(columns.length, 1)}
+                        colSpan={Math.max(columns.length, 1) + (showRowSerial ? 1 : 0)}
                         className="px-5 py-12 text-center text-muted-foreground"
                       >
                         No records returned from {apiPath}.
@@ -375,6 +383,11 @@ export function ResourceListView({
                         key={String(row.id ?? idx)}
                         className="border-b border-border/50 transition-colors last:border-0 hover:bg-accent/30"
                       >
+                        {showRowSerial ? (
+                          <td className="px-3 py-3 text-center text-xs tabular-nums text-muted-foreground">
+                            {idx + 1}
+                          </td>
+                        ) : null}
                         {columns.map((col, colIdx) => (
                           <td
                             key={col}

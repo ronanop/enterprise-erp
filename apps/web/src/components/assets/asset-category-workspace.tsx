@@ -10,6 +10,13 @@ import {
   SquarePen,
   Tags,
 } from "lucide-react";
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -281,6 +288,9 @@ export function AssetCategoryWorkspace() {
               <table className="w-full min-w-[520px] text-left text-sm">
                 <thead className="sticky top-0 bg-muted/60 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
                     <th className="px-3 py-2 font-medium">Code</th>
                     <th className="px-3 py-2 font-medium">Name</th>
                     <th className="px-3 py-2 font-medium">Life (mo)</th>
@@ -290,18 +300,18 @@ export function AssetCategoryWorkspace() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
+                      <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
                         <Loader2 className="mx-auto size-5 animate-spin" aria-hidden />
                       </td>
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td colSpan={4} className="px-3 py-8 text-center text-muted-foreground">
+                      <td colSpan={5} className="px-3 py-8 text-center text-muted-foreground">
                         No categories found.
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row) => (
+                    rows.map((row, index) => (
                       <tr
                         key={row.id}
                         className={`cursor-pointer border-t transition-colors duration-150 hover:bg-muted/40 ${
@@ -309,7 +319,8 @@ export function AssetCategoryWorkspace() {
                         }`}
                         onClick={() => setSelected(row)}
                       >
-                        <td className="px-3 py-2 font-mono text-xs">{row.category_code}</td>
+                        <td className={tableSerialCellClassName()}>{tableRowSerial(page, pageSize, index)}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{row.category_code}</td>
                         <td className="px-3 py-2">{row.category_name}</td>
                         <td className="px-3 py-2 tabular-nums">
                           {row.default_useful_life_months ?? "—"}

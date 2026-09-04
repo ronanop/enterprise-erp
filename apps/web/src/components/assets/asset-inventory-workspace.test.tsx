@@ -85,11 +85,13 @@ function renderWorkspace(overrides: Partial<ComponentProps<typeof AssetInventory
 afterEach(() => cleanup());
 
 describe("AssetInventoryWorkspace", () => {
-  it("renders header and presets", () => {
+  it("renders header and status filter dropdown", () => {
     renderWorkspace();
     expect(screen.getByText("IT Asset Inventory")).toBeInTheDocument();
-    expect(screen.getByTestId("inventory-preset-tabs")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Assigned" })).toBeInTheDocument();
+    expect(screen.getByTestId("inventory-status-filter")).toBeInTheDocument();
+    expect(screen.getByTestId("inventory-search-filter-row")).toBeInTheDocument();
+    expect(screen.queryByTestId("inventory-preset-tabs")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("inventory-filters-trigger")).not.toBeInTheDocument();
   });
 
   it("shows table row on desktop", () => {
@@ -143,11 +145,11 @@ describe("AssetInventoryWorkspace", () => {
     expect(within(table).getByText("No ready assets")).toBeInTheDocument();
   });
 
-  it("calls onPresetChange", async () => {
+  it("calls onPresetChange from the status dropdown", async () => {
     const user = userEvent.setup();
     const onPresetChange = vi.fn();
     renderWorkspace({ onPresetChange });
-    await user.click(screen.getByRole("tab", { name: "Disposed" }));
+    await user.selectOptions(screen.getByTestId("inventory-status-filter"), "disposed");
     expect(onPresetChange).toHaveBeenCalledWith("disposed");
   });
 
@@ -179,23 +181,20 @@ describe("AssetInventoryWorkspace", () => {
     expect(onQuickSearchSubmit).toHaveBeenCalled();
   });
 
-  it("opens advanced filters in a popover without operational status", async () => {
-    const user = userEvent.setup();
+  it("does not render the removed advanced filters popover", () => {
     renderWorkspace();
-    expect(screen.queryByText("Operational status")).not.toBeInTheDocument();
-    await user.click(screen.getByTestId("inventory-filters-trigger"));
-    expect(screen.getByTestId("inventory-filters-panel")).toBeInTheDocument();
-    expect(screen.getByText("Lifecycle status")).toBeInTheDocument();
-    expect(screen.queryByText("Operational status")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
+    expect(screen.queryByTestId("inventory-filters-trigger")).not.toBeInTheDocument();
+    expect(screen.queryByText("Lifecycle status")).not.toBeInTheDocument();
+    expect(screen.queryByText("All departments")).not.toBeInTheDocument();
   });
 
-  it("shows dismissible chips for applied advanced filters", () => {
+  it("shows dismissible chips for applied search only", () => {
     renderWorkspace({
-      appliedFilters: { ...EMPTY_INVENTORY_FILTERS, branchId: "b1" },
+      appliedFilters: { ...EMPTY_INVENTORY_FILTERS, search: "mac", branchId: "b1" },
       onDismissFilter: vi.fn(),
     });
-    expect(screen.getByTestId("inventory-active-filter-chips")).toHaveTextContent("Branch: Head Office");
+    expect(screen.getByTestId("inventory-active-filter-chips")).toHaveTextContent("Search: mac");
+    expect(screen.getByTestId("inventory-active-filter-chips")).not.toHaveTextContent("Branch:");
   });
 
   it("renders export toolbar when handlers provided", async () => {

@@ -140,12 +140,10 @@ export async function fetchInventoryPage(input: {
     pageSize: PAGE_SIZE,
   });
 
-  const branch_id = query.branch_id;
-
   // Assignments API caps page_size at 200 — paginate instead of requesting 500 (422).
   const [assetList, assignmentItems] = await Promise.all([
     listAssets(query),
-    fetchAllAssignmentPages(listAssignments, branch_id),
+    fetchAllAssignmentPages(listAssignments, undefined),
   ]);
 
   const assignmentList: AssetPaginatedListResult = {

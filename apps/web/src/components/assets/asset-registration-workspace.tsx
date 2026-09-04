@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableRowSerialFromIndex,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Loader2, Plus, RefreshCw, Save } from "lucide-react";
@@ -342,7 +350,10 @@ export function AssetRegistrationWorkspace() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left text-muted-foreground">
-                      <th className="py-2 pr-2" scope="col">
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="py-2 pr-2" scope="col">
                         Code
                       </th>
                       <th className="py-2 pr-2" scope="col">
@@ -357,7 +368,7 @@ export function AssetRegistrationWorkspace() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => (
+                    {rows.map((row, index) => (
                       <tr
                         key={row.id}
                         className={`cursor-pointer border-b transition-colors hover:bg-muted/50 ${
@@ -365,6 +376,7 @@ export function AssetRegistrationWorkspace() {
                         }`}
                         onClick={() => setSelected(row)}
                       >
+                        <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
                         <td className="py-2 pr-2 font-mono text-xs">{row.asset_code}</td>
                         <td className="py-2 pr-2">{row.asset_name}</td>
                         <td className="py-2 pr-2">{statusBadge(row)}</td>

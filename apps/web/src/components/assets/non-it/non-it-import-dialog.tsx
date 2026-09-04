@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableRowSerialFromIndex,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+
 import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import {
@@ -449,19 +457,23 @@ export function NonItImportDialog({ open, onOpenChange, types, onImported }: Pro
                       <table className="w-full text-left text-sm">
                         <thead className="sticky top-0 z-[1] border-b border-border bg-muted/60 text-[10px] uppercase tracking-wide text-muted-foreground backdrop-blur-sm">
                           <tr>
-                            <th className="px-3 py-2 font-semibold">Asset type</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="px-3 py-2 font-semibold">Asset type</th>
                             <th className="px-3 py-2 text-right font-semibold">Qty</th>
                             <th className="px-3 py-2 font-semibold">Check</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {preview.map((row, i) => {
+                          {preview.map((row, index) => {
                             const ok = knownTypeNames.has(row.asset_type.toLowerCase());
                             return (
                               <tr
                                 key={`${row.asset_type}-${i}`}
                                 className="border-b border-border/50 last:border-0"
                               >
+                                <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
                                 <td className="px-3 py-2 font-medium text-foreground">
                                   {row.asset_type}
                                 </td>

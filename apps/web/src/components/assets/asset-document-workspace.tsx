@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Archive, FileText, Loader2, Plus, RefreshCw, Replace } from "lucide-react";
 
@@ -411,14 +418,17 @@ export function AssetDocumentWorkspace() {
                 <table className="w-full text-left text-sm">
                   <thead className="border-b bg-muted/50 text-muted-foreground">
                     <tr>
-                      <th className="px-3 py-2 font-medium">Name</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="px-3 py-2 font-medium">Name</th>
                       <th className="px-3 py-2 font-medium">Type</th>
                       <th className="px-3 py-2 font-medium">Asset</th>
                       <th className="px-3 py-2 font-medium">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => {
+                    {rows.map((row, index) => {
                       const asset = assetMap.get(row.asset_id);
                       const active = selected?.id === row.id;
                       return (
@@ -429,6 +439,7 @@ export function AssetDocumentWorkspace() {
                           }`}
                           onClick={() => setSelected(row)}
                         >
+                          <td className={tableSerialCellClassName()}>{tableRowSerial(page, PAGE_SIZE, index)}</td>
                           <td className="px-3 py-2 font-medium">{row.document_name}</td>
                           <td className="px-3 py-2">{row.document_type}</td>
                           <td className="px-3 py-2">

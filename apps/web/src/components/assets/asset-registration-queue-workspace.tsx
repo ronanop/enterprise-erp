@@ -30,6 +30,11 @@ import {
   EmptyState,
   StatCard,
   type BranchOption,
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableRowSerialFromIndex,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
 } from "@/components/assets/shared";
 import { listBranchOptions } from "@/lib/org-options";
 import { isAuthenticated } from "@/lib/auth";
@@ -355,7 +360,10 @@ export function AssetRegistrationQueueWorkspace() {
                 <table className="w-full min-w-[64rem] text-left text-sm">
                   <thead className="border-b bg-muted/40 text-xs uppercase text-muted-foreground">
                     <tr>
-                      <th className="px-3 py-2">Status</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="px-3 py-2">Status</th>
                       <th className="px-3 py-2">Unit</th>
                       <th className="px-3 py-2">Asset</th>
                       <th className="px-3 py-2">Serial</th>
@@ -369,8 +377,9 @@ export function AssetRegistrationQueueWorkspace() {
                     </tr>
                   </thead>
                   <tbody>
-                    {reviewRows.map((row, idx) => (
+                    {reviewRows.map((row, index) => (
                       <tr key={`${row.row_number}-${idx}`} className="border-t">
+                        <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
                         <td className="px-3 py-2">
                           {row.status === "valid" ? "✓" : "✕"}
                         </td>
@@ -680,7 +689,10 @@ export function AssetRegistrationQueueWorkspace() {
             <table className="w-full min-w-[56rem] text-left text-sm">
               <thead className="border-b bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <th className="px-3 py-2 font-medium">Unit</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="px-3 py-2 font-medium">Unit</th>
                   <th className="px-3 py-2 font-medium">Asset</th>
                   <th className="px-3 py-2 font-medium">Serial</th>
                   <th className="px-3 py-2 font-medium">GRN</th>
@@ -694,13 +706,13 @@ export function AssetRegistrationQueueWorkspace() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-3 py-10 text-center text-muted-foreground" colSpan={9}>
+                    <td className="px-3 py-10 text-center text-muted-foreground" colSpan={10}>
                       <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-8" colSpan={9}>
+                    <td className="px-3 py-8" colSpan={10}>
                       <EmptyState
                         variant="no-queue"
                         title={
@@ -714,11 +726,12 @@ export function AssetRegistrationQueueWorkspace() {
                     </td>
                   </tr>
                 ) : (
-                  rows.map((row) => (
+                  rows.map((row, index) => (
                     <tr
                       key={row.incoming_unit_id}
                       className="border-t transition-colors duration-200 hover:bg-muted/40"
                     >
+                      <td className={tableSerialCellClassName()}>{tableRowSerial(page, pageSize, index)}</td>
                       <td className="px-3 py-2 font-mono text-xs">{row.unit_reference}</td>
                       <td className="px-3 py-2">
                         <div className="font-medium">{row.product_name ?? "Product"}</div>

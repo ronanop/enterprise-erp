@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableRowSerialFromIndex,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
@@ -306,7 +314,10 @@ export function AssetsDashboard() {
             <table className="w-full min-w-[480px] text-left text-sm">
               <thead>
                 <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
-                  <th className="px-4 py-2.5 font-medium">Asset</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="px-4 py-2.5 font-medium">Asset</th>
                   <th className="px-4 py-2.5 font-medium">Type</th>
                   <th className="px-4 py-2.5 font-medium">Book value</th>
                   <th className="px-4 py-2.5 font-medium">Status</th>
@@ -315,22 +326,23 @@ export function AssetsDashboard() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
+                    <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                       Loading…
                     </td>
                   </tr>
                 ) : recent.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
+                    <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                       No assets yet.
                     </td>
                   </tr>
                 ) : (
-                  recent.map((row, idx) => (
+                  recent.map((row, index) => (
                     <tr
                       key={String(row.id ?? idx)}
                       className="border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
                     >
+                      <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
                       <td className="max-w-[200px] truncate px-4 py-2.5">
                         <p className="font-medium text-foreground">
                           {String(row.asset_name ?? "—")}

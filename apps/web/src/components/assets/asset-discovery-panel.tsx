@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableRowSerialFromIndex,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+
 import { useCallback, useEffect, useState } from "react";
 import { CheckCircle2, Copy, Loader2, Radar, WandSparkles } from "lucide-react";
 
@@ -275,14 +283,18 @@ function ChangeTable({ changes }: { changes: DiscoveryChangeItem[] }) {
       <table className="w-full min-w-[420px] text-left text-xs">
         <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
           <tr>
-            <th className="px-2 py-1.5">Path</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="px-2 py-1.5">Path</th>
             <th className="px-2 py-1.5">Before</th>
             <th className="px-2 py-1.5">After</th>
           </tr>
         </thead>
         <tbody>
-          {changes.map((c) => (
+          {changes.map((c, index) => (
             <tr key={c.path} className="border-t">
+              <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
               <td className="px-2 py-1.5 font-mono">{c.path}</td>
               <td className="px-2 py-1.5">{formatValue(c.before)}</td>
               <td className="px-2 py-1.5">{formatValue(c.after)}</td>

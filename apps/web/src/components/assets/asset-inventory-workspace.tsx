@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import type { InventoryRowViewModel } from "@/components/assets/inventory.mapper";
 import { InventoryActiveFilterChips } from "@/components/assets/inventory/inventory-filter-chips";
-import { InventoryFilterPopover } from "@/components/assets/inventory/inventory-filter-popover";
 import {
   InventorySearchTypeahead,
   type InventorySearchSuggestion,
@@ -22,7 +21,6 @@ import { pickLinkedDcChallan } from "@/components/assets/dc-challan/dc-challan-d
 import { dcChallanService, type DcChallanRow } from "@/services/assets-service";
 import {
   INVENTORY_PRESETS,
-  INVENTORY_PRESET_PILL_CLASS,
   PRESET_EMPTY_COPY,
   PRESET_OPERATIONAL_STATUS,
   type InventoryPresetId,
@@ -30,10 +28,12 @@ import {
 import {
   BranchSelector,
   EmptyState,
-  InventoryFilterBar,
   StatusBadge,
+  TABLE_SERIAL_HEADER_LABEL,
   TableRowsSkeleton,
-  countAdvancedInventoryFilters,
+  tableRowSerial,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
   type BranchOption,
   type InventoryFilterOption,
   type InventoryFilterValues,
@@ -57,13 +57,9 @@ import Link from "next/link";
 function hasActiveInventoryFilters(
   filters: InventoryFilterValues,
   quickSearch: string,
-  preset: InventoryPresetId,
+  _preset: InventoryPresetId,
 ): boolean {
-  if (quickSearch.trim() || filters.search.trim()) return true;
-  if (countAdvancedInventoryFilters(filters) > 0) return true;
-  const presetOps = PRESET_OPERATIONAL_STATUS[preset] ?? "";
-  const effectiveOps = filters.operationalStatus || presetOps;
-  return effectiveOps !== presetOps;
+  return Boolean(quickSearch.trim() || filters.search.trim());
 }
 
 export type AssetInventoryWorkspaceProps = {
@@ -137,8 +133,8 @@ export function AssetInventoryWorkspace({
   onQuickSearchSubmit,
   draftFilters,
   appliedFilters,
-  onDraftFiltersChange,
-  onApplyFilters,
+  onDraftFiltersChange: _onDraftFiltersChange,
+  onApplyFilters: _onApplyFilters,
   onResetFilters,
   onDismissFilter,
   onSelectSearchSuggestion,
@@ -205,7 +201,7 @@ export function AssetInventoryWorkspace({
     !isOpenDcChallanStatus(linkedDc?.status);
   const currentApplied = appliedFilters ?? draftFilters;
   const filtersActive = hasActiveInventoryFilters(currentApplied, quickSearch, preset);
-  const advancedFilterCount = countAdvancedInventoryFilters(currentApplied);
+  const presetOperationalStatus = PRESET_OPERATIONAL_STATUS[preset];
   const emptyTitle =
     filtersActive || total === 0
       ? filtersActive
@@ -250,71 +246,39 @@ export function AssetInventoryWorkspace({
         }
       />
 
-      <div
-        className="flex flex-wrap gap-1.5"
-        role="tablist"
-        aria-label="Inventory presets"
-        data-testid="inventory-preset-tabs"
-      >
-        {INVENTORY_PRESETS.map((tab) => {
-          const selected = preset === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              className={cn(
-                "cursor-pointer rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors duration-200 motion-reduce:transition-none",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                selected
-                  ? INVENTORY_PRESET_PILL_CLASS[tab.id]
-                  : "border-border/70 bg-background/90 text-foreground hover:border-[#0369A1]/40 hover:bg-[rgba(3,105,161,0.03)]",
-              )}
-              onClick={() => onPresetChange(tab.id)}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-
       <Card className={ASSETS_SURFACE_CARD}>
         <div className="space-y-3 border-b border-border/50 p-4">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
+          <div
+            className="flex flex-col gap-2 sm:flex-row sm:items-center"
+            data-testid="inventory-search-filter-row"
+          >
             <InventorySearchTypeahead
               value={quickSearch}
               onValueChange={onQuickSearchChange}
               onSubmit={onQuickSearchSubmit}
               onSelectSuggestion={(suggestion) => onSelectSearchSuggestion?.(suggestion)}
-              branchId={
-                draftFilters.branchId !== BRANCH_ALL_VALUE ? draftFilters.branchId : undefined
-              }
+              className="w-full min-w-0 sm:max-w-md lg:max-w-lg sm:flex-none"
               locationId={
                 headerLocationId !== BRANCH_ALL_VALUE ? headerLocationId : undefined
               }
+              operationalStatuses={
+                presetOperationalStatus ? [presetOperationalStatus] : undefined
+              }
+              placeholder="Asset tag, name, serial, make, model, employee, status…"
             />
-            <InventoryFilterPopover activeCount={advancedFilterCount}>
-              {({ close }) => (
-                <InventoryFilterBar
-                  values={draftFilters}
-                  onChange={onDraftFiltersChange}
-                  onApply={() => {
-                    onApplyFilters();
-                    close();
-                  }}
-                  onReset={() => {
-                    onResetFilters();
-                    close();
-                  }}
-                  branches={branches}
-                  categories={categories}
-                  departments={departments}
-                  locations={locations}
-                  assetTypes={assetTypes}
-                />
-              )}
-            </InventoryFilterPopover>
+            <select
+              aria-label="Filter by operational status"
+              data-testid="inventory-status-filter"
+              className="flex h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm transition-colors duration-200 sm:w-[13.5rem] sm:shrink-0"
+              value={preset}
+              onChange={(e) => onPresetChange(e.target.value as InventoryPresetId)}
+            >
+              {INVENTORY_PRESETS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
           <InventoryActiveFilterChips
             filters={currentApplied}
@@ -347,6 +311,9 @@ export function AssetInventoryWorkspace({
         >
           <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
             <tr>
+              <th className={tableSerialHeaderClassName()} scope="col">
+                {TABLE_SERIAL_HEADER_LABEL}
+              </th>
               {TABLE_COLUMNS.map((col) => (
                 <th
                   key={col}
@@ -365,13 +332,13 @@ export function AssetInventoryWorkspace({
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={TABLE_COLUMNS.length + 1} className="p-4">
+                <td colSpan={TABLE_COLUMNS.length + 2} className="p-4">
                   <TableRowsSkeleton rows={6} />
                 </td>
               </tr>
             ) : rows.length === 0 ? (
               <tr>
-                <td colSpan={TABLE_COLUMNS.length + 1} className="p-6">
+                <td colSpan={TABLE_COLUMNS.length + 2} className="p-6">
                   <div className="space-y-3">
                     <EmptyState
                       variant="no-results"
@@ -395,10 +362,11 @@ export function AssetInventoryWorkspace({
                 </td>
               </tr>
             ) : (
-              rows.map((row) => (
+              rows.map((row, index) => (
                 <InventoryTableRow
                   key={row.id}
                   row={row}
+                  serial={tableRowSerial(page, pageSize, index)}
                   actionPermissions={actionPermissions}
                   onViewRow={onViewRow}
                   onMenuAction={onMenuAction}
@@ -501,11 +469,13 @@ export function AssetInventoryWorkspace({
 
 function InventoryTableRow({
   row,
+  serial,
   actionPermissions,
   onViewRow,
   onMenuAction,
 }: {
   row: InventoryRowViewModel;
+  serial: number;
   actionPermissions?: Partial<InventoryActionPermissions>;
   onViewRow?: (row: InventoryRowViewModel) => void;
   onMenuAction?: (action: InventoryMenuActionId, row: InventoryRowViewModel) => void;
@@ -536,6 +506,7 @@ function InventoryTableRow({
 
   return (
     <tr className="border-t border-border/50 transition-colors duration-200 hover:bg-muted/20 motion-reduce:transition-none">
+      <td className={tableSerialCellClassName()}>{serial}</td>
       <td className="px-3 py-2.5 font-mono text-xs">{row.assetTag}</td>
       <td className="px-3 py-2.5 font-medium">{row.laptopName}</td>
       <td className="px-3 py-2.5 font-mono text-xs">{row.serialNumber}</td>

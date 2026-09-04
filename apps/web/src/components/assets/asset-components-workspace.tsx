@@ -18,7 +18,13 @@ import {
   ASSETS_SURFACE_CARD,
   AssetsPremiumPage,
 } from "@/components/assets/shared/premium-surface";
-import { StatusBadge } from "@/components/assets/shared";
+import {
+  StatusBadge,
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -439,7 +445,10 @@ export function AssetComponentsWorkspace() {
           <table className="w-full min-w-[720px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <th className="px-4 py-2.5 font-medium">Identity</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="px-4 py-2.5 font-medium">Identity</th>
                 <th className="px-4 py-2.5 font-medium">Type</th>
                 <th className="px-4 py-2.5 font-medium">Parent asset</th>
                 <th className="px-4 py-2.5 font-medium">Status</th>
@@ -450,25 +459,26 @@ export function AssetComponentsWorkspace() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                     <Loader2 className="mx-auto size-5 animate-spin" />
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={7} className="px-4 py-10 text-center text-muted-foreground">
                     No components found.
                   </td>
                 </tr>
               ) : (
-                rows.map((row) => {
+                rows.map((row, index) => {
                   const idn = displayIdentity(row);
                   return (
                     <tr
                       key={row.id}
                       className="border-b border-border/70 transition-colors duration-150 hover:bg-muted/30"
                     >
-                      <td className="px-4 py-2.5">
+                      <td className={tableSerialCellClassName()}>{tableRowSerial(page, PAGE_SIZE, index)}</td>
+                          <td className="px-4 py-2.5">
                         <div className="font-medium">{idn.primary}</div>
                         <div className="text-xs text-muted-foreground">{idn.secondary}</div>
                         {row.linked_asset_operational_status ? (

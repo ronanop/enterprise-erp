@@ -3,9 +3,6 @@
 import { X } from "lucide-react";
 
 import {
-  DEFAULT_ASSET_TYPE_OPTIONS,
-  DEFAULT_LIFECYCLE_OPTIONS,
-  BRANCH_ALL_VALUE,
   type BranchOption,
   type InventoryFilterOption,
   type InventoryFilterValues,
@@ -18,7 +15,7 @@ export type InventoryFilterChip = {
 
 export function listActiveInventoryFilterChips(
   filters: InventoryFilterValues,
-  lookups: {
+  _lookups: {
     branches?: BranchOption[];
     categories?: InventoryFilterOption[];
     departments?: InventoryFilterOption[];
@@ -29,40 +26,6 @@ export function listActiveInventoryFilterChips(
   const chips: InventoryFilterChip[] = [];
   if (filters.search.trim()) {
     chips.push({ key: "search", label: `Search: ${filters.search.trim()}` });
-  }
-  if (filters.lifecycleStatus) {
-    const life =
-      DEFAULT_LIFECYCLE_OPTIONS.find((o) => o.value === filters.lifecycleStatus)?.label ??
-      filters.lifecycleStatus;
-    chips.push({ key: "lifecycleStatus", label: `Lifecycle: ${life}` });
-  }
-  if (filters.branchId && filters.branchId !== BRANCH_ALL_VALUE) {
-    const branch =
-      lookups.branches?.find((b) => b.id === filters.branchId)?.label ?? filters.branchId;
-    chips.push({ key: "branchId", label: `Branch: ${branch}` });
-  }
-  if (filters.departmentId) {
-    const department =
-      lookups.departments?.find((d) => d.value === filters.departmentId)?.label ??
-      filters.departmentId;
-    chips.push({ key: "departmentId", label: `Department: ${department}` });
-  }
-  if (filters.assetType) {
-    const typeOptions = lookups.assetTypes?.length
-      ? lookups.assetTypes
-      : DEFAULT_ASSET_TYPE_OPTIONS;
-    const type =
-      typeOptions.find((o) => o.value === filters.assetType)?.label ?? filters.assetType;
-    chips.push({ key: "assetType", label: `Type: ${type}` });
-  }
-  if (filters.assignmentState) {
-    const assignment = filters.assignmentState === "unassigned" ? "Unassigned" : "Assigned";
-    chips.push({ key: "assignmentState", label: `Assignment: ${assignment}` });
-  }
-  if (filters.locationId && filters.locationId !== BRANCH_ALL_VALUE) {
-    const location =
-      lookups.locations?.find((l) => l.value === filters.locationId)?.label ?? filters.locationId;
-    chips.push({ key: "locationId", label: `Location: ${location}` });
   }
   return chips;
 }

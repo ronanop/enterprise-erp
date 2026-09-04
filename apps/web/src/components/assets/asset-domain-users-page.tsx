@@ -3,6 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { UserPlus, Users } from "lucide-react";
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableRowSerialFromIndex,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -310,7 +318,10 @@ export function AssetDomainUsersPage() {
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr className="border-b border-border/80 bg-muted/60 text-xs font-semibold tracking-wide text-foreground uppercase">
-                <th className="px-4 py-2.5">User</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="px-4 py-2.5">User</th>
                 <th className="px-4 py-2.5">Domain</th>
                 <th className="px-4 py-2.5">Role</th>
                 <th className="px-4 py-2.5 text-right">Actions</th>
@@ -319,23 +330,24 @@ export function AssetDomainUsersPage() {
             <tbody>
               {loading && rows.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-4 py-10 text-center text-muted-foreground">
                     No domain memberships yet.
                   </td>
                 </tr>
               ) : (
-                rows.map((row) => (
+                rows.map((row, index) => (
                   <tr
                     key={row.id}
                     className="border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
                   >
-                    <td className="px-4 py-2.5">
+                    <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
+                          <td className="px-4 py-2.5">
                       <div className="flex items-center gap-2.5">
                         <span
                           className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground"

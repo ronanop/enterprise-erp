@@ -26,6 +26,10 @@ import {
   isNonItAssetStatus,
   StatusBadge,
   TableRowsSkeleton,
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
 } from "@/components/assets/shared";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -489,6 +493,9 @@ export function NonItAssetsWorkspace() {
             <table className="w-full min-w-[48rem] text-sm" data-testid="nonit-inventory-table">
               <thead className="bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                 <tr>
+                  <th className={tableSerialHeaderClassName()} scope="col">
+                    {TABLE_SERIAL_HEADER_LABEL}
+                  </th>
                   {TABLE_COLUMNS.map((col) => (
                     <th key={col} className="px-4 py-2.5 font-semibold whitespace-nowrap">
                       {col}
@@ -500,13 +507,13 @@ export function NonItAssetsWorkspace() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={TABLE_COLUMNS.length + 1} className="p-4">
+                    <td colSpan={TABLE_COLUMNS.length + 2} className="p-4">
                       <TableRowsSkeleton rows={6} />
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td colSpan={TABLE_COLUMNS.length + 1} className="p-8">
+                    <td colSpan={TABLE_COLUMNS.length + 2} className="p-8">
                       <div className="space-y-4">
                         <EmptyState
                           variant={filtersActive ? "no-results" : "no-assets"}
@@ -552,11 +559,12 @@ export function NonItAssetsWorkspace() {
                     </td>
                   </tr>
                 ) : (
-                  rows.map((row) => (
+                  rows.map((row, index) => (
                     <tr
                       key={row.id}
                       className="border-t border-border/50 transition-colors duration-200 hover:bg-muted/20 motion-reduce:transition-none"
                     >
+                      <td className={tableSerialCellClassName()}>{tableRowSerial(page, pageSize, index)}</td>
                       <td className="px-4 py-3">
                         <Link
                           href={`/assets/non-it/${row.id}`}

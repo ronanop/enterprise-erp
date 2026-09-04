@@ -101,6 +101,48 @@ describe("AssetDcChallanWorkspace", () => {
     await waitFor(() => expect(screen.getByText("DC-2026-000001")).toBeInTheDocument());
     expect(screen.getAllByText("Pending").length).toBeGreaterThan(0);
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
+    expect(screen.queryByText(/Open in All Assets/i)).toBeNull();
+  });
+
+  it("filters the table when a KPI card is clicked and marks it selected", async () => {
+    const user = userEvent.setup();
+    render(<AssetDcChallanWorkspace />);
+    await waitFor(() => expect(screen.getByText("DC-2026-000001")).toBeInTheDocument());
+    searchMock.mockClear();
+    const pendingKpi = screen.getByRole("button", { name: "Filter by Pending" });
+    await user.click(pendingKpi);
+    await waitFor(() => {
+      expect(searchMock).toHaveBeenCalledWith(expect.objectContaining({ status: "PENDING" }));
+    });
+    expect(pendingKpi).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Status: Pending")).toBeInTheDocument();
+  });
+
+  it("clears the status filter when the active KPI card is clicked again", async () => {
+    const user = userEvent.setup();
+    render(<AssetDcChallanWorkspace />);
+    await waitFor(() => expect(screen.getByText("DC-2026-000001")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "Filter by Pending" }));
+    await waitFor(() => {
+      expect(searchMock).toHaveBeenCalledWith(expect.objectContaining({ status: "PENDING" }));
+    });
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Filter by Pending" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+    });
+    searchMock.mockClear();
+    await user.click(screen.getByRole("button", { name: "Filter by Pending" }));
+    await waitFor(() => {
+      expect(searchMock).toHaveBeenCalled();
+      const lastCall = searchMock.mock.calls.at(-1)?.[0] as { status?: string };
+      expect(lastCall.status).toBeUndefined();
+    });
+    expect(screen.getByRole("button", { name: "Filter by Pending" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
   });
 
   it("shows per-item skip reasons after bulk send", async () => {

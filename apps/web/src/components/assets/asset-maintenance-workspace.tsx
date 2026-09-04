@@ -13,6 +13,13 @@ import {
   RefreshCw,
   X,
 } from "lucide-react";
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+
 
 import {
   ASSETS_ACCENT_BTN,
@@ -45,7 +52,7 @@ import { cn } from "@/lib/utils";
 
 const MAINTENANCE_TYPES = ["preventive", "corrective", "emergency", "annual_service"] as const;
 const PAGE_SIZE = 25;
-const TABLE_COLS = 8;
+const TABLE_COLS = 9;
 
 function formatMaintenanceType(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -381,6 +388,9 @@ export function AssetMaintenanceWorkspace() {
               <table className="min-w-full text-sm">
                 <thead className="bg-muted/40 text-left">
                   <tr>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
                     <th className="px-3 py-2 font-medium">Asset code</th>
                     <th className="px-3 py-2 font-medium">Asset name</th>
                     <th className="px-3 py-2 font-medium">Serial</th>
@@ -407,8 +417,9 @@ export function AssetMaintenanceWorkspace() {
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row) => (
+                    rows.map((row, index) => (
                         <tr key={row.id} className="border-t border-border/60">
+                          <td className={tableSerialCellClassName()}>{tableRowSerial(page, PAGE_SIZE, index)}</td>
                           <td className="px-3 py-2 font-mono text-xs">
                             {row.asset_code ?? "—"}
                           </td>

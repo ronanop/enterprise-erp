@@ -54,7 +54,7 @@ describe("buildInventoryListQuery", () => {
     expect(q.branch_id).toBeUndefined();
   });
 
-  it("includes lifecycle, category, and Phase 5F server filters", () => {
+  it("ignores removed advanced filters in the list query", () => {
     const q = buildInventoryListQuery({
       preset: "all",
       filters: {
@@ -65,17 +65,19 @@ describe("buildInventoryListQuery", () => {
         assetType: "type-1",
         locationId: "loc-1",
         assignmentState: "assigned",
+        branchId: "b1",
       },
       headerLocationId: BRANCH_ALL_VALUE,
       page: 1,
       pageSize: 25,
     });
-    expect(q.status).toBe("active");
-    expect(q.asset_category_id).toBe("cat-1");
-    expect(q.department_id).toBe("dept-1");
-    expect(q.asset_type_id).toBe("type-1");
-    expect(q.location_id).toBe("loc-1");
-    expect(q.assignment_state).toBe("assigned");
+    expect(q).toEqual({
+      page: 1,
+      page_size: 25,
+      q: undefined,
+      operational_status: undefined,
+      location_id: undefined,
+    });
   });
 
   it("does not send location_id when All locations selected", () => {

@@ -12,6 +12,10 @@ import { createAssetNavigation } from "@/components/assets/navigation/asset-navi
 import { BRANCH_ALL_VALUE, EMPTY_INVENTORY_FILTERS } from "@/components/assets/shared";
 import { assetOperationsService } from "@/services/assets-service";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
+}));
+
 vi.mock("@/components/assets/navigation/use-asset-navigation", () => ({
   useAssetNavigation: () => createAssetNavigation(vi.fn()),
 }));
@@ -160,7 +164,7 @@ describe("AssetInventoryContainer", () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
     await waitFor(() => expect(assetOperationsService.listAssets).toHaveBeenCalled());
-    await user.click(screen.getByRole("tab", { name: "Ready To Move" }));
+    await user.selectOptions(screen.getByTestId("inventory-status-filter"), "ready");
     await waitFor(() => {
       expect(assetOperationsService.listAssets).toHaveBeenCalledWith(
         expect.objectContaining({ operational_status: "READY_TO_MOVE" }),
@@ -178,22 +182,18 @@ describe("AssetInventoryContainer", () => {
 
   it("retries after error", async () => {
     const user = userEvent.setup();
-    vi.mocked(assetOperationsService.listAssets).mockRejectedValue(new Error("fail"));
-    render(<AssetInventoryContainer />);
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
-    });
-    vi.mocked(assetOperationsService.listAssets).mockImplementation(() =>
-      Promise.resolve({
+    vi.mocked(assetOperationsService.listAssets)
+      .mockRejectedValueOnce(new Error("fail"))
+      .mockResolvedValue({
         items: [assetItem],
         total: 1,
         page: 1,
         page_size: 25,
-      }),
-    );
-    await user.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(assetOperationsService.listAssets.mock.calls.length).toBeGreaterThanOrEqual(2));
-    expect(screen.getAllByText("AST-100")[0]).toBeInTheDocument();
+      });
+    render(<AssetInventoryContainer />);
+    const retry = await screen.findByRole("button", { name: "Retry" });
+    await user.click(retry);
+    await waitFor(() => expect(screen.getAllByText("AST-100")[0]).toBeInTheDocument());
   });
 
   it("refetches when header location changes", async () => {

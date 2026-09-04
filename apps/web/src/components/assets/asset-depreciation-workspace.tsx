@@ -9,6 +9,14 @@ import {
   RotateCcw,
   SquarePen,
 } from "lucide-react";
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableRowSerialFromIndex,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -433,6 +441,9 @@ export function AssetDepreciationWorkspace() {
               <table className="min-w-full text-sm">
                 <thead className="bg-muted/40 text-left">
                   <tr>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
                     <th scope="col" className="px-3 py-2 font-medium">
                       Document
                     </th>
@@ -450,18 +461,18 @@ export function AssetDepreciationWorkspace() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={4}>
+                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={5}>
                         <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                       </td>
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={4}>
+                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={5}>
                         No depreciation runs found.
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row) => {
+                    rows.map((row, index) => {
                       const asset = assetMap.get(row.asset_id);
                       const isSelected = selected?.id === row.id;
                       return (
@@ -472,6 +483,7 @@ export function AssetDepreciationWorkspace() {
                           }`}
                           onClick={() => setSelected(row)}
                         >
+                          <td className={tableSerialCellClassName()}>{tableRowSerial(page, pageSize, index)}</td>
                           <td className="px-3 py-2 font-mono text-xs">{row.document_number}</td>
                           <td className="px-3 py-2">
                             <div className="font-medium">{asset?.asset_name ?? row.asset_id}</div>
@@ -801,7 +813,10 @@ export function AssetDepreciationWorkspace() {
                 <table className="min-w-full text-sm">
                   <thead className="bg-muted/40 text-left">
                     <tr>
-                      <th scope="col" className="px-3 py-2 font-medium">
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th scope="col" className="px-3 py-2 font-medium">
                         Document
                       </th>
                       <th scope="col" className="px-3 py-2 font-medium">
@@ -815,29 +830,30 @@ export function AssetDepreciationWorkspace() {
                   <tbody>
                     {historyLoading ? (
                       <tr>
-                        <td className="px-3 py-6 text-center text-muted-foreground" colSpan={3}>
+                        <td className="px-3 py-6 text-center text-muted-foreground" colSpan={4}>
                           <Loader2 className="mx-auto h-4 w-4 animate-spin" />
                         </td>
                       </tr>
                     ) : !historyAssetId ? (
                       <tr>
-                        <td className="px-3 py-6 text-center text-muted-foreground" colSpan={3}>
+                        <td className="px-3 py-6 text-center text-muted-foreground" colSpan={4}>
                           Select an asset to view depreciation history.
                         </td>
                       </tr>
                     ) : historyRows.length === 0 ? (
                       <tr>
-                        <td className="px-3 py-6 text-center text-muted-foreground" colSpan={3}>
+                        <td className="px-3 py-6 text-center text-muted-foreground" colSpan={4}>
                           No history for this asset.
                         </td>
                       </tr>
                     ) : (
-                      historyRows.map((row) => (
+                      historyRows.map((row, index) => (
                         <tr
                           key={row.id}
                           className="cursor-pointer border-t transition-colors duration-200 hover:bg-muted/40"
                           onClick={() => setSelected(row)}
                         >
+                          <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
                           <td className="px-3 py-2 font-mono text-xs">{row.document_number}</td>
                           <td className="px-3 py-2 font-mono text-xs">
                             {row.period_year}-{String(row.period_month).padStart(2, "0")}
@@ -881,7 +897,10 @@ export function AssetDepreciationWorkspace() {
                 <table className="min-w-full text-sm">
                   <thead className="bg-muted/40 text-left">
                     <tr>
-                      <th scope="col" className="px-3 py-2 font-medium">
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th scope="col" className="px-3 py-2 font-medium">
                         Document
                       </th>
                       <th scope="col" className="px-3 py-2 font-medium">
@@ -895,24 +914,24 @@ export function AssetDepreciationWorkspace() {
                   <tbody>
                     {batchLoading ? (
                       <tr>
-                        <td className="px-3 py-6 text-center text-muted-foreground" colSpan={3}>
+                        <td className="px-3 py-6 text-center text-muted-foreground" colSpan={4}>
                           <Loader2 className="mx-auto h-4 w-4 animate-spin" />
                         </td>
                       </tr>
                     ) : !batchFilterId.trim() ? (
                       <tr>
-                        <td className="px-3 py-6 text-center text-muted-foreground" colSpan={3}>
+                        <td className="px-3 py-6 text-center text-muted-foreground" colSpan={4}>
                           Enter a batch UUID or generate a period run.
                         </td>
                       </tr>
                     ) : batchRows.length === 0 ? (
                       <tr>
-                        <td className="px-3 py-6 text-center text-muted-foreground" colSpan={3}>
+                        <td className="px-3 py-6 text-center text-muted-foreground" colSpan={4}>
                           No rows for this batch.
                         </td>
                       </tr>
                     ) : (
-                      batchRows.map((row) => {
+                      batchRows.map((row, index) => {
                         const asset = assetMap.get(row.asset_id);
                         return (
                           <tr
@@ -920,7 +939,8 @@ export function AssetDepreciationWorkspace() {
                             className="cursor-pointer border-t transition-colors duration-200 hover:bg-muted/40"
                             onClick={() => setSelected(row)}
                           >
-                            <td className="px-3 py-2 font-mono text-xs">{row.document_number}</td>
+                            <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{row.document_number}</td>
                             <td className="px-3 py-2 text-xs">
                               {asset?.asset_code ?? shortId(row.asset_id)}
                             </td>

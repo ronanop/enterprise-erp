@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Archive, Bell, CheckCheck, Loader2, RefreshCw } from "lucide-react";
 
@@ -326,14 +333,17 @@ export function AssetNotificationWorkspace() {
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b text-muted-foreground">
-                      <th className="py-2 pr-2 font-medium">Type</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="py-2 pr-2 font-medium">Type</th>
                       <th className="py-2 pr-2 font-medium">Asset</th>
                       <th className="py-2 pr-2 font-medium">Delivery</th>
                       <th className="py-2 font-medium">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => {
+                    {rows.map((row, index) => {
                       const asset = assetMap.get(row.asset_id);
                       const selectedRow = selected?.id === row.id;
                       return (
@@ -344,6 +354,7 @@ export function AssetNotificationWorkspace() {
                           }`}
                           onClick={() => setSelected(row)}
                         >
+                          <td className={tableSerialCellClassName()}>{tableRowSerial(page, PAGE_SIZE, index)}</td>
                           <td className="py-2 pr-2">{row.notification_type}</td>
                           <td className="py-2 pr-2">
                             {asset?.asset_code ?? row.asset_id.slice(0, 8)}

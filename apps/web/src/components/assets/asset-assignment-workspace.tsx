@@ -15,6 +15,13 @@ import {
   Undo2,
   X,
 } from "lucide-react";
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -582,7 +589,10 @@ export function AssetAssignmentWorkspace() {
             <table className="min-w-full text-sm">
               <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <th scope="col" className="px-3 py-2 font-medium">
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th scope="col" className="px-3 py-2 font-medium">
                     Document
                   </th>
                   <th scope="col" className="px-3 py-2 font-medium">
@@ -608,22 +618,23 @@ export function AssetAssignmentWorkspace() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={7}>
+                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={8}>
                       <Loader2 className="mx-auto size-5 animate-spin" />
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={7}>
+                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={8}>
                       No assignments found.
                     </td>
                   </tr>
                 ) : (
-                  rows.map((row) => {
+                  rows.map((row, index) => {
                     const asset = assetMap.get(row.asset_id);
                     return (
                       <tr key={row.id} className="border-t transition-colors duration-150 hover:bg-muted/40">
-                        <td className="px-3 py-2 font-mono text-xs">{row.document_number}</td>
+                        <td className={tableSerialCellClassName()}>{tableRowSerial(page, pageSize, index)}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{row.document_number}</td>
                         <td className="px-3 py-2">
                           <div className="font-medium">{asset?.asset_name ?? row.asset_id}</div>
                           <div className="text-xs text-muted-foreground">

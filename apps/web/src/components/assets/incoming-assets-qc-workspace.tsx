@@ -24,6 +24,11 @@ import {
   EmptyState,
   StatCard,
   type BranchOption,
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableRowSerialFromIndex,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
 } from "@/components/assets/shared";
 import { listBranchOptions } from "@/lib/org-options";
 import { isAuthenticated } from "@/lib/auth";
@@ -416,6 +421,9 @@ export function IncomingAssetsQcWorkspace() {
               <table className="w-full min-w-[52rem] text-left text-sm">
                 <thead className="border-b bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
                     <th className="px-3 py-2 font-medium">GRN</th>
                     <th className="px-3 py-2 font-medium">Product</th>
                     <th className="px-3 py-2 font-medium text-right">Arrived</th>
@@ -429,13 +437,13 @@ export function IncomingAssetsQcWorkspace() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td className="px-3 py-10 text-center text-muted-foreground" colSpan={8}>
+                      <td className="px-3 py-10 text-center text-muted-foreground" colSpan={9}>
                         <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                       </td>
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-8" colSpan={8}>
+                      <td className="px-3 py-8" colSpan={9}>
                         <EmptyState
                           variant="no-queue"
                           title="No arrived lines for QC"
@@ -445,7 +453,7 @@ export function IncomingAssetsQcWorkspace() {
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row) => (
+                    rows.map((row, index) => (
                       <tr
                         key={row.id}
                         className={cn(
@@ -453,6 +461,7 @@ export function IncomingAssetsQcWorkspace() {
                           selected?.id === row.id && "bg-muted/50",
                         )}
                       >
+                        <td className={tableSerialCellClassName()}>{tableRowSerial(page, pageSize, index)}</td>
                         <td className="px-3 py-2">
                           <div className="font-medium">{row.grn_document_number}</div>
                           <div className="text-xs text-muted-foreground">
@@ -655,7 +664,10 @@ export function IncomingAssetsQcWorkspace() {
                         <table className="w-full text-left text-sm">
                           <thead className="bg-muted/40 text-xs text-muted-foreground">
                             <tr>
-                              <th className="px-2 py-1.5">Unit</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="px-2 py-1.5">Unit</th>
                               <th className="px-2 py-1.5">Arrival</th>
                               <th className="px-2 py-1.5">QC</th>
                               <th className="px-2 py-1.5">Action</th>
@@ -664,8 +676,9 @@ export function IncomingAssetsQcWorkspace() {
                           <tbody>
                             {(selected.units ?? [])
                               .filter((u) => u.status === "ARRIVED")
-                              .map((unit) => (
+                              .map((unit, index) => (
                                 <tr key={unit.id} className="border-t">
+                                  <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
                                   <td className="px-2 py-1.5 font-mono text-xs">
                                     {unit.serial_number || `Unit ${unit.unit_index}`}
                                   </td>

@@ -57,6 +57,16 @@ describe("StatCard", () => {
     await user.click(screen.getByRole("button"));
     expect(onClick).toHaveBeenCalledOnce();
   });
+
+  it("does not show Open in All Assets hint on interactive cards", () => {
+    render(<StatCard title="Pending" value={3} onClick={() => undefined} />);
+    expect(screen.queryByText(/Open in All Assets/i)).toBeNull();
+  });
+
+  it("marks selected interactive cards with aria-pressed", () => {
+    render(<StatCard title="Pending" value={3} onClick={() => undefined} selected />);
+    expect(screen.getByRole("button", { name: "Pending" })).toHaveAttribute("aria-pressed", "true");
+  });
 });
 
 describe("QueueCard", () => {
@@ -167,7 +177,7 @@ describe("BranchSelector", () => {
 });
 
 describe("InventoryFilterBar", () => {
-  it("renders advanced fields and apply", () => {
+  it("keeps a hidden stub after advanced filters were removed", () => {
     render(
       <InventoryFilterBar
         values={EMPTY_INVENTORY_FILTERS}
@@ -176,11 +186,8 @@ describe("InventoryFilterBar", () => {
         onReset={vi.fn()}
       />,
     );
-    expect(screen.getByText("Lifecycle status")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Search")).not.toBeInTheDocument();
-    expect(screen.queryByText("Operational status")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reset" })).toBeInTheDocument();
+    expect(screen.getByTestId("inventory-filter-form")).toBeInTheDocument();
+    expect(screen.queryByText("Lifecycle status")).not.toBeInTheDocument();
   });
 });
 

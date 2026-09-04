@@ -15,7 +15,13 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatusBadge } from "@/components/assets/shared";
+import {
+  StatusBadge,
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerialFromIndex,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
 import {
   canReinstateFromOperationalStatus,
   canStartDisposalFromOperationalStatus,
@@ -734,6 +740,9 @@ function AssignmentHistoryDetailList({
       <table className="w-full text-sm">
         <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
           <tr>
+            <th className={tableSerialHeaderClassName()} scope="col">
+              {TABLE_SERIAL_HEADER_LABEL}
+            </th>
             <th className="px-3 py-2">Document</th>
             <th className="px-3 py-2">Assignee</th>
             <th className="px-3 py-2">Status</th>
@@ -745,8 +754,9 @@ function AssignmentHistoryDetailList({
           </tr>
         </thead>
         <tbody>
-          {entries.map((row) => (
+          {entries.map((row, index) => (
             <tr key={row.id} className="border-t">
+              <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
               <td className="px-3 py-2 font-mono text-xs">{row.documentNumber}</td>
               <td className="px-3 py-2">{row.assigneeLabel}</td>
               <td className="px-3 py-2">{row.status}</td>
@@ -789,6 +799,9 @@ function HistoryList({
       <table className="w-full text-sm">
         <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
           <tr>
+            <th className={tableSerialHeaderClassName()} scope="col">
+              {TABLE_SERIAL_HEADER_LABEL}
+            </th>
             {columns.map((c) => (
               <th key={c} className="px-3 py-2 capitalize">
                 {c.replace(/_/g, " ")}
@@ -797,8 +810,9 @@ function HistoryList({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <tr key={String(row.id)} className="border-t">
+              <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
               {columns.map((c) => (
                 <td key={c} className="px-3 py-2">
                   {String(row[c] ?? "—")}

@@ -105,17 +105,9 @@ export async function fetchAllInventoryRowsForExport(input: {
     input.deps?.listAssignments ??
     assetOperationsService.listAssignments.bind(assetOperationsService);
 
-  const baseQuery = buildInventoryListQuery({
-    preset: input.preset,
-    filters: input.filters,
-    headerLocationId: input.headerLocationId,
-    page: 1,
-    pageSize: INVENTORY_EXPORT_API_PAGE_SIZE,
-  });
-
   let assignmentItems: AssetsRow[];
   try {
-    assignmentItems = await fetchAllAssignmentPages(listAssignments, baseQuery.branch_id);
+    assignmentItems = await fetchAllAssignmentPages(listAssignments, undefined);
   } catch (err) {
     throw new InventoryExportError(
       "fetch_failed",

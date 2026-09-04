@@ -45,7 +45,7 @@
 - Secondary nav (current scope): Assets · Configuration · Operations (Assignment, **DC Challan**, Transfers, Maintenance) · Lifecycle (Disposal) · Extended (Components, Documents, QR, Reports)
 - Module sidebar: docked, opaque, `bg-sidebar`; collapse toggle (not hover overlay); icons ~16px; row height ~40px
 - Lifecycle funnel: Category → Asset → Assignment → Maintenance → Depreciation → Disposal
-- Prefer Lucide; sticky headers; `overflow-x-auto` on wide tables
+- **Inventory chrome:** Search field + operational-status dropdown (replaces preset pills and advanced Filters popover). Removed advanced filters: lifecycle, branch, department, assignment, location. Header location selector remains.
 
 ### Section Order
 

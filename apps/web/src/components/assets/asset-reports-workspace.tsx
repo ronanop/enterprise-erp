@@ -1,5 +1,12 @@
 "use client";
 
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+
 import { useCallback, useEffect, useState } from "react";
 import {
   Bar,
@@ -398,6 +405,9 @@ export function AssetReportsWorkspace() {
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr className="border-b text-muted-foreground">
+                        <th className={tableSerialHeaderClassName()} scope="col">
+                          {TABLE_SERIAL_HEADER_LABEL}
+                        </th>
                         {Object.keys(runResult.items[0]).map((k) => (
                           <th key={k} className="py-2 pr-2 font-medium">
                             {k}
@@ -406,8 +416,9 @@ export function AssetReportsWorkspace() {
                       </tr>
                     </thead>
                     <tbody>
-                      {runResult.items.map((row, idx) => (
-                        <tr key={idx} className="border-b">
+                      {runResult.items.map((row, index) => (
+                        <tr key={index} className="border-b">
+                          <td className={tableSerialCellClassName()}>{tableRowSerial(page, PAGE_SIZE, index)}</td>
                           {Object.keys(runResult.items[0]).map((k) => (
                             <td key={k} className="py-2 pr-2">
                               {String(row[k] ?? "")}
@@ -489,13 +500,16 @@ export function AssetReportsWorkspace() {
                 <table className="w-full text-left text-sm">
                   <thead>
                     <tr className="border-b text-muted-foreground">
-                      <th className="py-2 pr-2 font-medium">Code</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="py-2 pr-2 font-medium">Code</th>
                       <th className="py-2 pr-2 font-medium">Type</th>
                       <th className="py-2 font-medium">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {snapshots.map((row) => (
+                    {snapshots.map((row, index) => (
                       <tr
                         key={row.id}
                         className={`cursor-pointer border-b transition-colors duration-200 hover:bg-muted/50 ${
@@ -503,6 +517,7 @@ export function AssetReportsWorkspace() {
                         }`}
                         onClick={() => setSelectedSnap(row)}
                       >
+                        <td className={tableSerialCellClassName()}>{tableRowSerial(snapPage, PAGE_SIZE, index)}</td>
                         <td className="py-2 pr-2">{row.report_code}</td>
                         <td className="py-2 pr-2">{row.report_type}</td>
                         <td className="py-2">

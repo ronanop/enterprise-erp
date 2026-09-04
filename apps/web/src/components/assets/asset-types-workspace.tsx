@@ -3,7 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Cpu, LayoutGrid, Plus, Search, Tags } from "lucide-react";
 
-import { EmptyState } from "@/components/assets/shared";
+import {
+  EmptyState,
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableRowSerialFromIndex,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
 import {
   ASSETS_ACCENT_BTN,
   ASSETS_ICON_CHIP,
@@ -376,7 +383,10 @@ export function AssetTypesWorkspace() {
           <table className="w-full min-w-[40rem] text-sm">
             <thead className="bg-muted/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-4 py-2.5 font-semibold">Type</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="px-4 py-2.5 font-semibold">Type</th>
                 <th className="px-4 py-2.5 font-semibold">Hardware</th>
                 <th className="px-4 py-2.5 font-semibold">As component</th>
                 <th className="px-4 py-2.5 font-semibold">Status</th>
@@ -389,7 +399,7 @@ export function AssetTypesWorkspace() {
               {loading ? (
                 <tr>
                   <td
-                    colSpan={canManage ? 5 : 4}
+                    colSpan={canManage ? 6 : 5}
                     className="px-4 py-12 text-center text-muted-foreground"
                   >
                     Loading…
@@ -397,7 +407,7 @@ export function AssetTypesWorkspace() {
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={canManage ? 5 : 4} className="p-6">
+                  <td colSpan={canManage ? 6 : 5} className="p-6">
                     <EmptyState
                       variant="no-assets"
                       title={rows.length === 0 ? "No types yet" : "No matches"}
@@ -413,11 +423,12 @@ export function AssetTypesWorkspace() {
                   </td>
                 </tr>
               ) : (
-                filtered.map((row) => (
+                filtered.map((row, index) => (
                   <tr
                     key={row.id}
                     className="border-t border-border/50 transition-colors duration-200 hover:bg-muted/20 motion-reduce:transition-none"
                   >
+                    <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
                     <td className="px-4 py-3">
                       <div className="min-w-0">
                         <p className="truncate font-semibold text-foreground">{row.name}</p>

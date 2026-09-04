@@ -23,6 +23,8 @@ export type StatCardProps = {
   emptyLabel?: string;
   className?: string;
   onClick?: () => void;
+  /** When true, card shows as the active filter / selection. */
+  selected?: boolean;
   /** Accessible name when interactive (defaults to title). */
   "aria-label"?: string;
   /** Optional accent chip around the icon (premium dashboard look). */
@@ -57,6 +59,7 @@ export function StatCard({
   emptyLabel = "—",
   className,
   onClick,
+  selected = false,
   "aria-label": ariaLabel,
   tone = "default",
 }: StatCardProps) {
@@ -78,12 +81,15 @@ export function StatCard({
             "active:translate-y-px motion-reduce:active:translate-y-0",
             TONE_RING[tone],
           ),
+        selected &&
+          "border-[#0369A1] shadow-[0_8px_24px_-12px_rgba(3,105,161,0.35)] ring-1 ring-[#0369A1]/35",
         className,
       )}
       onClick={onClick}
       role={interactive ? "button" : undefined}
       tabIndex={interactive ? 0 : undefined}
       aria-label={interactive ? ariaLabel ?? title : undefined}
+      aria-pressed={interactive ? selected : undefined}
       onKeyDown={
         interactive
           ? (e) => {
@@ -96,7 +102,12 @@ export function StatCard({
       }
     >
       <CardHeader className="flex flex-row items-start justify-between space-y-0 px-4 pb-1.5 pt-3">
-        <CardTitle className="text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+        <CardTitle
+          className={cn(
+            "text-[11px] font-semibold tracking-wide uppercase",
+            selected ? "text-[#0369A1]" : "text-muted-foreground",
+          )}
+        >
           {title}
         </CardTitle>
         {Icon ? (
@@ -124,8 +135,6 @@ export function StatCard({
           >
             {trend.label}
           </p>
-        ) : interactive ? (
-          <p className="mt-1 text-[11px] font-medium text-[#0369A1]/80">Open in All Assets →</p>
         ) : null}
       </CardContent>
     </Card>

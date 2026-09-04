@@ -255,6 +255,7 @@ class AssetRepository(AstScopedRepository):
         search = (filters.search or "").strip()
         if search:
             term = f"%{search}%"
+            status_term = f"%{search.replace(' ', '_')}%"
             stmt = stmt.where(
                 or_(
                     AstAsset.asset_name.ilike(term),
@@ -263,6 +264,9 @@ class AssetRepository(AstScopedRepository):
                     AstAsset.serial_number.ilike(term),
                     AstAsset.make.ilike(term),
                     AstAsset.model.ilike(term),
+                    AstAsset.operational_status.ilike(term),
+                    AstAsset.operational_status.ilike(status_term),
+                    AstAsset.status.ilike(term),
                     self._exists_active_assignment_employee_search(
                         filters.company_id, term
                     ),

@@ -12,6 +12,11 @@ import {
   X,
 } from "lucide-react";
 
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { listEmployeeDirectory, type EmployeeDirectoryEntry } from "@/lib/org-options";
@@ -524,7 +529,9 @@ export function ItAssetImportDialog({
               <table className="min-w-full text-sm">
                 <thead className="bg-muted/40 text-left">
                   <tr>
-                    <th className="px-2 py-2">#</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
                     <th className="px-2 py-2">Asset name</th>
                     <th className="px-2 py-2">Type</th>
                     <th className="px-2 py-2">Status</th>
@@ -537,7 +544,7 @@ export function ItAssetImportDialog({
                 <tbody>
                   {validated.map((row) => (
                     <tr key={row.row_number} className="border-t border-border/60">
-                      <td className="px-2 py-1.5 text-muted-foreground">{row.row_number}</td>
+                      <td className={tableSerialCellClassName()}>{row.row_number}</td>
                       <td className="px-2 py-1.5 font-medium">{row.asset_name}</td>
                       <td className="px-2 py-1.5 text-xs">{row.asset_type || "—"}</td>
                       <td className="px-2 py-1.5 text-xs">{row.operational_status}</td>
