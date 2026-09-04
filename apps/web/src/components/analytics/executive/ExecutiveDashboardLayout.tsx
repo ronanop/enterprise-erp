@@ -22,7 +22,7 @@ export function ExecutiveDashboardLayout({ role }: { role: ExecutiveRole }) {
             {config.label} executive dashboard
           </h1>
           <p className="text-sm text-muted-foreground">
-            Cross-module KPI tiles for {config.label}. Live values wire in Phase 3.
+            Cross-module KPI tiles for {config.label}. Values come from matching source KPI keys.
           </p>
         </div>
         <nav aria-label="Executive role" className="flex flex-wrap gap-1">
