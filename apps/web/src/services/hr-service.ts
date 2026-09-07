@@ -46,10 +46,16 @@ function normalizeRows(data: unknown): HrRow[] {
   return [];
 }
 
-async function safeList(
+type ListResult = { rows: HrRow[]; error?: string; status?: number };
+
+const LIST_CACHE_TTL_MS = 15_000;
+const listCache = new Map<string, { at: number; value: ListResult }>();
+const listInflight = new Map<string, Promise<ListResult>>();
+
+async function safeListUncached(
   apiPath: string,
   query?: Record<string, string | number | boolean | null | undefined>,
-): Promise<{ rows: HrRow[]; error?: string; status?: number }> {
+): Promise<ListResult> {
   try {
     const response = await resourceService.list(apiPath, { page_size: 200, page: 1, ...query });
     return { rows: normalizeRows(response.data) };
@@ -61,7 +67,25 @@ async function safeList(
   }
 }
 
-async function safeListAll(apiPath: string): Promise<{ rows: HrRow[]; error?: string; status?: number }> {
+async function safeList(
+  apiPath: string,
+  query?: Record<string, string | number | boolean | null | undefined>,
+): Promise<ListResult> {
+  const cacheKey = `${apiPath}?${JSON.stringify(query ?? {})}`;
+  const hit = listCache.get(cacheKey);
+  if (hit && Date.now() - hit.at < LIST_CACHE_TTL_MS) return hit.value;
+  const pending = listInflight.get(cacheKey);
+  if (pending) return pending;
+  const req = safeListUncached(apiPath, query).then((value) => {
+    listCache.set(cacheKey, { at: Date.now(), value });
+    return value;
+  });
+  listInflight.set(cacheKey, req);
+  void req.finally(() => listInflight.delete(cacheKey));
+  return req;
+}
+
+async function safeListAll(apiPath: string): Promise<ListResult> {
   const all: HrRow[] = [];
   let page = 1;
   let lastStatus: number | undefined;
@@ -76,6 +100,72 @@ async function safeListAll(apiPath: string): Promise<{ rows: HrRow[]; error?: st
     page += 1;
   }
   return { rows: all, status: lastStatus };
+}
+
+export type HrOverviewSlice =
+  | "designations"
+  | "profiles"
+  | "employment"
+  | "shifts"
+  | "shiftAssignments"
+  | "holidayCalendars"
+  | "leaveTypes"
+  | "leaveBalances"
+  | "leaveRequests"
+  | "attendance"
+  | "documents"
+  | "reviews"
+  | "goals"
+  | "appraisals"
+  | "training"
+  | "trainingAttendance"
+  | "separation";
+
+const OVERVIEW_LOADERS: Record<HrOverviewSlice, () => Promise<ListResult>> = {
+  designations: () => safeList("/hr/designations"),
+  profiles: () => safeList("/hr/employee-profiles"),
+  employment: () => safeList("/hr/employment"),
+  shifts: () => safeList("/hr/shifts"),
+  shiftAssignments: () => safeList("/hr/shift-assignments"),
+  holidayCalendars: () => safeList("/hr/holiday-calendars"),
+  leaveTypes: () => safeList("/hr/leave-types"),
+  leaveBalances: () => safeList("/hr/leave-balances"),
+  leaveRequests: () => safeListAll("/hr/leave-requests"),
+  attendance: () => safeListAll("/hr/attendance"),
+  documents: () => safeList("/hr/employee-documents"),
+  reviews: () => safeList("/hr/performance-reviews"),
+  goals: () => safeList("/hr/goals"),
+  appraisals: () => safeList("/hr/appraisals"),
+  training: () => safeList("/hr/training"),
+  trainingAttendance: () => safeListAll("/hr/training-attendance"),
+  separation: () => safeList("/hr/separation"),
+};
+
+const ALL_OVERVIEW_SLICES = Object.keys(OVERVIEW_LOADERS) as HrOverviewSlice[];
+
+function emptyOverview(): HrOverview {
+  return {
+    designations: [],
+    profiles: [],
+    employment: [],
+    shifts: [],
+    shiftAssignments: [],
+    holidayCalendars: [],
+    leaveTypes: [],
+    leaveBalances: [],
+    leaveRequests: [],
+    attendance: [],
+    documents: [],
+    reviews: [],
+    goals: [],
+    appraisals: [],
+    training: [],
+    trainingAttendance: [],
+    separation: [],
+    errors: [],
+    statusCodes: [],
+    partial: false,
+  };
 }
 
 export function formatQty(value: number): string {
@@ -128,91 +218,21 @@ export function employeeDisplayName(row: HrRow): string {
   return name || String(row.employee_code ?? row.document_number ?? "—");
 }
 
-export async function loadHrOverview(): Promise<HrOverview> {
-  const [
-    designations,
-    profiles,
-    employment,
-    shifts,
-    shiftAssignments,
-    holidayCalendars,
-    leaveTypes,
-    leaveBalances,
-    leaveRequests,
-    attendance,
-    documents,
-    reviews,
-    goals,
-    appraisals,
-    training,
-    trainingAttendance,
-    separation,
-  ] = await Promise.all([
-    safeList("/hr/designations"),
-    safeList("/hr/employee-profiles"),
-    safeList("/hr/employment"),
-    safeList("/hr/shifts"),
-    safeList("/hr/shift-assignments"),
-    safeList("/hr/holiday-calendars"),
-    safeList("/hr/leave-types"),
-    safeList("/hr/leave-balances"),
-    safeListAll("/hr/leave-requests"),
-    safeListAll("/hr/attendance"),
-    safeList("/hr/employee-documents"),
-    safeList("/hr/performance-reviews"),
-    safeList("/hr/goals"),
-    safeList("/hr/appraisals"),
-    safeList("/hr/training"),
-    safeListAll("/hr/training-attendance"),
-    safeList("/hr/separation"),
-  ]);
-
-  const results = [
-    designations,
-    profiles,
-    employment,
-    shifts,
-    shiftAssignments,
-    holidayCalendars,
-    leaveTypes,
-    leaveBalances,
-    leaveRequests,
-    attendance,
-    documents,
-    reviews,
-    goals,
-    appraisals,
-    training,
-    trainingAttendance,
-    separation,
-  ];
-  const errors = results.map((r) => r.error).filter((e): e is string => Boolean(e));
-  const statusCodes = results
-    .map((r) => r.status)
-    .filter((s): s is number => typeof s === "number");
-
-  return {
-    designations: designations.rows,
-    profiles: profiles.rows,
-    employment: employment.rows,
-    shifts: shifts.rows,
-    shiftAssignments: shiftAssignments.rows,
-    holidayCalendars: holidayCalendars.rows,
-    leaveTypes: leaveTypes.rows,
-    leaveBalances: leaveBalances.rows,
-    leaveRequests: leaveRequests.rows,
-    attendance: attendance.rows,
-    documents: documents.rows,
-    reviews: reviews.rows,
-    goals: goals.rows,
-    appraisals: appraisals.rows,
-    training: training.rows,
-    trainingAttendance: trainingAttendance.rows,
-    separation: separation.rows,
-    errors,
-    statusCodes,
-    partial: errors.length > 0,
-  };
+export async function loadHrOverview(slices?: HrOverviewSlice[]): Promise<HrOverview> {
+  const keys = slices?.length ? slices : ALL_OVERVIEW_SLICES;
+  const loaded = await Promise.all(keys.map(async (key) => [key, await OVERVIEW_LOADERS[key]()] as const));
+  const out = emptyOverview();
+  const errors: string[] = [];
+  const statusCodes: number[] = [];
+  for (const [key, result] of loaded) {
+    out[key] = result.rows;
+    if (result.error) errors.push(result.error);
+    if (typeof result.status === "number") statusCodes.push(result.status);
+  }
+  out.errors = errors;
+  out.statusCodes = statusCodes;
+  out.partial = errors.length > 0;
+  return out;
 }
 
 export async function listHrBranchOptions(): Promise<HrOption[]> {
@@ -229,8 +249,14 @@ export async function listHrBranchOptions(): Promise<HrOption[]> {
 
 export async function listHrEmployeeOptions(): Promise<HrOption[]> {
   try {
-    const res = await resourceService.list("/employees");
-    return asArray(res.data).map((r) => ({
+    const all: HrRow[] = [];
+    for (let page = 1; page <= 25; page += 1) {
+      const res = await resourceService.list("/employees", { page_size: 200, page });
+      const chunk = asArray(res.data);
+      all.push(...chunk);
+      if (chunk.length < 200) break;
+    }
+    return all.map((r) => ({
       id: String(r.id),
       label:
         `${[r.first_name, r.last_name].filter(Boolean).join(" ")}${

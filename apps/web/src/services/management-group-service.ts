@@ -28,7 +28,7 @@ export type FeatureCatalogSection = {
   features: { key: string; label: string; default: boolean; parent_key: string | null }[];
 };
 
-const API = "/hr/management-groups";
+const API = "/hrms/management-groups";
 
 export async function loadManagementGroupCatalog(): Promise<FeatureCatalogSection[]> {
   const res = await apiClient<FeatureCatalogSection[]>(`${API}/feature-catalog`);

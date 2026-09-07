@@ -14,6 +14,7 @@ from modules.hr.dependencies import (
     get_db,
     get_pagination,
     paginate,
+    require_hr_superadmin_only,
 )
 from modules.hr.schemas import (
     AppraisalCreate,
@@ -1647,7 +1648,8 @@ def list_kpis(
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
 ):
-    return APIResponse(message="OK", data=paginate(KpiService(db).list(ctx, company_id), pagination))
+    rows = paginate(KpiService(db).list(ctx, company_id), pagination)
+    return APIResponse(message="OK", data=[KpiResponse.model_validate(r) for r in rows])
 
 
 @kpis_router.post("", response_model=APIResponse[KpiResponse])
@@ -1945,6 +1947,16 @@ def create_separation(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=SeparationService(db).create(ctx, **body.model_dump()))
+
+
+@separation_router.delete("/{row_id}", response_model=APIResponse[None])
+def delete_separation(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_hr_superadmin_only())],
+    db: Annotated[Session, Depends(get_db)],
+):
+    SeparationService(db).delete(ctx, row_id)
+    return APIResponse(message="Deleted", data=None)
 
 
 @separation_router.post("/{row_id}/submit", response_model=APIResponse[SeparationResponse])

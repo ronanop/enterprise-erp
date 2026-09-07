@@ -59,4 +59,12 @@ def test_hr_admin_assign_request_accepts_company_ids() -> None:
         company_ids=[company_id],
     )
     assert record.company_ids == [company_id]
+    assert record.nav_unrestricted is True
+
+
+def test_hr_admin_nav_request_normalizes_in_schema() -> None:
+    from modules.hr.schemas import HrAdminNavRequest
+
+    body = HrAdminNavRequest(nav_keys=["dashboard", "payroll-run"])
+    assert body.nav_keys == ["dashboard", "payroll-run"]
 

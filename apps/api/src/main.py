@@ -10,6 +10,7 @@ from core.config import settings
 from core.constants import API_V1_PREFIX, APP_DESCRIPTION
 from core.exceptions import register_exception_handlers
 from core.logging import setup_logging
+from middleware.hr_api_alias import HrToHrmsAliasMiddleware
 from middleware.request_context import RequestContextMiddleware
 from modules.mcp_server.bootstrap import mcp_lifespan, mount_mcp_on_app
 from shared.router import api_v1_router
@@ -41,6 +42,7 @@ def create_app() -> FastAPI:
     )
 
     application.add_middleware(RequestContextMiddleware)
+    application.add_middleware(HrToHrmsAliasMiddleware)
 
     cors_origins = list(settings.cors_origins)
     lan_origin_regex = (

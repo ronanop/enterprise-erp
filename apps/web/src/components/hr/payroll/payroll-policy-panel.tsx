@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SetupField, SetupInput, SetupSelect } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { resourceService } from "@/services/api-client";
+import { loadResolvedPayrollPfPolicy } from "@/lib/payroll-pf-policy";
 
 type PolicyForm = {
   id?: string;
@@ -28,8 +29,8 @@ type PolicyForm = {
 const EMPTY: PolicyForm = {
   period_day_denominator: "fixed_30",
   salary_proration_mode: "fixed_30_day_factor",
-  sandwich_enabled: false,
-  sandwich_triggers: "unauthorized_absence",
+  sandwich_enabled: true,
+  sandwich_triggers: "both",
   sandwich_off_becomes: "lop",
   pf_mode: "fixed_split",
   pf_employee_amount: "1800",
@@ -75,8 +76,8 @@ export function PayrollPolicyPanel() {
         version: Number(activeRow?.version ?? row.version ?? 1),
         period_day_denominator: String(row.period_day_denominator ?? "fixed_30"),
         salary_proration_mode: String(row.salary_proration_mode ?? "fixed_30_day_factor"),
-        sandwich_enabled: asBool(row.sandwich_enabled),
-        sandwich_triggers: String(row.sandwich_triggers ?? "unauthorized_absence"),
+        sandwich_enabled: asBool(row.sandwich_enabled ?? true),
+        sandwich_triggers: String(row.sandwich_triggers ?? "both"),
         sandwich_off_becomes: String(row.sandwich_off_becomes ?? "lop"),
         pf_mode: String(row.pf_mode ?? "fixed_split"),
         pf_employee_amount: String(row.pf_employee_amount ?? 1800),
@@ -125,7 +126,8 @@ export function PayrollPolicyPanel() {
         const id = String((active.data as Record<string, unknown> | null)?.id ?? "");
         if (id) await resourceService.update("/payroll/policies", id, body);
       }
-      toast("Payroll policy saved");
+      toast("Salary configuration saved");
+      await loadResolvedPayrollPfPolicy().catch(() => null);
       await load();
     } catch (err) {
       toast(err instanceof Error ? err.message : "Save failed", "error");
@@ -153,6 +155,10 @@ export function PayrollPolicyPanel() {
 
       <section className="rounded-xl border border-border/70 bg-card p-4">
         <h3 className="text-sm font-semibold">Sandwich policy</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Leave Friday and leave Monday converts Sat/Sun to LOP. Unauthorized absence on both sides
+          does the same. Trigger default is Both. Off becomes LOP.
+        </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           <SetupField label="Sandwich">
             <SetupSelect
@@ -169,9 +175,9 @@ export function PayrollPolicyPanel() {
               onChange={(e) => setForm((f) => ({ ...f, sandwich_triggers: e.target.value }))}
               disabled={!form.sandwich_enabled}
             >
-              <option value="unauthorized_absence">Unauthorized absence</option>
+              <option value="both">Both (leave or absence)</option>
               <option value="approved_leave">Approved leave</option>
-              <option value="both">Both</option>
+              <option value="unauthorized_absence">Unauthorized absence</option>
             </SetupSelect>
           </SetupField>
           <SetupField label="Off becomes">
@@ -189,6 +195,9 @@ export function PayrollPolicyPanel() {
 
       <section className="rounded-xl border border-border/70 bg-card p-4">
         <h3 className="text-sm font-semibold">Provident fund</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Company PF for every payroll run. Salary structures do not set employee PF.
+        </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <SetupField label="PF type">
             <SetupSelect
@@ -274,7 +283,7 @@ export function PayrollPolicyPanel() {
         disabled={saving}
         onClick={() => void save()}
       >
-        {saving ? "Saving…" : "Save payroll policy"}
+        {saving ? "Saving…" : "Save salary configuration"}
       </Button>
     </div>
   );

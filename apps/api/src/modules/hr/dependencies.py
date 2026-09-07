@@ -18,6 +18,7 @@ __all__ = [
     "get_tenant_context",
     "require_permission",
     "require_hr_module_admin",
+    "require_hr_superadmin_only",
     "TenantContext",
     "get_db",
     "paginate",
@@ -75,5 +76,27 @@ def require_hr_module_admin() -> Callable:
         if not HrModuleAdminService(db).is_admin(ctx):
             raise ForbiddenException("HR module admin access required")
         return ctx
+
+    return _checker
+
+
+def require_hr_superadmin_only() -> Callable:
+    """Platform superadmin / tenant admin, or explicit hr.superadmin:manage. Not module membership."""
+
+    def _checker(
+        ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+        db: Annotated[Session, Depends(get_db)],
+    ) -> TenantContext:
+        from modules.foundation.service.rbac_service import RBACService
+        from modules.hr.permissions import HR_SUPERADMIN_PERMISSION
+
+        if ctx.user_type in {"super_admin", "tenant_admin"}:
+            return ctx
+        rbac = RBACService(db)
+        if ctx.user_id is not None and rbac.has_permission(
+            ctx.user_id, ctx.tenant_id, HR_SUPERADMIN_PERMISSION
+        ):
+            return ctx
+        raise ForbiddenException("HR superadmin access required")
 
     return _checker

@@ -10,6 +10,13 @@ export type HrAdminRecord = {
   login_created: boolean;
   temporary_password: string | null;
   company_ids: string[];
+  nav_keys: string[];
+  nav_unrestricted: boolean;
+};
+
+export type HrNavAccessRecord = {
+  unrestricted: boolean;
+  nav_keys: string[];
 };
 
 export type HrAdminEntityOption = {
@@ -38,12 +45,18 @@ export type HrActivityLogRecord = {
   summary: string;
 };
 
-export async function listHrAdmins(): Promise<HrAdminRecord[]> {
-  const res = await apiClient<HrAdminRecord[]>("/hr/superadmin/admins");
-  return (res.data ?? []).map((row) => ({
+function mapAdmin(row: HrAdminRecord): HrAdminRecord {
+  return {
     ...row,
     company_ids: Array.isArray(row.company_ids) ? row.company_ids.map(String) : [],
-  }));
+    nav_keys: Array.isArray(row.nav_keys) ? row.nav_keys.map(String) : [],
+    nav_unrestricted: Boolean(row.nav_unrestricted),
+  };
+}
+
+export async function listHrAdmins(): Promise<HrAdminRecord[]> {
+  const res = await apiClient<HrAdminRecord[]>("/hr/superadmin/admins");
+  return (res.data ?? []).map(mapAdmin);
 }
 
 export async function listHrEntities(): Promise<HrAdminEntityOption[]> {
@@ -60,10 +73,7 @@ export async function assignHrAdmin(
     body: { employee_id: employeeId, company_ids: companyIds },
   });
   if (!res.data) throw new Error(res.message || "Assign failed");
-  return {
-    ...res.data,
-    company_ids: Array.isArray(res.data.company_ids) ? res.data.company_ids.map(String) : [],
-  };
+  return mapAdmin(res.data);
 }
 
 export async function setHrAdminEntities(
@@ -75,9 +85,23 @@ export async function setHrAdminEntities(
     body: { company_ids: companyIds },
   });
   if (!res.data) throw new Error(res.message || "Entity update failed");
+  return mapAdmin(res.data);
+}
+
+export async function setHrAdminNav(employeeId: string, navKeys: string[]): Promise<HrAdminRecord> {
+  const res = await apiClient<HrAdminRecord>(`/hr/superadmin/admins/${employeeId}/nav`, {
+    method: "PATCH",
+    body: { nav_keys: navKeys },
+  });
+  if (!res.data) throw new Error(res.message || "Menu update failed");
+  return mapAdmin(res.data);
+}
+
+export async function getMyHrNavAccess(): Promise<HrNavAccessRecord> {
+  const res = await apiClient<HrNavAccessRecord>("/hr/nav-access");
   return {
-    ...res.data,
-    company_ids: Array.isArray(res.data.company_ids) ? res.data.company_ids.map(String) : [],
+    unrestricted: Boolean(res.data?.unrestricted),
+    nav_keys: Array.isArray(res.data?.nav_keys) ? res.data.nav_keys.map(String) : [],
   };
 }
 

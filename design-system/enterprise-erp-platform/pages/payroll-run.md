@@ -2,38 +2,43 @@
 
 > **PROJECT:** Enterprise ERP Platform
 > **Page Type:** HRMS payroll run workspace
-> Rules in this file **override** `MASTER.md` and extend `pages/payroll.md`.
+> Rules in this file **override** `MASTER.md` and extend `pages/hr-payroll.md`.
 
 ---
 
 ## Page-Specific Rules
 
-### Layout Overrides
+### Layout
 
-- **Run payroll list** stays at `/hr/payroll?section=run-payroll`
-- **New run** and **run detail** are **full pages**, not right drawers:
-  - `/hr/payroll/runs/new`
-  - `/hr/payroll/runs/[runId]`
-  - `/hr/payroll/runs/[runId]/employees/[employeeId]`
-- Dense tables; light content pane; no KPI cards, heroes, or dark-mode-by-default
+- **Run payroll** lives on `/hr/payroll?section=run-payroll` as a same-tab drill-down (not a wizard drawer).
+- Three clickable levels: **Months** → **Employees** → **Pay**.
+- Dense tables; light pane; no KPI heroes; no dark-mode-by-default.
+- Entire row is `cursor-pointer` with 150–300ms hover.
 
-### List
+### Months
 
-- Columns: Pay cycle, Employees, Gross, Deductions, Net, Status, Lock
-- No run ID / document number column
-- Month filter required
-- Entire row opens the run page
-- No instructional / “how payroll works” copy
+- One row per month. Columns: Month, Employees, Gross, Deductions, Net, Status, Lock.
+- Click a month to open employees.
+- **Generate payroll** on this screen: pick month, show cycle dates, confirm. Updates the same month.
 
-### New run / detail
+### Employees
 
-- Month selector, then a full employee table (name, attendance, salary)
-- Click an employee for earnings / deductions / net
-- Lock is a row/header icon: locked runs stay clickable (view)
-- Locked months cannot be generated again; other months can
+- Columns: Name, Present, Leave, Weekly off, Loss of pay, Payable, Gross, Deductions, Net.
+- Click a name to open pay.
+- Lock stays on the header.
+
+### Pay
+
+- Earnings and deductions tables plus net.
+- Leave adjust for that employee.
+- Back returns to employees, then months.
+
+### Labels
+
+- Use Month, Weekly off, Loss of pay, Pending HR. Do not use Cutover, WO, LOP on the main tables.
 
 ### Avoid
 
-- Right-sidebar run wizard
-- Helper paragraphs about proration, snapshots, or month-lock policy
-- Emoji icons
+- Jumping to `/hr/payroll/runs/new` for generate.
+- Right-sidebar run wizard.
+- Emoji icons.

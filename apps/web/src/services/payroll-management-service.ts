@@ -39,6 +39,13 @@ import {
 } from "@/lib/payroll-cycle";
 import { summarizePayrollAttendance } from "@/lib/payroll-attendance-cycle";
 import type { PayrollCycle } from "@/lib/payroll-cycle";
+import {
+  getCachedPayrollPfPolicy,
+  loadResolvedPayrollPfPolicy,
+  pfDeductionRows,
+  replacePfDeductions,
+  type PayrollPfPolicy,
+} from "@/lib/payroll-pf-policy";
 import { loadHrMasterDirectory, type HrMasterOption } from "@/services/hr-master-connector";
 import { devWarn } from "@/lib/dev-log";
 
@@ -332,7 +339,7 @@ function saveRunEmployeeLines(runId: string, lines: PayrollRunEmployeeLine[]): v
 
 function getSavedRunEmployeeLines(runId: string): PayrollRunEmployeeLine[] {
   const map = readJson<Record<string, PayrollRunEmployeeLine[]>>(K.runLines, {});
-  return (map[runId] ?? []).map(withFixedMonthlyPf);
+  return (map[runId] ?? []).map(withPolicyPf);
 }
 
 function scalePayAmount(label: string, amount: number, factor: number): number {
@@ -340,21 +347,16 @@ function scalePayAmount(label: string, amount: number, factor: number): number {
   return Math.round(amount * factor);
 }
 
-/** Restore PF that was incorrectly scaled by payable-day factor in older local lines. */
-function withFixedMonthlyPf(line: PayrollRunEmployeeLine): PayrollRunEmployeeLine {
-  const factor = line.attendanceFactor;
-  if (!Number.isFinite(factor) || factor <= 0 || factor >= 1) return line;
-  let changed = false;
-  const deductionItems = line.deductionItems.map((d) => {
-    if (!isPfDeductionLabel(d.label)) return d;
-    // API lines already store the monthly PF on "Employee PF"; do not inflate them.
-    if (d.label.trim().toLowerCase() === "employee pf") return d;
-    const monthly = Math.round(d.amount / factor);
-    if (monthly === d.amount) return d;
-    changed = true;
-    return { ...d, amount: monthly };
+/** Apply company payroll-policy PF (not salary-structure employer PF). */
+function withPolicyPf(line: PayrollRunEmployeeLine): PayrollRunEmployeeLine {
+  const factor = Number.isFinite(line.attendanceFactor) && line.attendanceFactor > 0 ? line.attendanceFactor : 1;
+  const cycleBasic = line.earnings.find((e) => e.label.toLowerCase() === "basic")?.amount ?? 0;
+  const monthlyBasic = factor > 0 ? cycleBasic / factor : cycleBasic;
+  const deductionItems = replacePfDeductions(line.deductionItems, getCachedPayrollPfPolicy(), {
+    monthlyBasic,
+    cycleBasic,
+    factor,
   });
-  if (!changed) return line;
   const deductionTotal = deductionItems.reduce((sum, d) => sum + d.amount, 0);
   return {
     ...line,
@@ -382,6 +384,7 @@ function buildEmployeePayLine(
   sal: EmployeeSalary,
   att: PayrollEmployeeAttendance | undefined,
   structures: SalaryStructure[],
+  policy: PayrollPfPolicy = getCachedPayrollPfPolicy(),
 ): PayrollRunEmployeeLine {
   const lopDays = att?.lopDays ?? att?.absentDays ?? 0;
   const periodDays = SALARY_DAY_BASIS;
@@ -411,7 +414,6 @@ function buildEmployeePayLine(
     : [{ label: "CTC / Gross", amount: sal.monthlyCtc }];
   const deductionItems = st
     ? [
-        { label: "PF", amount: st.pf },
         { label: "ESI", amount: st.esi },
         { label: "Professional Tax", amount: st.professionalTax },
         { label: "TDS", amount: st.tds },
@@ -420,12 +422,18 @@ function buildEmployeePayLine(
         { label: "Insurance", amount: st.insurance },
         { label: "Other Deductions", amount: st.otherDeductions },
       ].filter((d) => d.amount > 0)
-    : [{ label: "Statutory", amount: Math.round(sal.monthlyCtc * 0.12) }];
+    : [];
   const scaledEarnings = earnings.map((e) => ({ ...e, amount: Math.round(e.amount * factor) }));
-  const scaledDeductions = deductionItems.map((d) => ({
+  const monthlyBasic = earnings.find((e) => e.label.toLowerCase() === "basic")?.amount ?? 0;
+  const cycleBasic = scaledEarnings.find((e) => e.label.toLowerCase() === "basic")?.amount ?? 0;
+  const scaledOther = deductionItems.map((d) => ({
     ...d,
     amount: scalePayAmount(d.label, d.amount, factor),
   }));
+  const scaledDeductions = [
+    ...pfDeductionRows(policy, { monthlyBasic, cycleBasic, factor }),
+    ...scaledOther,
+  ];
   const gross = scaledEarnings.reduce((sum, e) => sum + e.amount, 0);
   const deductionTotal = scaledDeductions.reduce((sum, d) => sum + d.amount, 0);
   return {
@@ -477,7 +485,7 @@ function mapApiRunLineToEmployeeLine(
     { label: "ESI", amount: Number(bd.esi_employee ?? 0) },
     { label: "Professional Tax", amount: Number(bd.professional_tax ?? 0) },
   ].filter((d) => d.amount > 0);
-  return {
+  return withPolicyPf({
     employeeId: String(line.employee_id ?? sal?.employeeId ?? ""),
     employeeName: sal?.employeeName ?? String(line.employee_id ?? ""),
     employeeCode: sal?.employeeId,
@@ -501,13 +509,13 @@ function mapApiRunLineToEmployeeLine(
     gross: Number(line.gross_earnings ?? 0),
     deductionTotal: Number(line.total_deductions ?? 0),
     net: Number(line.net_pay ?? 0),
-  };
+  });
 }
 
 async function fetchApiRunLines(runId: string): Promise<Record<string, unknown>[]> {
   const linesRes = await resourceService.list<Record<string, unknown>>("/payroll/payroll-run-lines", {
     page: 1,
-    page_size: 500,
+    page_size: 200,
   });
   const lineRows = Array.isArray(linesRes.data) ? linesRes.data : [];
   return lineRows.filter((l) => String(l.payroll_run_id ?? "") === runId);
@@ -589,6 +597,7 @@ export async function previewPayrollRunEmployees(
   month: string,
   cutoverDay?: number,
 ): Promise<{ cycle: import("@/lib/payroll-cycle").PayrollCycle; lines: PayrollRunEmployeeLine[] }> {
+  const policy = await loadResolvedPayrollPfPolicy();
   const cycle = buildPayrollCycle(month, cutoverDay ?? readPayrollCutoverDay());
   const master = await loadHrMasterDirectory().catch(() => ({ employees: [] as HrMasterOption[] }));
   const hr = master.employees ?? [];
@@ -638,6 +647,7 @@ export async function previewPayrollRunEmployees(
       { ...stub, employeeId: emp.id, employeeName: hrDisplayName(emp), department: emp.department ?? stub.department },
       findAttendanceLine(att, emp.id) ?? findAttendanceLine(att, emp.code ?? ""),
       structures,
+      policy,
     );
     return { ...line, employeeCode: emp.code || line.employeeCode };
   });
@@ -655,6 +665,106 @@ function normalizePayrollRun(row: PayrollRun): PayrollRun {
     cycleCutoverDay: cycle.cutoverDay,
     cycleLabel: cycle.label,
   };
+}
+
+function payrollRunGroupKey(run: Pick<PayrollRun, "month" | "cycleStart" | "cycleEnd">): string {
+  if (run.cycleStart && run.cycleEnd) return `c:${run.cycleStart}|${run.cycleEnd}`;
+  return `m:${(run.month || "").slice(0, 7)}`;
+}
+
+function findRunForCycle(runs: PayrollRun[], month: string, cycle: PayrollCycle): PayrollRun | undefined {
+  const ym = month.slice(0, 7);
+  return (
+    runs.find((r) => r.month.slice(0, 7) === ym) ??
+    runs.find((r) => r.cycleStart === cycle.start && r.cycleEnd === cycle.end)
+  );
+}
+
+function replaceRunInStore(row: PayrollRun): PayrollRun[] {
+  const all = uniqueRunsByMonth(
+    load<PayrollRun>(K.runs).filter((r) => r.id !== row.id && payrollRunGroupKey(r) !== payrollRunGroupKey(row)),
+  );
+  all.unshift(row);
+  save(K.runs, uniqueRunsByMonth(all));
+  return all;
+}
+
+function uniquePayslips(rows: PayslipRecord[]): PayslipRecord[] {
+  const byEmpMonth = new Map<string, PayslipRecord>();
+  for (const p of rows) {
+    const ym = (p.month || "").slice(0, 7);
+    const who = (p.employeeId || p.employeeCode || p.employeeName || p.id).toLowerCase();
+    const key = `${who}|${ym}`;
+    const prev = byEmpMonth.get(key);
+    if (!prev || (p.generatedAt || "") >= (prev.generatedAt || "")) {
+      byEmpMonth.set(key, p);
+    }
+  }
+  return [...byEmpMonth.values()];
+}
+
+function payslipsFromRunLines(run: PayrollRun, lines: PayrollRunEmployeeLine[]): PayslipRecord[] {
+  const month = run.month.slice(0, 7);
+  return lines.map((line) => ({
+    id: crypto.randomUUID(),
+    payslipCode: nextCode("slip", "PSL"),
+    runId: run.id,
+    employeeId: line.employeeId,
+    employeeName: line.employeeName,
+    employeeCode: line.employeeCode,
+    month,
+    monthLabel: monthLabel(month),
+    department: line.department,
+    bankAccount: line.bankAccount,
+    presentDays: line.presentDays,
+    leaveDays: line.leaveDays,
+    payableDays: line.payableDays,
+    periodDays: line.periodDays ?? line.workingDaysInCycle,
+    lopDays: line.lopDays,
+    weeklyOff: line.weeklyOff,
+    holidays: line.holidays,
+    earnings: line.earnings,
+    deductions: line.deductionItems,
+    gross: line.gross,
+    totalDeductions: line.deductionTotal,
+    net: line.net,
+    taxRegime: "new" as const,
+    generatedAt: nowIso(),
+  }));
+}
+
+function persistPayslipsForRun(run: PayrollRun, slips: PayslipRecord[]): PayslipRecord[] {
+  const monthKey = run.month.slice(0, 7);
+  const merged = uniquePayslips([
+    ...slips,
+    ...load<PayslipRecord>(K.payslips).filter(
+      (p) => p.runId !== run.id && p.month.slice(0, 7) !== monthKey,
+    ),
+  ]);
+  save(K.payslips, merged);
+  return merged;
+}
+
+function adoptOrphanedRunLines(before: PayrollRun[], kept: PayrollRun[]): void {
+  const lineMap = readJson<Record<string, PayrollRunEmployeeLine[]>>(K.runLines, {});
+  for (const run of kept) {
+    if ((lineMap[run.id] ?? []).length) continue;
+    const key = payrollRunGroupKey(run);
+    const donor = before.find(
+      (r) => r.id !== run.id && payrollRunGroupKey(r) === key && (lineMap[r.id] ?? []).length > 0,
+    );
+    if (!donor) continue;
+    saveRunEmployeeLines(run.id, lineMap[donor.id]);
+  }
+}
+
+export function findPayrollRunForMonth(runs: PayrollRun[], month: string): PayrollRun | undefined {
+  const ym = month.slice(0, 7);
+  const uniq = uniqueRunsByMonth(runs);
+  return (
+    uniq.find((r) => r.month.slice(0, 7) === ym) ??
+    uniq.find((r) => (r.cycleStart || "").slice(0, 7) === ym)
+  );
 }
 
 async function buildAttendanceLinesForCycle(
@@ -680,6 +790,7 @@ async function buildAttendanceLinesForCycle(
   if (!people.length) return [];
 
   const { loadAttendanceForEmployee } = await import("@/services/attendance-management-service");
+  const { loadLeaveDirectory } = await import("@/services/leave-management-service");
 
   const records: Awaited<ReturnType<typeof loadAttendanceForEmployee>> = [];
   const chunkSize = 8;
@@ -691,6 +802,9 @@ async function buildAttendanceLinesForCycle(
     for (const rows of parts) records.push(...rows);
   }
 
+  const leaveDir = await loadLeaveDirectory().catch(() => null);
+  const leaveRequests = leaveDir?.requests ?? [];
+
   const refs = people.map((p) => ({
     employeeId: p.id,
     employeeName: hrDisplayName(p),
@@ -699,7 +813,7 @@ async function buildAttendanceLinesForCycle(
     hrEmployeeId: p.id,
   }));
 
-  return summarizePayrollAttendance(cycle, refs, records, []);
+  return summarizePayrollAttendance(cycle, refs, records, leaveRequests);
 }
 
 export async function previewPayrollAttendanceForCycle(
@@ -826,6 +940,7 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
   let loans = load<LoanRecord>(K.loans);
 
   try {
+    await loadResolvedPayrollPfPolicy().catch(() => null);
     const overview = await loadPayrollOverview();
 
     const previous = structures;
@@ -905,7 +1020,9 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
           status: local.status === "locked" ? "locked" : api.status || local.status,
         });
       }
-      runs = [...byId.values()];
+      const mergedRuns = [...byId.values()];
+      runs = uniqueRunsByMonth(mergedRuns);
+      adoptOrphanedRunLines(mergedRuns, runs);
       save(K.runs, runs);
     }
 
@@ -947,26 +1064,28 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
     }
 
     if (overview.payslips.length) {
-      payslips = overview.payslips.map((p, i) => ({
+      const fromApi = overview.payslips.map((p, i) => ({
         id: String(p.id ?? crypto.randomUUID()),
         payslipCode: String(p.document_number ?? `PSL-${String(i + 1).padStart(6, "0")}`),
         runId: String(p.payroll_run_id ?? ""),
         employeeId: String(p.employee_id ?? ""),
         employeeName: String(p.employee_name ?? "Employee"),
-        month: String(p.month ?? "2026-07").slice(0, 7),
-        monthLabel: monthLabel(String(p.month ?? "2026-07").slice(0, 7)),
+        employeeCode: String(p.employee_code ?? ""),
+        month: String(p.month ?? p.payroll_month ?? "").slice(0, 7) || "2026-07",
+        monthLabel: monthLabel(String(p.month ?? p.payroll_month ?? "").slice(0, 7) || "2026-07"),
         department: "—",
         bankAccount: "XXXX",
         presentDays: 22,
         leaveDays: 0,
-        earnings: [{ label: "Gross", amount: Number(p.gross_earnings ?? 0) }],
+        earnings: [{ label: "Gross", amount: Number(p.gross_earnings ?? p.gross_salary ?? 0) }],
         deductions: [{ label: "Deductions", amount: Number(p.total_deductions ?? 0) }],
-        gross: Number(p.gross_earnings ?? 0),
+        gross: Number(p.gross_earnings ?? p.gross_salary ?? 0),
         totalDeductions: Number(p.total_deductions ?? 0),
-        net: Number(p.net_pay ?? 0),
-        taxRegime: "new",
-        generatedAt: nowIso(),
+        net: Number(p.net_pay ?? p.net_salary ?? 0),
+        taxRegime: "new" as const,
+        generatedAt: String(p.issued_at ?? p.created_at ?? p.updated_at ?? ""),
       }));
+      payslips = uniquePayslips([...fromApi, ...payslips]);
       save(K.payslips, payslips);
     }
   } catch {
@@ -983,7 +1102,12 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
   salaries = dedupeEmployeeSalaries(salaries);
   if (salaries.length !== beforeDedupe) save(K.salaries, salaries);
 
-  runs = runs.map(normalizePayrollRun);
+  const normalizedRuns = runs.map(normalizePayrollRun);
+  runs = uniqueRunsByMonth(normalizedRuns);
+  adoptOrphanedRunLines(normalizedRuns, runs);
+  save(K.runs, runs);
+  payslips = uniquePayslips(payslips);
+  save(K.payslips, payslips);
 
   return {
     structures,
@@ -1310,6 +1434,13 @@ export async function runPayroll(month: string, cutoverDay?: number): Promise<Pa
     updatedAt: nowIso(),
   };
 
+  const existingSameMonth = findRunForCycle(load<PayrollRun>(K.runs), month, cycle);
+  if (existingSameMonth) {
+    row.id = existingSameMonth.id;
+    row.runCode = existingSameMonth.runCode;
+    row.createdAt = existingSameMonth.createdAt;
+  }
+
   try {
     const ctx = readJson<{ branchId?: string }>(PAY_CTX_KEY, {});
     if (ctx.branchId) {
@@ -1320,15 +1451,21 @@ export async function runPayroll(month: string, cutoverDay?: number): Promise<Pa
       );
       const periodId = String(open?.id ?? "");
       if (periodId) {
-        const created = await resourceService.create<Record<string, unknown>>("/payroll/payroll-runs", {
-          branch_id: ctx.branchId,
-          payroll_period_id: periodId,
-          run_date: `${month}-01`,
-          run_type: "regular",
-          currency_code: "INR",
-          status: "draft",
-        });
-        const runId = String(created.data?.id ?? "");
+        const reuseId = existingSameMonth && UUID_RE.test(existingSameMonth.id) ? existingSameMonth.id : "";
+        let createdDoc: Record<string, unknown> | undefined;
+        let runId = reuseId;
+        if (!runId) {
+          const created = await resourceService.create<Record<string, unknown>>("/payroll/payroll-runs", {
+            branch_id: ctx.branchId,
+            payroll_period_id: periodId,
+            run_date: `${month}-01`,
+            run_type: "regular",
+            currency_code: "INR",
+            status: "draft",
+          });
+          createdDoc = created.data;
+          runId = String(created.data?.id ?? "");
+        }
         if (runId) {
           const calculated = await resourceService.action<Record<string, unknown>>(
             "/payroll/payroll-runs",
@@ -1337,7 +1474,7 @@ export async function runPayroll(month: string, cutoverDay?: number): Promise<Pa
             {},
           );
           row.id = runId;
-          row.runCode = String(calculated.data?.document_number ?? created.data?.document_number ?? row.runCode);
+          row.runCode = String(calculated.data?.document_number ?? createdDoc?.document_number ?? row.runCode);
           row.grossTotal = Number(calculated.data?.total_gross ?? row.grossTotal);
           row.deductionTotal = Number(calculated.data?.total_deduction ?? row.deductionTotal);
           row.netTotal = Number(calculated.data?.total_net ?? row.netTotal);
@@ -1364,9 +1501,7 @@ export async function runPayroll(month: string, cutoverDay?: number): Promise<Pa
               row.grossTotal = payLines.reduce((s, l) => s + l.gross, 0);
               row.deductionTotal = payLines.reduce((s, l) => s + l.deductionTotal, 0);
               row.netTotal = payLines.reduce((s, l) => s + l.net, 0);
-              const all = load<PayrollRun>(K.runs).filter((r) => r.id !== row.id);
-              all.unshift(row);
-              save(K.runs, all);
+              replaceRunInStore(row);
               saveRunEmployeeLines(row.id, payLines);
               if (attendanceLines.length) saveRunAttendance(row.id, attendanceLines);
               appendPayrollAudit({
@@ -1394,9 +1529,7 @@ export async function runPayroll(month: string, cutoverDay?: number): Promise<Pa
   row.deductionTotal = payLines.reduce((s, l) => s + l.deductionTotal, 0);
   row.netTotal = payLines.reduce((s, l) => s + l.net, 0);
 
-  const all = load<PayrollRun>(K.runs).filter((r) => r.id !== row.id);
-  all.unshift(row);
-  save(K.runs, all);
+  replaceRunInStore(row);
   saveRunEmployeeLines(row.id, payLines);
   if (attendanceLines.length) {
     saveRunAttendance(row.id, attendanceLines);
@@ -1752,6 +1885,7 @@ function mapApiPayslipToRecord(p: Record<string, unknown>, run: PayrollRun): Pay
     runId: String(p.payroll_run_id ?? run.id),
     employeeId: String(p.employee_id ?? emp.id ?? ""),
     employeeName: String(p.employee_name ?? emp.name ?? p.employee_id ?? ""),
+    employeeCode: String(p.employee_code ?? emp.code ?? emp.employee_code ?? ""),
     month: run.month,
     monthLabel: run.monthLabel,
     department: "—",
@@ -1787,6 +1921,18 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
   const run = runs.find((r) => r.id === runId);
   if (!run) throw new Error("Payroll run not found");
 
+  const localLines = listPayrollRunEmployeeLines(runId);
+  if (localLines.length) {
+    const slips = payslipsFromRunLines(run, localLines);
+    persistPayslipsForRun(run, slips);
+    appendPayrollAudit({
+      action: "payslips_generated",
+      detail: `${slips.length} payslips for ${monthLabel(run.month)}`,
+      actor: actor(),
+    });
+    return slips;
+  }
+
   if (UUID_RE.test(runId)) {
     try {
       const gen = await resourceService.action<Record<string, unknown>[]>(
@@ -1798,8 +1944,7 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
       const rows = Array.isArray(gen.data) ? gen.data : [];
       if (rows.length) {
         const slips = rows.map((p) => mapApiPayslipToRecord(p, run));
-        const all = load<PayslipRecord>(K.payslips);
-        save(K.payslips, [...slips, ...all.filter((p) => p.runId !== runId || !UUID_RE.test(p.id))]);
+        persistPayslipsForRun(run, slips);
         appendPayrollAudit({
           action: "payslips_generated",
           detail: `${slips.length} payslips (API) for ${run.monthLabel}`,
@@ -1857,8 +2002,9 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
             runId,
             employeeId,
             employeeName: String(created.data?.employee_name ?? employeeId),
-            month: run.month,
-            monthLabel: run.monthLabel,
+            employeeCode: String(created.data?.employee_code ?? ""),
+            month: run.month.slice(0, 7),
+            monthLabel: monthLabel(run.month),
             department: "—",
             bankAccount: "—",
             presentDays: Number(line.day_summary_json && (line.day_summary_json as Record<string, unknown>).counts
@@ -1878,8 +2024,7 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
           });
         }
         if (slips.length) {
-          const all = load<PayslipRecord>(K.payslips);
-          save(K.payslips, [...slips, ...all.filter((p) => p.runId !== runId || !UUID_RE.test(p.id))]);
+          persistPayslipsForRun(run, slips);
           appendPayrollAudit({
             action: "payslips_generated",
             detail: `${slips.length} payslips (API) for ${run.monthLabel}`,
@@ -1893,96 +2038,89 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
     }
   }
 
-  const salaries = load<EmployeeSalary>(K.salaries);
-  const structures = load<SalaryStructure>(K.structures);
-  const structureMap = new Map(structures.map((s) => [s.id, s]));
-  const employees = salaries.length
-    ? salaries.filter((s) => s.salaryStatus === "active")
-    : [
-        {
-          id: "demo",
-          employeeId: "EMP-000001",
-          employeeName: "Demo Employee",
-          structureId: structures[0]?.id ?? "",
-          structureName: structures[0]?.name ?? "Standard",
-          monthlyCtc: 50000,
-          annualCtc: 600000,
-          payrollGroup: "General",
-          bankAccount: "XXXX1234",
-          taxRegime: "new" as const,
-          salaryStatus: "active" as const,
-          department: "General",
-          effectiveDate: nowIso().slice(0, 10),
-        },
+  const fromRun = listPayrollRunEmployeeLines(runId);
+  let slips = fromRun.length ? payslipsFromRunLines(run, fromRun) : [];
+
+  if (!slips.length) {
+    const salaries = load<EmployeeSalary>(K.salaries);
+    const structures = load<SalaryStructure>(K.structures);
+    const structureMap = new Map(structures.map((s) => [s.id, s]));
+    const employees = salaries.filter((s) => s.salaryStatus === "active");
+    slips = employees.map((sal) => {
+      const att =
+        getPayrollRunAttendance(runId).find(
+          (l) => l.employeeId.toLowerCase() === sal.employeeId.toLowerCase(),
+        ) ?? null;
+      const factor = att?.attendanceFactor ?? 1;
+      const st = structureMap.get(sal.structureId) ?? structures[0];
+      const earnings = st
+        ? [
+            { label: "Basic", amount: st.basic },
+            { label: "HRA", amount: st.hra },
+            { label: "Special Allowance", amount: st.specialAllowance },
+            { label: "Medical", amount: st.medicalAllowance },
+            { label: "Travel", amount: st.travelAllowance },
+            { label: "Internet", amount: st.internetAllowance },
+            { label: "Other Earnings", amount: st.otherEarnings + st.bonus + st.incentives + st.overtime + st.arrears + st.reimbursement + st.foodAllowance },
+          ].filter((e) => e.amount > 0)
+        : [{ label: "CTC / Gross", amount: sal.monthlyCtc }];
+      const deductions = st
+        ? [
+            { label: "ESI", amount: st.esi },
+            { label: "Professional Tax", amount: st.professionalTax },
+            { label: "TDS", amount: st.tds },
+            { label: "Loan Recovery", amount: st.loanRecovery },
+            { label: "Advance Recovery", amount: st.advanceRecovery },
+            { label: "Insurance", amount: st.insurance },
+            { label: "Other Deductions", amount: st.otherDeductions },
+          ].filter((d) => d.amount > 0)
+        : [];
+      const gross = Math.round(earnings.reduce((s, e) => s + e.amount, 0) * factor);
+      const scaledEarnings = earnings.map((e) => ({
+        ...e,
+        amount: Math.round(e.amount * factor),
+      }));
+      const monthlyBasic = earnings.find((e) => e.label.toLowerCase() === "basic")?.amount ?? 0;
+      const cycleBasic = scaledEarnings.find((e) => e.label.toLowerCase() === "basic")?.amount ?? 0;
+      const scaledDeductions = [
+        ...pfDeductionRows(getCachedPayrollPfPolicy(), { monthlyBasic, cycleBasic, factor }),
+        ...deductions.map((d) => ({
+          ...d,
+          amount: scalePayAmount(d.label, d.amount, factor),
+        })),
       ];
+      const totalDeductions = scaledDeductions.reduce((s, d) => s + d.amount, 0);
+      return {
+        id: crypto.randomUUID(),
+        payslipCode: nextCode("slip", "PSL"),
+        runId,
+        employeeId: sal.employeeId,
+        employeeName: sal.employeeName,
+        month: run.month.slice(0, 7),
+        monthLabel: monthLabel(run.month),
+        department: sal.department,
+        bankAccount: sal.bankAccount,
+        presentDays: att?.presentDays ?? 0,
+        leaveDays: att?.leaveDays ?? 0,
+        earnings: scaledEarnings,
+        deductions: scaledDeductions,
+        gross,
+        totalDeductions,
+        net: Math.max(0, gross - totalDeductions),
+        taxRegime: sal.taxRegime,
+        generatedAt: nowIso(),
+      };
+    });
+  }
 
-  const slips: PayslipRecord[] = employees.map((sal) => {
-    const att =
-      getPayrollRunAttendance(runId).find(
-        (l) => l.employeeId.toLowerCase() === sal.employeeId.toLowerCase(),
-      ) ?? null;
-    const factor = att?.attendanceFactor ?? 1;
-    const st = structureMap.get(sal.structureId) ?? structures[0];
-    const earnings = st
-      ? [
-          { label: "Basic", amount: st.basic },
-          { label: "HRA", amount: st.hra },
-          { label: "Special Allowance", amount: st.specialAllowance },
-          { label: "Medical", amount: st.medicalAllowance },
-          { label: "Travel", amount: st.travelAllowance },
-          { label: "Internet", amount: st.internetAllowance },
-          { label: "Other Earnings", amount: st.otherEarnings + st.bonus + st.incentives + st.overtime + st.arrears + st.reimbursement + st.foodAllowance },
-        ].filter((e) => e.amount > 0)
-      : [{ label: "CTC / Gross", amount: sal.monthlyCtc }];
-    const deductions = st
-      ? [
-          { label: "PF", amount: st.pf },
-          { label: "ESI", amount: st.esi },
-          { label: "Professional Tax", amount: st.professionalTax },
-          { label: "TDS", amount: st.tds },
-          { label: "Loan Recovery", amount: st.loanRecovery },
-          { label: "Advance Recovery", amount: st.advanceRecovery },
-          { label: "Insurance", amount: st.insurance },
-          { label: "Other Deductions", amount: st.otherDeductions },
-        ].filter((d) => d.amount > 0)
-      : [{ label: "Statutory", amount: Math.round(sal.monthlyCtc * 0.12) }];
-    const gross = Math.round(earnings.reduce((s, e) => s + e.amount, 0) * factor);
-    const scaledEarnings = earnings.map((e) => ({
-      ...e,
-      amount: Math.round(e.amount * factor),
-    }));
-    const scaledDeductions = deductions.map((d) => ({
-      ...d,
-      amount: scalePayAmount(d.label, d.amount, factor),
-    }));
-    const totalDeductions = scaledDeductions.reduce((s, d) => s + d.amount, 0);
-    return {
-      id: crypto.randomUUID(),
-      payslipCode: nextCode("slip", "PSL"),
-      runId,
-      employeeId: sal.employeeId,
-      employeeName: sal.employeeName,
-      month: run.month,
-      monthLabel: run.cycleLabel || run.monthLabel,
-      department: sal.department,
-      bankAccount: sal.bankAccount,
-      presentDays: att?.presentDays ?? 0,
-      leaveDays: att?.leaveDays ?? 0,
-      earnings: scaledEarnings,
-      deductions: scaledDeductions,
-      gross,
-      totalDeductions,
-      net: Math.max(0, gross - totalDeductions),
-      taxRegime: sal.taxRegime,
-      generatedAt: nowIso(),
-    };
-  });
+  if (!slips.length) {
+    throw new Error("No employees on this payroll run. Run payroll for the month first.");
+  }
 
-  const all = load<PayslipRecord>(K.payslips);
-  save(K.payslips, [...slips, ...all]);
+  persistPayslipsForRun(run, slips);
   appendPayrollAudit({
     action: "payslips_generated",
-    detail: `${slips.length} payslips for ${run.monthLabel}`,
+    detail: `${slips.length} payslips for ${monthLabel(run.month)}`,
     actor: actor(),
   });
   return slips;
@@ -2060,9 +2198,40 @@ export function exportRunsCsv(runs: PayrollRun[]): string {
   return [h.join(","), ...lines].join("\n");
 }
 
+export function uniqueRunsByMonth(runs: PayrollRun[]): PayrollRun[] {
+  const rank = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === "locked" || s === "paid" || s === "posted") return 5;
+    if (s === "approved") return 4;
+    if (s === "pending_hr" || s === "pending_finance" || s === "processing" || s === "calculated") return 3;
+    if (s === "draft") return 1;
+    return 2;
+  };
+  const byMonth = new Map<string, PayrollRun>();
+  for (const run of runs) {
+    const key = payrollRunGroupKey(run);
+    const prev = byMonth.get(key);
+    if (!prev) {
+      byMonth.set(key, run);
+      continue;
+    }
+    const betterStatus = rank(run.status) > rank(prev.status);
+    const sameStatus = rank(run.status) === rank(prev.status);
+    const newer = (run.updatedAt || run.createdAt || "") >= (prev.updatedAt || prev.createdAt || "");
+    const apiPreferred = UUID_RE.test(run.id) && !UUID_RE.test(prev.id);
+    if (betterStatus || (sameStatus && (apiPreferred || newer))) {
+      byMonth.set(key, run);
+    }
+  }
+  return [...byMonth.values()].sort((a, b) =>
+    (b.cycleStart || b.month).localeCompare(a.cycleStart || a.month),
+  );
+}
+
 export function filterRuns(runs: PayrollRun[], f: PayrollFilters) {
   const q = f.query.trim().toLowerCase();
-  return runs.filter((r) => {
+  return uniqueRunsByMonth(
+    runs.filter((r) => {
     const locked = isMonthLocked(r.month) || r.status === "locked";
     if (f.status === "locked" && !locked) return false;
     if (f.status === "unlocked" && locked) return false;
@@ -2079,7 +2248,8 @@ export function filterRuns(runs: PayrollRun[], f: PayrollFilters) {
     }
     if (!q) return true;
     return [r.runCode, r.monthLabel, r.cycleLabel, r.status].join(" ").toLowerCase().includes(q);
-  });
+    }),
+  );
 }
 
 export function importStructuresCsv(text: string): number {

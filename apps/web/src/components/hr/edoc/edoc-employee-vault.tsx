@@ -23,6 +23,7 @@ import {
 
 import { DocumentPreviewContent } from "@/components/hr/shared/document-preview-content";
 import { HrLoadingBlock } from "@/components/hr/hr-primitives";
+import { EmsPagination } from "@/components/hr/workforce/ems-primitives";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ import type { OnboardingDocument } from "@/types/onboarding-management";
 import { policyAppliesToEntity, type OnboardingPolicyDoc } from "@/services/onboarding-policies-service";
 import type { ExitDocument } from "@/types/offboarding";
 import { cn } from "@/lib/utils";
+import { EMPLOYEE_LIST_PAGE_SIZE } from "@/services/employee-management-service";
 
 export type EmployeeDocBundle = {
   key: string;
@@ -292,6 +294,7 @@ export function EdocEmployeeVault({
   policyCatalog,
 }: Props) {
   const [filter, setFilter] = useState<VaultFilter>("all");
+  const [listPage, setListPage] = useState(1);
   const [preview, setPreview] = useState<PreviewTarget>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [previewWidth, setPreviewWidth] = useState(PREVIEW_DEFAULT);
@@ -308,6 +311,21 @@ export function EdocEmployeeVault({
       return filter === "complete" ? pct >= 100 : pct < 100;
     });
   }, [bundles, query, filter]);
+
+  const listTotal = filtered.length;
+  const pageRows = useMemo(() => {
+    const start = (listPage - 1) * EMPLOYEE_LIST_PAGE_SIZE;
+    return filtered.slice(start, start + EMPLOYEE_LIST_PAGE_SIZE);
+  }, [filtered, listPage]);
+
+  useEffect(() => {
+    setListPage(1);
+  }, [query, filter]);
+
+  useEffect(() => {
+    const pages = Math.max(1, Math.ceil(filtered.length / EMPLOYEE_LIST_PAGE_SIZE));
+    if (listPage > pages) setListPage(pages);
+  }, [filtered.length, listPage]);
 
   const selected = useMemo(
     () => bundles.find((b) => b.key === selectedKey) ?? null,
@@ -419,7 +437,7 @@ export function EdocEmployeeVault({
                 No employees match this search
               </li>
             ) : (
-              filtered.map((b) => {
+              pageRows.map((b) => {
                 const c = completeness(b);
                 const photo = groupDocs(b.documents).photo[0]?.fileDataUrl;
                 const active = selectedKey === b.key;
@@ -453,6 +471,12 @@ export function EdocEmployeeVault({
               })
             )}
           </ul>
+          <EmsPagination
+            page={listPage}
+            pageSize={EMPLOYEE_LIST_PAGE_SIZE}
+            total={listTotal}
+            onPageChange={setListPage}
+          />
         </aside>
 
         <section className="erp-scroll min-h-0 min-w-0 flex-1 overflow-y-auto rounded-xl border border-border/70 bg-card p-4 shadow-sm">

@@ -32,6 +32,7 @@ import {
   formatQty,
   loadHrOverview,
   type HrOverview,
+  type HrOverviewSlice,
   type HrRow,
 } from "@/services/hr-service";
 import { loadPayrollOverview, type PayrollOverview } from "@/services/payroll-service";
@@ -41,19 +42,21 @@ import {
   type RecruitmentOverview,
 } from "@/services/recruitment-service";
 
-function useHrData() {
+function useHrData(slices?: HrOverviewSlice[]) {
   const [data, setData] = useState<HrOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const authenticated = typeof window !== "undefined" ? isAuthenticated() : false;
+  const sliceKey = slices?.join(",") ?? "";
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await loadHrOverview());
+      const keys = sliceKey ? (sliceKey.split(",") as HrOverviewSlice[]) : undefined;
+      setData(await loadHrOverview(keys));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [sliceKey]);
 
   useEffect(() => {
     void load();
@@ -75,7 +78,7 @@ function filterRows(rows: HrRow[], q: string, fields: string[]): HrRow[] {
 }
 
 export function WorkforceHub() {
-  const { data, loading, load, authBlocked } = useHrData();
+  const { data, loading, load, authBlocked } = useHrData(["profiles", "employment", "documents"]);
   const [q, setQ] = useState("");
 
   const rows = useMemo(
@@ -160,7 +163,7 @@ export function WorkforceHub() {
 }
 
 export function LeaveHub() {
-  const { data, loading, load, authBlocked } = useHrData();
+  const { data, loading, load, authBlocked } = useHrData(["leaveRequests", "leaveBalances", "leaveTypes"]);
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
 
@@ -250,7 +253,7 @@ export function LeaveHub() {
 }
 
 export function TimeHub() {
-  const { data, loading, load, authBlocked } = useHrData();
+  const { data, loading, load, authBlocked } = useHrData(["attendance"]);
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const rows = useMemo(
@@ -319,7 +322,12 @@ export function TimeHub() {
 }
 
 export function SetupHub() {
-  const { data, loading, load, authBlocked } = useHrData();
+  const { data, loading, load, authBlocked } = useHrData([
+    "designations",
+    "shifts",
+    "leaveTypes",
+    "holidayCalendars",
+  ]);
   const [open, setOpen] = useState(false);
 
   return (
@@ -400,7 +408,7 @@ export function SetupHub() {
 }
 
 export function ShiftsHub() {
-  const { data, loading, load, authBlocked } = useHrData();
+  const { data, loading, load, authBlocked } = useHrData(["shifts", "shiftAssignments", "holidayCalendars"]);
   return (
     <div className="space-y-5">
       <PageHeader
@@ -466,7 +474,7 @@ export function ShiftsHub() {
 }
 
 export function TalentHub() {
-  const { data, loading, load, authBlocked } = useHrData();
+  const { data, loading, load, authBlocked } = useHrData(["reviews", "goals", "appraisals"]);
   return (
     <div className="space-y-5">
       <PageHeader
@@ -510,7 +518,7 @@ export function TalentHub() {
 }
 
 export function TrainingHubPage() {
-  const { data, loading, load, authBlocked } = useHrData();
+  const { data, loading, load, authBlocked } = useHrData(["training", "documents"]);
   return (
     <div className="space-y-5">
       <PageHeader
@@ -554,7 +562,16 @@ export function TrainingHubPage() {
 }
 
 export function ReportsHub() {
-  const { data, loading, load, authBlocked } = useHrData();
+  const { data, loading, load, authBlocked } = useHrData([
+    "profiles",
+    "employment",
+    "leaveRequests",
+    "attendance",
+    "reviews",
+    "separation",
+    "training",
+    "shiftAssignments",
+  ]);
   const [exporting, setExporting] = useState<string | null>(null);
   const kpis = useMemo(() => {
     const profiles = data?.profiles ?? [];

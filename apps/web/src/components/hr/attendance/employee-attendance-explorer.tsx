@@ -17,6 +17,7 @@ import { HrEmptyState, HrStatusBadge } from "@/components/hr/hr-primitives";
 import { SetupField, SetupSelect } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { EmsPagination } from "@/components/hr/workforce/ems-primitives";
 import { cn } from "@/lib/utils";
 import {
   loadAttendanceForEmployee,
@@ -27,6 +28,8 @@ import type { AttendanceRecord } from "@/types/attendance-management";
 type StatusFilter = "all" | "present" | "absent" | "half_day";
 
 type EmpOption = AttendanceDirectory["options"]["employees"][number];
+
+const PAGE_SIZE = 15;
 
 function currentMonthYm(): string {
   const d = new Date();
@@ -115,6 +118,8 @@ export function EmployeeAttendanceExplorer({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [rows, setRows] = useState<AttendanceRecord[]>([]);
   const [rowsLoading, setRowsLoading] = useState(false);
+  const [page, setPage] = useState(1);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const searchWrapRef = useRef<HTMLDivElement>(null);
   const autoMonthRef = useRef("");
@@ -223,6 +228,22 @@ export function EmployeeAttendanceExplorer({
     [rangedRows, statusFilter],
   );
 
+  const pageRows = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return listRows.slice(start, start + PAGE_SIZE);
+  }, [listRows, page]);
+
+  useEffect(() => setPage(1), [employeeId, dateFrom, dateTo, statusFilter]);
+
+  useEffect(() => {
+    setSelectedId((cur) => {
+      if (cur && pageRows.some((r) => r.id === cur)) return cur;
+      return pageRows[0]?.id ?? null;
+    });
+  }, [pageRows]);
+
+  const selectedRow = pageRows.find((r) => r.id === selectedId) ?? null;
+
   const monthOptions = useMemo(() => {
     const set = new Set(recentMonths());
     for (const r of rows) {
@@ -274,8 +295,8 @@ export function EmployeeAttendanceExplorer({
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+    <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+      <div className="shrink-0 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
         <div ref={searchWrapRef} className="relative max-w-xl">
           <label htmlFor="attendance-employee-search" className="sr-only">
             Search employee
@@ -414,62 +435,45 @@ export function EmployeeAttendanceExplorer({
       </div>
 
       {!employeeId ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center rounded-xl border border-dashed border-border/70">
         <HrEmptyState
           title="Search an employee"
           description="Type a name or employee code, then pick a person to see present, absent, and half-day for the selected dates."
         />
+        </div>
       ) : (
-        <>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {cards.map((card) => {
-              const active = statusFilter === card.key;
-              const Icon = card.icon;
-              return (
-                <button
-                  key={card.key}
-                  type="button"
-                  aria-pressed={active}
-                  onClick={() => setStatusFilter(active ? "all" : card.key)}
-                  className={cn(
-                    "cursor-pointer rounded-xl border px-3 py-2.5 text-left shadow-sm transition-all duration-200",
-                    "hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                    active ? "border-primary/50 ring-1 ring-primary/20" : "border-border/70 bg-card",
-                  )}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      {card.label}
-                    </p>
-                    <span className={cn("rounded-md p-1", card.tone)}>
-                      <Icon className="size-3.5" />
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-xl font-semibold tabular-nums">{card.value}</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {dateFrom && dateTo ? `${dateFrom} → ${dateTo}` : "Selected dates"}
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
           {busy ? (
-            <p className="text-sm text-muted-foreground">Loading attendance…</p>
+            <div
+              className="flex min-h-0 flex-1 flex-col gap-2 p-3"
+              aria-busy="true"
+              aria-label="Loading attendance"
+            >
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-11 shrink-0 rounded-lg bg-foreground/10 motion-safe:animate-pulse"
+                />
+              ))}
+            </div>
           ) : !listRows.length ? (
+            <div className="flex min-h-0 flex-1 items-center justify-center">
             <HrEmptyState
               title="No attendance for this filter"
               description="Try another month, custom date range, or status. Mark attendance if this period is empty."
             />
+            </div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-              <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-4 py-2 text-xs text-muted-foreground">
+            <>
+              <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/60 px-4 py-2 text-xs text-muted-foreground">
                 <CalendarDays className="size-3.5" />
                 <span>
                   {listRows.length} day{listRows.length === 1 ? "" : "s"}
                   {statusFilter !== "all" ? ` · ${statusFilter.replace("_", " ")}` : ""}
                 </span>
               </div>
-              <div className="erp-scroll max-h-[calc(100vh-22rem)] overflow-auto">
+              <div className="erp-scroll min-h-0 flex-1 overflow-auto">
                 <table className="w-full min-w-[880px] text-left text-sm">
                   <thead className="sticky top-0 z-10 border-b border-border/70 bg-muted/90 backdrop-blur-sm">
                     <tr>
@@ -495,8 +499,15 @@ export function EmployeeAttendanceExplorer({
                     </tr>
                   </thead>
                   <tbody>
-                    {listRows.map((row) => (
-                      <tr key={row.id} className="border-b border-border/40 hover:bg-muted/25">
+                    {pageRows.map((row) => (
+                      <tr
+                        key={row.id}
+                        className={cn(
+                          "cursor-pointer border-b border-border/40 transition-colors duration-200 hover:bg-muted/25",
+                          selectedId === row.id && "bg-muted/40",
+                        )}
+                        onClick={() => setSelectedId(row.id)}
+                      >
                         <td className="px-3 py-2 font-mono text-xs">{row.attendanceDate}</td>
                         <td className="px-3 py-2">
                           <HrStatusBadge status={row.status.replace(/_/g, " ")} />
@@ -513,7 +524,7 @@ export function EmployeeAttendanceExplorer({
                         >
                           {row.notes || "—"}
                         </td>
-                        <td className="px-3 py-2">
+                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                           <Button
                             type="button"
                             variant="ghost"
@@ -529,9 +540,65 @@ export function EmployeeAttendanceExplorer({
                   </tbody>
                 </table>
               </div>
-            </div>
+              <EmsPagination page={page} pageSize={PAGE_SIZE} total={listRows.length} onPageChange={setPage} />
+            </>
           )}
-        </>
+          </div>
+          <aside className="flex w-full shrink-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm lg:w-[22rem]">
+            <div className="shrink-0 space-y-3 border-b border-border/60 p-3">
+              {employeeMeta ? (
+                <div>
+                  <p className="truncate text-sm font-semibold">{employeeMeta.label}</p>
+                  <p className="truncate font-mono text-[11px] text-muted-foreground">
+                    {employeeMeta.code}
+                    {employeeMeta.designation ? ` · ${employeeMeta.designation}` : ""}
+                  </p>
+                </div>
+              ) : null}
+              <div className="grid grid-cols-3 gap-2">
+                {cards.map((card) => {
+                  const active = statusFilter === card.key;
+                  const Icon = card.icon;
+                  return (
+                    <button
+                      key={card.key}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setStatusFilter(active ? "all" : card.key)}
+                      className={cn(
+                        "cursor-pointer rounded-lg border px-2 py-1.5 text-left transition-all duration-200",
+                        "hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                        active ? "border-primary/50 ring-1 ring-primary/20" : "border-border/70",
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-1">
+                        <p className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
+                          {card.label}
+                        </p>
+                        <Icon className="size-3 text-muted-foreground" />
+                      </div>
+                      <p className="text-base font-semibold tabular-nums">{card.value}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="erp-scroll min-h-0 flex-1 overflow-auto p-3 text-xs">
+              {selectedRow ? (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-medium uppercase text-muted-foreground">Selected day</p>
+                  <p>Date {selectedRow.attendanceDate}</p>
+                  <p>Status {selectedRow.status.replace(/_/g, " ")}</p>
+                  <p>Check in {formatTime12(selectedRow.checkIn)}</p>
+                  <p>Check out {formatTime12(selectedRow.checkOut)}</p>
+                  <p>Hours {selectedRow.workingHours || "—"}</p>
+                </div>
+              ) : (
+                <p className="text-muted-foreground">Select a day in the list.</p>
+              )}
+            </div>
+          </aside>
+        </div>
       )}
     </div>
   );

@@ -21,4 +21,6 @@ Light mode; no purple gradients.
 
 ## Layout
 
-KPI cards; tabs for Structures, Employee Salary, Runs, Approvals, Locks, Revisions, Bonus, Reimbursements, Loans, Payslips, Reports, Audit. Drawers for run/structure/revision/lock. Payslip preview panel.
+- KPI cards; tabs for Structures, Employee Salary, Runs, Approvals, Locks, Revisions, Bonus, Reimbursements, Loans, Payslips, Reports, Audit.
+- Payslip list: month drill-in, employee search; columns employee code, name, month, net pay.
+- View shows letterhead (Cache logo + entity name/address). Download / bulk download are PDFs.

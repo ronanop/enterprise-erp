@@ -19,7 +19,7 @@ def test_hr_models_importable():
 
 
 def test_hr_router_mounted():
-    assert hr_router.prefix == "/hr"
+    assert hr_router.prefix == "/hrms"
     assert len(hr_router.routes) > 20
 
 

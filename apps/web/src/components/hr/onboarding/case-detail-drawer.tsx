@@ -260,6 +260,8 @@ export function CaseDetailDrawer({
         trainingDurationDays: form.trainingDurationDays,
         employeeIdMode: form.employeeIdMode,
         employeeCode: form.assignedEmployeeCode,
+        managementGroupId: managementGroupId || undefined,
+        managementGroupName: selectedManagementGroup?.group_name,
       });
     } finally {
       setSavingAssignment(false);
@@ -585,10 +587,10 @@ export function CaseDetailDrawer({
             </div>
           ) : null}
 
-          {(canComplete || isPendingJoin) ? (
+          {assignmentEditable || canComplete || isPendingJoin ? (
             <SetupField
               label="Employment group"
-              hint="Optional. Applies the group's default shift, calendars, and HRMS feature toggles."
+              hint="Optional. Auto attendance group marks present, weekly off, and holidays through today."
               labelClassName="normal-case"
             >
               <SetupSelect

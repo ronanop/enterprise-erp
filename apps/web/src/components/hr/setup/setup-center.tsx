@@ -991,7 +991,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         key: "sandwich_rule_enabled",
         label: "Sandwich Rule",
         type: "checkbox",
-        hint: "Company sandwich policy (Payroll → Salary configuration) is authoritative. This leave-type flag is a fallback enable. When sandwich is ON, weekly off/holiday between leave or absence is converted per policy (Leave or LOP).",
+        hint: "Company sandwich policy (Payroll → Salary configuration) is authoritative. Default: Friday leave + Monday leave converts weekly off/holiday to LOP. This leave-type flag is a fallback enable.",
       },
       {
         key: "leave_cycle_start_day",

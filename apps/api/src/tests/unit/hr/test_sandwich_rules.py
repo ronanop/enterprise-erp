@@ -51,7 +51,7 @@ def test_sandwich_applies_when_both_flanks_absent_without_leave():
     assert dates == {sat, sun}
 
 
-def test_sandwich_not_applied_when_approved_leave_covers_flanks():
+def test_sandwich_not_applied_when_approved_leave_covers_flanks_if_trigger_is_absence_only():
     fri = date(2026, 7, 24)
     mon = date(2026, 7, 27)
     dates = sandwich_lop_dates(
@@ -61,8 +61,26 @@ def test_sandwich_not_applied_when_approved_leave_covers_flanks():
         attendance_status_by_date={fri: "absent", mon: "absent"},
         approved_leave_dates={fri, mon},
         as_of=mon,
+        trigger="unauthorized_absence",
     )
     assert dates == set()
+
+
+def test_sandwich_applies_when_friday_monday_leave():
+    """Leave Friday + leave Monday converts Sat/Sun (default trigger is both)."""
+    fri = date(2026, 7, 24)
+    sat = date(2026, 7, 25)
+    sun = date(2026, 7, 26)
+    mon = date(2026, 7, 27)
+    dates = sandwich_lop_dates(
+        date(2026, 7, 20),
+        date(2026, 7, 31),
+        is_non_working=_weekend,
+        attendance_status_by_date={fri: "absent", mon: "absent"},
+        approved_leave_dates={fri, mon},
+        as_of=mon,
+    )
+    assert dates == {sat, sun}
 
 
 def test_sandwich_applies_when_approved_leave_covers_flanks_if_trigger_is_leave():
@@ -111,7 +129,7 @@ def test_sandwich_waits_until_next_working_day_is_known():
 
 
 def test_sandwich_applies_without_leave_balance_check():
-    """Unused leave balance is irrelevant — only approved leave blocks sandwich."""
+    """Unused leave balance is irrelevant — sandwich looks at punches and approved leave."""
     fri = date(2026, 7, 24)
     sat = date(2026, 7, 25)
     sun = date(2026, 7, 26)

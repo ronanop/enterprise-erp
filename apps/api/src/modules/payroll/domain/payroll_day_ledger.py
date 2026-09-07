@@ -13,6 +13,7 @@ from uuid import UUID
 class LeaveDayMarker:
     is_paid: bool
     leave_type_id: UUID | None = None
+    paid_units: Decimal = Decimal("1")
 
 
 def iter_dates_inclusive(start: date, end: date) -> Iterable[date]:
@@ -84,14 +85,29 @@ def expand_leave_markers(
         clip_end = min(end, period_end)
         if clip_start > clip_end:
             continue
-        for d in iter_dates_inclusive(clip_start, clip_end):
+        span_dates = list(iter_dates_inclusive(clip_start, clip_end))
+        span = len(span_dates)
+        raw_count = lr.get("days_count")
+        per = Decimal("1") if raw_count is None else Decimal(str(raw_count)) / Decimal(span)
+        for d in span_dates:
             existing = markers.get(d)
             if existing is None:
-                markers[d] = LeaveDayMarker(is_paid=is_paid, leave_type_id=type_id)
+                markers[d] = LeaveDayMarker(is_paid=is_paid, leave_type_id=type_id, paid_units=per)
             elif existing.is_paid or is_paid:
-                markers[d] = LeaveDayMarker(is_paid=True, leave_type_id=type_id or existing.leave_type_id)
+                units = per if is_paid else existing.paid_units
+                if existing.is_paid and is_paid and existing.paid_units > units:
+                    units = existing.paid_units
+                markers[d] = LeaveDayMarker(
+                    is_paid=True,
+                    leave_type_id=type_id or existing.leave_type_id,
+                    paid_units=units,
+                )
             else:
-                markers[d] = LeaveDayMarker(is_paid=False, leave_type_id=type_id or existing.leave_type_id)
+                markers[d] = LeaveDayMarker(
+                    is_paid=False,
+                    leave_type_id=type_id or existing.leave_type_id,
+                    paid_units=per,
+                )
     return markers
 
 
@@ -123,11 +139,12 @@ def resolve_lop_on_scheduled_days(
         status = (attendance_by_date.get(d) or "").strip().lower()
 
         if leave is not None:
+            units = Decimal(str(leave.paid_units or 1))
             if leave.is_paid:
-                paid_leave += Decimal("1")
+                paid_leave += units
                 continue
-            unpaid_leave += Decimal("1")
-            lop += Decimal("1")
+            unpaid_leave += units
+            lop += units
             continue
 
         if status in lop_statuses:
@@ -138,6 +155,9 @@ def resolve_lop_on_scheduled_days(
             continue
         elif status:
             continue
+        else:
+            # Scheduled working day with no punch and no leave = LOP
+            lop += Decimal("1")
 
     return lop, paid_leave, unpaid_leave
 

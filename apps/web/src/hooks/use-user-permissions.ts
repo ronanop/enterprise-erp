@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { parseAuthMe } from "@/lib/auth-user";
 import { isAuthenticated } from "@/lib/auth";
 import { authService } from "@/services/api-client";
-import type { UserProfile } from "@/types/api";
+import { HR_SUPERADMIN_PERMISSION, type UserProfile } from "@/types/api";
 
 export function useUserPermissions() {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -33,6 +33,7 @@ export function useUserPermissions() {
                   email: parsed.user.email,
                   display_name: parsed.user.displayName,
                   permissions: parsed.permissions,
+                  user_type: parsed.user.userType,
                 } as UserProfile)
               : null,
           );
@@ -52,6 +53,11 @@ export function useUserPermissions() {
     };
   }, []);
 
+  const canExact = useCallback((permission: string) => {
+    const perms = user?.permissions ?? [];
+    return perms.includes(permission) || perms.includes("*");
+  }, [user]);
+
   const can = useCallback(
     (permission: string) => {
       const perms = user?.permissions;
@@ -63,7 +69,12 @@ export function useUserPermissions() {
     [user, hrModuleAdmin],
   );
 
-  const isHrmsSuperAdmin = Boolean(user?.permissions?.includes("hr.superadmin:manage"));
+  const isHrmsSuperAdmin = Boolean(
+    user?.user_type === "super_admin" ||
+      user?.user_type === "tenant_admin" ||
+      user?.permissions?.includes(HR_SUPERADMIN_PERMISSION) ||
+      user?.permissions?.includes("*"),
+  );
 
-  return { user, loading, can, isHrmsSuperAdmin, hrModuleAdmin };
+  return { user, loading, can, canExact, isHrmsSuperAdmin, hrModuleAdmin };
 }

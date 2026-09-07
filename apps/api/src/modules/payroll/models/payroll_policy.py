@@ -108,9 +108,9 @@ class PayPayrollPolicy(Base, *PayMasterMixin):
     pf_wage_ceiling: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     pf_on_lop: Mapped[str] = mapped_column(String(40), nullable=False, default="fixed")
 
-    sandwich_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    sandwich_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
     sandwich_off_becomes: Mapped[str] = mapped_column(String(20), nullable=False, default="lop")
-    sandwich_triggers: Mapped[str] = mapped_column(String(40), nullable=False, default="unauthorized_absence")
+    sandwich_triggers: Mapped[str] = mapped_column(String(40), nullable=False, default="both", server_default="both")
 
     net_pay_formula: Mapped[str] = mapped_column(String(50), nullable=False)
     attendance_rules_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

@@ -4,8 +4,8 @@ Company policy selects:
 - trigger: unauthorized_absence | approved_leave | both
 - outcome: lop | leave
 
-Default trigger is unauthorized absence (legacy). Approved leave on both flanks
-only sandwiches when the trigger includes approved_leave.
+Default trigger is both: Friday leave + Monday leave converts Sat/Sun to LOP
+(or leave, per outcome), and unauthorized absence on both flanks does the same.
 
 Leave request day counts stay working-days only. Sandwich is attendance LOP
 or leave consumption, never both for the same date.
@@ -137,7 +137,7 @@ def sandwich_off_dates(
     attendance_status_by_date: dict[date, str],
     approved_leave_dates: set[date],
     as_of: date | None = None,
-    trigger: str = SANDWICH_TRIGGER_UNAUTHORIZED,
+    trigger: str = SANDWICH_TRIGGER_BOTH,
 ) -> set[date]:
     """Return weekly-off / holiday dates that sandwich under the given trigger."""
     out: set[date] = set()
@@ -175,13 +175,13 @@ def sandwich_lop_dates(
     attendance_status_by_date: dict[date, str],
     approved_leave_dates: set[date],
     as_of: date | None = None,
-    trigger: str = SANDWICH_TRIGGER_UNAUTHORIZED,
+    trigger: str = SANDWICH_TRIGGER_BOTH,
 ) -> set[date]:
     """Return off/holiday dates that should become LOP under the sandwich rule.
 
     ``as_of`` skips blocks whose next working day is still in the future
     (Friday+Monday sandwich cannot be decided on Saturday).
-    Default trigger is unauthorized absence (legacy behaviour).
+    Default trigger is both (approved leave or unauthorized absence).
     """
     return sandwich_off_dates(
         start,

@@ -48,9 +48,11 @@ from modules.hr.routers.employee_assets_router import employee_assets_router
 from modules.hr.routers.employee_import import employee_import_router
 from modules.hr.routers.digital_onboarding import digital_onboarding_router
 from modules.hr.routers.legal_entities import legal_entities_router
-from modules.hr.routers.superadmin import superadmin_router
+from modules.hr.routers.leave_adjust import leave_adjust_router
+from modules.hr.routers.superadmin import hr_nav_access_router, superadmin_router
 
-hr_router = APIRouter(prefix="/hr")
+# Browser Network tab filter: /hrms. UI routes stay under /hr/*. Legacy /api/v1/hr is aliased in middleware.
+hr_router = APIRouter(prefix="/hrms")
 hr_router.include_router(designations_router)
 hr_router.include_router(job_levels_router)
 hr_router.include_router(grades_router)
@@ -68,6 +70,7 @@ hr_router.include_router(leave_types_router)
 hr_router.include_router(leave_balances_router)
 hr_router.include_router(leave_requests_router)
 hr_router.include_router(leave_adjustments_router)
+hr_router.include_router(leave_adjust_router)
 hr_router.include_router(attendance_router)
 hr_router.include_router(attendance_corrections_router)
 hr_router.include_router(weekly_off_policies_router)
@@ -95,4 +98,5 @@ hr_router.include_router(ess_policies_router)
 hr_router.include_router(management_groups_router)
 hr_router.include_router(digital_onboarding_router)
 hr_router.include_router(legal_entities_router)
+hr_router.include_router(hr_nav_access_router)
 hr_router.include_router(superadmin_router)

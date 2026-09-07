@@ -90,7 +90,7 @@ export function PayrollRunNewPage() {
               setRunning(true);
               void runPayroll(month, cutoverDay)
                 .then((run) => {
-                  toast(`Payroll generated for ${cycle.label}`);
+                  toast(`Payroll updated for ${monthLabel(month)}`);
                   router.push(`/hr/payroll/runs/${run.id}`);
                 })
                 .catch((e) => toast(e instanceof Error ? e.message : "Failed", "error"))
@@ -166,8 +166,12 @@ export function PayrollRunNewPage() {
                   <th className="px-3 py-2 font-medium">Name</th>
                   <th className="px-3 py-2 font-medium">Present</th>
                   <th className="px-3 py-2 font-medium">Leave</th>
-                  <th className="px-3 py-2 font-medium">WO</th>
-                  <th className="px-3 py-2 font-medium">LOP</th>
+                  <th className="px-3 py-2 font-medium" title="Weekly off">
+                    WO
+                  </th>
+                  <th className="px-3 py-2 font-medium" title="Loss of pay — unpaid days deducted from salary">
+                    LOP
+                  </th>
                   <th className="px-3 py-2 font-medium">Payable</th>
                   <th className="px-3 py-2 font-medium">Salary</th>
                   <th className="px-3 py-2 font-medium">Net</th>
@@ -177,7 +181,15 @@ export function PayrollRunNewPage() {
                 {visible.map((l) => {
                   const att = splitPresentAndHalf(l.presentDays, l.halfDays);
                   return (
-                <tr key={l.employeeId} className="border-b border-border/50 hover:bg-muted/30">
+                <tr
+                  key={l.employeeId}
+                  className="cursor-pointer border-b border-border/50 transition-colors duration-200 hover:bg-muted/30"
+                  onClick={() =>
+                    router.push(
+                      `/hr/payroll/runs/new/employees/${encodeURIComponent(l.employeeId)}?month=${month}&cutover=${cutoverDay}`,
+                    )
+                  }
+                >
                     <td className="px-3 py-2">
                       <p className="font-medium">{l.employeeName}</p>
                       <p className="text-[11px] text-muted-foreground">

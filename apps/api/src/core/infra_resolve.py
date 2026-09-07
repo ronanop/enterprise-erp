@@ -55,10 +55,10 @@ def apply_infra_fallback(settings: Settings) -> str:
         ACTIVE_INFRA_SOURCE = "primary"
         return ACTIVE_INFRA_SOURCE
 
-    has_fallback = bool(
-        (settings.database_url_fallback or "").strip()
-        or (settings.redis_url_fallback or "").strip()
-    )
+    def fallback(name: str) -> str:
+        return str(getattr(settings, name, None) or "").strip()
+
+    has_fallback = bool(fallback("database_url_fallback") or fallback("redis_url_fallback"))
     if not has_fallback:
         ACTIVE_INFRA_SOURCE = "primary"
         return ACTIVE_INFRA_SOURCE
@@ -68,18 +68,18 @@ def apply_infra_fallback(settings: Settings) -> str:
         return ACTIVE_INFRA_SOURCE
 
     # Switch each configured fallback independently (blank = keep primary value).
-    if (settings.database_url_fallback or "").strip():
-        settings.database_url = settings.database_url_fallback.strip()
-    if (settings.redis_url_fallback or "").strip():
-        settings.redis_url = settings.redis_url_fallback.strip()
-    if (settings.celery_broker_url_fallback or "").strip():
-        settings.celery_broker_url = settings.celery_broker_url_fallback.strip()
-    if (settings.celery_result_backend_fallback or "").strip():
-        settings.celery_result_backend = settings.celery_result_backend_fallback.strip()
-    if (settings.minio_endpoint_fallback or "").strip():
-        settings.minio_endpoint = settings.minio_endpoint_fallback.strip()
-    if (settings.opensearch_url_fallback or "").strip():
-        settings.opensearch_url = settings.opensearch_url_fallback.strip()
+    if fallback("database_url_fallback"):
+        settings.database_url = fallback("database_url_fallback")
+    if fallback("redis_url_fallback"):
+        settings.redis_url = fallback("redis_url_fallback")
+    if fallback("celery_broker_url_fallback"):
+        settings.celery_broker_url = fallback("celery_broker_url_fallback")
+    if fallback("celery_result_backend_fallback"):
+        settings.celery_result_backend = fallback("celery_result_backend_fallback")
+    if fallback("minio_endpoint_fallback"):
+        settings.minio_endpoint = fallback("minio_endpoint_fallback")
+    if fallback("opensearch_url_fallback"):
+        settings.opensearch_url = fallback("opensearch_url_fallback")
 
     ACTIVE_INFRA_SOURCE = "fallback"
     return ACTIVE_INFRA_SOURCE

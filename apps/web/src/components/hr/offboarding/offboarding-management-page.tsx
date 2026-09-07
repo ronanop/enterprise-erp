@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ClipboardList, Clock, FileText, GitBranch, MessageSquare, Plus, Upload, Wallet } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
+import { Check, ChevronDown, ClipboardList, Clock, FileText, GitBranch, MessageSquare, Plus, Trash2, Upload, Wallet } from "lucide-react";
 
 import {
   ExitDocumentDrawer,
@@ -19,13 +19,16 @@ import {
   type HrTabItem,
 } from "@/components/hr/hr-primitives";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
+import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
 import { SetupField, SetupTextarea } from "@/components/hr/setup/setup-drawer";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { SetupSelect } from "@/components/hr/setup/setup-drawer";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { isAuthenticated } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import {
+  deleteOffboardingCase,
   isApiError,
   loadOffboardingCases,
   offboardingAction,
@@ -290,6 +293,126 @@ function WorkflowStrip({ c }: { c: OffboardingCase }) {
   );
 }
 
+function lastWorkingDay(c: OffboardingCase): string {
+  return c.approvedLwd || c.expectedExitDate || c.requestedLwd || "—";
+}
+
+function ExitCaseTable({
+  cases,
+  selectedId,
+  expandedIds,
+  canDelete,
+  onTogglePipeline,
+  onOpenCase,
+  onDelete,
+}: {
+  cases: OffboardingCase[];
+  selectedId: string | null;
+  expandedIds: Set<string>;
+  canDelete: boolean;
+  onTogglePipeline: (id: string) => void;
+  onOpenCase: (c: OffboardingCase) => void;
+  onDelete: (c: OffboardingCase) => void;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[960px] text-left text-sm">
+        <thead className="border-b bg-muted/40 text-[11px] uppercase text-muted-foreground">
+          <tr>
+            <th className="px-3 py-2 font-medium">Employee code</th>
+            <th className="px-3 py-2 font-medium">Name</th>
+            <th className="px-3 py-2 font-medium">Type</th>
+            <th className="px-3 py-2 font-medium">Notice period served</th>
+            <th className="px-3 py-2 font-medium">Last working day</th>
+            <th className="px-3 py-2 font-medium">Status</th>
+            {canDelete ? <th className="px-3 py-2 font-medium">Action</th> : null}
+            <th className="w-12 px-2 py-2 font-medium">
+              <span className="sr-only">Exit pipeline</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {cases.map((c) => {
+            const open = expandedIds.has(c.id);
+            return (
+              <Fragment key={c.id}>
+                <tr
+                  className={cn(
+                    "border-b border-border/50 transition-colors duration-200 hover:bg-muted/30",
+                    selectedId === c.id && "bg-muted/40",
+                  )}
+                >
+                  <td className="px-3 py-2 font-mono text-xs">{c.employeeCode}</td>
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      className={cn(
+                        "cursor-pointer text-left text-sm font-medium underline-offset-2 transition-colors duration-200 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                        c.hasEmployeeRecord ? "text-foreground" : "text-muted-foreground",
+                      )}
+                      onClick={() => onOpenCase(c)}
+                    >
+                      {c.employeeName}
+                    </button>
+                  </td>
+                  <td className="px-3 py-2 text-xs capitalize">
+                    {SEPARATION_TYPE_LABELS[c.separationType] ?? c.separationType}
+                  </td>
+                  <td className="px-3 py-2 text-xs">{noticeServedLabel(c)}</td>
+                  <td className="px-3 py-2 text-xs tabular-nums">{lastWorkingDay(c)}</td>
+                  <td className="px-3 py-2">
+                    <HrStatusBadge status={c.status} />
+                  </td>
+                  {canDelete ? (
+                    <td className="px-3 py-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="cursor-pointer text-destructive hover:bg-destructive/10"
+                        onClick={() => onDelete(c)}
+                      >
+                        <Trash2 className="size-3.5" />
+                        Delete
+                      </Button>
+                    </td>
+                  ) : null}
+                  <td className="px-2 py-2">
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      aria-label={open ? "Hide exit pipeline" : "Show exit pipeline"}
+                      className="inline-flex size-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                      onClick={() => onTogglePipeline(c.id)}
+                    >
+                      <ChevronDown
+                        className={cn(
+                          "size-4 transition-transform duration-200 motion-reduce:transition-none",
+                          open && "rotate-180",
+                        )}
+                      />
+                    </button>
+                  </td>
+                </tr>
+                {open ? (
+                  <tr className="border-b border-border/50 bg-muted/20">
+                    <td colSpan={canDelete ? 8 : 7} className="px-3 py-3">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Exit pipeline
+                      </p>
+                      <WorkflowStrip c={c} />
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function OffboardingCaseHeader({ c }: { c: OffboardingCase }) {
   return (
     <div className="flex flex-col gap-2 border-b border-border/60 pb-3 sm:flex-row sm:items-start sm:justify-between">
@@ -343,6 +466,7 @@ function OffboardingCasePicker({
 }
 
 export function OffboardingManagementPage() {
+  const { isHrmsSuperAdmin } = useUserPermissions();
   const [cases, setCases] = useState<OffboardingCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabId>("resignations");
@@ -352,13 +476,19 @@ export function OffboardingManagementPage() {
   const [interviewOpen, setInterviewOpen] = useState(false);
   const [documentOpen, setDocumentOpen] = useState(false);
   const [kpiFilter, setKpiFilter] = useState<KpiFilter>("all");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+  const [confirmDelete, setConfirmDelete] = useState<OffboardingCase | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const rows = await loadOffboardingCases();
-      setCases(rows);
-      setSelectedId((prev) => (prev && rows.some((r) => r.id === prev) ? prev : rows[0]?.id ?? null));
+      const listed = rows.filter((r) => r.hasEmployeeRecord);
+      setCases(listed);
+      setSelectedId((prev) =>
+        prev && listed.some((r) => r.id === prev) ? prev : listed[0]?.id ?? null,
+      );
     } catch (e) {
       toast(isApiError(e), "error");
     } finally {
@@ -370,9 +500,11 @@ export function OffboardingManagementPage() {
     void load();
   }, [load]);
 
+  const listedCases = cases;
+
   const selected = useMemo(
-    () => cases.find((c) => c.id === selectedId) ?? null,
-    [cases, selectedId],
+    () => listedCases.find((c) => c.id === selectedId) ?? null,
+    [listedCases, selectedId],
   );
 
   function tabForCase(c: OffboardingCase): TabId {
@@ -394,6 +526,30 @@ export function OffboardingManagementPage() {
   function openCase(c: OffboardingCase, nextTab?: TabId) {
     setSelectedId(c.id);
     setTab(nextTab ?? tabForCase(c));
+  }
+
+  function togglePipeline(id: string) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function confirmDeleteCase() {
+    if (!confirmDelete) return;
+    setDeleting(true);
+    try {
+      await deleteOffboardingCase(confirmDelete.id);
+      toast("Exit case deleted", "success");
+      setConfirmDelete(null);
+      await load();
+    } catch (e) {
+      toast(isApiError(e), "error");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   const authBlocked = !isAuthenticated() && !loading && cases.length === 0;
@@ -428,9 +584,9 @@ export function OffboardingManagementPage() {
     }
   }
 
-  const onNoticeCount = cases.filter(isOnNotice).length;
-  const directExitCount = cases.filter(isDirectExit).length;
-  const fnfPendingCount = cases.filter(isFnfPendingWork).length;
+  const onNoticeCount = listedCases.filter(isOnNotice).length;
+  const directExitCount = listedCases.filter(isDirectExit).length;
+  const fnfPendingCount = listedCases.filter(isFnfPendingWork).length;
   const exEmployeeSplit = `${directExitCount}/${onNoticeCount}`;
 
   const tabs: HrTabItem[] = useMemo(
@@ -446,11 +602,11 @@ export function OffboardingManagementPage() {
   );
 
   const visibleCases = useMemo(() => {
-    if (kpiFilter === "on_notice") return cases.filter(isOnNotice);
-    if (kpiFilter === "direct_exit") return cases.filter(isDirectExit);
-    if (kpiFilter === "fnf_pending") return cases.filter(isFnfPendingWork);
-    return cases;
-  }, [cases, kpiFilter]);
+    if (kpiFilter === "on_notice") return listedCases.filter(isOnNotice);
+    if (kpiFilter === "direct_exit") return listedCases.filter(isDirectExit);
+    if (kpiFilter === "fnf_pending") return listedCases.filter(isFnfPendingWork);
+    return listedCases;
+  }, [listedCases, kpiFilter]);
 
   function onKpiClick(key: string) {
     const next = key as KpiFilter;
@@ -528,10 +684,10 @@ export function OffboardingManagementPage() {
         }}
       />
 
-      {tab !== "resignations" && tab !== "on_notice" && cases.length > 0 ? (
+      {tab !== "resignations" && tab !== "on_notice" && listedCases.length > 0 ? (
         <div className="rounded-xl border border-border/70 bg-card px-4 py-3 shadow-sm">
           <OffboardingCasePicker
-            cases={cases}
+            cases={listedCases}
             selectedId={selectedId}
             onSelect={(id) => setSelectedId(id)}
           />
@@ -574,87 +730,16 @@ export function OffboardingManagementPage() {
               }
             />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-border/70 bg-card shadow-sm">
-              <p className="border-b border-border/60 px-3 py-2 text-[11px] text-muted-foreground">
-                {kpiFilter === "direct_exit"
-                  ? "Direct exits — notice was skipped. Click the Direct exits card again to show all."
-                  : kpiFilter === "fnf_pending"
-                    ? "Cases where FNF is still pending after exit. Click the FNF pending card again to show all."
-                    : "On Notice is a live employment state, not just an open case. Direct exits skip notice. Click a summary card to filter."}
-              </p>
-              <table className="w-full min-w-[1080px] text-left text-sm">
-                <thead className="border-b bg-muted/40 text-[11px] uppercase text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">Document</th>
-                    <th className="px-3 py-2 font-medium">Employee</th>
-                    <th className="px-3 py-2 font-medium">Type</th>
-                    <th className="px-3 py-2 font-medium">Notice</th>
-                    <th className="px-3 py-2 font-medium">Expected exit</th>
-                    <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 font-medium">FNF</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleCases.map((c) => (
-                    <tr
-                      key={c.id}
-                      role="button"
-                      tabIndex={0}
-                      className={cn(
-                        "cursor-pointer border-b border-border/50 transition-colors duration-200 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                        selectedId === c.id && "bg-muted/40",
-                      )}
-                      onClick={() => openCase(c)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          openCase(c);
-                        }
-                      }}
-                    >
-                      <td className="px-3 py-2">
-                        <span className="font-mono text-xs font-medium text-primary underline-offset-2 hover:underline">
-                          {c.documentNumber}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 font-medium">{c.employeeName}</td>
-                      <td className="px-3 py-2 text-xs capitalize">
-                        {SEPARATION_TYPE_LABELS[c.separationType] ?? c.separationType}
-                      </td>
-                      <td className="px-3 py-2">
-                        <HrStatusBadge status={NOTICE_STATUS_LABELS[c.noticeStatus] ?? c.noticeStatus} />
-                      </td>
-                      <td className="px-3 py-2 text-xs tabular-nums">
-                        {c.expectedExitDate || c.approvedLwd || c.requestedLwd || "—"}
-                      </td>
-                      <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          className="cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openCase(c, "workflow");
-                          }}
-                        >
-                          <HrStatusBadge status={c.status} />
-                        </button>
-                      </td>
-                      <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          className="cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openCase(c, "fnf");
-                          }}
-                        >
-                          <HrStatusBadge status={c.fnfStatus} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+              <ExitCaseTable
+                cases={visibleCases}
+                selectedId={selectedId}
+                expandedIds={expandedIds}
+                canDelete={isHrmsSuperAdmin}
+                onTogglePipeline={togglePipeline}
+                onOpenCase={(c) => openCase(c, "workflow")}
+                onDelete={setConfirmDelete}
+              />
             </div>
           )}
         </section>
@@ -662,74 +747,22 @@ export function OffboardingManagementPage() {
 
       {tab === "on_notice" ? (
         <section className="space-y-3">
-          {cases.filter(isOnNotice).length === 0 ? (
+          {listedCases.filter(isOnNotice).length === 0 ? (
             <HrEmptyState
               title="No employees On Notice"
               description="After manager approval, resignations that serve notice appear here until last working day."
             />
           ) : (
-            <div className="overflow-x-auto rounded-xl border border-border/70 bg-card shadow-sm">
-              <p className="border-b border-border/60 px-3 py-2 text-[11px] text-muted-foreground">
-                Employees currently serving notice. Approvals (Manager → IT → Accounts → HR) can continue while they remain On Notice.
-              </p>
-              <table className="w-full min-w-[1080px] text-left text-sm">
-                <thead className="border-b bg-muted/40 text-[11px] uppercase text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">Employee</th>
-                    <th className="px-3 py-2 font-medium">Exit type</th>
-                    <th className="px-3 py-2 font-medium">Notice start</th>
-                    <th className="px-3 py-2 font-medium">Notice period</th>
-                    <th className="px-3 py-2 font-medium">Expected exit</th>
-                    <th className="px-3 py-2 font-medium">Notice</th>
-                    <th className="px-3 py-2 font-medium">Status</th>
-                    <th className="px-3 py-2 font-medium">FNF</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cases.filter(isOnNotice).map((c) => (
-                    <tr
-                      key={c.id}
-                      role="button"
-                      tabIndex={0}
-                      className={cn(
-                        "cursor-pointer border-b border-border/50 transition-colors duration-200 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                        selectedId === c.id && "bg-muted/40",
-                      )}
-                      onClick={() => openCase(c, "workflow")}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          openCase(c, "workflow");
-                        }
-                      }}
-                    >
-                      <td className="px-3 py-2">
-                        <p className="font-medium">{c.employeeName}</p>
-                        <p className="font-mono text-[10px] text-muted-foreground">
-                          {c.employeeCode} · {c.documentNumber}
-                        </p>
-                      </td>
-                      <td className="px-3 py-2 text-xs">
-                        {SEPARATION_TYPE_LABELS[c.separationType] ?? c.separationType}
-                      </td>
-                      <td className="px-3 py-2 text-xs tabular-nums">{c.noticeStartDate || "—"}</td>
-                      <td className="px-3 py-2 text-xs tabular-nums">
-                        {c.noticePeriodDays != null ? `${c.noticePeriodDays} days` : "—"}
-                      </td>
-                      <td className="px-3 py-2 text-xs tabular-nums">
-                        {c.expectedExitDate || c.requestedLwd || "—"}
-                      </td>
-                      <td className="px-3 py-2 text-xs">{noticeServedLabel(c)}</td>
-                      <td className="px-3 py-2">
-                        <HrStatusBadge status={c.status} />
-                      </td>
-                      <td className="px-3 py-2">
-                        <HrStatusBadge status={c.fnfStatus} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+              <ExitCaseTable
+                cases={listedCases.filter(isOnNotice)}
+                selectedId={selectedId}
+                expandedIds={expandedIds}
+                canDelete={isHrmsSuperAdmin}
+                onTogglePipeline={togglePipeline}
+                onOpenCase={(c) => openCase(c, "workflow")}
+                onDelete={setConfirmDelete}
+              />
             </div>
           )}
         </section>
@@ -1218,6 +1251,21 @@ export function OffboardingManagementPage() {
           />
         </>
       ) : null}
+
+      <SetupConfirmDialog
+        open={Boolean(confirmDelete)}
+        title="Delete exit case"
+        message={
+          confirmDelete
+            ? `Remove the exit case for ${confirmDelete.employeeName}? This hides the case from offboarding.`
+            : ""
+        }
+        confirmLabel="Delete"
+        destructive
+        loading={deleting}
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={() => void confirmDeleteCase()}
+      />
     </div>
   );
 }

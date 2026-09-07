@@ -127,6 +127,18 @@ class SeparationService:
             raise NotFoundException("Separation not found")
         return row
 
+    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        row = self.get(ctx, row_id)
+        if not self._repo.soft_delete(ctx, row_id):
+            raise NotFoundException("Separation not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_separation",
+            entity_id=row.id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
+
     def create(self, ctx: TenantContext, *, branch_id: UUID, employee_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)

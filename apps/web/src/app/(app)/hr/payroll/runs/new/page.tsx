@@ -1,5 +1,5 @@
-import { PayrollRunNewPage } from "@/components/hr/payroll/payroll-run-new-page";
+import { redirect } from "next/navigation";
 
 export default function NewPayrollRunPage() {
-  return <PayrollRunNewPage />;
+  redirect("/hr/payroll?section=run-payroll&generate=1");
 }

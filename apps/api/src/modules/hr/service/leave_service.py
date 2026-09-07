@@ -13,6 +13,7 @@ from modules.foundation.service.audit_service import AuditService
 from modules.hr.adapters.master_data_port import HrMasterDataAdapter
 from modules.hr.domain.enums import HolidayCalendarStatus, HrEntityType, LeaveAdjustmentStatus, LeaveRequestStatus
 from modules.hr.domain.exceptions import InvalidLeaveAdjustmentState
+from modules.hr.domain.leave_accrual_calendar import leave_financial_year
 from modules.hr.domain.leave_cycle_rules import (
     assert_leave_balance_for_cycle,
     assert_no_future_calendar_month_leave,
@@ -74,7 +75,7 @@ def _count_leave_days(
     """Leave requests always count working days (exclude weekends + published holidays).
 
     ``sandwich`` is ignored here. Sandwich is an attendance LOP rule: weekly offs
-    between unauthorized absences become LOP unless those days have approved leave.
+    between leave or unauthorized absence become LOP (or leave) per company policy.
     """
     del sandwich
     count = 0
@@ -243,7 +244,7 @@ class LeaveBalanceService:
             if (
                 bal.employee_id == employee_id
                 and bal.leave_type_id == co_type.id
-                and bal.balance_year == earned.year
+                and bal.balance_year == leave_financial_year(earned)
                 and bal.status == "open"
             ):
                 balance = bal
@@ -255,7 +256,7 @@ class LeaveBalanceService:
                 employee_id=employee_id,
                 company_id=cid,
                 leave_type_id=co_type.id,
-                balance_year=earned.year,
+                balance_year=leave_financial_year(earned),
                 opening_balance=Decimal("0"),
                 accrued=Decimal("0"),
                 used=Decimal("0"),
@@ -721,7 +722,7 @@ class LeaveRequestService:
     ) -> None:
         leave_type = self._types.get(ctx, leave_type_id)
         balance = self._find_open_balance(
-            ctx, company_id, employee_id, leave_type_id, start_date.year
+            ctx, company_id, employee_id, leave_type_id, leave_financial_year(start_date)
         )
         validate_leave_cycle_application(
             start_date=start_date,
@@ -754,7 +755,9 @@ class LeaveRequestService:
         )
         # Leave cycle: calendar months only (past/current). Posted balance only — no early credit.
         assert_no_future_calendar_month_leave(start_date, end_date)
-        balance = self._find_open_balance(ctx, cid, employee_id, leave_type_id, start_date.year)
+        balance = self._find_open_balance(
+            ctx, cid, employee_id, leave_type_id, leave_financial_year(start_date)
+        )
         if balance is not None:
             leave_type = self._types.get(ctx, leave_type_id)
             assert_leave_balance_for_cycle(
@@ -884,7 +887,7 @@ class LeaveRequestService:
         )
         self._engine.approve(row)
         balance = self._find_open_balance(
-            ctx, row.company_id, row.employee_id, row.leave_type_id, row.start_date.year
+            ctx, row.company_id, row.employee_id, row.leave_type_id, leave_financial_year(row.start_date)
         )
         if balance is None:
             raise NotFoundException("Open leave balance not found for approval year")
@@ -1079,7 +1082,7 @@ class LeaveAdjustmentService:
             if (
                 bal.employee_id == row.employee_id
                 and bal.leave_type_id == row.leave_type_id
-                and bal.balance_year == row.adjustment_month.year
+                and bal.balance_year == leave_financial_year(row.adjustment_month)
                 and bal.status == "open"
             ):
                 balance = bal

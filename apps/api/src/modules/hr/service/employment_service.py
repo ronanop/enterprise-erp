@@ -236,6 +236,13 @@ class EmploymentService:
             )
         except Exception:
             pass
+
+        target = updated or row
+        if target and target.management_group_id:
+            try:
+                ManagementGroupService(self._db).apply_to_employment(ctx, target)
+            except Exception:
+                pass
         return updated
 
     def confirm(self, ctx: TenantContext, row_id: UUID):

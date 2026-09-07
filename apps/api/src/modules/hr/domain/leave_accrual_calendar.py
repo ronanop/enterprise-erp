@@ -1,8 +1,20 @@
-"""Leave balance credit uses completed calendar months (1–31), not payroll 20–20."""
+"""Leave balance credit uses completed calendar months (1–31), not payroll 20–20.
+
+Leave balances run on a March–March financial year: 1 March through the last day of February.
+"""
 
 from __future__ import annotations
 
 from datetime import date, timedelta
+
+
+def leave_financial_year(on_date: date) -> int:
+    """FY start year. 1 Mar 2026–28 Feb 2027 → 2026."""
+    return on_date.year if on_date.month >= 3 else on_date.year - 1
+
+
+def leave_financial_year_label(year: int) -> str:
+    return f"{year}–{str(year + 1)[2:]} · 1 Mar–last Feb"
 
 
 def completed_calendar_month_yyyymm(reference: date | None = None) -> str:
@@ -19,4 +31,6 @@ def completed_calendar_month_yyyymm(reference: date | None = None) -> str:
 
 
 def balance_year_for_accrual_period(period_yyyymm: str) -> int:
-    return int(period_yyyymm[:4])
+    year = int(period_yyyymm[:4])
+    month = int(period_yyyymm[5:7])
+    return leave_financial_year(date(year, month, 1))

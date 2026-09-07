@@ -1175,6 +1175,8 @@ export type OnboardingAssignmentInput = {
   leavePolicy?: string;
   employeeIdMode?: "auto" | "manual";
   employeeCode?: string;
+  managementGroupId?: string;
+  managementGroupName?: string;
 };
 
 /** HR updates assignment fields on Overview (after doc review / before complete). */
@@ -1229,6 +1231,8 @@ export async function updateOnboardingAssignment(
       (input.employeeIdMode ?? c.employeeIdMode ?? "auto") === "manual"
         ? (input.employeeCode || "").trim().toUpperCase() || c.assignedEmployeeCode
         : undefined,
+    managementGroupId: input.managementGroupId || undefined,
+    managementGroupName: input.managementGroupName || undefined,
   });
   if (!next) return null;
   appendOnboardingAudit({

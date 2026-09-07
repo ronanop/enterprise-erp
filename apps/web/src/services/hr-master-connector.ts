@@ -31,6 +31,8 @@ export type HrMasterOption = {
   branchId?: string;
   branchName?: string;
   companyId?: string;
+  companyName?: string;
+  designation?: string;
   headEmployeeId?: string;
   shiftId?: string;
   shiftName?: string;
@@ -82,6 +84,9 @@ function recordToOption(r: EmployeeRecord): HrMasterOption {
     departmentId: r.departmentId,
     branchId: r.branchId,
     branchName: r.branchName,
+    companyId: r.companyId,
+    companyName: r.companyName,
+    designation: r.designationName,
     shiftId: r.extension?.employment?.shiftId,
     shiftName: r.extension?.employment?.shiftName,
     bankAccount: r.extension?.bank?.accountNumber

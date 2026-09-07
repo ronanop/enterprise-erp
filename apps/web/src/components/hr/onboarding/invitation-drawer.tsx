@@ -1,13 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Mail, MessageCircle, Phone } from "lucide-react";
+import { Copy, Mail } from "lucide-react";
 
 import {
   SetupDrawer,
   SetupField,
   SetupInput,
-  SetupSelect,
 } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +25,6 @@ type Props = {
 };
 
 export function InvitationDrawer({ open, caseRow, onClose, onSend }: Props) {
-  const [channel, setChannel] = useState<InvitationChannel>("email");
   const [expiryDays, setExpiryDays] = useState("14");
   const [copied, setCopied] = useState<"link" | "creds" | null>(null);
 
@@ -75,7 +73,7 @@ export function InvitationDrawer({ open, caseRow, onClose, onSend }: Props) {
             type="button"
             className="cursor-pointer"
             onClick={() => {
-              onSend(caseRow.id, channel, Number(expiryDays) || 14);
+              onSend(caseRow.id, "email", Number(expiryDays) || 14);
               onClose();
             }}
           >
@@ -157,17 +155,6 @@ export function InvitationDrawer({ open, caseRow, onClose, onSend }: Props) {
           </div>
         </SetupField>
 
-        <SetupField label="Channel">
-          <SetupSelect
-            value={channel}
-            onChange={(e) => setChannel(e.target.value as InvitationChannel)}
-          >
-            <option value="email">Email</option>
-            <option value="sms">SMS</option>
-            <option value="whatsapp">WhatsApp</option>
-          </SetupSelect>
-        </SetupField>
-
         <SetupField label="Link expiry (days)">
           <SetupInput
             type="number"
@@ -186,26 +173,6 @@ export function InvitationDrawer({ open, caseRow, onClose, onSend }: Props) {
           >
             <Mail className="size-3.5" />
             Send Email
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="cursor-pointer"
-            onClick={() => onSend(caseRow.id, "sms", Number(expiryDays) || 14)}
-          >
-            <Phone className="size-3.5" />
-            Send SMS
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="cursor-pointer"
-            onClick={() => onSend(caseRow.id, "whatsapp", Number(expiryDays) || 14)}
-          >
-            <MessageCircle className="size-3.5" />
-            Send WhatsApp
           </Button>
         </div>
       </div>

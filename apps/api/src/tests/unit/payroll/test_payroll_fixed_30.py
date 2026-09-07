@@ -105,6 +105,23 @@ def test_case_i_sandwich_on_approved_leave_becomes_lop():
     assert payable_days_from_lop(lop) == Decimal("28")
 
 
+def test_case_i_both_trigger_leave_surrounding_weekend():
+    fri = date(2026, 7, 24)
+    sat = date(2026, 7, 25)
+    sun = date(2026, 7, 26)
+    mon = date(2026, 7, 27)
+    dates = sandwich_off_dates(
+        date(2026, 7, 20),
+        date(2026, 7, 31),
+        is_non_working=_weekend,
+        attendance_status_by_date={fri: "absent", mon: "absent"},
+        approved_leave_dates={fri, mon},
+        as_of=mon,
+        trigger="both",
+    )
+    assert dates == {sat, sun}
+
+
 def test_case_k_absent_weekend_absent_unauthorized():
     fri = date(2026, 7, 24)
     sat = date(2026, 7, 25)

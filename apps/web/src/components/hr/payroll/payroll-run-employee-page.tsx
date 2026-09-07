@@ -1,46 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Scale } from "lucide-react";
 
-import { HrEmptyState, HrStatusBadge } from "@/components/hr/hr-primitives";
+import { LeaveAdjustPanel } from "@/components/hr/attendance/leave-adjust-panel";
+import { HrEmptyState } from "@/components/hr/hr-primitives";
 import { PageHeader } from "@/components/layout/page-header";
-import { cn } from "@/lib/utils";
 import { splitPresentAndHalf } from "@/lib/payroll-attendance-cycle";
-import { isPfDeductionLabel } from "@/lib/payroll-cycle";
+import { isPfDeductionLabel, readPayrollCutoverDay } from "@/lib/payroll-cycle";
 import { formatInr } from "@/services/payroll-service";
-import { loadAttendanceForEmployee } from "@/services/attendance-management-service";
+import {
+  loadAttendanceDirectory,
+  type AttendanceDirectory,
+} from "@/services/attendance-management-service";
 import {
   getPayrollRun,
   getPayrollRunAttendance,
   getPayrollRunEmployeeLine,
+  isMonthLocked,
   loadPayrollDirectory,
+  previewPayrollRunEmployees,
 } from "@/services/payroll-management-service";
 import { loadHrMasterDirectory } from "@/services/hr-master-connector";
-import type { AttendanceRecord } from "@/types/attendance-management";
 import type { PayrollRun, PayrollRunEmployeeLine } from "@/types/payroll-management";
-
-function formatTime12(iso: string): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function formatDate(iso: string): string {
-  const [y, m, d] = iso.split("-").map(Number);
-  if (!y || !m || !d) return iso;
-  return new Date(y, m - 1, d).toLocaleDateString(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
-}
+import { monthLabel } from "@/types/payroll-management";
 
 export function PayrollRunEmployeePage({
   runId,
@@ -49,43 +34,90 @@ export function PayrollRunEmployeePage({
   runId: string;
   employeeId: string;
 }) {
+  return (
+    <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+      <PayrollRunEmployeeBody runId={runId} employeeId={employeeId} />
+    </Suspense>
+  );
+}
+
+function PayrollRunEmployeeBody({
+  runId,
+  employeeId,
+}: {
+  runId: string;
+  employeeId: string;
+}) {
+  const searchParams = useSearchParams();
+  const isPreview = runId === "new";
   const [run, setRun] = useState<PayrollRun | null>(null);
   const [line, setLine] = useState<PayrollRunEmployeeLine | null>(null);
   const [name, setName] = useState("");
-  const [days, setDays] = useState<AttendanceRecord[]>([]);
+  const [hrEmployeeId, setHrEmployeeId] = useState("");
+  const [directory, setDirectory] = useState<AttendanceDirectory | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reloadAt, setReloadAt] = useState(0);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     void (async () => {
       await loadPayrollDirectory();
-      const nextRun = getPayrollRun(runId);
       const decoded = decodeURIComponent(employeeId);
-      const nextLine = getPayrollRunEmployeeLine(runId, decoded);
       const master = await loadHrMasterDirectory().catch(() => null);
       const emp = master?.employees.find((e) => e.id === decoded || e.code === decoded);
+
+      let nextRun = isPreview ? null : getPayrollRun(runId);
+      let nextLine = isPreview ? null : getPayrollRunEmployeeLine(runId, decoded);
+
+      if (isPreview) {
+        const month =
+          searchParams.get("month") ||
+          `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+        const cutover = Number(searchParams.get("cutover") || readPayrollCutoverDay());
+        const preview = await previewPayrollRunEmployees(month, cutover);
+        nextLine =
+          preview.lines.find((l) => l.employeeId === decoded || l.employeeCode === decoded) ?? null;
+        nextRun = {
+          id: "new",
+          runCode: "",
+          month,
+          monthLabel: monthLabel(month),
+          cycleStart: preview.cycle.start,
+          cycleEnd: preview.cycle.end,
+          cycleCutoverDay: cutover,
+          cycleLabel: preview.cycle.label,
+          employeeCount: preview.lines.length,
+          grossTotal: 0,
+          deductionTotal: 0,
+          netTotal: 0,
+          status: "draft",
+          attendanceSynced: false,
+          leaveSynced: false,
+          otSynced: false,
+          createdAt: "",
+          updatedAt: "",
+        };
+      }
+
       const hrId = emp?.id || nextLine?.employeeId || decoded;
-      const attRows = await loadAttendanceForEmployee(hrId).catch(() => []);
-      const start = nextRun?.cycleStart ?? "";
-      const end = nextRun?.cycleEnd ?? "";
-      const inCycle = attRows
-        .filter((r) => (!start || r.attendanceDate >= start) && (!end || r.attendanceDate <= end))
-        .sort((a, b) => a.attendanceDate.localeCompare(b.attendanceDate));
+      const attDir = await loadAttendanceDirectory().catch(() => null);
       if (cancelled) return;
       setRun(nextRun);
       setLine(nextLine);
       setName(emp?.label.split(" · ")[0] || nextLine?.employeeName || decoded);
-      setDays(inCycle);
+      setHrEmployeeId(hrId);
+      setDirectory(attDir);
     })().finally(() => {
       if (!cancelled) setLoading(false);
     });
     return () => {
       cancelled = true;
     };
-  }, [runId, employeeId]);
+  }, [runId, employeeId, isPreview, searchParams, reloadAt]);
 
-  const att = line
+  const att = !isPreview && line
     ? getPayrollRunAttendance(runId).find(
         (a) =>
           a.employeeId === line.employeeId ||
@@ -98,26 +130,35 @@ export function PayrollRunEmployeePage({
     att?.presentDays ?? line?.presentDays ?? 0,
     att?.halfDays ?? line?.halfDays ?? 0,
   );
-  const leaveDays = att?.leaveDays ?? line?.leaveDays ?? 0;
   const absentDays = att?.absentDays ?? line?.absentDays ?? 0;
-  const holidays = att?.holidays ?? line?.holidays ?? 0;
   const weeklyOff = att?.weeklyOff ?? line?.weeklyOff ?? 0;
-  const lopDays = att?.lopDays ?? line?.lopDays ?? absentDays + (split.half ? split.half * 0.5 : 0);
   const payable = line?.payableDays ?? 0;
   const working = line?.periodDays || line?.workingDaysInCycle || 30;
-  const unmarked = Math.max(
-    0,
-    Math.round((working - split.present - split.half - leaveDays - absentDays - holidays - weeklyOff) * 10) / 10,
-  );
 
   const factor = line?.attendanceFactor || (working ? payable / working : 1);
+  const locked = run ? isMonthLocked(run.month) || run.status === "locked" : false;
 
   return (
     <div className="space-y-5">
       <PageHeader
         title={name || "Employee payroll"}
-        backHref={`/hr/payroll/runs/${runId}`}
-        backLabel={run?.cycleLabel || "run"}
+        backHref={
+          isPreview
+            ? `/hr/payroll/runs/new`
+            : `/hr/payroll/runs/${runId}`
+        }
+        backLabel={run?.cycleLabel || (isPreview ? "run payroll" : "run")}
+        actions={
+          hrEmployeeId ? (
+            <Link
+              href={`/hr/time?tab=leave-adjust&employeeId=${encodeURIComponent(hrEmployeeId)}`}
+              className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-[min(var(--radius-md),12px)] border border-border bg-background px-2.5 text-[0.8rem] font-medium transition-colors duration-200 hover:bg-muted"
+            >
+              <Scale className="size-3.5" />
+              Leave adjust
+            </Link>
+          ) : null
+        }
       />
       {loading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -125,70 +166,33 @@ export function PayrollRunEmployeePage({
         <HrEmptyState title="Employee not found on this run" />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-            <Stat label="Present" value={String(split.present)} tone="bg-hrms-mint" />
-            <Stat label="Half day" value={String(split.half)} tone="bg-hrms-peach" />
-            <Stat label="Leave" value={String(leaveDays)} />
-            <Stat label="Week off" value={String(weeklyOff)} />
-            <Stat label="Holiday" value={String(holidays)} />
-            <Stat label="Absent" value={String(absentDays)} tone="bg-hrms-pink" />
-            <Stat label="LOP" value={String(lopDays)} tone="bg-hrms-pink" />
-            <Stat label="Payable" value={`${payable}/${working || 30}`} />
-          </div>
-
-          <p className="text-xs text-muted-foreground">
-            Payable days = 30 − LOP ({lopDays}) = {payable} / {working || 30}. Weekly offs and holidays are payable
-            unless sandwich policy converts them. Present ({split.present}) is attendance, not the salary numerator.
-            {unmarked > 0 ? ` ${unmarked} day(s) in the 20th–19th cycle have no attendance mark.` : ""}
-          </p>
-
-          <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
-            <div className="border-b border-border/60 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Daily attendance · {run?.cycleLabel || "cycle"}
+          {run?.cycleStart && run.cycleEnd && hrEmployeeId ? (
+            <div className="w-full rounded-xl border border-border/70 bg-card p-3">
+              <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Leave adjust
+              </h3>
+              <LeaveAdjustPanel
+                directory={directory}
+                initialEmployeeId={hrEmployeeId}
+                payrollRunId={isPreview ? undefined : run.id}
+                source={isPreview ? "attendance_tab" : "payroll_run"}
+                locked={locked}
+                periodStart={run.cycleStart}
+                periodEnd={run.cycleEnd}
+                hideEmployee
+                onChanged={() => setReloadAt((n) => n + 1)}
+                selectedDate={selectedDay}
+                onSelectedDateChange={setSelectedDay}
+                attendanceSummary={{
+                  present: split.present,
+                  halfDay: split.half,
+                  absent: absentDays,
+                  weekOff: weeklyOff,
+                  payable,
+                }}
+              />
             </div>
-            {days.length === 0 ? (
-              <p className="px-4 py-6 text-sm text-muted-foreground">No attendance rows in this cycle.</p>
-            ) : (
-              <div className="erp-scroll max-h-[22rem] overflow-auto">
-                <table className="w-full min-w-[640px] text-left text-sm">
-                  <thead className="sticky top-0 z-10 border-b border-border/70 bg-muted/90 backdrop-blur-sm">
-                    <tr>
-                      {["Date", "Status", "Check in", "Check out", "Hours", "Paid"].map((h) => (
-                        <th
-                          key={h}
-                          className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {days.map((row) => {
-                      const paid =
-                        row.status === "half_day"
-                          ? 0.5
-                          : row.status === "absent"
-                            ? 0
-                            : 1;
-                      return (
-                        <tr key={row.id} className="border-b border-border/40 hover:bg-muted/25">
-                          <td className="px-3 py-2 text-xs whitespace-nowrap">{formatDate(row.attendanceDate)}</td>
-                          <td className="px-3 py-2">
-                            <HrStatusBadge status={row.status.replace(/_/g, " ")} />
-                          </td>
-                          <td className="px-3 py-2 text-xs whitespace-nowrap">{formatTime12(row.checkIn)}</td>
-                          <td className="px-3 py-2 text-xs whitespace-nowrap">{formatTime12(row.checkOut)}</td>
-                          <td className="px-3 py-2 text-xs tabular-nums">{row.workingHours || "—"}</td>
-                          <td className="px-3 py-2 text-xs tabular-nums">{paid}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          ) : null}
 
           <div className="grid gap-4 lg:grid-cols-2">
             <PayTable
@@ -218,23 +222,6 @@ export function PayrollRunEmployeePage({
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone?: string;
-}) {
-  return (
-    <div className={cn("rounded-xl border border-border/70 bg-card px-3 py-2", tone)}>
-      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-1 text-sm font-medium tabular-nums">{value}</p>
     </div>
   );
 }

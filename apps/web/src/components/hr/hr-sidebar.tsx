@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { clearTokens } from "@/lib/auth";
 import { authService } from "@/services/api-client";
+import { getMyHrNavAccess } from "@/services/hr-superadmin-service";
 import { cn } from "@/lib/utils";
 
 function navHrefMatches(pathname: string, search: string, href: string): boolean {
@@ -22,6 +23,9 @@ function navHrefMatches(pathname: string, search: string, href: string): boolean
   }
   if (pathname.startsWith("/hr/payroll/salary-structures")) {
     return href === "/hr/payroll?section=salary-structure";
+  }
+  if (pathname.startsWith("/hr/payroll/runs")) {
+    return href === "/hr/payroll?section=run-payroll";
   }
   const pathOk = pathname === pathPart || pathname.startsWith(`${pathPart}/`);
   if (!pathOk) return false;
@@ -96,10 +100,30 @@ function NavLinkRow({
   );
 }
 
-function visibleNavGroups(isHrmsSuperAdmin: boolean): HrNavGroup[] {
+function visibleNavGroups(
+  isHrmsSuperAdmin: boolean,
+  access: { unrestricted: boolean; keys: Set<string> } | null,
+): HrNavGroup[] {
+  const unrestricted = isHrmsSuperAdmin || access == null || access.unrestricted;
+  const allowed = access?.keys ?? new Set<string>();
   return hrNavGroups.map((group) => ({
     ...group,
-    items: group.items.filter((item) => isHrmsSuperAdmin || !item.superAdminOnly),
+    items: group.items
+      .filter((item) => isHrmsSuperAdmin || !item.superAdminOnly)
+      .map((item) => {
+        if (unrestricted || item.superAdminOnly) return item;
+        if (item.children?.length) {
+          const children = item.children.filter((child) => child.navKey && allowed.has(child.navKey));
+          return { ...item, children };
+        }
+        return item;
+      })
+      .filter((item) => {
+        if (item.superAdminOnly) return isHrmsSuperAdmin;
+        if (unrestricted) return true;
+        if (item.children?.length) return item.children.length > 0;
+        return Boolean(item.navKey && allowed.has(item.navKey));
+      }),
   }));
 }
 
@@ -114,7 +138,36 @@ function SidebarNavBody({
   const searchParams = useSearchParams();
   const search = searchParams.toString();
   const { isHrmsSuperAdmin } = useUserPermissions();
-  const groups = useMemo(() => visibleNavGroups(isHrmsSuperAdmin), [isHrmsSuperAdmin]);
+  const [navAccess, setNavAccess] = useState<{ unrestricted: boolean; keys: Set<string> } | null>(
+    isHrmsSuperAdmin ? { unrestricted: true, keys: new Set() } : null,
+  );
+
+  useEffect(() => {
+    if (isHrmsSuperAdmin) {
+      setNavAccess({ unrestricted: true, keys: new Set() });
+      return;
+    }
+    let cancelled = false;
+    void getMyHrNavAccess()
+      .then((row) => {
+        if (cancelled) return;
+        setNavAccess({
+          unrestricted: row.unrestricted,
+          keys: new Set(row.nav_keys),
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setNavAccess({ unrestricted: true, keys: new Set() });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isHrmsSuperAdmin]);
+
+  const groups = useMemo(
+    () => visibleNavGroups(isHrmsSuperAdmin, navAccess),
+    [isHrmsSuperAdmin, navAccess],
+  );
 
   const allNavHrefs = useMemo(() => flattenHrNavHrefs(groups), [groups]);
   const activeHref = useMemo(

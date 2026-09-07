@@ -43,12 +43,21 @@ function eachDay(from: string, to: string): string[] {
   return days;
 }
 
-function leaveDaysInCycle(req: LeaveRequestRecord, cycle: PayrollCycle): number {
-  if (!["approved", "manager_approved", "hr_approved"].includes(req.status)) return 0;
+function isWeekend(iso: string): boolean {
+  const [y, m, d] = iso.split("-").map(Number);
+  return new Date(y, m - 1, d).getDay() % 6 === 0;
+}
+
+function leaveDatesInCycle(req: LeaveRequestRecord, cycle: PayrollCycle): string[] {
+  if (!["approved", "manager_approved", "hr_approved"].includes(req.status)) return [];
   const overlapStart = req.fromDate > cycle.start ? req.fromDate : cycle.start;
   const overlapEnd = req.toDate < cycle.end ? req.toDate : cycle.end;
-  if (overlapStart > overlapEnd) return 0;
-  return eachDay(overlapStart, overlapEnd).length;
+  if (overlapStart > overlapEnd) return [];
+  return eachDay(overlapStart, overlapEnd);
+}
+
+function leaveDaysInCycle(req: LeaveRequestRecord, cycle: PayrollCycle): number {
+  return leaveDatesInCycle(req, cycle).length;
 }
 
 function presentWeight(status: string): number {
@@ -113,6 +122,19 @@ export function summarizePayrollAttendance(
       else if (r.status === "leave") leaveFromAtt += 1;
       else if (r.status === "holiday") holidays += 1;
       else if (r.status === "weekend" || r.status === "week_off") weeklyOff += 1;
+    }
+
+    const leaveDates = new Set<string>();
+    for (const req of leaveRequests) {
+      if (req.employeeId !== hrId && req.employeeId !== emp.employeeId) continue;
+      for (const day of leaveDatesInCycle(req, cycle)) leaveDates.add(day);
+    }
+
+    const covered = new Set(rows.map((r) => r.attendanceDate));
+    for (const day of eachDay(cycle.start, cycle.end)) {
+      if (covered.has(day) || leaveDates.has(day)) continue;
+      if (isWeekend(day)) weeklyOff += 1;
+      else absentDays += 1;
     }
 
     const leaveFromRequests =

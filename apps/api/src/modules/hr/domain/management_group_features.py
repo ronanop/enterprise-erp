@@ -18,6 +18,7 @@ FEATURE_SECTIONS: tuple[tuple[str, str, tuple[tuple[str, str, bool, str | None],
             ("attendance.regularization", "Enable Attendance Regularization", True, "attendance.enable"),
             ("attendance.shift_rotation", "Enable Shift Rotation", True, "attendance.enable"),
             ("attendance.auto_shift", "Enable Auto Shift Assignment", True, "attendance.enable"),
+            ("attendance.auto_mark", "Auto-mark attendance through today", False, "attendance.enable"),
             ("attendance.overtime", "Enable Overtime", True, "attendance.enable"),
             ("attendance.night_allowance", "Enable Night Shift Allowance", False, "attendance.enable"),
         ),
@@ -138,6 +139,9 @@ def default_feature_toggles() -> dict[str, bool]:
 
 def preset_for_group_code(group_code: str) -> dict[str, bool]:
     toggles = default_feature_toggles()
+    if group_code == "MG-ATT-AUTO":
+        toggles["attendance.auto_mark"] = True
+        toggles["attendance.auto_shift"] = True
     if group_code == "MG-CLIENT":
         toggles["client.enable"] = True
         toggles["client.timesheets"] = True

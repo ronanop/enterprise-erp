@@ -23,6 +23,30 @@ class ManagementGroupRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrManagementGroup, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
+    def get_by_code_any(
+        self, ctx: TenantContext, company_id: UUID, group_code: str
+    ) -> HrManagementGroup | None:
+        """Lookup by company + code, including soft-deleted rows (unique key ignores is_deleted)."""
+        stmt = select(HrManagementGroup).where(
+            HrManagementGroup.company_id == company_id,
+            HrManagementGroup.group_code == group_code,
+        )
+        stmt = self.apply_hr_filter(stmt, HrManagementGroup, ctx, branch_scoped=False)
+        return self.db.scalar(stmt)
+
+    def restore(self, ctx: TenantContext, row: HrManagementGroup) -> HrManagementGroup:
+        row.is_deleted = False
+        row.deleted_at = None
+        row.deleted_by = None
+        if row.status != "active":
+            row.status = "active"
+        row.updated_at = utcnow()
+        row.updated_by = ctx.user_id
+        if hasattr(row, "version"):
+            row.version = int(row.version or 1) + 1
+        self.db.flush()
+        return row
+
     def list_rows(self, ctx: TenantContext, company_id: UUID | None) -> list[HrManagementGroup]:
         stmt = select(HrManagementGroup).where(HrManagementGroup.is_deleted.is_(False))
         if company_id is not None:

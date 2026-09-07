@@ -19,6 +19,10 @@ import { isAuthenticated } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import {
+  ALL_HR_NAV_KEYS,
+  hrNavAccessGroups,
+} from "@/config/hr-nav";
+import {
   assignHrAdmin,
   listHrActivityLogs,
   listHrAdmins,
@@ -26,6 +30,7 @@ import {
   resetHrAdminPassword,
   revokeHrAdmin,
   setHrAdminEntities,
+  setHrAdminNav,
   type HrActivityLogRecord,
   type HrAdminEntityOption,
   type HrAdminRecord,
@@ -46,6 +51,13 @@ const TABS: HrTabItem[] = [
   { id: "passwords", label: "Passwords", icon: KeyRound },
   { id: "logs", label: "Activity logs", icon: ScrollText },
 ];
+
+const NAV_ACCESS_GROUPS = hrNavAccessGroups();
+
+function effectiveNavKeys(admin: HrAdminRecord): Set<string> {
+  if (admin.nav_unrestricted) return new Set(ALL_HR_NAV_KEYS);
+  return new Set(admin.nav_keys);
+}
 
 function formatWhen(iso: string): string {
   const d = new Date(iso);
@@ -331,6 +343,46 @@ export function HrSuperadminPage() {
     }
   }
 
+  async function onToggleNav(employeeId: string, navKey: string, next: boolean) {
+    const admin = adminByEmployee.get(employeeId);
+    if (!admin) return;
+    const current = effectiveNavKeys(admin);
+    if (next) current.add(navKey);
+    else current.delete(navKey);
+    setBusyId(`nav:${employeeId}:${navKey}`);
+    try {
+      const row = await setHrAdminNav(employeeId, [...current]);
+      setAdmins((prev) => prev.map((item) => (item.employee_id === employeeId ? row : item)));
+      toast(next ? "Menu shown" : "Menu hidden for that HR Admin");
+      await reloadLogs();
+    } catch (err) {
+      toast(err instanceof ApiClientError ? err.message : "Menu update failed", "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function onToggleNavGroup(employeeId: string, keys: string[], next: boolean) {
+    const admin = adminByEmployee.get(employeeId);
+    if (!admin) return;
+    const current = effectiveNavKeys(admin);
+    for (const key of keys) {
+      if (next) current.add(key);
+      else current.delete(key);
+    }
+    setBusyId(`nav:${employeeId}:${keys.join(",")}`);
+    try {
+      const row = await setHrAdminNav(employeeId, [...current]);
+      setAdmins((prev) => prev.map((item) => (item.employee_id === employeeId ? row : item)));
+      toast(next ? "Menus shown" : "Menus hidden for that HR Admin");
+      await reloadLogs();
+    } catch (err) {
+      toast(err instanceof ApiClientError ? err.message : "Menu update failed", "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function onGeneratePassword(employeeId: string) {
     setBusyId(employeeId);
     try {
@@ -363,7 +415,7 @@ export function HrSuperadminPage() {
       <SetupToastHost />
       <PageHeader
         title="Superadmin Panel"
-        description="Assign HR Admins, grant HR module access, choose which entities they can manage (one or many), generate login passwords, and review activity logs."
+        description="Assign HR Admins, choose entities, pick which sidebar menus they see, generate passwords, and review activity logs."
       />
 
       {issued ? (
@@ -427,7 +479,7 @@ export function HrSuperadminPage() {
               <PanelHeader
                 icon={Shield}
                 title={`Assigned HR Admins (${admins.length})`}
-                caption="Employees with HR Admin / module access. They see HRMS in their ERP menu. Toggle entities (one or many). Turn off HR Admin to revoke access and sign them out."
+                caption="Employees with HR Admin / module access. Toggle entities and sidebar menus. Superadmin Panel is never granted here. Turn off HR Admin to revoke access."
               >
                 <Input
                   value={query}
@@ -445,12 +497,13 @@ export function HrSuperadminPage() {
                 />
               ) : (
                 <div className="mb-6 overflow-auto rounded-xl border border-border/70">
-                  <table className="w-full min-w-[48rem] text-left text-xs">
+                  <table className="w-full min-w-[72rem] text-left text-xs">
                     <thead className="sticky top-0 bg-muted/80 backdrop-blur">
                       <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
                         <th className="px-3 py-2.5 font-medium">Employee</th>
                         <th className="px-3 py-2.5 font-medium">Designation</th>
                         <th className="px-3 py-2.5 font-medium">Entities</th>
+                        <th className="px-3 py-2.5 font-medium">Sidebar menus</th>
                         <th className="px-3 py-2.5 text-right font-medium">HR Admin</th>
                       </tr>
                     </thead>
@@ -460,6 +513,8 @@ export function HrSuperadminPage() {
                         const entityNames = admin.company_ids
                           .map((id) => entityNameById.get(id))
                           .filter((name): name is string => Boolean(name));
+                        const navKeys = effectiveNavKeys(admin);
+                        const allMenusOn = ALL_HR_NAV_KEYS.every((key) => navKeys.has(key));
                         return (
                           <tr key={admin.employee_id} className="border-b border-border/50 align-top last:border-b-0">
                             <td className="px-3 py-3">
@@ -511,6 +566,70 @@ export function HrSuperadminPage() {
                                   })}
                                 </ul>
                               )}
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="mb-2 flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2 py-1">
+                                <span className="text-[11px] font-medium text-foreground">All menus</span>
+                                <ToggleSwitch
+                                  compact
+                                  checked={allMenusOn}
+                                  disabled={Boolean(busyId)}
+                                  label={allMenusOn ? "Shown" : "Hidden"}
+                                  onChange={(next) =>
+                                    void onToggleNavGroup(admin.employee_id, ALL_HR_NAV_KEYS, next)
+                                  }
+                                />
+                              </div>
+                              <div className="max-h-72 space-y-3 overflow-y-auto pr-1">
+                                {NAV_ACCESS_GROUPS.map((group, groupIdx) => {
+                                  const groupKeys = group.items.map((item) => item.navKey);
+                                  const groupOn = groupKeys.every((key) => navKeys.has(key));
+                                  return (
+                                    <div key={`${group.label || "menus"}-${groupIdx}`}>
+                                      {group.label ? (
+                                        <div className="mb-1 flex items-center justify-between gap-2">
+                                          <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                            {group.label}
+                                          </p>
+                                          <ToggleSwitch
+                                            compact
+                                            checked={groupOn}
+                                            disabled={Boolean(busyId)}
+                                            label={groupOn ? "All" : "None"}
+                                            onChange={(next) =>
+                                              void onToggleNavGroup(admin.employee_id, groupKeys, next)
+                                            }
+                                          />
+                                        </div>
+                                      ) : null}
+                                      <ul className="space-y-1">
+                                        {group.items.map((item) => {
+                                          const on = navKeys.has(item.navKey);
+                                          const itemBusy =
+                                            busyId === `nav:${admin.employee_id}:${item.navKey}`;
+                                          return (
+                                            <li
+                                              key={item.navKey}
+                                              className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-2 py-1"
+                                            >
+                                              <span className="min-w-0 truncate text-[11px]">{item.title}</span>
+                                              <ToggleSwitch
+                                                compact
+                                                checked={on}
+                                                disabled={busyId === admin.employee_id || itemBusy}
+                                                label={on ? "Shown" : "Hidden"}
+                                                onChange={(next) =>
+                                                  void onToggleNav(admin.employee_id, item.navKey, next)
+                                                }
+                                              />
+                                            </li>
+                                          );
+                                        })}
+                                      </ul>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             </td>
                             <td className="px-3 py-3">
                               <div className="flex justify-end">

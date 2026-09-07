@@ -5,6 +5,7 @@ import {
   redirectToLogin,
   setTokens,
 } from "@/lib/auth";
+import { clampListPageSize, rewriteHrmsApiPath } from "@/lib/hrms-api";
 import { env, getApiUrl, resolveApiUrl, setApiUrl } from "@/utils/env";
 import { fetchWithRetry } from "@/lib/fetch-retry";
 import { clearStoredOrgContext } from "@/lib/org-context-storage";
@@ -54,10 +55,12 @@ function buildUrl(
   query?: RequestOptions["query"],
   baseUrl: string = getApiUrl(),
 ): string {
-  const base = `${baseUrl}${path}`;
-  if (!query) return base;
+  const resolved = rewriteHrmsApiPath(path);
+  const clamped = clampListPageSize(resolved, query);
+  const base = `${baseUrl}${resolved}`;
+  if (!clamped) return base;
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(query)) {
+  for (const [key, value] of Object.entries(clamped)) {
     if (value === undefined || value === null || value === "") continue;
     params.set(key, String(value));
   }
@@ -67,6 +70,7 @@ function buildUrl(
 
 let refreshInFlight: Promise<boolean> | null = null;
 let apiBaseReady: Promise<string> | null = null;
+const getInflight = new Map<string, Promise<ApiResponse<unknown>>>();
 
 function ensureApiBase(): Promise<string> {
   if (!apiBaseReady) {
@@ -135,6 +139,33 @@ async function refreshAccessToken(): Promise<boolean> {
  * UI must never access the database directly (DG-01).
  */
 export async function apiClient<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<ApiResponse<T>> {
+  const method = (options.method ?? "GET").toUpperCase();
+  const coalesce =
+    method === "GET" && !options._retried && !options._apiFailover;
+  const coalesceKey = coalesce
+    ? `${getApiUrl()}|${rewriteHrmsApiPath(path)}|${JSON.stringify(
+        clampListPageSize(rewriteHrmsApiPath(path), options.query) ?? {},
+      )}`
+    : null;
+  if (coalesceKey) {
+    const existing = getInflight.get(coalesceKey);
+    if (existing) return existing as Promise<ApiResponse<T>>;
+  }
+
+    const pending = apiClientExecute<T>(path, options);
+  if (coalesceKey) {
+    getInflight.set(coalesceKey, pending as Promise<ApiResponse<unknown>>);
+    void pending.finally(() => {
+      getInflight.delete(coalesceKey);
+    }).catch(() => undefined);
+  }
+  return pending;
+}
+
+async function apiClientExecute<T>(
   path: string,
   options: RequestOptions = {},
 ): Promise<ApiResponse<T>> {

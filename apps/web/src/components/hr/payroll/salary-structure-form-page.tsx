@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Loader2, Pencil } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
@@ -17,6 +18,12 @@ import {
   amountsFromSplit,
 } from "@/lib/salary-structure-excel";
 import { formatInr } from "@/services/payroll-service";
+import {
+  getCachedPayrollPfPolicy,
+  loadResolvedPayrollPfPolicy,
+  employeePfAmount,
+  type PayrollPfPolicy,
+} from "@/lib/payroll-pf-policy";
 import {
   createStructure,
   getSalaryStructure,
@@ -59,14 +66,12 @@ export function SalaryStructureFormPage({
   const [hraPct, setHraPct] = useState("50");
   const [telephone, setTelephone] = useState("0");
   const [employer, setEmployer] = useState("1800");
-  const [pfPct, setPfPct] = useState("12");
-  const [pfWageCeiling, setPfWageCeiling] = useState("15000");
-  const [pfFixedCeiling, setPfFixedCeiling] = useState("1800");
   const [edli, setEdli] = useState("100");
   const [esiPct, setEsiPct] = useState("0.75");
   const [esiCeiling, setEsiCeiling] = useState("21000");
   const [totalDays, setTotalDays] = useState("30");
   const [payableDays, setPayableDays] = useState("30");
+  const [pfPolicy, setPfPolicy] = useState<PayrollPfPolicy>(() => getCachedPayrollPfPolicy());
 
   const applyRow = useCallback((row: SalaryStructure) => {
     setExisting(row);
@@ -78,9 +83,6 @@ export function SalaryStructureFormPage({
     setHraPct(fractionToPct(row.hraPercentOfBasic, EXCEL_DEFAULTS.hraPercentOfBasic));
     setTelephone(String(row.telephoneAllowance ?? 0));
     setEmployer(String(row.employerContribution ?? row.pf ?? EXCEL_DEFAULTS.employerContribution));
-    setPfPct(fractionToPct(row.pfPercent, EXCEL_DEFAULTS.pfPercent));
-    setPfWageCeiling(String(row.pfWageCeiling ?? EXCEL_DEFAULTS.pfWageCeiling));
-    setPfFixedCeiling(String(row.pfFixedCeiling ?? EXCEL_DEFAULTS.pfFixedCeiling));
     setEdli(String(row.edliAdminAmount ?? EXCEL_DEFAULTS.edliAdminAmount));
     setEsiPct(fractionToPct(row.esiPercent, EXCEL_DEFAULTS.esiPercent));
     setEsiCeiling(String(row.esiMonthlyCeiling ?? EXCEL_DEFAULTS.esiMonthlyCeiling));
@@ -112,6 +114,10 @@ export function SalaryStructureFormPage({
     };
   }, [structureId, applyRow]);
 
+  useEffect(() => {
+    void loadResolvedPayrollPfPolicy().then(setPfPolicy);
+  }, []);
+
   const split = useMemo(
     () =>
       computeCtcSplit({
@@ -124,21 +130,29 @@ export function SalaryStructureFormPage({
     [grossCtc, basicPct, hraPct, telephone, employer],
   );
 
-  const preview = useMemo(
-    () =>
-      computePayablePreview(split, {
-        pfPercent: pctToFraction(pfPct),
-        pfWageCeiling: Number(pfWageCeiling) || 0,
-        pfFixedCeiling: Number(pfFixedCeiling) || 0,
-        edliAdminAmount: Number(edli) || 0,
-        esiPercent: pctToFraction(esiPct),
-        esiMonthlyCeiling: Number(esiCeiling) || 0,
-        totalDays: Number(totalDays) || 30,
-        payableDays: Number(payableDays) || 0,
-        advanceArrear: 0,
-      }),
-    [split, pfPct, pfWageCeiling, pfFixedCeiling, edli, esiPct, esiCeiling, totalDays, payableDays],
-  );
+  const preview = useMemo(() => {
+    const days = Number(totalDays) || 30;
+    const payable = Number(payableDays) || 0;
+    const raw = computePayablePreview(split, {
+      pfPercent: pfPolicy.pf_employee_percent,
+      pfWageCeiling: pfPolicy.pf_wage_ceiling,
+      pfFixedCeiling: pfPolicy.pf_employee_amount,
+      edliAdminAmount: Number(edli) || 0,
+      esiPercent: pctToFraction(esiPct),
+      esiMonthlyCeiling: Number(esiCeiling) || 0,
+      totalDays: days,
+      payableDays: payable,
+      advanceArrear: 0,
+    });
+    const factor = days > 0 ? Math.min(1, Math.max(0, payable / days)) : 1;
+    const pf = employeePfAmount(pfPolicy, {
+      monthlyBasic: split.basic,
+      cycleBasic: raw.payableBasic,
+      factor,
+    });
+    const totalDed = Math.round(raw.totalDed - raw.pf + pf);
+    return { ...raw, pf, totalDed, net: Math.round(raw.gross - totalDed) };
+  }, [split, pfPolicy, edli, esiPct, esiCeiling, totalDays, payableDays]);
 
   function toInput(status: "draft" | "active"): Omit<SalaryStructure, "id" | "createdAt"> {
     return {
@@ -149,9 +163,9 @@ export function SalaryStructureFormPage({
       effectiveFrom: existing?.effectiveFrom,
       basicPercent: pctToFraction(basicPct),
       hraPercentOfBasic: pctToFraction(hraPct),
-      pfPercent: pctToFraction(pfPct),
-      pfWageCeiling: Number(pfWageCeiling) || EXCEL_DEFAULTS.pfWageCeiling,
-      pfFixedCeiling: Number(pfFixedCeiling) || EXCEL_DEFAULTS.pfFixedCeiling,
+      pfPercent: pfPolicy.pf_employee_percent,
+      pfWageCeiling: pfPolicy.pf_wage_ceiling,
+      pfFixedCeiling: pfPolicy.pf_employee_amount,
       edliAdminAmount: Number(edli) || EXCEL_DEFAULTS.edliAdminAmount,
       esiPercent: pctToFraction(esiPct),
       esiMonthlyCeiling: Number(esiCeiling) || EXCEL_DEFAULTS.esiMonthlyCeiling,
@@ -293,44 +307,13 @@ export function SalaryStructureFormPage({
                 className="tabular-nums"
               />
             </SetupField>
-            <SetupField label="Employer contribution" hint="Excel M — typically ₹1,800 PF">
+            <SetupField label="Employer contribution" hint="CTC split only — not employee PF">
               <SetupInput
                 type="number"
                 min={0}
                 step={1}
                 value={employer}
                 onChange={(e) => setEmployer(e.target.value)}
-                className="tabular-nums"
-              />
-            </SetupField>
-            <SetupField label="PF % of PF wage" hint="Excel Y — 12% if wage < ceiling">
-              <SetupInput
-                type="number"
-                min={0}
-                max={100}
-                step={0.01}
-                value={pfPct}
-                onChange={(e) => setPfPct(e.target.value)}
-                className="tabular-nums"
-              />
-            </SetupField>
-            <SetupField label="PF wage ceiling" hint="Excel Y — below this, % applies">
-              <SetupInput
-                type="number"
-                min={0}
-                step={1}
-                value={pfWageCeiling}
-                onChange={(e) => setPfWageCeiling(e.target.value)}
-                className="tabular-nums"
-              />
-            </SetupField>
-            <SetupField label="PF fixed ceiling" hint="Excel Y — ₹1,800 when wage ≥ ceiling">
-              <SetupInput
-                type="number"
-                min={0}
-                step={1}
-                value={pfFixedCeiling}
-                onChange={(e) => setPfFixedCeiling(e.target.value)}
                 className="tabular-nums"
               />
             </SetupField>
@@ -402,8 +385,14 @@ export function SalaryStructureFormPage({
           <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
             <h2 className="mb-1 text-sm font-semibold text-foreground">Sample month preview</h2>
             <p className="mb-3 text-xs text-muted-foreground">
-              Live payroll uses a fixed 30-day salary basis: Gross × (payable days / 30). This preview matches
-              that model. Total days is locked at 30.
+              Employee PF comes from{" "}
+              <Link
+                href="/hr/payroll?section=salary-configuration"
+                className="cursor-pointer font-medium text-primary underline-offset-2 hover:underline"
+              >
+                Payroll → Salary configuration
+              </Link>
+              . Live payroll uses Gross × (payable days / 30).
             </p>
             <div className="mb-3 grid grid-cols-2 gap-3">
               <div>
@@ -435,7 +424,7 @@ export function SalaryStructureFormPage({
               <ComputedRow label="Payable special" hint="T" value={preview.payableSpecial} />
               <ComputedRow label="Gross" hint="W" value={preview.gross} />
               <ComputedRow label="PF wage" hint="X = R+T" value={preview.pfWage} />
-              <ComputedRow label="PF" hint="Y" value={preview.pf} />
+              <ComputedRow label="Employee PF" hint="From Salary configuration" value={preview.pf} />
               <ComputedRow label="EDLI / admin" hint="Z" value={preview.edli} />
               <ComputedRow label="ESI" hint="AA" value={preview.esi} />
               <ComputedRow label="TDS for the year" hint="AG" value={preview.tdsYear} />

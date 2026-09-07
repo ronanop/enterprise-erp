@@ -9,8 +9,9 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from modules.hr.domain.leave_accrual_calendar import leave_financial_year
 from modules.hr.domain.sandwich_rules import (
-    SANDWICH_TRIGGER_UNAUTHORIZED,
+    SANDWICH_TRIGGER_BOTH,
     append_sandwich_note,
     iter_dates_inclusive,
     parse_sandwich_original,
@@ -28,7 +29,7 @@ PAID_SKIP_STATUSES = frozenset(
 def resolve_company_sandwich_settings(db: Session, company_id: UUID) -> dict:
     """Policy from payroll when available; leave-type flag is a fallback enable."""
     enabled = company_id in company_ids_with_sandwich_enabled(db)
-    trigger = SANDWICH_TRIGGER_UNAUTHORIZED
+    trigger = SANDWICH_TRIGGER_BOTH
     off_becomes = "lop"
     try:
         from modules.payroll.models.payroll_policy import PayPayrollPolicy
@@ -100,7 +101,7 @@ def apply_sandwich_for_employee(
     is_non_working,
     holiday_dates: set[date],
     approved_dates: set[date] | None = None,
-    trigger: str = SANDWICH_TRIGGER_UNAUTHORIZED,
+    trigger: str = SANDWICH_TRIGGER_BOTH,
     off_becomes: str = "lop",
 ) -> dict:
     """Mark sandwiched offs as absent (LOP) or leave; restore when the rule no longer applies."""
@@ -245,7 +246,7 @@ def _consume_sandwich_leave(
                 HrLeaveBalance.is_deleted.is_(False),
                 HrLeaveBalance.employee_id == employee_id,
                 HrLeaveBalance.company_id == company_id,
-                HrLeaveBalance.balance_year == as_of.year,
+                HrLeaveBalance.balance_year == leave_financial_year(as_of),
                 HrLeaveBalance.status == "open",
                 HrLeaveBalance.leave_type_id.in_(type_ids),
             )

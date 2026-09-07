@@ -1,6 +1,7 @@
 import { ApiClientError, resourceService } from "@/services/api-client";
-import { listHrEmployeeOptions } from "@/services/hr-service";
+import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import type { HrRow } from "@/services/hr-service";
+import { loadOnboardingDirectory } from "@/services/onboarding-management-service";
 import type {
   ClearanceChecklistItem,
   ExitDocument,
@@ -84,26 +85,64 @@ function parseClearance(raw: unknown): {
   return { checklist, exitInterview, documents, approvals, fnfMeta };
 }
 
-function parseEmployeeLabel(label: string): { name: string; code: string } {
-  const m = label.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
-  if (m) return { name: m[1].trim(), code: m[2].trim() };
-  return { name: label.trim(), code: "" };
+const NO_ONBOARDING_LABEL = "No onboarding";
+
+type EmployeeLookups = {
+  names: Map<string, string>;
+  codes: Map<string, string>;
+  knownIds: Set<string>;
+};
+
+async function loadEmployeeLookups(): Promise<EmployeeLookups> {
+  const names = new Map<string, string>();
+  const codes = new Map<string, string>();
+  const knownIds = new Set<string>();
+
+  const [directory, onboarding] = await Promise.all([
+    loadEmployeeDirectory().catch(() => null),
+    loadOnboardingDirectory().catch(() => null),
+  ]);
+
+  if (directory) {
+    for (const r of directory.records) {
+      if (r.isDeleted) continue;
+      const id = String(r.id);
+      if (!id) continue;
+      knownIds.add(id);
+      if (r.displayName.trim()) names.set(id, r.displayName.trim());
+      if (r.employeeCode.trim()) codes.set(id, r.employeeCode.trim());
+    }
+  }
+
+  if (onboarding) {
+    for (const c of onboarding.cases) {
+      const id = String(c.employeeId ?? "").trim();
+      if (!id) continue;
+      knownIds.add(id);
+      const nm = String(c.candidateName ?? "").trim();
+      if (nm && !names.has(id)) names.set(id, nm);
+      const code = String(c.assignedEmployeeCode ?? "").trim();
+      if (code && !codes.has(id)) codes.set(id, code);
+    }
+  }
+
+  return { names, codes, knownIds };
 }
 
 export function mapOffboardingRow(
   row: HrRow,
-  employeeNames: Map<string, string>,
-  employeeCodes: Map<string, string>,
+  lookups: EmployeeLookups,
 ): OffboardingCase {
   const { checklist, exitInterview, documents, approvals, fnfMeta } = parseClearance(row.clearance_json);
   const employeeId = String(row.employee_id ?? "");
-  const fallbackCode = employeeId ? employeeId.slice(0, 8) : "—";
+  const known = Boolean(employeeId) && lookups.knownIds.has(employeeId);
   return {
     id: String(row.id),
     documentNumber: String(row.document_number ?? row.id),
     employeeId,
-    employeeName: employeeNames.get(employeeId) ?? "Unknown employee",
-    employeeCode: employeeCodes.get(employeeId) || fallbackCode,
+    employeeName: known ? lookups.names.get(employeeId) || "—" : NO_ONBOARDING_LABEL,
+    employeeCode: known ? lookups.codes.get(employeeId) || "—" : "—",
+    hasEmployeeRecord: known,
     separationType: String(row.separation_type ?? "resignation"),
     requestedLwd: String(row.requested_last_working_date ?? ""),
     approvedLwd: row.approved_last_working_date
@@ -131,31 +170,12 @@ export function mapOffboardingRow(
 }
 
 export async function loadOffboardingCases(): Promise<OffboardingCase[]> {
-  const [sepRes, employees, profilesRes] = await Promise.all([
+  const [sepRes, lookups] = await Promise.all([
     resourceService.list<HrRow>("/hr/separation", { page_size: 200 }).catch(() => ({ data: [] })),
-    listHrEmployeeOptions(),
-    resourceService.list<HrRow>("/hr/employee-profiles", { page_size: 500 }).catch(() => ({ data: [] })),
+    loadEmployeeLookups(),
   ]);
-  const nameMap = new Map<string, string>();
-  const codeMap = new Map<string, string>();
-  for (const e of employees) {
-    const { name, code } = parseEmployeeLabel(e.label);
-    nameMap.set(e.id, name || e.label);
-    if (code) codeMap.set(e.id, code);
-  }
-  const profileRows = Array.isArray(profilesRes.data) ? profilesRes.data : [];
-  for (const p of profileRows) {
-    const id = String(p.employee_id ?? p.id ?? "");
-    if (!id) continue;
-    const first = String(p.first_name ?? "").trim();
-    const last = String(p.last_name ?? "").trim();
-    const full = [first, last].filter(Boolean).join(" ");
-    if (full) nameMap.set(id, full);
-    const code = String(p.employee_code ?? "").trim();
-    if (code) codeMap.set(id, code);
-  }
   const rows = Array.isArray(sepRes.data) ? sepRes.data : [];
-  return rows.map((r) => mapOffboardingRow(r as HrRow, nameMap, codeMap));
+  return rows.map((r) => mapOffboardingRow(r as HrRow, lookups));
 }
 
 export async function createOffboardingCase(input: {
@@ -181,15 +201,8 @@ export async function createOffboardingCase(input: {
     serve_notice: input.serveNotice ?? null,
     initiated_by: "hr",
   });
-  const employees = await listHrEmployeeOptions();
-  const nameMap = new Map<string, string>();
-  const codeMap = new Map<string, string>();
-  for (const e of employees) {
-    const { name, code } = parseEmployeeLabel(e.label);
-    nameMap.set(e.id, name || e.label);
-    if (code) codeMap.set(e.id, code);
-  }
-  return mapOffboardingRow(res.data as HrRow, nameMap, codeMap);
+  const lookups = await loadEmployeeLookups();
+  return mapOffboardingRow(res.data as HrRow, lookups);
 }
 
 export function patchOffboardingCaseFromRow(c: OffboardingCase, row: HrRow): OffboardingCase {
@@ -217,6 +230,10 @@ export function patchOffboardingCaseFromRow(c: OffboardingCase, row: HrRow): Off
     approvals,
     fnfMeta,
   };
+}
+
+export async function deleteOffboardingCase(caseId: string): Promise<void> {
+  await resourceService.delete("/hr/separation", caseId);
 }
 
 export async function offboardingAction(

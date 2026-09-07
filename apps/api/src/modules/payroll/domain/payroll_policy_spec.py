@@ -71,15 +71,15 @@ def default_company_payroll_policy_fields() -> dict[str, Any]:
         "pf_wage_ceiling": Decimal("15000.0000"),
         "pf_on_lop": PfOnLopMode.FIXED.value,
         "net_pay_formula": NetPayFormula.GROSS_MINUS_EMPLOYEE_PF_ONLY.value,
-        "sandwich_enabled": False,
+        "sandwich_enabled": True,
         "sandwich_off_becomes": SandwichOffBecomes.LOP.value,
-        "sandwich_triggers": SandwichTrigger.UNAUTHORIZED_ABSENCE.value,
+        "sandwich_triggers": SandwichTrigger.BOTH.value,
         "attendance_rules_json": dict(DEFAULT_ATTENDANCE_PAY_RULES),
         "notes": (
             "Gross X: Basic=60%×X, HRA=50%×Basic, Special=remainder. "
             "Payable days = 30 − LOP. Payable gross = X×(paid_days/30) on the 20th–19th cycle. "
             "Net = payable_gross − employee PF. Employer PF is not deducted from net. "
-            "Sandwich is OFF unless company policy enables it."
+            "Sandwich is ON: week-off/holiday between leave or unauthorized absence becomes LOP."
         ),
     }
 

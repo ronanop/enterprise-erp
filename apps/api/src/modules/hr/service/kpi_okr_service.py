@@ -5,6 +5,7 @@ from __future__ import annotations
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
 from core.exceptions import AppException, NotFoundException
@@ -14,6 +15,11 @@ from modules.hr.repository.kpi_okr_repository import KpiRepository, OkrRepositor
 from modules.hr.service.hr_scope_validator import HrScopeValidator
 
 _MEASURES = {"percentage", "number", "currency", "rating"}
+
+
+def _missing_relation(exc: ProgrammingError) -> bool:
+    detail = str(getattr(exc, "orig", None) or exc).lower()
+    return "does not exist" in detail or "undefinedcolumn" in detail or "undefinedtable" in detail
 
 
 def _weighted_progress(key_results: list) -> Decimal:
@@ -36,8 +42,14 @@ class KpiService:
         self._audit = AuditService(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_rows(ctx, cid)
+        try:
+            cid = self._scope.resolve_company_id(ctx, company_id)
+            return self._repo.list_rows(ctx, cid)
+        except ProgrammingError as exc:
+            if _missing_relation(exc):
+                self._repo.db.rollback()
+                return []
+            raise
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)
@@ -111,8 +123,14 @@ class OkrService:
         self._audit = AuditService(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
-        cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_rows(ctx, cid)
+        try:
+            cid = self._scope.resolve_company_id(ctx, company_id)
+            return self._repo.list_rows(ctx, cid)
+        except ProgrammingError as exc:
+            if _missing_relation(exc):
+                self._repo.db.rollback()
+                return []
+            raise
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)

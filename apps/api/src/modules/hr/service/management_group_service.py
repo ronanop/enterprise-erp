@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import date
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from core.exceptions import AppException, ConflictException, NotFoundException
@@ -52,25 +53,38 @@ class ManagementGroupService:
         return row
 
     def ensure_default_groups(self, ctx: TenantContext, company_id: UUID) -> None:
-        if self._repo.count_for_company(ctx, company_id) > 0:
-            return
-        shift = self._first_active_shift(ctx, company_id)
-        if shift is None:
-            return
+        shift = None
         for spec in DEFAULT_GROUP_SPECS:
+            existing = self._repo.get_by_code_any(ctx, company_id, spec["group_code"])
+            if existing is not None:
+                if existing.is_deleted:
+                    self._repo.restore(ctx, existing)
+                if spec["group_code"] == "MG-ATT-AUTO":
+                    toggles = normalize_toggles(existing.feature_toggles_json)
+                    if not toggles.get("attendance.auto_mark"):
+                        toggles["attendance.auto_mark"] = True
+                        self._repo.update(ctx, existing.id, feature_toggles_json=toggles)
+                continue
+            if shift is None:
+                shift = self._first_active_shift(ctx, company_id)
+            if shift is None:
+                continue
             toggles = preset_for_group_code(spec["group_code"])
-            self._repo.create(
-                ctx,
-                company_id=company_id,
-                group_code=spec["group_code"],
-                group_name=spec["group_name"],
-                description=spec.get("description"),
-                employment_type=spec.get("employment_type", "permanent"),
-                status="active",
-                default_shift_id=shift.id,
-                feature_toggles_json=toggles,
-            )
-        self._db.flush()
+            try:
+                with self._db.begin_nested():
+                    self._repo.create(
+                        ctx,
+                        company_id=company_id,
+                        group_code=spec["group_code"],
+                        group_name=spec["group_name"],
+                        description=spec.get("description"),
+                        employment_type=spec.get("employment_type", "permanent"),
+                        status="active",
+                        default_shift_id=shift.id,
+                        feature_toggles_json=toggles,
+                    )
+            except IntegrityError:
+                continue
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -166,9 +180,14 @@ class ManagementGroupService:
         if employment.management_group_id is None:
             return
         group = self.get(ctx, employment.management_group_id)
-        if not auto_shift:
-            return
-        self._assign_shift_from_group(ctx, employment, group.default_shift_id)
+        if auto_shift and group.default_shift_id:
+            self._assign_shift_from_group(ctx, employment, group.default_shift_id)
+        toggles = normalize_toggles(group.feature_toggles_json)
+        auto_mark = group.group_code == "MG-ATT-AUTO" or bool(toggles.get("attendance.auto_mark"))
+        if auto_mark:
+            from modules.hr.service.auto_attendance_backfill_service import AutoAttendanceBackfillService
+
+            AutoAttendanceBackfillService(self._db).backfill_employment(ctx, employment)
 
     def _assign_shift_from_group(
         self,

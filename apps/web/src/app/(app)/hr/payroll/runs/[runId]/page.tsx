@@ -1,4 +1,4 @@
-import { PayrollRunDetailPage } from "@/components/hr/payroll/payroll-run-detail-page";
+import { redirect } from "next/navigation";
 
 export default async function PayrollRunPage({
   params,
@@ -6,5 +6,5 @@ export default async function PayrollRunPage({
   params: Promise<{ runId: string }>;
 }) {
   const { runId } = await params;
-  return <PayrollRunDetailPage runId={runId} />;
+  redirect(`/hr/payroll?section=run-payroll&run=${encodeURIComponent(runId)}`);
 }

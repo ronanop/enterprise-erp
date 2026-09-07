@@ -15,18 +15,15 @@ import { PageHeader } from "@/components/layout/page-header";
 import { HrUnderlineTabs, type HrTabItem } from "@/components/hr/hr-primitives";
 import { SetupToastHost, toast } from "@/components/hr/setup/setup-toast";
 import { loadOnboardingDirectory } from "@/services/onboarding-management-service";
-import { listOnboardingPolicies, ensureOnboardingPoliciesLoaded, listActivePoliciesForPortal } from "@/services/onboarding-policies-service";
+import { listOnboardingPolicies, ensureOnboardingPoliciesLoaded } from "@/services/onboarding-policies-service";
 import {
   ensureSignedPolicyDocsLoaded,
   getSignedPolicyDocsForCase,
-  saveSignedPolicyDocsForCase,
 } from "@/lib/onboarding-signed-docs-store";
-import { stampPoliciesWithSignature } from "@/lib/stamp-policy-signatures";
-import { loadEmployeeDirectory } from "@/services/employee-management-service";
+import { listEmployeesPage, loadEmployeeDirectory, EMPLOYEE_LIST_PAGE_SIZE } from "@/services/employee-management-service";
 import { loadOffboardingCases } from "@/services/offboarding-service";
 import type { OnboardingCase, OnboardingDocument } from "@/types/onboarding-management";
 import type { EmployeeRecord } from "@/types/employee-management";
-import { devWarn } from "@/lib/dev-log";
 
 type EdocTab = "employees" | "document-types" | "onboarding-policies" | "other";
 
@@ -66,6 +63,35 @@ function docsFromEmployee(emp: EmployeeRecord): OnboardingDocument[] {
   return docs;
 }
 
+function bundleFromEmployee(emp: EmployeeRecord): EmployeeDocBundle {
+  const name = emp.displayName || emp.employeeCode || "Employee";
+  const email = (
+    emp.extension?.personal?.personalEmail ||
+    emp.extension?.personal?.email ||
+    emp.officialEmail ||
+    ""
+  ).toLowerCase();
+  return {
+    key: `emp:${emp.id}`,
+    name,
+    code: emp.employeeCode || emp.id.slice(0, 8),
+    email,
+    source: "employee",
+    employeeId: emp.id,
+    entityId: emp.extension?.employment?.entityId || undefined,
+    documents: docsFromEmployee(emp),
+    policiesAccepted: [],
+    signedPolicyDocs: [],
+    offboardingDocs: [],
+  };
+}
+
+function publishBundles(employees: EmployeeRecord[]): EmployeeDocBundle[] {
+  return employees
+    .map(bundleFromEmployee)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 export function EdocManagementPage() {
   const [tab, setTab] = useState<EdocTab>("employees");
   const [loading, setLoading] = useState(true);
@@ -79,15 +105,35 @@ export function EdocManagementPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      const first = await listEmployeesPage(1, EMPLOYEE_LIST_PAGE_SIZE);
+      let employees = first.records;
+      const initial = publishBundles(employees);
+      setBundles(initial);
+      setSelectedKey((prev) =>
+        prev && initial.some((b) => b.key === prev) ? prev : initial[0]?.key ?? null,
+      );
+      setLoading(false);
+
+      let page = 2;
+      let hasMore = first.hasMore;
+      while (hasMore) {
+        const next = await listEmployeesPage(page, EMPLOYEE_LIST_PAGE_SIZE);
+        if (!next.records.length) break;
+        employees = [...employees, ...next.records];
+        setBundles(publishBundles(employees));
+        hasMore = next.hasMore;
+        page += 1;
+      }
+
       const [dir, empDir, offboarding] = await Promise.all([
         loadOnboardingDirectory().catch(() => ({ cases: [] as OnboardingCase[] })),
-        loadEmployeeDirectory().catch(() => ({ records: [] as EmployeeRecord[] })),
+        loadEmployeeDirectory().catch(() => ({ records: employees })),
         loadOffboardingCases().catch(() => [] as Awaited<ReturnType<typeof loadOffboardingCases>>),
         ensureOnboardingPoliciesLoaded().catch(() => []),
         ensureSignedPolicyDocsLoaded().catch(() => ({})),
       ]);
       setPolicyCatalog(listOnboardingPolicies(true));
-      const employees = empDir.records ?? [];
+      employees = empDir.records?.length ? empDir.records : employees;
 
       const byEmail = new Map<string, EmployeeDocBundle>();
       const byEmpId = new Map<string, EmployeeDocBundle>();
@@ -131,23 +177,6 @@ export function EdocManagementPage() {
         const signatureDataUrl = c.portal?.policies?.signatureDataUrl;
         const fromCase = c.portal?.policies?.signedDocuments ?? [];
         let fromIdb = await getSignedPolicyDocsForCase(c.id);
-        if (signatureDataUrl && signatureDataUrl.startsWith("data:image/")) {
-          try {
-            const policies = listActivePoliciesForPortal(c.entityId);
-            if (policies.length) {
-              const stamped = await stampPoliciesWithSignature({
-                policies,
-                signatureDataUrl,
-                signatureMimeType: c.portal?.policies?.signatureMimeType,
-                candidateName: c.candidateName,
-              });
-              await saveSignedPolicyDocsForCase(c.id, stamped);
-              fromIdb = stamped;
-            }
-          } catch {
-            devWarn("Could not refresh signed policy PDFs");
-          }
-        }
         const signedSource = fromIdb.length
           ? fromIdb
           : fromCase.filter((s) => Boolean(s.fileDataUrl));

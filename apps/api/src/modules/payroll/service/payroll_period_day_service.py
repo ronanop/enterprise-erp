@@ -61,8 +61,8 @@ class _PeriodCalendarCache:
     company_weekly_off: object | None = None
     holidays_by_calendar: dict[UUID, set[date]] = field(default_factory=dict)
     company_holiday_dates: set[date] = field(default_factory=set)
-    sandwich_enabled: bool = False
-    sandwich_triggers: str = "unauthorized_absence"
+    sandwich_enabled: bool = True
+    sandwich_triggers: str = "both"
     sandwich_off_becomes: str = "lop"
 
 
@@ -101,7 +101,7 @@ class PayrollPeriodDayService:
         )
         cache.sandwich_enabled = bool(resolved.get("sandwich_enabled"))
         cache.sandwich_triggers = str(
-            resolved.get("sandwich_triggers") or "unauthorized_absence"
+            resolved.get("sandwich_triggers") or "both"
         )
         cache.sandwich_off_becomes = str(resolved.get("sandwich_off_becomes") or "lop")
         if not cache.sandwich_enabled:
@@ -428,27 +428,15 @@ class PayrollPeriodDayService:
             sandwich_lop_days=sandwich_lop,
         )
 
-        has_signals = bool(emp_attendance) or bool(leave_by_date)
-        if not has_signals:
-            return EmployeePayDaysResult(
-                period_days=period_days,
-                paid_days=period_days,
-                lop_days=Decimal("0"),
-                leave_days=leave_days,
-                has_attendance=False,
-                overtime_minutes=overtime_minutes,
-                primary_shift_id=primary_shift,
-                day_summary_json=day_summary,
-            )
-
         paid_days = payable_days_from_lop(lop_days, period_days=period_days)
+        has_signals = bool(emp_attendance) or bool(leave_by_date)
 
         return EmployeePayDaysResult(
             period_days=period_days,
             paid_days=paid_days,
             lop_days=lop_days,
             leave_days=leave_days,
-            has_attendance=True,
+            has_attendance=has_signals,
             overtime_minutes=overtime_minutes,
             primary_shift_id=primary_shift,
             day_summary_json=day_summary,

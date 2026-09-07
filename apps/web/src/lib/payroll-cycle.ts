@@ -47,7 +47,7 @@ export const SALARY_DAY_BASIS = 30;
 /** Employee PF is a fixed monthly statutory amount — never scaled by LOP / payable days. */
 export function isPfDeductionLabel(label: string): boolean {
   const n = label.trim().toLowerCase();
-  return n === "pf" || n === "employee pf" || n.includes("provident");
+  return n === "pf" || n === "employee pf" || n === "employer pf" || n.includes("provident");
 }
 
 /** Count Monday–Friday days in an inclusive date range (display only — not salary N). */

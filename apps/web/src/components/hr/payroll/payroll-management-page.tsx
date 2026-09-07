@@ -3,14 +3,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  ChevronLeft,
   Download,
   Eye,
   FileText,
-  Lock,
   Pencil,
   Plus,
   Trash2,
-  Unlock,
   Upload,
 } from "lucide-react";
 
@@ -21,6 +20,7 @@ import {
   RevisionDrawer,
 } from "@/components/hr/payroll/payroll-drawers";
 import { PayrollPolicyPanel } from "@/components/hr/payroll/payroll-policy-panel";
+import { PayrollRunWorkspace } from "@/components/hr/payroll/payroll-run-workspace";
 import {
   HrAuthBanner,
   HrEmptyState,
@@ -29,12 +29,12 @@ import {
 } from "@/components/hr/hr-primitives";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
+import { SetupDrawer, SetupField, SetupSelect } from "@/components/hr/setup/setup-drawer";
 import { EmsPagination, EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isAuthenticated } from "@/lib/auth";
-import { cn } from "@/lib/utils";
 import {
   addBonus,
   addPayrollAdjustment,
@@ -42,19 +42,17 @@ import {
   createRevision,
   deleteEmployeeSalary,
   deleteStructure,
-  downloadTextFile,
-  exportPayslipText,
-  filterRuns,
   formatInr,
   generatePayslips,
   importStructuresCsv,
-  isMonthLocked,
   loadPayrollDirectory,
-  lockPayrollMonth,
+  findPayrollRunForMonth,
   resetStructuresToCacheDigitech,
-  unlockPayrollMonth,
+  uniqueRunsByMonth,
   type PayrollDirectory,
 } from "@/services/payroll-management-service";
+import { PayslipLetterhead } from "@/components/hr/payroll/payslip-letterhead";
+import { downloadPayslipPdf, downloadPayslipsPdf, payslipPdfContext } from "@/utils/payslip-pdf";
 import {
   loadHrMasterDirectory,
   type HrMasterOption,
@@ -62,16 +60,15 @@ import {
 import type {
   PayslipRecord,
   EmployeeSalary,
-  PayrollRun,
   SalaryStructure,
 } from "@/types/payroll-management";
 import {
-  emptyPayrollFilters,
+  monthLabel,
   RUN_STATUS_LABELS,
   structureCtc,
 } from "@/types/payroll-management";
 
-const PAGE = 10;
+const SLIP_PAGE = 15;
 
 const PAYROLL_SECTIONS = [
   "salary-structure",
@@ -96,6 +93,7 @@ const SECTION_META: Record<PayrollSection, { title: string; description?: string
   },
   "run-payroll": {
     title: "Run payroll",
+    description: "Click a month, then an employee. Generate payroll on this tab.",
   },
   payslip: {
     title: "Payslip",
@@ -111,15 +109,21 @@ const SECTION_META: Record<PayrollSection, { title: string; description?: string
   },
   "salary-configuration": {
     title: "Salary configuration",
-    description: "Company payroll policy: 30-day salary basis, sandwich, and PF.",
+    description: "30-day salary basis, sandwich policy, and provident fund.",
   },
 };
 
 function parseSection(raw: string | null): PayrollSection {
+  if (raw === "provident-fund") return "salary-configuration";
   if (raw && (PAYROLL_SECTIONS as readonly string[]).includes(raw)) {
     return raw as PayrollSection;
   }
   return "salary-structure";
+}
+
+function payslipEmployeeCode(p: PayslipRecord, employees: HrMasterOption[]): string {
+  const fromMaster = employees.find((e) => e.id === p.employeeId)?.code;
+  return (p.employeeCode || fromMaster || "").trim();
 }
 
 export function PayrollManagementPage() {
@@ -130,9 +134,13 @@ export function PayrollManagementPage() {
   const [dir, setDir] = useState<PayrollDirectory | null>(null);
   const [employees, setEmployees] = useState<HrMasterOption[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState(() => emptyPayrollFilters());
   const [page, setPage] = useState(1);
-  const [preview, setPreview] = useState<PayslipRecord | null>(null);
+  const [viewSlip, setViewSlip] = useState<PayslipRecord | null>(null);
+  const [slipQuery, setSlipQuery] = useState("");
+  const [slipOpenMonth, setSlipOpenMonth] = useState("");
+  const [generateOpen, setGenerateOpen] = useState(false);
+  const [generateMonth, setGenerateMonth] = useState("");
+  const [generating, setGenerating] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
   const [revisionOpen, setRevisionOpen] = useState(false);
@@ -142,9 +150,6 @@ export function PayrollManagementPage() {
   const [adjOpen, setAdjOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<SalaryStructure | null>(null);
   const [confirmDeleteAssignment, setConfirmDeleteAssignment] = useState<EmployeeSalary | null>(null);
-  const [confirmLock, setConfirmLock] = useState<{ run: PayrollRun; mode: "lock" | "unlock" } | null>(
-    null,
-  );
   const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(async () => {
@@ -169,28 +174,101 @@ export function PayrollManagementPage() {
 
   useEffect(() => {
     const raw = searchParams.get("section");
+    if (raw === "provident-fund") {
+      router.replace("/hr/payroll?section=salary-configuration");
+      return;
+    }
     if (!raw || !(PAYROLL_SECTIONS as readonly string[]).includes(raw)) {
       router.replace("/hr/payroll?section=salary-structure");
     }
   }, [router, searchParams]);
 
-  useEffect(() => setPage(1), [filters, section]);
+  useEffect(() => setPage(1), [section, slipQuery, slipOpenMonth]);
 
-  const runs = useMemo(() => filterRuns(dir?.runs ?? [], filters), [dir, filters]);
-  const pageRuns = useMemo(() => {
-    const s = (page - 1) * PAGE;
-    return runs.slice(s, s + PAGE);
-  }, [runs, page]);
-  const runMonths = useMemo(() => {
-    const seen = new Set<string>();
-    const rows: { value: string; label: string }[] = [];
-    for (const r of dir?.runs ?? []) {
-      if (seen.has(r.month)) continue;
-      seen.add(r.month);
-      rows.push({ value: r.month, label: r.monthLabel || r.month });
+  useEffect(() => {
+    if (section !== "payslip") return;
+    const monthParam = (searchParams.get("month") || "").slice(0, 7);
+    if (monthParam) setSlipOpenMonth(monthParam);
+    if (searchParams.get("generate") !== "1") return;
+    setGenerateMonth(monthParam);
+    setGenerateOpen(true);
+    router.replace(monthParam ? `/hr/payroll?section=payslip&month=${monthParam}` : "/hr/payroll?section=payslip");
+  }, [section, searchParams, router]);
+
+  const payrollMonths = useMemo(() => {
+    const byMonth = new Map<
+      string,
+      {
+        month: string;
+        label: string;
+        cycleLabel: string;
+        employeeCount: number;
+        netTotal: number;
+        runId: string;
+        slipCount: number;
+        status: string;
+      }
+    >();
+    for (const r of uniqueRunsByMonth(dir?.runs ?? [])) {
+      const month = r.month.slice(0, 7);
+      byMonth.set(month, {
+        month,
+        label: monthLabel(month),
+        cycleLabel: r.cycleLabel || r.monthLabel,
+        employeeCount: r.employeeCount,
+        netTotal: r.netTotal,
+        runId: r.id,
+        slipCount: 0,
+        status: r.status,
+      });
     }
-    return rows;
+    for (const p of dir?.payslips ?? []) {
+      const month = (p.month || "").slice(0, 7);
+      const viaRun = [...byMonth.values()].find((row) => row.runId && row.runId === p.runId);
+      const target = viaRun ?? (month ? byMonth.get(month) : undefined);
+      if (!target) {
+        if (!month) continue;
+        byMonth.set(month, {
+          month,
+          label: p.monthLabel || monthLabel(month),
+          cycleLabel: p.monthLabel || monthLabel(month),
+          employeeCount: 1,
+          netTotal: p.net,
+          runId: p.runId,
+          slipCount: 1,
+          status: "generated",
+        });
+        continue;
+      }
+      target.slipCount += 1;
+      if (!target.runId) target.runId = p.runId;
+    }
+    return [...byMonth.values()].sort((a, b) => b.month.localeCompare(a.month));
   }, [dir]);
+
+  const filteredPayslips = useMemo(() => {
+    const q = slipQuery.trim().toLowerCase();
+    const openRun = uniqueRunsByMonth(dir?.runs ?? []).find((r) => r.month.slice(0, 7) === slipOpenMonth);
+    return (dir?.payslips ?? []).filter((p) => {
+      const code = payslipEmployeeCode(p, employees);
+      if (q) {
+        const hay = `${p.employeeName} ${code} ${p.payslipCode}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      if (slipOpenMonth) {
+        const sameMonth = p.month.slice(0, 7) === slipOpenMonth;
+        const sameRun = Boolean(openRun && p.runId && p.runId === openRun.id);
+        if (!sameMonth && !sameRun) return false;
+      }
+      return true;
+    });
+  }, [dir, employees, slipOpenMonth, slipQuery]);
+
+  const pagePayslips = useMemo(() => {
+    const s = (page - 1) * SLIP_PAGE;
+    return filteredPayslips.slice(s, s + SLIP_PAGE);
+  }, [filteredPayslips, page]);
+
   const authBlocked =
     !isAuthenticated() &&
     !loading &&
@@ -204,21 +282,37 @@ export function PayrollManagementPage() {
     router.replace(`/hr/payroll?section=${next}`);
   }
 
-  async function handleGeneratePayslips() {
-    const run =
-      dir?.runs.find((r) => ["approved", "paid", "pending_finance", "pending_hr"].includes(r.status)) ??
-      dir?.runs[0];
+  async function handleGeneratePayslips(monthOverride?: string) {
+    const ym = (monthOverride || generateMonth || slipOpenMonth).slice(0, 7);
+    const run = findPayrollRunForMonth(dir?.runs ?? [], ym);
     if (!run) {
-      toast("Run payroll first", "error");
+      toast("Run payroll for that month first", "error");
       return;
     }
+    setGenerating(true);
     try {
       const slips = await generatePayslips(run.id);
-      toast(`Generated ${slips.length} payslips`);
+      toast(`Generated ${slips.length} payslips for ${monthLabel(ym)}`);
+      setGenerateOpen(false);
+      setSlipOpenMonth(run.month.slice(0, 7));
+      setDir((d) =>
+        d
+          ? {
+              ...d,
+              payslips: [
+                ...slips,
+                ...d.payslips.filter(
+                  (p) => p.runId !== run.id && p.month.slice(0, 7) !== run.month.slice(0, 7),
+                ),
+              ],
+            }
+          : d,
+      );
       refresh();
-      goSection("payslip");
     } catch (e) {
       toast(e instanceof Error ? e.message : "Failed", "error");
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -266,34 +360,37 @@ export function PayrollManagementPage() {
                 Assign salary
               </Button>
             ) : null}
-            {section === "run-payroll" ? (
-              <Button
-                size="sm"
-                className="cursor-pointer"
-                onClick={() => router.push("/hr/payroll/runs/new")}
-              >
-                <Plus className="size-3.5" />
-                Run payroll
-              </Button>
-            ) : null}
             {section === "payslip" ? (
               <>
-                <Button size="sm" className="cursor-pointer" onClick={() => void handleGeneratePayslips()}>
+                <Button
+                  size="sm"
+                  className="cursor-pointer"
+                  onClick={() => {
+                    setGenerateMonth(slipOpenMonth || payrollMonths[0]?.month || "");
+                    setGenerateOpen(true);
+                  }}
+                >
                   <FileText className="size-3.5" />
-                  Generate payslips
+                  Generate slip
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   className="cursor-pointer"
-                  disabled={!dir?.payslips.length}
-                  onClick={() => {
-                    const all = (dir?.payslips ?? [])
-                      .slice(0, 50)
-                      .map(exportPayslipText)
-                      .join("\n\n");
-                    downloadTextFile(`payslips-bulk-${Date.now()}.txt`, all);
-                    toast("Bulk download started");
+                  disabled={!slipOpenMonth || !filteredPayslips.length}
+                  onClick={async () => {
+                    try {
+                      await downloadPayslipsPdf(
+                        filteredPayslips.map((p) => ({
+                          slip: p,
+                          ctx: payslipPdfContext(p, employees),
+                        })),
+                        `salary-slips-${slipOpenMonth}.pdf`,
+                      );
+                      toast("PDF downloaded");
+                    } catch {
+                      toast("Could not download PDF", "error");
+                    }
                   }}
                 >
                   <Download className="size-3.5" />
@@ -529,138 +626,7 @@ export function PayrollManagementPage() {
           ) : null}
 
           {section === "run-payroll" ? (
-            <section className="space-y-3">
-              <div className="flex flex-wrap items-end gap-2">
-                <div className="min-w-[180px] flex-1">
-                  <Input
-                    placeholder="Search runs…"
-                    value={filters.query}
-                    onChange={(e) => setFilters((f) => ({ ...f, query: e.target.value }))}
-                    className="h-9"
-                  />
-                </div>
-                <select
-                  className="h-9 cursor-pointer rounded-md border border-input bg-background px-2 text-xs"
-                  value={filters.month}
-                  onChange={(e) => setFilters((f) => ({ ...f, month: e.target.value }))}
-                >
-                  <option value="all">All months</option>
-                  <option value="custom">Custom month</option>
-                  <option value="range">Date range</option>
-                  {runMonths.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
-                {filters.month === "custom" ? (
-                  <Input
-                    type="month"
-                    className="h-9 w-[160px]"
-                    value={filters.customMonth}
-                    onChange={(e) => setFilters((f) => ({ ...f, customMonth: e.target.value }))}
-                  />
-                ) : null}
-                {filters.month === "range" ? (
-                  <>
-                    <Input
-                      type="date"
-                      className="h-9 w-[150px]"
-                      value={filters.dateFrom}
-                      onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))}
-                      aria-label="From date"
-                    />
-                    <Input
-                      type="date"
-                      className="h-9 w-[150px]"
-                      value={filters.dateTo}
-                      onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))}
-                      aria-label="To date"
-                    />
-                  </>
-                ) : null}
-                <select
-                  className="h-9 cursor-pointer rounded-md border border-input bg-background px-2 text-xs"
-                  value={filters.status}
-                  onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-                >
-                  <option value="all">All</option>
-                  <option value="locked">Lock</option>
-                  <option value="unlocked">Unlock</option>
-                  <option value="run">Run payroll</option>
-                </select>
-              </div>
-              {pageRuns.length === 0 ? (
-                <HrEmptyState title="No payroll runs" />
-              ) : (
-                <>
-                  <div className="overflow-x-auto rounded-xl border border-border/70">
-                    <table className="w-full min-w-[720px] text-left text-sm">
-                      <thead className="border-b bg-muted/40 text-[11px] uppercase text-muted-foreground">
-                        <tr>
-                          <th className="px-3 py-2 font-medium">Pay cycle</th>
-                          <th className="px-3 py-2 font-medium">Employees</th>
-                          <th className="px-3 py-2 font-medium">Gross</th>
-                          <th className="px-3 py-2 font-medium">Deductions</th>
-                          <th className="px-3 py-2 font-medium">Net</th>
-                          <th className="px-3 py-2 font-medium">Status</th>
-                          <th className="px-3 py-2 text-right font-medium">Lock</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pageRuns.map((r) => {
-                          const locked = isMonthLocked(r.month) || r.status === "locked";
-                          return (
-                            <tr
-                              key={r.id}
-                              className="cursor-pointer border-b border-border/50 transition-colors duration-200 hover:bg-muted/30"
-                              onClick={() => router.push(`/hr/payroll/runs/${r.id}`)}
-                            >
-                              <td className="px-3 py-2 text-xs">
-                                <span className="font-medium">{r.cycleLabel || r.monthLabel}</span>
-                              </td>
-                              <td className="px-3 py-2 tabular-nums">{r.employeeCount}</td>
-                              <td className="px-3 py-2 tabular-nums">{formatInr(r.grossTotal)}</td>
-                              <td className="px-3 py-2 tabular-nums">{formatInr(r.deductionTotal)}</td>
-                              <td className="px-3 py-2 tabular-nums font-medium">
-                                {formatInr(r.netTotal)}
-                              </td>
-                              <td className="px-3 py-2">
-                                <HrStatusBadge status={RUN_STATUS_LABELS[r.status] ?? r.status} />
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex justify-end">
-                                  <Button
-                                    type="button"
-                                    size="icon-sm"
-                                    variant="ghost"
-                                    className="cursor-pointer text-muted-foreground transition-colors duration-200 hover:text-foreground"
-                                    aria-label={locked ? `Unlock ${r.monthLabel}` : `Lock ${r.monthLabel}`}
-                                    title={locked ? "Unlock" : "Lock"}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setConfirmLock({ run: r, mode: locked ? "unlock" : "lock" });
-                                    }}
-                                  >
-                                    {locked ? <Unlock className="size-3.5" /> : <Lock className="size-3.5" />}
-                                  </Button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  <EmsPagination
-                    page={page}
-                    pageSize={PAGE}
-                    total={runs.length}
-                    onPageChange={setPage}
-                  />
-                </>
-              )}
-            </section>
+            <PayrollRunWorkspace dir={dir} employees={employees} onRefresh={refresh} />
           ) : null}
 
           {section === "revised-salary" ? (
@@ -744,131 +710,164 @@ export function PayrollManagementPage() {
 
           {section === "payslip" ? (
             <section className="space-y-3">
-              {(dir?.payslips.length ?? 0) === 0 ? (
-                <HrEmptyState
-                  title="No payslips"
-                  description="Generate payslips after a payroll run."
-                />
-              ) : (
-                <div className="grid gap-4 lg:grid-cols-[1fr_360px]">
-                  <div className="overflow-x-auto rounded-xl border border-border/70">
-                    <table className="w-full min-w-[640px] text-left text-sm">
-                      <thead className="border-b bg-muted/40 text-[11px] uppercase text-muted-foreground">
-                        <tr>
-                          <th className="px-3 py-2 font-medium">Payslip</th>
-                          <th className="px-3 py-2 font-medium">Employee</th>
-                          <th className="px-3 py-2 font-medium">Month</th>
-                          <th className="px-3 py-2 font-medium">Net</th>
-                          <th className="px-3 py-2 font-medium">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {dir?.payslips.slice(0, 50).map((p) => (
-                          <tr
-                            key={p.id}
-                            className={cn(
-                              "cursor-pointer border-b border-border/50 hover:bg-muted/30",
-                              preview?.id === p.id && "bg-muted/40",
-                            )}
-                            onClick={() => setPreview(p)}
-                          >
-                            <td className="px-3 py-2 font-mono text-xs">{p.payslipCode}</td>
-                            <td className="px-3 py-2 font-medium">{p.employeeName}</td>
-                            <td className="px-3 py-2 text-xs">{p.monthLabel}</td>
-                            <td className="px-3 py-2 tabular-nums">{formatInr(p.net)}</td>
-                            <td className="px-3 py-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 cursor-pointer text-xs"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  downloadTextFile(`${p.payslipCode}.txt`, exportPayslipText(p));
-                                  toast("Downloaded");
-                                }}
-                              >
-                                Download
-                              </Button>
-                            </td>
+              {!slipOpenMonth ? (
+                payrollMonths.length === 0 ? (
+                  <HrEmptyState
+                    title="No payroll months"
+                    description="Run payroll for a month, then generate slips for that month."
+                  />
+                ) : (
+                  <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[640px] text-left text-sm">
+                        <thead className="border-b bg-muted/40 text-[11px] uppercase text-muted-foreground">
+                          <tr>
+                            <th className="px-3 py-2 font-medium">Month</th>
+                            <th className="px-3 py-2 font-medium">Pay cycle</th>
+                            <th className="px-3 py-2 font-medium">Employees</th>
+                            <th className="px-3 py-2 font-medium">Slips</th>
+                            <th className="px-3 py-2 font-medium">Net</th>
+                            <th className="px-3 py-2 font-medium">Status</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {payrollMonths.map((m) => (
+                            <tr
+                              key={m.month}
+                              className="cursor-pointer border-b border-border/50 transition-colors duration-200 hover:bg-muted/30"
+                              onClick={() => setSlipOpenMonth(m.month)}
+                            >
+                              <td className="px-3 py-2 font-medium">{m.label}</td>
+                              <td className="px-3 py-2 text-xs text-muted-foreground">{m.cycleLabel}</td>
+                              <td className="px-3 py-2 tabular-nums">{m.employeeCount}</td>
+                              <td className="px-3 py-2 tabular-nums">{m.slipCount}</td>
+                              <td className="px-3 py-2 tabular-nums">{formatInr(m.netTotal)}</td>
+                              <td className="px-3 py-2">
+                                <HrStatusBadge status={RUN_STATUS_LABELS[m.status as keyof typeof RUN_STATUS_LABELS] ?? m.status} />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                  <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-                    {preview ? (
-                      <div className="space-y-3 text-xs">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <p className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
-                              Company Logo
-                            </p>
-                            <p className="text-sm font-semibold">Enterprise ERP</p>
-                          </div>
-                          <div className="grid size-12 place-items-center rounded border border-dashed border-border text-[9px] text-muted-foreground">
-                            QR
-                          </div>
-                        </div>
-                        <div className="space-y-0.5">
-                          <p className="font-medium">{preview.employeeName}</p>
-                          <p className="text-muted-foreground">
-                            {preview.employeeId} · {preview.department}
-                          </p>
-                          <p className="text-muted-foreground">Bank: {preview.bankAccount}</p>
-                          <p className="text-muted-foreground">
-                            Attendance: {preview.presentDays} present · {preview.leaveDays} leave
-                            {preview.monthLabel ? ` · ${preview.monthLabel}` : ""}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="mb-1 font-semibold">Earnings</p>
-                          {preview.earnings.map((e) => (
-                            <div key={e.label} className="flex justify-between tabular-nums">
-                              <span>{e.label}</span>
-                              <span>{formatInr(e.amount)}</span>
-                            </div>
-                          ))}
-                          <div className="mt-1 flex justify-between border-t pt-1 font-medium">
-                            <span>Gross</span>
-                            <span>{formatInr(preview.gross)}</span>
-                          </div>
-                        </div>
-                        <div>
-                          <p className="mb-1 font-semibold">Deductions</p>
-                          {preview.deductions.map((d) => (
-                            <div key={d.label} className="flex justify-between tabular-nums">
-                              <span>{d.label}</span>
-                              <span>{formatInr(d.amount)}</span>
-                            </div>
-                          ))}
-                          <div className="mt-1 flex justify-between border-t pt-1 font-medium">
-                            <span>Total</span>
-                            <span>{formatInr(preview.totalDeductions)}</span>
-                          </div>
-                        </div>
-                        <div className="flex justify-between rounded-lg bg-primary/5 px-3 py-2 font-semibold">
-                          <span>Net Salary</span>
-                          <span>{formatInr(preview.net)}</span>
-                        </div>
-                        <p className="text-muted-foreground">
-                          Tax regime: {preview.taxRegime} · Digital signature on file
-                        </p>
+                )
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="cursor-pointer"
+                      onClick={() => {
+                        setSlipOpenMonth("");
+                        setSlipQuery("");
+                      }}
+                    >
+                      <ChevronLeft className="size-3.5" />
+                      All months
+                    </Button>
+                    <p className="text-sm font-medium">{monthLabel(slipOpenMonth)}</p>
+                    <div className="min-w-[180px] flex-1">
+                      <Input
+                        className="h-8"
+                        placeholder="Search name or code…"
+                        value={slipQuery}
+                        onChange={(e) => setSlipQuery(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  {filteredPayslips.length === 0 ? (
+                    <HrEmptyState
+                      title="No slips for this month"
+                      description="Generate slips from the payroll run for this month."
+                      action={
                         <Button
                           size="sm"
-                          className="w-full cursor-pointer"
-                          onClick={() => {
-                            downloadTextFile(`${preview.payslipCode}.txt`, exportPayslipText(preview));
-                            toast("Payslip downloaded");
-                          }}
+                          className="cursor-pointer"
+                          disabled={generating}
+                          onClick={() => void handleGeneratePayslips(slipOpenMonth)}
                         >
-                          Download / Email Ready
+                          <FileText className="size-3.5" />
+                          {generating ? "Generating…" : "Generate slip"}
                         </Button>
+                      }
+                    />
+                  ) : (
+                    <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+                      <div className="overflow-x-auto">
+                        <table className="w-full min-w-[720px] text-left text-sm">
+                          <thead className="border-b bg-muted/40 text-[11px] uppercase text-muted-foreground">
+                            <tr>
+                              <th className="px-3 py-2 font-medium">Employee code</th>
+                              <th className="px-3 py-2 font-medium">Name</th>
+                              <th className="px-3 py-2 font-medium">Month</th>
+                              <th className="px-3 py-2 font-medium">Net pay</th>
+                              <th className="px-3 py-2 font-medium">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {pagePayslips.map((p) => {
+                              const code = payslipEmployeeCode(p, employees);
+                              return (
+                                <tr
+                                  key={p.id}
+                                  className="border-b border-border/50 transition-colors duration-200 hover:bg-muted/30"
+                                >
+                                  <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                                    {code || "—"}
+                                  </td>
+                                  <td className="px-3 py-2 font-medium">{p.employeeName}</td>
+                                  <td className="px-3 py-2 text-xs">{p.monthLabel}</td>
+                                  <td className="px-3 py-2 tabular-nums">{formatInr(p.net)}</td>
+                                  <td className="px-3 py-2">
+                                    <div className="flex flex-wrap gap-1.5">
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 cursor-pointer text-xs"
+                                        onClick={() => setViewSlip(p)}
+                                      >
+                                        <Eye className="size-3.5" />
+                                        View
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        className="h-7 cursor-pointer text-xs"
+                                        onClick={async () => {
+                                          try {
+                                            await downloadPayslipPdf(
+                                              p,
+                                              payslipPdfContext(p, employees),
+                                            );
+                                            toast("PDF downloaded");
+                                          } catch {
+                                            toast("Could not download PDF", "error");
+                                          }
+                                        }}
+                                      >
+                                        <Download className="size-3.5" />
+                                        Download
+                                      </Button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
-                    ) : (
-                      <p className="text-xs text-muted-foreground">Select a payslip to preview.</p>
-                    )}
-                  </div>
-                </div>
+                      <EmsPagination
+                        page={page}
+                        pageSize={SLIP_PAGE}
+                        total={filteredPayslips.length}
+                        onPageChange={setPage}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </section>
           ) : null}
@@ -914,6 +913,74 @@ export function PayrollManagementPage() {
           refresh();
         }}
       />
+      <SetupDrawer
+        open={generateOpen}
+        title="Generate slip"
+        description="Select the payroll month. Slips are created for employees on that run."
+        onClose={() => setGenerateOpen(false)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => setGenerateOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="cursor-pointer"
+              disabled={!generateMonth || generating}
+              onClick={() => void handleGeneratePayslips()}
+            >
+              {generating ? "Generating…" : "Generate"}
+            </Button>
+          </div>
+        }
+      >
+        <SetupField label="Month" required>
+          <SetupSelect value={generateMonth} onChange={(e) => setGenerateMonth(e.target.value)}>
+            <option value="">Select month</option>
+            {payrollMonths.map((m) => (
+              <option key={m.month} value={m.month}>
+                {m.label}
+                {m.cycleLabel ? ` · ${m.cycleLabel}` : ""}
+              </option>
+            ))}
+          </SetupSelect>
+        </SetupField>
+      </SetupDrawer>
+      <SetupDrawer
+        open={Boolean(viewSlip)}
+        wide
+        title={viewSlip ? "Salary slip" : "Payslip"}
+        description={
+          viewSlip
+            ? `${payslipEmployeeCode(viewSlip, employees) || viewSlip.employeeId} · ${viewSlip.monthLabel}`
+            : undefined
+        }
+        onClose={() => setViewSlip(null)}
+        footer={
+          viewSlip ? (
+            <Button
+              size="sm"
+              className="cursor-pointer"
+              onClick={async () => {
+                try {
+                  await downloadPayslipPdf(viewSlip, payslipPdfContext(viewSlip, employees));
+                  toast("PDF downloaded");
+                } catch {
+                  toast("Could not download PDF", "error");
+                }
+              }}
+            >
+              <Download className="size-3.5" />
+              Download PDF
+            </Button>
+          ) : null
+        }
+      >
+        {viewSlip ? (
+          <PayslipLetterhead slip={viewSlip} ctx={payslipPdfContext(viewSlip, employees)} />
+        ) : null}
+      </SetupDrawer>
       <BonusDrawer
         open={bonusOpen}
         onClose={() => setBonusOpen(false)}
@@ -994,39 +1061,6 @@ export function PayrollManagementPage() {
             })
             .catch((e) => toast(e instanceof Error ? e.message : "Delete failed", "error"))
             .finally(() => setDeleting(false));
-        }}
-      />
-      <SetupConfirmDialog
-        open={Boolean(confirmLock)}
-        title={confirmLock?.mode === "unlock" ? "Unlock month" : "Lock month"}
-        message={
-          confirmLock
-            ? confirmLock.mode === "unlock"
-              ? `Unlock ${confirmLock.run.monthLabel}?`
-              : `Lock ${confirmLock.run.monthLabel}?`
-            : ""
-        }
-        confirmLabel={confirmLock?.mode === "unlock" ? "Unlock" : "Lock"}
-        loading={deleting}
-        onCancel={() => setConfirmLock(null)}
-        onConfirm={() => {
-          if (!confirmLock) return;
-          setDeleting(true);
-          try {
-            if (confirmLock.mode === "lock") {
-              lockPayrollMonth(confirmLock.run.month, "Locked from payroll run");
-              toast("Month locked");
-            } else {
-              unlockPayrollMonth(confirmLock.run.month, "Unlocked from payroll run");
-              toast("Month unlocked");
-            }
-            setConfirmLock(null);
-            refresh();
-          } catch (e) {
-            toast(e instanceof Error ? e.message : "Failed", "error");
-          } finally {
-            setDeleting(false);
-          }
         }}
       />
     </div>

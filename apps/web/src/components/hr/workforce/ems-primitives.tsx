@@ -7,18 +7,51 @@ import { Button } from "@/components/ui/button";
 import { HrUnderlineTabs, type HrTabItem } from "@/components/hr/hr-primitives";
 import { cn } from "@/lib/utils";
 
-export function EmsSkeleton({ rows = 6 }: { rows?: number }) {
+function Bone({ className }: { className?: string }) {
   return (
-    <div className="space-y-3 animate-pulse">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="h-20 rounded-xl bg-muted/60" />
+    <div
+      className={cn("rounded-md bg-foreground/10 motion-safe:animate-pulse", className)}
+    />
+  );
+}
+
+export function EmsSkeleton({
+  rows = 8,
+  cards = 5,
+}: {
+  rows?: number;
+  cards?: number;
+}) {
+  return (
+    <div
+      className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden"
+      aria-busy="true"
+      aria-label="Loading"
+    >
+      <div
+        className={cn(
+          "grid shrink-0 gap-3 sm:grid-cols-2",
+          cards <= 4 ? "xl:grid-cols-4" : "xl:grid-cols-5",
+        )}
+      >
+        {Array.from({ length: cards }).map((_, i) => (
+          <div
+            key={i}
+            className="rounded-xl border border-border/70 bg-card px-3 py-2.5 shadow-sm"
+          >
+            <Bone className="h-2.5 w-24" />
+            <Bone className="mt-2 h-6 w-14" />
+          </div>
         ))}
       </div>
-      <div className="h-10 rounded-lg bg-muted/60" />
-      {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="h-12 rounded-lg bg-muted/40" />
-      ))}
+      <Bone className="h-9 w-full shrink-0 max-w-xl rounded-lg" />
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card p-3 shadow-sm">
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
+          {Array.from({ length: rows }).map((_, i) => (
+            <Bone key={i} className="h-11 w-full shrink-0 rounded-lg" />
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

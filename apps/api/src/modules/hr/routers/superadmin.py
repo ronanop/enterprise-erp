@@ -18,14 +18,17 @@ from modules.hr.schemas import (
     HrAdminAssignRequest,
     HrAdminEntitiesRequest,
     HrAdminEntityOption,
+    HrAdminNavRequest,
     HrAdminPasswordResponse,
     HrAdminRecord,
+    HrNavAccessRecord,
 )
 from modules.hr.service.hr_module_admin import HrModuleAdminService
 from modules.hr.service.superadmin_service import HrSuperadminService
 from shared.schemas import APIResponse
 
 superadmin_router = APIRouter(prefix="/superadmin", tags=["HR - Superadmin"])
+hr_nav_access_router = APIRouter(tags=["HR - Nav"])
 
 
 def require_hr_superadmin_access() -> Callable:
@@ -47,6 +50,14 @@ def require_hr_superadmin_access() -> Callable:
         raise ForbiddenException("HR superadmin or HR module admin access required")
 
     return _checker
+
+
+@hr_nav_access_router.get("/nav-access", response_model=APIResponse[HrNavAccessRecord])
+def get_my_hr_nav_access(
+    ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=HrSuperadminService(db).my_nav_access(ctx))
 
 
 @superadmin_router.get("/admins", response_model=APIResponse[list[HrAdminRecord]])
@@ -84,6 +95,17 @@ def set_hr_admin_entities(
 ):
     data = HrSuperadminService(db).set_entities(ctx, employee_id, body.company_ids)
     return APIResponse(message="HR Admin entities updated", data=data)
+
+
+@superadmin_router.patch("/admins/{employee_id}/nav", response_model=APIResponse[HrAdminRecord])
+def set_hr_admin_nav(
+    employee_id: UUID,
+    body: HrAdminNavRequest,
+    ctx: Annotated[TenantContext, Depends(require_hr_superadmin_access())],
+    db: Annotated[Session, Depends(get_db)],
+):
+    data = HrSuperadminService(db).set_nav_keys(ctx, employee_id, body.nav_keys)
+    return APIResponse(message="HR Admin sidebar menus updated", data=data)
 
 
 @superadmin_router.post(

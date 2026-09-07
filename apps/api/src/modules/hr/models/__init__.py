@@ -13,7 +13,9 @@ from modules.hr.models.employment import HrEmployment
 from modules.hr.models.goal import HrGoal
 from modules.hr.models.grade import HrGrade
 from modules.hr.models.holiday_calendar import HrHolidayCalendar
+from modules.hr.models.hr_admin_nav_access import HrAdminNavAccess
 from modules.hr.models.job_level import HrJobLevel
+from modules.hr.models.leave_adjust_event import HrLeaveAdjustEvent
 from modules.hr.models.leave_adjustment import HrLeaveAdjustment
 from modules.hr.models.leave_balance import HrLeaveBalance
 from modules.hr.models.leave_request import HrLeaveRequest
@@ -51,10 +53,12 @@ __all__ = [
     "HrShift",
     "HrShiftAssignment",
     "HrHolidayCalendar",
+    "HrAdminNavAccess",
     "HrLeaveType",
     "HrLeaveBalance",
     "HrLeaveRequest",
     "HrLeaveAdjustment",
+    "HrLeaveAdjustEvent",
     "HrAttendance",
     "HrAttendanceCorrection",
     "HrAttendanceRule",

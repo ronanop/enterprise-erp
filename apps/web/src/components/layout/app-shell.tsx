@@ -26,7 +26,8 @@ export function AppShell({ children }: AppShellProps) {
   const standalone = useStandaloneChrome();
   const hrMode = isHrPath(pathname);
   const { dark } = useHrmsColorMode();
-  const lockPageScroll = pathname === "/hr/edoc" || pathname.startsWith("/hr/edoc/");
+  const lockPageScroll =
+    pathname === "/hr/edoc" || pathname.startsWith("/hr/edoc/") || pathname === "/hr/time";
   const isCrm = pathname === "/crm" || pathname.startsWith("/crm/");
   const isProjects = pathname === "/projects" || pathname.startsWith("/projects/");
   const isProcurement =

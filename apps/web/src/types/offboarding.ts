@@ -48,6 +48,8 @@ export type OffboardingCase = {
   employeeId: string;
   employeeName: string;
   employeeCode: string;
+  /** False when employee_id is not in master/onboarding directory. */
+  hasEmployeeRecord: boolean;
   separationType: SeparationType | string;
   requestedLwd: string;
   approvedLwd: string | null;

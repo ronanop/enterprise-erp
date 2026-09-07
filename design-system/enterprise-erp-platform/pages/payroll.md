@@ -23,7 +23,7 @@
 4. Payslip
 5. Revised salary
 6. Incentives
-7. Salary configuration (placeholder until specified)
+7. Salary configuration (includes sandwich and provident fund)
 
 ### Removed from this workspace
 
@@ -32,6 +32,13 @@
 - Loans
 - Standalone Month Lock / Approvals / Reports / Audit tabs
 - Structure form: Food, Internet, TDS, PT, ESI, loan, advance, insurance (payroll-run items, not CTC template)
+
+### Payslip
+
+- Full-width list (no right-side preview pane)
+- Filters: Month or Custom date range, plus employee name/code search
+- Columns: employee code, name, month, net pay
+- Actions: View (letterhead drawer) and Download PDF (Cache logo + entity name/address)
 
 ### Run payroll
 

@@ -155,19 +155,28 @@ export function HrExecutiveDashboardPage() {
   const { user: authUser } = useAuthUser();
   const [data, setData] = useState<HrExecutiveDashboard | null>(null);
   const [loading, setLoading] = useState(true);
+  const [chartsLoading, setChartsLoading] = useState(true);
   const [role, setRole] = useState<DashboardRole>("hr");
   const [query, setQuery] = useState("");
   const [period, setPeriod] = useState<AnalyticsPeriod>("last_6");
 
   const load = useCallback(async (opts?: { silent?: boolean }) => {
-    if (!opts?.silent) setLoading(true);
+    if (!opts?.silent) {
+      setLoading(true);
+      setChartsLoading(true);
+    }
     try {
       setRole("hr");
-      setData(await loadHrExecutiveDashboard("hr"));
+      const core = await loadHrExecutiveDashboard("hr", "core");
+      setData(core);
+      setLoading(false);
+      const full = await loadHrExecutiveDashboard("hr", "full");
+      setData(full);
     } catch {
       if (!opts?.silent) toast("Failed to load HR dashboard", "error");
     } finally {
       setLoading(false);
+      setChartsLoading(false);
     }
   }, []);
 
@@ -176,7 +185,7 @@ export function HrExecutiveDashboardPage() {
   }, [load]);
 
   useEffect(() => {
-    const id = window.setInterval(() => void load({ silent: true }), 60_000);
+    const id = window.setInterval(() => void load({ silent: true }), 120_000);
     return () => window.clearInterval(id);
   }, [load]);
 
@@ -308,10 +317,10 @@ export function HrExecutiveDashboardPage() {
               size="sm"
               variant="outline"
               className="h-10 cursor-pointer rounded-xl px-4"
-              disabled={loading}
+              disabled={loading || chartsLoading}
               onClick={() => void load()}
             >
-              <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
+              <RefreshCw className={cn("size-3.5", (loading || chartsLoading) && "animate-spin")} />
               Refresh
             </Button>
           </div>
@@ -451,9 +460,13 @@ export function HrExecutiveDashboardPage() {
                       <p className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
                         {k.label}
                       </p>
-                      <p className="mt-0.5 text-2xl font-semibold tabular-nums leading-none text-foreground">
-                        {loading ? "—" : (k.value ?? 0).toLocaleString("en-IN")}
-                      </p>
+                        {loading || k.value == null ? (
+                          <span className="mt-0.5 inline-block h-7 w-16 animate-pulse rounded bg-black/10" />
+                        ) : (
+                          <p className="mt-0.5 text-2xl font-semibold tabular-nums leading-none text-foreground">
+                            {k.value.toLocaleString("en-IN")}
+                          </p>
+                        )}
                     </div>
                   </div>
                 );
@@ -486,6 +499,16 @@ export function HrExecutiveDashboardPage() {
             </div>
 
             <ChartHeightContext.Provider value={268}>
+              {chartsLoading ? (
+                <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="h-[268px] animate-pulse rounded-2xl border border-border bg-muted/40"
+                    />
+                  ))}
+                </div>
+              ) : (
               <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
                 <ChartFrame>
                   <PremiumBarChart
@@ -529,6 +552,7 @@ export function HrExecutiveDashboardPage() {
                   />
                 </ChartFrame>
               </div>
+              )}
             </ChartHeightContext.Provider>
           </section>
         </>

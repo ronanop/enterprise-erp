@@ -1687,6 +1687,15 @@ class HrAdminAssignRequest(BaseModel):
     company_ids: list[UUID] = []
 
 
+class HrAdminNavRequest(BaseModel):
+    nav_keys: list[str]
+
+
+class HrNavAccessRecord(BaseModel):
+    unrestricted: bool = False
+    nav_keys: list[str] = []
+
+
 class HrAdminEntitiesRequest(BaseModel):
     company_ids: list[UUID]
 
@@ -1709,6 +1718,8 @@ class HrAdminRecord(BaseModel):
     login_created: bool = False
     temporary_password: str | None = None
     company_ids: list[UUID] = []
+    nav_keys: list[str] = []
+    nav_unrestricted: bool = True
 
 
 class HrAdminPasswordResponse(BaseModel):
@@ -1727,3 +1738,33 @@ class HrActivityLogRecord(BaseModel):
     actor_name: str | None = None
     actor_email: str | None = None
     summary: str = ""
+
+
+class LeaveAdjustConfirmRequest(BaseModel):
+    employee_id: UUID
+    period_start: date
+    period_end: date
+    company_id: UUID | None = None
+    source: str = "attendance_tab"
+    payroll_run_id: UUID | None = None
+    reason: str | None = None
+
+
+class LeaveAdjustApplyDayRequest(BaseModel):
+    employee_id: UUID
+    period_start: date
+    period_end: date
+    attendance_date: date
+    leave_type_code: str
+    company_id: UUID | None = None
+    source: str = "attendance_tab"
+    payroll_run_id: UUID | None = None
+    reason: str | None = None
+
+
+class LeaveAdjustRevertRequest(BaseModel):
+    employee_id: UUID
+    period_start: date
+    period_end: date
+    company_id: UUID | None = None
+    payroll_run_id: UUID | None = None

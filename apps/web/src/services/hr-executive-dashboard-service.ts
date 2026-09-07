@@ -12,6 +12,7 @@ import {
   employeeDisplayName,
   loadHrOverview,
   type HrOverview,
+  type HrOverviewSlice,
   type HrRow,
 } from "@/services/hr-service";
 import { ApiClientError } from "@/services/api-client";
@@ -39,7 +40,13 @@ import type {
 import { DASHBOARD_ROLE_LABELS } from "@/types/hr-executive-dashboard";
 import { parseHolidaysJson } from "@/types/holiday-calendar";
 
-const ROLE_KEY = "erp_hr_dashboard_role_v1";
+const DASHBOARD_CORE_SLICES: HrOverviewSlice[] = [
+  "profiles",
+  "employment",
+  "leaveRequests",
+  "separation",
+  "holidayCalendars",
+];
 
 /** Map free-text work locations to clean city labels for charts. */
 function normalizeLocationCity(raw: string | null | undefined): string {
@@ -1142,6 +1149,7 @@ export function filterDashboardByRole(
 
 export async function loadHrExecutiveDashboard(
   roleOverride?: DashboardRole,
+  phase: "core" | "full" = "full",
 ): Promise<HrExecutiveDashboard> {
   const role = roleOverride ?? getDashboardRole();
   let overview: HrOverview | null = null;
@@ -1158,42 +1166,50 @@ export async function loadHrExecutiveDashboard(
   let authBlocked = false;
 
   try {
-    const [ov, directory, rec, inbox, onboardingDir] = await Promise.all([
-      loadHrOverview(),
-      loadEmployeeDirectory().catch(() => ({ records: [] as EmployeeRecord[], errors: ["employees"] })),
-      loadRecruitmentOverview().catch(() => null),
-      loadHrEssInbox({ includeCompoff: true }).catch(() => [] as HrEssInboxItem[]),
-      import("@/services/onboarding-management-service")
-        .then((m) => m.loadOnboardingDirectory())
-        .catch(() => null),
-    ]);
-    overview = ov;
-    directoryRecords = directory.records ?? [];
-    recruitment = rec;
-    essInbox = inbox;
-    if (onboardingDir?.cases) {
-      onboardingCases = onboardingDir.cases.map((c) => ({
-        status: c.status,
-        candidateName: c.candidateName,
-        progressPct: c.progressPct,
-      }));
-      onboardingInProcess = onboardingDir.cases.filter((c) => {
-        const st = String(c.status ?? "").toLowerCase();
-        if (["joined", "cancelled"].includes(st)) return false;
-        return Boolean(c.invitation?.sentAt) || ["invitation_sent", "in_progress", "submitted", "hr_review"].includes(st);
-      }).length;
+    if (phase === "core") {
+      overview = await loadHrOverview(DASHBOARD_CORE_SLICES);
+      partial = Boolean(overview.partial);
+      authBlocked =
+        overview.statusCodes.includes(401) ||
+        (!isAuthenticated() && overview.errors.length > 0);
+    } else {
+      const [ov, directory, rec, inbox, onboardingDir] = await Promise.all([
+        loadHrOverview(),
+        loadEmployeeDirectory().catch(() => ({ records: [] as EmployeeRecord[], errors: ["employees"] })),
+        loadRecruitmentOverview().catch(() => null),
+        loadHrEssInbox({ includeCompoff: true }).catch(() => [] as HrEssInboxItem[]),
+        import("@/services/onboarding-management-service")
+          .then((m) => m.loadOnboardingDirectory())
+          .catch(() => null),
+      ]);
+      overview = ov;
+      directoryRecords = directory.records ?? [];
+      recruitment = rec;
+      essInbox = inbox;
+      if (onboardingDir?.cases) {
+        onboardingCases = onboardingDir.cases.map((c) => ({
+          status: c.status,
+          candidateName: c.candidateName,
+          progressPct: c.progressPct,
+        }));
+        onboardingInProcess = onboardingDir.cases.filter((c) => {
+          const st = String(c.status ?? "").toLowerCase();
+          if (["joined", "cancelled"].includes(st)) return false;
+          return Boolean(c.invitation?.sentAt) || ["invitation_sent", "in_progress", "submitted", "hr_review"].includes(st);
+        }).length;
+      }
+      const directoryFailed = Boolean(directory.errors?.length);
+      const { people: directoryPeople } = peopleFromDirectory(directoryRecords);
+      const { people: overviewPeople } = peopleFromHrOverview(overview);
+      const hasPeople = directoryPeople.length > 0 || overviewPeople.length > 0;
+      partial =
+        Boolean(overview.partial) ||
+        (directoryFailed && !hasPeople) ||
+        (!hasPeople && overview.errors.length > 0);
+      authBlocked =
+        overview.statusCodes.includes(401) ||
+        (!isAuthenticated() && overview.errors.length > 0);
     }
-    const directoryFailed = Boolean(directory.errors?.length);
-    const { people: directoryPeople } = peopleFromDirectory(directoryRecords);
-    const { people: overviewPeople } = peopleFromHrOverview(overview);
-    const hasPeople = directoryPeople.length > 0 || overviewPeople.length > 0;
-    partial =
-      Boolean(overview.partial) ||
-      (directoryFailed && !hasPeople) ||
-      (!hasPeople && overview.errors.length > 0);
-    authBlocked =
-      overview.statusCodes.includes(401) ||
-      (!isAuthenticated() && overview.errors.length > 0);
   } catch (err) {
     partial = true;
     authBlocked =

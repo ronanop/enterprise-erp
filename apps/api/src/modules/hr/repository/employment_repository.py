@@ -47,7 +47,14 @@ class EmploymentRepository(HrScopedRepository):
                 setattr(row, k, v)
         row.updated_at = utcnow()
         row.updated_by = ctx.user_id
-        if hasattr(row, "version"):
-            row.version = int(row.version or 1) + 1
         self.db.flush()
         return row
+
+    def get_by_employee_id(self, ctx: TenantContext, employee_id: UUID) -> HrEmployment | None:
+        stmt = select(HrEmployment).where(
+            HrEmployment.employee_id == employee_id,
+            HrEmployment.is_deleted.is_(False),
+        )
+        stmt = self.apply_hr_filter(stmt, HrEmployment, ctx, branch_scoped=True)
+        stmt = stmt.order_by(HrEmployment.date_of_joining.desc())
+        return self.db.scalars(stmt).first()

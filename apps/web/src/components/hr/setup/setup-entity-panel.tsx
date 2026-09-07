@@ -34,7 +34,9 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { nextCode, type HrSetupTab } from "@/config/hr-setup";
 import { getStoredOrgContext } from "@/lib/org-context-storage";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { ApiClientError, resourceService } from "@/services/api-client";
+import { loadUserDirectory } from "@/services/user-directory-service";
 import {
   archiveLocal,
   cell,
@@ -249,6 +251,7 @@ export function SetupEntityPanel({
     archive?: string;
   };
 }) {
+  const { canExact, loading: permLoading } = useUserPermissions();
   const [rows, setRows] = useState<SetupRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -293,22 +296,6 @@ export function SetupEntityPanel({
         const lookups = await loadSetupOrgLookups();
         setOrgLookups(lookups);
       }
-      // Best-effort user directory for audit "created by / updated by" labels
-      void resourceService
-        .list<Record<string, unknown>>("/users")
-        .then((res) => {
-          const map: Record<string, string> = {};
-          const list = Array.isArray(res.data) ? res.data : [];
-          for (const u of list) {
-            const id = String(u.id ?? "");
-            if (!id) continue;
-            map[id] = String(u.display_name || u.email || id);
-          }
-          setUsersById(map);
-        })
-        .catch(() => {
-          /* permission may block; UUIDs still show as short ids */
-        });
     } catch (err) {
       toast(err instanceof ApiClientError ? err.message : "Failed to load records", "error");
       setRows([]);
@@ -323,6 +310,17 @@ export function SetupEntityPanel({
     setQuery("");
     setStatusFilter("all");
   }, [load]);
+
+  useEffect(() => {
+    if (permLoading) return;
+    let cancelled = false;
+    void loadUserDirectory(canExact("foundation.user:read")).then((map) => {
+      if (!cancelled) setUsersById(map);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [permLoading, canExact]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

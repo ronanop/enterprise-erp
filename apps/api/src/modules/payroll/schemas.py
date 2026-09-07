@@ -671,9 +671,9 @@ class PayrollPolicyCreate(BaseModel):
     pf_employer_percent: Decimal | None = Decimal("0.1200")
     pf_wage_ceiling: Decimal | None = Decimal("15000")
     pf_on_lop: str = "fixed"
-    sandwich_enabled: bool = False
+    sandwich_enabled: bool = True
     sandwich_off_becomes: str = "lop"
-    sandwich_triggers: str = "unauthorized_absence"
+    sandwich_triggers: str = "both"
     net_pay_formula: str = "gross_minus_employee_pf_only"
     attendance_rules_json: dict | None = None
     notes: str | None = None
@@ -735,9 +735,9 @@ class PayrollPolicyResponse(OrmModel):
     pf_employer_percent: Decimal | None = None
     pf_wage_ceiling: Decimal | None = None
     pf_on_lop: str = "fixed"
-    sandwich_enabled: bool = False
+    sandwich_enabled: bool = True
     sandwich_off_becomes: str = "lop"
-    sandwich_triggers: str = "unauthorized_absence"
+    sandwich_triggers: str = "both"
     net_pay_formula: str
     attendance_rules_json: dict | None
     notes: str | None

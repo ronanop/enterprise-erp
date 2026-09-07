@@ -2,7 +2,8 @@
 
 Creates:
   - Login: hr@cachedigitech.com / CacheHr@2026
-  - user_type super_admin, SUPER_ADMIN role
+  - user_type super_admin, SUPER_ADMIN role (HRMS Superadmin Panel)
+  - HR module admin (foundation.sec_user_module hr/admin) + HR_ADMIN role
   - No master_employee row (hidden from employee directory / ESS)
   - hr.superadmin:manage granted only to SUPER_ADMIN
   - HR_ADMIN role gets full HRMS sidebar permissions (not Superadmin Panel)
@@ -272,6 +273,28 @@ def main() -> None:
         if company and branch:
             ensure_org_scope(db, tenant.id, user, company, branch)
 
+        from modules.foundation.repository.user_module_repository import UserModuleRepository
+        from modules.foundation.service.org_module_admin_sync_service import (
+            OrgModuleAdminSyncService,
+        )
+
+        modules = UserModuleRepository(db)
+        previous_admin = modules.list_admin_keys_for_user(tenant.id, user.id)
+        new_admin = list(dict.fromkeys([*previous_admin, "hr"]))
+        modules.replace_admin_keys(
+            tenant_id=tenant.id,
+            user_id=user.id,
+            module_keys=new_admin,
+            assigned_by=None,
+        )
+        OrgModuleAdminSyncService(db).sync_user_admin_modules(
+            tenant.id,
+            user.id,
+            previous_admin_keys=[k for k in previous_admin if k != "hr"],
+            new_admin_keys=new_admin,
+            actor_id=None,
+        )
+
         linked = db.scalars(
             select(MasterEmployee).where(
                 MasterEmployee.tenant_id == tenant.id,
@@ -291,12 +314,23 @@ def main() -> None:
         except Exception:
             pass
 
+        db.execute(
+            text(
+                """
+                UPDATE foundation.sec_session
+                SET revoked_at = :now
+                WHERE user_id = :uid AND revoked_at IS NULL
+                """
+            ),
+            {"now": utcnow(), "uid": user.id},
+        )
+
         db.commit()
         print("=" * 60)
         print("HRMS Superadmin seeded")
         print(f"  Email    : {HRMS_ADMIN_EMAIL}")
         print(f"  Password : {HRMS_ADMIN_PASSWORD}")
-        print("  Role     : SUPER_ADMIN (hidden from employee directory)")
+        print("  Role     : SUPER_ADMIN + HR module admin (hidden from employee directory)")
         print("  Login    : ERP web — not Employee App")
         print("=" * 60)
         print("Sign out and sign in again so the session reloads permissions.")

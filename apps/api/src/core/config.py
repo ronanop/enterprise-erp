@@ -61,6 +61,10 @@ class Settings(BaseSettings):
         return value
 
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
+    redis_url_fallback: str = Field(
+        default="redis://localhost:6379/0",
+        alias="REDIS_URL_FALLBACK",
+    )
     celery_broker_url: str = Field(
         default="amqp://erp:erp_dev_password@172.16.200.26:5672//",
         alias="CELERY_BROKER_URL",

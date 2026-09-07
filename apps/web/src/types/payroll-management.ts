@@ -425,6 +425,7 @@ export type PayslipRecord = {
   runId: string;
   employeeId: string;
   employeeName: string;
+  employeeCode?: string;
   month: string;
   monthLabel: string;
   department: string;

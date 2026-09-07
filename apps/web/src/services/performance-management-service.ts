@@ -148,7 +148,7 @@ export async function loadPerformanceDirectory(): Promise<PerformanceDirectory> 
   }
 
   try {
-    const overview = await loadHrOverview();
+    const overview = await loadHrOverview(["profiles", "goals", "reviews", "appraisals"]);
     if (employees.length === 0) {
       for (const e of overview.profiles ?? []) {
         const name = String(e.full_name ?? e.display_name ?? "").trim();
