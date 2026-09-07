@@ -14,6 +14,7 @@ export function HrFormDialog({
   children,
   footer,
   wide,
+  className,
 }: {
   open: boolean;
   title: string;
@@ -22,6 +23,7 @@ export function HrFormDialog({
   children: ReactNode;
   footer?: ReactNode;
   wide?: boolean;
+  className?: string;
 }) {
   if (!open) return null;
   return (
@@ -41,6 +43,7 @@ export function HrFormDialog({
         className={cn(
           "relative z-10 flex max-h-[90dvh] w-full flex-col rounded-t-2xl border border-border bg-card shadow-lg sm:rounded-2xl",
           wide ? "sm:max-w-2xl" : "sm:max-w-lg",
+          className,
         )}
       >
         <div className="flex items-start justify-between gap-3 border-b border-border/70 px-4 py-3">

@@ -19,12 +19,12 @@ class RBACService:
             cached = self._store.get_permissions(user_id)
             if cached is not None:
                 return cached
-        except redis.ConnectionError:
+        except redis.RedisError:
             pass
         permissions = self._engine.get_user_permission_codes(user_id, tenant_id)
         try:
             self._store.set_permissions(user_id, permissions)
-        except redis.ConnectionError:
+        except redis.RedisError:
             pass
         return permissions
 
@@ -34,5 +34,5 @@ class RBACService:
     def invalidate_user(self, user_id: UUID) -> None:
         try:
             self._store.invalidate_permissions(user_id)
-        except redis.ConnectionError:
+        except redis.RedisError:
             pass

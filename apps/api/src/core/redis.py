@@ -10,11 +10,21 @@ from core.config import settings
 
 _redis_client: redis.Redis | None = None
 
+# Fail fast when VM Redis is unreachable so FastAPI is not blocked (~260s Windows TCP).
+_REDIS_SOCKET_TIMEOUT = 1.5
+
 
 def get_redis() -> redis.Redis:
     global _redis_client
     if _redis_client is None:
-        _redis_client = redis.from_url(settings.redis_url, decode_responses=True)
+        _redis_client = redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=_REDIS_SOCKET_TIMEOUT,
+            socket_timeout=_REDIS_SOCKET_TIMEOUT,
+            retry_on_timeout=False,
+            health_check_interval=30,
+        )
     return _redis_client
 
 
@@ -23,6 +33,10 @@ def check_redis_connection() -> bool:
         return bool(get_redis().ping())
     except Exception:
         return False
+
+
+def _ignore_redis() -> tuple[type[BaseException], ...]:
+    return (redis.RedisError, OSError, TimeoutError)
 
 
 class SessionStore:
@@ -34,13 +48,13 @@ class SessionStore:
         key = f"session:{session_id}"
         try:
             self._client.setex(key, self._ttl, json.dumps(payload))
-        except redis.ConnectionError:
+        except _ignore_redis():
             return
 
     def get_session(self, session_id: UUID) -> dict[str, Any] | None:
         try:
             raw = cast(str | None, self._client.get(f"session:{session_id}"))
-        except redis.ConnectionError:
+        except _ignore_redis():
             return None
         if raw is None:
             return None
@@ -49,7 +63,7 @@ class SessionStore:
     def delete_session(self, session_id: UUID) -> None:
         try:
             self._client.delete(f"session:{session_id}")
-        except redis.ConnectionError:
+        except _ignore_redis():
             return
 
     def set_permissions(self, user_id: UUID, permissions: set[str]) -> None:
@@ -57,13 +71,13 @@ class SessionStore:
         ttl = settings.jwt_access_token_expire_minutes * 60
         try:
             self._client.setex(key, ttl, json.dumps(list(permissions)))
-        except redis.ConnectionError:
+        except _ignore_redis():
             return
 
     def get_permissions(self, user_id: UUID) -> set[str] | None:
         try:
             raw = cast(str | None, self._client.get(f"permissions:{user_id}"))
-        except redis.ConnectionError:
+        except _ignore_redis():
             return None
         if raw is None:
             return None
@@ -72,51 +86,69 @@ class SessionStore:
     def invalidate_permissions(self, user_id: UUID) -> None:
         try:
             self._client.delete(f"permissions:{user_id}")
-        except redis.ConnectionError:
+        except _ignore_redis():
             return
 
     def touch_session(self, session_id: UUID, payload: dict[str, Any] | None = None) -> None:
         """Refresh session TTL; optionally replace cached payload."""
         key = f"session:{session_id}"
-        if payload is not None:
-            self._client.setex(key, self._ttl, json.dumps(payload))
+        try:
+            if payload is not None:
+                self._client.setex(key, self._ttl, json.dumps(payload))
+                return
+            raw = cast(str | None, self._client.get(key))
+            if raw is not None:
+                self._client.setex(key, self._ttl, raw)
+        except _ignore_redis():
             return
-        raw = cast(str | None, self._client.get(key))
-        if raw is not None:
-            self._client.setex(key, self._ttl, raw)
 
     def increment_login_attempts(self, ip: str) -> int:
         """Return attempt count. When login_rate_limit <= 0, rate limiting is disabled."""
         if settings.login_rate_limit <= 0:
             return 0
         key = f"rate_limit:login:{ip}"
-        count = cast(int, self._client.incr(key))
-        if count == 1:
-            self._client.expire(key, settings.login_rate_window_seconds)
-        return count
+        try:
+            count = cast(int, self._client.incr(key))
+            if count == 1:
+                self._client.expire(key, settings.login_rate_window_seconds)
+            return count
+        except _ignore_redis():
+            return 0
 
     def set_oauth_state(
         self, state: str, payload: dict[str, Any], *, ttl_seconds: int = 600
     ) -> None:
-        self._client.setex(f"oauth:state:{state}", ttl_seconds, json.dumps(payload))
+        try:
+            self._client.setex(f"oauth:state:{state}", ttl_seconds, json.dumps(payload))
+        except _ignore_redis():
+            return
 
     def pop_oauth_state(self, state: str) -> dict[str, Any] | None:
         key = f"oauth:state:{state}"
-        raw = cast(str | None, self._client.get(key))
-        if raw is None:
+        try:
+            raw = cast(str | None, self._client.get(key))
+            if raw is None:
+                return None
+            self._client.delete(key)
+            return json.loads(raw)
+        except _ignore_redis():
             return None
-        self._client.delete(key)
-        return json.loads(raw)
 
     def set_oauth_exchange(
         self, exchange_code: str, payload: dict[str, Any], *, ttl_seconds: int = 120
     ) -> None:
-        self._client.setex(f"oauth:exchange:{exchange_code}", ttl_seconds, json.dumps(payload))
+        try:
+            self._client.setex(f"oauth:exchange:{exchange_code}", ttl_seconds, json.dumps(payload))
+        except _ignore_redis():
+            return
 
     def pop_oauth_exchange(self, exchange_code: str) -> dict[str, Any] | None:
         key = f"oauth:exchange:{exchange_code}"
-        raw = cast(str | None, self._client.get(key))
-        if raw is None:
+        try:
+            raw = cast(str | None, self._client.get(key))
+            if raw is None:
+                return None
+            self._client.delete(key)
+            return json.loads(raw)
+        except _ignore_redis():
             return None
-        self._client.delete(key)
-        return json.loads(raw)

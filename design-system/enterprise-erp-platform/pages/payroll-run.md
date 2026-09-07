@@ -19,7 +19,8 @@
 
 - One row per month. Columns: Month, Employees, Gross, Deductions, Net, Status, Lock.
 - Click a month to open employees.
-- **Generate payroll** on this screen: pick month, show cycle dates, confirm. Updates the same month.
+- **Generate payroll** opens a centered dialog (not a right slider). Pick month, show cycle dates, and list employees by name with Present, Leave, Weekly off, Loss of pay, and Payable (x/30). Confirm updates the same month.
+- Day counts use attendance punches, weekly-off policy, and holidays. Unmarked working days after today are not loss of pay. Deduplicate by employee id and code. Refresh icon on the Employees header reloads the list.
 
 ### Employees
 
@@ -40,5 +41,5 @@
 ### Avoid
 
 - Jumping to `/hr/payroll/runs/new` for generate.
-- Right-sidebar run wizard.
+- Right-sidebar run wizard. Use a centered generate dialog instead.
 - Emoji icons.

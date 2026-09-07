@@ -37,7 +37,7 @@ import {
   readPayrollCutoverDay,
   SALARY_DAY_BASIS,
 } from "@/lib/payroll-cycle";
-import { summarizePayrollAttendance } from "@/lib/payroll-attendance-cycle";
+import { summarizePayrollAttendance, type PayrollAttendanceCalendar } from "@/lib/payroll-attendance-cycle";
 import type { PayrollCycle } from "@/lib/payroll-cycle";
 import {
   getCachedPayrollPfPolicy,
@@ -47,7 +47,7 @@ import {
   type PayrollPfPolicy,
 } from "@/lib/payroll-pf-policy";
 import { loadHrMasterDirectory, type HrMasterOption } from "@/services/hr-master-connector";
-import { devWarn } from "@/lib/dev-log";
+import { type WeeklyOffRuleCode } from "@/lib/hr/weekly-off-rules";
 
 const PAY_CTX_KEY = "erp_pay_api_context_v1";
 const UUID_RE =
@@ -611,17 +611,7 @@ export async function previewPayrollRunEmployees(
     if (emp?.code) salaryByKey.set(emp.code.toLowerCase(), sal);
   }
 
-  const people = hr.length
-    ? hr
-    : salaries.map((s) => ({
-        id: s.employeeId,
-        label: s.employeeName,
-        code: s.employeeId,
-        department: s.department,
-        bankAccount: s.bankAccount,
-        bankName: s.bankName,
-        monthlyCtc: s.monthlyCtc,
-      }));
+  const people = await payrollPeopleWithSalary(hr);
 
   const lines = people.map((emp) => {
     const sal =
@@ -767,26 +757,73 @@ export function findPayrollRunForMonth(runs: PayrollRun[], month: string): Payro
   );
 }
 
-async function buildAttendanceLinesForCycle(
-  cycle: PayrollCycle,
-  hrEmployees?: HrMasterOption[],
-): Promise<PayrollEmployeeAttendance[]> {
+async function payrollPeopleWithSalary(hrEmployees?: HrMasterOption[]): Promise<HrMasterOption[]> {
   const hr =
     hrEmployees ??
     (await loadHrMasterDirectory()
       .then((d) => d.employees ?? [])
       .catch(() => [] as HrMasterOption[]));
-  const salaries = (hr.length ? [] : load<EmployeeSalary>(K.salaries)).filter(
-    (s) => s.salaryStatus === "active",
+  const salaries = (await resolveEmployeeSalaries(hr)).filter(
+    (s) => s.salaryStatus === "active" && s.monthlyCtc > 0,
   );
-  const people: HrMasterOption[] = hr.length
-    ? hr
-    : salaries.map((s) => ({
-        id: s.employeeId,
-        label: s.employeeName,
-        code: s.employeeId,
-        department: s.department,
-      }));
+  const keys = new Set(salaries.map((s) => s.employeeId.toLowerCase()));
+  const fromHr = hr.filter(
+    (e) =>
+      keys.has(e.id.toLowerCase()) ||
+      (e.code && keys.has(e.code.toLowerCase())) ||
+      (e.monthlyCtc ?? 0) > 0,
+  );
+  if (fromHr.length) return fromHr;
+  return salaries.map((s) => ({
+    id: s.employeeId,
+    label: s.employeeName,
+    code: s.employeeId,
+    department: s.department,
+    monthlyCtc: s.monthlyCtc,
+  }));
+}
+
+async function loadPayrollAttendanceCalendar(): Promise<PayrollAttendanceCalendar> {
+  const [weeklyOffRes, holidayRes] = await Promise.all([
+    resourceService.list("/hr/weekly-off-policies").catch(() => ({ data: [] })),
+    resourceService.list("/hr/holiday-calendars").catch(() => ({ data: [] })),
+  ]);
+  const weeklyOffRows = (Array.isArray(weeklyOffRes.data) ? weeklyOffRes.data : []) as Record<
+    string,
+    unknown
+  >[];
+  const activePolicy =
+    weeklyOffRows.find((p) => p.is_default && p.status === "active") ??
+    weeklyOffRows.find((p) => p.status === "active") ??
+    weeklyOffRows[0];
+  const apiRules = Array.isArray(activePolicy?.rules_json)
+    ? (activePolicy.rules_json as WeeklyOffRuleCode[])
+    : null;
+  const weeklyOffRules: WeeklyOffRuleCode[] = apiRules?.length ? apiRules : ["sunday"];
+  const alternateSaturdayStart = activePolicy?.alternate_saturday_start
+    ? String(activePolicy.alternate_saturday_start).slice(0, 10)
+    : null;
+  const holidayDates: string[] = [];
+  for (const cal of (Array.isArray(holidayRes.data) ? holidayRes.data : []) as Record<
+    string,
+    unknown
+  >[]) {
+    const json = cal.holidays_json;
+    if (!Array.isArray(json)) continue;
+    for (const h of json) {
+      if (h && typeof h === "object" && "date" in h) {
+        holidayDates.push(String((h as { date: string }).date).slice(0, 10));
+      }
+    }
+  }
+  return { weeklyOffRules, alternateSaturdayStart, holidayDates };
+}
+
+async function buildAttendanceLinesForCycle(
+  cycle: PayrollCycle,
+  hrEmployees?: HrMasterOption[],
+): Promise<PayrollEmployeeAttendance[]> {
+  const people = await payrollPeopleWithSalary(hrEmployees);
   if (!people.length) return [];
 
   const { loadAttendanceForEmployee } = await import("@/services/attendance-management-service");
@@ -797,13 +834,21 @@ async function buildAttendanceLinesForCycle(
   for (let i = 0; i < people.length; i += chunkSize) {
     const chunk = people.slice(i, i + chunkSize);
     const parts = await Promise.all(
-      chunk.map((p) => loadAttendanceForEmployee(p.id).catch(() => [])),
+      chunk.map(async (p) => {
+        const byId = await loadAttendanceForEmployee(p.id).catch(() => []);
+        if (!p.code || p.code === p.id) return byId;
+        const byCode = await loadAttendanceForEmployee(p.code).catch(() => []);
+        return [...byId, ...byCode];
+      }),
     );
     for (const rows of parts) records.push(...rows);
   }
 
   const leaveDir = await loadLeaveDirectory().catch(() => null);
   const leaveRequests = leaveDir?.requests ?? [];
+  const calendar = await loadPayrollAttendanceCalendar().catch(() => ({
+    weeklyOffRules: ["sunday"] as WeeklyOffRuleCode[],
+  }));
 
   const refs = people.map((p) => ({
     employeeId: p.id,
@@ -813,7 +858,7 @@ async function buildAttendanceLinesForCycle(
     hrEmployeeId: p.id,
   }));
 
-  return summarizePayrollAttendance(cycle, refs, records, leaveRequests);
+  return summarizePayrollAttendance(cycle, refs, records, leaveRequests, calendar);
 }
 
 export async function previewPayrollAttendanceForCycle(
@@ -1386,9 +1431,6 @@ export async function runPayroll(month: string, cutoverDay?: number): Promise<Pa
     throw new Error("Assign salary before running payroll.");
   }
   const attendanceLines = await buildAttendanceLinesForCycle(cycle, hr);
-  const factorByEmployee = new Map(
-    attendanceLines.map((l) => [l.employeeId.toLowerCase(), l.attendanceFactor]),
-  );
 
   const structures = load<SalaryStructure>(K.structures);
   const structureMap = new Map(structures.map((s) => [s.id, s]));
@@ -1398,9 +1440,11 @@ export async function runPayroll(month: string, cutoverDay?: number): Promise<Pa
   const employees = salaries;
 
   for (const sal of employees) {
-    const factor =
-      factorByEmployee.get(sal.employeeId.toLowerCase()) ??
-      (attendanceLines.length ? 1 : 1);
+    const linked = findHrEmployee(hr, sal.employeeId);
+    const att =
+      findAttendanceLine(attendanceLines, sal.employeeId) ??
+      (linked ? findAttendanceLine(attendanceLines, linked.id) : undefined);
+    const factor = att?.attendanceFactor ?? 1;
     const st = structureMap.get(sal.structureId) ?? structures[0];
     if (st) {
       gross += structureGross(st) * factor;

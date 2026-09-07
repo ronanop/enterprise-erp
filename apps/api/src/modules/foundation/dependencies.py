@@ -37,7 +37,7 @@ def get_tenant_context(
     store = SessionStore()
     try:
         cached = store.get_session(session_id)
-    except redis.ConnectionError:
+    except redis.RedisError:
         cached = None
 
     if cached is None:
@@ -49,12 +49,12 @@ def get_tenant_context(
         }
         try:
             store.set_session(session_id, cached)
-        except redis.ConnectionError:
+        except redis.RedisError:
             pass
     else:
         try:
             store.touch_session(session_id)
-        except redis.ConnectionError:
+        except redis.RedisError:
             pass
     company_id = UUID(cached["company_id"]) if cached.get("company_id") else None
     branch_id = UUID(cached["branch_id"]) if cached.get("branch_id") else None

@@ -333,7 +333,7 @@ class AuthService:
             session_payload["branch_id"] = str(branch_id)
         try:
             self._store.set_session(session.id, session_payload)
-        except redis.ConnectionError:
+        except redis.RedisError:
             pass
         self._users.record_successful_login(user)
         self._audit.log_security_event(
