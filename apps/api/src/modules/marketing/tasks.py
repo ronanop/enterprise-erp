@@ -15,9 +15,8 @@ def _utcnow():
 @celery_app.task(name="marketing.run_content_agent_pipeline")
 def run_content_agent_pipeline(request_id: str, tenant_id: str, user_id: str) -> dict:
     from database.session import SessionLocal
-    from modules.marketing.domain.enums import ContentRequestStatus, ContentStatus
-    from modules.marketing.models import MktContentRequest, MktGeneratedContent, MktPlatform
-    from modules.marketing.service.engines.agent_pipeline import run_agent_pipeline
+    from modules.marketing.domain.enums import ContentRequestStatus
+    from modules.marketing.models import MktContentRequest
 
     db = SessionLocal()
     try:
@@ -28,42 +27,22 @@ def run_content_agent_pipeline(request_id: str, tenant_id: str, user_id: str) ->
         req.updated_at = _utcnow()
         db.flush()
 
-        platform_code = None
-        if req.platform_id:
-            platform = db.get(MktPlatform, req.platform_id)
-            platform_code = platform.platform_code if platform else None
+        from modules.foundation.domain.value_objects import TenantContext
+        from modules.marketing.service.engines.writer_pipeline import generate_variants
 
-        result = run_agent_pipeline(req.topic, req.content_type, req.tone, platform_code)
-        content_payload = result["content"]
-
-        generated = MktGeneratedContent(
-            id=uuid4(),
+        actor = UUID(user_id) if user_id else req.created_by
+        ctx = TenantContext(
             tenant_id=req.tenant_id,
+            user_id=actor,
+            user_type="user",
             company_id=req.company_id,
-            branch_id=req.branch_id,
-            content_request_id=req.id,
-            campaign_id=req.campaign_id,
-            platform_id=req.platform_id,
-            headline=content_payload.get("headline"),
-            hook=content_payload.get("hook"),
-            body=content_payload.get("body") or "",
-            cta=content_payload.get("cta"),
-            hashtags=content_payload.get("hashtags"),
-            scores=result["scores"],
-            pipeline_result=result,
-            content_version=1,
-            ai_model="marketing.agent_pipeline.v1",
-            token_count=len((content_payload.get("body") or "").split()),
-            status=ContentStatus.DRAFT.value,
-            created_by=UUID(user_id) if user_id else req.created_by,
-            updated_by=UUID(user_id) if user_id else req.updated_by,
         )
-        db.add(generated)
+        created = generate_variants(db, ctx, req)
         req.status = ContentRequestStatus.COMPLETED.value
         req.error_message = None
         req.updated_at = _utcnow()
         db.commit()
-        return {"status": "completed", "content_id": str(generated.id)}
+        return {"status": "completed", "content_ids": [str(row.id) for row in created]}
     except Exception as exc:  # noqa: BLE001 — worker must mark failure
         db.rollback()
         req = db.get(MktContentRequest, UUID(request_id))
@@ -88,24 +67,37 @@ def run_publish_job(job_id: str) -> dict:
         job = db.get(MktPublishJob, UUID(job_id))
         if job is None or job.is_deleted:
             return {"status": "missing"}
+        from modules.marketing.adapters.social_publish_adapter import SocialPublishAdapter
+        from modules.marketing.models import MktPlatform, MktSocialAccount
+        from modules.marketing.service.publish_truth import is_live_post_id
+
         job.status = PublishJobStatus.RUNNING.value
         job.started_at = _utcnow()
         db.flush()
 
-        job.result_payload = {
-            "provider": "stub",
-            "message": "Publish simulated successfully",
-            "external_post_id": f"stub-{job_id[:8]}",
-        }
-        job.status = PublishJobStatus.SUCCEEDED.value
-        job.completed_at = _utcnow()
-
         content = db.get(MktGeneratedContent, job.content_id)
-        if content is not None:
-            content.status = ContentStatus.PUBLISHED.value
-            content.updated_at = _utcnow()
+        account = db.get(MktSocialAccount, job.social_account_id) if job.social_account_id else None
+        platform = db.get(MktPlatform, job.platform_id) if job.platform_id else None
+        result = SocialPublishAdapter().publish(
+            platform_code=platform.platform_code if platform else None,
+            external_account_id=account.external_account_id if account else None,
+            body=content.body if content is not None else "",
+        )
+        job.result_payload = result
+        if is_live_post_id(result.get("external_post_id")):
+            job.status = PublishJobStatus.SUCCEEDED.value
+            job.completed_at = _utcnow()
+            if content is not None:
+                content.status = ContentStatus.PUBLISHED.value
+                content.updated_at = _utcnow()
+        else:
+            job.status = PublishJobStatus.QUEUED.value
+            job.completed_at = None
+            if content is not None and content.status == ContentStatus.APPROVED.value:
+                content.status = ContentStatus.SCHEDULED.value
+                content.updated_at = _utcnow()
         db.commit()
-        return {"status": "succeeded"}
+        return {"status": job.status}
     except Exception as exc:  # noqa: BLE001
         db.rollback()
         job = db.get(MktPublishJob, UUID(job_id))

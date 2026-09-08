@@ -17,6 +17,7 @@ from modules.marketing.dependencies import (
 )
 from modules.marketing.schemas import (
     AnalyticsOverviewResponse,
+    BrandKitSave,
     BrandVoiceCreate,
     BrandVoiceResponse,
     BrandVoiceSourceCreate,
@@ -25,17 +26,25 @@ from modules.marketing.schemas import (
     CalendarEntryCreate,
     CalendarEntryResponse,
     CalendarEntryUpdate,
+    CalendarWeekSlotsCreate,
+    CampaignHomeResponse,
     CampaignCreate,
+    CampaignDeliverableCreate,
+    CampaignDeliverableResponse,
     CampaignResponse,
     CampaignUpdate,
     CompetitorCreate,
     CompetitorResponse,
     CompetitorUpdate,
+    ContentReviseBody,
     ContentRequestCreate,
     ContentRequestResponse,
+    ContentRequestReviewBody,
+    ContentRequestReviewItem,
     ContentVersionResponse,
     GeneratedContentResponse,
     GeneratedContentUpdate,
+    MarketingTeamMemberResponse,
     PillarCreate,
     PillarResponse,
     PillarUpdate,
@@ -46,6 +55,8 @@ from modules.marketing.schemas import (
     PublishJobResponse,
     ResearchCreate,
     ResearchResponse,
+    SocialInboxAssignBody,
+    SocialInboxResponse,
     SocialAccountCreate,
     SocialAccountResponse,
     SocialAccountUpdate,
@@ -70,9 +81,11 @@ from shared.schemas import APIResponse
 
 platforms_router = APIRouter(prefix="/platforms", tags=["Marketing - Platforms"])
 campaigns_router = APIRouter(prefix="/campaigns", tags=["Marketing - Campaigns"])
+team_router = APIRouter(prefix="/team-members", tags=["Marketing - Team"])
 pillars_router = APIRouter(prefix="/pillars", tags=["Marketing - Pillars"])
 brand_voices_router = APIRouter(prefix="/brand-voices", tags=["Marketing - Brand Voice"])
 social_accounts_router = APIRouter(prefix="/social-accounts", tags=["Marketing - Social Accounts"])
+inbox_router = APIRouter(prefix="/inbox", tags=["Marketing - Inbox"])
 content_requests_router = APIRouter(prefix="/content-requests", tags=["Marketing - Content Requests"])
 content_router = APIRouter(prefix="/content", tags=["Marketing - Content"])
 research_router = APIRouter(prefix="/research", tags=["Marketing - Research"])
@@ -131,7 +144,21 @@ def create_campaign(
     ctx: Annotated[TenantContext, Depends(require_permission("marketing.campaign:create"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=CampaignService(db).create(ctx, **body.model_dump()))
+    row = CampaignService(db).create(ctx, **body.model_dump())
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
+
+
+@campaigns_router.get("/{campaign_id}/home", response_model=APIResponse[CampaignHomeResponse])
+def campaign_home(
+    campaign_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.campaign:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    from modules.marketing.service.campaign_home_service import CampaignHomeService
+
+    return APIResponse(message="OK", data=CampaignHomeService(db).home(ctx, campaign_id))
 
 
 @campaigns_router.get("/{campaign_id}", response_model=APIResponse[CampaignResponse])
@@ -165,6 +192,60 @@ def activate_campaign(
     return APIResponse(message="OK", data=CampaignService(db).activate(ctx, campaign_id))
 
 
+@campaigns_router.get(
+    "/{campaign_id}/deliverables",
+    response_model=APIResponse[list[CampaignDeliverableResponse]],
+)
+def list_campaign_deliverables(
+    campaign_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.campaign:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    rows = CampaignService(db).list_deliverables(ctx, campaign_id)
+    return APIResponse(
+        message="OK",
+        data=[CampaignDeliverableResponse(**CampaignService.deliverable_payload(r)) for r in rows],
+    )
+
+
+@campaigns_router.post(
+    "/{campaign_id}/deliverables",
+    response_model=APIResponse[CampaignDeliverableResponse],
+)
+def create_campaign_deliverable(
+    campaign_id: UUID,
+    body: CampaignDeliverableCreate,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.campaign:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = CampaignService(db).create_deliverable(
+        ctx,
+        campaign_id,
+        deliverable_type=body.deliverable_type,
+        due_date=body.due_date,
+        title=body.title,
+        notes=body.notes,
+        content_provider_user_id=body.content_provider_user_id,
+        approval_head_user_id=body.approval_head_user_id,
+        editor_user_id=body.editor_user_id,
+    )
+    db.commit()
+    db.refresh(row)
+    return APIResponse(
+        message="OK",
+        data=CampaignDeliverableResponse(**CampaignService.deliverable_payload(row)),
+    )
+
+
+@team_router.get("", response_model=APIResponse[list[MarketingTeamMemberResponse]])
+def list_marketing_team_members(
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.campaign:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    rows = CampaignService(db).list_team_members(ctx)
+    return APIResponse(message="OK", data=[MarketingTeamMemberResponse(**row) for row in rows])
+
+
 @pillars_router.get("", response_model=APIResponse[list[PillarResponse]])
 def list_pillars(
     ctx: Annotated[TenantContext, Depends(require_permission("marketing.pillar:read"))],
@@ -192,6 +273,29 @@ def update_pillar(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=PillarService(db).update(ctx, pillar_id, **extract_update_fields(body)))
+
+
+@brand_voices_router.get("/kit", response_model=APIResponse[BrandVoiceResponse])
+def get_brand_kit(
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.brand_voice:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = BrandVoiceService(db).ensure_kit(ctx)
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
+
+
+@brand_voices_router.put("/kit", response_model=APIResponse[BrandVoiceResponse])
+def save_brand_kit(
+    body: BrandKitSave,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.brand_voice:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = BrandVoiceService(db).save_kit(ctx, **body.model_dump())
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
 
 
 @brand_voices_router.get("", response_model=APIResponse[list[BrandVoiceResponse]])
@@ -296,6 +400,32 @@ def list_content_requests(
     return APIResponse(message="OK", data=paginate(ContentService(db).list_requests(ctx, company_id), pagination))
 
 
+@content_requests_router.get("/review-queue", response_model=APIResponse[list[ContentRequestReviewItem]])
+def list_content_review_queue(
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    return APIResponse(message="OK", data=ContentService(db).list_review_queue(ctx, company_id))
+
+
+@content_requests_router.post("/{request_id}/review", response_model=APIResponse[ContentRequestReviewItem])
+def review_content_request(
+    request_id: UUID,
+    body: ContentRequestReviewBody,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = ContentService(db).review_submission(
+        ctx,
+        request_id,
+        action=body.action,
+        comment=body.comment,
+    )
+    db.commit()
+    return APIResponse(message="OK", data=ContentRequestReviewItem(**row))
+
+
 @content_requests_router.post("", response_model=APIResponse[ContentRequestResponse])
 def create_content_request(
     body: ContentRequestCreate,
@@ -304,10 +434,10 @@ def create_content_request(
 ):
     payload = body.model_dump()
     generate_now = payload.pop("generate_now", True)
-    return APIResponse(
-        message="OK",
-        data=ContentService(db).create_request(ctx, generate_now=generate_now, **payload),
-    )
+    row = ContentService(db).create_request(ctx, generate_now=generate_now, **payload)
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
 
 
 @content_requests_router.get("/{request_id}", response_model=APIResponse[ContentRequestResponse])
@@ -325,7 +455,10 @@ def generate_content_request(
     ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:generate"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=ContentService(db).enqueue_generation(ctx, request_id))
+    row = ContentService(db).enqueue_generation(ctx, request_id)
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
 
 
 @content_router.get("", response_model=APIResponse[list[GeneratedContentResponse]])
@@ -366,7 +499,10 @@ def submit_content(
     ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=ContentService(db).submit_for_review(ctx, content_id))
+    row = ContentService(db).submit_for_review(ctx, content_id)
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
 
 
 @content_router.post("/{content_id}/approve", response_model=APIResponse[GeneratedContentResponse])
@@ -375,7 +511,23 @@ def approve_content(
     ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:approve"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=ContentService(db).approve(ctx, content_id))
+    row = ContentService(db).approve(ctx, content_id)
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
+
+
+@content_router.post("/{content_id}/revise", response_model=APIResponse[GeneratedContentResponse])
+def revise_content(
+    content_id: UUID,
+    body: ContentReviseBody,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = ContentService(db).request_revision(ctx, content_id, comment=body.comment)
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
 
 
 @content_router.get("/{content_id}/versions", response_model=APIResponse[list[ContentVersionResponse]])
@@ -463,8 +615,25 @@ def list_calendar(
     db: Annotated[Session, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
+    campaign_id: UUID | None = None,
 ):
-    return APIResponse(message="OK", data=paginate(CalendarService(db).list(ctx, company_id), pagination))
+    return APIResponse(
+        message="OK",
+        data=paginate(CalendarService(db).list(ctx, company_id, campaign_id), pagination),
+    )
+
+
+@calendar_router.post("/week-slots", response_model=APIResponse[list[CalendarEntryResponse]])
+def create_calendar_week_slots(
+    body: CalendarWeekSlotsCreate,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.calendar:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    rows = CalendarService(db).week_from_brief(ctx, **body.model_dump())
+    db.commit()
+    for row in rows:
+        db.refresh(row)
+    return APIResponse(message="OK", data=rows)
 
 
 @calendar_router.post("", response_model=APIResponse[CalendarEntryResponse])
@@ -473,7 +642,10 @@ def create_calendar_entry(
     ctx: Annotated[TenantContext, Depends(require_permission("marketing.calendar:create"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=CalendarService(db).create(ctx, **body.model_dump()))
+    row = CalendarService(db).create(ctx, **body.model_dump())
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
 
 
 @calendar_router.patch("/{entry_id}", response_model=APIResponse[CalendarEntryResponse])
@@ -483,10 +655,10 @@ def update_calendar_entry(
     ctx: Annotated[TenantContext, Depends(require_permission("marketing.calendar:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(
-        message="OK",
-        data=CalendarService(db).update(ctx, entry_id, **extract_update_fields(body)),
-    )
+    row = CalendarService(db).update(ctx, entry_id, **extract_update_fields(body))
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
 
 
 @publish_router.get("", response_model=APIResponse[list[PublishJobResponse]])
@@ -514,7 +686,64 @@ def queue_publish_job(
     ctx: Annotated[TenantContext, Depends(require_permission("marketing.publish:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=PublishService(db).queue(ctx, job_id))
+    row = PublishService(db).queue(ctx, job_id)
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
+
+
+@inbox_router.get("", response_model=APIResponse[list[SocialInboxResponse]])
+def list_inbox(
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+    campaign_id: UUID | None = None,
+):
+    from modules.marketing.service.inbox_service import InboxService
+
+    return APIResponse(message="OK", data=InboxService(db).list(ctx, company_id, campaign_id))
+
+
+@inbox_router.post("/sync", response_model=APIResponse[dict])
+def sync_inbox(
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:update"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    from modules.marketing.service.inbox_service import InboxService
+
+    data = InboxService(db).sync(ctx, company_id)
+    db.commit()
+    return APIResponse(message="OK", data=data)
+
+
+@inbox_router.post("/{item_id}/assign", response_model=APIResponse[SocialInboxResponse])
+def assign_inbox(
+    item_id: UUID,
+    body: SocialInboxAssignBody,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    from modules.marketing.service.inbox_service import InboxService
+
+    row = InboxService(db).assign(ctx, item_id, body.assignee_user_id)
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
+
+
+@inbox_router.post("/{item_id}/done", response_model=APIResponse[SocialInboxResponse])
+def complete_inbox(
+    item_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    from modules.marketing.service.inbox_service import InboxService
+
+    row = InboxService(db).complete(ctx, item_id)
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
 
 
 @analytics_router.get("/overview", response_model=APIResponse[AnalyticsOverviewResponse])

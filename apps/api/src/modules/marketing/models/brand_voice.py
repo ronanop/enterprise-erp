@@ -27,4 +27,5 @@ class MktBrandVoice(Base, *MktMasterMixin):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     tone_keywords: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     guidelines: Mapped[str | None] = mapped_column(Text, nullable=True)
+    brand_kit: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)

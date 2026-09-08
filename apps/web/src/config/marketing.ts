@@ -68,8 +68,8 @@ export const marketingQuickLinks: MarketingQuickLink[] = [
     icon: CalendarDays,
   },
   {
-    title: "Brand Voice",
-    description: "Train reusable voice",
+    title: "Brand kit",
+    description: "Logo, colors, fonts, and voice",
     href: "/marketing/brand-voices",
     icon: FileText,
   },

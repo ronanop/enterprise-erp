@@ -23,11 +23,13 @@
 | `/marketing/tasks` | Nested task execution / delegation |
 | `/marketing/m365` | Teams / SharePoint / OneDrive |
 | `/marketing/workload` | Resource balancing |
-| `/marketing/campaigns` | Marketing campaigns (optional CRM campaign link) |
+| `/marketing/campaigns` | Campaign list. Open a row for the campaign home |
+| `/marketing/campaigns/[id]` | Campaign home — brief, captions, approvals, calendar, tasks, assets |
+| `/marketing/inbox` | Reply queue for live published posts |
 | `/marketing/content` | Content studio — requests + generated drafts |
 | `/marketing/research` | Research & trends |
-| `/marketing/brand-voice` | Brand voice training |
-| `/marketing/calendar` | Publishing calendar |
+| `/marketing/brand-voices` | Brand kit — logo, colors, fonts, voice |
+| `/marketing/calendar` | Publishing calendar — **month grid** (not list table) |
 | `/marketing/social-accounts` | Connected platforms |
 | `/marketing/competitors` | Competitor monitor |
 | `/marketing/analytics` | Content performance |

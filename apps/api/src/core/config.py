@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     # Local Docker fallbacks (used when VM primary is unreachable)
     infra_fallback_enabled: bool = Field(default=True, alias="INFRA_FALLBACK_ENABLED")
     database_url_fallback: str = Field(
-        default="postgresql+psycopg://erp:erp_dev_password@localhost:5433/erp",
+        default="postgresql+psycopg://erp:erp_dev_password@localhost:15432/erp",
         alias="DATABASE_URL_FALLBACK",
     )
 
@@ -226,6 +226,10 @@ class Settings(BaseSettings):
     mcp_auth_token: str = Field(default="", alias="MCP_AUTH_TOKEN")
 
     frontend_url: str = Field(default="http://localhost:3000", alias="FRONTEND_URL")
+
+    openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
+    openai_base_url: str = Field(default="https://api.openai.com/v1", alias="OPENAI_BASE_URL")
+    openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
 
     microsoft_tenant_id: str = Field(default="", alias="MICROSOFT_TENANT_ID")
     microsoft_client_id: str = Field(default="", alias="MICROSOFT_CLIENT_ID")

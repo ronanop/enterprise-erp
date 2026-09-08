@@ -198,6 +198,9 @@ export function MarketingContentStudio() {
                   <h3 className="text-sm font-semibold">
                     {row.headline || "Untitled draft"}
                   </h3>
+                  <Badge variant="outline" className="text-[10px] uppercase">
+                    {row.pipeline_result?.variant || "draft"}
+                  </Badge>
                   <Badge variant="secondary" className="text-[10px] uppercase">
                     {row.status}
                   </Badge>
@@ -210,6 +213,13 @@ export function MarketingContentStudio() {
                 <p className="whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
                   {row.body}
                 </p>
+                {Array.isArray(row.pipeline_result?.lines_to_change) ? (
+                  <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-foreground/80">
+                    {row.pipeline_result.lines_to_change.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                ) : null}
               </article>
             );
           })

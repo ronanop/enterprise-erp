@@ -18,6 +18,7 @@ from modules.marketing.models.platform import MktPlatform
 from modules.marketing.models.publish_job import MktPublishJob
 from modules.marketing.models.research_report import MktResearchReport
 from modules.marketing.models.social_account import MktSocialAccount
+from modules.marketing.models.social_inbox import MktSocialInbox
 from modules.marketing.models.task import MktTask
 from modules.marketing.models.time_entry import MktTimeEntry
 from modules.marketing.models.trend_report import MktTrendReport
@@ -29,6 +30,7 @@ __all__ = [
     "MktBrandVoice",
     "MktBrandVoiceSource",
     "MktSocialAccount",
+    "MktSocialInbox",
     "MktContentRequest",
     "MktGeneratedContent",
     "MktGeneratedContentVersion",

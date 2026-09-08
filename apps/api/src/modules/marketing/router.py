@@ -14,7 +14,9 @@ from modules.marketing.routers import (
     platforms_router,
     publish_router,
     research_router,
+    inbox_router,
     social_accounts_router,
+    team_router,
     trends_router,
 )
 from modules.marketing.routers.ops import (
@@ -29,9 +31,11 @@ from modules.marketing.routers.ops import (
 marketing_router = APIRouter(prefix="/marketing")
 marketing_router.include_router(platforms_router)
 marketing_router.include_router(campaigns_router)
+marketing_router.include_router(team_router)
 marketing_router.include_router(pillars_router)
 marketing_router.include_router(brand_voices_router)
 marketing_router.include_router(social_accounts_router)
+marketing_router.include_router(inbox_router)
 marketing_router.include_router(content_requests_router)
 marketing_router.include_router(content_router)
 marketing_router.include_router(research_router)

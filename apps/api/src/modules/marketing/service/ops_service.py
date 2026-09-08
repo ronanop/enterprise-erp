@@ -89,14 +89,30 @@ class TaskService:
         self._numbers = MarketingNumberService(db)
         self._ops = OpsEventService(db)
 
-    def list(self, ctx: TenantContext, company_id: UUID | None = None, mine: bool = False):
+    def list(
+        self,
+        ctx: TenantContext,
+        company_id: UUID | None = None,
+        mine: bool = False,
+        campaign_id: UUID | None = None,
+        deliverables_only: bool = False,
+    ):
         cid = self._repo.resolve_company_id(ctx, company_id)
         rows = self._repo.list_by_company(MktTask, ctx, cid, branch_scoped=True)
+        if campaign_id is not None:
+            rows = [r for r in rows if r.campaign_id == campaign_id]
+        if deliverables_only:
+            rows = [
+                r
+                for r in rows
+                if isinstance(r.metadata_json, dict) and r.metadata_json.get("is_deliverable") is True
+            ]
         if mine and ctx.user_id:
             rows = [
                 r
                 for r in rows
-                if ctx.user_id in {r.owner_user_id, r.assignee_user_id, r.reviewer_user_id, r.delegated_by_user_id}
+                if ctx.user_id
+                in {r.owner_user_id, r.assignee_user_id, r.reviewer_user_id, r.delegated_by_user_id}
             ]
         return rows
 
@@ -146,6 +162,233 @@ class TaskService:
 
     def execute(self, ctx: TenantContext, row_id: UUID) -> MktTask:
         return self.update(ctx, row_id, execution_mode="execute", assignee_user_id=ctx.user_id, status="in_progress")
+
+    def submit_content(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        *,
+        content_url: str | None = None,
+        document_name: str | None = None,
+        notes: str | None = None,
+        content_base64: str | None = None,
+        content_type: str | None = None,
+        file_name: str | None = None,
+    ) -> MktTask:
+        """Content provider attaches a link and/or uploaded file for approval."""
+        import base64
+        import re
+        import uuid as uuid_lib
+        from pathlib import Path
+
+        from core.config import settings
+        from modules.foundation.domain.erp_modules import MARKETING_ROLE_HEAD
+        from modules.marketing.domain.enums import ContentRequestStatus, ContentStatus
+        from modules.marketing.models import MktContentRequest, MktGeneratedContent
+        from modules.marketing.service.role_access import (
+            is_marketing_module_admin,
+            marketing_module_role,
+        )
+
+        row = self.get(ctx, row_id)
+        meta = dict(row.metadata_json) if isinstance(row.metadata_json, dict) else {}
+        if meta.get("is_deliverable") is not True:
+            raise ValidationException("Only campaign deliverables can submit content this way")
+
+        provider_id = meta.get("content_provider_user_id")
+        is_provider = (
+            (provider_id and ctx.user_id and str(ctx.user_id) == str(provider_id))
+            or (ctx.user_id is not None and row.owner_user_id == ctx.user_id)
+        )
+        role = marketing_module_role(self.db, ctx)
+        if (
+            not is_provider
+            and not is_marketing_module_admin(self.db, ctx)
+            and role != MARKETING_ROLE_HEAD
+        ):
+            raise ValidationException("Only the assigned content provider can submit content")
+
+        if row.status in {"completed", "cancelled"}:
+            raise ValidationException("This deliverable is closed and cannot accept new content")
+        if meta.get("submission_status") == "approved":
+            raise ValidationException("This deliverable is already approved")
+
+        url = (content_url or "").strip()
+        doc_name = (document_name or "").strip()
+        note_text = (notes or "").strip()
+        raw_b64 = (content_base64 or "").strip()
+        upload_name = (file_name or "").strip() or doc_name
+
+        stored_rel: str | None = None
+        stored_name: str | None = None
+        stored_ctype: str | None = None
+        if raw_b64:
+            if not upload_name:
+                raise ValidationException("File name is required when uploading a file")
+            try:
+                raw = base64.b64decode(raw_b64, validate=False)
+            except Exception as exc:  # noqa: BLE001
+                raise ValidationException("Invalid file upload payload") from exc
+            max_bytes = 25 * 1024 * 1024
+            if len(raw) > max_bytes:
+                raise ValidationException("Uploaded file must be 25 MB or smaller")
+            if len(raw) == 0:
+                raise ValidationException("Uploaded file is empty")
+            safe = re.sub(r"[^A-Za-z0-9._-]+", "_", Path(upload_name).name).strip("._") or "upload.bin"
+            root = Path(settings.resolved_crm_upload_root).parent / "marketing-deliverables"
+            folder = root / str(ctx.tenant_id) / str(row.id)
+            folder.mkdir(parents=True, exist_ok=True)
+            stored_name = f"{uuid_lib.uuid4().hex[:12]}_{safe}"
+            path = folder / stored_name
+            path.write_bytes(raw)
+            stored_rel = str(path.relative_to(root)).replace("\\", "/")
+            stored_ctype = (content_type or "").strip() or "application/octet-stream"
+            if not doc_name:
+                doc_name = Path(upload_name).name
+
+        if not url and not stored_rel and not doc_name and not note_text:
+            raise ValidationException("Provide a content link, upload a file, or add notes")
+
+        # Prefer a stable in-app download URL for uploaded files.
+        display_url = url
+        if stored_rel:
+            display_url = f"/marketing/tasks/{row.id}/submission-file"
+
+        if row.content_request_id:
+            req = self._repo.get_by_id(MktContentRequest, ctx, row.content_request_id, branch_scoped=True)
+        else:
+            req = None
+
+        submission = {
+            "workflow": "deliverable_submission",
+            "deliverable_task_id": str(row.id),
+            "content_url": display_url or None,
+            "external_link": url or None,
+            "document_name": doc_name or None,
+            "submission_notes": note_text or None,
+            "submission_kind": "file" if stored_rel else "link",
+            "file_storage_path": stored_rel,
+            "file_content_type": stored_ctype,
+            "file_stored_name": stored_name,
+            "content_provider_user_id": meta.get("content_provider_user_id"),
+            "approval_head_user_id": meta.get("approval_head_user_id"),
+            "editor_user_id": meta.get("editor_user_id"),
+            "deliverable_type": meta.get("deliverable_type") or row.task_kind,
+        }
+
+        if req is None:
+            code = self._numbers.next_code(MktContentRequest, row.company_id, "request_code", "CRQ")
+            req = self._repo.create_row(
+                MktContentRequest,
+                ctx,
+                company_id=row.company_id,
+                branch_id=row.branch_id,
+                campaign_id=row.campaign_id,
+                request_code=code,
+                topic=row.title,
+                content_type="other",
+                reference_notes=note_text or None,
+                assigned_to_user_id=row.reviewer_user_id,
+                due_at=row.due_at,
+                inputs=submission,
+                status=ContentRequestStatus.COMPLETED.value,
+            )
+        else:
+            req.inputs = {**(req.inputs or {}), **submission}
+            req.reference_notes = note_text or req.reference_notes
+            req.assigned_to_user_id = row.reviewer_user_id or req.assigned_to_user_id
+            req.status = ContentRequestStatus.COMPLETED.value
+            req.updated_at = utcnow()
+            req.updated_by = ctx.user_id
+            self.db.flush()
+
+        existing_content = self.db.scalar(
+            select(MktGeneratedContent).where(
+                MktGeneratedContent.content_request_id == req.id,
+                MktGeneratedContent.is_deleted.is_(False),
+            )
+        )
+        body = display_url or note_text or doc_name or row.title
+        headline = doc_name or row.title
+        if existing_content is None:
+            self._repo.create_row(
+                MktGeneratedContent,
+                ctx,
+                company_id=row.company_id,
+                branch_id=row.branch_id,
+                content_request_id=req.id,
+                campaign_id=row.campaign_id,
+                headline=headline,
+                body=body,
+                status=ContentStatus.IN_REVIEW.value,
+                pipeline_result={"submission": submission},
+                content_version=1,
+                ai_model="manual.deliverable_submission",
+            )
+        else:
+            existing_content.headline = headline
+            existing_content.body = body
+            existing_content.status = ContentStatus.IN_REVIEW.value
+            existing_content.pipeline_result = {"submission": submission}
+            existing_content.updated_at = utcnow()
+            existing_content.updated_by = ctx.user_id
+            self.db.flush()
+
+        meta.update(
+            {
+                "content_url": display_url or None,
+                "external_link": url or None,
+                "document_name": doc_name or None,
+                "submission_notes": note_text or None,
+                "submission_kind": submission["submission_kind"],
+                "file_storage_path": stored_rel,
+                "file_content_type": stored_ctype,
+                "submission_status": "in_review",
+                "improvement_comment": None,
+            }
+        )
+        updated = self.update(
+            ctx,
+            row_id,
+            content_request_id=req.id,
+            metadata_json=meta,
+            status="in_review",
+        )
+        self._ops.record(
+            ctx,
+            company_id=row.company_id,
+            action="deliverable.submit_content",
+            entity_type="mkt_task",
+            entity_id=row.id,
+            campaign_id=row.campaign_id,
+            new_value={
+                "submission_kind": submission["submission_kind"],
+                "document_name": doc_name,
+                "has_file": bool(stored_rel),
+                "has_link": bool(url),
+            },
+            branch_id=row.branch_id,
+        )
+        return updated
+
+    def resolve_submission_file(self, ctx: TenantContext, row_id: UUID):
+        """Return (path, download_name, content_type) for a deliverable upload."""
+        from pathlib import Path
+
+        from core.config import settings
+
+        row = self.get(ctx, row_id)
+        meta = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+        rel = meta.get("file_storage_path")
+        if not rel:
+            raise NotFoundException("No uploaded file on this deliverable")
+        root = Path(settings.resolved_crm_upload_root).parent / "marketing-deliverables"
+        path = (root / str(rel)).resolve()
+        if not str(path).startswith(str(root.resolve())) or not path.is_file():
+            raise NotFoundException("Uploaded file is missing on disk")
+        download_name = meta.get("document_name") or path.name
+        content_type = meta.get("file_content_type") or "application/octet-stream"
+        return path, str(download_name), str(content_type)
 
     def delegate(self, ctx: TenantContext, row_id: UUID, assignee_user_id: UUID) -> MktTask:
         return self.update(

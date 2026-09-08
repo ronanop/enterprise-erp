@@ -5,6 +5,7 @@ import { Activity, AlertTriangle, Gauge, RefreshCw, Users } from "lucide-react";
 
 import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
 import { PageHeader } from "@/components/layout/page-header";
+import { MarketingSignedInProfile } from "@/components/marketing/marketing-signed-in-profile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { loadWorkloadOverview, type WorkloadOverview } from "@/services/marketing-service";
@@ -57,16 +58,19 @@ export function MarketingOperationsBoard() {
         title="Marketing Operations"
         description="Campaign health, resource utilization, delayed work, and executive bottlenecks."
         actions={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="cursor-pointer transition-colors duration-200"
-            onClick={() => void load()}
-          >
-            <RefreshCw className="size-3.5" aria-hidden />
-            Refresh
-          </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <MarketingSignedInProfile />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="cursor-pointer transition-colors duration-200"
+              onClick={() => void load()}
+            >
+              <RefreshCw className="size-3.5" aria-hidden />
+              Refresh
+            </Button>
+          </div>
         }
       />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

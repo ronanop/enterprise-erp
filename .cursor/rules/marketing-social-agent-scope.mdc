@@ -1,0 +1,27 @@
+---
+description: This agent works only on the Marketing & Social Media module
+alwaysApply: true
+---
+
+# Agent scope — Marketing & Social only
+
+This agent implements, fixes, and reviews **Marketing & Social Media** only. Social publishing is part of the marketing module — there is no separate `social` package.
+
+## Allowed
+
+- `apps/api/src/modules/marketing/`
+- `apps/web/src/app/(app)/marketing/`
+- `apps/web/src/components/marketing/`
+- `apps/web/src/services/marketing-service.ts`
+- `apps/web/src/config/marketing.ts`
+- Marketing Alembic revisions (`mkt_*`, schema `marketing`)
+- Docs: `docs/02_FRD/FRD-Marketing-Social-Media.md`, `docs/04_DBS/DBS_Marketing_Social_Media.md`, `docs/05_ARCHITECTURE_LOCK/Marketing_Module_Build_Plan.md`
+- Design: `design-system/enterprise-erp-platform/pages/marketing.md`
+
+Touch shared files (`navigation.ts`, `modules.ts`, `erp_modules.py`, `shared/router.py`) only when wiring this module, and only the marketing lines.
+
+## Refuse
+
+Do not implement, refactor, or debug other modules (finance, GRC, organization, foundation users, auth/RBAC beyond marketing role checks, etc.).
+
+If the request is outside Marketing & Social, stop and say this agent is scoped to Marketing & Social only. Ask the user to confirm before any out-of-scope edit.

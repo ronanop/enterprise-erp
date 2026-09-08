@@ -28,6 +28,7 @@ from modules.marketing.schemas import (
     MeetingResponse,
     OpsEventResponse,
     SearchQuery,
+    TaskContentSubmitBody,
     TaskCreate,
     TaskResponse,
     TaskUpdate,
@@ -59,8 +60,15 @@ def list_tasks(
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
     mine: bool = False,
+    campaign_id: UUID | None = None,
 ):
-    return APIResponse(message="OK", data=paginate(TaskService(db).list(ctx, company_id, mine=mine), pagination))
+    return APIResponse(
+        message="OK",
+        data=paginate(
+            TaskService(db).list(ctx, company_id, mine=mine, campaign_id=campaign_id),
+            pagination,
+        ),
+    )
 
 
 @tasks_router.post("", response_model=APIResponse[TaskResponse])
@@ -69,7 +77,10 @@ def create_task(
     ctx: Annotated[TenantContext, Depends(require_permission("marketing.task:create"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=TaskService(db).create(ctx, **body.model_dump()))
+    row = TaskService(db).create(ctx, **body.model_dump())
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
 
 
 @tasks_router.patch("/{task_id}", response_model=APIResponse[TaskResponse])
@@ -88,7 +99,48 @@ def execute_task(
     ctx: Annotated[TenantContext, Depends(require_permission("marketing.task:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=TaskService(db).execute(ctx, task_id))
+    row = TaskService(db).execute(ctx, task_id)
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
+
+
+@tasks_router.post("/{task_id}/submit-content", response_model=APIResponse[TaskResponse])
+def submit_task_content(
+    task_id: UUID,
+    body: TaskContentSubmitBody,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.task:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = TaskService(db).submit_content(
+        ctx,
+        task_id,
+        content_url=body.content_url,
+        document_name=body.document_name,
+        notes=body.notes,
+        content_base64=body.content_base64,
+        content_type=body.content_type,
+        file_name=body.file_name,
+    )
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
+
+
+@tasks_router.get("/{task_id}/submission-file")
+def download_task_submission_file(
+    task_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.task:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    from fastapi.responses import FileResponse
+
+    path, download_name, content_type = TaskService(db).resolve_submission_file(ctx, task_id)
+    return FileResponse(
+        path=path,
+        media_type=content_type,
+        filename=download_name,
+    )
 
 
 @tasks_router.post("/{task_id}/delegate", response_model=APIResponse[TaskResponse])

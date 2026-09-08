@@ -102,6 +102,40 @@ class CampaignResponse(OrmModel):
     version: int
 
 
+class CampaignDeliverableCreate(BaseModel):
+    deliverable_type: str = Field(..., min_length=1, max_length=40)
+    title: str | None = Field(default=None, max_length=500)
+    due_date: date
+    notes: str | None = None
+    content_provider_user_id: UUID | None = None
+    approval_head_user_id: UUID | None = None
+    editor_user_id: UUID | None = None
+
+
+class CampaignDeliverableResponse(BaseModel):
+    id: UUID
+    campaign_id: UUID
+    deliverable_code: str
+    title: str
+    deliverable_type: str
+    due_date: date | None
+    status: str
+    notes: str | None = None
+    content_provider_user_id: UUID | None = None
+    content_provider_name: str | None = None
+    approval_head_user_id: UUID | None = None
+    approval_head_name: str | None = None
+    editor_user_id: UUID | None = None
+    editor_name: str | None = None
+
+
+class MarketingTeamMemberResponse(BaseModel):
+    user_id: UUID
+    display_name: str
+    email: str
+    role: str
+
+
 # ---- Pillar ----
 class PillarCreate(BaseModel):
     company_id: UUID | None = None
@@ -139,6 +173,7 @@ class BrandVoiceCreate(BaseModel):
     description: str | None = None
     tone_keywords: dict | None = None
     guidelines: str | None = None
+    brand_kit: dict | None = None
 
 
 class BrandVoiceUpdate(BaseModel):
@@ -146,6 +181,7 @@ class BrandVoiceUpdate(BaseModel):
     description: str | None = None
     tone_keywords: dict | None = None
     guidelines: str | None = None
+    brand_kit: dict | None = None
     status: str | None = None
     version: int | None = None
 
@@ -158,8 +194,17 @@ class BrandVoiceResponse(OrmModel):
     description: str | None
     tone_keywords: dict | None
     guidelines: str | None
+    brand_kit: dict | None = None
     status: str
     version: int
+
+
+class BrandKitSave(BaseModel):
+    voice_name: str | None = None
+    description: str | None = None
+    guidelines: str | None = None
+    tone_keywords: dict | None = None
+    brand_kit: dict
 
 
 class BrandVoiceSourceCreate(BaseModel):
@@ -487,6 +532,7 @@ class TaskResponse(OrmModel):
     company_id: UUID
     campaign_id: UUID | None
     parent_task_id: UUID | None
+    content_request_id: UUID | None = None
     task_code: str
     title: str
     description: str | None
@@ -501,8 +547,44 @@ class TaskResponse(OrmModel):
     assignee_user_id: UUID | None
     delegated_by_user_id: UUID | None
     reviewer_user_id: UUID | None
+    metadata_json: dict | None = None
     status: str
     version: int
+
+
+class TaskContentSubmitBody(BaseModel):
+    """Submit deliverable content as an external link and/or uploaded file."""
+
+    content_url: str | None = Field(default=None, max_length=2000)
+    document_name: str | None = Field(default=None, max_length=255)
+    notes: str | None = None
+    content_base64: str | None = None
+    content_type: str | None = Field(default=None, max_length=120)
+    file_name: str | None = Field(default=None, max_length=255)
+
+
+class ContentRequestReviewBody(BaseModel):
+    action: str  # approve | reject | improve
+    comment: str | None = None
+
+
+class ContentRequestReviewItem(BaseModel):
+    id: UUID
+    request_code: str
+    topic: str
+    content_type: str
+    status: str
+    campaign_id: UUID | None = None
+    assigned_to_user_id: UUID | None = None
+    due_at: datetime | None = None
+    inputs: dict | None = None
+    content_id: UUID | None = None
+    content_status: str | None = None
+    content_url: str | None = None
+    document_name: str | None = None
+    submission_notes: str | None = None
+    deliverable_task_id: UUID | None = None
+    improvement_comment: str | None = None
 
 
 class DelegateBody(BaseModel):
@@ -617,6 +699,54 @@ class AiTopicBody(BaseModel):
 
 class SearchQuery(BaseModel):
     query: str
+
+
+class ContentReviseBody(BaseModel):
+    comment: str
+
+
+class CalendarWeekSlotsCreate(BaseModel):
+    content_id: UUID
+    start_at: datetime
+    social_account_id: UUID | None = None
+    campaign_id: UUID | None = None
+    slot_count: int = 5
+
+
+class CampaignHomeResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    campaign: CampaignResponse
+    content: list[GeneratedContentResponse]
+    requests: list[ContentRequestResponse]
+    calendar: list[dict]
+    approvals: list[dict]
+    tasks: list[dict]
+    assets: list[dict]
+    inbox: list[dict]
+    health: dict
+
+
+class SocialInboxResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    campaign_id: UUID | None
+    content_id: UUID | None
+    publish_job_id: UUID | None
+    social_account_id: UUID | None
+    platform_code: str
+    external_thread_id: str
+    author_name: str
+    body: str
+    kind: str
+    assignee_user_id: UUID | None
+    received_at: datetime
+    status: str
+    version: int
+
+
+class SocialInboxAssignBody(BaseModel):
+    assignee_user_id: UUID
 
 
 class OpsEventResponse(OrmModel):
