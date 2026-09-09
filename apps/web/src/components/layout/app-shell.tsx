@@ -9,6 +9,7 @@ import { ElevenLabsConvaiWidget } from "@/components/elevenlabs/convai-widget";
 import { HrSidebar } from "@/components/hr/hr-sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppTopbar } from "@/components/layout/app-topbar";
+import { MarketingSidebar } from "@/components/marketing/marketing-workspace-nav";
 import { ProcurementSidebar } from "@/components/procurement/procurement-workspace-nav";
 import { ProjectsSidebar } from "@/components/projects/projects-workspace-nav";
 import { ServiceSidebar } from "@/components/service/service-workspace-nav";
@@ -30,6 +31,7 @@ export function AppShell({ children }: AppShellProps) {
     pathname === "/procurement" || pathname.startsWith("/procurement/");
   const isAssets = pathname === "/assets" || pathname.startsWith("/assets/");
   const isService = pathname === "/service" || pathname.startsWith("/service/");
+  const isMarketing = pathname === "/marketing" || pathname.startsWith("/marketing/");
 
   return (
     <div className="flex min-h-dvh w-full max-w-[100dvw] overflow-x-clip bg-background">
@@ -42,6 +44,7 @@ export function AppShell({ children }: AppShellProps) {
           {isProcurement ? <ProcurementSidebar /> : null}
           {isAssets ? <AssetsModuleSidebar /> : null}
           {isService ? <ServiceSidebar /> : null}
+          {isMarketing ? <MarketingSidebar /> : null}
         </>
       ) : (
         <AppSidebar />

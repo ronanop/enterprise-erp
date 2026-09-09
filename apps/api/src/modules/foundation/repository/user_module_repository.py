@@ -63,6 +63,13 @@ class UserModuleRepository(TenantScopedRepository):
         )
         return self.db.scalar(stmt) is not None
 
+    def list_roles_for_user(self, tenant_id: UUID, user_id: UUID) -> dict[str, str]:
+        stmt = select(SecUserModule.module_key, SecUserModule.role).where(
+            SecUserModule.tenant_id == tenant_id,
+            SecUserModule.user_id == user_id,
+        )
+        return {module_key: role for module_key, role in self.db.execute(stmt).all()}
+
     def list_user_ids_for_module(self, tenant_id: UUID, module_key: str) -> set[UUID]:
         stmt = select(SecUserModule.user_id).where(
             SecUserModule.tenant_id == tenant_id,

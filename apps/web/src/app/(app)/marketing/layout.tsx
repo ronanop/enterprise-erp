@@ -1,12 +1,27 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { Suspense } from "react";
 
 import { MarketingWorkspaceNav } from "@/components/marketing/marketing-workspace-nav";
+import { useStandaloneChrome } from "@/hooks/use-standalone-chrome";
+
+function MarketingLayoutInner({ children }: { children: ReactNode }) {
+  const standalone = useStandaloneChrome();
+
+  return (
+    <div className="grid min-w-0 max-w-full grid-cols-1 gap-5 overflow-x-clip">
+      {/* Horizontal strip only when Marketing shares the main module sidebar. */}
+      {!standalone ? <MarketingWorkspaceNav /> : null}
+      <div className="min-w-0 max-w-full overflow-x-clip">{children}</div>
+    </div>
+  );
+}
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-0 min-w-0 flex-col gap-4 overflow-x-clip md:flex-row md:gap-5">
-      <MarketingWorkspaceNav />
-      <div className="min-w-0 flex-1 overflow-x-clip">{children}</div>
-    </div>
+    <Suspense fallback={<div className="min-w-0 max-w-full overflow-x-clip">{children}</div>}>
+      <MarketingLayoutInner>{children}</MarketingLayoutInner>
+    </Suspense>
   );
 }

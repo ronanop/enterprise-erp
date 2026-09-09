@@ -70,3 +70,17 @@ export function canManageModuleUsers(
   if (isModuleAdmin(userType)) return true;
   return adminModuleKeys.includes(moduleKey);
 }
+
+/**
+ * True when the user may see all screens/records in a module (not member-scoped).
+ * Platform admins and per-module admins qualify; team roles stay role-gated separately.
+ */
+export function canViewAllModuleScreens(
+  moduleKey: string,
+  adminModuleKeys: string[],
+  userType?: string,
+  _moduleRoles?: Record<string, string>,
+): boolean {
+  if (isModuleAdmin(userType)) return true;
+  return adminModuleKeys.includes(moduleKey);
+}

@@ -37,6 +37,26 @@ MODULE_ROLE_ADMIN = "admin"
 MODULE_ROLE_MEMBER = "member"
 MODULE_ROLES = frozenset({MODULE_ROLE_ADMIN, MODULE_ROLE_MEMBER})
 
+# Marketing team roles (stored on sec_user_module.role for module_key=marketing).
+MARKETING_ROLE_HEAD = "marketing_head"
+MARKETING_ROLE_APPROVAL_HEAD = "approval_head"
+MARKETING_ROLE_CONTENT_CREATOR = "content_creator"
+MARKETING_ROLE_VIDEO_EDITOR = "video_editor"
+MARKETING_ROLE_GRAPHIC_DESIGNER = "graphic_designer"
+MARKETING_ROLE_SUPPORTING_MEMBER = "supporting_member"
+MARKETING_TEAM_ROLES = frozenset(
+    {
+        MARKETING_ROLE_HEAD,
+        MARKETING_ROLE_APPROVAL_HEAD,
+        MARKETING_ROLE_CONTENT_CREATOR,
+        MARKETING_ROLE_VIDEO_EDITOR,
+        MARKETING_ROLE_GRAPHIC_DESIGNER,
+        MARKETING_ROLE_SUPPORTING_MEMBER,
+        MODULE_ROLE_ADMIN,
+        MODULE_ROLE_MEMBER,
+    }
+)
+
 # Permission seed `module` column occasionally differs from UI/module-assignment keys.
 PERMISSION_MODULE_ALIASES: dict[str, str] = {
     "project": "projects",

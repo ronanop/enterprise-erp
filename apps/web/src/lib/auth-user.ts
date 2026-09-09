@@ -8,11 +8,22 @@ export type AuthSessionUser = {
   employeeId?: string;
 };
 
+function parseModuleRoles(record: Record<string, unknown>): Record<string, string> {
+  const raw = record.module_roles ?? record.moduleRoles;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === "string" && value.trim()) out[key] = value;
+  }
+  return out;
+}
+
 export function parseAuthMe(data: unknown): {
   user: AuthSessionUser | null;
   permissions: string[];
   moduleKeys: string[];
   adminModuleKeys: string[];
+  moduleRoles: Record<string, string>;
   projectModuleAdmin: boolean;
   hrModuleAdmin: boolean;
   assetsModuleAdmin: boolean;
@@ -23,6 +34,7 @@ export function parseAuthMe(data: unknown): {
       permissions: [],
       moduleKeys: [],
       adminModuleKeys: [],
+      moduleRoles: {},
       projectModuleAdmin: false,
       hrModuleAdmin: false,
       assetsModuleAdmin: false,
@@ -43,6 +55,7 @@ export function parseAuthMe(data: unknown): {
     : Array.isArray(record.adminModuleKeys)
       ? (record.adminModuleKeys as string[])
       : [];
+  const moduleRoles = parseModuleRoles(record);
   const projectModuleAdmin = Boolean(record.project_module_admin);
   const hrModuleAdmin = Boolean(record.hr_module_admin);
   const assetsModuleAdmin = Boolean(record.assets_module_admin);
@@ -60,6 +73,7 @@ export function parseAuthMe(data: unknown): {
       permissions,
       moduleKeys,
       adminModuleKeys,
+      moduleRoles,
       projectModuleAdmin,
       hrModuleAdmin,
       assetsModuleAdmin,
@@ -78,6 +92,7 @@ export function parseAuthMe(data: unknown): {
       permissions,
       moduleKeys,
       adminModuleKeys,
+      moduleRoles,
       projectModuleAdmin,
       hrModuleAdmin,
       assetsModuleAdmin,
@@ -89,6 +104,7 @@ export function parseAuthMe(data: unknown): {
     permissions: [],
     moduleKeys: [],
     adminModuleKeys: [],
+    moduleRoles: {},
     projectModuleAdmin: false,
     hrModuleAdmin: false,
     assetsModuleAdmin: false,

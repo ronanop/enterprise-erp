@@ -192,11 +192,15 @@ def me(
     )
     module_keys = service.effective_modules_for_user(user_entity)
     admin_module_keys = service.effective_admin_modules_for_user(user_entity)
+    from modules.foundation.repository.user_module_repository import UserModuleRepository
+
+    module_roles = UserModuleRepository(db).list_roles_for_user(ctx.tenant_id, ctx.user_id)
     data = {
         "user": UserService.to_response(user_entity),
         "permissions": permissions,
         "module_keys": module_keys,
         "admin_module_keys": admin_module_keys,
+        "module_roles": module_roles,
     }
     from modules.project.service.project_module_admin import ProjectModuleAdminService
     from modules.hr.service.hr_module_admin import HrModuleAdminService

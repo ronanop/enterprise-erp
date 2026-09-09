@@ -11,6 +11,7 @@ export function useAuthUser() {
   const [permissions, setPermissions] = useState<string[]>([]);
   const [moduleKeys, setModuleKeys] = useState<string[]>([]);
   const [adminModuleKeys, setAdminModuleKeys] = useState<string[]>([]);
+  const [moduleRoles, setModuleRoles] = useState<Record<string, string>>({});
   const [projectModuleAdmin, setProjectModuleAdmin] = useState(false);
   const [hrModuleAdmin, setHrModuleAdmin] = useState(false);
   const [assetsModuleAdmin, setAssetsModuleAdmin] = useState(false);
@@ -22,6 +23,7 @@ export function useAuthUser() {
       setPermissions([]);
       setModuleKeys([]);
       setAdminModuleKeys([]);
+      setModuleRoles({});
       setProjectModuleAdmin(false);
       setHrModuleAdmin(false);
       setAssetsModuleAdmin(false);
@@ -39,6 +41,7 @@ export function useAuthUser() {
           setPermissions(parsed.permissions);
           setModuleKeys(parsed.moduleKeys);
           setAdminModuleKeys(parsed.adminModuleKeys);
+          setModuleRoles(parsed.moduleRoles);
           setProjectModuleAdmin(parsed.projectModuleAdmin);
           setHrModuleAdmin(parsed.hrModuleAdmin);
           setAssetsModuleAdmin(parsed.assetsModuleAdmin);
@@ -49,6 +52,7 @@ export function useAuthUser() {
           setPermissions([]);
           setModuleKeys([]);
           setAdminModuleKeys([]);
+          setModuleRoles({});
           setProjectModuleAdmin(false);
           setHrModuleAdmin(false);
           setAssetsModuleAdmin(false);
@@ -68,6 +72,7 @@ export function useAuthUser() {
     permissions,
     moduleKeys,
     adminModuleKeys,
+    moduleRoles,
     projectModuleAdmin,
     hrModuleAdmin,
     assetsModuleAdmin,
