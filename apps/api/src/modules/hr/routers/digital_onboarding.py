@@ -3,7 +3,7 @@
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from core.exceptions import AppException
@@ -88,6 +88,12 @@ def list_digital_onboarding(
     return APIResponse(message="OK", data=DigitalOnboardingService(db).list_cases(ctx))
 
 
+class DigitalOnboardingClearRequest(BaseModel):
+    """Explicit empty body — reject mass-assignment style extra fields."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class DigitalOnboardingClearResponse(BaseModel):
     deleted: int
     message: str
@@ -106,7 +112,9 @@ def clear_all_digital_onboarding(
         ),
     ],
     db: Annotated[Session, Depends(get_db)],
+    body: DigitalOnboardingClearRequest = DigitalOnboardingClearRequest(),
 ):
+    _ = body
     data = DigitalOnboardingService(db).clear_all_cases(ctx)
     db.commit()
     return APIResponse(

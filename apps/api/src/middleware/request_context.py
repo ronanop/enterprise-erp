@@ -81,8 +81,8 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 request=request,
             )
         except DBAPIError as exc:
+            duration_ms = (time.perf_counter() - start) * 1000
             if _is_connection_pool_exhausted(exc):
-                duration_ms = (time.perf_counter() - start) * 1000
                 logger.warning(
                     "database connection pool exhausted",
                     extra={
@@ -99,7 +99,22 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                     request_id=request_id,
                     request=request,
                 )
-            raise
+            logger.exception(
+                "database error",
+                extra={
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": 500,
+                    "duration_ms": round(duration_ms, 2),
+                },
+            )
+            return _json_error_response(
+                status_code=500,
+                body=_INTERNAL_ERROR_BODY,
+                request_id=request_id,
+                request=request,
+            )
         except Exception:
             duration_ms = (time.perf_counter() - start) * 1000
             logger.exception(

@@ -98,7 +98,9 @@ services:
       - .env
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-development}
-      DEBUG: ${DEBUG:-true}
+      DEBUG: ${DEBUG:-false}
+      API_RATE_LIMIT: ${API_RATE_LIMIT:-300}
+      API_RATE_WINDOW_SECONDS: ${API_RATE_WINDOW_SECONDS:-60}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-erp-postgres}:${POSTGRES_PASSWORD:-erp-postgres}@postgres:5432/${POSTGRES_DB:-erp}
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-erp}:${RABBITMQ_PASSWORD:-erp_dev_password}@rabbitmq:5672//
@@ -172,7 +174,7 @@ services:
       context: ./apps/web
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://172.16.200.26/api/v1}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
         NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Enterprise ERP}
         NEXT_PUBLIC_DEMO_EMAIL: ${NEXT_PUBLIC_DEMO_EMAIL:-admin@example.com}
         NEXT_PUBLIC_DEMO_PASSWORD: ${NEXT_PUBLIC_DEMO_PASSWORD:-Secure1!}

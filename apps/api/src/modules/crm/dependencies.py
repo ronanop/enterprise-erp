@@ -54,7 +54,7 @@ class PaginationParams:
 
 def get_pagination(
     page: Annotated[int, Query(ge=1)] = 1,
-    page_size: Annotated[int, Query(ge=1, le=200)] = 25,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 25,
 ) -> PaginationParams:
     return PaginationParams(page=page, page_size=page_size)
 

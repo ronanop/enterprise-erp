@@ -5,7 +5,13 @@ import logging
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import DBAPIError, OperationalError, TimeoutError as SATimeoutError
+from sqlalchemy.exc import (
+    DBAPIError,
+    DataError,
+    IntegrityError,
+    OperationalError,
+    TimeoutError as SATimeoutError,
+)
 
 from shared.schemas import ErrorResponse
 
@@ -106,6 +112,25 @@ def register_exception_handlers(app: FastAPI) -> None:
             content=ErrorResponse(message="Database temporarily unavailable").model_dump(),
         )
 
+    @app.exception_handler(DataError)
+    async def data_error_handler(_: Request, exc: DataError) -> JSONResponse:
+        logger.warning("database data error (invalid input): %s", exc)
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content=ErrorResponse(
+                message="Validation error",
+                errors=["One or more field values are out of range or invalid for storage"],
+            ).model_dump(),
+        )
+
+    @app.exception_handler(IntegrityError)
+    async def integrity_error_handler(_: Request, exc: IntegrityError) -> JSONResponse:
+        logger.warning("database integrity error: %s", exc)
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content=ErrorResponse(message="Conflict with existing data").model_dump(),
+        )
+
     @app.exception_handler(DBAPIError)
     async def dbapi_error_handler(_: Request, exc: DBAPIError) -> JSONResponse:
         if isinstance(exc.orig, Exception) and "too many clients" in str(exc.orig).lower():
@@ -114,10 +139,15 @@ def register_exception_handlers(app: FastAPI) -> None:
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 content=ErrorResponse(message="Database temporarily unavailable").model_dump(),
             )
-        raise exc
+        logger.exception("database error")
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content=ErrorResponse(message="Internal server error").model_dump(),
+        )
 
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        logger.exception("unhandled exception on %s %s", request.method, request.url.path)
         origin = request.headers.get("origin")
         headers: dict[str, str] = {}
         if origin:

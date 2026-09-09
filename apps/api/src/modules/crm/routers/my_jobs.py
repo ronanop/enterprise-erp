@@ -44,10 +44,10 @@ def list_my_jobs(
     db: Annotated[Session, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
-    team_role: str | None = None,
-    status: str | None = None,
+    team_role: Annotated[str | None, Query(max_length=50)] = None,
+    status: Annotated[str | None, Query(max_length=40)] = None,
     mine: bool = False,
-    entity_type: str | None = None,
+    entity_type: Annotated[str | None, Query(max_length=50)] = None,
     entity_id: UUID | None = None,
 ):
     rows = ApprovalTaskService(db).list(

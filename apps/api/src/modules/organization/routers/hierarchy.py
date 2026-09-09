@@ -3,9 +3,10 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from core.constants import MAX_PAGE_SIZE
 from database.session import get_db
 from modules.foundation.dependencies import require_permission
 from modules.foundation.domain.value_objects import TenantContext
@@ -44,8 +45,9 @@ def list_branches(
     ctx: Annotated[TenantContext, Depends(require_permission("organization.branch:read"))],
     db: Annotated[Session, Depends(get_db)],
     company_id: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = MAX_PAGE_SIZE,
 ) -> APIResponse[list[BranchResponse]]:
-    branches = BranchService(db).list_branches(ctx, company_id=company_id)
+    branches = BranchService(db).list_branches(ctx, company_id=company_id)[:limit]
     return APIResponse(
         message="Branches retrieved",
         data=[BranchResponse(**b.__dict__) for b in branches],
@@ -105,10 +107,11 @@ def list_departments(
     db: Annotated[Session, Depends(get_db)],
     company_id: UUID | None = None,
     branch_id: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = MAX_PAGE_SIZE,
 ) -> APIResponse[list]:
     depts = DepartmentService(db).list_departments(
         ctx, company_id=company_id, branch_id=branch_id
-    )
+    )[:limit]
     return APIResponse(message="Departments retrieved", data=[d.__dict__ for d in depts])
 
 
@@ -178,8 +181,11 @@ def list_locations(
     db: Annotated[Session, Depends(get_db)],
     branch_id: UUID | None = None,
     company_id: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = MAX_PAGE_SIZE,
 ) -> APIResponse[list]:
-    locs = LocationService(db).list_locations(ctx, branch_id=branch_id, company_id=company_id)
+    locs = LocationService(db).list_locations(ctx, branch_id=branch_id, company_id=company_id)[
+        :limit
+    ]
     return APIResponse(message="Locations retrieved", data=[loc.__dict__ for loc in locs])
 
 

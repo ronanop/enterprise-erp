@@ -160,6 +160,9 @@ class Settings(BaseSettings):
     session_ttl_seconds: int = Field(default=604800, alias="SESSION_TTL_SECONDS")
     login_rate_limit: int = Field(default=0, alias="LOGIN_RATE_LIMIT")
     login_rate_window_seconds: int = Field(default=900, alias="LOGIN_RATE_WINDOW_SECONDS")
+    # Global API rate limit per client IP (0 disables). Default tuned for AppScan DAST.
+    api_rate_limit: int = Field(default=300, alias="API_RATE_LIMIT")
+    api_rate_window_seconds: int = Field(default=60, alias="API_RATE_WINDOW_SECONDS")
     account_lockout_threshold: int = Field(default=5, alias="ACCOUNT_LOCKOUT_THRESHOLD")
     account_lockout_minutes: int = Field(default=15, alias="ACCOUNT_LOCKOUT_MINUTES")
     # Business-day timezone for attendance punch "today" (IST by default)

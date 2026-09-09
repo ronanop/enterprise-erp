@@ -61,8 +61,10 @@ class ProjectCreate(BaseModel):
     site_installation: SiteInstallationNestedCreate | None = None
 
 class ProjectUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     project_name: str | None = Field(default=None, min_length=1, max_length=255)
-    project_type: str | None = None
+    project_type: str | None = Field(default=None, max_length=40)
     customer_id: UUID | None = None
     department_id: UUID | None = None
     project_manager_employee_id: UUID | None = None
@@ -72,11 +74,11 @@ class ProjectUpdate(BaseModel):
     actual_start_date: date | None = None
     actual_end_date: date | None = None
     budget_amount: Decimal | None = None
-    currency_code: str | None = None
-    billing_type: str | None = None
-    health_status: str | None = None
-    description: str | None = None
-    status: str | None = None
+    currency_code: str | None = Field(default=None, max_length=10)
+    billing_type: str | None = Field(default=None, max_length=40)
+    health_status: str | None = Field(default=None, max_length=40)
+    description: str | None = Field(default=None, max_length=5000)
+    status: str | None = Field(default=None, max_length=40)
     version: int | None = None
 
 class ProjectResponse(OrmModel):

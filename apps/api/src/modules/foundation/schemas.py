@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
@@ -196,26 +196,37 @@ class WorkflowActionRequest(BaseModel):
 
 
 class NotificationTemplateCreateRequest(BaseModel):
-    template_code: str
-    template_name: str
-    channel: str
-    body_template: str
-    subject_template: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    template_code: str = Field(min_length=1, max_length=100, pattern=r"^[^<>]{1,100}$")
+    template_name: str = Field(min_length=1, max_length=255, pattern=r"^[^<>]{1,255}$")
+    channel: str = Field(min_length=1, max_length=30, pattern=r"^[a-zA-Z0-9_\-]{1,30}$")
+    body_template: str = Field(min_length=1, max_length=100_000)
+    subject_template: str | None = Field(default=None, max_length=500, pattern=r"^[^<>]{0,500}$")
 
 
 class NotificationSendRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     template_id: UUID
-    event_type: str
+    event_type: str = Field(min_length=1, max_length=100, pattern=r"^[a-zA-Z0-9_.\-]{1,100}$")
     recipient_user_id: UUID | None = None
-    recipient_address: str | None = None
+    recipient_address: str | None = Field(default=None, max_length=255)
     payload_json: dict | None = None
 
 
 class EmailComposeRequest(BaseModel):
-    to_address: str
-    subject: str
-    body_html: str
-    event_type: str = "email.compose"
+    model_config = ConfigDict(extra="forbid")
+
+    to_address: str = Field(min_length=3, max_length=255)
+    subject: str = Field(min_length=1, max_length=500)
+    body_html: str = Field(min_length=1, max_length=500_000)
+    event_type: str = Field(
+        default="email.compose",
+        min_length=1,
+        max_length=100,
+        pattern=r"^[a-zA-Z0-9_.\-]{1,100}$",
+    )
     template_id: UUID | None = None
     payload_json: dict | None = None
 

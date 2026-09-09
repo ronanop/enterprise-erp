@@ -15,13 +15,10 @@ router = APIRouter()
 def health_check(
     _: Annotated[None, Depends(optional_authentication)],
 ) -> APIResponse[dict[str, str]]:
-    """Public liveness probe for load balancers and orchestrators."""
-    db_status = "healthy" if check_database_connection() else "unhealthy"
+    """Public liveness probe — minimal payload (no stack/env disclosure)."""
+    ok = check_database_connection()
     return APIResponse(
         success=True,
-        message="Service health check",
-        data={
-            "status": "healthy" if db_status == "healthy" else "unhealthy",
-            "database": db_status,
-        },
+        message="OK",
+        data={"status": "ok" if ok else "degraded"},
     )

@@ -3,9 +3,10 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from core.constants import MAX_PAGE_SIZE
 from database.session import get_db
 from modules.foundation.dependencies import require_permission
 from modules.foundation.domain.value_objects import TenantContext
@@ -24,8 +25,9 @@ router = APIRouter(prefix="/companies", tags=["Companies"])
 def list_companies(
     ctx: Annotated[TenantContext, Depends(require_permission("organization.company:read"))],
     db: Annotated[Session, Depends(get_db)],
+    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = MAX_PAGE_SIZE,
 ) -> APIResponse[list[CompanyResponse]]:
-    companies = CompanyService(db).list_companies(ctx)
+    companies = CompanyService(db).list_companies(ctx)[:limit]
     return APIResponse(
         message="Companies retrieved",
         data=[CompanyResponse(**c.__dict__) for c in companies],

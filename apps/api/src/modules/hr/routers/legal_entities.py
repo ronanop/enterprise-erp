@@ -3,9 +3,10 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from core.constants import MAX_PAGE_SIZE
 from database.session import get_db
 from modules.foundation.dependencies import require_any_permission
 from modules.foundation.domain.value_objects import TenantContext
@@ -32,8 +33,9 @@ def list_legal_entities(
         Depends(require_any_permission("organization.company:read", HR_SUPERADMIN_PERMISSION)),
     ],
     db: Annotated[Session, Depends(get_db)],
+    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = MAX_PAGE_SIZE,
 ) -> APIResponse[list[CompanyResponse]]:
-    rows = HrLegalEntityService(db).list_entities(ctx)
+    rows = HrLegalEntityService(db).list_entities(ctx)[:limit]
     return APIResponse(
         message="Legal entities retrieved",
         data=[_to_response(row) for row in rows],

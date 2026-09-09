@@ -4,7 +4,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
 class OrmModel(BaseModel):
@@ -999,20 +999,24 @@ class SalesLeadResponse(OrmModel):
 
 
 class ProductCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     company_id: UUID | None = None
-    product_code: str | None = None
-    product_name: str
-    product_type: str
-    hsn_sac: str | None = None
-    unit_price: Decimal = Decimal("0")
-    status: str = "active"
+    product_code: str | None = Field(default=None, max_length=50, pattern=r"^[^<>]{0,50}$")
+    product_name: str = Field(min_length=1, max_length=255, pattern=r"^[^<>]{1,255}$")
+    product_type: str = Field(min_length=1, max_length=20, pattern="^(hardware|software|services)$")
+    hsn_sac: str | None = Field(default=None, max_length=20, pattern=r"^[A-Za-z0-9./\-]{0,20}$")
+    unit_price: Decimal = Field(default=Decimal("0"), ge=0, le=Decimal("99999999999999.9999"))
+    status: str = Field(default="active", max_length=30, pattern="^(active|inactive)$")
 
 
 class ProductUpdate(BaseModel):
-    product_name: str | None = None
-    hsn_sac: str | None = None
-    unit_price: Decimal | None = None
-    status: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    product_name: str | None = Field(default=None, min_length=1, max_length=255)
+    hsn_sac: str | None = Field(default=None, max_length=20)
+    unit_price: Decimal | None = Field(default=None, ge=0, le=Decimal("99999999999999.9999"))
+    status: str | None = Field(default=None, max_length=30, pattern="^(active|inactive)$")
     version: int | None = None
 
 
@@ -1434,16 +1438,18 @@ class OvfDealWonRequest(BaseModel):
 
 
 class AttachmentCreate(BaseModel):
-    entity_type: str
+    model_config = ConfigDict(extra="forbid")
+
+    entity_type: str = Field(min_length=1, max_length=50)
     entity_id: UUID
     branch_id: UUID
     company_id: UUID | None = None
-    file_name: str
-    category: str = "other"
+    file_name: str = Field(min_length=1, max_length=255)
+    category: str = Field(default="other", max_length=50)
     source: str = Field(default="upload", pattern="^(upload|link|google_drive|onedrive|dropbox|box)$")
-    file_path: str | None = None
+    file_path: str | None = Field(default=None, max_length=1000)
     content_base64: str | None = None
-    content_type: str | None = None
+    content_type: str | None = Field(default=None, max_length=255)
 
 
 class AttachmentResponse(OrmModel):
@@ -1459,6 +1465,17 @@ class AttachmentResponse(OrmModel):
     uploaded_by: UUID | None
     company_id: UUID
     branch_id: UUID
+
+    @field_serializer("file_path")
+    def _safe_file_path(self, value: str) -> str:
+        """Never expose absolute filesystem paths (AppScan path disclosure)."""
+        text = (value or "").strip()
+        if not text:
+            return ""
+        lower = text.lower()
+        if lower.startswith(("http://", "https://", "db://")):
+            return text
+        return ""
 
 
 class ApprovalTaskResponse(OrmModel):

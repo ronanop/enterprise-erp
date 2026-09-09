@@ -130,7 +130,7 @@ def create_template(
 def list_events(
     ctx: Annotated[TenantContext, Depends(require_permission("foundation.notification:read"))],
     db: Annotated[Session, Depends(get_db)],
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
 ) -> APIResponse[list]:
     events = NotificationService(db).list_events(ctx.tenant_id, limit=limit)
     return APIResponse(message="Events retrieved", data=events)
@@ -140,7 +140,7 @@ def list_events(
 def list_deliveries(
     ctx: Annotated[TenantContext, Depends(require_permission("foundation.notification:read"))],
     db: Annotated[Session, Depends(get_db)],
-    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    limit: Annotated[int, Query(ge=1, le=100)] = 100,
 ) -> APIResponse[list]:
     deliveries = NotificationService(db).list_deliveries(ctx.tenant_id, limit=limit)
     return APIResponse(message="Deliveries retrieved", data=deliveries)

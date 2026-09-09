@@ -1,13 +1,38 @@
 /** Client-safe environment configuration with API URL fallback. */
 
-const PRIMARY_API_URL =
-  process.env.NEXT_PUBLIC_API_URL?.trim() || "http://localhost:8000/api/v1";
-const FALLBACK_API_URL =
+function browserSameOriginApi(): string | null {
+  if (typeof window === "undefined") return null;
+  // Prefer same-origin relative API so private IPs are not baked into the bundle.
+  return `${window.location.origin}/api/v1`;
+}
+
+const BUILD_API_URL = process.env.NEXT_PUBLIC_API_URL?.trim() || "";
+const BUILD_FALLBACK_URL =
   process.env.NEXT_PUBLIC_API_URL_FALLBACK?.trim() || "http://127.0.0.1:8000/api/v1";
+
+/** Prefer relative /api/v1 in production builds to avoid IP disclosure in JS bundles. */
+const PRIMARY_API_URL =
+  BUILD_API_URL && !/172\.\d+\.\d+\.\d+|192\.168\.|10\.\d+\./.test(BUILD_API_URL)
+    ? BUILD_API_URL
+    : BUILD_API_URL.startsWith("/")
+      ? BUILD_API_URL
+      : typeof window !== "undefined"
+        ? `${window.location.origin}/api/v1`
+        : BUILD_API_URL || "/api/v1";
+
+const FALLBACK_API_URL = BUILD_FALLBACK_URL;
 
 const STORAGE_KEY = "erp.activeApiUrl";
 
 function normalizeApiBase(url: string): string {
+  if (!url) return "/api/v1";
+  // Support relative bases like "/api/v1"
+  if (url.startsWith("/")) {
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}${url.replace(/\/+$/, "")}`;
+    }
+    return url.replace(/\/+$/, "");
+  }
   return url.replace(/\/+$/, "");
 }
 
@@ -30,17 +55,28 @@ function storeApiUrl(url: string): void {
   }
 }
 
-let activeApiUrl = normalizeApiBase(readStoredApiUrl() || PRIMARY_API_URL);
+let activeApiUrl = normalizeApiBase(
+  readStoredApiUrl() || browserSameOriginApi() || PRIMARY_API_URL,
+);
 let resolveInFlight: Promise<string> | null = null;
 
 function candidateApiUrls(): string[] {
+  const sameOrigin = browserSameOriginApi();
   const primary = normalizeApiBase(PRIMARY_API_URL);
   const fallback = normalizeApiBase(FALLBACK_API_URL);
-  const ordered = [activeApiUrl, primary, fallback];
+  const ordered = [activeApiUrl, sameOrigin, primary, fallback].filter(Boolean) as string[];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const url of ordered) {
     if (!url || seen.has(url)) continue;
+    // Skip private-IP candidates in the browser when same-origin works.
+    if (
+      typeof window !== "undefined" &&
+      /172\.\d+\.\d+\.\d+|192\.168\.|10\.\d+\./.test(url) &&
+      sameOrigin
+    ) {
+      continue;
+    }
     seen.add(url);
     out.push(url);
   }
@@ -80,8 +116,8 @@ export async function resolveApiUrl(force = false): Promise<string> {
         return base;
       }
     }
-    // Keep last known / primary so callers still attempt a request.
-    activeApiUrl = normalizeApiBase(PRIMARY_API_URL);
+    // Keep last known / same-origin so callers still attempt a request.
+    activeApiUrl = normalizeApiBase(browserSameOriginApi() || PRIMARY_API_URL);
     return activeApiUrl;
   })();
 

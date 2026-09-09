@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Building2,
+  MessageSquareText,
   MapPin,
   Package,
   Truck,
@@ -24,6 +25,7 @@ import {
 import {
   FinanceField,
   FinanceSelect,
+  FinanceTextarea,
 } from "@/components/finance/journals/finance-form-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -278,7 +280,7 @@ export function LeadFormPage({
           zip: companyRow.billing_code,
           country: companyRow.billing_country,
           end_customer_name: f.end_customer_name || "",
-          notes: f.notes || companyRow.description || "",
+          notes: "",
         };
       });
     } catch (err) {
@@ -871,6 +873,19 @@ export function LeadFormPage({
             />
           </FinanceField>
         </div>
+      </CrmSection>
+
+      <CrmSection title="Lead Remarks" icon={MessageSquareText}>
+        <FinanceField label="Remarks">
+          <FinanceTextarea
+            value={form.notes ?? ""}
+            onChange={(e) => set("notes", e.target.value)}
+            placeholder="Add remarks for this lead"
+            rows={4}
+            className="min-h-[96px] cursor-text transition-colors duration-200"
+            aria-label="Lead remarks"
+          />
+        </FinanceField>
       </CrmSection>
 
       <div className="flex justify-end gap-2">

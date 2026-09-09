@@ -7,4 +7,4 @@ APP_DESCRIPTION = "Enterprise ERP Platform API — Modular Monolith with Clean A
 HEALTH_ENDPOINT = "/health"
 
 DEFAULT_PAGE_SIZE = 25
-MAX_PAGE_SIZE = 200
+MAX_PAGE_SIZE = 100
