@@ -141,6 +141,53 @@ class AuditType(str, Enum):
     COMPLIANCE = "compliance"
 
 
+class PfmeaLineStatus(str, Enum):
+    OPEN = "open"
+    MITIGATED = "mitigated"
+    CLOSED = "closed"
+
+
+class PpapStatus(str, Enum):
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    INTERIM = "interim"
+
+
+class ScarStatus(str, Enum):
+    DRAFT = "draft"
+    ISSUED = "issued"
+    RESPONDED = "responded"
+    VERIFIED = "verified"
+    CLOSED = "closed"
+    CANCELLED = "cancelled"
+
+
+class VinTraceStatus(str, Enum):
+    BUILT = "built"
+    INSPECTED = "inspected"
+    SHIPPED = "shipped"
+
+
+class WarrantyClaimStatus(str, Enum):
+    DRAFT = "draft"
+    INVESTIGATING = "investigating"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+    CAPA_LINKED = "capa_linked"
+    CLOSED = "closed"
+    CANCELLED = "cancelled"
+
+
+class RecallStatus(str, Enum):
+    DRAFT = "draft"
+    ANNOUNCED = "announced"
+    IN_PROGRESS = "in_progress"
+    CLOSED = "closed"
+    CANCELLED = "cancelled"
+
+
 class QmEntityType(str, Enum):
     INSPECTION_PLAN = "inspection_plan"
     SAMPLING_PLAN = "sampling_plan"
@@ -152,6 +199,13 @@ class QmEntityType(str, Enum):
     CUSTOMER_COMPLAINT = "customer_complaint"
     QUALITY_AUDIT = "quality_audit"
     DEFECT = "defect"
+    PFMEA = "pfmea"
+    PPAP = "ppap"
+    SPC_READING = "spc_reading"
+    SCAR = "scar"
+    VIN_TRACE = "vin_trace"
+    WARRANTY_CLAIM = "warranty_claim"
+    RECALL = "recall"
 
 
 CODE_PREFIXES: dict[QmEntityType, tuple[str, int]] = {
@@ -165,6 +219,13 @@ CODE_PREFIXES: dict[QmEntityType, tuple[str, int]] = {
     QmEntityType.CUSTOMER_COMPLAINT: ("CQC-", 6),
     QmEntityType.QUALITY_AUDIT: ("QAD-", 6),
     QmEntityType.DEFECT: ("DEF-", 6),
+    QmEntityType.PFMEA: ("PFMEA-", 6),
+    QmEntityType.PPAP: ("PPAP-", 6),
+    QmEntityType.SPC_READING: ("SPC-", 6),
+    QmEntityType.SCAR: ("SCAR-", 6),
+    QmEntityType.VIN_TRACE: ("VIN-", 6),
+    QmEntityType.WARRANTY_CLAIM: ("WRN-", 6),
+    QmEntityType.RECALL: ("RCL-", 6),
 }
 
 SOURCE_MODULE = "quality"

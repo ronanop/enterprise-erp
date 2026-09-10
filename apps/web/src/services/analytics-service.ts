@@ -192,9 +192,35 @@ export type AnalyticsKpi = {
   warning_threshold: number | null;
   critical_threshold: number | null;
   direction: string | null;
+  period_grain: string | null;
   source_kpi_key: string | null;
   status: string;
   version: number;
+};
+
+export type AnalyticsKpiWrite = {
+  kpi_name: string;
+  kpi_code?: string;
+  source_kpi_key?: string | null;
+  target_value?: number | null;
+  warning_threshold?: number | null;
+  critical_threshold?: number | null;
+  direction?: string | null;
+  period_grain?: string | null;
+};
+
+export type AnalyticsDashboardWrite = {
+  dashboard_name: string;
+  dashboard_code?: string;
+  dashboard_type?: string;
+  audience_role?: string | null;
+};
+
+export type AnalyticsWidgetWrite = {
+  dashboard_id: string;
+  widget_title: string;
+  widget_type?: string;
+  kpi_id?: string | null;
 };
 
 export type AnalyticsKpiBreakdown = {
@@ -256,6 +282,7 @@ export async function listAnalyticsKpis(): Promise<AnalyticsKpi[]> {
   return (normalizeRows(res.data) as AnalyticsKpi[]).map((row) => ({
     ...row,
     source_kpi_key: typeof row.source_kpi_key === "string" ? row.source_kpi_key : null,
+    period_grain: typeof row.period_grain === "string" ? row.period_grain : null,
     current_value: parseNullableNumber(row.current_value),
     target_value: parseNullableNumber(row.target_value),
   }));
@@ -302,7 +329,7 @@ export async function getAnalyticsKpiDetail(id: string): Promise<AnalyticsKpiDet
 }
 
 export async function listDashboardWidgets(dashboardId: string): Promise<AnalyticsWidget[]> {
-  const res = await resourceService.list<AnalyticsWidget>("/analytics/dashboard-widgets");
+  const res = await resourceService.list<AnalyticsWidget>("/analytics/dashboard-widgets", { page_size: 200 });
   return normalizeRows(res.data).filter((r) => String(r.dashboard_id) === dashboardId) as AnalyticsWidget[];
 }
 
@@ -330,6 +357,27 @@ export async function analyticsKpiAction(
   action: "submit" | "approve",
 ): Promise<AnalyticsKpi> {
   return biUnwrap(resourceService.action<AnalyticsKpi>("/analytics/kpis", id, action));
+}
+
+export async function createAnalyticsKpi(body: AnalyticsKpiWrite): Promise<AnalyticsKpi> {
+  return biUnwrap(resourceService.create<AnalyticsKpi>("/analytics/kpis", body));
+}
+
+export async function updateAnalyticsKpi(
+  id: string,
+  body: Partial<AnalyticsKpiWrite>,
+): Promise<AnalyticsKpi> {
+  return biUnwrap(resourceService.update<AnalyticsKpi>("/analytics/kpis", id, body));
+}
+
+export async function createAnalyticsDashboard(
+  body: AnalyticsDashboardWrite,
+): Promise<AnalyticsDashboard> {
+  return biUnwrap(resourceService.create<AnalyticsDashboard>("/analytics/dashboards", body));
+}
+
+export async function createDashboardWidget(body: AnalyticsWidgetWrite): Promise<AnalyticsWidget> {
+  return biUnwrap(resourceService.create<AnalyticsWidget>("/analytics/dashboard-widgets", body));
 }
 
 export async function loadExecutiveKpis(): Promise<AnalyticsKpi[]> {

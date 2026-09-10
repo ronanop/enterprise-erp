@@ -18,6 +18,13 @@ from modules.quality.routers import (
     sampling_plans_router,
     scores_router,
     supplier_quality_router,
+    pfmeas_router,
+    ppaps_router,
+    spc_readings_router,
+    scars_router,
+    vin_traces_router,
+    warranty_claims_router,
+    recalls_router,
 )
 
 quality_router = APIRouter(prefix="/quality")
@@ -36,3 +43,10 @@ quality_router.include_router(complaints_router)
 quality_router.include_router(audits_router)
 quality_router.include_router(scores_router)
 quality_router.include_router(reports_router)
+quality_router.include_router(pfmeas_router)
+quality_router.include_router(ppaps_router)
+quality_router.include_router(spc_readings_router)
+quality_router.include_router(scars_router)
+quality_router.include_router(vin_traces_router)
+quality_router.include_router(warranty_claims_router)
+quality_router.include_router(recalls_router)

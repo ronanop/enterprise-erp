@@ -27,6 +27,15 @@ class KpiRepository(AnalyticsScopedRepository):
         stmt = self.apply_analytics_filter(stmt, BiKpi, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 
+    def code_exists(self, ctx: TenantContext, company_id: UUID, kpi_code: str) -> bool:
+        stmt = select(BiKpi.id).where(
+            BiKpi.company_id == company_id,
+            BiKpi.kpi_code == kpi_code,
+            BiKpi.is_deleted.is_(False),
+        )
+        stmt = self.apply_analytics_filter(stmt, BiKpi, ctx, branch_scoped=False)
+        return self.db.scalar(stmt) is not None
+
     def create(self, ctx: TenantContext, **fields) -> BiKpi:
         row = BiKpi(
             id=uuid4(),
@@ -44,8 +53,7 @@ class KpiRepository(AnalyticsScopedRepository):
         if row is None:
             return None
         for k, v in fields.items():
-            if v is not None:
-                setattr(row, k, v)
+            setattr(row, k, v)
         row.updated_at = utcnow()
         row.updated_by = ctx.user_id
         if hasattr(row, "version"):

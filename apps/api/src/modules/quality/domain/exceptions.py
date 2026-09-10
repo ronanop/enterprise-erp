@@ -46,3 +46,33 @@ class InvalidScoreState(ConflictException):
 class InvalidDefectState(ConflictException):
     def __init__(self, detail: str = "Invalid defect state") -> None:
         super().__init__(detail)
+
+
+class InvalidPfmeaState(ConflictException):
+    def __init__(self, detail: str = "Invalid PFMEA state") -> None:
+        super().__init__(detail)
+
+
+class InvalidPpapState(ConflictException):
+    def __init__(self, detail: str = "Invalid PPAP state") -> None:
+        super().__init__(detail)
+
+
+class InvalidScarState(ConflictException):
+    def __init__(self, detail: str = "Invalid SCAR state") -> None:
+        super().__init__(detail)
+
+
+class InvalidVinTraceState(ConflictException):
+    def __init__(self, detail: str = "Invalid VIN trace state") -> None:
+        super().__init__(detail)
+
+
+class InvalidWarrantyClaimState(ConflictException):
+    def __init__(self, detail: str = "Invalid warranty claim state") -> None:
+        super().__init__(detail)
+
+
+class InvalidRecallState(ConflictException):
+    def __init__(self, detail: str = "Invalid recall state") -> None:
+        super().__init__(detail)

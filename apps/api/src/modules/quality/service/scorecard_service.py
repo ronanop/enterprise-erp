@@ -102,8 +102,8 @@ class CustomerComplaintService:
         return row
 
     def create_complaint(self, ctx: TenantContext, **fields) -> QmCustomerComplaint:
-        company_id = fields["company_id"]
-        branch_id = self._scope.require_branch(ctx, fields.get("branch_id"))
+        company_id = fields.pop("company_id")
+        branch_id = self._scope.require_branch(ctx, fields.pop("branch_id", None))
         self._scope.validate_company_access(ctx, company_id)
         number = self._numbers.generate(
             QmEntityType.CUSTOMER_COMPLAINT,
@@ -113,12 +113,13 @@ class CustomerComplaintService:
         )
         if fields.get("quantity") is not None:
             fields["quantity"] = Decimal(str(fields["quantity"]))
+        document_date = fields.pop("document_date", None) or date.today()
         return self._repo.create(
             ctx,
             company_id=company_id,
             branch_id=branch_id,
             document_number=number,
-            document_date=fields.pop("document_date", date.today()),
+            document_date=document_date,
             status=ComplaintStatus.DRAFT.value,
             source_module=SOURCE_MODULE,
             **fields,
@@ -168,8 +169,8 @@ class QualityAuditService:
         return row
 
     def create_audit(self, ctx: TenantContext, **fields) -> QmQualityAudit:
-        company_id = fields["company_id"]
-        branch_id = self._scope.require_branch(ctx, fields.get("branch_id"))
+        company_id = fields.pop("company_id")
+        branch_id = self._scope.require_branch(ctx, fields.pop("branch_id", None))
         self._scope.validate_company_access(ctx, company_id)
         number = self._numbers.generate(
             QmEntityType.QUALITY_AUDIT,
@@ -177,12 +178,13 @@ class QualityAuditService:
             model=QmQualityAudit,
             code_column="document_number",
         )
+        document_date = fields.pop("document_date", None) or date.today()
         return self._repo.create(
             ctx,
             company_id=company_id,
             branch_id=branch_id,
             document_number=number,
-            document_date=fields.pop("document_date", date.today()),
+            document_date=document_date,
             **fields,
         )
 

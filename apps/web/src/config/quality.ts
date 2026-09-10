@@ -45,7 +45,7 @@ export const qualityWorkspaceGroups: QualityWorkspaceGroup[] = [
     title: "Quality Masters",
     description: "Plans, sampling, characteristics, and defect catalog",
     icon: ListChecks,
-    resourceKeys: ["plans", "sampling-plans", "characteristics", "defect-types"],
+    resourceKeys: ["plans", "sampling-plans", "characteristics", "defect-types", "pfmeas"],
   },
   {
     key: "inspections",
@@ -56,6 +56,7 @@ export const qualityWorkspaceGroups: QualityWorkspaceGroup[] = [
       "incoming-inspections",
       "inprocess-inspections",
       "final-inspections",
+      "vin-traces",
       "defects",
     ],
   },
@@ -64,7 +65,7 @@ export const qualityWorkspaceGroups: QualityWorkspaceGroup[] = [
     title: "NCR, CAPA & Assurance",
     description: "Non-conformances, CAPA, suppliers, complaints, audits, scores",
     icon: ShieldCheck,
-    resourceKeys: ["ncrs", "capas", "supplier-quality", "complaints", "audits", "scores"],
+    resourceKeys: ["ncrs", "scars", "capas", "ppaps", "supplier-quality", "complaints", "warranty-claims", "recalls", "audits", "scores"],
   },
 ];
 
@@ -129,6 +130,12 @@ export const qualityQuickLinks = [
     href: "/quality/audits",
     description: "Quality audits",
     icon: BadgeCheck,
+  },
+  {
+    title: "Reports",
+    href: "/quality/reports",
+    description: "KPI & summary reports",
+    icon: ClipboardCheck,
   },
 ] as const;
 

@@ -13,6 +13,11 @@ export default async function AnalyticsResourcePage({ params }: PageProps) {
   const resource = getResource("analytics", resourceKey);
   if (!mod || !resource) notFound();
 
+  const createRoutes: Record<string, string> = {
+    kpis: "/analytics/kpis/new",
+    dashboards: "/analytics/dashboards/new",
+  };
+
   return (
     <ResourceListView
       moduleKey={mod.key}
@@ -20,6 +25,7 @@ export default async function AnalyticsResourcePage({ params }: PageProps) {
       title={resource.title}
       description={resource.description}
       apiPath={resource.apiPath}
+      createHref={createRoutes[resourceKey]}
     />
   );
 }

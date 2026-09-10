@@ -6,7 +6,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import NotFoundException, ValidationException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.quality.domain.enums import (
@@ -46,8 +46,8 @@ class DefectService:
         return row
 
     def create_defect(self, ctx: TenantContext, **fields) -> QmDefect:
-        company_id = fields["company_id"]
-        branch_id = self._scope.require_branch(ctx, fields.get("branch_id"))
+        company_id = fields.pop("company_id")
+        branch_id = self._scope.require_branch(ctx, fields.pop("branch_id", None))
         self._scope.validate_company_access(ctx, company_id)
         number = self._numbers.generate(
             QmEntityType.DEFECT,
@@ -106,8 +106,8 @@ class NcrService:
         return row
 
     def create_ncr(self, ctx: TenantContext, **fields) -> QmNcr:
-        company_id = fields["company_id"]
-        branch_id = self._scope.require_branch(ctx, fields.get("branch_id"))
+        company_id = fields.pop("company_id")
+        branch_id = self._scope.require_branch(ctx, fields.pop("branch_id", None))
         self._scope.validate_company_access(ctx, company_id)
         number = self._numbers.generate(
             QmEntityType.NCR,
@@ -115,12 +115,13 @@ class NcrService:
             model=QmNcr,
             code_column="document_number",
         )
+        document_date = fields.pop("document_date", None) or date.today()
         return self._repo.create(
             ctx,
             company_id=company_id,
             branch_id=branch_id,
             document_number=number,
-            document_date=fields.pop("document_date", date.today()),
+            document_date=document_date,
             status=NcrStatus.DRAFT.value,
             source_module=SOURCE_MODULE,
             **fields,
@@ -187,21 +188,35 @@ class CapaService:
         preventive_actions: list[dict] | None = None,
         **fields,
     ) -> QmCapa:
-        company_id = fields["company_id"]
-        branch_id = self._scope.require_branch(ctx, fields.get("branch_id"))
+        company_id = fields.pop("company_id")
+        branch_id = self._scope.require_branch(ctx, fields.pop("branch_id", None))
         self._scope.validate_company_access(ctx, company_id)
+        ncr_id = fields.get("ncr_id")
+        if ncr_id is not None:
+            ncr = NcrRepository(self._db).get(ctx, ncr_id)
+            if ncr is None:
+                raise ValidationException(
+                    "NCR not found. Switch the Workspace company to the same plant, then pick that plant's NCR."
+                )
+            if ncr.company_id != company_id:
+                raise ValidationException(
+                    "That NCR belongs to a different company. "
+                    "DEMO-QM-NCR-0001 exists on both Cache Digitech and DEMO-HMC — "
+                    "pick the NCR for the company on this form."
+                )
         number = self._numbers.generate(
             QmEntityType.CAPA,
             company_id,
             model=QmCapa,
             code_column="document_number",
         )
+        document_date = fields.pop("document_date", None) or date.today()
         capa = self._repo.create(
             ctx,
             company_id=company_id,
             branch_id=branch_id,
             document_number=number,
-            document_date=fields.pop("document_date", date.today()),
+            document_date=document_date,
             status=CapaStatus.DRAFT.value,
             **fields,
         )

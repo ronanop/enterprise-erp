@@ -11,9 +11,15 @@ from modules.quality.domain.exceptions import (
     InvalidDefectState,
     InvalidInspectionState,
     InvalidNcrState,
+    InvalidPfmeaState,
     InvalidPlanState,
+    InvalidPpapState,
     InvalidSamplingPlan,
+    InvalidScarState,
     InvalidScoreState,
+    InvalidVinTraceState,
+    InvalidWarrantyClaimState,
+    InvalidRecallState,
 )
 from modules.quality.service.engines import (
     CapaEngine,
@@ -23,8 +29,14 @@ from modules.quality.service.engines import (
     IncomingInspectionEngine,
     InspectionPlanEngine,
     NcrEngine,
+    PfmeaEngine,
+    PpapEngine,
     QualityScoreEngine,
     SamplingEngine,
+    ScarEngine,
+    VinTraceEngine,
+    WarrantyEngine,
+    RecallEngine,
 )
 
 
@@ -141,3 +153,120 @@ def test_quality_score_publish_requires_period():
     score = SimpleNamespace(status="draft", period_start=None, period_end=None)
     with pytest.raises(InvalidScoreState):
         engine.validate_publishable(score)
+
+
+def test_disposition_qty_rejects_negative_values():
+    from decimal import Decimal
+
+    from modules.quality.domain.entities import DispositionQty
+
+    disposition = DispositionQty(
+        inspected_qty=Decimal("6"),
+        accepted_qty=Decimal("-10"),
+        rejected_qty=Decimal("-16"),
+    )
+    assert not disposition.validate()
+    assert "zero or greater" in disposition.error_message()
+
+
+def test_disposition_qty_rejects_over_allocation():
+    from decimal import Decimal
+
+    from modules.quality.domain.entities import DispositionQty
+
+    disposition = DispositionQty(
+        inspected_qty=Decimal("10"),
+        accepted_qty=Decimal("6"),
+        rejected_qty=Decimal("6"),
+    )
+    assert not disposition.validate()
+    assert "cannot exceed inspected" in disposition.error_message()
+
+
+def test_pfmea_rpn_is_product_of_ratings():
+    engine = PfmeaEngine()
+    assert engine.compute_rpn(8, 4, 3) == 96
+    with pytest.raises(InvalidPfmeaState):
+        engine.compute_rpn(11, 1, 1)
+
+
+def test_ppap_submit_only_from_draft():
+    engine = PpapEngine()
+    ppap = SimpleNamespace(status="submitted", vendor_id=uuid4(), product_id=uuid4(), inspection_plan_id=uuid4())
+    with pytest.raises(InvalidPpapState):
+        engine.validate_submittable(ppap)
+
+
+def test_scar_lifecycle_independent_of_ncr():
+    engine = ScarEngine()
+    scar = SimpleNamespace(
+        status="draft",
+        vendor_id=uuid4(),
+        description="Supplier dimensional deviation",
+        supplier_response=None,
+    )
+    engine.apply_issue(scar)
+    assert scar.status == "issued"
+    engine.apply_record_response(scar, "Containment and 8D attached")
+    assert scar.status == "responded"
+    engine.apply_verify(scar)
+    assert scar.status == "verified"
+    engine.apply_close(scar)
+    assert scar.status == "closed"
+
+
+def test_scar_cannot_issue_without_description():
+    engine = ScarEngine()
+    scar = SimpleNamespace(status="draft", vendor_id=uuid4(), description=None)
+    with pytest.raises(InvalidScarState):
+        engine.validate_issuable(scar)
+
+
+def test_vin_trace_status_only_moves_forward():
+    engine = VinTraceEngine()
+    trace = SimpleNamespace(status="built")
+    engine.apply_status(trace, "inspected")
+    assert trace.status == "inspected"
+    engine.apply_status(trace, "shipped")
+    assert trace.status == "shipped"
+    with pytest.raises(InvalidVinTraceState):
+        engine.validate_status_change(trace, "built")
+
+
+def test_warranty_claim_lifecycle_independent_of_complaint():
+    engine = WarrantyEngine()
+    claim = SimpleNamespace(status="draft")
+    engine.apply_investigate(claim)
+    assert claim.status == "investigating"
+    engine.apply_status(claim, "accepted")
+    assert claim.status == "accepted"
+    engine.apply_link_capa(claim)
+    assert claim.status == "capa_linked"
+    engine.apply_close(claim)
+    assert claim.status == "closed"
+
+
+def test_warranty_cannot_close_from_draft():
+    engine = WarrantyEngine()
+    claim = SimpleNamespace(status="draft")
+    with pytest.raises(InvalidWarrantyClaimState):
+        engine.validate_closable(claim)
+
+
+def test_recall_announce_then_close_independent_of_capa():
+    engine = RecallEngine()
+    recall = SimpleNamespace(status="draft", product_id=uuid4(), trigger_reason="Field failure cluster")
+    engine.apply_announce(recall)
+    assert recall.status == "announced"
+    engine.apply_status(recall, "in_progress")
+    assert recall.status == "in_progress"
+    engine.apply_close(recall)
+    assert recall.status == "closed"
+
+
+def test_recall_cannot_announce_without_reason():
+    engine = RecallEngine()
+    recall = SimpleNamespace(status="draft", product_id=uuid4(), trigger_reason=None)
+    with pytest.raises(InvalidRecallState):
+        engine.validate_announceable(recall)
+

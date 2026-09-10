@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import re
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import NotFoundException, ValidationException
 from modules.analytics.domain.enums import AnalyticsEntityType, SourceKpiKey
 from modules.analytics.domain.exceptions import UnknownKpiSource
 from modules.analytics.models import BiKpi
@@ -17,8 +18,37 @@ from modules.analytics.service.analytics_scope_validator import AnalyticsScopeVa
 from modules.analytics.service.engines import KpiEngine
 from modules.analytics.service.integration_service import AnalyticsIntegrationService
 from modules.analytics.service.kpi_snapshot_service import KpiDailySnapshotService
+from modules.analytics.service.owner_resolver import resolve_owner_employee_id
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
+
+_KPI_CREATE_FIELDS = {
+    "kpi_code",
+    "kpi_name",
+    "owner_employee_id",
+    "department_id",
+    "target_value",
+    "warning_threshold",
+    "critical_threshold",
+    "direction",
+    "period_grain",
+    "source_kpi_key",
+    "status",
+    "metric_id",
+    "branch_id",
+}
+_KPI_UPDATE_FIELDS = {
+    "kpi_name",
+    "target_value",
+    "warning_threshold",
+    "critical_threshold",
+    "direction",
+    "period_grain",
+    "source_kpi_key",
+}
+_VALID_DIRECTIONS = {"higher_better", "lower_better"}
+_VALID_GRAINS = {"day", "week", "month", "quarter", "year"}
+_SOURCE_KEYS = {item.value for item in SourceKpiKey}
 
 
 class KpiService:
@@ -42,13 +72,55 @@ class KpiService:
         return row
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
-        cid = self._scope.resolve_company_id(ctx, company_id)
+        cid = self._scope.resolve_company_id(ctx, company_id or fields.pop("company_id", None))
+        payload = {k: v for k, v in fields.items() if k in _KPI_CREATE_FIELDS}
+        name = str(payload.get("kpi_name") or "").strip()
+        if not name:
+            raise ValidationException("KPI name is required")
+        payload["kpi_name"] = name
+        source = str(payload.get("source_kpi_key") or "").strip() or None
+        if source:
+            self._validate_source_key(source)
+        payload["source_kpi_key"] = source
+        code = str(payload.get("kpi_code") or "").strip().upper()
+        if not code:
+            code = self._unique_kpi_code(ctx, cid, source or name)
+        payload["kpi_code"] = code[:50]
+        if self._repo.code_exists(ctx, cid, payload["kpi_code"]):
+            raise ValidationException(f"KPI code already exists: {payload['kpi_code']}")
+        direction = payload.get("direction")
+        if direction and direction not in _VALID_DIRECTIONS:
+            raise ValidationException("direction must be higher_better or lower_better")
+        grain = payload.get("period_grain")
+        if grain and grain not in _VALID_GRAINS:
+            raise ValidationException("Invalid period_grain")
+        payload["owner_employee_id"] = resolve_owner_employee_id(
+            self._repo.db, ctx, cid, payload.get("owner_employee_id")
+        )
+        payload.setdefault("status", "draft")
+        payload.setdefault("direction", "higher_better")
+        payload.setdefault("period_grain", "month")
         doc = self._numbers.generate(AnalyticsEntityType.KPI, cid, BiKpi, "kpi_number")
-        return self._repo.create(ctx, company_id=cid, kpi_number=doc, **fields)
+        return self._repo.create(ctx, company_id=cid, kpi_number=doc, **payload)
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
         self.get(ctx, row_id)
-        row = self._repo.update(ctx, row_id, **fields)
+        payload = {k: v for k, v in fields.items() if k in _KPI_UPDATE_FIELDS}
+        if "kpi_name" in payload and payload["kpi_name"] is not None:
+            name = str(payload["kpi_name"]).strip()
+            if not name:
+                raise ValidationException("KPI name is required")
+            payload["kpi_name"] = name
+        if "source_kpi_key" in payload:
+            source = str(payload["source_kpi_key"] or "").strip() or None
+            if source:
+                self._validate_source_key(source)
+            payload["source_kpi_key"] = source
+        if payload.get("direction") and payload["direction"] not in _VALID_DIRECTIONS:
+            raise ValidationException("direction must be higher_better or lower_better")
+        if payload.get("period_grain") and payload["period_grain"] not in _VALID_GRAINS:
+            raise ValidationException("Invalid period_grain")
+        row = self._repo.update(ctx, row_id, **payload)
         if row is None:
             raise NotFoundException("KpiService not found")
         return row
@@ -134,3 +206,15 @@ class KpiService:
         if key == SourceKpiKey.HELPDESK_INCIDENT_COUNT.value:
             return self._integration.helpdesk_incident_count(ctx, company_id)
         raise UnknownKpiSource(f"Unsupported source_kpi_key: {key or '(empty)'}")
+
+    def _validate_source_key(self, key: str) -> None:
+        if key not in _SOURCE_KEYS:
+            raise ValidationException(f"Unsupported source_kpi_key: {key}")
+
+    def _unique_kpi_code(self, ctx: TenantContext, company_id: UUID, seed: str) -> str:
+        slug = re.sub(r"[^A-Z0-9]+", "-", seed.upper()).strip("-") or "KPI"
+        base = slug[:50]
+        if not self._repo.code_exists(ctx, company_id, base):
+            return base
+        suffix = uuid4().hex[:6].upper()
+        return f"{base[:43]}-{suffix}"[:50]

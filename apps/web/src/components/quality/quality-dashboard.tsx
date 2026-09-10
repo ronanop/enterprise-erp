@@ -2,18 +2,25 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ArrowUpRight,
   ClipboardCheck,
   FileWarning,
   RefreshCw,
   ShieldAlert,
+  Siren,
   TriangleAlert,
 } from "lucide-react";
 
 import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
-import { QualityPipelineFunnel } from "@/components/quality/quality-pipeline-funnel";
+import {
+  QualityPipelineFunnel,
+  QualityPpapPipeline,
+  QualitySpcOocTrend,
+} from "@/components/quality/quality-pipeline-funnel";
+import { inspectionDetailHref, tagInspections, type TaggedInspection } from "@/components/quality/quality-routes";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -44,6 +51,7 @@ function recentDocs(rows: QualityRow[], limit = 6): QualityRow[] {
 }
 
 export function QualityDashboard() {
+  const router = useRouter();
   const [data, setData] = useState<QualityOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const authenticated = typeof window !== "undefined" ? isAuthenticated() : false;
@@ -62,7 +70,11 @@ export function QualityDashboard() {
   }, [load]);
 
   const allInspections = useMemo(
-    () => [...(data?.incoming ?? []), ...(data?.inprocess ?? []), ...(data?.final ?? [])],
+    () => [
+      ...tagInspections(data?.incoming ?? [], "incoming"),
+      ...tagInspections(data?.inprocess ?? [], "inprocess"),
+      ...tagInspections(data?.final ?? [], "final"),
+    ],
     [data],
   );
 
@@ -98,7 +110,10 @@ export function QualityDashboard() {
     [data],
   );
 
-  const recentInspections = useMemo(() => recentDocs(allInspections), [allInspections]);
+  const recentInspections = useMemo(
+    () => recentDocs(allInspections) as TaggedInspection[],
+    [allInspections],
+  );
 
   const ncrWatch = useMemo(() => {
     const rows = data?.ncrs ?? [];
@@ -148,6 +163,13 @@ export function QualityDashboard() {
               Refresh
             </button>
             <Link
+              href="/quality/incoming-inspections/new"
+              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted"
+            >
+              <ClipboardCheck className="size-3.5" />
+              New IQC
+            </Link>
+            <Link
               href="/quality/ncrs"
               className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
             >
@@ -180,37 +202,130 @@ export function QualityDashboard() {
       ) : null}
 
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-        <FinanceKpiCard
-          label="Open inspections"
-          value={loading ? "—" : String(kpis.openInspections)}
-          hint={`${allInspections.length} total · ${kpis.rejectedInspections} rejected/rework`}
-          icon={ClipboardCheck}
-          tone={kpis.openInspections > 0 ? "warning" : "success"}
-        />
-        <FinanceKpiCard
-          label="Open NCRs"
-          value={loading ? "—" : String(kpis.openNcrs)}
-          hint={`${data?.ncrs.length ?? 0} NCRs · ${countByStatus(data?.ncrs ?? [], ["submitted", "approved"])} in review`}
-          icon={FileWarning}
-          tone={kpis.openNcrs > 0 ? "warning" : "success"}
-        />
-        <FinanceKpiCard
-          label="Open CAPAs"
-          value={loading ? "—" : String(kpis.openCapas)}
-          hint={`${data?.capas.length ?? 0} CAPAs · ${countByStatus(data?.capas ?? [], ["in_progress"])} in progress`}
-          icon={ShieldAlert}
-          tone={kpis.openCapas > 0 ? "default" : "success"}
-        />
-        <FinanceKpiCard
-          label="Critical defects"
-          value={loading ? "—" : String(kpis.criticalDefects)}
-          hint={`${kpis.openDefects} open · ${data?.defects.length ?? 0} defect records`}
-          icon={TriangleAlert}
-          tone={kpis.criticalDefects > 0 ? "danger" : "success"}
-        />
+        <Link href="/quality/incoming-inspections" className="block cursor-pointer">
+          <FinanceKpiCard
+            label="Open inspections"
+            value={loading ? "—" : String(kpis.openInspections)}
+            hint={`${allInspections.length} total · ${kpis.rejectedInspections} rejected/rework`}
+            icon={ClipboardCheck}
+            tone={kpis.openInspections > 0 ? "warning" : "success"}
+          />
+        </Link>
+        <Link href="/quality/ncrs" className="block cursor-pointer">
+          <FinanceKpiCard
+            label="Open NCRs"
+            value={loading ? "—" : String(kpis.openNcrs)}
+            hint={`${data?.ncrs.length ?? 0} NCRs · ${countByStatus(data?.ncrs ?? [], ["submitted", "approved"])} in review`}
+            icon={FileWarning}
+            tone={kpis.openNcrs > 0 ? "warning" : "success"}
+          />
+        </Link>
+        <Link href="/quality/capas" className="block cursor-pointer">
+          <FinanceKpiCard
+            label="Open CAPAs"
+            value={loading ? "—" : String(kpis.openCapas)}
+            hint={`${data?.capas.length ?? 0} CAPAs · ${countByStatus(data?.capas ?? [], ["in_progress"])} in progress`}
+            icon={ShieldAlert}
+            tone={kpis.openCapas > 0 ? "default" : "success"}
+          />
+        </Link>
+        <Link href="/quality/defects" className="block cursor-pointer">
+          <FinanceKpiCard
+            label="Critical defects"
+            value={loading ? "—" : String(kpis.criticalDefects)}
+            hint={`${kpis.openDefects} open · ${data?.defects.length ?? 0} defect records`}
+            icon={TriangleAlert}
+            tone={kpis.criticalDefects > 0 ? "danger" : "success"}
+          />
+        </Link>
       </div>
 
       <QualityPipelineFunnel counts={pipelineCounts} loading={loading} />
+
+      <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <QualityPpapPipeline
+          counts={{
+            draft: countByStatus(data?.ppaps ?? [], ["draft"]),
+            submitted: countByStatus(data?.ppaps ?? [], ["submitted"]),
+            approved: countByStatus(data?.ppaps ?? [], ["approved"]),
+          }}
+          openCount={data?.openPpaps}
+          loading={loading}
+        />
+        <QualitySpcOocTrend readings={data?.spcReadings ?? []} loading={loading} />
+      </div>
+
+      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+        <Link href="/quality/scars" className="block cursor-pointer">
+          <FinanceKpiCard
+            label="Open SCARs"
+            value={loading ? "—" : String(data?.openScars ?? 0)}
+            hint={`${data?.scars.length ?? 0} SCARs · ${countByStatus(data?.scars ?? [], ["issued", "responded"])} awaiting response`}
+            icon={FileWarning}
+            tone={(data?.openScars ?? 0) > 0 ? "warning" : "success"}
+          />
+        </Link>
+        <Link
+          href="/quality/recalls"
+          className="block cursor-pointer rounded-xl border-2 border-[#DC2626] bg-[#FEF2F2] p-0.5 shadow-sm transition-[box-shadow,border-color] duration-200 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#DC2626]"
+        >
+          <FinanceKpiCard
+            label="Active recalls"
+            value={loading ? "—" : String(data?.activeRecalls ?? 0)}
+            hint={`${data?.recalls.length ?? 0} campaigns · announced / in progress`}
+            icon={Siren}
+            tone="danger"
+          />
+        </Link>
+        <Link href="/quality/warranty-claims" className="block cursor-pointer">
+          <FinanceKpiCard
+            label="Recent warranty claims"
+            value={loading ? "—" : String(data?.recentWarrantyClaims.length ?? 0)}
+            hint={`${data?.warrantyClaims.length ?? 0} claims total`}
+            icon={ShieldAlert}
+            tone="default"
+          />
+        </Link>
+        <Link href="/quality/pfmeas" className="block cursor-pointer">
+          <FinanceKpiCard
+            label="PFMEA by status"
+            value={loading ? "—" : String(data?.pfmeas.length ?? 0)}
+            hint={`Active ${data?.pfmeaByStatus.active ?? 0} · draft ${data?.pfmeaByStatus.draft ?? 0} · obsolete ${data?.pfmeaByStatus.obsolete ?? 0}`}
+            icon={ClipboardCheck}
+            tone="default"
+          />
+        </Link>
+      </div>
+
+      {(data?.recentWarrantyClaims.length ?? 0) > 0 ? (
+        <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
+          <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
+            <div>
+              <h2 className="text-sm font-medium tracking-tight">Recent warranty claims</h2>
+              <p className="text-[11px] text-muted-foreground">Latest field claims</p>
+            </div>
+            <Link
+              href="/quality/warranty-claims"
+              className="cursor-pointer text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
+            >
+              View all
+            </Link>
+          </div>
+          <ul className="divide-y divide-border/60">
+            {(data?.recentWarrantyClaims ?? []).slice(0, 5).map((row, idx) => (
+              <li key={String(row.id ?? idx)}>
+                <Link
+                  href={`/quality/warranty-claims/${String(row.id)}`}
+                  className="flex cursor-pointer items-center justify-between gap-2 px-4 py-2.5 text-sm transition-colors duration-200 hover:bg-accent/30"
+                >
+                  <span className="font-medium text-primary">{String(row.document_number ?? "—")}</span>
+                  <FinanceStatusBadge status={asStatus(row.status) || String(row.status ?? "")} />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {qualityQuickLinks.map((link) => {
@@ -319,13 +434,21 @@ export function QualityDashboard() {
                     </td>
                   </tr>
                 ) : (
-                  recentInspections.map((row, idx) => (
+                  recentInspections.map((row, idx) => {
+                    const href = inspectionDetailHref(row._inspectionKind, String(row.id));
+                    return (
                     <tr
                       key={String(row.id ?? idx)}
-                      className="border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
+                      className="cursor-pointer border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
+                      onClick={() => router.push(href)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") router.push(href);
+                      }}
+                      tabIndex={0}
+                      role="link"
                     >
                       <td className="max-w-[200px] truncate px-4 py-2.5">
-                        <p className="font-medium text-foreground">
+                        <p className="font-medium text-primary">
                           {String(row.document_number ?? "—")}
                         </p>
                       </td>
@@ -340,7 +463,8 @@ export function QualityDashboard() {
                         />
                       </td>
                     </tr>
-                  ))
+                  );
+                  })
                 )}
               </tbody>
             </table>
@@ -366,13 +490,28 @@ export function QualityDashboard() {
             ) : ncrWatch.length === 0 ? (
               <li className="px-4 py-8 text-center text-sm text-muted-foreground">No NCRs yet.</li>
             ) : (
-              ncrWatch.map((row, idx) => (
+              ncrWatch.map((row, idx) => {
+                const ncrId = row.id != null ? String(row.id) : null;
+                const href = ncrId ? `/quality/ncrs/${ncrId}` : null;
+                return (
                 <li
                   key={String(row.id ?? idx)}
-                  className="px-4 py-2.5 transition-colors duration-150 hover:bg-accent/30"
+                  className={`px-4 py-2.5 transition-colors duration-150 hover:bg-accent/30 ${
+                    href ? "cursor-pointer" : ""
+                  }`}
+                  onClick={href ? () => router.push(href) : undefined}
+                  onKeyDown={
+                    href
+                      ? (e) => {
+                          if (e.key === "Enter") router.push(href);
+                        }
+                      : undefined
+                  }
+                  tabIndex={href ? 0 : undefined}
+                  role={href ? "link" : undefined}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-medium">
+                    <p className="truncate text-sm font-medium text-primary">
                       {String(row.document_number ?? "—")}
                     </p>
                     <FinanceStatusBadge status={String(row.status ?? "draft")} />
@@ -381,15 +520,16 @@ export function QualityDashboard() {
                     Severity {String(row.severity ?? "minor").replaceAll("_", " ")}
                   </p>
                 </li>
-              ))
+              );
+              })
             )}
           </ul>
         </div>
 
-        <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
+        <Link href="/quality/defects" className="block cursor-pointer rounded-xl border border-border/80 bg-card p-4 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-primary/25 hover:shadow-md">
           <div className="mb-3">
             <h2 className="text-sm font-medium tracking-tight">Defect severity mix</h2>
-            <p className="text-[11px] text-muted-foreground">Critical / major / minor</p>
+            <p className="text-[11px] text-muted-foreground">Critical / major / minor — click to view defects</p>
           </div>
           {loading ? (
             <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>
@@ -421,7 +561,7 @@ export function QualityDashboard() {
               </p>
             </div>
           )}
-        </div>
+        </Link>
       </div>
     </div>
   );

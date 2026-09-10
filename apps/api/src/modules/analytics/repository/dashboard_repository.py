@@ -27,6 +27,15 @@ class DashboardRepository(AnalyticsScopedRepository):
         stmt = self.apply_analytics_filter(stmt, BiDashboard, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 
+    def code_exists(self, ctx: TenantContext, company_id: UUID, dashboard_code: str) -> bool:
+        stmt = select(BiDashboard.id).where(
+            BiDashboard.company_id == company_id,
+            BiDashboard.dashboard_code == dashboard_code,
+            BiDashboard.is_deleted.is_(False),
+        )
+        stmt = self.apply_analytics_filter(stmt, BiDashboard, ctx, branch_scoped=False)
+        return self.db.scalar(stmt) is not None
+
     def create(self, ctx: TenantContext, **fields) -> BiDashboard:
         row = BiDashboard(
             id=uuid4(),

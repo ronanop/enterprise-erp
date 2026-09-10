@@ -12,6 +12,7 @@ from sqlalchemy import (
     ForeignKey,
     Numeric,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -60,6 +61,9 @@ class QmQualityCharacteristic(Base, *QmMasterMixin):
     min_value: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     max_value: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     is_mandatory: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    reaction_plan: Mapped[str | None] = mapped_column(Text, nullable=True)
+    control_method: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    sample_frequency: Mapped[str | None] = mapped_column(String(50), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active", index=True)
 
     inspection_plan: Mapped[QmInspectionPlan | None] = relationship(back_populates="characteristics")

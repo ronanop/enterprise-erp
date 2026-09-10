@@ -1,0 +1,26 @@
+export const ANALYTICS_SOURCE_KPI_KEYS = [
+  "org.headcount_by_department",
+  "master.active_customers",
+  "master.active_vendors",
+  "finance.total_revenue",
+  "finance.cash_position",
+  "finance.ar_aging_total",
+  "finance.ap_aging_total",
+  "sales.invoice_count",
+  "sales.order_count",
+  "sales.invoiced_total",
+  "inventory.on_hand_qty",
+  "inventory.available_qty",
+  "inventory.balance_rows",
+  "mfg.production_order_count",
+  "mfg.planned_qty",
+  "mfg.scrap_count",
+  "quality.ncr_count",
+  "quality.ncr_open_count",
+  "quality.incoming_inspection_count",
+  "helpdesk.ticket_count",
+  "helpdesk.open_ticket_count",
+  "helpdesk.incident_count",
+] as const;
+
+export type AnalyticsSourceKpiKey = (typeof ANALYTICS_SOURCE_KPI_KEYS)[number];

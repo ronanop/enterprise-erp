@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class OrmModel(BaseModel):
@@ -57,6 +57,8 @@ class InspectionPlanCreateRequest(BaseModel):
     product_category: str | None = None
     inspection_type: str
     sampling_plan_id: UUID | None = None
+    revision: str | None = None
+    process_name: str | None = None
     notes: str | None = None
 
 
@@ -65,6 +67,8 @@ class InspectionPlanUpdateRequest(BaseModel):
     product_id: UUID | None = None
     product_category: str | None = None
     sampling_plan_id: UUID | None = None
+    revision: str | None = None
+    process_name: str | None = None
     notes: str | None = None
     version: int | None = None
 
@@ -77,6 +81,8 @@ class InspectionPlanResponse(OrmModel):
     inspection_type: str
     product_id: UUID | None
     sampling_plan_id: UUID | None
+    revision: str | None = None
+    process_name: str | None = None
     status: str
     notes: str | None
     version: int
@@ -94,6 +100,9 @@ class CharacteristicCreateRequest(BaseModel):
     min_value: Decimal | None = None
     max_value: Decimal | None = None
     is_mandatory: bool = True
+    reaction_plan: str | None = None
+    control_method: str | None = None
+    sample_frequency: str | None = None
 
 
 class CharacteristicUpdateRequest(BaseModel):
@@ -102,6 +111,9 @@ class CharacteristicUpdateRequest(BaseModel):
     min_value: Decimal | None = None
     max_value: Decimal | None = None
     is_mandatory: bool | None = None
+    reaction_plan: str | None = None
+    control_method: str | None = None
+    sample_frequency: str | None = None
     status: str | None = None
     version: int | None = None
 
@@ -118,6 +130,9 @@ class CharacteristicResponse(OrmModel):
     min_value: Decimal | None
     max_value: Decimal | None
     is_mandatory: bool
+    reaction_plan: str | None = None
+    control_method: str | None = None
+    sample_frequency: str | None = None
     status: str
     company_id: UUID
     version: int
@@ -162,6 +177,16 @@ class IncomingLineCreate(BaseModel):
     defect_type_id: UUID | None = None
     notes: str | None = None
 
+    @field_validator("pass_fail", mode="before")
+    @classmethod
+    def normalize_pass_fail(cls, value: object) -> str | None:
+        if value is None or (isinstance(value, str) and value.strip() == ""):
+            return None
+        normalized = str(value).strip().lower()
+        if normalized not in {"pass", "fail", "na"}:
+            raise ValueError("pass_fail must be pass, fail, or na")
+        return normalized
+
 
 class IncomingInspectionCreateRequest(BaseModel):
     company_id: UUID
@@ -179,6 +204,29 @@ class IncomingInspectionCreateRequest(BaseModel):
     period_id: UUID | None = None
     lines: list[IncomingLineCreate] = Field(default_factory=list)
 
+    @field_validator("document_date", mode="before")
+    @classmethod
+    def default_document_date(cls, value: object) -> date | None:
+        if value is None or (isinstance(value, str) and value.strip() == ""):
+            return date.today()
+        return value  # type: ignore[return-value]
+
+    @field_validator("inspected_qty", "accepted_qty", "rejected_qty", mode="before")
+    @classmethod
+    def coerce_non_negative_qty(cls, value: object) -> Decimal:
+        if value is None:
+            return Decimal("0")
+        qty = Decimal(str(value))
+        if qty < 0:
+            raise ValueError("Quantity cannot be negative")
+        return qty
+
+    @model_validator(mode="after")
+    def validate_disposition(self) -> "IncomingInspectionCreateRequest":
+        if self.accepted_qty + self.rejected_qty > self.inspected_qty:
+            raise ValueError("Accepted plus rejected quantity cannot exceed inspected quantity")
+        return self
+
 
 class IncomingInspectionUpdateRequest(BaseModel):
     inspected_qty: Decimal | None = None
@@ -186,6 +234,16 @@ class IncomingInspectionUpdateRequest(BaseModel):
     rejected_qty: Decimal | None = None
     inspector_employee_id: UUID | None = None
     version: int | None = None
+
+    @field_validator("inspected_qty", "accepted_qty", "rejected_qty", mode="before")
+    @classmethod
+    def coerce_non_negative_qty(cls, value: object) -> Decimal | None:
+        if value is None:
+            return None
+        qty = Decimal(str(value))
+        if qty < 0:
+            raise ValueError("Quantity cannot be negative")
+        return qty
 
 
 class IncomingLineResponse(OrmModel):
@@ -207,6 +265,8 @@ class IncomingInspectionResponse(OrmModel):
     warehouse_id: UUID
     product_id: UUID
     uom_id: UUID
+    vendor_id: UUID | None = None
+    inspection_plan_id: UUID | None = None
     inspected_qty: Decimal
     accepted_qty: Decimal
     rejected_qty: Decimal
@@ -221,6 +281,10 @@ class IncomingApproveRequest(BaseModel):
     inventory_account_id: UUID | None = None
     amount: Decimal | None = None
     fiscal_year_id: UUID | None = None
+
+
+class IncomingLinesAddRequest(BaseModel):
+    lines: list[IncomingLineCreate] = Field(min_length=1)
 
 
 class InprocessInspectionCreateRequest(BaseModel):
@@ -245,10 +309,14 @@ class InprocessInspectionUpdateRequest(BaseModel):
 class InprocessInspectionResponse(OrmModel):
     id: UUID
     company_id: UUID
+    branch_id: UUID | None = None
     document_number: str
     document_date: date
     production_order_id: UUID
     product_id: UUID
+    production_operation_id: UUID | None = None
+    operation_seq: int | None = None
+    inspector_employee_id: UUID | None = None
     result: str
     status: str
     version: int
@@ -311,6 +379,33 @@ class DefectCreateRequest(BaseModel):
     inprocess_inspection_id: UUID | None = None
     final_inspection_id: UUID | None = None
 
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def coerce_non_negative_qty(cls, value: object) -> Decimal:
+        if value is None:
+            return Decimal("0")
+        qty = Decimal(str(value))
+        if qty < 0:
+            raise ValueError("Quantity cannot be negative")
+        return qty
+
+    @field_validator("severity")
+    @classmethod
+    def validate_severity(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"minor", "major", "critical"}:
+            raise ValueError("severity must be minor, major, or critical")
+        return normalized
+
+    @field_validator("source_inspection_type")
+    @classmethod
+    def validate_source(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        allowed = {"incoming", "in_process", "final", "audit", "complaint", "other"}
+        if normalized not in allowed:
+            raise ValueError(f"source_inspection_type must be one of: {', '.join(sorted(allowed))}")
+        return normalized
+
 
 class DefectUpdateRequest(BaseModel):
     severity: str | None = None
@@ -326,6 +421,12 @@ class DefectResponse(OrmModel):
     defect_type_id: UUID
     severity: str
     quantity: Decimal
+    description: str | None = None
+    source_inspection_type: str
+    incoming_inspection_id: UUID | None = None
+    inprocess_inspection_id: UUID | None = None
+    final_inspection_id: UUID | None = None
+    product_id: UUID | None = None
     status: str
     ncr_id: UUID | None
     version: int
@@ -359,12 +460,20 @@ class NcrUpdateRequest(BaseModel):
 class NcrResponse(OrmModel):
     id: UUID
     company_id: UUID
+    branch_id: UUID | None = None
     document_number: str
     document_date: date
     source: str
     severity: str
     status: str
     description: str | None
+    product_id: UUID | None = None
+    vendor_id: UUID | None = None
+    customer_id: UUID | None = None
+    incoming_inspection_id: UUID | None = None
+    inprocess_inspection_id: UUID | None = None
+    final_inspection_id: UUID | None = None
+    workflow_status: str | None = None
     version: int
 
 
@@ -410,9 +519,27 @@ class CapaChildResponse(OrmModel):
     status: str
 
 
+class RootCauseResponse(OrmModel):
+    id: UUID
+    sequence_no: int
+    method: str
+    cause_text: str
+    status: str
+
+
+class CapaActionResponse(OrmModel):
+    id: UUID
+    sequence_no: int
+    action_text: str
+    owner_employee_id: UUID | None
+    due_date: date | None
+    status: str
+
+
 class CapaResponse(OrmModel):
     id: UUID
     company_id: UUID
+    branch_id: UUID | None = None
     document_number: str
     document_date: date
     ncr_id: UUID
@@ -420,6 +547,12 @@ class CapaResponse(OrmModel):
     status: str
     due_date: date | None
     verified_at: datetime | None
+    notes: str | None = None
+    owner_employee_id: UUID | None = None
+    workflow_status: str | None = None
+    root_causes: list[RootCauseResponse] = Field(default_factory=list)
+    corrective_actions: list[CapaActionResponse] = Field(default_factory=list)
+    preventive_actions: list[CapaActionResponse] = Field(default_factory=list)
     version: int
 
 
@@ -486,6 +619,7 @@ class CustomerComplaintResponse(OrmModel):
     customer_id: UUID
     complaint_type: str
     quantity: Decimal
+    description: str | None = None
     status: str
     ncr_id: UUID | None
     version: int
@@ -572,3 +706,535 @@ class ReportSummaryResponse(BaseModel):
     name: str
     row_count: int
     rows: list[dict]
+
+
+class PfmeaLineCreate(BaseModel):
+    sequence_no: int | None = None
+    process_step: str | None = None
+    failure_mode: str | None = None
+    failure_effect: str | None = None
+    failure_cause: str | None = None
+    severity: int
+    occurrence: int
+    detection: int
+    characteristic_id: UUID | None = None
+    recommended_action: str | None = None
+    status: str = "open"
+
+
+class PfmeaCreateRequest(BaseModel):
+    company_id: UUID
+    branch_id: UUID | None = None
+    pfmea_name: str
+    inspection_plan_id: UUID
+    product_id: UUID | None = None
+    process_name: str | None = None
+    revision: str | None = None
+    notes: str | None = None
+    lines: list[PfmeaLineCreate] = Field(default_factory=list)
+
+
+class PfmeaUpdateRequest(BaseModel):
+    pfmea_name: str | None = None
+    process_name: str | None = None
+    revision: str | None = None
+    notes: str | None = None
+    status: str | None = None
+    lines: list[PfmeaLineCreate] | None = None
+    version: int | None = None
+
+
+class PfmeaLineResponse(OrmModel):
+    id: UUID
+    sequence_no: int
+    process_step: str | None
+    failure_mode: str | None
+    failure_effect: str | None
+    failure_cause: str | None
+    severity: int
+    occurrence: int
+    detection: int
+    rpn: int
+    characteristic_id: UUID | None
+    recommended_action: str | None
+    status: str
+
+
+class PfmeaResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    pfmea_code: str
+    pfmea_name: str
+    inspection_plan_id: UUID
+    product_id: UUID | None
+    process_name: str | None
+    revision: str | None
+    status: str
+    notes: str | None
+    lines: list[PfmeaLineResponse] = Field(default_factory=list)
+    version: int
+
+
+class PpapCreateRequest(BaseModel):
+    company_id: UUID
+    branch_id: UUID
+    vendor_id: UUID
+    product_id: UUID
+    submission_level: str
+    inspection_plan_id: UUID
+    pfmea_id: UUID | None = None
+    document_date: date | None = None
+    notes: str | None = None
+
+    @field_validator("submission_level")
+    @classmethod
+    def validate_level(cls, value: str) -> str:
+        normalized = str(value).strip()
+        if normalized not in {"1", "2", "3", "4", "5"}:
+            raise ValueError("submission_level must be 1, 2, 3, 4, or 5")
+        return normalized
+
+
+class PpapUpdateRequest(BaseModel):
+    notes: str | None = None
+    pfmea_id: UUID | None = None
+    submission_level: str | None = None
+    version: int | None = None
+
+
+class PpapResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    document_number: str
+    document_date: date
+    vendor_id: UUID
+    product_id: UUID
+    submission_level: str
+    status: str
+    inspection_plan_id: UUID
+    pfmea_id: UUID | None
+    workflow_status: str | None
+    notes: str | None
+    version: int
+
+
+class SpcReadingCreateRequest(BaseModel):
+    company_id: UUID
+    branch_id: UUID
+    characteristic_id: UUID
+    measured_value: Decimal
+    product_id: UUID | None = None
+    inspection_plan_id: UUID | None = None
+    recorded_at: datetime | None = None
+    source_inspection_type: str | None = None
+    incoming_inspection_id: UUID | None = None
+    inprocess_inspection_id: UUID | None = None
+    final_inspection_id: UUID | None = None
+
+    @field_validator("source_inspection_type")
+    @classmethod
+    def validate_source(cls, value: str | None) -> str | None:
+        if value is None or str(value).strip() == "":
+            return None
+        normalized = str(value).strip().lower()
+        allowed = {"incoming", "in_process", "final", "audit", "complaint", "other"}
+        if normalized not in allowed:
+            raise ValueError(f"source_inspection_type must be one of: {', '.join(sorted(allowed))}")
+        return normalized
+
+
+class SpcCapabilityResponse(BaseModel):
+    characteristic_id: UUID
+    sample_count: int
+    mean: Decimal | None = None
+    stdev: Decimal | None = None
+    lsl: Decimal | None = None
+    usl: Decimal | None = None
+    target: Decimal | None = None
+    cp: Decimal | None = None
+    cpk: Decimal | None = None
+
+
+class SpcReadingResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    document_number: str
+    characteristic_id: UUID
+    product_id: UUID | None = None
+    inspection_plan_id: UUID | None = None
+    measured_value: Decimal
+    recorded_at: datetime
+    source_inspection_type: str | None = None
+    incoming_inspection_id: UUID | None = None
+    inprocess_inspection_id: UUID | None = None
+    final_inspection_id: UUID | None = None
+    is_out_of_control: bool
+    ncr_id: UUID | None = None
+    version: int
+    capability: SpcCapabilityResponse | None = None
+
+
+class ScarCreateRequest(BaseModel):
+    company_id: UUID
+    branch_id: UUID
+    vendor_id: UUID
+    product_id: UUID | None = None
+    ncr_id: UUID | None = None
+    capa_id: UUID | None = None
+    severity: str = "minor"
+    description: str | None = None
+    due_date: date | None = None
+    document_date: date | None = None
+
+    @field_validator("severity")
+    @classmethod
+    def validate_severity(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"minor", "major", "critical"}:
+            raise ValueError("severity must be minor, major, or critical")
+        return normalized
+
+
+class ScarUpdateRequest(BaseModel):
+    description: str | None = None
+    severity: str | None = None
+    due_date: date | None = None
+    product_id: UUID | None = None
+    ncr_id: UUID | None = None
+    capa_id: UUID | None = None
+    version: int | None = None
+
+
+class ScarRecordResponseRequest(BaseModel):
+    supplier_response: str
+
+    @field_validator("supplier_response")
+    @classmethod
+    def validate_response(cls, value: str) -> str:
+        text = value.strip()
+        if not text:
+            raise ValueError("supplier_response is required")
+        return text
+
+
+class ScarResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    document_number: str
+    document_date: date
+    vendor_id: UUID
+    product_id: UUID | None
+    ncr_id: UUID | None
+    capa_id: UUID | None
+    severity: str
+    description: str | None
+    supplier_response: str | None
+    due_date: date | None
+    status: str
+    workflow_status: str | None
+    version: int
+
+
+class VinTraceComponentCreate(BaseModel):
+    line_number: int | None = None
+    product_id: UUID
+    batch_id: UUID | None = None
+    quantity: Decimal = Decimal("0")
+    source_module: str | None = None
+    source_document_type: str | None = None
+    source_document_id: UUID | None = None
+
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def coerce_qty(cls, value: object) -> Decimal:
+        if value is None:
+            return Decimal("0")
+        qty = Decimal(str(value))
+        if qty < 0:
+            raise ValueError("Quantity cannot be negative")
+        return qty
+
+
+class VinTraceCreateRequest(BaseModel):
+    company_id: UUID
+    branch_id: UUID
+    vin: str
+    product_id: UUID
+    final_inspection_id: UUID | None = None
+    production_order_id: UUID | None = None
+    status: str | None = None
+    document_date: date | None = None
+    components: list[VinTraceComponentCreate] = Field(default_factory=list)
+
+    @field_validator("vin")
+    @classmethod
+    def validate_vin(cls, value: str) -> str:
+        vin = value.strip().upper()
+        if len(vin) != 17:
+            raise ValueError("VIN must be 17 characters")
+        if any(ch in vin for ch in "IOQ"):
+            raise ValueError("VIN cannot contain I, O, or Q")
+        if not vin.isalnum():
+            raise ValueError("VIN must be alphanumeric")
+        return vin
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str | None) -> str | None:
+        if value is None or str(value).strip() == "":
+            return None
+        normalized = str(value).strip().lower()
+        if normalized not in {"built", "inspected", "shipped"}:
+            raise ValueError("status must be built, inspected, or shipped")
+        return normalized
+
+
+class VinTraceUpdateRequest(BaseModel):
+    final_inspection_id: UUID | None = None
+    production_order_id: UUID | None = None
+    status: str | None = None
+    components: list[VinTraceComponentCreate] | None = None
+    version: int | None = None
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str | None) -> str | None:
+        if value is None or str(value).strip() == "":
+            return None
+        normalized = str(value).strip().lower()
+        if normalized not in {"built", "inspected", "shipped"}:
+            raise ValueError("status must be built, inspected, or shipped")
+        return normalized
+
+
+class VinTraceComponentResponse(OrmModel):
+    id: UUID
+    line_number: int
+    product_id: UUID
+    batch_id: UUID | None
+    quantity: Decimal
+    source_module: str | None
+    source_document_type: str | None
+    source_document_id: UUID | None
+
+
+class VinTraceResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    document_number: str
+    document_date: date
+    vin: str
+    product_id: UUID
+    final_inspection_id: UUID | None
+    production_order_id: UUID | None
+    status: str
+    version: int
+    components: list[VinTraceComponentResponse] = Field(default_factory=list)
+
+
+_WARRANTY_TYPES = {"field_failure", "part_replacement", "goodwill", "campaign", "other"}
+_WARRANTY_STATUSES = {
+    "draft",
+    "investigating",
+    "accepted",
+    "rejected",
+    "capa_linked",
+    "closed",
+    "cancelled",
+}
+
+
+class WarrantyClaimCreateRequest(BaseModel):
+    company_id: UUID
+    branch_id: UUID
+    vin_trace_id: UUID
+    vin: str | None = None
+    customer_id: UUID | None = None
+    product_id: UUID | None = None
+    component_product_id: UUID | None = None
+    quantity: Decimal = Decimal("1")
+    description: str | None = None
+    claim_type: str = "field_failure"
+    capa_id: UUID | None = None
+    ncr_id: UUID | None = None
+    customer_complaint_id: UUID | None = None
+    document_date: date | None = None
+
+    @field_validator("vin")
+    @classmethod
+    def validate_vin(cls, value: str | None) -> str | None:
+        if value is None or str(value).strip() == "":
+            return None
+        vin = str(value).strip().upper()
+        if len(vin) != 17:
+            raise ValueError("VIN must be 17 characters")
+        return vin
+
+    @field_validator("claim_type")
+    @classmethod
+    def validate_claim_type(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in _WARRANTY_TYPES:
+            raise ValueError("invalid claim_type")
+        return normalized
+
+    @field_validator("quantity", mode="before")
+    @classmethod
+    def coerce_qty(cls, value: object) -> Decimal:
+        if value is None:
+            return Decimal("1")
+        qty = Decimal(str(value))
+        if qty < 0:
+            raise ValueError("Quantity cannot be negative")
+        return qty
+
+
+class WarrantyClaimUpdateRequest(BaseModel):
+    vin: str | None = None
+    customer_id: UUID | None = None
+    product_id: UUID | None = None
+    component_product_id: UUID | None = None
+    quantity: Decimal | None = None
+    description: str | None = None
+    claim_type: str | None = None
+    capa_id: UUID | None = None
+    ncr_id: UUID | None = None
+    customer_complaint_id: UUID | None = None
+    status: str | None = None
+    version: int | None = None
+
+    @field_validator("claim_type")
+    @classmethod
+    def validate_claim_type(cls, value: str | None) -> str | None:
+        if value is None or str(value).strip() == "":
+            return None
+        normalized = str(value).strip().lower()
+        if normalized not in _WARRANTY_TYPES:
+            raise ValueError("invalid claim_type")
+        return normalized
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str | None) -> str | None:
+        if value is None or str(value).strip() == "":
+            return None
+        normalized = str(value).strip().lower()
+        if normalized not in _WARRANTY_STATUSES:
+            raise ValueError("invalid status")
+        return normalized
+
+
+class WarrantyLinkCapaRequest(BaseModel):
+    capa_id: UUID
+
+
+class WarrantyClaimResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    document_number: str
+    document_date: date
+    vin_trace_id: UUID
+    vin: str | None
+    customer_id: UUID | None
+    product_id: UUID
+    component_product_id: UUID | None
+    quantity: Decimal
+    description: str | None
+    claim_type: str
+    capa_id: UUID | None
+    ncr_id: UUID | None
+    customer_complaint_id: UUID | None
+    status: str
+    version: int
+
+
+def _normalize_vin(value: str | None) -> str | None:
+    if value is None or str(value).strip() == "":
+        return None
+    vin = str(value).strip().upper()
+    if len(vin) != 17:
+        raise ValueError("VIN must be 17 characters")
+    if any(ch in vin for ch in "IOQ"):
+        raise ValueError("VIN cannot contain I, O, or Q")
+    if not vin.isalnum():
+        raise ValueError("VIN must be alphanumeric")
+    return vin
+
+
+_RECALL_STATUSES = {"draft", "announced", "in_progress", "closed", "cancelled"}
+
+
+class RecallCreateRequest(BaseModel):
+    company_id: UUID
+    branch_id: UUID
+    product_id: UUID
+    trigger_reason: str | None = None
+    vin_from: str | None = None
+    vin_to: str | None = None
+    capa_id: UUID | None = None
+    ncr_id: UUID | None = None
+    warranty_claim_id: UUID | None = None
+    document_date: date | None = None
+
+    @field_validator("vin_from", "vin_to")
+    @classmethod
+    def validate_vin(cls, value: str | None) -> str | None:
+        return _normalize_vin(value)
+
+    @model_validator(mode="after")
+    def validate_range(self):
+        if (self.vin_from and not self.vin_to) or (self.vin_to and not self.vin_from):
+            raise ValueError("vin_from and vin_to must be provided together")
+        if self.vin_from and self.vin_to and self.vin_from > self.vin_to:
+            raise ValueError("vin_from cannot be after vin_to")
+        return self
+
+
+class RecallUpdateRequest(BaseModel):
+    product_id: UUID | None = None
+    trigger_reason: str | None = None
+    vin_from: str | None = None
+    vin_to: str | None = None
+    capa_id: UUID | None = None
+    ncr_id: UUID | None = None
+    warranty_claim_id: UUID | None = None
+    status: str | None = None
+    version: int | None = None
+
+    @field_validator("vin_from", "vin_to")
+    @classmethod
+    def validate_vin(cls, value: str | None) -> str | None:
+        return _normalize_vin(value)
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str | None) -> str | None:
+        if value is None or str(value).strip() == "":
+            return None
+        normalized = str(value).strip().lower()
+        if normalized not in _RECALL_STATUSES:
+            raise ValueError("invalid status")
+        return normalized
+
+
+class RecallResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    document_number: str
+    document_date: date
+    product_id: UUID
+    trigger_reason: str | None
+    vin_from: str | None
+    vin_to: str | None
+    status: str
+    capa_id: UUID | None
+    ncr_id: UUID | None
+    warranty_claim_id: UUID | None
+    version: int
+

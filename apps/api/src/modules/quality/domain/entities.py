@@ -26,6 +26,22 @@ class DispositionQty:
             and (self.accepted_qty + self.rejected_qty) <= self.inspected_qty
         )
 
+    def error_message(self) -> str:
+        if self.inspected_qty < 0 or self.accepted_qty < 0 or self.rejected_qty < 0:
+            return "Inspected, accepted, and rejected quantities must be zero or greater."
+        if (self.accepted_qty + self.rejected_qty) > self.inspected_qty:
+            return "Accepted plus rejected quantity cannot exceed inspected quantity."
+        return "Invalid disposition quantities."
+
+
+def normalize_pass_fail(value: str | None) -> str | None:
+    if value is None or str(value).strip() == "":
+        return None
+    normalized = str(value).strip().lower()
+    if normalized not in {"pass", "fail", "na"}:
+        raise ValueError("pass_fail must be pass, fail, or na")
+    return normalized
+
 
 @dataclass
 class QualityKpiSnapshot:

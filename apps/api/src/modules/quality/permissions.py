@@ -54,7 +54,90 @@ QM_PERMISSIONS: list[tuple[str, str, str, str]] = [
     ("quality.score:publish", "quality.score", "publish", "quality"),
     ("quality.report:read", "quality.report", "read", "quality"),
     ("quality.report:export", "quality.report", "export", "quality"),
+    ("quality.pfmea:read", "quality.pfmea", "read", "quality"),
+    ("quality.pfmea:create", "quality.pfmea", "create", "quality"),
+    ("quality.pfmea:update", "quality.pfmea", "update", "quality"),
+    ("quality.ppap:read", "quality.ppap", "read", "quality"),
+    ("quality.ppap:create", "quality.ppap", "create", "quality"),
+    ("quality.ppap:update", "quality.ppap", "update", "quality"),
+    ("quality.ppap:submit", "quality.ppap", "submit", "quality"),
+    ("quality.ppap:approve", "quality.ppap", "approve", "quality"),
+    ("quality.spc_reading:read", "quality.spc_reading", "read", "quality"),
+    ("quality.spc_reading:create", "quality.spc_reading", "create", "quality"),
+    ("quality.scar:read", "quality.scar", "read", "quality"),
+    ("quality.scar:create", "quality.scar", "create", "quality"),
+    ("quality.scar:update", "quality.scar", "update", "quality"),
+    ("quality.scar:issue", "quality.scar", "issue", "quality"),
+    ("quality.scar:verify", "quality.scar", "verify", "quality"),
+    ("quality.scar:close", "quality.scar", "close", "quality"),
+    ("quality.vin_trace:read", "quality.vin_trace", "read", "quality"),
+    ("quality.vin_trace:create", "quality.vin_trace", "create", "quality"),
+    ("quality.vin_trace:update", "quality.vin_trace", "update", "quality"),
+    ("quality.warranty_claim:read", "quality.warranty_claim", "read", "quality"),
+    ("quality.warranty_claim:create", "quality.warranty_claim", "create", "quality"),
+    ("quality.warranty_claim:update", "quality.warranty_claim", "update", "quality"),
+    ("quality.warranty_claim:close", "quality.warranty_claim", "close", "quality"),
+    ("quality.recall:read", "quality.recall", "read", "quality"),
+    ("quality.recall:create", "quality.recall", "create", "quality"),
+    ("quality.recall:update", "quality.recall", "update", "quality"),
+    ("quality.recall:close", "quality.recall", "close", "quality"),
 ]
+
+QM_AUTO_PERMISSIONS = [
+    "quality.pfmea:read",
+    "quality.pfmea:create",
+    "quality.pfmea:update",
+    "quality.ppap:read",
+    "quality.ppap:create",
+    "quality.ppap:update",
+    "quality.ppap:submit",
+    "quality.ppap:approve",
+]
+
+QM_SPC_PERMISSIONS = [
+    "quality.spc_reading:read",
+    "quality.spc_reading:create",
+]
+
+QM_SCAR_PERMISSIONS = [
+    "quality.scar:read",
+    "quality.scar:create",
+    "quality.scar:update",
+    "quality.scar:issue",
+    "quality.scar:verify",
+    "quality.scar:close",
+]
+
+QM_VIN_PERMISSIONS = [
+    "quality.vin_trace:read",
+    "quality.vin_trace:create",
+    "quality.vin_trace:update",
+]
+
+QM_WARRANTY_PERMISSIONS = [
+    "quality.warranty_claim:read",
+    "quality.warranty_claim:create",
+    "quality.warranty_claim:update",
+    "quality.warranty_claim:close",
+]
+
+QM_RECALL_PERMISSIONS = [
+    "quality.recall:read",
+    "quality.recall:create",
+    "quality.recall:update",
+    "quality.recall:close",
+]
+
+QM_PHASE16_PERMISSIONS = sorted(
+    set(
+        QM_AUTO_PERMISSIONS
+        + QM_SPC_PERMISSIONS
+        + QM_SCAR_PERMISSIONS
+        + QM_VIN_PERMISSIONS
+        + QM_WARRANTY_PERMISSIONS
+        + QM_RECALL_PERMISSIONS
+    )
+)
 
 QUALITY_INSPECTOR_PERMISSIONS = [
     "quality.inspection_plan:read",
@@ -81,6 +164,22 @@ QUALITY_INSPECTOR_PERMISSIONS = [
     "quality.audit:read",
     "quality.score:read",
     "quality.report:read",
+    "quality.pfmea:read",
+    "quality.ppap:read",
+    "quality.spc_reading:read",
+    "quality.spc_reading:create",
+    "quality.scar:read",
+    "quality.scar:create",
+    "quality.scar:update",
+    "quality.vin_trace:read",
+    "quality.vin_trace:create",
+    "quality.vin_trace:update",
+    "quality.warranty_claim:read",
+    "quality.warranty_claim:create",
+    "quality.warranty_claim:update",
+    "quality.recall:read",
+    "quality.recall:create",
+    "quality.recall:update",
 ]
 
 QUALITY_ENGINEER_PERMISSIONS = QUALITY_INSPECTOR_PERMISSIONS + [
@@ -99,6 +198,12 @@ QUALITY_ENGINEER_PERMISSIONS = QUALITY_INSPECTOR_PERMISSIONS + [
     "quality.capa:verify",
     "quality.supplier_quality:read",
     "quality.customer_complaint:update",
+    "quality.pfmea:create",
+    "quality.pfmea:update",
+    "quality.ppap:create",
+    "quality.ppap:update",
+    "quality.ppap:submit",
+    "quality.scar:issue",
 ]
 
 QUALITY_AUDITOR_PERMISSIONS = [
@@ -121,6 +226,13 @@ QUALITY_AUDITOR_PERMISSIONS = [
     "quality.score:read",
     "quality.report:read",
     "quality.report:export",
+    "quality.pfmea:read",
+    "quality.ppap:read",
+    "quality.spc_reading:read",
+    "quality.scar:read",
+    "quality.vin_trace:read",
+    "quality.warranty_claim:read",
+    "quality.recall:read",
 ]
 
 QUALITY_MANAGER_PERMISSIONS = sorted(
@@ -139,6 +251,11 @@ QUALITY_MANAGER_PERMISSIONS = sorted(
             "quality.customer_complaint:close",
             "quality.score:publish",
             "quality.report:export",
+            "quality.ppap:approve",
+            "quality.scar:verify",
+            "quality.scar:close",
+            "quality.warranty_claim:close",
+            "quality.recall:close",
         ]
     )
 )

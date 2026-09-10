@@ -14,10 +14,21 @@ class OrmModel(BaseModel):
 class DashboardCreate(BaseModel):
     company_id: UUID | None = None
     status: str | None = None
+    dashboard_code: str | None = None
+    dashboard_name: str
+    dashboard_type: str | None = None
+    audience_role: str | None = None
+    owner_employee_id: UUID | None = None
+    department_id: UUID | None = None
+    is_default: bool | None = None
 
 class DashboardUpdate(BaseModel):
     status: str | None = None
     version: int | None = None
+    dashboard_name: str | None = None
+    dashboard_type: str | None = None
+    audience_role: str | None = None
+    is_default: bool | None = None
 
 class DashboardResponse(OrmModel):
     id: UUID
@@ -41,10 +52,25 @@ class DashboardResponse(OrmModel):
 class DashboardWidgetCreate(BaseModel):
     company_id: UUID | None = None
     status: str | None = None
+    dashboard_id: UUID
+    widget_code: str | None = None
+    widget_title: str
+    widget_type: str | None = None
+    kpi_id: UUID | None = None
+    metric_id: UUID | None = None
+    report_id: UUID | None = None
+    dataset_id: UUID | None = None
+    sequence_no: int | None = None
+    config_json: dict | None = None
 
 class DashboardWidgetUpdate(BaseModel):
     status: str | None = None
     version: int | None = None
+    widget_title: str | None = None
+    widget_type: str | None = None
+    kpi_id: UUID | None = None
+    sequence_no: int | None = None
+    config_json: dict | None = None
 
 class DashboardWidgetResponse(OrmModel):
     id: UUID
@@ -213,12 +239,28 @@ class MetricResponse(OrmModel):
 class KpiCreate(BaseModel):
     company_id: UUID | None = None
     status: str | None = None
+    kpi_code: str | None = None
+    kpi_name: str
     source_kpi_key: str | None = None
+    owner_employee_id: UUID | None = None
+    department_id: UUID | None = None
+    target_value: Decimal | None = None
+    warning_threshold: Decimal | None = None
+    critical_threshold: Decimal | None = None
+    direction: str | None = None
+    period_grain: str | None = None
+    metric_id: UUID | None = None
 
 class KpiUpdate(BaseModel):
     status: str | None = None
     version: int | None = None
+    kpi_name: str | None = None
     source_kpi_key: str | None = None
+    target_value: Decimal | None = None
+    warning_threshold: Decimal | None = None
+    critical_threshold: Decimal | None = None
+    direction: str | None = None
+    period_grain: str | None = None
 
 class KpiBreakdownItem(BaseModel):
     dimension_label: str

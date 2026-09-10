@@ -1,13 +1,33 @@
 """Analytics module dependencies."""
 
+from collections.abc import Generator
 from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Query
+from sqlalchemy.orm import Session
 
-from database.session import get_db
+from database.session import SessionLocal
 from modules.foundation.dependencies import get_tenant_context, require_permission
 from modules.foundation.domain.value_objects import TenantContext
+
+
+def get_db() -> Generator[Session]:
+    """Commit writes after a successful request; roll back on error.
+
+    Analytics routers flush in services but do not call ``db.commit()``.
+    Closing the session without commit rolls those changes back, so Submit
+    appeared to work then reloaded as Draft.
+    """
+    db = SessionLocal()
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 __all__ = [
     "PaginationParams",

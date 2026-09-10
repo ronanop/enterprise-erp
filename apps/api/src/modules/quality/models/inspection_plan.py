@@ -55,6 +55,8 @@ class QmInspectionPlan(Base, *QmMasterMixin):
         index=True,
     )
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
+    revision: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    process_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     characteristics: Mapped[list[QmQualityCharacteristic]] = relationship(

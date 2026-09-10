@@ -5,7 +5,7 @@ from logging.config import fileConfig
 from pathlib import Path
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
@@ -69,6 +69,15 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        # Revision ids such as 0498_seed_qm_ppap_pfmea_permissions exceed
+        # Alembic's default version_num VARCHAR(32).
+        connection.execute(
+            text(
+                "ALTER TABLE IF EXISTS alembic_version "
+                "ALTER COLUMN version_num TYPE VARCHAR(128)"
+            )
+        )
+        connection.commit()
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

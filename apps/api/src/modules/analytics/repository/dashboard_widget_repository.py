@@ -27,6 +27,14 @@ class DashboardWidgetRepository(AnalyticsScopedRepository):
         stmt = self.apply_analytics_filter(stmt, BiDashboardWidget, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 
+    def list_by_dashboard(self, ctx: TenantContext, dashboard_id: UUID):
+        stmt = select(BiDashboardWidget).where(
+            BiDashboardWidget.dashboard_id == dashboard_id,
+            BiDashboardWidget.is_deleted.is_(False),
+        )
+        stmt = self.apply_analytics_filter(stmt, BiDashboardWidget, ctx, branch_scoped=False)
+        return list(self.db.scalars(stmt).all())
+
     def create(self, ctx: TenantContext, **fields) -> BiDashboardWidget:
         row = BiDashboardWidget(
             id=uuid4(),

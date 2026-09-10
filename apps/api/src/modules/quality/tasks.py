@@ -147,3 +147,78 @@ def retry_inventory_disposition() -> dict:
         return {"status": "ok", "pending_dispositions": len(rows)}
     finally:
         db.close()
+
+
+@celery_app.task(name="quality.spc_out_of_control_alert")
+def spc_out_of_control_alert() -> dict:
+    from sqlalchemy import select
+
+    from database.session import SessionLocal
+    from modules.quality.models import QmSpcReading
+
+    db = SessionLocal()
+    try:
+        rows = list(
+            db.scalars(
+                select(QmSpcReading).where(
+                    QmSpcReading.is_deleted.is_(False),
+                    QmSpcReading.is_out_of_control.is_(True),
+                    QmSpcReading.ncr_id.is_(None),
+                )
+            ).all()
+        )
+        return {"status": "ok", "out_of_control_without_ncr": len(rows)}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="quality.ppap_pending_approval_alerts")
+def ppap_pending_approval_alerts() -> dict:
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import select
+
+    from database.session import SessionLocal
+    from modules.quality.models import QmPpap
+
+    db = SessionLocal()
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=3)
+        rows = list(
+            db.scalars(
+                select(QmPpap).where(
+                    QmPpap.is_deleted.is_(False),
+                    QmPpap.status == "submitted",
+                    QmPpap.updated_at <= cutoff,
+                )
+            ).all()
+        )
+        return {"status": "ok", "pending_ppap_approvals": len(rows)}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="quality.scar_overdue_alerts")
+def scar_overdue_alerts() -> dict:
+    from datetime import date
+
+    from sqlalchemy import select
+
+    from database.session import SessionLocal
+    from modules.quality.models import QmScar
+
+    db = SessionLocal()
+    try:
+        rows = list(
+            db.scalars(
+                select(QmScar).where(
+                    QmScar.is_deleted.is_(False),
+                    QmScar.status.in_(["issued", "responded"]),
+                    QmScar.due_date.is_not(None),
+                    QmScar.due_date < date.today(),
+                )
+            ).all()
+        )
+        return {"status": "ok", "overdue_scars": len(rows)}
+    finally:
+        db.close()

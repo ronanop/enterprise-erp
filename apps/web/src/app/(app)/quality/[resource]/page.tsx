@@ -13,6 +13,29 @@ export default async function QualityResourcePage({ params }: PageProps) {
   const resource = getResource("quality", resourceKey);
   if (!mod || !resource) notFound();
 
+  const createRoutes: Record<string, string> = {
+    plans: "/quality/plans/new",
+    "sampling-plans": "/quality/sampling-plans/new",
+    characteristics: "/quality/characteristics/new",
+    "defect-types": "/quality/defect-types/new",
+    pfmeas: "/quality/pfmeas/new",
+    scores: "/quality/scores/new",
+    "incoming-inspections": "/quality/incoming-inspections/new",
+    "inprocess-inspections": "/quality/inprocess-inspections/new",
+    "final-inspections": "/quality/final-inspections/new",
+    "vin-traces": "/quality/vin-traces/new",
+    defects: "/quality/defects/new",
+    ncrs: "/quality/ncrs/new",
+    scars: "/quality/scars/new",
+    capas: "/quality/capas/new",
+    ppaps: "/quality/ppaps/new",
+    complaints: "/quality/complaints/new",
+    "warranty-claims": "/quality/warranty-claims/new",
+    recalls: "/quality/recalls/new",
+    audits: "/quality/audits/new",
+    "supplier-quality": "/quality/supplier-quality/new",
+  };
+
   return (
     <ResourceListView
       moduleKey={mod.key}
@@ -20,6 +43,7 @@ export default async function QualityResourcePage({ params }: PageProps) {
       title={resource.title}
       description={resource.description}
       apiPath={resource.apiPath}
+      createHref={createRoutes[resourceKey]}
     />
   );
 }

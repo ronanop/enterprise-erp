@@ -8,13 +8,17 @@ import { cn } from "@/lib/utils";
 /** Primary quality screens from FRD-14 screen inventory */
 const QUALITY_NAV = [
   { title: "Overview", href: "/quality" },
+  { title: "Plans", href: "/quality/plans" },
   { title: "Incoming", href: "/quality/incoming-inspections" },
   { title: "In-Process", href: "/quality/inprocess-inspections" },
   { title: "Final", href: "/quality/final-inspections" },
+  { title: "Defects", href: "/quality/defects" },
   { title: "NCRs", href: "/quality/ncrs" },
   { title: "CAPAs", href: "/quality/capas" },
   { title: "Audits", href: "/quality/audits" },
   { title: "Complaints", href: "/quality/complaints" },
+  { title: "Supplier", href: "/quality/supplier-quality" },
+  { title: "Reports", href: "/quality/reports" },
 ] as const;
 
 export function QualityWorkspaceNav() {

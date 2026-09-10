@@ -150,6 +150,12 @@ export const analyticsQuickLinks = [
     description: "Threshold monitoring",
     icon: Bell,
   },
+  {
+    title: "Executive",
+    href: "/analytics/executive",
+    description: "Cross-module KPIs",
+    icon: BarChart3,
+  },
 ] as const;
 
 export const analyticsIcons = {

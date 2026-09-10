@@ -6,10 +6,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import NotFoundException, ValidationException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.quality.adapters.inventory_port import QualityInventoryAdapter
+from modules.quality.domain.entities import DispositionQty, normalize_pass_fail
 from modules.quality.domain.enums import (
     SOURCE_MODULE,
     FinalResult,
@@ -32,6 +33,34 @@ from modules.quality.service.engines import (
 )
 from modules.quality.service.posting_service import QualityPostingService
 from modules.quality.service.qm_scope_validator import QmScopeValidator
+
+
+def _decimal_qty(value: object | None, default: Decimal = Decimal("0")) -> Decimal:
+    if value is None:
+        return default
+    return Decimal(str(value))
+
+
+def _validate_disposition(
+    inspected_qty: Decimal,
+    accepted_qty: Decimal,
+    rejected_qty: Decimal,
+) -> None:
+    disposition = DispositionQty(
+        inspected_qty=inspected_qty,
+        accepted_qty=accepted_qty,
+        rejected_qty=rejected_qty,
+    )
+    if not disposition.validate():
+        raise ValidationException(disposition.error_message())
+
+
+def _normalize_incoming_line(line: dict) -> dict:
+    normalized = dict(line)
+    normalized["pass_fail"] = normalize_pass_fail(line.get("pass_fail"))
+    if normalized.get("measured_value") is not None:
+        normalized["measured_value"] = Decimal(str(normalized["measured_value"]))
+    return normalized
 
 
 class IncomingInspectionService:
@@ -58,8 +87,8 @@ class IncomingInspectionService:
     def create_inspection(
         self, ctx: TenantContext, *, lines: list[dict] | None = None, **fields
     ) -> QmIncomingInspection:
-        company_id = fields["company_id"]
-        branch_id = self._scope.require_branch(ctx, fields.get("branch_id"))
+        company_id = fields.pop("company_id")
+        branch_id = self._scope.require_branch(ctx, fields.pop("branch_id", None))
         self._scope.validate_company_access(ctx, company_id)
         number = self._numbers.generate(
             QmEntityType.INCOMING_INSPECTION,
@@ -67,33 +96,39 @@ class IncomingInspectionService:
             model=QmIncomingInspection,
             code_column="document_number",
         )
-        for key in ("inspected_qty", "accepted_qty", "rejected_qty"):
-            if fields.get(key) is not None:
-                fields[key] = Decimal(str(fields[key]))
+        inspected_qty = _decimal_qty(fields.get("inspected_qty"))
+        accepted_qty = _decimal_qty(fields.get("accepted_qty"))
+        rejected_qty = _decimal_qty(fields.get("rejected_qty"))
+        _validate_disposition(inspected_qty, accepted_qty, rejected_qty)
+        fields["inspected_qty"] = inspected_qty
+        fields["accepted_qty"] = accepted_qty
+        fields["rejected_qty"] = rejected_qty
+        document_date = fields.pop("document_date", None) or date.today()
         header = self._repo.create(
             ctx,
             company_id=company_id,
             branch_id=branch_id,
             document_number=number,
-            document_date=fields.pop("document_date", date.today()),
+            document_date=document_date,
             status=IncomingStatus.DRAFT.value,
             result=IncomingResult.PENDING.value,
             source_module=SOURCE_MODULE,
             **fields,
         )
         for i, ln in enumerate(lines or [], start=1):
+            line = _normalize_incoming_line(ln)
             self._repo.add_line(
                 ctx,
                 header,
-                line_number=ln.get("line_number", i),
-                characteristic_id=ln["characteristic_id"],
-                measured_value=Decimal(str(ln["measured_value"])) if ln.get("measured_value") is not None else None,
-                measured_text=ln.get("measured_text"),
-                pass_fail=ln.get("pass_fail"),
-                is_out_of_spec=bool(ln.get("is_out_of_spec", False)),
-                defect_type_id=ln.get("defect_type_id"),
-                notes=ln.get("notes"),
-                status=ln.get("status", "pending"),
+                line_number=line.get("line_number", i),
+                characteristic_id=line["characteristic_id"],
+                measured_value=line.get("measured_value"),
+                measured_text=line.get("measured_text"),
+                pass_fail=line.get("pass_fail"),
+                is_out_of_spec=bool(line.get("is_out_of_spec", False)),
+                defect_type_id=line.get("defect_type_id"),
+                notes=line.get("notes"),
+                status=line.get("status", "pending"),
             )
         inspected = Decimal(str(header.inspected_qty or 0))
         if inspected > 0 and header.warehouse_id and header.product_id and header.uom_id:
@@ -118,9 +153,44 @@ class IncomingInspectionService:
             fields = {k: v for k, v in fields.items() if k in {"inspector_employee_id"}}
         for key in ("inspected_qty", "accepted_qty", "rejected_qty"):
             if fields.get(key) is not None:
-                fields[key] = Decimal(str(fields[key]))
+                fields[key] = _decimal_qty(fields[key])
+        if any(k in fields for k in ("inspected_qty", "accepted_qty", "rejected_qty")):
+            inspected_qty = _decimal_qty(fields.get("inspected_qty", inspection.inspected_qty))
+            accepted_qty = _decimal_qty(fields.get("accepted_qty", inspection.accepted_qty))
+            rejected_qty = _decimal_qty(fields.get("rejected_qty", inspection.rejected_qty))
+            _validate_disposition(inspected_qty, accepted_qty, rejected_qty)
+            fields["inspected_qty"] = inspected_qty
+            fields["accepted_qty"] = accepted_qty
+            fields["rejected_qty"] = rejected_qty
         row = self._repo.update(ctx, inspection_id, **fields)
         assert row is not None
+        return self.get_inspection(ctx, inspection_id)
+
+    def add_lines(
+        self, ctx: TenantContext, inspection_id: UUID, lines: list[dict]
+    ) -> QmIncomingInspection:
+        inspection = self.get_inspection(ctx, inspection_id)
+        if inspection.status not in {IncomingStatus.DRAFT.value, IncomingStatus.IN_PROGRESS.value}:
+            raise ValidationException("Checklist lines can only be added while the inspection is draft or in progress")
+        if not lines:
+            raise ValidationException("At least one checklist line is required")
+        existing = [ln for ln in (inspection.lines or []) if not getattr(ln, "is_deleted", False)]
+        next_no = max((int(ln.line_number) for ln in existing), default=0) + 1
+        for i, raw in enumerate(lines):
+            line = _normalize_incoming_line(raw)
+            self._repo.add_line(
+                ctx,
+                inspection,
+                line_number=line.get("line_number") or (next_no + i),
+                characteristic_id=line["characteristic_id"],
+                measured_value=line.get("measured_value"),
+                measured_text=line.get("measured_text"),
+                pass_fail=line.get("pass_fail"),
+                is_out_of_spec=bool(line.get("is_out_of_spec", False)),
+                defect_type_id=line.get("defect_type_id"),
+                notes=line.get("notes"),
+                status=line.get("status", "pending"),
+            )
         return self.get_inspection(ctx, inspection_id)
 
     def _apply_inventory_disposition(self, ctx: TenantContext, inspection: QmIncomingInspection) -> None:
@@ -218,8 +288,8 @@ class InProcessInspectionService:
         return row
 
     def create_inspection(self, ctx: TenantContext, **fields) -> QmInprocessInspection:
-        company_id = fields["company_id"]
-        branch_id = self._scope.require_branch(ctx, fields.get("branch_id"))
+        company_id = fields.pop("company_id")
+        branch_id = self._scope.require_branch(ctx, fields.pop("branch_id", None))
         self._scope.validate_company_access(ctx, company_id)
         number = self._numbers.generate(
             QmEntityType.INPROCESS_INSPECTION,
@@ -227,12 +297,13 @@ class InProcessInspectionService:
             model=QmInprocessInspection,
             code_column="document_number",
         )
+        document_date = fields.pop("document_date", None) or date.today()
         return self._repo.create(
             ctx,
             company_id=company_id,
             branch_id=branch_id,
             document_number=number,
-            document_date=fields.pop("document_date", date.today()),
+            document_date=document_date,
             status=InProcessStatus.DRAFT.value,
             result=InProcessResult.PENDING.value,
             source_module=fields.pop("source_module", "manufacturing"),
@@ -277,8 +348,8 @@ class FinalInspectionService:
         return row
 
     def create_inspection(self, ctx: TenantContext, **fields) -> QmFinalInspection:
-        company_id = fields["company_id"]
-        branch_id = self._scope.require_branch(ctx, fields.get("branch_id"))
+        company_id = fields.pop("company_id")
+        branch_id = self._scope.require_branch(ctx, fields.pop("branch_id", None))
         self._scope.validate_company_access(ctx, company_id)
         number = self._numbers.generate(
             QmEntityType.FINAL_INSPECTION,
@@ -288,12 +359,13 @@ class FinalInspectionService:
         )
         if fields.get("inspected_qty") is not None:
             fields["inspected_qty"] = Decimal(str(fields["inspected_qty"]))
+        document_date = fields.pop("document_date", None) or date.today()
         return self._repo.create(
             ctx,
             company_id=company_id,
             branch_id=branch_id,
             document_number=number,
-            document_date=fields.pop("document_date", date.today()),
+            document_date=document_date,
             status=FinalStatus.DRAFT.value,
             result=FinalResult.PENDING.value,
             source_module=fields.pop("source_module", "manufacturing"),

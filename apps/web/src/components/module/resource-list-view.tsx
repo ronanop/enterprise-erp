@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { resolveDetailHref, resourceKeyFromApiPath } from "@/config/module-detail-routes";
 import { isAuthenticated } from "@/lib/auth";
 import { ApiClientError, resourceService } from "@/services/api-client";
 
@@ -17,6 +19,7 @@ interface ResourceListViewProps {
   title: string;
   description: string;
   apiPath: string;
+  createHref?: string;
 }
 
 const UUID_RE =
@@ -227,7 +230,9 @@ export function ResourceListView({
   title,
   description,
   apiPath,
+  createHref,
 }: ResourceListViewProps) {
+  const router = useRouter();
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -270,6 +275,11 @@ export function ResourceListView({
 
   const columns = useMemo(() => pickColumns(enrichedRows), [enrichedRows]);
 
+  const resourceKey = useMemo(
+    () => resourceKeyFromApiPath(moduleKey, apiPath),
+    [moduleKey, apiPath],
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return enrichedRows;
@@ -288,6 +298,14 @@ export function ResourceListView({
         description={description}
         actions={
           <div className="flex items-center gap-2">
+            {createHref ? (
+              <Link
+                href={createHref}
+                className="inline-flex h-8 cursor-pointer items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-colors duration-200 hover:bg-primary/90"
+              >
+                New
+              </Link>
+            ) : null}
             <Button variant="outline" size="sm" className="shadow-none" onClick={() => void load()} disabled={loading}>
               <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
               Refresh
@@ -346,8 +364,8 @@ export function ResourceListView({
               ) : null}
               {status === 403 && authenticated ? (
                 <p className="text-sm text-muted-foreground">
-                  Your role is missing this permission. Sign out and sign back in as{" "}
-                  <code className="rounded bg-muted px-1">admin@example.com</code>.
+                  Your role is missing this permission. Sign out and sign back in with an
+                  account that has the required access (for example a platform administrator).
                 </p>
               ) : null}
             </div>
@@ -380,10 +398,31 @@ export function ResourceListView({
                       </td>
                     </tr>
                   ) : (
-                    filtered.map((row, idx) => (
+                    filtered.map((row, idx) => {
+                      const rowId = row.id != null ? String(row.id) : null;
+                      const detailHref =
+                        rowId && resourceKey
+                          ? resolveDetailHref(moduleKey, resourceKey, rowId)
+                          : null;
+                      return (
                       <tr
                         key={String(row.id ?? idx)}
-                        className="border-b border-border/50 transition-colors last:border-0 hover:bg-accent/30"
+                        className={`border-b border-border/50 transition-colors last:border-0 hover:bg-accent/30 ${
+                          detailHref ? "cursor-pointer" : ""
+                        }`}
+                        onClick={detailHref ? () => router.push(detailHref) : undefined}
+                        onKeyDown={
+                          detailHref
+                            ? (e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  router.push(detailHref);
+                                }
+                              }
+                            : undefined
+                        }
+                        tabIndex={detailHref ? 0 : undefined}
+                        role={detailHref ? "link" : undefined}
                       >
                         {columns.map((col, colIdx) => (
                           <td
@@ -393,11 +432,22 @@ export function ResourceListView({
                             }`}
                             title={formatCell(col, row[col])}
                           >
-                            {formatCell(col, row[col])}
+                            {colIdx === 0 && detailHref ? (
+                              <Link
+                                href={detailHref}
+                                className="hover:text-primary hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {formatCell(col, row[col])}
+                              </Link>
+                            ) : (
+                              formatCell(col, row[col])
+                            )}
                           </td>
                         ))}
                       </tr>
-                    ))
+                    );
+                    })
                   )}
                 </tbody>
               </table>

@@ -107,7 +107,11 @@ class InspectionPlanService:
     def update_plan(self, ctx: TenantContext, plan_id: UUID, **fields) -> QmInspectionPlan:
         plan = self.get_plan(ctx, plan_id)
         if plan.status != PlanStatus.DRAFT.value:
-            fields = {k: v for k, v in fields.items() if k in {"notes", "sampling_plan_id"}}
+            fields = {
+                k: v
+                for k, v in fields.items()
+                if k in {"notes", "sampling_plan_id", "revision", "process_name"}
+            }
         row = self._repo.update(ctx, plan_id, **fields)
         assert row is not None
         return self.get_plan(ctx, plan_id)
