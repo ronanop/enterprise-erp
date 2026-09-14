@@ -383,8 +383,10 @@ class LeadService:
         lead = self.get(ctx, lead_id)
         if lead.company_account_id is None:
             raise ConflictException("Only sales-process leads can be updated with this endpoint")
-        if lead.blueprint_state != "open":
-            raise ConflictException("Only open sales leads can be edited")
+        if lead.blueprint_state == "lost":
+            raise ConflictException("Lost leads cannot be edited")
+        if lead.blueprint_state not in ("open", "converted"):
+            raise ConflictException("Only open or converted sales leads can be edited")
         sales_blueprint_engine.assert_not_locked(lead)
         if version is not None and int(lead.version or 1) != int(version):
             raise ConflictException("Lead was modified by another user; refresh and try again")

@@ -1080,6 +1080,14 @@ class ScmHandoffService:
         """Draft PO with the next company PO number for the entity (e.g. PO/CDT/007)."""
         cid = self._scope.resolve_company_id(ctx, company_id)
         branch_id = ctx.branch_id
+        if branch_id is None and cid is not None:
+            from modules.foundation.service.org_context_service import OrgContextService
+
+            branch_id = OrgContextService(self._db).resolve_branch_for_company(
+                user_id=ctx.user_id,
+                tenant_id=ctx.tenant_id,
+                company_id=cid,
+            )
         if branch_id is None:
             raise ConflictException("Select a branch in your session before creating a purchase order")
         code = normalize_entity_code(entity_code)

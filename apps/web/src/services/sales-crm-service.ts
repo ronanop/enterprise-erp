@@ -250,6 +250,7 @@ export type LeadCreateFromCompanyInput = {
   assign_to_id?: string | null;
   assigned_date?: string | null;
   expected_amount?: number | null;
+  committed_amount?: number | null;
   expected_closure_date?: string | null;
   product_type?: string | null;
   sub_product_category?: string | null;
@@ -288,6 +289,7 @@ export type LeadCreateFromCompanyInput = {
   entity_gst?: string | null;
   entity_contact?: string | null;
   notes?: string | null;
+  presales_owner_id?: string | null;
 };
 
 export async function createLeadFromCompany(
@@ -487,6 +489,7 @@ export type SalesLead = {
   assign_to_id: string | null;
   assigned_date?: string | null;
   expected_amount: number | null;
+  committed_amount?: number | null;
   expected_closure_date: string | null;
   project_title: string | null;
   product_type: string | null;
@@ -528,6 +531,7 @@ export type SalesLead = {
   convert_remark?: string | null;
   lost_reason?: string | null;
   converted_opportunity_id: string | null;
+  presales_owner_id?: string | null;
   version: number;
 };
 

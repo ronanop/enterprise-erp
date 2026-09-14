@@ -40,6 +40,7 @@ export function salesLeadToCreateInput(lead: SalesLead): LeadCreateFromCompanyIn
     assign_to_id: lead.assign_to_id,
     assigned_date: lead.assigned_date ?? null,
     expected_amount: lead.expected_amount,
+    committed_amount: lead.committed_amount ?? null,
     expected_closure_date: lead.expected_closure_date,
     product_type: lead.product_type,
     sub_product_category: lead.sub_product_category,
@@ -78,6 +79,7 @@ export function salesLeadToCreateInput(lead: SalesLead): LeadCreateFromCompanyIn
     entity_gst: lead.entity_gst,
     entity_contact: lead.entity_contact,
     notes: lead.notes,
+    presales_owner_id: lead.presales_owner_id ?? null,
   };
 }
 

@@ -34,7 +34,14 @@ export default function LoginPage() {
     void authService
       .microsoftConfig()
       .then((res) => setMicrosoftEnabled(Boolean(res.data?.enabled)))
-      .catch(() => setMicrosoftEnabled(false));
+      .catch((err) => {
+        setMicrosoftEnabled(false);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Cannot reach the API to check Microsoft sign-in.",
+        );
+      });
   }, []);
 
   const returnTo = searchParams.get("next")?.startsWith("/")

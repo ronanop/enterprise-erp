@@ -131,11 +131,19 @@ export function LeadDetailsCard({
             label="Expected Order Value *"
             value={lead.expected_amount != null ? formatInr(lead.expected_amount) : "—"}
           />
+          <LeadReadOnlyField
+            label="Committed Amount"
+            value={lead.committed_amount != null ? formatInr(lead.committed_amount) : "—"}
+          />
           <LeadReadOnlyField label="Status" value={formatLeadStatus(lead)} />
 
           <LeadReadOnlyField
             label="Expected Closure Date *"
             value={textOrDash(lead.expected_closure_date)}
+          />
+          <LeadReadOnlyField
+            label="Presales Owner"
+            value={employeeName(lead.presales_owner_id)}
           />
         </div>
       </CrmSection>

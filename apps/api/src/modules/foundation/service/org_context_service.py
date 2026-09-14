@@ -84,6 +84,28 @@ class OrgContextService:
     def get_tenant_primary_org(self, tenant_id: UUID) -> tuple[OrgCompany | None, OrgBranch | None]:
         return self._get_tenant_primary_org(tenant_id)
 
+    def resolve_branch_for_company(
+        self,
+        *,
+        user_id: UUID,
+        tenant_id: UUID,
+        company_id: UUID,
+    ) -> UUID | None:
+        """Pick a usable branch when the session has a company but no branch_id."""
+        for scope in self._scopes.list_user_scopes(user_id, tenant_id):
+            if scope.company_id == company_id and scope.branch_id is not None:
+                return scope.branch_id
+        branch = self._db.scalar(
+            select(OrgBranch)
+            .where(
+                OrgBranch.tenant_id == tenant_id,
+                OrgBranch.company_id == company_id,
+                OrgBranch.is_deleted.is_(False),
+            )
+            .order_by(OrgBranch.branch_code)
+        )
+        return branch.id if branch is not None else None
+
     def _get_tenant_primary_org(self, tenant_id: UUID) -> tuple[OrgCompany | None, OrgBranch | None]:
         company = self._db.scalar(
             select(OrgCompany)

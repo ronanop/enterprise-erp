@@ -336,6 +336,45 @@ export const authService = {
     }),
 };
 
+export const contextService = {
+  getContext: () =>
+    apiClient<{
+      tenant_id: string | null;
+      user_id: string | null;
+      company_id: string | null;
+      branch_id: string | null;
+      user_type?: string | null;
+    }>("/auth/context"),
+  listCompanies: () =>
+    apiClient<
+      Array<{
+        id: string;
+        company_code: string;
+        company_name: string;
+        legal_name?: string;
+        status?: string;
+      }>
+    >("/auth/context/companies"),
+  listBranches: (companyId: string) =>
+    apiClient<
+      Array<{
+        id: string;
+        company_id: string;
+        branch_code: string;
+        branch_name: string;
+        status?: string;
+      }>
+    >("/auth/context/branches", { query: { company_id: companyId } }),
+  switchContext: (body: { company_id: string; branch_id?: string | null }) =>
+    apiClient<{ company_id: string; branch_id: string | null }>("/auth/context/switch", {
+      method: "POST",
+      body: {
+        company_id: body.company_id,
+        branch_id: body.branch_id ?? null,
+      },
+    }),
+};
+
 export type ListQuery = Record<string, string | number | boolean | null | undefined>;
 
 export const resourceService = {

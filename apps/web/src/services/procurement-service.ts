@@ -838,6 +838,11 @@ export async function createPoFromInventory(payload: {
   stock_unit_ids?: string[];
   import_line_ids?: string[];
 }): Promise<ProcOrder> {
+  const { ensureSessionBranch } = await import("@/lib/ensure-session-branch");
+  const scope = await ensureSessionBranch();
+  if (!scope?.branch_id) {
+    throw new Error("Select a branch in your session before creating a purchase order");
+  }
   const res = await apiClient<ProcOrder>(`${SCM_API}/inventory/purchase-orders`, {
     method: "POST",
     body: {

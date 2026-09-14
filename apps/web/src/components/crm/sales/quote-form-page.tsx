@@ -455,7 +455,7 @@ export function QuoteFormPage({
       product_name: line.product_name.trim(),
       hsn_sac: line.hsn_sac || null,
       description: line.description || null,
-      line_type: line.line_type,
+      line_type: line.line_type || "hardware",
       qty: Number(line.qty) || 1,
       unit_cost: unitPrice,
       unit_sell: unitPrice * (1 + marginPct / 100),
@@ -511,7 +511,6 @@ export function QuoteFormPage({
       const rowLabel = `Row ${index + 1}`;
       if (!line.product_name.trim()) missing.push(`${rowLabel}: Product Name`);
       if (!line.description.trim()) missing.push(`${rowLabel}: Item Description`);
-      if (!line.line_type.trim()) missing.push(`${rowLabel}: Service Type`);
       if (!line.qty.trim() || Number(line.qty) <= 0) missing.push(`${rowLabel}: Quantity`);
       if (!line.unit_sell.trim() || Number(line.unit_sell) <= 0) missing.push(`${rowLabel}: Unit Price`);
       if (!line.margin_pct.trim()) missing.push(`${rowLabel}: Margin %`);
@@ -852,7 +851,6 @@ export function QuoteFormPage({
                   "Product Name",
                   "HSN/SAC Code",
                   "Item Description",
-                  "Service Type",
                   "Quantity",
                   "Unit Price (₹)",
                   "Margin %",
@@ -898,17 +896,6 @@ export function QuoteFormPage({
                         value={line.description}
                         onChange={(e) => setLine(line.key, "description", e.target.value)}
                       />
-                    </td>
-                    <td className="px-2 py-2">
-                      <FinanceSelect
-                        className="w-28 min-w-[6.5rem]"
-                        value={line.line_type}
-                        onChange={(e) => setLine(line.key, "line_type", e.target.value)}
-                      >
-                        <option value="hardware">Hardware</option>
-                        <option value="software">Software</option>
-                        <option value="services">Services</option>
-                      </FinanceSelect>
                     </td>
                     <td className="px-2 py-2">
                       <Input

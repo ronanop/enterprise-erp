@@ -39,10 +39,22 @@ export async function resolvePostLoginNavigation(
 
     if (companies.length === 1) {
       const company = companies[0];
-      await contextService.switchContext({ company_id: company.id });
+      let branchId: string | undefined;
+      try {
+        const branchesRes = await contextService.listBranches(company.id);
+        const branches = Array.isArray(branchesRes.data) ? branchesRes.data : [];
+        branchId = branches[0]?.id ? String(branches[0].id) : undefined;
+      } catch {
+        branchId = undefined;
+      }
+      await contextService.switchContext({
+        company_id: company.id,
+        branch_id: branchId ?? null,
+      });
       setStoredOrgContext({
         companyId: company.id,
         companyName: company.company_name,
+        branchId,
       });
       return destination;
     }

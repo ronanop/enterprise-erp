@@ -93,6 +93,7 @@ const EMPTY: LeadCreateFromCompanyInput = {
   assign_to_id: "",
   assigned_date: "",
   expected_amount: undefined,
+  committed_amount: undefined,
   expected_closure_date: "",
   product_type: "",
   sub_product_category: "",
@@ -128,6 +129,7 @@ const EMPTY: LeadCreateFromCompanyInput = {
   entity_gst: "",
   entity_contact: "",
   notes: "",
+  presales_owner_id: "",
 };
 
 export function LeadFormPage({
@@ -179,6 +181,9 @@ export function LeadFormPage({
         setBlueprint(null);
       }
       setExistingLead(leadRow);
+      if (leadRow?.blueprint_state === "lost") {
+        setError("Lost leads cannot be edited.");
+      }
       const mePayload = meResponse?.data;
       let meUser: UserProfile | undefined;
       if (mePayload && typeof mePayload === "object" && "user" in mePayload) {
@@ -225,6 +230,7 @@ export function LeadFormPage({
             email: leadRow.email ?? "",
             lead_source_id: leadRow.lead_source_id ?? "",
             expected_amount: leadRow.expected_amount ?? undefined,
+            committed_amount: leadRow.committed_amount ?? undefined,
             expected_closure_date: leadRow.expected_closure_date ?? "",
             product_type: leadRow.product_type ?? "",
             sub_product_category: leadRow.sub_product_category ?? "",
@@ -259,6 +265,7 @@ export function LeadFormPage({
             entity_gst: leadRow.entity_gst ?? "",
             entity_contact: leadRow.entity_contact ?? "",
             owner_employee_id: leadRow.owner_employee_id ?? "",
+            presales_owner_id: leadRow.presales_owner_id ?? "",
             notes: leadRow.notes ?? "",
           };
         }
@@ -375,6 +382,10 @@ export function LeadFormPage({
   }
 
   async function onSave() {
+    if (isEdit && existingLead?.blueprint_state === "lost") {
+      setError("Lost leads cannot be edited.");
+      return;
+    }
     const missing: string[] = [];
     if (!form.project_title?.trim()) missing.push("Project Title");
     if (!form.email?.trim()) missing.push("Email");
@@ -412,7 +423,14 @@ export function LeadFormPage({
         assign_to_id: null,
         assigned_date: null,
         expected_amount: form.expected_amount ? Number(form.expected_amount) : null,
+        committed_amount:
+          form.committed_amount !== undefined &&
+          form.committed_amount !== null &&
+          !Number.isNaN(Number(form.committed_amount))
+            ? Number(form.committed_amount)
+            : null,
         expected_closure_date: form.expected_closure_date || null,
+        presales_owner_id: form.presales_owner_id?.trim() || null,
         distributor_department: null,
       };
       if (isEdit && leadId && existingLead) {
@@ -676,12 +694,39 @@ export function LeadFormPage({
             )}
           </FinanceField>
 
+          <FinanceField label="Presales Owner">
+            <FinanceSelect
+              value={form.presales_owner_id ?? ""}
+              onChange={(e) => set("presales_owner_id", e.target.value)}
+            >
+              <option value="">None</option>
+              {crmMembers.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.label}
+                </option>
+              ))}
+            </FinanceSelect>
+          </FinanceField>
+
           <FinanceField label="Expected Order Value *">
             <Input
               type="number"
               min={0}
+              step="0.01"
               value={form.expected_amount ?? ""}
               onChange={(e) => set("expected_amount", e.target.value ? Number(e.target.value) : undefined)}
+            />
+          </FinanceField>
+
+          <FinanceField label="Committed Amount">
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              value={form.committed_amount ?? ""}
+              onChange={(e) =>
+                set("committed_amount", e.target.value ? Number(e.target.value) : undefined)
+              }
             />
           </FinanceField>
 
@@ -895,7 +940,12 @@ export function LeadFormPage({
         >
           Cancel
         </Link>
-        <Button type="button" className="cursor-pointer" disabled={saving} onClick={() => void onSave()}>
+        <Button
+          type="button"
+          className="cursor-pointer"
+          disabled={saving || (isEdit && existingLead?.blueprint_state === "lost")}
+          onClick={() => void onSave()}
+        >
           {saving ? (isEdit ? "Saving…" : "Creating…") : isEdit ? "Save changes" : "Create Lead"}
         </Button>
       </div>

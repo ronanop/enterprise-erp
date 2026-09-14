@@ -104,6 +104,7 @@ class CrmLead(Base, *CrmTransactionMixin):
     )
     assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     expected_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    committed_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     expected_closure_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     salutation: Mapped[str | None] = mapped_column(String(20), nullable=True)
     product_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
@@ -113,6 +114,12 @@ class CrmLead(Base, *CrmTransactionMixin):
     engagement_score: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     portal_link: Mapped[str | None] = mapped_column(String(500), nullable=True)
     assign_to_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    presales_owner_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("master.master_employee.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     project_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     requirement_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     purchase_model: Mapped[str | None] = mapped_column(String(100), nullable=True)

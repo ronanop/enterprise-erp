@@ -27,9 +27,19 @@ async function applyCompany(
   companyName?: string,
   branchId?: string | null,
 ): Promise<void> {
+  let resolvedBranch = branchId ?? null;
+  if (!resolvedBranch) {
+    try {
+      const branchesRes = await contextService.listBranches(companyId);
+      const branches = Array.isArray(branchesRes.data) ? branchesRes.data : [];
+      resolvedBranch = branches[0]?.id ? String(branches[0].id) : null;
+    } catch {
+      resolvedBranch = null;
+    }
+  }
   await contextService.switchContext({
     company_id: companyId,
-    branch_id: branchId ?? null,
+    branch_id: resolvedBranch,
   });
   const name =
     companyName ||
@@ -38,7 +48,7 @@ async function applyCompany(
   setStoredOrgContext({
     companyId,
     companyName: name,
-    branchId: branchId || undefined,
+    branchId: resolvedBranch || undefined,
   });
 }
 

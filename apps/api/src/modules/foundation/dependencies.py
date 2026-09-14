@@ -73,6 +73,24 @@ def get_tenant_context(
             }
             store.set_session(session_id, cached)
 
+    # Company without branch (common after company-only context switch) — fill default branch.
+    if company_id and not branch_id:
+        from modules.foundation.service.org_context_service import OrgContextService
+
+        resolved_branch = OrgContextService(db).resolve_branch_for_company(
+            user_id=user_id,
+            tenant_id=tenant_id,
+            company_id=company_id,
+        )
+        if resolved_branch:
+            branch_id = resolved_branch
+            cached = {
+                **cached,
+                "company_id": str(company_id),
+                "branch_id": str(branch_id),
+            }
+            store.set_session(session_id, cached)
+
     from modules.foundation.repository.user_module_repository import UserModuleRepository
     from modules.organization.repository.org_scope_repository import OrgScopeRepository
 

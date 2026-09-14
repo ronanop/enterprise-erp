@@ -26,6 +26,7 @@ from modules.crm.models.ovf import CrmOvf, CrmOvfLine
 from modules.crm.models.pipeline import CrmPipeline
 from modules.crm.models.product import CrmProduct
 from modules.crm.models.quote import CrmQuote, CrmQuoteLine
+from modules.crm.models.saved_report import CrmSavedReport
 from modules.crm.models.state_history import CrmStateHistory
 from modules.crm.models.task import CrmTask
 from modules.crm.models.visit_log import CrmVisitLog
@@ -59,6 +60,7 @@ __all__ = [
     "CrmProduct",
     "CrmQuote",
     "CrmQuoteLine",
+    "CrmSavedReport",
     "CrmStateHistory",
     "CrmTask",
     "CrmVisitLog",

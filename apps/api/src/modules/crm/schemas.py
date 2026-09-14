@@ -107,6 +107,7 @@ class SalesLeadUpdate(BaseModel):
     email: str | None = None
     lead_source_id: UUID | None = None
     expected_amount: Decimal | None = None
+    committed_amount: Decimal | None = None
     expected_closure_date: date | None = None
     product_type: str | None = None
     sub_product_category: str | None = None
@@ -145,6 +146,7 @@ class SalesLeadUpdate(BaseModel):
     entity_gst: str | None = None
     entity_contact: str | None = None
     notes: str | None = None
+    presales_owner_id: UUID | None = None
 
 
 class LeadAssignRequest(BaseModel):
@@ -184,6 +186,7 @@ class LeadResponse(OrmModel):
     assign_to_id: UUID | None
     assigned_date: date | None = None
     expected_amount: Decimal | None
+    committed_amount: Decimal | None = None
     expected_closure_date: date | None
     project_title: str | None
     product_type: str | None
@@ -226,6 +229,7 @@ class LeadResponse(OrmModel):
     lost_reason: str | None = None
     customer_id: UUID | None
     converted_opportunity_id: UUID | None
+    presales_owner_id: UUID | None = None
     version: int
 
 
@@ -910,6 +914,7 @@ class LeadCreateFromCompany(BaseModel):
     assign_to_id: UUID | None = None
     assigned_date: date | None = None
     expected_amount: Decimal | None = None
+    committed_amount: Decimal | None = None
     expected_closure_date: date | None = None
     product_type: str | None = None
     sub_product_category: str = Field(min_length=1)
@@ -948,6 +953,7 @@ class LeadCreateFromCompany(BaseModel):
     entity_gst: str | None = None
     entity_contact: str | None = None
     notes: str | None = None
+    presales_owner_id: UUID | None = None
 
 
 class LeadLostRequest(BaseModel):
@@ -971,6 +977,7 @@ class SalesLeadResponse(OrmModel):
     owner_employee_id: UUID
     assign_to_id: UUID | None
     expected_amount: Decimal | None
+    committed_amount: Decimal | None = None
     expected_closure_date: date | None
     project_title: str | None = None
     product_type: str | None = None
@@ -995,6 +1002,7 @@ class SalesLeadResponse(OrmModel):
     end_customer_location: str | None = None
     notes: str | None = None
     converted_opportunity_id: UUID | None
+    presales_owner_id: UUID | None = None
     version: int
 
 
@@ -1616,3 +1624,58 @@ class KycRecordResponse(OrmModel):
     company_id: UUID
     branch_id: UUID
     version: int
+
+
+# --- Custom / saved reports ---
+
+
+class SavedReportCreate(BaseModel):
+    report_name: str
+    primary_module: str
+    columns: list[str]
+    folder_name: str | None = None
+    description: str | None = None
+    company_id: UUID | None = None
+
+
+class SavedReportUpdate(BaseModel):
+    report_name: str | None = None
+    columns: list[str] | None = None
+    folder_name: str | None = None
+    description: str | None = None
+    version: int | None = None
+
+
+class SavedReportCloneRequest(BaseModel):
+    report_name: str | None = None
+
+
+class SavedReportResponse(OrmModel):
+    id: UUID
+    report_code: str
+    report_name: str
+    primary_module: str
+    folder_name: str | None
+    description: str | None
+    definition_json: dict
+    owner_user_id: UUID
+    status: str
+    company_id: UUID
+    version: int
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ReportRunRequest(BaseModel):
+    primary_module: str
+    columns: list[str]
+    company_id: UUID | None = None
+    preview_limit: int | None = None
+
+
+class ReportRunResponse(BaseModel):
+    columns: list[dict]
+    rows: list[dict]
+    record_count: int
+    primary_module: str
+    module_label: str

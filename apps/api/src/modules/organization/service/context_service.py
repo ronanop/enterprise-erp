@@ -77,6 +77,14 @@ class OrgContextService:
         if company is None:
             raise NotFoundException("Company not found")
         self._validator.validate_company_access(ctx, company_id)
+        if branch_id is None:
+            from modules.foundation.service.org_context_service import OrgContextService
+
+            branch_id = OrgContextService(self._db).resolve_branch_for_company(
+                user_id=ctx.user_id,
+                tenant_id=ctx.tenant_id,
+                company_id=company_id,
+            )
         if branch_id:
             self._validator.validate_branch_access(ctx, branch_id)
 

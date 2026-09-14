@@ -681,3 +681,7 @@ from modules.crm.routers.ovf import ovf_router  # noqa: E402,F401
 from modules.crm.routers.products import products_router  # noqa: E402,F401
 from modules.crm.routers.sales_quotes import quotes_router  # noqa: E402,F401
 from modules.crm.routers.kyc_records import kyc_records_router  # noqa: E402,F401
+from modules.crm.routers.saved_reports import saved_reports_router  # noqa: E402,F401
+
+# Mount custom/saved report routes on the existing /reports prefix (keeps /summary).
+reports_router.include_router(saved_reports_router)

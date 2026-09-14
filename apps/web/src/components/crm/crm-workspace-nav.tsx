@@ -19,6 +19,7 @@ import {
   LayoutDashboard,
   ListTodo,
   Package,
+  BarChart3,
   Receipt,
   ScrollText,
   ShieldCheck,
@@ -54,6 +55,7 @@ type CrmNavItem = {
 /** Sales CRM (Zoho-replacement) teamspace navigation. */
 export const CRM_NAV: readonly CrmNavItem[] = [
   { title: "Dashboard", href: "/crm", icon: LayoutDashboard },
+  { title: "Reports", href: "/crm/reports", icon: BarChart3 },
   { title: "My Jobs", href: "/crm/my-jobs", icon: ListTodo },
   { title: "Company", href: "/crm/companies", icon: Building2 },
   { title: "Leads", href: "/crm/leads", icon: UserPlus },
