@@ -31,9 +31,10 @@ import {
 } from "@/components/crm/sales/ovf-order-lines-section";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { ApiClientError } from "@/services/api-client";
-import { cloneOvfRecord, printOvfPreview } from "@/lib/crm/crm-record-actions";
+import { cloneOvfRecord, downloadOvfExport, printOvfPreview } from "@/lib/crm/crm-record-actions";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { buildLeadDistributorDropdownOptions } from "@/lib/crm/lead-distributor-options";
+import { ApiClientError } from "@/services/api-client";
 import {
   applyOvfAction,
   deleteOvf,
@@ -301,6 +302,28 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
     });
   }
 
+  async function onExport() {
+    await downloadOvfExport({
+      ovf,
+      quote,
+      opportunity,
+      customerName,
+      accountName,
+      quoteName,
+      ownerName,
+      billingAddress,
+      billingState,
+      billingCountry,
+      billingContact,
+      shippingAddress,
+      shippingState,
+      shippingCountry,
+      shippingContact,
+      customerRows,
+      vendorRows,
+    });
+  }
+
   return (
     <CrmPage>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -326,8 +349,8 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       ) : null}
 
       <PageHeader
-        title={ovf.ovf_no}
-        description={quote ? `From Quote ${quote.quote_no}` : "Order Value Form"}
+        title={formatCrmCode(ovf.ovf_no)}
+        description={quote ? `From Quote ${formatCrmCode(quote.quote_no)}` : "Order Value Form"}
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <CrmDetailEditLink href={`/crm/ovf/${ovf.id}/edit`} />
@@ -335,10 +358,11 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
               entityType="ovf"
               entityId={ovf.id}
               entityLabel="OVF"
-              entityName={ovf.ovf_no}
-              shareTitle={ovf.ovf_no}
+              entityName={formatCrmCode(ovf.ovf_no)}
+              shareTitle={formatCrmCode(ovf.ovf_no)}
               onClone={() => cloneOvfRecord()}
               onPrintPreview={onPrintPreview}
+              onExport={onExport}
               onDelete={() => deleteOvf(ovf.id)}
               onDeleted={() =>
                 router.push(
@@ -388,14 +412,14 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         <CrmDetailGrid className="mt-3">
           <CrmDetailItem label="Customer Name">{customerName}</CrmDetailItem>
           <CrmDetailItem label="Quote Name">{quoteName}</CrmDetailItem>
-          <CrmDetailItem label="Quote No.">{textOrDash(quote?.quote_no)}</CrmDetailItem>
+          <CrmDetailItem label="Quote No.">{textOrDash(formatCrmCode(quote?.quote_no) || null)}</CrmDetailItem>
           <CrmDetailItem label="OVF Module Owner">{ownerName}</CrmDetailItem>
           <CrmDetailItem label="PO Number">{textOrDash(ovf.po_number)}</CrmDetailItem>
           <CrmDetailItem label="Customer PO received date">
             {ovf.po_date ? String(ovf.po_date).slice(0, 10) : "—"}
           </CrmDetailItem>
           <CrmDetailItem label="Delivery Period">{textOrDash(ovf.delivery_period)}</CrmDetailItem>
-          <CrmDetailItem label="OVF No.">{ovf.ovf_no}</CrmDetailItem>
+          <CrmDetailItem label="OVF No.">{formatCrmCode(ovf.ovf_no)}</CrmDetailItem>
           <CrmDetailItem label="OVF sent to SCM team">{ovf.shared_to_scm ? "Yes" : "No"}</CrmDetailItem>
           <CrmDetailItem label="OVF Approver">{textOrDash(ovfApproverName)}</CrmDetailItem>
           <CrmDetailItem label="Opportunity">

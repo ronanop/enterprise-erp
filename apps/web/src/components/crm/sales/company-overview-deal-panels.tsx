@@ -22,6 +22,7 @@ import {
   CRM_TABLE_HEAD_ROW,
 } from "@/components/crm/crm-ui";
 import { Badge } from "@/components/ui/badge";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import {
   formatInr,
   listOvfLines,
@@ -203,7 +204,7 @@ export function CompanyOverviewDealPanels({
                         <Link href={`/crm/opportunities/${row.id}`} className="cursor-pointer hover:underline">
                           {row.opportunity_name}
                         </Link>
-                        <div className="text-[11px] font-normal text-muted-foreground">{row.opportunity_code}</div>
+                        <div className="text-[11px] font-normal text-muted-foreground">{formatCrmCode(row.opportunity_code)}</div>
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">
                         {companyCustomerName.trim() || "—"}
@@ -286,7 +287,7 @@ export function CompanyOverviewDealPanels({
                             "—"
                           )}
                           {row.quote_no ? (
-                            <div className="text-[11px] font-normal text-muted-foreground">{row.quote_no}</div>
+                            <div className="text-[11px] font-normal text-muted-foreground">{formatCrmCode(row.quote_no)}</div>
                           ) : null}
                         </td>
                         <td className="px-4 py-2.5 text-muted-foreground">
@@ -372,7 +373,7 @@ export function CompanyOverviewDealPanels({
                           )}
                           <div className="text-[11px] font-normal text-muted-foreground">
                             <Link href={`/crm/ovf/${row.id}`} className="cursor-pointer hover:underline">
-                              {row.ovf_no}
+                              {formatCrmCode(row.ovf_no)}
                             </Link>
                           </div>
                         </td>

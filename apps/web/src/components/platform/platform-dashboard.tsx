@@ -48,7 +48,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { erpModules } from "@/config/modules";
 import { useAuthUser } from "@/hooks/use-auth-user";
-import { isAuthenticated } from "@/lib/auth";
 import { canAccessHref, hasModuleAssignments } from "@/lib/module-access";
 import { cn } from "@/lib/utils";
 import {
@@ -320,10 +319,10 @@ function HealthSummaryStrip({
 }
 
 export function PlatformDashboard() {
-  const { user, moduleKeys, loading: authLoading } = useAuthUser();
+  const { user, moduleKeys, loading: authLoading, status: authStatus, error: authError, refresh } =
+    useAuthUser();
   const [data, setData] = useState<PlatformDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const authenticated = typeof window !== "undefined" ? isAuthenticated() : false;
 
   const visibleModules = useMemo(
     () => erpModules.filter((mod) => canAccessHref(mod.href, moduleKeys, user?.userType)),
@@ -331,14 +330,14 @@ export function PlatformDashboard() {
   );
 
   const load = useCallback(async () => {
-    if (authLoading) return;
+    if (authLoading || authStatus !== "authenticated") return;
     setLoading(true);
     try {
       setData(await loadPlatformDashboard(moduleKeys, user?.userType));
     } finally {
       setLoading(false);
     }
-  }, [authLoading, moduleKeys, user?.userType]);
+  }, [authLoading, authStatus, moduleKeys, user?.userType]);
 
   useEffect(() => {
     void load();
@@ -360,12 +359,40 @@ export function PlatformDashboard() {
   );
 
   const headline = data?.executive ?? [];
-  const authBlocked = Boolean(data?.authBlocked) || (!authenticated && Boolean(data?.partial));
+  const authBlocked = Boolean(data?.authBlocked) || Boolean(data?.partial && authStatus !== "authenticated");
   const tracked = data?.modules.length ?? 0;
-  const showLoading = loading || authLoading;
+  const showLoading = loading || authLoading || authStatus === "loading";
   const hasModules = hasModuleAssignments(moduleKeys, user?.userType);
 
-  if (!showLoading && authenticated && !hasModules) {
+  if (authStatus === "error") {
+    return (
+      <div className="space-y-5">
+        <PageHeader
+          title="Welcome"
+          description="We could not load your module assignments. This is usually temporary."
+        />
+        <div className="rounded-xl border border-border/80 bg-card px-6 py-10 text-center shadow-sm">
+          <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
+            <Shield className="size-5 text-muted-foreground" aria-hidden />
+          </div>
+          <h2 className="mt-4 text-lg font-semibold text-foreground">Session loading failed</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+            {authError || "Retry to restore your modules. Your account is still signed in."}
+          </p>
+          <Button
+            type="button"
+            className="mt-5 cursor-pointer"
+            onClick={() => void refresh()}
+          >
+            Retry
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Only show "no modules" after a confirmed successful /auth/me — never on failed loads.
+  if (!showLoading && authStatus === "authenticated" && user && !hasModules) {
     return (
       <div className="space-y-5">
         <PageHeader

@@ -55,6 +55,15 @@ export type VendorChargeRow = {
   quoteFiles: ChargeRowFile[];
 };
 
+/** Sentinel while "Others" is selected but the free-text name is still empty. */
+export const DISTRIBUTOR_OTHERS_PENDING = "__others_pending__";
+
+export function normalizeDistributorName(value: string | null | undefined): string {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed || trimmed === DISTRIBUTOR_OTHERS_PENDING) return "";
+  return trimmed;
+}
+
 const LINE_FILE_PREFIX = /^\[line:([^\]]+)\]\s*(.*)$/;
 
 export function encodeChargeLineFileName(rowKey: string, fileName: string): string {
@@ -430,10 +439,11 @@ function vendorLinePayload(row: VendorChargeRow): OvfLineFormInput {
   const qty = Math.round(Number(row.qty)) || 1;
   const unitPrice = Number(moneyAsFixed(Number(row.unit_price) || 0)) || 0;
   const total = Number(moneyAsFixed(Number(row.total) || qty * unitPrice)) || 0;
+  const distributor = normalizeDistributorName(row.vendor_name);
   return {
-    product_name: row.product_name.trim() || row.vendor_name.trim(),
+    product_name: row.product_name.trim() || distributor,
     description: row.description.trim() || null,
-    distributor_name: row.vendor_name.trim() || null,
+    distributor_name: distributor || null,
     contact_person: row.contact_person.trim() || null,
     contact_number: row.contact_number.trim() || null,
     qty,
@@ -514,14 +524,18 @@ export function validateChargeAttachments(
   }
 
   const hasVendorProductRows = vendorRows.some(
-    (row) => row.product_name.trim() || row.vendor_name.trim(),
+    (row) => row.product_name.trim() || normalizeDistributorName(row.vendor_name) || row.vendor_name.trim() === DISTRIBUTOR_OTHERS_PENDING,
   );
   if (hasVendorProductRows && !chargeTableHasFile(vendorRows, "quoteFiles")) {
     return "Add Quote * is required for Vendor Charges (upload at least one file on any product row).";
   }
 
   for (const row of vendorRows) {
-    if ((row.product_name.trim() || row.vendor_name.trim()) && !row.vendor_name.trim()) {
+    const hasContent =
+      row.product_name.trim() ||
+      normalizeDistributorName(row.vendor_name) ||
+      row.vendor_name.trim() === DISTRIBUTOR_OTHERS_PENDING;
+    if (hasContent && !normalizeDistributorName(row.vendor_name)) {
       return "Distributor Name is required for each vendor charge row.";
     }
   }
@@ -713,24 +727,46 @@ export function OvfOrderLinesSection({
 }: OvfOrderLinesSectionProps) {
   const totalSaleValue = sumLineTotals(customerRows);
   const totalPurchaseValue = sumLineTotals(vendorRows);
+  const DISTRIBUTOR_OTHERS = "__others__";
   const vendorOptions = Array.from(
     new Set(
       [
         ...vendorNameOptions.map((name) => name.trim()).filter(Boolean),
-        ...vendorRows.map((row) => row.vendor_name.trim()).filter(Boolean),
+        ...vendorRows
+          .map((row) => normalizeDistributorName(row.vendor_name))
+          .filter(
+            (name) =>
+              name &&
+              !vendorNameOptions.some((opt) => opt.trim().toLowerCase() === name.toLowerCase()),
+          ),
       ].filter(Boolean),
     ),
-  );
+  ).filter((name) => name.toLowerCase() !== "others");
+
   function selectedDistributor(value: string): string {
     const trimmed = value.trim();
     if (!trimmed) return "";
+    if (trimmed === DISTRIBUTOR_OTHERS_PENDING) return DISTRIBUTOR_OTHERS;
     const match = vendorOptions.find((name) => name.toLowerCase() === trimmed.toLowerCase());
-    return match ?? "";
+    if (match) return match;
+    // Custom / free-text distributor → show Others + text box
+    return DISTRIBUTOR_OTHERS;
+  }
+
+  function isOthersDistributor(value: string): boolean {
+    return selectedDistributor(value) === DISTRIBUTOR_OTHERS;
+  }
+
+  function othersDistributorText(value: string): string {
+    return normalizeDistributorName(value);
   }
 
   const hasCustomerProductRows = customerRows.some((row) => row.product_name.trim());
   const hasVendorProductRows = vendorRows.some(
-    (row) => row.product_name.trim() || row.vendor_name.trim(),
+    (row) =>
+      row.product_name.trim() ||
+      normalizeDistributorName(row.vendor_name) ||
+      row.vendor_name.trim() === DISTRIBUTOR_OTHERS_PENDING,
   );
   const customerPoTableMissing =
     !disabled && hasCustomerProductRows && !chargeTableHasFile(customerRows, "poFiles");
@@ -1054,25 +1090,52 @@ export function OvfOrderLinesSection({
                       />
                     </td>
                     <td className={tdClass()}>
-                      <select
-                        disabled={disabled}
-                        value={selectedDistributor(row.vendor_name)}
-                        onChange={(e) => updateVendorRow(row.key, { vendor_name: e.target.value })}
-                        className={cn(
-                          "flex h-9 w-full min-w-[140px] cursor-pointer rounded-[4px] border border-[#cfd7e3] bg-white px-2.5 text-[13px] shadow-none outline-none transition-colors duration-200",
-                          "focus-visible:border-sky-400 focus-visible:ring-1 focus-visible:ring-sky-300",
-                          disabled && "cursor-default bg-[#f8fafc] opacity-70",
-                          !selectedDistributor(row.vendor_name) && "text-muted-foreground",
-                        )}
-                        aria-label="Distributor name"
-                      >
-                        <option value="">Select distributor…</option>
-                        {vendorOptions.map((name) => (
-                          <option key={name} value={name}>
-                            {name}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex min-w-[140px] flex-col gap-1.5">
+                        <select
+                          disabled={disabled}
+                          value={selectedDistributor(row.vendor_name)}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (next === DISTRIBUTOR_OTHERS) {
+                              const keep = isOthersDistributor(row.vendor_name)
+                                ? othersDistributorText(row.vendor_name)
+                                : "";
+                              updateVendorRow(row.key, {
+                                vendor_name: keep.trim() ? keep : DISTRIBUTOR_OTHERS_PENDING,
+                              });
+                              return;
+                            }
+                            updateVendorRow(row.key, { vendor_name: next });
+                          }}
+                          className={cn(
+                            "flex h-9 w-full cursor-pointer rounded-[4px] border border-[#cfd7e3] bg-white px-2.5 text-[13px] shadow-none outline-none transition-colors duration-200",
+                            "focus-visible:border-sky-400 focus-visible:ring-1 focus-visible:ring-sky-300",
+                            disabled && "cursor-default bg-[#f8fafc] opacity-70",
+                            !selectedDistributor(row.vendor_name) && "text-muted-foreground",
+                          )}
+                          aria-label="Distributor name"
+                        >
+                          <option value="">Select distributor…</option>
+                          {vendorOptions.map((name) => (
+                            <option key={name} value={name}>
+                              {name}
+                            </option>
+                          ))}
+                          <option value={DISTRIBUTOR_OTHERS}>Others</option>
+                        </select>
+                        {isOthersDistributor(row.vendor_name) ? (
+                          <ChargesField
+                            readOnly={disabled}
+                            value={othersDistributorText(row.vendor_name)}
+                            placeholder="Enter distributor name"
+                            onChange={(v) =>
+                              updateVendorRow(row.key, {
+                                vendor_name: v.trim() ? v : DISTRIBUTOR_OTHERS_PENDING,
+                              })
+                            }
+                          />
+                        ) : null}
+                      </div>
                     </td>
                     <td className={tdClass()}>
                       <ChargesField

@@ -41,6 +41,23 @@ class LeadRepository(CrmScopedRepository):
         stmt = stmt.order_by(CrmLead.created_at.desc())
         return list(self.db.scalars(stmt).all())
 
+    def list_by_ids(
+        self,
+        ctx: TenantContext,
+        company_id: UUID,
+        lead_ids: list[UUID],
+    ) -> list[CrmLead]:
+        """Load leads by id, including converted — used for opportunity report joins."""
+        if not lead_ids:
+            return []
+        stmt = select(CrmLead).where(
+            CrmLead.company_id == company_id,
+            CrmLead.is_deleted.is_(False),
+            CrmLead.id.in_(lead_ids),
+        )
+        stmt = self.apply_crm_filter(stmt, CrmLead, ctx, branch_scoped=True)
+        return list(self.db.scalars(stmt).all())
+
     def create(self, ctx: TenantContext, **fields) -> CrmLead:
         row = CrmLead(
             id=uuid4(),

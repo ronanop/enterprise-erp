@@ -3,6 +3,7 @@
  */
 import { jsPDF } from "jspdf";
 
+import { downloadPdf, openPdfInNewTab } from "@/lib/crm/open-pdf-preview";
 import type { Company } from "@/services/sales-crm-service";
 
 export type CompanyExportInput = {
@@ -187,7 +188,7 @@ export function buildCompanyExportFilename(company: Company): string {
   return `Company_${base || company.account_number}.pdf`;
 }
 
-export function exportCompanyPdf(input: CompanyExportInput): void {
+function buildCompanyPdfDocument(input: CompanyExportInput): jsPDF {
   const { company } = input;
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
   const pageRef: PageRef = { n: 1 };
@@ -253,5 +254,17 @@ export function exportCompanyPdf(input: CompanyExportInput): void {
   );
 
   drawFooter(doc, pageRef);
-  doc.save(buildCompanyExportFilename(company));
+  return doc;
+}
+
+/** Open company PDF in a new tab (print preview). */
+export function exportCompanyPdf(input: CompanyExportInput): void {
+  const doc = buildCompanyPdfDocument(input);
+  openPdfInNewTab(doc, buildCompanyExportFilename(input.company));
+}
+
+/** Download company PDF. */
+export function downloadCompanyPdf(input: CompanyExportInput): void {
+  const doc = buildCompanyPdfDocument(input);
+  downloadPdf(doc, buildCompanyExportFilename(input.company));
 }

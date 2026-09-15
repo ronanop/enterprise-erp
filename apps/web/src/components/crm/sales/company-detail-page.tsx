@@ -38,6 +38,7 @@ import { FinanceField } from "@/components/finance/journals/finance-form-field";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { ApiClientError } from "@/services/api-client";
 import {
   fullName,
@@ -452,7 +453,7 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
                             <Link href={`/crm/leads/${lead.id}`} className="cursor-pointer hover:underline">
                               {fullName(lead)}
                             </Link>
-                            <div className="text-[11px] font-normal text-muted-foreground">{lead.lead_code}</div>
+                            <div className="text-[11px] font-normal text-muted-foreground">{formatCrmCode(lead.lead_code)}</div>
                           </td>
                           <td className="px-4 py-2.5 text-muted-foreground">
                             {textOrDash(lead.end_customer_name ?? company.customer_name)}

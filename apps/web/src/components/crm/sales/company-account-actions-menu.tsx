@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CrmRecordActionsMenu } from "@/components/crm/sales/crm-record-actions-menu";
 import {
   cloneCompanyRecord,
+  downloadCompanyExport,
   printCompanyPreview,
 } from "@/lib/crm/crm-record-actions";
 import { deleteCompany, type Company } from "@/services/sales-crm-service";
@@ -21,6 +22,7 @@ export function CompanyAccountActionsMenu({ company }: { company: Company }) {
       shareTitle={company.customer_name}
       onClone={() => cloneCompanyRecord(company, router)}
       onPrintPreview={() => printCompanyPreview(company)}
+      onExport={() => downloadCompanyExport(company)}
       onDelete={() => deleteCompany(company.id)}
       onDeleted={() => router.push("/crm/companies")}
     />

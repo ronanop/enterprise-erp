@@ -155,6 +155,7 @@ class OpportunityBlueprintService:
             # Approve/reject run via My Jobs while locked; hide stale actions if unlocked.
             allowed = [action for action in allowed if action not in _UNLOCKING_ACTIONS]
         allowed = self._ensure_peer_document_actions(allowed, opp, current)
+        allowed = self._filter_create_actions_when_children_exist(ctx, opp, allowed)
         return {
             "entity_type": "opportunity",
             "entity_id": opp.id,
@@ -163,6 +164,26 @@ class OpportunityBlueprintService:
             "allowed_actions": allowed,
             "is_sales_blueprint": is_sales_blueprint,
         }
+
+    def _filter_create_actions_when_children_exist(
+        self, ctx: TenantContext, opp: CrmOpportunity, allowed: list[str]
+    ) -> list[str]:
+        """Hide Create Quote / Create OVF once those records already exist."""
+        from modules.crm.repository.ovf_repository import OvfRepository
+        from modules.crm.repository.quote_repository import QuoteRepository
+
+        actions = list(allowed)
+        if "create_quote" in actions:
+            quotes = QuoteRepository(self._db).list_quotes(
+                ctx, opp.company_id, opportunity_id=opp.id
+            )
+            if quotes:
+                actions = [action for action in actions if action != "create_quote"]
+        if "create_ovf" in actions:
+            ovfs = OvfRepository(self._db).list_ovfs(ctx, opp.company_id, opportunity_id=opp.id)
+            if ovfs:
+                actions = [action for action in actions if action != "create_ovf"]
+        return actions
 
     @staticmethod
     def _filter_document_step_actions(allowed: list[str], opp: CrmOpportunity) -> list[str]:

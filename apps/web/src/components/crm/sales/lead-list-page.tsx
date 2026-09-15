@@ -11,6 +11,7 @@ import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/cr
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { ApiClientError } from "@/services/api-client";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { formatInr, fullName, listSalesLeads, type SalesLead } from "@/services/sales-crm-service";
 
 type SortKey = "lead" | "mobile" | "expected_amount" | "blueprint_state" | "status";
@@ -121,7 +122,7 @@ export function LeadListPage({
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                     <td className="px-4 py-2.5 font-medium text-foreground">
                       <Link href={`/crm/leads/${row.id}`} className="cursor-pointer hover:underline">
-                        {fullName(row)} · {row.lead_code}
+                        {fullName(row)} · {formatCrmCode(row.lead_code)}
                       </Link>
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">{row.mobile}</td>

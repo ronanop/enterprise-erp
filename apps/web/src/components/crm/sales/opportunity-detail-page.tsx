@@ -25,7 +25,8 @@ import { CompanyWorkspaceNav } from "@/components/crm/company-workspace-nav";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cloneOpportunityRecord, printOpportunityPreview } from "@/lib/crm/crm-record-actions";
+import { cloneOpportunityRecord, downloadOpportunityExport, printOpportunityPreview } from "@/lib/crm/crm-record-actions";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { setCrmOpportunityContext, setCrmSidebarFocus } from "@/lib/crm-sidebar-focus";
 import { ApiClientError } from "@/services/api-client";
 import {
@@ -272,7 +273,10 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
   const acceptedQuote = quotes.find((q) => q.quote_stage === "accepted");
   const activeQuote = acceptedQuote ?? quotes[0];
   const existingOvf = ovfs[0];
-  const canCreateQuote = blueprint.allowed_actions.includes("create_quote") && !blueprint.locked;
+  const canCreateQuote =
+    blueprint.allowed_actions.includes("create_quote") &&
+    !blueprint.locked &&
+    quotes.length === 0;
   const canCreateOvf =
     blueprint.allowed_actions.includes("create_ovf") &&
     !blueprint.locked &&
@@ -302,7 +306,12 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
       ...(canCreateQuote ? ["create_quote"] : []),
       ...(canCreateOvf ? ["create_ovf"] : []),
     ]),
-  );
+  ).filter((action) => {
+    // Once quote/OVF exists, never offer create again (opp may still be ovf_ready).
+    if (action === "create_quote" && quotes.length > 0) return false;
+    if (action === "create_ovf" && existingOvf) return false;
+    return true;
+  });
 
   async function onOpenReviewAttachment() {
     if (!reviewAttachment) return;
@@ -361,7 +370,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
           />
 
           <PageHeader
-            title={`${opp.opportunity_name} · ${opp.opportunity_code}`}
+            title={`${opp.opportunity_name} · ${formatCrmCode(opp.opportunity_code)}`}
             description={`Expected revenue ${formatInr(opp.expected_revenue)}`}
             actions={
               <div className="flex flex-wrap items-center gap-2">
@@ -374,10 +383,41 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
                   entityType="opportunity"
                   entityId={opp.id}
                   entityLabel="Opportunity"
-                  entityName={`${opp.opportunity_name} · ${opp.opportunity_code}`}
-                  shareTitle={`${opp.opportunity_name} · ${opp.opportunity_code}`}
+                  entityName={`${opp.opportunity_name} · ${formatCrmCode(opp.opportunity_code)}`}
+                  shareTitle={`${opp.opportunity_name} · ${formatCrmCode(opp.opportunity_code)}`}
                   onClone={() => cloneOpportunityRecord(opp, router)}
-                  onPrintPreview={async () => printOpportunityPreview(opp)}
+                  onPrintPreview={async () =>
+                    printOpportunityPreview({
+                      opportunity: opp,
+                      lead: sourceLead,
+                      company,
+                      leadOwnerName: sourceLead
+                        ? employees.find((e) => e.id === sourceLead.owner_employee_id)?.label
+                        : null,
+                      presalesOwnerName: sourceLead
+                        ? employees.find((e) => e.id === sourceLead.presales_owner_id)?.label
+                        : null,
+                      leadSourceName: sourceLead
+                        ? leadSources.find((s) => s.id === sourceLead.lead_source_id)?.label
+                        : null,
+                    })
+                  }
+                  onExport={async () =>
+                    downloadOpportunityExport({
+                      opportunity: opp,
+                      lead: sourceLead,
+                      company,
+                      leadOwnerName: sourceLead
+                        ? employees.find((e) => e.id === sourceLead.owner_employee_id)?.label
+                        : null,
+                      presalesOwnerName: sourceLead
+                        ? employees.find((e) => e.id === sourceLead.presales_owner_id)?.label
+                        : null,
+                      leadSourceName: sourceLead
+                        ? leadSources.find((s) => s.id === sourceLead.lead_source_id)?.label
+                        : null,
+                    })
+                  }
                   onDelete={() => deleteOpportunity(opp.id)}
                   onDeleted={() => router.push("/crm/opportunities")}
                 />
@@ -435,7 +475,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
                         <tr key={q.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                           <td className="px-4 py-2 font-medium">
                             <Link href={`/crm/quotes/${q.id}`} className="cursor-pointer hover:underline">
-                              {q.quote_no}
+                              {formatCrmCode(q.quote_no)}
                             </Link>
                           </td>
                           <td className="px-4 py-2">
@@ -483,7 +523,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
                         <tr key={o.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                           <td className="px-4 py-2 font-medium">
                             <Link href={`/crm/ovf/${o.id}`} className="cursor-pointer hover:underline">
-                              {o.ovf_no}
+                              {formatCrmCode(o.ovf_no)}
                             </Link>
                           </td>
                           <td className="px-4 py-2">

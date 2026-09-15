@@ -11,6 +11,7 @@ import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/cr
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { setCrmSidebarFocus } from "@/lib/crm-sidebar-focus";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { ApiClientError } from "@/services/api-client";
 import { formatInr, listOpportunities, type Opportunity } from "@/services/sales-crm-service";
 
@@ -137,7 +138,7 @@ export function OpportunityListPage({
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                     <td className="px-4 py-2.5 font-medium text-foreground">
                       <Link href={`/crm/opportunities/${row.id}`} className="cursor-pointer hover:underline">
-                        {row.opportunity_name} · {row.opportunity_code}
+                        {row.opportunity_name} · {formatCrmCode(row.opportunity_code)}
                       </Link>
                     </td>
                     <td className="px-4 py-2.5">

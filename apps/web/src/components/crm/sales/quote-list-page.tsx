@@ -10,6 +10,7 @@ import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/cr
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { ApiClientError } from "@/services/api-client";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { formatInr, listQuotes, type Quote } from "@/services/sales-crm-service";
 
 type SortKey =
@@ -142,7 +143,7 @@ export function QuoteListPage({
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                     <td className="px-4 py-2.5 font-medium text-foreground">
                       <Link href={`/crm/quotes/${row.id}`} className="cursor-pointer hover:underline">
-                        {row.quote_no}
+                        {formatCrmCode(row.quote_no)}
                       </Link>
                     </td>
                     <td className="px-4 py-2.5">

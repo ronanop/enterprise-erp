@@ -6,6 +6,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
+import { downloadPdf, openPdfInNewTab } from "@/lib/crm/open-pdf-preview";
 import type { Quote, QuoteLine } from "@/services/sales-crm-service";
 
 export type QuoteExportSeller = {
@@ -226,7 +227,10 @@ export function buildQuoteExportFilename(quote: Quote, subject?: string | null):
   return `QT_${base || quote.quote_no}.pdf`;
 }
 
-export async function exportQuotePdf(input: QuoteExportInput): Promise<void> {
+export async function exportQuotePdf(
+  input: QuoteExportInput,
+  options?: { download?: boolean },
+): Promise<void> {
   const [cacheLogo, womenLogo] = await Promise.all([
     loadImageDataUrl(CACHE_LOGO.path),
     loadImageDataUrl(WOMEN_LOGO.path),
@@ -411,5 +415,15 @@ export async function exportQuotePdf(input: QuoteExportInput): Promise<void> {
   doc.text(pdfSafe(ownerName), BODY_X, y);
 
   drawFooter(doc);
-  doc.save(buildQuoteExportFilename(quote, subject));
+  const filename = buildQuoteExportFilename(quote, subject);
+  if (options?.download) {
+    downloadPdf(doc, filename);
+  } else {
+    openPdfInNewTab(doc, filename);
+  }
+}
+
+/** Download quote PDF. */
+export async function downloadQuotePdf(input: QuoteExportInput): Promise<void> {
+  await exportQuotePdf(input, { download: true });
 }

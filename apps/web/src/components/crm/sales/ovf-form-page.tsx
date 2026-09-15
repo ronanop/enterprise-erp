@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ClipboardCheck, IndianRupee } from "lucide-react";
 
 import { CrmErrorBanner, CrmPage, CrmSection } from "@/components/crm/crm-ui";
+import { CrmSessionEmployeeField } from "@/components/crm/sales/crm-session-employee-field";
 import {
   OvfOrderLinesSection,
   computeOvfMargins,
@@ -34,7 +35,14 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { buildLeadDistributorDropdownOptions } from "@/lib/crm/lead-distributor-options";
+import {
+  LEAD_PRODUCT_TYPES,
+  normalizeLeadProductType,
+  subProductOptionsForType,
+} from "@/lib/crm/lead-product-options";
+import { resolveSessionEmployeeLabel } from "@/lib/crm/session-employee";
 import {
   addOvfLine,
   createAttachment,
@@ -49,7 +57,7 @@ import {
   getSalesLead,
   listAttachments,
   listContacts,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   listOvfLines,
   listOvfs,
   listQuoteLines,
@@ -87,9 +95,6 @@ type OvfDraft = {
   approval_status: string;
 };
 
-const SEGMENTS = ["Hardware", "Software", "Services", "Cloud", "Networking", "Security"];
-const SUB_SEGMENTS = ["Compute", "Storage", "Licensing", "Implementation", "Support", "Managed Services"];
-
 const NUMBER_NO_SPIN =
   "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
@@ -105,6 +110,7 @@ async function distributorOptionsForOpportunity(opportunityRow: Opportunity): Pr
 
 export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: string }) {
   const router = useRouter();
+  const { user } = useAuthUser();
   const isEdit = Boolean(ovfId);
   const [ovf, setOvf] = useState<Ovf | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
@@ -221,7 +227,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
 
       const quoteRow = await getQuote(quoteId);
       const opportunityRow = await getOpportunity(quoteRow.opportunity_id);
-      const [companyRow, contactRows, employeeRows, blueprint, existingOvfs, quoteLines] =
+      const [companyRow, contactRows, memberRows, blueprint, existingOvfs, quoteLines] =
         await Promise.all([
           opportunityRow.company_account_id
             ? getCompany(opportunityRow.company_account_id).catch(() => null)
@@ -229,7 +235,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           opportunityRow.company_account_id
             ? listContacts(opportunityRow.company_account_id).catch(() => [])
             : Promise.resolve([]),
-          listEmployeeOptions().catch(() => []),
+          listCrmMemberOptions().catch(() => []),
           getOpportunityBlueprint(quoteRow.opportunity_id).catch(() => null),
           listOvfs({ opportunity_id: quoteRow.opportunity_id }).catch(() => []),
           listQuoteLines(quoteId).catch(() => []),
@@ -255,9 +261,10 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         contactRows[0] ??
         null;
       const ownerName =
-        employeeRows.find(
-          (employee) => employee.id === opportunityRow.owner_employee_id,
-        )?.label ?? "";
+        resolveSessionEmployeeLabel(memberRows, user) ||
+        quoteRow.owner_name?.trim() ||
+        memberRows.find((member) => member.id === opportunityRow.owner_employee_id)?.label ||
+        "";
       const contactName = selectedContact ? fullName(selectedContact) : "";
       const billingAddress = companyRow
         ? [
@@ -304,7 +311,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
     } finally {
       setLoading(false);
     }
-  }, [isEdit, ovfId, quoteId]);
+  }, [isEdit, ovfId, quoteId, user]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -475,7 +482,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           <FinanceField label="Billing Address"><Input value={form.billing_address} onChange={(event) => setField("billing_address", event.target.value)} /></FinanceField>
           <FinanceField label="Quote No"><Input value={quote?.quote_no ?? "-"} disabled /></FinanceField>
           <FinanceField label="Billing State"><Input value={form.billing_state} onChange={(event) => setField("billing_state", event.target.value)} /></FinanceField>
-          <FinanceField label="OVF Module Owner"><Input value={form.owner_name} onChange={(event) => setField("owner_name", event.target.value)} /></FinanceField>
+          <CrmSessionEmployeeField label="OVF Module Owner" value={form.owner_name} />
           <FinanceField label="Billing Contact Person"><Input value={form.billing_contact_person} onChange={(event) => setField("billing_contact_person", event.target.value)} /></FinanceField>
           <FinanceField label="Shipping Address *"><Input value={form.shipping_address} onChange={(event) => setField("shipping_address", event.target.value)} /></FinanceField>
           <FinanceField label="Billing Country"><Input value={form.billing_country} onChange={(event) => setField("billing_country", event.target.value)} /></FinanceField>
@@ -495,15 +502,56 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
       <CrmSection title="Technology Segment & Sub Technology Segment" icon={ClipboardCheck}>
         <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
           <FinanceField label="Technology Segment">
-            <FinanceSelect value={form.technology_segment} onChange={(event) => setField("technology_segment", event.target.value)}>
+            <FinanceSelect
+              value={form.technology_segment}
+              onChange={(event) => {
+                const next = event.target.value;
+                const nextSubs = subProductOptionsForType(next);
+                setForm((current) => ({
+                  ...current,
+                  technology_segment: next,
+                  sub_technology_segment: nextSubs.includes(current.sub_technology_segment)
+                    ? current.sub_technology_segment
+                    : "",
+                }));
+              }}
+            >
               <option value="">None</option>
-              {SEGMENTS.map((segment) => <option key={segment} value={segment}>{segment}</option>)}
+              {LEAD_PRODUCT_TYPES.map((segment) => (
+                <option key={segment} value={segment}>
+                  {segment}
+                </option>
+              ))}
+              {form.technology_segment &&
+              !normalizeLeadProductType(form.technology_segment) ? (
+                <option value={form.technology_segment}>{form.technology_segment}</option>
+              ) : null}
             </FinanceSelect>
           </FinanceField>
           <FinanceField label="Sub Technology Segment">
-            <FinanceSelect value={form.sub_technology_segment} onChange={(event) => setField("sub_technology_segment", event.target.value)}>
-              <option value="">None</option>
-              {SUB_SEGMENTS.map((segment) => <option key={segment} value={segment}>{segment}</option>)}
+            <FinanceSelect
+              value={form.sub_technology_segment}
+              onChange={(event) => setField("sub_technology_segment", event.target.value)}
+              disabled={!normalizeLeadProductType(form.technology_segment)}
+            >
+              <option value="">
+                {normalizeLeadProductType(form.technology_segment)
+                  ? "None"
+                  : "Select technology segment first"}
+              </option>
+              {subProductOptionsForType(form.technology_segment).map((segment) => (
+                <option key={segment} value={segment}>
+                  {segment}
+                </option>
+              ))}
+              {form.sub_technology_segment &&
+              !subProductOptionsForType(form.technology_segment).includes(
+                form.sub_technology_segment,
+              ) ? (
+                <option value={form.sub_technology_segment}>
+                  {form.sub_technology_segment}
+                </option>
+              ) : null}
             </FinanceSelect>
           </FinanceField>
         </div>

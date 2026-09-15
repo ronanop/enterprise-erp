@@ -36,9 +36,10 @@ class CodeSequenceRepository:
                     nums.append(int(str(code).rsplit("-", 1)[-1]))
                 except ValueError:
                     continue
-            if nums:
+        if nums:
                 seq = max(nums) + 1
-        return f"{full_prefix}{seq:0{width}d}"
+        seq_part = f"{seq:0{width}d}" if width > 0 else str(seq)
+        return f"{full_prefix}{seq_part}"
 
     def _next_company_account_number(self, company_id: UUID, model, code_column: str) -> str:
         """Sales account numbers: COMP-01, COMP-02, … (per org company scope)."""

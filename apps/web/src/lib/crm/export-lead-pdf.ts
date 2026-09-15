@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 
+import { downloadPdf, openPdfInNewTab } from "@/lib/crm/open-pdf-preview";
 import { formatInr, fullName, type SalesLead } from "@/services/sales-crm-service";
 
 function pdfSafe(text: string): string {
@@ -14,7 +15,7 @@ function dash(value: string | number | null | undefined): string {
   return text ? pdfSafe(text) : "-";
 }
 
-export function exportLeadPdf(lead: SalesLead, companyName?: string | null): void {
+function buildLeadPdf(lead: SalesLead, companyName?: string | null): jsPDF {
   const doc = new jsPDF();
   let y = 18;
   doc.setFont("helvetica", "bold");
@@ -51,5 +52,21 @@ export function exportLeadPdf(lead: SalesLead, companyName?: string | null): voi
     }
   }
 
-  doc.save(`${lead.lead_code || "lead"}.pdf`);
+  return doc;
+}
+
+export function buildLeadExportFilename(lead: SalesLead): string {
+  return `${lead.lead_code || "lead"}.pdf`;
+}
+
+/** Open lead PDF in a new tab (print preview). */
+export function exportLeadPdf(lead: SalesLead, companyName?: string | null): void {
+  const doc = buildLeadPdf(lead, companyName);
+  openPdfInNewTab(doc, buildLeadExportFilename(lead));
+}
+
+/** Download lead PDF. */
+export function downloadLeadPdf(lead: SalesLead, companyName?: string | null): void {
+  const doc = buildLeadPdf(lead, companyName);
+  downloadPdf(doc, buildLeadExportFilename(lead));
 }

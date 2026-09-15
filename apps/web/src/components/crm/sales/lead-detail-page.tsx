@@ -17,7 +17,8 @@ import { CrmRecordActionsMenu } from "@/components/crm/sales/crm-record-actions-
 import { LeadDetailsCard } from "@/components/crm/sales/lead-details-card";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { cloneLeadRecord, printLeadPreview } from "@/lib/crm/crm-record-actions";
+import { cloneLeadRecord, downloadLeadExport, printLeadPreview } from "@/lib/crm/crm-record-actions";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { ApiClientError } from "@/services/api-client";
 import {
   convertLead,
@@ -128,7 +129,7 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
       <ApprovalBanner locked={blueprint.locked} label="This lead" />
 
       <PageHeader
-        title={`${fullName(lead)} · ${lead.lead_code}`}
+        title={`${fullName(lead)} · ${formatCrmCode(lead.lead_code)}`}
         description={
           lead.expected_amount
             ? `Expected amount ${formatInr(lead.expected_amount)}`
@@ -155,11 +156,12 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
               entityType="lead"
               entityId={lead.id}
               entityLabel="Lead"
-              entityName={`${fullName(lead)} · ${lead.lead_code}`}
-              shareTitle={`${fullName(lead)} · ${lead.lead_code}`}
+              entityName={`${fullName(lead)} · ${formatCrmCode(lead.lead_code)}`}
+              shareTitle={`${fullName(lead)} · ${formatCrmCode(lead.lead_code)}`}
               cloneDisabled={!lead.company_account_id}
               onClone={() => cloneLeadRecord(lead, router)}
               onPrintPreview={async () => printLeadPreview(lead, company?.customer_name)}
+              onExport={async () => downloadLeadExport(lead, company?.customer_name)}
               onDelete={() => deleteLead(lead.id)}
               onDeleted={() =>
                 router.push(lead.company_account_id ? `/crm/companies/${lead.company_account_id}` : "/crm/leads")

@@ -14,8 +14,9 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { cn } from "@/lib/utils";
-import type { OpportunityTimelineEvent } from "@/services/sales-crm-service";
+import type { BlueprintEntity, OpportunityTimelineEvent } from "@/services/sales-crm-service";
 
 export type DealFlow = "hardware" | "cloud" | "cloud_migration";
 
@@ -84,21 +85,22 @@ export function getDealStageLabel(stage: DealStage): string {
   return findStepLabel(stage) ?? stage;
 }
 
-function humanizeToken(value: string): string {
-  return value.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 /** Status label aligned with the deal stepper and opportunity history timeline. */
 export function resolveDealTimelineStatusLabel(options: {
   stage: DealStage;
   lost?: boolean;
   timelineEvents?: OpportunityTimelineEvent[] | null;
 }): string {
-  if (options.lost) return "Lost";
+  if (options.lost) return "Lost Deal";
   const events = options.timelineEvents ?? [];
   const latest = events.length > 0 ? events[events.length - 1] : null;
+  if (latest?.to_state?.trim() && ["lead", "opportunity", "quote", "ovf"].includes(latest.entity_type)) {
+    return resolveSalesStageLabel({
+      entityType: latest.entity_type as BlueprintEntity,
+      blueprintState: latest.to_state,
+    });
+  }
   if (latest?.title?.trim()) return latest.title.trim();
-  if (latest?.to_state?.trim()) return humanizeToken(latest.to_state);
   return getDealStageLabel(options.stage);
 }
 

@@ -23,12 +23,15 @@ export function AppSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
-  const { user, loading: userLoading, signedIn, moduleKeys } = useAuthUser();
+  const { user, loading: userLoading, signedIn, moduleKeys, status: authStatus, refresh } =
+    useAuthUser();
 
   const hasModules = hasModuleAssignments(moduleKeys, user?.userType);
+  const sessionReady = authStatus === "authenticated";
+  const sessionPending = userLoading || authStatus === "loading";
 
   const navGroups = useMemo(() => {
-    if (userLoading) {
+    if (sessionPending || authStatus === "error") {
       return navigation
         .map((group) => ({
           ...group,
@@ -37,7 +40,7 @@ export function AppSidebar() {
         .filter((group) => group.items.length > 0);
     }
     return filterNavigationGroups(navigation, moduleKeys, user?.userType);
-  }, [moduleKeys, user?.userType, userLoading]);
+  }, [moduleKeys, user?.userType, sessionPending, authStatus]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -75,7 +78,11 @@ export function AppSidebar() {
                 {env.appName}
               </p>
               <p className="truncate text-[11px] text-sidebar-foreground/55">
-                {userLoading ? "Loading session…" : "23 modules · live API"}
+                {sessionPending
+                  ? "Loading session…"
+                  : authStatus === "error"
+                    ? "Session retry needed"
+                    : "23 modules · live API"}
               </p>
             </div>
           ) : null}
@@ -98,7 +105,19 @@ export function AppSidebar() {
       ) : null}
 
       <nav className="erp-scroll flex-1 overflow-y-auto px-2.5 py-2">
-        {!collapsed && signedIn && !userLoading && !hasModules ? (
+        {!collapsed && authStatus === "error" ? (
+          <div className="mb-4 space-y-2 rounded-lg border border-sidebar-border/80 bg-white/5 px-3 py-2.5 text-[12px] leading-relaxed text-sidebar-foreground/70">
+            <p>Could not load modules. Retry to restore your menu.</p>
+            <button
+              type="button"
+              className="cursor-pointer text-[12px] font-medium text-sidebar-primary underline-offset-2 hover:underline"
+              onClick={() => void refresh()}
+            >
+              Retry
+            </button>
+          </div>
+        ) : null}
+        {!collapsed && sessionReady && !hasModules ? (
           <div className="mb-4 rounded-lg border border-sidebar-border/80 bg-white/5 px-3 py-2.5 text-[12px] leading-relaxed text-sidebar-foreground/70">
             No modules assigned. Contact your ERP administrator to get access.
           </div>

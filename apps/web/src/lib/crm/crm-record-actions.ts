@@ -1,10 +1,10 @@
 import { useRouter } from "next/navigation";
 
-import { exportCompanyPdf } from "@/lib/crm/export-company-pdf";
-import { exportLeadPdf } from "@/lib/crm/export-lead-pdf";
-import { exportOpportunityPdf } from "@/lib/crm/export-opportunity-pdf";
-import { exportOvfPdf } from "@/lib/crm/export-ovf-pdf";
-import { exportQuotePdf, loadSellerLetterhead } from "@/lib/crm/export-quote-pdf";
+import { downloadCompanyPdf, exportCompanyPdf } from "@/lib/crm/export-company-pdf";
+import { downloadLeadPdf, exportLeadPdf } from "@/lib/crm/export-lead-pdf";
+import { downloadOpportunityPdf, exportOpportunityPdf, type OpportunityExportInput } from "@/lib/crm/export-opportunity-pdf";
+import { exportOvfPdf, openOvfPrintPreview } from "@/lib/crm/export-ovf-pdf";
+import { downloadQuotePdf, exportQuotePdf, loadSellerLetterhead } from "@/lib/crm/export-quote-pdf";
 import { nextCloneCompanyName } from "@/lib/crm/company-clone-name";
 import { ApiClientError } from "@/services/api-client";
 import {
@@ -17,7 +17,6 @@ import {
   listCompanies,
   listCrmMemberOptions,
   listPipelines,
-  listQuoteLines,
   type Company,
   type LeadCreateFromCompanyInput,
   type Opportunity,
@@ -107,6 +106,23 @@ export async function printCompanyPreview(company: Company) {
   });
 }
 
+export async function downloadCompanyExport(company: Company) {
+  const employees = await listCrmMemberOptions().catch(() => []);
+  const nameFor = (id: string | null) => {
+    if (!id) return "—";
+    return employees.find((e) => e.id === id)?.label ?? "—";
+  };
+  downloadCompanyPdf({
+    company,
+    accountManagerName: nameFor(company.account_owner_id),
+    assignedOwnershipName: company.account_ownership_id
+      ? nameFor(company.account_ownership_id)
+      : "None",
+    createdByName: nameFor(company.account_owner_id),
+    modifiedByName: nameFor(company.account_owner_id),
+  });
+}
+
 export async function cloneLeadRecord(lead: SalesLead, router: ReturnType<typeof useRouter>) {
   if (!lead.company_account_id) {
     throw new ApiClientError("Lead must belong to a company account to clone", 409);
@@ -117,6 +133,10 @@ export async function cloneLeadRecord(lead: SalesLead, router: ReturnType<typeof
 
 export function printLeadPreview(lead: SalesLead, companyName?: string | null) {
   exportLeadPdf(lead, companyName);
+}
+
+export function downloadLeadExport(lead: SalesLead, companyName?: string | null) {
+  downloadLeadPdf(lead, companyName);
 }
 
 export async function cloneOpportunityRecord(
@@ -141,8 +161,12 @@ export async function cloneOpportunityRecord(
   router.push(`/crm/opportunities/${cloned.id}`);
 }
 
-export function printOpportunityPreview(opportunity: Opportunity) {
-  exportOpportunityPdf(opportunity);
+export function printOpportunityPreview(input: OpportunityExportInput | Opportunity) {
+  exportOpportunityPdf(input);
+}
+
+export function downloadOpportunityExport(input: OpportunityExportInput | Opportunity) {
+  downloadOpportunityPdf(input);
 }
 
 export async function cloneQuoteRecord(
@@ -202,11 +226,38 @@ export async function printQuotePreview(quote: Quote, lines: QuoteLine[]) {
   });
 }
 
+export async function downloadQuoteExport(quote: Quote, lines: QuoteLine[]) {
+  const seller = await loadSellerLetterhead(quote.company_id, quote.branch_id);
+  await downloadQuotePdf({
+    quote,
+    lines,
+    seller,
+    customerName: quote.entity_name || quote.account_name || "—",
+    customerAddress: quote.entity_address || "—",
+    subject: quote.subject || quote.project_title || quote.quote_no,
+    ownerName: quote.owner_name || "—",
+    termsOverride: quote.terms,
+  });
+}
+
 export async function cloneOvfRecord() {
   throw new ApiClientError("Only one OVF is allowed per opportunity; cloning is not supported.", 409);
 }
 
 export async function printOvfPreview(
+  input: Parameters<typeof openOvfPrintPreview>[0],
+) {
+  await openOvfPrintPreview(input);
+}
+
+export async function downloadOvfExport(
+  input: Parameters<typeof exportOvfPdf>[0],
+) {
+  await exportOvfPdf(input);
+}
+
+/** @deprecated Prefer downloadOvfExport (PDF download). */
+export async function downloadOvfPdf(
   input: Parameters<typeof exportOvfPdf>[0],
 ) {
   await exportOvfPdf(input);

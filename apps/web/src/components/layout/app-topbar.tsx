@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
 import { LogIn } from "lucide-react";
 
 import { CrmGlobalSearch } from "@/components/crm/crm-global-search";
 import { AppTopbarNotifications } from "@/components/layout/app-topbar-notifications";
 import { ProjectsGlobalSearch } from "@/components/projects/projects-global-search";
-import { isAuthenticated } from "@/lib/auth";
+import { useAuthUser } from "@/hooks/use-auth-user";
 
-function workspaceSubtitle(pathname: string, signedIn: boolean): string {
+function workspaceSubtitle(pathname: string, signedIn: boolean, loading: boolean): string {
+  if (loading) return "Loading session…";
   if (!signedIn) return "Guest · sign in for protected APIs";
   if (pathname === "/crm" || pathname.startsWith("/crm/")) return "Sales CRM · secure session";
   if (pathname === "/projects" || pathname.startsWith("/projects/")) {
@@ -21,13 +21,9 @@ function workspaceSubtitle(pathname: string, signedIn: boolean): string {
 
 export function AppTopbar() {
   const pathname = usePathname();
-  const [signedIn, setSignedIn] = useState(false);
+  const { signedIn, loading } = useAuthUser();
   const isCrm = pathname === "/crm" || pathname.startsWith("/crm/");
   const isProjects = pathname === "/projects" || pathname.startsWith("/projects/");
-
-  useEffect(() => {
-    setSignedIn(isAuthenticated());
-  }, []);
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-4 border-b border-border/80 bg-card/80 px-4 backdrop-blur-md supports-backdrop-filter:bg-card/70 sm:px-6">
@@ -39,7 +35,7 @@ export function AppTopbar() {
           Workspace
         </Link>
         <p className="truncate text-xs text-muted-foreground">
-          {workspaceSubtitle(pathname, signedIn)}
+          {workspaceSubtitle(pathname, signedIn, loading)}
         </p>
       </div>
 
@@ -53,7 +49,7 @@ export function AppTopbar() {
 
       <div className="flex shrink-0 items-center gap-2">
         <AppTopbarNotifications />
-        {!signedIn ? (
+        {!signedIn && !loading ? (
           <Link
             href="/login"
             className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"

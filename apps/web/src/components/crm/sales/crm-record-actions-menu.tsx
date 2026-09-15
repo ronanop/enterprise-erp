@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Copy, Printer, Share2, Trash2 } from "lucide-react";
+import { Copy, Download, Printer, Share2, Trash2 } from "lucide-react";
 
 import { CrmEntityShareDialog } from "@/components/crm/sales/crm-entity-share-dialog";
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
@@ -18,6 +18,7 @@ type Props = {
   shareTitle: string;
   onClone: () => Promise<void>;
   onPrintPreview: () => Promise<void>;
+  onExport?: () => Promise<void>;
   onDelete: () => Promise<void>;
   onDeleted?: () => void;
   cloneDisabled?: boolean;
@@ -31,6 +32,7 @@ export function CrmRecordActionsMenu({
   shareTitle,
   onClone,
   onPrintPreview,
+  onExport,
   onDelete,
   onDeleted,
   cloneDisabled,
@@ -81,6 +83,23 @@ export function CrmRecordActionsMenu({
     }
   }
 
+  async function runExport() {
+    if (!onExport) return;
+    setMenuOpen(false);
+    setBusy(true);
+    setError(null);
+    try {
+      await onExport();
+    } catch (err) {
+      const message =
+        err instanceof ApiClientError ? err.message : `Failed to export ${entityLabel.toLowerCase()}`;
+      setActionError(message);
+      setError(message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onDeleteConfirm() {
     setBusy(true);
     setError(null);
@@ -110,6 +129,12 @@ export function CrmRecordActionsMenu({
           <Printer className="size-3.5 text-muted-foreground" />
           Print preview
         </RowActionsItem>
+        {onExport ? (
+          <RowActionsItem disabled={busy} onClick={() => void runExport()}>
+            <Download className="size-3.5 text-muted-foreground" />
+            Export
+          </RowActionsItem>
+        ) : null}
         {canDelete ? (
           <RowActionsItem
             destructive

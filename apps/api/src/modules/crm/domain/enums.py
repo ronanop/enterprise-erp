@@ -155,23 +155,24 @@ class CrmEntityType(str, Enum):
 
 
 CODE_PREFIXES: dict[CrmEntityType, tuple[str, int]] = {
-    CrmEntityType.LEAD: ("LEAD-", 6),
-    CrmEntityType.OPPORTUNITY: ("OPP-", 6),
-    CrmEntityType.CAMPAIGN: ("CMP-", 6),
-    CrmEntityType.PIPELINE: ("PIPE-", 6),
-    CrmEntityType.TASK: ("TSK-", 6),
-    CrmEntityType.FOLLOWUP: ("FU-", 6),
-    CrmEntityType.MEETING: ("MTG-", 6),
-    CrmEntityType.INTERACTION: ("INT-", 6),
-    CrmEntityType.FEEDBACK: ("FBK-", 6),
+    # width = zero-pad length for the trailing sequence (0 = no padding → QT-2026-14).
+    CrmEntityType.LEAD: ("LEAD-", 0),
+    CrmEntityType.OPPORTUNITY: ("OPP-", 0),
+    CrmEntityType.CAMPAIGN: ("CMP-", 0),
+    CrmEntityType.PIPELINE: ("PIPE-", 0),
+    CrmEntityType.TASK: ("TSK-", 0),
+    CrmEntityType.FOLLOWUP: ("FU-", 0),
+    CrmEntityType.MEETING: ("MTG-", 0),
+    CrmEntityType.INTERACTION: ("INT-", 0),
+    CrmEntityType.FEEDBACK: ("FBK-", 0),
     CrmEntityType.COMPANY: ("COMP-", 2),
-    CrmEntityType.QUOTE: ("QT-", 6),
-    CrmEntityType.OVF: ("OVF-", 6),
-    CrmEntityType.PRODUCT: ("PRD-", 6),
-    CrmEntityType.OEM: ("OEM-", 6),
-    CrmEntityType.SELLING_ENTITY: ("ENT-", 6),
-    CrmEntityType.APPROVAL_TASK: ("JOB-", 6),
-    CrmEntityType.KYC: ("KYC-", 6),
+    CrmEntityType.QUOTE: ("QT-", 0),
+    CrmEntityType.OVF: ("OVF-", 0),
+    CrmEntityType.PRODUCT: ("PRD-", 0),
+    CrmEntityType.OEM: ("OEM-", 0),
+    CrmEntityType.SELLING_ENTITY: ("ENT-", 0),
+    CrmEntityType.APPROVAL_TASK: ("JOB-", 0),
+    CrmEntityType.KYC: ("KYC-", 0),
 }
 
 # Team roles that can receive a "My Jobs" approval task.

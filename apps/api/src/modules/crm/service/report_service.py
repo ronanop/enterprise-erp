@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from core.exceptions import ConflictException, ForbiddenException, NotFoundException, ValidationException
 from modules.crm.models.saved_report import CrmSavedReport
 from modules.crm.repository.base import utcnow
+from modules.crm.repository.lead_repository import LeadRepository
 from modules.crm.repository.opportunity_repository import OpportunityRepository
 from modules.crm.service.activity_service import FollowupService, MeetingService
 from modules.crm.service.attachment_service import AttachmentService
@@ -45,6 +46,14 @@ class _ReportRow:
     def __init__(self, *sources) -> None:
         self._sources = sources
 
+    @staticmethod
+    def _present(value) -> bool:
+        if value is None:
+            return False
+        if isinstance(value, str) and value.strip() == "":
+            return False
+        return True
+
     def __getattr__(self, key: str):
         found = False
         last = None
@@ -54,7 +63,7 @@ class _ReportRow:
             if hasattr(source, key):
                 found = True
                 value = getattr(source, key)
-                if value is not None:
+                if self._present(value):
                     return value
                 last = value
         if found:
@@ -352,15 +361,16 @@ class CRMReportService:
             return self._derive_from_leads(ctx, company_id, kind="end_customers")
         return []
 
-    def _companies_by_id(self, ctx: TenantContext, company_id: UUID) -> dict:
-        return {c.id: c for c in CompanyService(self._db).list(ctx, company_id)}
+    def _companies_by_id(self, ctx: TenantContext, company_id: UUID) -> dict[str, object]:
+        return {str(c.id): c for c in CompanyService(self._db).list(ctx, company_id)}
 
     def _enrich_leads_with_company(self, ctx: TenantContext, company_id: UUID) -> list:
         leads = self._leads.list(ctx, company_id)
         companies = self._companies_by_id(ctx, company_id)
         rows: list = []
         for lead in leads:
-            account = companies.get(getattr(lead, "company_account_id", None))
+            account_id = getattr(lead, "company_account_id", None)
+            account = companies.get(str(account_id)) if account_id else None
             rows.append(
                 _ReportRow(
                     lead,
@@ -373,14 +383,25 @@ class CRMReportService:
 
     def _enrich_opportunities_with_lead(self, ctx: TenantContext, company_id: UUID) -> list:
         """Merge opportunity + linked lead (and company name) so report columns
-        include lead-creation fields shown on the opportunity detail page."""
+        include lead-creation fields shown on the opportunity detail page.
+
+        Converted leads are excluded from LeadService.list (Leads module UX), so
+        we load linked leads by id — including converted — for report joins.
+        """
         opps = OpportunityService(self._db).list(ctx, company_id)
-        leads_by_id = {lead.id: lead for lead in self._leads.list(ctx, company_id)}
+        lead_ids = [opp.lead_id for opp in opps if getattr(opp, "lead_id", None)]
+        leads_by_id = {
+            str(lead.id): lead
+            for lead in LeadRepository(self._db).list_by_ids(ctx, company_id, lead_ids)
+        }
         companies = self._companies_by_id(ctx, company_id)
         rows: list = []
         for opp in opps:
-            lead = leads_by_id.get(opp.lead_id) if getattr(opp, "lead_id", None) else None
-            account = companies.get(getattr(opp, "company_account_id", None))
+            lead = leads_by_id.get(str(opp.lead_id)) if getattr(opp, "lead_id", None) else None
+            account_id = getattr(opp, "company_account_id", None) or (
+                getattr(lead, "company_account_id", None) if lead is not None else None
+            )
+            account = companies.get(str(account_id)) if account_id else None
             extras = SimpleNamespace(
                 company_account_name=getattr(account, "customer_name", None) if account else None,
             )

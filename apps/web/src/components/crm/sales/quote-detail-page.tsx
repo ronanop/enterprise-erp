@@ -34,7 +34,8 @@ import { normalizeQuoteServiceType } from "@/lib/crm/lead-product-options";
 import { QuoteLineTable } from "@/components/crm/sales/quote-line-table";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { cloneQuoteRecord, printQuotePreview } from "@/lib/crm/crm-record-actions";
+import { cloneQuoteRecord, downloadQuoteExport, printQuotePreview } from "@/lib/crm/crm-record-actions";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { ApiClientError } from "@/services/api-client";
 import {
   applyOpportunityAction,
@@ -231,8 +232,10 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       ? oppBlueprint.allowed_actions.filter(
           (action) =>
             action !== "create_quote" &&
+            action !== "create_ovf" &&
             action !== "quote_accepted" &&
-            !blueprint.allowed_actions.includes(action),
+            !blueprint.allowed_actions.includes(action) &&
+            !(existingOvf && action === "create_ovf"),
         )
       : [];
 
@@ -242,12 +245,18 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       ...oppTransitionActions,
       ...(canCreateOvf ? ["create_ovf"] : []),
     ]),
-  );
+  ).filter((action) => !(action === "create_ovf" && existingOvf));
 
   async function onPrintPreview() {
     const q = quote;
     if (!q) return;
     await printQuotePreview(q, lines);
+  }
+
+  async function onExport() {
+    const q = quote;
+    if (!q) return;
+    await downloadQuoteExport(q, lines);
   }
 
   return (
@@ -262,7 +271,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       <ApprovalBanner locked={blueprint.locked} approvalStatus={blueprint.state} label="This quote" />
 
       <PageHeader
-        title={`${quote.quote_no}${quote.quote_revision > 1 ? ` (Rev ${quote.quote_revision})` : ""}`}
+        title={`${formatCrmCode(quote.quote_no)}${quote.quote_revision > 1 ? ` (Rev ${quote.quote_revision})` : ""}`}
         description={quote.subject ?? "Customer quotation"}
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -280,10 +289,11 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
                 entityType="quote"
                 entityId={quote.id}
                 entityLabel="Quote"
-                entityName={quote.quote_no}
-                shareTitle={quote.quote_no}
+                entityName={formatCrmCode(quote.quote_no)}
+                shareTitle={formatCrmCode(quote.quote_no)}
                 onClone={() => cloneQuoteRecord(quote, lines, router)}
                 onPrintPreview={onPrintPreview}
+                onExport={onExport}
                 onDelete={() => deleteQuote(quote.id)}
                 onDeleted={() =>
                   router.push(
@@ -358,7 +368,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
             label="Service Type *"
             value={textOrDash(normalizeQuoteServiceType(quote.service_type) || quote.service_type)}
           />
-          <CrmReadOnlyField label="Quote No." value={quote.quote_no} />
+          <CrmReadOnlyField label="Quote No." value={formatCrmCode(quote.quote_no)} />
           <CrmReadOnlyField
             label="Quote Stage"
             value={formatQuoteStage(quote.quote_stage)}

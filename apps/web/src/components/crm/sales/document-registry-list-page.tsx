@@ -8,6 +8,7 @@ import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_RO
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { ApiClientError } from "@/services/api-client";
 import {
   listAttachmentsByCategory,
@@ -247,7 +248,7 @@ export function DocumentRegistryListPage({
                       )}
                       {row.opportunity?.opportunity_code ? (
                         <div className="text-[11px] text-muted-foreground">
-                          {row.opportunity.opportunity_code}
+                          {formatCrmCode(row.opportunity.opportunity_code)}
                         </div>
                       ) : null}
                     </td>
