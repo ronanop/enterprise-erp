@@ -2,10 +2,8 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends curl ca-certificates \
-    && update-ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+# python:3.13-slim already ships ca-certificates; avoid apt-get during Coolify
+# builds (transient deb.debian.org failures → apt exit 100).
 
 COPY requirements-prod.txt .
 RUN pip install --no-cache-dir -r requirements-prod.txt
@@ -34,7 +32,7 @@ ENV REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt
 ENV SSL_CERT_DIR=/etc/ssl/certs
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
-    CMD curl -sf "http://127.0.0.1:${API_PORT}/api/v1/health" || exit 1
+    CMD python -c "import os,urllib.request; urllib.request.urlopen('http://127.0.0.1:%s/api/v1/health' % os.environ.get('API_PORT','8000'), timeout=4)" || exit 1
 
 EXPOSE 8000
 
