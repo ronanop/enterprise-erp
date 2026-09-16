@@ -6,7 +6,10 @@ WORKDIR /app
 # builds (transient deb.debian.org failures → apt exit 100).
 
 COPY requirements-prod.txt .
-RUN pip install --no-cache-dir -r requirements-prod.txt
+# Prefer binary wheels; retry on transient PyPI/network blips common on Coolify hosts.
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir --prefer-binary --retries 5 --timeout 100 \
+      -r requirements-prod.txt
 
 COPY alembic.ini .
 COPY alembic ./alembic

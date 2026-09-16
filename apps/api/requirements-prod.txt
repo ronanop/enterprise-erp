@@ -1,4 +1,8 @@
 fastapi==0.115.6
+# Pin FastAPI's Starlette range so mcp's loose sse-starlette pin does not
+# backtrack through dozens of releases (slow / flaky Coolify builds).
+starlette==0.41.3
+sse-starlette==3.0.3
 uvicorn[standard]==0.32.1
 sqlalchemy==2.0.36
 alembic==1.14.0

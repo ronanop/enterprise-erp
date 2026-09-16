@@ -40,6 +40,8 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
+    # Shared with celery-worker so Coolify builds the API image once.
+    image: ${COOLIFY_RESOURCE_UUID:-erp}-api:${COOLIFY_BRANCH:-local}
     restart: unless-stopped
     environment:
       ENVIRONMENT: ${ENVIRONMENT:-production}
@@ -98,9 +100,9 @@ services:
       retries: 12
 
   celery-worker:
-    build:
-      context: ./apps/api
-      dockerfile: Dockerfile
+    # Reuse the api image (same Dockerfile/entrypoint, different command).
+    image: ${COOLIFY_RESOURCE_UUID:-erp}-api:${COOLIFY_BRANCH:-local}
+    pull_policy: never
     restart: unless-stopped
     command: ["worker"]
     environment:
