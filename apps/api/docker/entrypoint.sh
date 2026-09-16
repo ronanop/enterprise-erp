@@ -8,10 +8,18 @@ echo "entrypoint: role=${1:-api} environment=${ENVIRONMENT:-unknown}"
 # Coolify / production preflight — fail fast with clear messages
 if [ -z "${DATABASE_URL:-}" ]; then
   echo "ERROR: DATABASE_URL is required (Postgres connection string)." >&2
-  echo "In-compose example: postgresql+psycopg://erp:PASSWORD@postgres:5432/erp" >&2
-  echo "AWS RDS example: postgresql+psycopg://USER:PASS@HOST:5432/DB?sslmode=require" >&2
+  echo "RDS example: postgresql+psycopg://USER:PASS@HOST:5432/DB?sslmode=require" >&2
   exit 1
 fi
+
+# Fail fast on unreachable DB instead of hanging Coolify for minutes.
+case "${DATABASE_URL}" in
+  *connect_timeout=*) ;;
+  *\?*) export DATABASE_URL="${DATABASE_URL}&connect_timeout=10" ;;
+  *) export DATABASE_URL="${DATABASE_URL}?connect_timeout=10" ;;
+esac
+
+python -c "from urllib.parse import urlparse; import os; u=urlparse(os.environ['DATABASE_URL']); print(f'DB target: {u.hostname}:{u.port or 5432}/{ (u.path or \"/\").lstrip(\"/\") }')"
 
 backend="$(printf '%s' "${OBJECT_STORAGE_BACKEND:-local}" | tr '[:upper:]' '[:lower:]')"
 if [ "$backend" = "s3" ]; then
@@ -30,10 +38,11 @@ if [ -z "${CELERY_BROKER_URL:-}" ]; then
 fi
 
 if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
-  echo "Running Alembic migrations..."
+  echo "Running Alembic migrations (connect_timeout=10)…"
   if ! alembic upgrade head; then
     echo "ERROR: alembic upgrade head failed." >&2
-    echo "Check DATABASE_URL host is reachable from this container (use 'postgres' for in-compose DB, or your RDS hostname)." >&2
+    echo "Most common Coolify cause: RDS security group does not allow this EC2 on port 5432." >&2
+    echo "Also verify DATABASE_URL user/password/db name and sslmode=require." >&2
     exit 1
   fi
   echo "Migrations complete."

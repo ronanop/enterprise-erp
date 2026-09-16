@@ -17,6 +17,8 @@ engine: Engine = create_engine(
     max_overflow=50,
     pool_timeout=20,
     pool_recycle=1800,
+    # Fail fast when RDS/SG/DNS is wrong (default TCP wait can exceed Coolify deploy timeout).
+    connect_args={"connect_timeout": 10},
 )
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)

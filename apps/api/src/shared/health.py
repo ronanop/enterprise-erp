@@ -4,7 +4,6 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
-from database.session import check_database_connection
 from security.public_routes import optional_authentication
 from shared.schemas import APIResponse
 
@@ -15,10 +14,9 @@ router = APIRouter()
 def health_check(
     _: Annotated[None, Depends(optional_authentication)],
 ) -> APIResponse[dict[str, str]]:
-    """Public liveness probe - minimal payload (no stack/env disclosure)."""
-    ok = check_database_connection()
+    """Public liveness probe — no DB/network I/O (Coolify/Docker healthchecks)."""
     return APIResponse(
         success=True,
         message="OK",
-        data={"status": "ok" if ok else "degraded"},
+        data={"status": "ok"},
     )

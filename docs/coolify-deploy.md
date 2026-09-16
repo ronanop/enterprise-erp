@@ -6,9 +6,8 @@ Use **Docker Compose** mode in Coolify with compose file:
 docker-compose.coolify.yml
 ```
 
-Coolify terminates HTTPS. Default stack includes **Postgres + Redis + RabbitMQ + API + Celery + Web** (local file storage).
-
-For AWS later: point `DATABASE_URL` at RDS and set `OBJECT_STORAGE_BACKEND=s3` plus S3 credentials.
+Coolify terminates HTTPS. Stack includes **Redis + RabbitMQ + API + Celery + Web**.
+Postgres = **AWS RDS** via `DATABASE_URL`. Object storage = local or **AWS S3**.
 
 ## Services to expose
 
@@ -21,34 +20,29 @@ Point `NEXT_PUBLIC_API_URL` at the **public** API URL (includes `/api/v1`).
 
 ## Required environment variables
 
-Set these in the Coolify application environment (not in git):
-
 ```bash
-# Must match the in-compose postgres service (or use an RDS URL instead)
-POSTGRES_USER=erp
-POSTGRES_PASSWORD=strong-password
-POSTGRES_DB=erp
-DATABASE_URL=postgresql+psycopg://erp:strong-password@postgres:5432/erp
+# AWS RDS (security group must allow Coolify EC2 → 5432)
+DATABASE_URL=postgresql+psycopg://USER:PASS@YOUR_RDS_HOST:5432/DBNAME?sslmode=require
 
 # Auth
 JWT_SECRET_KEY=long-random-string
 
-# Public URLs (build + runtime)
+# Public URLs
 NEXT_PUBLIC_API_URL=https://api.erp.example.com/api/v1
 FRONTEND_URL=https://erp.example.com
 CORS_ORIGINS=["https://erp.example.com"]
 
-# RabbitMQ (in-stack)
+# In-compose RabbitMQ
 RABBITMQ_USER=erp
 RABBITMQ_PASSWORD=strong-password
 CELERY_BROKER_URL=amqp://erp:strong-password@rabbitmq:5672//
 
-# Storage (default local — optional AWS S3)
+# Storage
 OBJECT_STORAGE_BACKEND=local
 ASSET_STORAGE_BACKEND=local
 ```
 
-Optional AWS S3:
+Optional S3:
 
 ```bash
 OBJECT_STORAGE_BACKEND=s3
@@ -59,32 +53,14 @@ AWS_ACCESS_KEY_ID=AKIA...
 AWS_SECRET_ACCESS_KEY=...
 ```
 
-Optional:
+## If deploy hangs on Waiting for api
 
-```bash
-REDIS_URL=redis://redis:6379/0
-CELERY_RESULT_BACKEND=redis://redis:6379/1
-OPENSEARCH_URL=
-MICROSOFT_TENANT_ID=
-MICROSOFT_CLIENT_ID=
-MICROSOFT_CLIENT_SECRET=
-MICROSOFT_REDIRECT_URI=https://api.erp.example.com/api/v1/auth/microsoft/callback
-MICROSOFT_PLATFORM_ADMIN_EMAILS=techbank@cachedigitech.com,connectplus@cachedigitech.com
-```
+1. Open **api** container logs in Coolify
+2. Look for `Running Alembic migrations` then either `Migrations complete` or an ERROR
+3. If connection times out: add Coolify EC2 security group to RDS inbound **5432**
 
 ## After first deploy
 
-1. Open Coolify → **api** container logs (look for `Migrations complete` / `Starting uvicorn`)
-2. Confirm API health: `https://api…/api/v1/health`
-3. Confirm web loads and can call the API
-
-## Important Coolify env gotchas
-
-- `DATABASE_URL` host must be `postgres` for the in-compose DB (not a missing hostname).
-- `POSTGRES_PASSWORD` must match the password embedded in `DATABASE_URL`.
-- If `OBJECT_STORAGE_BACKEND=s3` without `S3_BUCKET`, the API now falls back to local storage.
-
-## Local LAN stack
-
-Keep using `docker-compose.app.yml` on the office VM. Coolify uses
-`docker-compose.coolify.yml` only.
+1. API logs show `Starting uvicorn`
+2. `https://api…/api/v1/health` returns OK
+3. Web loads
