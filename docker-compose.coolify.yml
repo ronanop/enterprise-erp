@@ -40,6 +40,8 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
+      # Host network helps Coolify/Docker 29 builders reach registries if needed.
+      network: host
     # Shared with celery-worker so Coolify builds the API image once.
     image: ${COOLIFY_RESOURCE_UUID:-erp}-api:${COOLIFY_BRANCH:-local}
     restart: unless-stopped
@@ -141,6 +143,7 @@ services:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
+      network: host
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
         NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Enterprise ERP}

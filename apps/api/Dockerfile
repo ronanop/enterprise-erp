@@ -2,66 +2,22 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# python:3.13-slim already ships ca-certificates; avoid apt-get during Coolify
-# builds (transient deb.debian.org failures → apt exit 100).
+# Avoid apt-get (Coolify hosts often hit transient Debian mirror failures).
+# Install Python deps from the committed wheelhouse so Coolify builds do not
+# need outbound access to pypi.org during docker build (common DinD failure).
 
-# Cert paths must be set before pip (Coolify may inject empty SSL/proxy ARGs).
 ENV SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt \
     REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt \
     SSL_CERT_DIR=/etc/ssl/certs \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PIP_DEFAULT_TIMEOUT=120 \
     PIP_ROOT_USER_ACTION=ignore
 
 COPY requirements-prod.txt .
+COPY wheels ./wheels
 
-# Coolify injects many ARG/env values into RUN (DATABASE_URL, proxies, etc.).
-# An empty HTTP(S)_PROXY / SSL_* from build-args can break pip; isolate install.
-RUN set -eu; \
-    echo "PyPI connectivity check..."; \
-    env -i \
-      HOME="/root" \
-      PATH="/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin" \
-      LANG="C.UTF-8" \
-      SSL_CERT_FILE="/etc/ssl/certs/ca-certificates.crt" \
-      REQUESTS_CA_BUNDLE="/etc/ssl/certs/ca-certificates.crt" \
-      SSL_CERT_DIR="/etc/ssl/certs" \
-      python -c "import urllib.request; urllib.request.urlopen('https://pypi.org/simple/pip/', timeout=45); print('pypi ok')"; \
-    env -i \
-      HOME="/root" \
-      PATH="/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin" \
-      LANG="C.UTF-8" \
-      SSL_CERT_FILE="/etc/ssl/certs/ca-certificates.crt" \
-      REQUESTS_CA_BUNDLE="/etc/ssl/certs/ca-certificates.crt" \
-      SSL_CERT_DIR="/etc/ssl/certs" \
-      PIP_DISABLE_PIP_VERSION_CHECK="1" \
-      PIP_DEFAULT_TIMEOUT="120" \
-      PIP_ROOT_USER_ACTION="ignore" \
-      python -m pip install --no-cache-dir --prefer-binary \
-        --retries 10 \
-        --trusted-host pypi.org \
-        --trusted-host pypi.python.org \
-        --trusted-host files.pythonhosted.org \
-        -r requirements-prod.txt \
-    || { \
-      echo "===== pip install failed; retrying verbose ====="; \
-      env -i \
-        HOME="/root" \
-        PATH="/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin" \
-        LANG="C.UTF-8" \
-        SSL_CERT_FILE="/etc/ssl/certs/ca-certificates.crt" \
-        REQUESTS_CA_BUNDLE="/etc/ssl/certs/ca-certificates.crt" \
-        SSL_CERT_DIR="/etc/ssl/certs" \
-        PIP_DISABLE_PIP_VERSION_CHECK="1" \
-        PIP_DEFAULT_TIMEOUT="120" \
-        PIP_ROOT_USER_ACTION="ignore" \
-        python -m pip install -v --no-cache-dir --prefer-binary \
-          --retries 3 \
-          --trusted-host pypi.org \
-          --trusted-host files.pythonhosted.org \
-          -r requirements-prod.txt; \
-      exit 1; \
-    }
+RUN python -m pip install --no-cache-dir --no-index --find-links=/app/wheels \
+      -r requirements-prod.txt \
+    && rm -rf /app/wheels
 
 COPY alembic.ini .
 COPY alembic ./alembic
