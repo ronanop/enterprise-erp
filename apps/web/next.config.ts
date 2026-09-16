@@ -10,8 +10,23 @@ const repoRoot = path.resolve(configDir, "../..");
 loadEnvConfig(repoRoot);
 loadEnvConfig(configDir);
 
-// Docker Compose service name; override for local `next dev` if needed.
-const apiInternalUrl = (process.env.API_INTERNAL_URL || "http://api:8000").replace(/\/+$/, "");
+/** Upstream for same-origin `/api/v1` rewrites (browser → Next → API). */
+function resolveApiProxyTarget(): string {
+  const explicit = process.env.API_INTERNAL_URL?.trim();
+  if (explicit) return explicit.replace(/\/+$/, "");
+
+  // Local `next dev`: derive from NEXT_PUBLIC_API_URL (e.g. http://localhost:8000/api/v1).
+  const publicApi = process.env.NEXT_PUBLIC_API_URL?.trim() || "";
+  if (publicApi && !publicApi.startsWith("/")) {
+    const origin = publicApi.replace(/\/api\/v1\/?$/, "").replace(/\/+$/, "");
+    if (origin) return origin;
+  }
+
+  // Docker Compose sets API_INTERNAL_URL=http://api:8000; this is a last-resort local default.
+  return "http://127.0.0.1:8000";
+}
+
+const apiInternalUrl = resolveApiProxyTarget();
 
 const nextConfig: NextConfig = {
   typescript: {

@@ -1,6 +1,6 @@
 """Organization domain entities."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from uuid import UUID
 
@@ -59,6 +59,7 @@ class DepartmentEntity:
     created_by: UUID | None = None
     updated_at: datetime | None = None
     updated_by: UUID | None = None
+    module_keys: list[str] = field(default_factory=list)
 
 
 @dataclass

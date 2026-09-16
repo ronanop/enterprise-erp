@@ -880,9 +880,10 @@ async function mapWithConcurrency<T, R>(
 export async function loadPlatformDashboard(
   moduleKeys: string[],
   userType?: string,
+  adminModuleKeys: string[] = [],
 ): Promise<PlatformDashboardData> {
   const accessibleKeys = Object.keys(MODULE_LOADERS).filter((key) =>
-    canAccessHref(moduleMeta(key).href, moduleKeys, userType),
+    canAccessHref(moduleMeta(key).href, moduleKeys, userType, adminModuleKeys),
   );
 
   const settled = await mapWithConcurrency(

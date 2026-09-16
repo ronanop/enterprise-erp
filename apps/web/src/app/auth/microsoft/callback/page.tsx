@@ -25,14 +25,14 @@ function MicrosoftAuthCallbackContent() {
       try {
         const result = await authService.exchangeMicrosoftCode(code);
         if (cancelled) return;
-        let redirect = result.data?.redirect_to ?? "/";
+        let redirect = result.data?.redirect_to ?? "/home";
         try {
           const profile = await authService.me();
           const { user } = parseAuthMe(profile.data);
           if (user?.email) {
             redirect = getPostLoginRedirect(user.email);
           } else if (user?.userType === "super_admin") {
-            redirect = "/";
+            redirect = "/home";
           }
         } catch {
           // keep redirect from exchange payload

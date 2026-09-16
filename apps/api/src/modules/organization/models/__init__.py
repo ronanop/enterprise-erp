@@ -6,6 +6,7 @@ from modules.organization.models.hierarchy import (
     OrgBusinessUnit,
     OrgCostCenter,
     OrgDepartment,
+    OrgDepartmentModule,
     OrgLocation,
     OrgProfitCenter,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "OrgCompany",
     "OrgCostCenter",
     "OrgDepartment",
+    "OrgDepartmentModule",
     "OrgLocation",
     "OrgProfitCenter",
 ]

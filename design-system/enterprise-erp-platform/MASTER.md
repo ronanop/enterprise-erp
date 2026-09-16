@@ -7,8 +7,8 @@
 ---
 
 **Project:** Enterprise ERP Platform
-**Generated:** 2026-08-21 11:30:11
-**Category:** Social Media App
+**Generated:** 2026-09-04 18:12:17
+**Category:** Booking & Appointment App
 
 ---
 
@@ -18,29 +18,29 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#E11D48` | `--color-primary` |
+| Primary | `#2563EB` | `--color-primary` |
 | On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#FB7185` | `--color-secondary` |
-| Accent/CTA | `#2563EB` | `--color-accent` |
-| Background | `#FFF1F2` | `--color-background` |
-| Foreground | `#881337` | `--color-foreground` |
-| Muted | `#F0ECF2` | `--color-muted` |
-| Border | `#FECDD3` | `--color-border` |
+| Secondary | `#3B82F6` | `--color-secondary` |
+| Accent/CTA | `#059669` | `--color-accent` |
+| Background | `#F8FAFC` | `--color-background` |
+| Foreground | `#0F172A` | `--color-foreground` |
+| Muted | `#F1F5FD` | `--color-muted` |
+| Border | `#E4ECFC` | `--color-border` |
 | Destructive | `#DC2626` | `--color-destructive` |
-| Ring | `#E11D48` | `--color-ring` |
+| Ring | `#2563EB` | `--color-ring` |
 
-**Color Notes:** Vibrant rose + engagement blue
+**Color Notes:** Calendar blue + event green
 
 ### Typography
 
-- **Heading Font:** Calistoga
-- **Body Font:** Inter
-- **Mood:** saas, boutique, electric, warm, editorial, bold, premium, fintech, business, dual font, human warmth
-- **Google Fonts:** [Calistoga + Inter](https://fonts.googleapis.com/css2?family=Calistoga:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap)
+- **Heading Font:** Libre Bodoni
+- **Body Font:** Public Sans
+- **Mood:** magazine, editorial, publishing, refined, journalism, print
+- **Google Fonts:** [Libre Bodoni + Public Sans](https://fonts.googleapis.com/css2?family=Libre+Bodoni:wght@400;500;600;700&family=Public+Sans:wght@300;400;500;600;700&display=swap)
 
 **CSS Import:**
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Calistoga:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Libre+Bodoni:wght@400;500;600;700&family=Public+Sans:wght@300;400;500;600;700&display=swap');
 ```
 
 ### Spacing Variables
@@ -73,7 +73,7 @@
 ```css
 /* Primary Button */
 .btn-primary {
-  background: #2563EB;
+  background: #059669;
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -90,8 +90,8 @@
 /* Secondary Button */
 .btn-secondary {
   background: transparent;
-  color: #E11D48;
-  border: 2px solid #E11D48;
+  color: #2563EB;
+  border: 2px solid #2563EB;
   padding: 12px 24px;
   border-radius: 8px;
   font-weight: 600;
@@ -104,7 +104,7 @@
 
 ```css
 .card {
-  background: #FFF1F2;
+  background: #F8FAFC;
   border-radius: 12px;
   padding: 24px;
   box-shadow: var(--shadow-md);
@@ -130,9 +130,9 @@
 }
 
 .input:focus {
-  border-color: #E11D48;
+  border-color: #2563EB;
   outline: none;
-  box-shadow: 0 0 0 3px #E11D4820;
+  box-shadow: 0 0 0 3px #2563EB20;
 }
 ```
 
@@ -158,28 +158,28 @@
 
 ## Style Guidelines
 
-**Style:** Vibrant & Block-based
+**Style:** Soft UI Evolution
 
-**Keywords:** Bold, energetic, playful, block layout, geometric shapes, high color contrast, duotone, modern, energetic
+**Keywords:** Evolved soft UI, better contrast, modern aesthetics, subtle depth, accessibility-focused, improved shadows, hybrid
 
-**Best For:** Startups, creative agencies, gaming, social media, youth-focused, entertainment, consumer
+**Best For:** Modern enterprise apps, SaaS platforms, health/wellness, modern business tools, professional, hybrid
 
-**Key Effects:** Large sections (48px+ gaps), animated patterns, bold hover (color shift), scroll-snap, large type (32px+), 200-300ms
+**Key Effects:** Improved shadows (softer than flat, clearer than neumorphism), modern (200-300ms), focus visible, WCAG AA/AAA
 
 ### Page Pattern
 
-**Pattern Name:** Newsletter / Content First
+**Pattern Name:** Portfolio Grid
 
-- **Conversion Strategy:** Single field form (Email only). Show 'Join X, 000 readers'. Read sample link.
-- **CTA Placement:** Hero inline form + Sticky header form
-- **Section Order:** 1. Hero (Value Prop + Form), 2. Recent Issues/Archives, 3. Social Proof (Subscriber count), 4. About Author
+- **Conversion Strategy:** Visuals first. Filter by category. Fast loading essential.
+- **CTA Placement:** Project Card Hover + Footer Contact
+- **Section Order:** 1. Hero (Name/Role), 2. Project Grid (Masonry), 3. About/Philosophy, 4. Contact
 
 ---
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ Heavy skeuomorphism
-- ❌ Accessibility ignored
+- ❌ Complex shadows
+- ❌ 3D effects
 
 ### Additional Forbidden Patterns
 

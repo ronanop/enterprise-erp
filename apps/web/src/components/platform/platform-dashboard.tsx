@@ -319,25 +319,35 @@ function HealthSummaryStrip({
 }
 
 export function PlatformDashboard() {
-  const { user, moduleKeys, loading: authLoading, status: authStatus, error: authError, refresh } =
-    useAuthUser();
+const {
+    user,
+    moduleKeys,
+    adminModuleKeys,
+    loading: authLoading,
+    status: authStatus,
+    error: authError,
+    refresh,
+  } = useAuthUser();
   const [data, setData] = useState<PlatformDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const visibleModules = useMemo(
-    () => erpModules.filter((mod) => canAccessHref(mod.href, moduleKeys, user?.userType)),
-    [moduleKeys, user?.userType],
+    () =>
+      erpModules.filter((mod) =>
+        canAccessHref(mod.href, moduleKeys, user?.userType, adminModuleKeys),
+      ),
+    [adminModuleKeys, moduleKeys, user?.userType],
   );
 
   const load = useCallback(async () => {
     if (authLoading || authStatus !== "authenticated") return;
     setLoading(true);
     try {
-      setData(await loadPlatformDashboard(moduleKeys, user?.userType));
+      setData(await loadPlatformDashboard(moduleKeys, user?.userType, adminModuleKeys));
     } finally {
       setLoading(false);
     }
-  }, [authLoading, authStatus, moduleKeys, user?.userType]);
+  }, [adminModuleKeys, authLoading, authStatus, moduleKeys, user?.userType]);
 
   useEffect(() => {
     void load();
@@ -362,7 +372,7 @@ export function PlatformDashboard() {
   const authBlocked = Boolean(data?.authBlocked) || Boolean(data?.partial && authStatus !== "authenticated");
   const tracked = data?.modules.length ?? 0;
   const showLoading = loading || authLoading || authStatus === "loading";
-  const hasModules = hasModuleAssignments(moduleKeys, user?.userType);
+  const hasModules = hasModuleAssignments(moduleKeys, user?.userType, adminModuleKeys);
 
   if (authStatus === "error") {
     return (

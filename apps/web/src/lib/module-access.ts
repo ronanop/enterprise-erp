@@ -20,25 +20,36 @@ export function hasAllModulesAdmin(adminModuleKeys: string[]): boolean {
 }
 
 export function moduleKeyForHref(href: string): string | null {
-  if (href === "/") return null;
+  if (href === "/" || href === "/erp-settings" || href.startsWith("/erp-settings/")) return null;
   if (href === "/organization/users") return "organization";
   const mod = erpModules.find((m) => href === m.href || href.startsWith(`${m.href}/`));
   return mod?.key ?? null;
 }
 
-export function hasModuleAssignments(moduleKeys: string[], userType?: string): boolean {
+export function hasModuleAssignments(
+  moduleKeys: string[],
+  userType?: string,
+  adminModuleKeys: string[] = [],
+): boolean {
   if (isModuleAdmin(userType)) return true;
-  return moduleKeys.length > 0;
+  return moduleKeys.length > 0 || adminModuleKeys.length > 0;
 }
 
-export function canAccessHref(href: string, moduleKeys: string[], userType?: string): boolean {
-  if (href === "/") return true;
-  if (href === "/organization/users") {
+export function canAccessHref(
+  href: string,
+  moduleKeys: string[],
+  userType?: string,
+  adminModuleKeys: string[] = [],
+): boolean {
+  if (href === "/" || href === "/erp-settings") return true;
+  if (href === "/erp-settings/users" || href === "/organization/users") {
     return isModuleAdmin(userType) || moduleKeys.includes("foundation");
   }
   const key = moduleKeyForHref(href);
   if (!key) return true;
   if (isModuleAdmin(userType)) return true;
+  // Module admins can open every screen in the modules they administer.
+  if (adminModuleKeys.includes(key)) return true;
   return moduleKeys.includes(key);
 }
 
@@ -46,11 +57,14 @@ export function filterNavigationGroups(
   groups: NavGroup[],
   moduleKeys: string[],
   userType?: string,
+  adminModuleKeys: string[] = [],
 ): NavGroup[] {
   return groups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => canAccessHref(item.href, moduleKeys, userType)),
+      items: group.items.filter((item) =>
+        canAccessHref(item.href, moduleKeys, userType, adminModuleKeys),
+      ),
     }))
     .filter((group) => group.items.length > 0);
 }
@@ -87,8 +101,10 @@ export function canViewAllModuleScreens(
   moduleKey: string,
   adminModuleKeys: string[],
   userType?: string,
-  _moduleRoles?: Record<string, string>,
+  moduleRoles: Record<string, string> = {},
 ): boolean {
   if (isModuleAdmin(userType)) return true;
-  return adminModuleKeys.includes(moduleKey);
+  if (adminModuleKeys.includes(moduleKey)) return true;
+  // Legacy: role "admin" on the module assignment is module admin.
+  return moduleRoles[moduleKey] === "admin";
 }

@@ -99,6 +99,7 @@ class DepartmentCreateRequest(BaseModel):
     department_name: str
     parent_department_id: UUID | None = None
     head_employee_id: UUID | None = None
+    module_keys: list[str] = Field(default_factory=list)
 
 
 class DepartmentUpdateRequest(BaseModel):
@@ -106,6 +107,28 @@ class DepartmentUpdateRequest(BaseModel):
     status: str | None = None
     parent_department_id: UUID | None = None
     head_employee_id: UUID | None = None
+
+
+class DepartmentModulesUpdateRequest(BaseModel):
+    module_keys: list[str] = Field(default_factory=list)
+
+
+class DepartmentResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    company_id: UUID
+    branch_id: UUID
+    department_code: str
+    department_name: str
+    status: str
+    parent_department_id: UUID | None = None
+    head_employee_id: UUID | None = None
+    version: int = 1
+    created_at: datetime | None = None
+    created_by: UUID | None = None
+    updated_at: datetime | None = None
+    updated_by: UUID | None = None
+    module_keys: list[str] = Field(default_factory=list)
 
 
 class BusinessUnitCreateRequest(BaseModel):

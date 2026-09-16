@@ -21,6 +21,16 @@ class UserModuleRepository(TenantScopedRepository):
         )
         return list(self.db.scalars(stmt).all())
 
+    def list_roles_for_user(self, tenant_id: UUID, user_id: UUID) -> dict[str, str]:
+        stmt = select(SecUserModule.module_key, SecUserModule.role).where(
+            SecUserModule.tenant_id == tenant_id,
+            SecUserModule.user_id == user_id,
+        )
+        return {
+            str(module_key): (role or MODULE_ROLE_MEMBER)
+            for module_key, role in self.db.execute(stmt).all()
+        }
+
     def list_admin_keys_for_user(self, tenant_id: UUID, user_id: UUID) -> list[str]:
         stmt = (
             select(SecUserModule.module_key)
@@ -150,17 +160,23 @@ class UserModuleRepository(TenantScopedRepository):
         user_id: UUID,
         module_key: str,
         assigned_by: UUID | None,
+        role: str = MODULE_ROLE_MEMBER,
     ) -> SecUserModule:
         row = SecUserModule(
             id=uuid4(),
             tenant_id=tenant_id,
             user_id=user_id,
             module_key=module_key,
-            role=MODULE_ROLE_MEMBER,
+            role=role or MODULE_ROLE_MEMBER,
             assigned_at=utcnow(),
             assigned_by=assigned_by,
         )
         self.db.add(row)
+        self.db.flush()
+        return row
+
+    def update_role(self, row: SecUserModule, role: str) -> SecUserModule:
+        row.role = role
         self.db.flush()
         return row
 

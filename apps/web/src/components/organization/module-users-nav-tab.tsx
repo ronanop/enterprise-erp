@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 
 type Props = {
   moduleKey: string;
-  variant?: "underline" | "pill";
+  variant?: "underline" | "pill" | "sidebar";
 };
 
 export function ModuleUsersNavTab({ moduleKey, variant = "underline" }: Props) {
@@ -22,6 +22,27 @@ export function ModuleUsersNavTab({ moduleKey, variant = "underline" }: Props) {
   }
 
   const active = pathname === href || pathname.startsWith(`${href}/`);
+
+  if (variant === "sidebar") {
+    return (
+      <li>
+        <Link
+          href={href}
+          className={cn(
+            "relative flex cursor-pointer items-center rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors duration-200",
+            active
+              ? "bg-muted text-foreground"
+              : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+          )}
+        >
+          {active ? (
+            <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-primary" aria-hidden />
+          ) : null}
+          Users
+        </Link>
+      </li>
+    );
+  }
 
   if (variant === "pill") {
     return (

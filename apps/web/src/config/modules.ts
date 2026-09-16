@@ -1787,8 +1787,8 @@ export const erpModules: ErpModule[] = [
       },
       {
         key: "brand-voices",
-        title: "Brand Voice",
-        description: "Brand voice profiles",
+        title: "Brand kit",
+        description: "Logo, colors, fonts, and voice",
         apiPath: "/marketing/brand-voices",
       },
       {

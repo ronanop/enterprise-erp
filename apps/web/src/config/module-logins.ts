@@ -34,19 +34,19 @@ export const adminLoginAccounts: AdminLoginAccount[] = [
   {
     email: "admin@example.com",
     displayName: "Platform Admin",
-    href: "/",
+    href: "/home",
     kind: "platform",
   },
   {
     email: "techbank@cachedigitech.com",
     displayName: "TechBank (Platform Admin)",
-    href: "/",
+    href: "/home",
     kind: "platform",
   },
   {
     email: "tenant.admin@example.com",
     displayName: "Tenant Admin",
-    href: "/",
+    href: "/home",
     kind: "tenant",
   },
 ];
@@ -91,10 +91,10 @@ const redirectByEmail = new Map<string, string>([
   ...serviceTeamLoginAccounts.map((a) => [a.email.toLowerCase(), a.href] as const),
 ]);
 
-/** Resolve post-login destination from the signed-in email. Unknown → `/`. */
+/** Resolve post-login destination from the signed-in email. Unknown → `/home`. */
 export function getPostLoginRedirect(email: string | null | undefined): string {
-  if (!email) return "/";
-  return redirectByEmail.get(email.trim().toLowerCase()) ?? "/";
+  if (!email) return "/home";
+  return redirectByEmail.get(email.trim().toLowerCase()) ?? "/home";
 }
 
 export function getModuleLoginByEmail(email: string): ModuleLoginAccount | undefined {

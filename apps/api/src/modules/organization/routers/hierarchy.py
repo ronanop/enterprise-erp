@@ -17,6 +17,8 @@ from modules.organization.schemas import (
     BusinessUnitCreateRequest,
     CostCenterCreateRequest,
     DepartmentCreateRequest,
+    DepartmentModulesUpdateRequest,
+    DepartmentResponse,
     DepartmentUpdateRequest,
     LocationCreateRequest,
     LocationUpdateRequest,
@@ -101,44 +103,59 @@ def delete_branch(
     return APIResponse(message="Branch deleted", data=None)
 
 
-@departments_router.get("", response_model=APIResponse[list])
+@departments_router.get("", response_model=APIResponse[list[DepartmentResponse]])
 def list_departments(
     ctx: Annotated[TenantContext, Depends(require_permission("organization.department:read"))],
     db: Annotated[Session, Depends(get_db)],
     company_id: UUID | None = None,
     branch_id: UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = MAX_PAGE_SIZE,
-) -> APIResponse[list]:
+) -> APIResponse[list[DepartmentResponse]]:
     depts = DepartmentService(db).list_departments(
         ctx, company_id=company_id, branch_id=branch_id
     )[:limit]
-    return APIResponse(message="Departments retrieved", data=[d.__dict__ for d in depts])
+    return APIResponse(
+        message="Departments retrieved",
+        data=[DepartmentService.to_response(d) for d in depts],
+    )
 
 
-@departments_router.post("", response_model=APIResponse[dict])
+@departments_router.post("", response_model=APIResponse[DepartmentResponse])
 def create_department(
     body: DepartmentCreateRequest,
     ctx: Annotated[TenantContext, Depends(require_permission("organization.department:create"))],
     db: Annotated[Session, Depends(get_db)],
-) -> APIResponse[dict]:
+) -> APIResponse[DepartmentResponse]:
     dept = DepartmentService(db).create_department(ctx, **body.model_dump())
     db.commit()
-    return APIResponse(message="Department created", data=dept.__dict__)
+    return APIResponse(message="Department created", data=DepartmentService.to_response(dept))
 
 
-@departments_router.put("/{department_id}", response_model=APIResponse[dict])
-@departments_router.patch("/{department_id}", response_model=APIResponse[dict])
+@departments_router.put("/{department_id}/modules", response_model=APIResponse[DepartmentResponse])
+def replace_department_modules(
+    department_id: UUID,
+    body: DepartmentModulesUpdateRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("organization.department:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[DepartmentResponse]:
+    dept = DepartmentService(db).replace_modules(ctx, department_id, body.module_keys)
+    db.commit()
+    return APIResponse(message="Department modules updated", data=DepartmentService.to_response(dept))
+
+
+@departments_router.put("/{department_id}", response_model=APIResponse[DepartmentResponse])
+@departments_router.patch("/{department_id}", response_model=APIResponse[DepartmentResponse])
 def update_department(
     department_id: UUID,
     body: DepartmentUpdateRequest,
     ctx: Annotated[TenantContext, Depends(require_permission("organization.department:update"))],
     db: Annotated[Session, Depends(get_db)],
-) -> APIResponse[dict]:
+) -> APIResponse[DepartmentResponse]:
     dept = DepartmentService(db).update_department(
         ctx, department_id, **body.model_dump(exclude_unset=True)
     )
     db.commit()
-    return APIResponse(message="Department updated", data=dept.__dict__)
+    return APIResponse(message="Department updated", data=DepartmentService.to_response(dept))
 
 
 @departments_router.delete("/{department_id}", response_model=APIResponse[None])

@@ -77,11 +77,19 @@ class EmployeeService:
         bypass_onboarding: bool = False,
         status: str = "draft",
     ):
-        if hire_source != "recruitment_onboarding" and not bypass_onboarding:
+        # Recruitment is the default hire path. Organization / M365 directory
+        # provisioning and explicit migration bypasses are also allowed.
+        allowed_hire_sources = {
+            "recruitment_onboarding",
+            "directory_sync",
+            "organization",
+            "m365",
+        }
+        if hire_source not in allowed_hire_sources and not bypass_onboarding:
             raise ConflictException(
                 "Employees must be hired via completed recruitment onboarding "
-                "(POST /recruitment/onboarding/{id}/complete). "
-                "Direct workforce create is blocked. "
+                "(POST /recruitment/onboarding/{id}/complete), "
+                "organization member add, or Microsoft 365 directory sync. "
                 "For data migration only, pass bypass_onboarding=true."
             )
         resolved_company_id = self._scope.resolve_company_id(ctx, company_id)

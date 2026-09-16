@@ -1,4 +1,4 @@
-"""Authentication router."""
+﻿"""Authentication router."""
 
 from typing import Annotated
 from urllib.parse import quote

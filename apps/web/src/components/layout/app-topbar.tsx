@@ -29,7 +29,7 @@ export function AppTopbar() {
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-4 border-b border-border/80 bg-card/80 px-4 backdrop-blur-md supports-backdrop-filter:bg-card/70 sm:px-6">
       <div className="min-w-0 shrink-0 sm:w-44">
         <Link
-          href="/"
+          href="/home"
           className="block cursor-pointer truncate text-sm font-medium tracking-tight transition-opacity duration-200 hover:opacity-80"
         >
           Workspace

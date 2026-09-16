@@ -1,9 +1,9 @@
 """Department, business unit, location, cost/profit center ORM models."""
 
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -38,6 +38,27 @@ class OrgDepartment(Base, AuditMixin, TenantMixin, CompanyMixin, SoftDeleteMixin
     )
     head_employee_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
+
+
+class OrgDepartmentModule(Base, TenantMixin):
+    """Maps an organization department to one or more ERP module keys."""
+
+    __tablename__ = "org_department_module"
+    __table_args__ = (
+        UniqueConstraint("department_id", "module_key", name="uk_org_department_module"),
+        {"schema": "organization"},
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    department_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("organization.org_department.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    module_key: Mapped[str] = mapped_column(String(50), nullable=False)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    assigned_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
 
 
 class OrgBusinessUnit(Base, AuditMixin, TenantMixin, CompanyMixin, SoftDeleteMixin, VersionMixin):

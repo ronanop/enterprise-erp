@@ -46,7 +46,7 @@ export default function LoginPage() {
 
   const returnTo = searchParams.get("next")?.startsWith("/")
     ? searchParams.get("next")!
-    : "/";
+    : "/home";
 
   return (
     <div className="relative flex min-h-dvh items-center justify-center overflow-hidden px-4 py-10">

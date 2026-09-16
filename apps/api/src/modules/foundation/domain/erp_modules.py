@@ -38,6 +38,7 @@ MODULE_ROLE_MEMBER = "member"
 MODULE_ROLES = frozenset({MODULE_ROLE_ADMIN, MODULE_ROLE_MEMBER})
 
 # Marketing team roles (stored on sec_user_module.role for module_key=marketing).
+# Work-structure permissions will layer on these later.
 MARKETING_ROLE_HEAD = "marketing_head"
 MARKETING_ROLE_APPROVAL_HEAD = "approval_head"
 MARKETING_ROLE_CONTENT_CREATOR = "content_creator"
@@ -56,6 +57,34 @@ MARKETING_TEAM_ROLES = frozenset(
         MODULE_ROLE_MEMBER,
     }
 )
+
+MARKETING_FUNCTIONAL_ROLES: tuple[tuple[str, str], ...] = (
+    (MARKETING_ROLE_HEAD, "Marketing head"),
+    (MARKETING_ROLE_VIDEO_EDITOR, "Video editor"),
+    (MARKETING_ROLE_GRAPHIC_DESIGNER, "Graphic designer"),
+    (MARKETING_ROLE_CONTENT_CREATOR, "Content creator"),
+    (MARKETING_ROLE_APPROVAL_HEAD, "Approval head"),
+    (MARKETING_ROLE_SUPPORTING_MEMBER, "Supporting member"),
+)
+MARKETING_FUNCTIONAL_ROLE_SET = frozenset(code for code, _ in MARKETING_FUNCTIONAL_ROLES)
+MARKETING_FUNCTIONAL_ROLE_LABELS = dict(MARKETING_FUNCTIONAL_ROLES)
+
+
+def module_member_roles(module_key: str) -> frozenset[str]:
+    """Roles that may be assigned when adding a module user (excludes module admin)."""
+    if module_key == "marketing":
+        return MARKETING_FUNCTIONAL_ROLE_SET | {MODULE_ROLE_MEMBER}
+    return frozenset({MODULE_ROLE_MEMBER})
+
+
+def is_module_admin_role(role: str | None) -> bool:
+    return (role or MODULE_ROLE_MEMBER) == MODULE_ROLE_ADMIN
+
+
+def default_module_member_role(module_key: str) -> str:
+    if module_key == "marketing":
+        return MARKETING_ROLE_SUPPORTING_MEMBER
+    return MODULE_ROLE_MEMBER
 
 # Permission seed `module` column occasionally differs from UI/module-assignment keys.
 PERMISSION_MODULE_ALIASES: dict[str, str] = {

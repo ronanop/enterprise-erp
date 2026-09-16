@@ -1,0 +1,54 @@
+@keyframes icp-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes icp-rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.icp-landing .icp-anim-fade {
+  animation: icp-fade 1s ease-out both;
+}
+
+.icp-landing .icp-anim-rise {
+  animation: icp-rise 0.8s ease-out both;
+}
+
+.icp-landing .icp-anim-rise-delay-1 {
+  animation: icp-rise 0.8s ease-out 0.05s both;
+}
+
+.icp-landing .icp-anim-rise-delay-2 {
+  animation: icp-rise 0.8s ease-out 0.1s both;
+}
+
+.icp-landing .icp-anim-rise-delay-3 {
+  animation: icp-rise 0.8s ease-out 0.15s both;
+}
+
+.icp-landing .icp-anim-rise-delay-4 {
+  animation: icp-rise 0.8s ease-out 0.2s both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icp-landing .icp-anim-fade,
+  .icp-landing .icp-anim-rise,
+  .icp-landing .icp-anim-rise-delay-1,
+  .icp-landing .icp-anim-rise-delay-2,
+  .icp-landing .icp-anim-rise-delay-3,
+  .icp-landing .icp-anim-rise-delay-4 {
+    animation: none !important;
+  }
+}

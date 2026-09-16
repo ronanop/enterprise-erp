@@ -16,6 +16,7 @@ import {
   Package,
   Plug,
   Scale,
+  Settings,
   Shield,
   ShoppingCart,
   Store,
@@ -91,9 +92,16 @@ export const navigation: NavGroup[] = [
     items: [
       {
         title: "Dashboard",
-        href: "/",
+        href: "/home",
         description: "Platform status and all modules",
         icon: LayoutDashboard,
+        inApp: true,
+      },
+      {
+        title: "ERP Settings",
+        href: "/erp-settings",
+        description: "Platform configuration and preferences",
+        icon: Settings,
         inApp: true,
       },
     ],

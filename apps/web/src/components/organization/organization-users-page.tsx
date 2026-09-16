@@ -1,23 +1,28 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ShieldCheck, UserRound, Users } from "lucide-react";
+import { ShieldCheck, Users } from "lucide-react";
 
 import { UserAvatar } from "@/components/layout/user-avatar";
-import { UserMemberModulesCell } from "@/components/organization/user-member-modules-cell";
+import { OrganizationMembers } from "@/components/organization/organization-members";
 import { UserModulesCell } from "@/components/organization/user-modules-cell";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { canManageUserModules, moduleTitle } from "@/lib/module-access";
 import {
   hasModuleAdminAssignment,
-  hasModuleMemberAssignment,
   memberOnlyModuleKeys,
 } from "@/lib/module-membership";
 import { PageHeader } from "@/components/layout/page-header";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
-import { listFoundationUsers, type FoundationUser } from "@/services/foundation-users-service";
+import {
+  createOrganizationMember,
+  isOrganizationDomainEmail,
+  listFoundationUsers,
+  syncM365OrganizationUsers,
+  type FoundationUser,
+} from "@/services/foundation-users-service";
 
 function sortUsersByName(users: FoundationUser[]): FoundationUser[] {
   return [...users].sort((a, b) =>
@@ -43,7 +48,7 @@ function filterUsers(rows: FoundationUser[], query: string): FoundationUser[] {
   });
 }
 
-type TableVariant = "admin" | "member";
+type TableVariant = "admin";
 
 function UsersTableCard({
   title,
@@ -53,7 +58,6 @@ function UsersTableCard({
   loading,
   emptyLabel,
   rows,
-  variant,
   canEditModules,
   onModulesSaved,
 }: {
@@ -64,7 +68,6 @@ function UsersTableCard({
   loading: boolean;
   emptyLabel: string;
   rows: FoundationUser[];
-  variant: TableVariant;
   canEditModules: boolean;
   onModulesSaved: (
     userId: string,
@@ -72,8 +75,6 @@ function UsersTableCard({
     admin_module_keys: string[],
   ) => void;
 }) {
-  const modulesColumnLabel = variant === "admin" ? "Module admins" : "Module membership";
-
   return (
     <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
@@ -95,7 +96,7 @@ function UsersTableCard({
             <tr className="border-b border-border/80 bg-muted/60 text-xs font-semibold tracking-wide text-foreground uppercase">
               <th className="px-4 py-2.5">User</th>
               <th className="px-4 py-2.5">Email</th>
-              <th className="px-4 py-2.5">{modulesColumnLabel}</th>
+              <th className="px-4 py-2.5">Module admins</th>
               <th className="px-4 py-2.5">Status</th>
             </tr>
           </thead>
@@ -130,23 +131,16 @@ function UsersTableCard({
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">{row.email}</td>
                   <td className="px-4 py-2.5">
-                    {variant === "admin" ? (
-                      <UserModulesCell
-                        userId={row.id}
-                        userType={row.user_type}
-                        assignedModuleKeys={row.assigned_module_keys ?? []}
-                        adminModuleKeys={row.admin_module_keys ?? []}
-                        canEdit={canEditModules}
-                        onSaved={(assigned_module_keys, admin_module_keys) => {
-                          onModulesSaved(row.id, assigned_module_keys, admin_module_keys);
-                        }}
-                      />
-                    ) : (
-                      <UserMemberModulesCell
-                        assignedModuleKeys={row.assigned_module_keys ?? []}
-                        adminModuleKeys={row.admin_module_keys ?? []}
-                      />
-                    )}
+                    <UserModulesCell
+                      userId={row.id}
+                      userType={row.user_type}
+                      assignedModuleKeys={row.assigned_module_keys ?? []}
+                      adminModuleKeys={row.admin_module_keys ?? []}
+                      canEdit={canEditModules}
+                      onSaved={(assigned_module_keys, admin_module_keys) => {
+                        onModulesSaved(row.id, assigned_module_keys, admin_module_keys);
+                      }}
+                    />
                   </td>
                   <td className="px-4 py-2.5">
                     <FinanceStatusBadge status={row.status} />
@@ -161,15 +155,30 @@ function UsersTableCard({
   );
 }
 
-export function OrganizationUsersPage() {
-  const { user: sessionUser, permissions } = useAuthUser();
+export function OrganizationUsersPage({
+  title = "Organization users",
+  description = "Assign module admins, and map organization members to department, roles, and hierarchy.",
+  backHref,
+  backLabel,
+}: {
+  title?: string;
+  description?: string;
+  backHref?: string;
+  backLabel?: string;
+} = {}) {
+  const { user: sessionUser, permissions, signedIn } = useAuthUser();
   const canEditModules = canManageUserModules(permissions, sessionUser?.userType);
+  const canManageMembers = Boolean(signedIn);
   const [rows, setRows] = useState<FoundationUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [adminQuery, setAdminQuery] = useState("");
   const [memberQuery, setMemberQuery] = useState("");
   const [unassignedQuery, setUnassignedQuery] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -196,6 +205,48 @@ export function OrganizationUsersPage() {
     void load();
   }, [load]);
 
+  const onSyncM365 = useCallback(async () => {
+    setSyncing(true);
+    setSyncError(null);
+    setSyncMessage(null);
+    try {
+      const result = await syncM365OrganizationUsers();
+      setSyncMessage(
+        `Saved @${result.domain} to the database without duplicates: ${result.directory_count} users (${result.created} created, ${result.updated} updated).`,
+      );
+      await load();
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        setSyncError(err.message);
+      } else {
+        setSyncError("Microsoft 365 sync failed.");
+      }
+    } finally {
+      setSyncing(false);
+    }
+  }, [load]);
+
+  const onAddMember = useCallback(
+    async (input: { email: string; display_name: string }) => {
+      setAdding(true);
+      setSyncError(null);
+      setSyncMessage(null);
+      try {
+        const created = await createOrganizationMember(input);
+        setSyncMessage(`Added organization member ${created.display_name} (${created.email}).`);
+        await load();
+      } catch (err) {
+        const message =
+          err instanceof ApiClientError ? err.message : "Failed to add organization member.";
+        setSyncError(message);
+        throw new Error(message);
+      } finally {
+        setAdding(false);
+      }
+    },
+    [load],
+  );
+
   const adminUsers = useMemo(() => {
     const list = rows.filter((row) =>
       hasModuleAdminAssignment(row.user_type, row.admin_module_keys ?? []),
@@ -204,13 +255,7 @@ export function OrganizationUsersPage() {
   }, [rows, adminQuery]);
 
   const memberUsers = useMemo(() => {
-    const list = rows.filter((row) =>
-      hasModuleMemberAssignment(
-        row.user_type,
-        row.assigned_module_keys ?? [],
-        row.admin_module_keys ?? [],
-      ),
-    );
+    const list = rows.filter((row) => isOrganizationDomainEmail(row.email));
     return sortUsersByName(filterUsers(list, memberQuery));
   }, [rows, memberQuery]);
 
@@ -218,11 +263,7 @@ export function OrganizationUsersPage() {
     const list = rows.filter(
       (row) =>
         !hasModuleAdminAssignment(row.user_type, row.admin_module_keys ?? []) &&
-        !hasModuleMemberAssignment(
-          row.user_type,
-          row.assigned_module_keys ?? [],
-          row.admin_module_keys ?? [],
-        ),
+        !isOrganizationDomainEmail(row.email),
     );
     return sortUsersByName(filterUsers(list, unassignedQuery));
   }, [rows, unassignedQuery]);
@@ -239,6 +280,10 @@ export function OrganizationUsersPage() {
     );
   }
 
+  function onMemberUpdated(user: FoundationUser) {
+    setRows((prev) => prev.map((r) => (r.id === user.id ? { ...r, ...user } : r)));
+  }
+
   const adminSearchInput = (
     <Input
       value={adminQuery}
@@ -249,31 +294,23 @@ export function OrganizationUsersPage() {
     />
   );
 
-  const memberSearchInput = (
-    <Input
-      value={memberQuery}
-      onChange={(e) => setMemberQuery(e.target.value)}
-      placeholder="Search name or email…"
-      className="h-9 w-full min-w-[200px] max-w-xs"
-      aria-label="Search module member users"
-    />
-  );
-
   const unassignedSearchInput = (
     <Input
       value={unassignedQuery}
       onChange={(e) => setUnassignedQuery(e.target.value)}
       placeholder="Search name or email…"
       className="h-9 w-full min-w-[200px] max-w-xs"
-      aria-label="Search users without module assignment"
+      aria-label="Search users outside the organization domain"
     />
   );
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Organization users"
-        description="Assign module admins here. Module members are assigned inside each module (for example HR Superadmin Panel) and listed separately below."
+        title={title}
+        description={description}
+        backHref={backHref}
+        backLabel={backLabel}
       />
 
       {error ? (
@@ -296,30 +333,23 @@ export function OrganizationUsersPage() {
             : "No module admins assigned yet."
         }
         rows={adminUsers}
-        variant="admin"
         canEditModules={canEditModules}
         onModulesSaved={onModulesSaved}
       />
 
-      <UsersTableCard
-        title="Module member users"
-        subtitle={
-          loading
-            ? "Loading…"
-            : `${memberUsers.length} with member access (managed in module panels)`
-        }
-        icon={<UserRound className="size-4" />}
-        toolbar={memberSearchInput}
-        loading={loading}
-        emptyLabel={
-          memberQuery.trim()
-            ? "No module member users match your search."
-            : "No module members assigned yet."
-        }
+      <OrganizationMembers
         rows={memberUsers}
-        variant="member"
-        canEditModules={canEditModules}
-        onModulesSaved={onModulesSaved}
+        loading={loading}
+        query={memberQuery}
+        onQueryChange={setMemberQuery}
+        canManageMembers={canManageMembers}
+        syncing={syncing}
+        adding={adding}
+        syncMessage={syncMessage}
+        syncError={syncError}
+        onSyncM365={() => void onSyncM365()}
+        onAddMember={onAddMember}
+        onMemberUpdated={onMemberUpdated}
       />
 
       <UsersTableCard
@@ -327,18 +357,17 @@ export function OrganizationUsersPage() {
         subtitle={
           loading
             ? "Loading…"
-            : `${unassignedUsers.length} without module assignment`
+            : `${unassignedUsers.length} outside @cachedigitech.com`
         }
         icon={<Users className="size-4" />}
         toolbar={unassignedSearchInput}
         loading={loading}
         emptyLabel={
           unassignedQuery.trim()
-            ? "No unassigned users match your search."
-            : "Every user has a module assignment."
+            ? "No other users match your search."
+            : "No users outside the organization domain."
         }
         rows={unassignedUsers}
-        variant="admin"
         canEditModules={canEditModules}
         onModulesSaved={onModulesSaved}
       />

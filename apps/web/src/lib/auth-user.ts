@@ -8,6 +8,28 @@ export type AuthSessionUser = {
   employeeId?: string;
 };
 
+export type AuthMeParsed = {
+  user: AuthSessionUser | null;
+  permissions: string[];
+  moduleKeys: string[];
+  adminModuleKeys: string[];
+  moduleRoles: Record<string, string>;
+  projectModuleAdmin: boolean;
+  hrModuleAdmin: boolean;
+  assetsModuleAdmin: boolean;
+};
+
+const EMPTY_AUTH: AuthMeParsed = {
+  user: null,
+  permissions: [],
+  moduleKeys: [],
+  adminModuleKeys: [],
+  moduleRoles: {},
+  projectModuleAdmin: false,
+  hrModuleAdmin: false,
+  assetsModuleAdmin: false,
+};
+
 function parseModuleRoles(record: Record<string, unknown>): Record<string, string> {
   const raw = record.module_roles ?? record.moduleRoles;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
@@ -18,27 +40,9 @@ function parseModuleRoles(record: Record<string, unknown>): Record<string, strin
   return out;
 }
 
-export function parseAuthMe(data: unknown): {
-  user: AuthSessionUser | null;
-  permissions: string[];
-  moduleKeys: string[];
-  adminModuleKeys: string[];
-  moduleRoles: Record<string, string>;
-  projectModuleAdmin: boolean;
-  hrModuleAdmin: boolean;
-  assetsModuleAdmin: boolean;
-} {
+export function parseAuthMe(data: unknown): AuthMeParsed {
   if (!data || typeof data !== "object") {
-    return {
-      user: null,
-      permissions: [],
-      moduleKeys: [],
-      adminModuleKeys: [],
-      moduleRoles: {},
-      projectModuleAdmin: false,
-      hrModuleAdmin: false,
-      assetsModuleAdmin: false,
-    };
+    return { ...EMPTY_AUTH };
   }
   const record = data as Record<string, unknown>;
 
@@ -99,16 +103,7 @@ export function parseAuthMe(data: unknown): {
     };
   }
 
-  return {
-    user: null,
-    permissions: [],
-    moduleKeys: [],
-    adminModuleKeys: [],
-    moduleRoles: {},
-    projectModuleAdmin: false,
-    hrModuleAdmin: false,
-    assetsModuleAdmin: false,
-  };
+  return { ...EMPTY_AUTH };
 }
 
 export function userInitials(displayName: string): string {

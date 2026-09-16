@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 import { env } from "@/utils/env";
 
 function isActivePath(pathname: string, href: string) {
-  if (href === "/") return pathname === "/";
+  if (href === "/home") return pathname === "/home";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -23,10 +23,17 @@ export function AppSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
-  const { user, loading: userLoading, signedIn, moduleKeys, status: authStatus, refresh } =
-    useAuthUser();
+const {
+    user,
+    loading: userLoading,
+    signedIn,
+    moduleKeys,
+    adminModuleKeys,
+    status: authStatus,
+    refresh,
+  } = useAuthUser();
 
-  const hasModules = hasModuleAssignments(moduleKeys, user?.userType);
+  const hasModules = hasModuleAssignments(moduleKeys, user?.userType, adminModuleKeys);
   const sessionReady = authStatus === "authenticated";
   const sessionPending = userLoading || authStatus === "loading";
 
@@ -35,12 +42,14 @@ export function AppSidebar() {
       return navigation
         .map((group) => ({
           ...group,
-          items: group.items.filter((item) => item.href === "/"),
+          items: group.items.filter(
+            (item) => item.href === "/" || item.href === "/erp-settings" || item.href === "/home",
+          ),
         }))
         .filter((group) => group.items.length > 0);
     }
-    return filterNavigationGroups(navigation, moduleKeys, user?.userType);
-  }, [moduleKeys, user?.userType, sessionPending, authStatus]);
+    return filterNavigationGroups(navigation, moduleKeys, user?.userType, adminModuleKeys);
+  }, [adminModuleKeys, moduleKeys, user?.userType, sessionPending, authStatus]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
