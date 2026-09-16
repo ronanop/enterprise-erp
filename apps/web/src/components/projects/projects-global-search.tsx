@@ -397,7 +397,7 @@ export function ProjectsGlobalSearch({ className }: { className?: string }) {
           aria-autocomplete="list"
           aria-controls={listId}
           aria-expanded={showPanel}
-          className="h-9 border-border/80 bg-background pl-8 pr-9 transition-colors duration-200"
+          className="h-8.5 rounded-full border border-border/70 bg-muted/40 pl-8 pr-9 text-xs transition-all duration-150 hover:bg-muted/60 focus-visible:bg-background focus-visible:border-primary/50 focus-visible:ring-3 focus-visible:ring-primary/15 shadow-[0_1px_2px_0_rgba(0,0,0,0.02)] backdrop-blur-xs"
         />
         {loading ? (
           <Loader2
@@ -411,24 +411,24 @@ export function ProjectsGlobalSearch({ className }: { className?: string }) {
         <div
           id={listId}
           role="listbox"
-          className="absolute top-[calc(100%+6px)] left-1/2 z-50 w-[min(100vw-2rem,36rem)] -translate-x-1/2 overflow-hidden rounded-xl border border-border/80 bg-card shadow-lg"
+          className="absolute top-[calc(100%+6px)] left-1/2 z-50 w-[min(100vw-2rem,36rem)] -translate-x-1/2 overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 duration-150"
         >
           {flatHits.length === 0 && !loading ? (
             <p className="px-3 py-4 text-center text-xs text-muted-foreground">
               No Projects matches for “{query.trim()}”.
             </p>
           ) : (
-            <div className="erp-scroll max-h-[min(70vh,28rem)] overflow-y-auto py-1">
+            <div className="erp-scroll max-h-[min(70vh,28rem)] overflow-y-auto p-1.5">
               {grouped.map((group) => {
                 const meta = KIND_META[group.kind];
                 const Icon = meta.icon;
                 return (
-                  <div key={group.kind} className="border-b border-border/50 last:border-0">
-                    <p className="flex items-center gap-1.5 px-3 pt-2.5 pb-1 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
+                  <div key={group.kind} className="border-b border-border/40 last:border-0 pb-1 mb-1 last:pb-0 last:mb-0">
+                    <p className="flex items-center gap-1.5 px-3 pt-2 pb-1 text-[10px] font-semibold tracking-[0.12em] text-muted-foreground uppercase">
                       <Icon className="size-3" aria-hidden />
                       {meta.label}
                     </p>
-                    <ul>
+                    <ul className="space-y-0.5">
                       {group.hits.map((hit) => {
                         const flatIndex = flatHits.findIndex(
                           (h) => h.id === hit.id && h.kind === hit.kind,
@@ -439,8 +439,8 @@ export function ProjectsGlobalSearch({ className }: { className?: string }) {
                             <Link
                               href={hit.href}
                               className={cn(
-                                "flex cursor-pointer flex-col gap-0.5 px-3 py-2 transition-colors duration-150",
-                                active ? "bg-muted/70" : "hover:bg-muted/50",
+                                "flex cursor-pointer flex-col gap-0.5 rounded-xl px-3 py-2 transition-all duration-150 active:scale-[0.99]",
+                                active ? "bg-primary/10 text-primary" : "hover:bg-muted/50 text-foreground",
                               )}
                               onMouseEnter={() => setActiveIndex(flatIndex)}
                               onClick={(e) => {
@@ -448,7 +448,7 @@ export function ProjectsGlobalSearch({ className }: { className?: string }) {
                                 goTo(hit);
                               }}
                             >
-                              <span className="truncate text-sm font-medium text-foreground">
+                              <span className="truncate text-sm font-medium">
                                 {hit.title}
                               </span>
                               <span className="truncate text-[11px] text-muted-foreground">

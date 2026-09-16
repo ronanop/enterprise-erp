@@ -38,7 +38,7 @@ export function PageHeader({
         onClick={onBack}
         className={cn(
           buttonVariants({ variant: "outline", size: "sm" }),
-          "h-8 w-fit cursor-pointer gap-1.5 transition-colors duration-200",
+          "h-8 w-fit cursor-pointer gap-1.5 rounded-full px-3 text-xs font-medium shadow-[0_1px_2px_0_rgba(0,0,0,0.02)] transition-all duration-150 active:scale-[0.98]",
         )}
       >
         <ArrowLeft className="size-3.5" aria-hidden />
@@ -49,7 +49,7 @@ export function PageHeader({
         href={backHref}
         className={cn(
           buttonVariants({ variant: "outline", size: "sm" }),
-          "h-8 w-fit cursor-pointer gap-1.5 transition-colors duration-200",
+          "h-8 w-fit cursor-pointer gap-1.5 rounded-full px-3 text-xs font-medium shadow-[0_1px_2px_0_rgba(0,0,0,0.02)] transition-all duration-150 active:scale-[0.98]",
         )}
       >
         <ArrowLeft className="size-3.5" aria-hidden />
@@ -61,7 +61,7 @@ export function PageHeader({
     <div className={cn("space-y-1.5", centerTitle && "text-center")}>
       <h1
         className={cn(
-          "text-[1.65rem] font-medium tracking-tight text-foreground",
+          "text-2xl sm:text-[1.75rem] font-semibold tracking-tight text-foreground",
           titleClassName,
         )}
       >

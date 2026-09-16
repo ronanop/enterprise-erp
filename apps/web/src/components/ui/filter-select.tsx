@@ -122,10 +122,11 @@ export function FilterSelect({
         aria-controls={open ? listId : undefined}
         title={label}
         className={cn(
-          "flex h-8 w-full cursor-pointer items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent px-2.5 text-left text-sm outline-none transition-[border-color,box-shadow,background-color] duration-200",
-          "hover:bg-muted/40",
-          "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-          open && "border-ring ring-3 ring-ring/50",
+          "flex h-8.5 w-full cursor-pointer items-center justify-between gap-2 rounded-xl border border-input/80 bg-background/60 px-3 text-left text-sm outline-none transition-all duration-150",
+          "hover:bg-muted/60 hover:border-border",
+          "focus-visible:border-primary/60 focus-visible:ring-3 focus-visible:ring-primary/15",
+          "shadow-[0_1px_2px_0_rgba(0,0,0,0.02)] backdrop-blur-xs",
+          open && "border-primary/60 ring-3 ring-primary/15",
           "disabled:cursor-not-allowed disabled:opacity-50",
         )}
         onClick={() => setOpen((v) => !v)}
@@ -133,7 +134,7 @@ export function FilterSelect({
         <span className={cn("min-w-0 truncate", !selected && "text-muted-foreground")}>{label}</span>
         <ChevronDown
           className={cn(
-            "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 ease-out",
+            "size-3.5 shrink-0 text-muted-foreground transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
             open && "rotate-180",
           )}
         />
@@ -146,7 +147,7 @@ export function FilterSelect({
               id={listId}
               role="listbox"
               aria-label={placeholder}
-              className="fixed z-[200] overflow-hidden rounded-xl border border-border/80 bg-card shadow-lg"
+              className="fixed z-[200] overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 duration-150"
               style={{
                 top: coords?.top ?? 0,
                 left: coords?.left ?? 0,
@@ -156,7 +157,7 @@ export function FilterSelect({
                 visibility: coords ? "visible" : "hidden",
               }}
             >
-              <div className="erp-scroll max-h-56 overflow-y-auto overscroll-contain p-1.5">
+              <div className="erp-scroll max-h-56 overflow-y-auto overscroll-contain p-1.5 space-y-0.5">
                 {options.map((opt) => {
                   const active = opt.value === value;
                   return (
@@ -167,10 +168,10 @@ export function FilterSelect({
                       aria-selected={active}
                       title={opt.label}
                       className={cn(
-                        "flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm transition-colors duration-150",
+                        "flex w-full cursor-pointer items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-left text-sm font-medium transition-all duration-150 active:scale-[0.99]",
                         active
-                          ? "bg-primary text-primary-foreground"
-                          : "text-foreground hover:bg-muted/80",
+                          ? "bg-primary text-primary-foreground shadow-xs"
+                          : "text-foreground hover:bg-muted/70",
                       )}
                       onClick={() => {
                         onChange(opt.value);

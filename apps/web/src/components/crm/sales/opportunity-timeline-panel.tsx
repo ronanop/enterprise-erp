@@ -133,11 +133,20 @@ function resolveTimelineEventTitle(event: OpportunityTimelineEvent): string {
 function EventCard({ event }: { event: OpportunityTimelineEvent }) {
   const Icon = eventIcon(event);
   const title = resolveTimelineEventTitle(event);
+  const assignees = (event.assignee_names ?? []).filter(Boolean);
+  const isSentForApproval = /sent for approval/i.test(title) || assignees.length > 0;
+  const approverLabel =
+    event.decided_by_name ||
+    (event.decision === "approved" ? event.actor_name : null) ||
+    null;
   const actorLabel =
     event.actor_name ||
     event.decided_by_name ||
     event.requested_by_name ||
     null;
+  const isApprovedStep =
+    /approved|studied/i.test(title) && !/sent for approval/i.test(title);
+
   return (
     <li className="relative pl-8">
       <span
@@ -153,7 +162,19 @@ function EventCard({ event }: { event: OpportunityTimelineEvent }) {
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
             <p className="text-[13px] font-medium text-foreground">{title}</p>
-            {actorLabel ? (
+            {isSentForApproval && assignees.length > 0 ? (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Sent to{" "}
+                <span className="font-medium text-foreground/80">{assignees.join(", ")}</span>
+              </p>
+            ) : isApprovedStep && (approverLabel || actorLabel) ? (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Approved by{" "}
+                <span className="font-medium text-foreground/80">
+                  {approverLabel || actorLabel}
+                </span>
+              </p>
+            ) : actorLabel ? (
               <p className="mt-0.5 text-[11px] text-muted-foreground">
                 by <span className="font-medium text-foreground/80">{actorLabel}</span>
               </p>
@@ -177,13 +198,17 @@ function EventCard({ event }: { event: OpportunityTimelineEvent }) {
         <dl className="mt-2 grid gap-1 text-[11px] text-muted-foreground">
           {event.requested_by_name &&
           event.event_type !== "approval_requested" &&
-          event.requested_by_name !== actorLabel ? (
+          event.requested_by_name !== actorLabel &&
+          event.requested_by_name !== approverLabel ? (
             <div className="flex gap-1.5">
               <dt className="shrink-0 font-medium text-foreground/70">Requested by</dt>
               <dd>{event.requested_by_name}</dd>
             </div>
           ) : null}
-          {event.decided_by_name && event.decided_by_name !== actorLabel ? (
+          {event.decided_by_name &&
+          event.decided_by_name !== actorLabel &&
+          event.decided_by_name !== approverLabel &&
+          !isApprovedStep ? (
             <div className="flex gap-1.5">
               <dt className="shrink-0 font-medium text-foreground/70">Decided by</dt>
               <dd>{event.decided_by_name}</dd>
@@ -205,7 +230,7 @@ function EventCard({ event }: { event: OpportunityTimelineEvent }) {
             </div>
           ) : null}
           {typeof event.version === "number" ? (
-            <div className="flex gap-1.5">
+            <div className="flex flex-wrap gap-1.5">
               <dt className="shrink-0 font-medium text-foreground/70">Version</dt>
               <dd className="font-mono">v{event.version}</dd>
             </div>

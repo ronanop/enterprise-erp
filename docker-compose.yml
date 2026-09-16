@@ -50,25 +50,6 @@ services:
       timeout: 5s
       retries: 10
 
-  minio:
-    image: minio/minio:latest
-    container_name: erp-minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-erp_minio}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-erp_minio_password}
-    ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   opensearch:
     image: opensearchproject/opensearch:2
     container_name: erp-opensearch
@@ -105,8 +86,6 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-erp}:${RABBITMQ_PASSWORD:-erp_dev_password}@rabbitmq:5672//
       CELERY_RESULT_BACKEND: redis://redis:6379/1
-      MINIO_ENDPOINT: minio:9000
-      MINIO_SECURE: "false"
       OPENSEARCH_URL: http://opensearch:9200
       RUN_MIGRATIONS: "true"
       CORS_ORIGINS: ${CORS_ORIGINS}
@@ -115,8 +94,13 @@ services:
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
       SSL_CERT_DIR: /etc/ssl/certs
-      ASSET_STORAGE_BACKEND: local
+      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-s3}
+      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-s3}
       ASSET_STORAGE_PATH: /app/var/asset-storage
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-ap-south-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
     volumes:
       - crm_uploads:/app/var/crm-attachments
       - asset_storage:/app/var/asset-storage
@@ -150,14 +134,18 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-erp}:${RABBITMQ_PASSWORD:-erp_dev_password}@rabbitmq:5672//
       CELERY_RESULT_BACKEND: redis://redis:6379/1
-      MINIO_ENDPOINT: minio:9000
       OPENSEARCH_URL: http://opensearch:9200
       RUN_MIGRATIONS: "false"
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
       SSL_CERT_DIR: /etc/ssl/certs
-      ASSET_STORAGE_BACKEND: local
+      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-s3}
+      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-s3}
       ASSET_STORAGE_PATH: /app/var/asset-storage
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-ap-south-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
     volumes:
       - crm_uploads:/app/var/crm-attachments
       - asset_storage:/app/var/asset-storage
@@ -214,8 +202,6 @@ volumes:
     name: erp_redis_data
   rabbitmq_data:
     name: erp_rabbitmq_data
-  minio_data:
-    name: erp_minio_data
   opensearch_data:
     name: erp_opensearch_data
   crm_uploads:

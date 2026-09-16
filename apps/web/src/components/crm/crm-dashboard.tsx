@@ -359,7 +359,7 @@ export function CrmDashboard() {
                   recent.map((row, idx) => (
                     <tr
                       key={String(row.id ?? idx)}
-                      className="border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
+                      className="border-b border-border/40 transition-colors duration-150 last:border-0 hover:bg-muted/40"
                     >
                       <td className="max-w-50 truncate px-4 py-2.5">
                         <Link
@@ -421,7 +421,7 @@ export function CrmDashboard() {
               oppWatch.map((row, idx) => (
                 <li
                   key={String(row.id ?? idx)}
-                  className="px-4 py-2.5 transition-colors duration-150 hover:bg-accent/30"
+                  className="px-4 py-2.5 transition-colors duration-150 hover:bg-muted/40"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <Link

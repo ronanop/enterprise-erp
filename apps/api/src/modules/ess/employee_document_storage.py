@@ -1,4 +1,4 @@
-"""Employee document storage - MinIO when enabled, local disk otherwise."""
+"""Employee document storage - S3 when enabled, local disk otherwise."""
 
 from __future__ import annotations
 
@@ -88,7 +88,7 @@ def resolve_document_path(storage_uri: str) -> Path:
 
 
 def load_document_download(storage_uri: str, document_name: str) -> DocumentDownload:
-    if object_storage.is_minio_uri(storage_uri):
+    if object_storage.is_object_uri(storage_uri):
         content = object_storage.get_bytes(storage_uri)
         stored_name = storage_uri.rsplit("/", 1)[-1]
         suffix = Path(stored_name).suffix

@@ -1556,6 +1556,8 @@ class OpportunityTimelineEventResponse(BaseModel):
     requested_by_name: str | None = None
     decided_by_id: UUID | None = None
     decided_by_name: str | None = None
+    # Selected My Jobs recipients for "Sent for Approval" milestones.
+    assignee_names: list[str] = []
     decision: str | None = None
     team_role: str | None = None
     remark: str | None = None

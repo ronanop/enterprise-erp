@@ -70,17 +70,17 @@ function NavLinkRow({
       href={item.href}
       title={collapsed ? item.title : undefined}
       className={cn(
-        "group relative flex cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm transition-all duration-200",
+        "group relative flex cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm transition-all duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.985]",
         nested && "py-1.5 pl-9 text-[13px]",
         active
-          ? "bg-[#9B5BB8] text-white"
+          ? "bg-[#9B5BB8] text-white shadow-sm ring-1 ring-white/10"
           : "text-[#AEB6C3] hover:bg-[#2A2A2A] hover:text-white",
         collapsed && "justify-center px-0",
       )}
     >
       <Icon
         className={cn(
-          "size-4 shrink-0",
+          "size-4 shrink-0 transition-transform duration-150 group-hover:scale-105",
           nested && "size-3.5",
           active
             ? "text-white"
@@ -305,7 +305,7 @@ export function HrSidebar() {
     <aside
       data-slot="app-sidebar"
       className={cn(
-        "sticky top-0 z-20 flex h-dvh shrink-0 flex-col border-r border-[#222222] bg-[#0A0A0A] text-white transition-[width] duration-200",
+        "sticky top-0 z-20 flex h-dvh shrink-0 flex-col border-r border-[#222222] bg-[#0A0A0A] text-white transition-[width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
         collapsed ? "w-[72px]" : "w-[260px]",
       )}
     >

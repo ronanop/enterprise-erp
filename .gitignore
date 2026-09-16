@@ -3,9 +3,18 @@
 .env.local
 .env.*.local
 
-# Local CRM uploads (not for repo)
+# Local object/file storage (S3 in deploy; keep .gitkeep placeholders only)
 apps/api/var/crm-attachments/*
 !apps/api/var/crm-attachments/.gitkeep
+apps/api/var/asset-storage/*
+!apps/api/var/asset-storage/.gitkeep
+apps/api/var/ess-documents/*
+!apps/api/var/ess-documents/.gitkeep
+apps/api/var/project-trackers/*
+!apps/api/var/project-trackers/.gitkeep
+apps/api/var/marketing-deliverables/*
+!apps/api/var/marketing-deliverables/.gitkeep
+apps/api/var/*.jsonl
 
 # Python
 __pycache__/
@@ -61,4 +70,8 @@ alembic/versions/*.pyc
 # Local VAPT / security scan reports (not for repo)
 docs/security/
 
-apps/api/var/crm-attachments/
+# Local DB dumps (not for repo)
+backups/
+
+# TLS certs (Coolify/local nginx) — never commit
+docker/nginx/certs/

@@ -135,7 +135,7 @@ export function GlobalNotificationBell({ variant = "topbar", className }: Props)
               role="dialog"
               aria-label="Notifications"
               style={panelStyle}
-              className="max-w-[calc(100vw-16px)] overflow-hidden rounded-xl border border-border/80 bg-card shadow-xl"
+              className="max-w-[calc(100vw-16px)] overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 duration-150"
             >
               <div className="flex items-center justify-between gap-2 border-b border-border/70 px-3 py-2.5">
                 <div>

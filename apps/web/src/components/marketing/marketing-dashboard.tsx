@@ -118,24 +118,24 @@ export function MarketingDashboard() {
             Content Intelligence
           </Badge>
         </div>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
           {marketingQuickLinks.map((link) => {
             const Icon = link.icon;
             return (
               <Link
                 key={link.href}
                 href={link.href}
-                className="group flex cursor-pointer items-start gap-3 rounded-md border border-border/70 bg-card p-3 transition-colors duration-200 hover:border-primary/40 hover:bg-muted/40"
+                className="group flex cursor-pointer items-start gap-3 rounded-2xl border border-border/70 bg-card/95 p-3.5 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-border active:scale-[0.99] backdrop-blur-xs"
               >
-                <span className="mt-0.5 rounded-md border border-border/60 bg-background p-1.5 text-muted-foreground transition-colors duration-200 group-hover:text-foreground">
-                  <Icon className="size-3.5" aria-hidden />
+                <span className="mt-0.5 rounded-xl border border-border/60 bg-background/80 p-2 text-muted-foreground transition-all duration-200 group-hover:text-primary group-hover:bg-primary/10 group-hover:border-primary/30">
+                  <Icon className="size-4" aria-hidden />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1 text-sm font-medium text-foreground">
+                  <span className="flex items-center gap-1 text-sm font-semibold text-foreground transition-colors duration-150 group-hover:text-primary">
                     {link.title}
-                    <ArrowUpRight className="size-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+                    <ArrowUpRight className="size-3.5 opacity-0 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
                   </span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
+                  <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
                     {link.description}
                   </span>
                 </span>

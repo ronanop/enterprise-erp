@@ -1,10 +1,11 @@
 """CRM Attachment metadata REST endpoints (BOQ / SOW / OEM quote / customer PO / vendor quote / other)."""
 
+from io import BytesIO
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 
 from modules.crm.dependencies import get_db
@@ -51,12 +52,21 @@ def download_attachment(
     ctx: Annotated[TenantContext, Depends(require_permission("crm.attachment:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    path, file_name, content_type = AttachmentService(db).resolve_file_path(ctx, attachment_id)
-    return FileResponse(
-        path=path,
-        filename=file_name,
-        media_type=content_type or "application/octet-stream",
-        content_disposition_type="inline",
+    download = AttachmentService(db).resolve_download(ctx, attachment_id)
+    media = download.content_type or "application/octet-stream"
+    if download.path is not None:
+        return FileResponse(
+            path=download.path,
+            filename=download.file_name,
+            media_type=media,
+            content_disposition_type="inline",
+        )
+    return StreamingResponse(
+        BytesIO(download.content or b""),
+        media_type=media,
+        headers={
+            "Content-Disposition": f'inline; filename="{download.file_name}"',
+        },
     )
 
 

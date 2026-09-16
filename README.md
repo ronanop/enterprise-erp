@@ -11,11 +11,11 @@ Multi-Industry, Multi-Company, Enterprise-Grade ERP Platform.
 |-------|------------|
 | Frontend | Next.js 16+, TypeScript, Tailwind CSS, ShadCN UI |
 | Backend | Python 3.13+, FastAPI, SQLAlchemy 2.0, Alembic, Pydantic v2, Celery |
-| Database | PostgreSQL |
-| Search | OpenSearch |
-| Storage | MinIO / AWS S3 |
+| Database | PostgreSQL (AWS RDS in production) |
+| Search | OpenSearch (optional) |
+| Storage | AWS S3 |
 | Cache / Queue | Redis, RabbitMQ |
-| Infrastructure | Docker, Kubernetes Ready, Terraform Ready |
+| Deploy | Docker Compose · Coolify on EC2 (`docker-compose.coolify.yml`) |
 
 **Pattern:** Clean Architecture · DDD · Modular Monolith
 
@@ -51,13 +51,14 @@ cp .env.example .env
 
 ### 2. Infrastructure (Docker)
 
+**Coolify (AWS EC2):** use `docker-compose.coolify.yml` — see `docs/coolify-deploy.md`  
+(AWS RDS + S3; Redis/RabbitMQ in compose; no MinIO/nginx).
+
+**LAN / local app stack:**
+
 ```bash
-docker compose up -d
+docker compose -f docker-compose.app.yml up -d --build
 ```
-
-Services: Redis, RabbitMQ, MinIO, OpenSearch
-
-PostgreSQL is **not** in Docker - use the native instance on `172.16.200.26:5432` (`DATABASE_URL` in `.env`).
 
 ### 3. Backend API
 

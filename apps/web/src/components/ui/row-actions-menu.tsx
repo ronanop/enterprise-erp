@@ -124,7 +124,7 @@ export function RowActionsMenu({
               role="menu"
               data-row-actions-menu
               className={cn(
-                "fixed z-[200] min-w-[10rem] rounded-lg border border-border bg-card py-1 text-xs shadow-lg",
+                "fixed z-[200] min-w-[11rem] overflow-hidden rounded-2xl border border-border/70 bg-card/95 p-1 text-xs shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 duration-150",
                 menuClassName,
               )}
               style={{
@@ -157,8 +157,8 @@ export function RowActionsItem({
   href?: string;
 }) {
   const classes = cn(
-    "flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-muted",
-    destructive && "text-destructive",
+    "flex w-full cursor-pointer items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-xs font-medium transition-all duration-150 hover:bg-muted/70 active:scale-[0.99]",
+    destructive && "text-destructive hover:bg-destructive/10",
     className,
   );
 

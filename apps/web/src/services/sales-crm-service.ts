@@ -745,6 +745,7 @@ export type OpportunityTimelineEvent = {
   requested_by_name: string | null;
   decided_by_id: string | null;
   decided_by_name: string | null;
+  assignee_names?: string[];
   decision: string | null;
   team_role: string | null;
   remark: string | null;

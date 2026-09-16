@@ -44,7 +44,7 @@ export function CrmListToolbar({
             onChange={(e) => search.onChange(e.target.value)}
             placeholder={search.placeholder}
             aria-label={search.placeholder ?? `Search ${title}`}
-            className="h-8 w-52 shrink-0 sm:w-56"
+            className="h-8.5 w-52 shrink-0 rounded-full bg-muted/40 sm:w-60 hover:bg-muted/60 focus-visible:bg-background"
           />
         ) : null}
       </div>

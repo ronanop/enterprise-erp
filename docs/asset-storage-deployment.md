@@ -1,43 +1,53 @@
-# Asset file storage - deployment notes
+# Asset / object file storage - deployment notes
 
-Local disk (`ASSET_STORAGE_BACKEND=local`) is the only backend in this phase. DC challan documents are stored under opaque keys such as `dc-challan/{challan_id}/scm-issued/{uuid}.pdf`. The database stores that **key**, never an absolute filesystem path.
+## AWS S3 (preferred)
 
-## Persistent volume
+Set:
 
-Set `ASSET_STORAGE_PATH` to an **absolute** directory that is a persistent volume (or bind mount), not the container writable layer.
-
-Example: `/var/erp/asset-storage`
-
-The API process must be able to create that directory and write files into it. On startup the API writes and deletes a probe file; failure is logged as `ERROR` and does not crash the process, but uploads will fail until the path is writable.
-
-This repo’s `docker-compose.yml` does **not** run the API service (only Postgres, Redis, RabbitMQ, MinIO, OpenSearch). When you containerise the API, add a named volume, for example:
-
-```yaml
-services:
-  api:
-    volumes:
-      - asset_storage:/var/erp/asset-storage
-    environment:
-      ASSET_STORAGE_BACKEND: local
-      ASSET_STORAGE_PATH: /var/erp/asset-storage
-
-volumes:
-  asset_storage:
+```bash
+OBJECT_STORAGE_BACKEND=s3
+ASSET_STORAGE_BACKEND=s3
+S3_BUCKET=your-bucket
+S3_REGION=ap-south-1
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
 ```
 
-## Single-replica constraint
+Credentials may be omitted when the API runs with an IAM role that can
+`s3:GetObject` / `PutObject` / `DeleteObject` / `ListBucket` / `HeadBucket`
+on that bucket.
 
-While the local backend is in use, run **one** API replica that can see that volume. A second replica on a different disk will 404 when serving files written by the first.
+Opaque keys stay the same shape as local disk (e.g.
+`dc-challan/{challan_id}/scm-issued/{uuid}.pdf`). CRM attachments store full
+`s3://bucket/crm/attachments/...` URIs in `crm_attachment.file_path`.
+
+Keep content endpoints authenticated; do not expose the bucket publicly.
+
+### Migrate existing local files
+
+With volumes mounted and S3 configured:
+
+```bash
+cd apps/api
+PYTHONPATH=src python scripts/migrate_local_storage_to_s3.py --dry-run
+PYTHONPATH=src python scripts/migrate_local_storage_to_s3.py
+```
+
+Then restart API/Celery. Local Docker volumes can be removed after verifying
+downloads.
+
+## Local disk (dev fallback)
+
+```bash
+OBJECT_STORAGE_BACKEND=local
+ASSET_STORAGE_BACKEND=local
+ASSET_STORAGE_PATH=/var/erp/asset-storage
+```
+
+While local is in use, run **one** API replica that can see that volume.
 
 ## Backup
 
-Back up `ASSET_STORAGE_PATH` together with Postgres. Soft-deleted DC challan rows keep their files; restoring the database without the files (or vice versa) leaves preview/download broken.
-
-## Switching to S3 / MinIO later
-
-Do **not** put cloud credentials in the asset module until a backend exists.
-
-1. Implement `modules/asset/storage/s3.py` with the same `StorageBackend` protocol (`save`, `open`, `delete`, `exists`). Keys stay opaque (`dc-challan/...`).
-2. Copy existing objects from the local tree into the bucket using the same keys.
-3. Set `ASSET_STORAGE_BACKEND=s3` (and bucket/region env vars on that backend) and restart.
-4. Keep the content endpoint authenticated; do not expose the bucket publicly.
+With S3, enable bucket versioning / cross-region replication as needed and
+keep Postgres backups separate. Soft-deleted rows may keep object keys;
+restoring the DB without the objects (or vice versa) leaves downloads broken.

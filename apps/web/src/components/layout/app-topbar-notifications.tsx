@@ -459,19 +459,19 @@ export function AppTopbarNotifications() {
           ref={inboxRef}
           role="dialog"
           aria-label={dialogLabel}
-          className="fixed z-80 overflow-hidden rounded-xl border border-border/80 bg-card shadow-lg animate-in fade-in-0 zoom-in-95 duration-200"
+          className="fixed z-80 overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 duration-150"
           style={{
             top: coords.top,
             left: coords.left,
             width: panelWidth,
           }}
         >
-          <div className="flex items-center justify-between gap-2 border-b border-border/70 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2 border-b border-border/70 px-3.5 py-3">
             <p className="text-sm font-semibold">{inboxTitle}</p>
             {unreadCount > 0 ? (
               <button
                 type="button"
-                className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
+                className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-opacity duration-150 hover:opacity-80 active:scale-[0.98]"
                 onClick={() => {
                   if (mode === "crm") onMarkAllCrmRead();
                   else void onMarkAllProjectRead();

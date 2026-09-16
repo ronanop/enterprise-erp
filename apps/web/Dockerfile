@@ -1,14 +1,14 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-ARG NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+ARG NEXT_PUBLIC_API_URL=/api/v1
 ARG NEXT_PUBLIC_APP_NAME="Enterprise ERP"
 ARG NEXT_PUBLIC_DEMO_EMAIL=
 ARG NEXT_PUBLIC_DEMO_PASSWORD=
@@ -23,6 +23,10 @@ ENV NEXT_PUBLIC_ELEVENLABS_AGENT_ID=$NEXT_PUBLIC_ELEVENLABS_AGENT_ID
 ENV API_INTERNAL_URL=$API_INTERNAL_URL
 
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+# Coolify builders can be memory-constrained
+ENV NODE_OPTIONS=--max-old-space-size=4096
+
 RUN npm run build
 
 FROM node:20-alpine AS runner
@@ -41,5 +45,6 @@ USER nextjs
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+ENV API_INTERNAL_URL=http://api:8000
 
 CMD ["node", "server.js"]

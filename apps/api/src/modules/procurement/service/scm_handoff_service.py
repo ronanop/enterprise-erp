@@ -2093,17 +2093,19 @@ class ScmHandoffService:
     def resolve_commercial_attachment_file(
         self, ctx: TenantContext, attachment_id: UUID
     ) -> tuple:
-        """Return (path|None, file_name, content_type, external_url|None).
+        """Return (path|None, file_name, content_type, external_url|None, content|None).
 
-        Uploaded files resolve under ``CRM_UPLOAD_ROOT`` (absolute path with
-        filename fallback). Link/cloud attachments return an external URL and
-        no local path.
+        Uploaded files resolve from S3 (``s3://``) or ``CRM_UPLOAD_ROOT``.
+        Link/cloud attachments return an external URL and no local path.
         """
         from pathlib import Path
 
+        from core import object_storage
         from core.config import settings
         from modules.crm.models import CrmAttachment
+        from modules.crm.models.ovf import CrmOvf
         from sqlalchemy import select
+        from sqlalchemy import select as sa_select
 
         # Load by tenant only - then authorize via OVF/PO ownership checks.
         row = self._db.scalar(
@@ -2121,9 +2123,6 @@ class ScmHandoffService:
             self._order_service.get_order(ctx, row.entity_id)
         elif row.entity_type in {"quote", "opportunity"}:
             # Sales pack files - authorize via any OVF handoff that references them.
-            from modules.crm.models.ovf import CrmOvf
-            from sqlalchemy import select as sa_select
-
             ovf_stmt = sa_select(CrmOvf.id).where(
                 CrmOvf.tenant_id == ctx.tenant_id,
                 CrmOvf.is_deleted.is_(False),
@@ -2144,7 +2143,14 @@ class ScmHandoffService:
         if source != "upload" or stored.lower().startswith(("http://", "https://")):
             if not stored.lower().startswith(("http://", "https://")):
                 raise NotFoundException("Attachment link is missing")
-            return None, row.file_name, row.content_type, stored
+            return None, row.file_name, row.content_type, stored, None
+
+        if object_storage.is_object_uri(stored):
+            try:
+                content = object_storage.get_bytes(stored)
+            except Exception as exc:
+                raise NotFoundException("Attachment file is missing in object storage") from exc
+            return None, row.file_name, row.content_type, None, content
 
         path = Path(stored)
         if not path.is_file():
@@ -2153,7 +2159,7 @@ class ScmHandoffService:
                 path = candidate
             else:
                 raise NotFoundException("Attachment file is missing on disk")
-        return path, row.file_name, row.content_type, None
+        return path, row.file_name, row.content_type, None, None
 
     def get_receipt_batch(self, ctx: TenantContext, batch_id: UUID) -> ProcOrderReceiptBatch:
         stmt = (

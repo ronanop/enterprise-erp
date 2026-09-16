@@ -26,8 +26,8 @@ export function QuickActionCard({
   return (
     <Card
       className={cn(
-        "border-border/70 bg-background/95 shadow-sm transition-all duration-200",
-        !disabled && "cursor-pointer hover:border-[#0369A1]/40 hover:shadow-md",
+        "border-border/70 bg-card/95 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] transition-all duration-200 backdrop-blur-xs active:scale-[0.99]",
+        !disabled && "cursor-pointer hover:border-primary/40 hover:shadow-md hover:-translate-y-0.5",
         disabled && "opacity-50",
         className,
       )}

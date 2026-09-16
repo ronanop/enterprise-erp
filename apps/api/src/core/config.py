@@ -77,13 +77,29 @@ class Settings(BaseSettings):
     asset_storage_backend: str = Field(
         default="local",
         alias="ASSET_STORAGE_BACKEND",
-        description="Asset file storage backend; only 'local' is implemented in this phase.",
+        description="Asset file storage backend: 'local' or 's3' (follows OBJECT_STORAGE when s3).",
     )
     asset_storage_path: str = Field(
         default="",
         alias="ASSET_STORAGE_PATH",
         description="Directory for asset-module files (DC challan docs); default apps/api/var/asset-storage",
     )
+
+    object_storage_backend: str = Field(
+        default="local",
+        alias="OBJECT_STORAGE_BACKEND",
+        description="Shared object storage: 'local' or 's3' (AWS S3).",
+    )
+    s3_bucket: str = Field(default="", alias="S3_BUCKET")
+    s3_region: str = Field(default="ap-south-1", alias="S3_REGION")
+    s3_endpoint_url: str = Field(
+        default="",
+        alias="S3_ENDPOINT_URL",
+        description="Optional custom S3 API endpoint (leave empty for AWS).",
+    )
+    aws_access_key_id: str = Field(default="", alias="AWS_ACCESS_KEY_ID")
+    aws_secret_access_key: str = Field(default="", alias="AWS_SECRET_ACCESS_KEY")
+    aws_session_token: str = Field(default="", alias="AWS_SESSION_TOKEN")
 
     asset_workflow_governance_enabled: bool = Field(
         default=False,
@@ -111,12 +127,6 @@ class Settings(BaseSettings):
         alias="ESS_LOGIN_CAPTCHA_ENABLED",
         description="Require math CAPTCHA on ESS employee code login.",
     )
-
-    minio_endpoint: str = Field(default="172.16.200.26:9000", alias="MINIO_ENDPOINT")
-    minio_root_user: str = Field(default="erp_minio", alias="MINIO_ROOT_USER")
-    minio_root_password: str = Field(default="erp_minio_password", alias="MINIO_ROOT_PASSWORD")
-    minio_bucket: str = Field(default="erp-documents", alias="MINIO_BUCKET")
-    minio_secure: bool = Field(default=False, alias="MINIO_SECURE")
 
     opensearch_url: str = Field(
         default="http://172.16.200.26:9200",
@@ -282,12 +292,9 @@ class Settings(BaseSettings):
         return _API_ROOT / "var" / "asset-storage"
 
     @property
-    def minio_configured(self) -> bool:
-        return bool(
-            self.minio_endpoint.strip()
-            and self.minio_root_user.strip()
-            and self.minio_root_password.strip()
-        )
+    def s3_configured(self) -> bool:
+        """Bucket + region required; credentials use env / IAM role chain when empty."""
+        return bool(self.s3_bucket.strip() and self.s3_region.strip())
 
     def resolved_graph_tenant_id(self) -> str:
         return (self.azure_tenant_id or self.microsoft_tenant_id or "").strip()

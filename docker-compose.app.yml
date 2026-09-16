@@ -1,6 +1,6 @@
 # App-only stack for coexistence with other host services.
-# Shared infra: 172.16.200.26 (Postgres, Redis, RabbitMQ, MinIO, OpenSearch).
-# Does NOT bind 80/443/5432/6379/5672/9000/9200.
+# Shared infra: 172.16.200.26 (Postgres, Redis, RabbitMQ, OpenSearch) + AWS S3.
+# Does NOT bind 80/443/5432/6379/5672/9200.
 # Host ports: API http://172.16.200.30:8010  |  Web http://172.16.200.30:3000
 
 services:
@@ -20,8 +20,6 @@ services:
       REDIS_URL: ${REDIS_URL}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
-      MINIO_SECURE: "false"
       OPENSEARCH_URL: ${OPENSEARCH_URL}
       RUN_MIGRATIONS: "true"
       CORS_ORIGINS: ${CORS_ORIGINS}
@@ -31,8 +29,13 @@ services:
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
       SSL_CERT_DIR: /etc/ssl/certs
-      ASSET_STORAGE_BACKEND: local
+      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-s3}
+      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-s3}
       ASSET_STORAGE_PATH: /app/var/asset-storage
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-ap-south-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
     ports:
       - "8010:8000"
     volumes:
@@ -63,14 +66,18 @@ services:
       REDIS_URL: ${REDIS_URL}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND}
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
       OPENSEARCH_URL: ${OPENSEARCH_URL}
       RUN_MIGRATIONS: "false"
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
       SSL_CERT_DIR: /etc/ssl/certs
-      ASSET_STORAGE_BACKEND: local
+      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-s3}
+      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-s3}
       ASSET_STORAGE_PATH: /app/var/asset-storage
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-ap-south-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
     volumes:
       - erp_crm_uploads:/app/var/crm-attachments
       - erp_asset_storage:/app/var/asset-storage

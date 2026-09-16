@@ -1066,7 +1066,7 @@ class EssService:
     def resolve_document_download(
         self, ctx: TenantContext, document_id: UUID
     ) -> DocumentDownload:
-        """Return a filesystem path or MinIO bytes payload for download."""
+        """Return a filesystem path or S3 bytes payload for download."""
         doc = self.get_document(ctx, document_id)
         return load_document_download(doc.storage_uri, doc.document_name)
 

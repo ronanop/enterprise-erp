@@ -248,17 +248,29 @@ def download_scm_commercial_attachment(
     db: Annotated[Session, Depends(get_db)],
     download: Annotated[bool, Query(description="Force download instead of inline view")] = False,
 ):
-    path, file_name, content_type, external_url = ScmHandoffService(
+    from io import BytesIO
+
+    from fastapi.responses import StreamingResponse
+
+    path, file_name, content_type, external_url, content = ScmHandoffService(
         db
     ).resolve_commercial_attachment_file(ctx, attachment_id)
     if external_url:
         return RedirectResponse(url=external_url, status_code=status.HTTP_302_FOUND)
+    media = content_type or "application/octet-stream"
+    disposition = "attachment" if download else "inline"
+    if content is not None:
+        return StreamingResponse(
+            BytesIO(content),
+            media_type=media,
+            headers={"Content-Disposition": f'{disposition}; filename="{file_name}"'},
+        )
     assert path is not None
     return FileResponse(
         path=path,
         filename=file_name,
-        media_type=content_type or "application/octet-stream",
-        content_disposition_type="attachment" if download else "inline",
+        media_type=media,
+        content_disposition_type=disposition,
     )
 
 

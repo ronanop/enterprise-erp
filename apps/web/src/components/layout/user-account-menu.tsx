@@ -98,8 +98,9 @@ export function UserAccountMenu({
               open && !collapsed && "bg-sidebar-accent/40",
             )
             : cn(
-              "max-w-[min(100%,280px)] px-1.5 py-1",
-              "hover:border-border/80 hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+              "max-w-[min(100%,280px)] rounded-full border border-border/60 bg-muted/30 px-2 py-1 shadow-xs transition-all duration-150",
+              "hover:border-border/80 hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-primary/20",
+              "active:scale-[0.985]",
               open && "border-border/80 bg-muted/60",
             ),
         )}
@@ -116,7 +117,7 @@ export function UserAccountMenu({
         {!collapsed ? (
           <ChevronDown
             className={cn(
-              "size-4 shrink-0 transition-transform duration-200",
+              "size-3.5 shrink-0 transition-transform duration-200",
               isSidebar ? "text-sidebar-foreground/55" : "text-muted-foreground",
               open && "rotate-180",
             )}
@@ -130,7 +131,7 @@ export function UserAccountMenu({
           <div
             ref={menuRef}
             role="menu"
-            className="fixed z-[200] min-w-[12rem] rounded-xl border border-border bg-card py-1 text-sm shadow-lg"
+            className="fixed z-[200] min-w-[13rem] overflow-hidden rounded-2xl border border-border/70 bg-card/95 p-1 text-sm shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 duration-150"
             style={{
               top: coords?.top ?? 0,
               left: coords?.left ?? 0,
@@ -140,7 +141,7 @@ export function UserAccountMenu({
             <button
               type="button"
               role="menuitem"
-              className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted"
+              className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm font-medium text-foreground transition-all duration-150 hover:bg-muted/80 active:scale-[0.98]"
               onClick={() => {
                 setOpen(false);
                 void onSignOut();

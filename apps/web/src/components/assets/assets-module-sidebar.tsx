@@ -103,17 +103,17 @@ export function AssetsModuleSidebar() {
       data-erp-primary-sidebar
       className={cn(
         "sticky top-0 z-20 flex h-dvh shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
-        "transition-[width] duration-200 motion-reduce:transition-none",
+        "transition-[width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none",
         collapsed ? "w-[72px]" : "w-[260px]",
       )}
     >
       <div className={cn("flex items-center gap-3 px-4 py-5", collapsed && "justify-center px-2")}>
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.25)] ring-1 ring-white/10">
           <Package className="size-4" aria-hidden />
         </div>
         {!collapsed ? (
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
+            <p className="truncate text-sm font-semibold tracking-tight text-sidebar-foreground">
               Asset Management
             </p>
             <p className="truncate text-[11px] text-sidebar-foreground/55">IT · Non-IT</p>
@@ -129,7 +129,7 @@ export function AssetsModuleSidebar() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search Assets…"
-              className="h-9 border-sidebar-border bg-white/5 pl-8 text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:ring-sidebar-ring"
+              className="h-9 rounded-xl border-sidebar-border bg-white/5 pl-8 text-sidebar-foreground placeholder:text-sidebar-foreground/40 focus-visible:ring-1 focus-visible:ring-sidebar-primary/60 transition-all duration-150"
               aria-label="Search Asset Management panes"
             />
           </div>
@@ -144,7 +144,7 @@ export function AssetsModuleSidebar() {
         {filtered.map((group, gi) => (
           <div key={group.title ?? gi} className="mb-3">
             {group.title && !collapsed ? (
-              <p className="mb-2 px-2.5 text-[10px] font-medium tracking-[0.14em] text-sidebar-foreground/40 uppercase">
+              <p className="mb-2 px-2.5 text-[10px] font-semibold tracking-[0.14em] text-sidebar-foreground/40 uppercase">
                 {group.title}
               </p>
             ) : null}
@@ -173,20 +173,20 @@ export function AssetsModuleSidebar() {
                       aria-label={item.title}
                       aria-current={active ? "page" : undefined}
                       className={cn(
-                        "group relative flex cursor-pointer items-center rounded-lg text-[13px] font-medium",
-                        "transition-colors duration-200 motion-reduce:transition-none",
+                        "group relative flex cursor-pointer items-center rounded-xl text-[13px] font-medium",
+                        "transition-all duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.985]",
                         collapsed ? "h-10 justify-center px-0" : "gap-2.5 px-2.5 py-2",
                         active
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm ring-1 ring-white/10 backdrop-blur-xs"
+                          : "text-sidebar-foreground/75 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
                       )}
                     >
                       {active ? (
-                        <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-sidebar-primary" />
+                        <span className="absolute inset-y-2 left-0.5 w-1 rounded-full bg-sidebar-primary shadow-[0_0_8px_rgba(255,255,255,0.4)]" />
                       ) : null}
                       <Icon
                         className={cn(
-                          "size-4 shrink-0",
+                          "size-4 shrink-0 transition-transform duration-150 group-hover:scale-105",
                           active
                             ? "text-sidebar-primary"
                             : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80",

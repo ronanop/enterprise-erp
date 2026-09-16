@@ -179,7 +179,7 @@ export function CrmSidebar() {
     <aside
       data-erp-primary-sidebar
       className={cn(
-        "sticky top-0 z-20 flex h-dvh shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200",
+        "sticky top-0 z-20 flex h-dvh shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
         collapsed ? "w-[72px]" : "w-[260px]",
       )}
     >
@@ -188,7 +188,7 @@ export function CrmSidebar() {
           <div className="flex items-center gap-2">
             <Handshake className="size-3.5 shrink-0 text-sidebar-primary" aria-hidden />
             <div className="min-w-0">
-              <p className="truncate text-xs font-medium text-sidebar-foreground">Sales CRM</p>
+              <p className="truncate text-xs font-semibold text-sidebar-foreground">Sales CRM</p>
               <p className="truncate text-[10px] text-sidebar-foreground/55">
                 {navItems.length} workspace panes
               </p>
@@ -198,12 +198,12 @@ export function CrmSidebar() {
       ) : (
         <div className={cn("px-4 py-4", collapsed && "px-2")}>
           <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
-            <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-sm">
+            <div className="flex size-9 items-center justify-center rounded-xl bg-sidebar-primary text-sidebar-primary-foreground shadow-[0_1px_3px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(255,255,255,0.25)] ring-1 ring-white/10">
               <Handshake className="size-4" aria-hidden />
             </div>
             {!collapsed ? (
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
+                <p className="truncate text-sm font-semibold tracking-tight text-sidebar-foreground">
                   Sales CRM
                 </p>
                 <p className="truncate text-[11px] text-sidebar-foreground/55">
@@ -217,7 +217,7 @@ export function CrmSidebar() {
 
       <nav aria-label="CRM workspace" className="erp-scroll flex-1 overflow-y-auto px-2.5 py-2">
         {!collapsed ? (
-          <p className="mb-2 px-2.5 text-[10px] font-medium tracking-[0.14em] text-sidebar-foreground/40 uppercase">
+          <p className="mb-2 px-2.5 text-[10px] font-semibold tracking-[0.14em] text-sidebar-foreground/40 uppercase">
             Workspace
           </p>
         ) : null}
@@ -236,19 +236,19 @@ export function CrmSidebar() {
                     if (focus !== "opportunities") setCrmOpportunityContext(null);
                   }}
                   className={cn(
-                    "group relative flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors duration-200",
+                    "group relative flex cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-[13px] font-medium transition-all duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.985]",
                     active
-                      ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                      ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm ring-1 ring-white/10 backdrop-blur-xs"
+                      : "text-sidebar-foreground/75 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
                     collapsed && "justify-center px-0",
                   )}
                 >
                   {active ? (
-                    <span className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-sidebar-primary" />
+                    <span className="absolute inset-y-2 left-0.5 w-1 rounded-full bg-sidebar-primary shadow-[0_0_8px_rgba(255,255,255,0.4)]" />
                   ) : null}
                   <Icon
                     className={cn(
-                      "size-4 shrink-0 transition-colors duration-200",
+                      "size-4 shrink-0 transition-transform duration-150 group-hover:scale-105",
                       active
                         ? "text-sidebar-primary"
                         : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80",

@@ -12,6 +12,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
+from modules.crm.repository.approval_task_repository import ApprovalTaskRepository
 from modules.crm.repository.lead_repository import LeadRepository
 from modules.crm.repository.opportunity_repository import OpportunityRepository
 from modules.crm.repository.ovf_repository import OvfRepository
@@ -57,6 +58,7 @@ def _event(
         "requested_by_name": None,
         "decided_by_id": None,
         "decided_by_name": None,
+        "assignee_names": [],
         "decision": None,
         "team_role": None,
         "remark": None,
@@ -64,6 +66,27 @@ def _event(
     }
     base.update(extra)
     return base
+
+
+# Blueprint "send" actions → My Jobs task.action (the approve action stored on the task).
+_SEND_ACTION_TO_TASK_ACTION: dict[str, str] = {
+    "send_sow_approval": "approve_sow",
+    "send_boq_approval": "approve_boq",
+    "send_po_approval": "approve_po",
+    "send_cloud_discount_approval": "approve_cloud_discount",
+}
+
+# Timeline approve/study actions that resolve from My Jobs decided_by.
+_APPROVE_TASK_ACTIONS: frozenset[str] = frozenset(
+    {
+        "approve_sow",
+        "approve_boq",
+        "approve_po",
+        "approve_internally",
+        "approve",
+        "approve_cloud_discount",
+    }
+)
 
 
 # Map blueprint actions → Current State label (hardware happy path).
@@ -164,7 +187,7 @@ def _milestone_title(
         return _ACTION_MILESTONE[action_key]
     if et in _TO_STATE_MILESTONE and state_key in _TO_STATE_MILESTONE[et]:
         return _TO_STATE_MILESTONE[et][state_key]
-    return None
+        return None
 
 
 class OpportunityTimelineService:
@@ -174,6 +197,7 @@ class OpportunityTimelineService:
         self._quotes = QuoteRepository(db)
         self._ovfs = OvfRepository(db)
         self._history = StateHistoryRepository(db)
+        self._approvals = ApprovalTaskRepository(db)
         self._users = UserRepository(db)
         self._visibility = CrmRecordVisibility(db)
 
@@ -204,6 +228,7 @@ class OpportunityTimelineService:
             related_ids.append(lead.id)
 
         history_rows = self._history.list_for_entities(ctx, related_ids)
+        approval_tasks = self._approvals.list_for_entity_ids(ctx, opp.company_id, related_ids)
 
         user_ids: set[UUID] = set()
         for uid in (
@@ -227,8 +252,71 @@ class OpportunityTimelineService:
                 user_ids.add(o.created_by)
             if getattr(o, "updated_by", None):
                 user_ids.add(o.updated_by)
+        for task in approval_tasks:
+            if task.assigned_user_id:
+                user_ids.add(task.assigned_user_id)
+            if task.requested_by:
+                user_ids.add(task.requested_by)
+            if task.decided_by:
+                user_ids.add(task.decided_by)
 
         user_names = self._resolve_users(ctx.tenant_id, user_ids)
+
+        def task_action_for_send(action: str | None, entity_type: str | None) -> str | None:
+            key = (action or "").strip().lower()
+            if key in _SEND_ACTION_TO_TASK_ACTION:
+                return _SEND_ACTION_TO_TASK_ACTION[key]
+            if key == "send_for_approval":
+                et = (entity_type or "").strip().lower()
+                if et == "quote":
+                    return "approve_internally"
+                if et == "ovf":
+                    return "approve"
+            return None
+
+        def tasks_for(entity_id: UUID | None, task_action: str | None) -> list:
+            if entity_id is None or not task_action:
+                return []
+            wanted = task_action.lower()
+            return [
+                t
+                for t in approval_tasks
+                if t.entity_id == entity_id and (t.action or "").strip().lower() == wanted
+            ]
+
+        def assignee_names_for(entity_id: UUID | None, task_action: str | None) -> list[str]:
+            rows = tasks_for(entity_id, task_action)
+            selected = [t for t in rows if (t.assigned_role or "") != "admin_copy"]
+            pool = selected or rows
+            names: list[str] = []
+            seen: set[str] = set()
+            for task in pool:
+                if not task.assigned_user_id:
+                    continue
+                label = user_names.get(task.assigned_user_id)
+                if not label or label in seen:
+                    continue
+                seen.add(label)
+                names.append(label)
+            return names
+
+        def decided_for(entity_id: UUID | None, task_action: str | None):
+            rows = [
+                t
+                for t in tasks_for(entity_id, task_action)
+                if (t.status or "").lower() == "approved" and t.decided_by
+            ]
+            if not rows:
+                return None, None
+            row = max(
+                rows,
+                key=lambda t: (
+                    (t.decided_at or t.updated_at or datetime.min).timestamp()
+                    if (t.decided_at or t.updated_at)
+                    else 0.0
+                ),
+            )
+            return row.decided_by, user_names.get(row.decided_by)
 
         def hist_matches(
             *,
@@ -323,6 +411,23 @@ class OpportunityTimelineService:
                 )
             if resolved_actor is None:
                 resolved_actor = default_actor
+
+            send_task_action = task_action_for_send(action, entity_type)
+            assignees = assignee_names_for(entity_id, send_task_action) if send_task_action else []
+
+            approve_action = (action or "").strip().lower()
+            if approve_action not in _APPROVE_TASK_ACTIONS and actor_actions:
+                for candidate in actor_actions:
+                    if candidate in _APPROVE_TASK_ACTIONS:
+                        approve_action = candidate
+                        break
+            decided_id = None
+            decided_name = None
+            if approve_action in _APPROVE_TASK_ACTIONS:
+                decided_id, decided_name = decided_for(entity_id, approve_action)
+                if decided_id is not None:
+                    resolved_actor = decided_id
+
             events.append(
                 _event(
                     id=f"milestone-{title.lower().replace(' ', '-').replace('/', '-')}-{entity_id or opportunity_id}",
@@ -337,6 +442,10 @@ class OpportunityTimelineService:
                     to_state=to_state,
                     actor_id=resolved_actor,
                     actor_name=user_names.get(resolved_actor) if resolved_actor else None,
+                    assignee_names=assignees,
+                    decided_by_id=decided_id,
+                    decided_by_name=decided_name,
+                    decision="approved" if decided_id else None,
                 )
             )
 

@@ -48,7 +48,7 @@ export function UserAvatar({
   return (
     <div
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-xl bg-sidebar-primary font-semibold tracking-wide text-sidebar-primary-foreground shadow-sm",
+        "flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sidebar-primary to-sidebar-primary/80 font-semibold tracking-wide text-sidebar-primary-foreground shadow-[0_1px_2px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.2)] ring-1 ring-white/10",
         sizeClasses[size],
         className,
       )}

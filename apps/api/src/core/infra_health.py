@@ -1,4 +1,4 @@
-"""Startup probes for shared infrastructure (Postgres, Redis, RabbitMQ, MinIO, OpenSearch)."""
+"""Startup probes for shared infrastructure (Postgres, Redis, RabbitMQ, S3, OpenSearch)."""
 
 from __future__ import annotations
 
@@ -78,41 +78,30 @@ def _check_rabbitmq() -> tuple[bool, str, str]:
             if banner:
                 return True, target, f"tcp ok, banner={banner!r}"
         except TimeoutError:
-            # Port open; broker may not send a banner before client frames.
             return True, target, f"tcp ok ({host}:{port})"
         return True, target, f"tcp ok ({host}:{port})"
     except Exception as exc:
         return False, target, f"{type(exc).__name__}: {exc}"
 
 
-def _check_minio() -> tuple[bool, str, str]:
-    endpoint = settings.minio_endpoint.strip()
-    if not endpoint:
-        return False, "(not configured)", "MINIO_ENDPOINT empty"
-    scheme = "https" if settings.minio_secure else "http"
-    base = endpoint if "://" in endpoint else f"{scheme}://{endpoint}"
-    health_url = f"{base.rstrip('/')}/minio/health/live"
-    try:
-        with httpx.Client(timeout=3.0) as client:
-            response = client.get(health_url)
-        if response.status_code < 500:
-            return True, base, f"health HTTP {response.status_code}"
-        return False, base, f"health HTTP {response.status_code}"
-    except Exception as exc:
-        # Fallback: TCP only
-        parsed = urlparse(base if "://" in base else f"http://{base}")
-        host = parsed.hostname or endpoint.split(":")[0]
-        port = parsed.port or (443 if settings.minio_secure else 9000)
-        ok, detail = _tcp_ok(host, port)
-        if ok:
-            return True, base, f"tcp ok (health endpoint unreachable: {exc})"
-        return False, base, f"{type(exc).__name__}: {exc}"
+def _check_s3() -> tuple[bool, str, str]:
+    from core import object_storage
+
+    backend = (settings.object_storage_backend or "local").strip().lower()
+    bucket = settings.s3_bucket.strip() or "(none)"
+    target = f"s3://{bucket} ({settings.s3_region})"
+    if backend != "s3":
+        return True, target, "OBJECT_STORAGE_BACKEND!=s3 (skipped)"
+    if not settings.s3_configured:
+        return False, target, "S3_BUCKET / S3_REGION empty"
+    ok, detail = object_storage.head_ok()
+    return ok, target, detail
 
 
 def _check_opensearch() -> tuple[bool, str, str]:
     url = (settings.opensearch_url or "").strip().rstrip("/")
     if not url:
-        return False, "(not configured)", "OPENSEARCH_URL empty"
+        return True, "(not configured)", "OPENSEARCH_URL empty (skipped)"
     try:
         with httpx.Client(timeout=3.0) as client:
             response = client.get(url)
@@ -129,7 +118,7 @@ def log_infrastructure_connections() -> dict[str, bool]:
         ("postgres", _check_postgres),
         ("redis", _check_redis),
         ("rabbitmq", _check_rabbitmq),
-        ("minio", _check_minio),
+        ("s3", _check_s3),
         ("opensearch", _check_opensearch),
     )
     results: dict[str, bool] = {}

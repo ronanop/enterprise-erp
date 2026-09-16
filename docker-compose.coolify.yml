@@ -1,0 +1,159 @@
+# Coolify / AWS production stack
+# ----------------------------
+# External: AWS RDS (Postgres) + AWS S3
+# In-compose: Redis, RabbitMQ, API, Celery worker, Web
+# Coolify proxy terminates TLS — do NOT include nginx / MinIO / local Postgres.
+#
+# Coolify UI:
+#   - Docker Compose Location: docker-compose.coolify.yml
+#   - Set env vars from docs/coolify-deploy.md
+#   - Map domains to services: web (UI) and api (API)
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - coolify_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-erp}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-erp_change_me}
+    volumes:
+      - coolify_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DEBUG: ${DEBUG:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      APP_NAME: ${APP_NAME:-Enterprise ERP API}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      RABBITMQ_USER: ${RABBITMQ_USER:-erp}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-erp_change_me}
+      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-s3}
+      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-s3}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_REGION: ${S3_REGION:-ap-south-1}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      OPENSEARCH_URL: ${OPENSEARCH_URL:-}
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-[]}
+      CORS_ORIGIN_REGEX: ${CORS_ORIGIN_REGEX:-}
+      FRONTEND_URL: ${FRONTEND_URL:-}
+      MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+      MICROSOFT_REDIRECT_URI: ${MICROSOFT_REDIRECT_URI:-}
+      MICROSOFT_USER_EMAIL_DOMAIN: ${MICROSOFT_USER_EMAIL_DOMAIN:-}
+      MICROSOFT_PLATFORM_ADMIN_EMAILS: ${MICROSOFT_PLATFORM_ADMIN_EMAILS:-}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
+      JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS:-30}
+      SESSION_TTL_SECONDS: ${SESSION_TTL_SECONDS:-604800}
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SSL_CERT_DIR: /etc/ssl/certs
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8000/api/v1/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      start_period: 120s
+      retries: 12
+
+  celery-worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["worker"]
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DEBUG: ${DEBUG:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-}
+      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
+      RABBITMQ_USER: ${RABBITMQ_USER:-erp}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-erp_change_me}
+      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-s3}
+      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-s3}
+      S3_BUCKET: ${S3_BUCKET}
+      S3_REGION: ${S3_REGION:-ap-south-1}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
+      OPENSEARCH_URL: ${OPENSEARCH_URL:-}
+      RUN_MIGRATIONS: "false"
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SSL_CERT_DIR: /etc/ssl/certs
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Enterprise ERP}
+        NEXT_PUBLIC_DEMO_EMAIL: ${NEXT_PUBLIC_DEMO_EMAIL:-}
+        NEXT_PUBLIC_DEMO_PASSWORD: ${NEXT_PUBLIC_DEMO_PASSWORD:-}
+        NEXT_PUBLIC_ELEVENLABS_AGENT_ID: ${NEXT_PUBLIC_ELEVENLABS_AGENT_ID:-}
+        API_INTERNAL_URL: http://api:8000
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      NODE_ENV: production
+      API_INTERNAL_URL: http://api:8000
+    depends_on:
+      api:
+        condition: service_healthy
+    expose:
+      - "3000"
+
+volumes:
+  coolify_redis_data:
+  coolify_rabbitmq_data:
