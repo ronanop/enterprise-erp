@@ -1,4 +1,4 @@
-# Coolify deployment (AWS RDS + S3)
+# Coolify deployment
 
 Use **Docker Compose** mode in Coolify with compose file:
 
@@ -6,8 +6,9 @@ Use **Docker Compose** mode in Coolify with compose file:
 docker-compose.coolify.yml
 ```
 
-Coolify terminates HTTPS. This compose does **not** run nginx, MinIO, or Postgres.
-Postgres = **AWS RDS**. Object storage = **AWS S3**. Redis + RabbitMQ run in the stack.
+Coolify terminates HTTPS. Default stack includes **Postgres + Redis + RabbitMQ + API + Celery + Web** (local file storage).
+
+For AWS later: point `DATABASE_URL` at RDS and set `OBJECT_STORAGE_BACKEND=s3` plus S3 credentials.
 
 ## Services to expose
 
@@ -23,16 +24,11 @@ Point `NEXT_PUBLIC_API_URL` at the **public** API URL (includes `/api/v1`).
 Set these in the Coolify application environment (not in git):
 
 ```bash
-# AWS RDS
-DATABASE_URL=postgresql+psycopg://USER:PASS@YOUR_RDS_HOST:5432/DBNAME?sslmode=require
-
-# AWS S3
-OBJECT_STORAGE_BACKEND=s3
-ASSET_STORAGE_BACKEND=s3
-S3_BUCKET=your-bucket
-S3_REGION=ap-south-1
-AWS_ACCESS_KEY_ID=AKIA...
-AWS_SECRET_ACCESS_KEY=...
+# Must match the in-compose postgres service (or use an RDS URL instead)
+POSTGRES_USER=erp
+POSTGRES_PASSWORD=strong-password
+POSTGRES_DB=erp
+DATABASE_URL=postgresql+psycopg://erp:strong-password@postgres:5432/erp
 
 # Auth
 JWT_SECRET_KEY=long-random-string
@@ -41,12 +37,26 @@ JWT_SECRET_KEY=long-random-string
 NEXT_PUBLIC_API_URL=https://api.erp.example.com/api/v1
 FRONTEND_URL=https://erp.example.com
 CORS_ORIGINS=["https://erp.example.com"]
-MICROSOFT_REDIRECT_URI=https://api.erp.example.com/api/v1/auth/microsoft/callback
 
-# RabbitMQ password for the in-stack broker (change from default)
+# RabbitMQ (in-stack)
 RABBITMQ_USER=erp
 RABBITMQ_PASSWORD=strong-password
 CELERY_BROKER_URL=amqp://erp:strong-password@rabbitmq:5672//
+
+# Storage (default local — optional AWS S3)
+OBJECT_STORAGE_BACKEND=local
+ASSET_STORAGE_BACKEND=local
+```
+
+Optional AWS S3:
+
+```bash
+OBJECT_STORAGE_BACKEND=s3
+ASSET_STORAGE_BACKEND=s3
+S3_BUCKET=your-bucket
+S3_REGION=ap-south-1
+AWS_ACCESS_KEY_ID=AKIA...
+AWS_SECRET_ACCESS_KEY=...
 ```
 
 Optional:
@@ -54,27 +64,25 @@ Optional:
 ```bash
 REDIS_URL=redis://redis:6379/0
 CELERY_RESULT_BACKEND=redis://redis:6379/1
-OPENSEARCH_URL=   # leave empty to skip
+OPENSEARCH_URL=
 MICROSOFT_TENANT_ID=
 MICROSOFT_CLIENT_ID=
 MICROSOFT_CLIENT_SECRET=
+MICROSOFT_REDIRECT_URI=https://api.erp.example.com/api/v1/auth/microsoft/callback
 MICROSOFT_PLATFORM_ADMIN_EMAILS=techbank@cachedigitech.com,connectplus@cachedigitech.com
 ```
 
-## RDS security group
-
-Allow inbound **5432** from the Coolify EC2 security group (or private subnet).
-
-## S3 IAM
-
-The IAM user/role needs at least: `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`,
-`s3:ListBucket`, `s3:HeadBucket` on the bucket.
-
 ## After first deploy
 
-1. Confirm API health: `https://api…/api/v1/health`
-2. Confirm web loads and can call the API (CORS + `NEXT_PUBLIC_API_URL`)
-3. Upload a CRM attachment and verify the object appears in S3 under `crm/attachments/`
+1. Open Coolify → **api** container logs (look for `Migrations complete` / `Starting uvicorn`)
+2. Confirm API health: `https://api…/api/v1/health`
+3. Confirm web loads and can call the API
+
+## Important Coolify env gotchas
+
+- `DATABASE_URL` host must be `postgres` for the in-compose DB (not a missing hostname).
+- `POSTGRES_PASSWORD` must match the password embedded in `DATABASE_URL`.
+- If `OBJECT_STORAGE_BACKEND=s3` without `S3_BUCKET`, the API now falls back to local storage.
 
 ## Local LAN stack
 

@@ -1,15 +1,34 @@
-# Coolify / AWS production stack
-# ----------------------------
-# External: AWS RDS (Postgres) + AWS S3
-# In-compose: Redis, RabbitMQ, API, Celery worker, Web
-# Coolify proxy terminates TLS — do NOT include nginx / MinIO / local Postgres.
+# Coolify stack (docker-compose.coolify.yml)
+# ------------------------------------------
+# In-compose: Postgres, Redis, RabbitMQ, API, Celery, Web
+# Optional external: set DATABASE_URL to AWS RDS and/or OBJECT_STORAGE_BACKEND=s3
+# Coolify proxy terminates TLS — do NOT publish host ports for api/web.
 #
 # Coolify UI:
 #   - Docker Compose Location: docker-compose.coolify.yml
-#   - Set env vars from docs/coolify-deploy.md
-#   - Map domains to services: web (UI) and api (API)
+#   - Env vars: see docs/coolify-deploy.md
+#   - Domains → web:3000 and api:8000
 
 services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-erp}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-erp_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-erp}
+    volumes:
+      - coolify_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-erp} -d ${POSTGRES_DB:-erp}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -40,9 +59,7 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
-      # Host network helps Coolify/Docker 29 builders reach registries if needed.
       network: host
-    # Shared with celery-worker so Coolify builds the API image once.
     image: ${COOLIFY_RESOURCE_UUID:-erp}-api:${COOLIFY_BRANCH:-local}
     restart: unless-stopped
     environment:
@@ -50,19 +67,23 @@ services:
       DEBUG: ${DEBUG:-false}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       APP_NAME: ${APP_NAME:-Enterprise ERP API}
-      DATABASE_URL: ${DATABASE_URL}
+      # Default matches in-compose postgres. Override with RDS URL when ready.
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://erp:erp_change_me@postgres:5432/erp}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
       RABBITMQ_USER: ${RABBITMQ_USER:-erp}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-erp_change_me}
-      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-s3}
-      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-s3}
-      S3_BUCKET: ${S3_BUCKET}
+      # Default local disk; set OBJECT_STORAGE_BACKEND=s3 + S3_* for AWS.
+      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-local}
+      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-local}
+      ASSET_STORAGE_PATH: /app/var/asset-storage
+      CRM_UPLOAD_ROOT: /app/var/crm-attachments
+      S3_BUCKET: ${S3_BUCKET:-}
       S3_REGION: ${S3_REGION:-ap-south-1}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
       OPENSEARCH_URL: ${OPENSEARCH_URL:-}
       RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
@@ -83,7 +104,11 @@ services:
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
       SSL_CERT_DIR: /etc/ssl/certs
+    volumes:
+      - coolify_api_uploads:/app/var
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -98,11 +123,10 @@ services:
         ]
       interval: 15s
       timeout: 5s
-      start_period: 120s
-      retries: 12
+      start_period: 180s
+      retries: 20
 
   celery-worker:
-    # Reuse the api image (same Dockerfile/entrypoint, different command).
     image: ${COOLIFY_RESOURCE_UUID:-erp}-api:${COOLIFY_BRANCH:-local}
     pull_policy: never
     restart: unless-stopped
@@ -111,19 +135,21 @@ services:
       ENVIRONMENT: ${ENVIRONMENT:-production}
       DEBUG: ${DEBUG:-false}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      DATABASE_URL: ${DATABASE_URL}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://erp:erp_change_me@postgres:5432/erp}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-}
       CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
       RABBITMQ_USER: ${RABBITMQ_USER:-erp}
       RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-erp_change_me}
-      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-s3}
-      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-s3}
-      S3_BUCKET: ${S3_BUCKET}
+      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-local}
+      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-local}
+      ASSET_STORAGE_PATH: /app/var/asset-storage
+      CRM_UPLOAD_ROOT: /app/var/crm-attachments
+      S3_BUCKET: ${S3_BUCKET:-}
       S3_REGION: ${S3_REGION:-ap-south-1}
       S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_SESSION_TOKEN: ${AWS_SESSION_TOKEN:-}
       OPENSEARCH_URL: ${OPENSEARCH_URL:-}
       RUN_MIGRATIONS: "false"
@@ -131,8 +157,12 @@ services:
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
       SSL_CERT_DIR: /etc/ssl/certs
+    volumes:
+      - coolify_api_uploads:/app/var
     depends_on:
       api:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -164,5 +194,7 @@ services:
       - "3000"
 
 volumes:
+  coolify_pgdata:
   coolify_redis_data:
   coolify_rabbitmq_data:
+  coolify_api_uploads:

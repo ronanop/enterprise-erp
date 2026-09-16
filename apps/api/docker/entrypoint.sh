@@ -3,20 +3,23 @@ set -e
 
 cd /app
 
+echo "entrypoint: role=${1:-api} environment=${ENVIRONMENT:-unknown}"
+
 # Coolify / production preflight — fail fast with clear messages
 if [ -z "${DATABASE_URL:-}" ]; then
-  echo "ERROR: DATABASE_URL is required (AWS RDS PostgreSQL connection string)." >&2
-  echo "Example: postgresql+psycopg://USER:PASS@HOST:5432/DB?sslmode=require" >&2
+  echo "ERROR: DATABASE_URL is required (Postgres connection string)." >&2
+  echo "In-compose example: postgresql+psycopg://erp:PASSWORD@postgres:5432/erp" >&2
+  echo "AWS RDS example: postgresql+psycopg://USER:PASS@HOST:5432/DB?sslmode=require" >&2
   exit 1
 fi
 
-backend="$(printf '%s' "${OBJECT_STORAGE_BACKEND:-s3}" | tr '[:upper:]' '[:lower:]')"
+backend="$(printf '%s' "${OBJECT_STORAGE_BACKEND:-local}" | tr '[:upper:]' '[:lower:]')"
 if [ "$backend" = "s3" ]; then
   if [ -z "${S3_BUCKET:-}" ] || [ -z "${S3_REGION:-}" ]; then
-    echo "ERROR: S3_BUCKET and S3_REGION are required when OBJECT_STORAGE_BACKEND=s3." >&2
-    exit 1
-  fi
-  if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+    echo "WARNING: OBJECT_STORAGE_BACKEND=s3 but S3_BUCKET/S3_REGION missing — falling back to local storage." >&2
+    export OBJECT_STORAGE_BACKEND=local
+    export ASSET_STORAGE_BACKEND=local
+  elif [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
     echo "WARNING: AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY empty — relying on instance IAM role." >&2
   fi
 fi
@@ -27,8 +30,13 @@ if [ -z "${CELERY_BROKER_URL:-}" ]; then
 fi
 
 if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
-  echo "Running Alembic migrations against RDS..."
-  alembic upgrade head
+  echo "Running Alembic migrations..."
+  if ! alembic upgrade head; then
+    echo "ERROR: alembic upgrade head failed." >&2
+    echo "Check DATABASE_URL host is reachable from this container (use 'postgres' for in-compose DB, or your RDS hostname)." >&2
+    exit 1
+  fi
+  echo "Migrations complete."
 fi
 
 PORT="${PORT:-${API_PORT:-8000}}"
@@ -36,6 +44,7 @@ export API_PORT="$PORT"
 
 case "${1:-api}" in
   api)
+    echo "Starting uvicorn on 0.0.0.0:${PORT}"
     exec uvicorn main:app --host "${API_HOST:-0.0.0.0}" --port "$PORT" --app-dir src
     ;;
   worker)
