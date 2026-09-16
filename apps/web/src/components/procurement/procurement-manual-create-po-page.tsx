@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { ChevronDown, Eye, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
 import { FinanceField, FinanceSelect, FinanceTextarea } from "@/components/finance/journals/finance-form-field";
@@ -45,6 +45,10 @@ import {
   buildProcurementInventoryStockSummary,
   isGrnNonBilledStockRow,
 } from "@/utils/procurement-inventory-report";
+import {
+  purchaseOrderPdfInputFromOrder,
+  previewPurchaseOrderPdf,
+} from "@/utils/purchase-order-pdf";
 
 const TAX_OPTIONS = ["0", "5", "12", "18", "28"] as const;
 const CUSTOM_SHIPPING_ID_PREFIX = "custom-po-";
@@ -147,7 +151,7 @@ function newLine(): PoLineDraft {
     productName: "",
     description: "",
     hsnSac: "",
-    quantity: 1,
+    quantity: 0,
     unitCost: 0,
     taxPercentage: "18",
   };
@@ -209,6 +213,7 @@ export function ProcurementManualCreatePoPage() {
   const [vendorDialogError, setVendorDialogError] = useState<string | null>(null);
   const [vendorDraft, setVendorDraft] = useState<VendorFormDraft>(() => emptyVendorFormDraft());
   const [orgScope, setOrgScope] = useState<{ company_id: string; branch_id: string } | null>(null);
+  const [pdfBusy, setPdfBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -547,6 +552,63 @@ export function ProcurementManualCreatePoPage() {
       );
     } finally {
       setVendorDialogBusy(false);
+    }
+  }
+
+  async function onPreviewDraftPdf() {
+    const previewLines = poLines
+      .filter((line) => (line.productName || "").trim() && line.quantity > 0)
+      .map((line) => ({
+        product_name: (line.productName || "").trim(),
+        description: (line.description || "").trim() || null,
+        hsn_code: (line.hsnSac || "").trim() || null,
+        quantity: Math.max(0, line.quantity),
+        unit_cost: Math.max(0, line.unitCost),
+        tax_rate: toNumber(line.taxPercentage),
+      }));
+    if (previewLines.length === 0) {
+      setError("Add at least one line with a product name and quantity greater than 0 to preview.");
+      return;
+    }
+    if (!vendorId || !selectedVendor) {
+      setError("Select a vendor before previewing the PO PDF.");
+      return;
+    }
+
+    const taxPct =
+      previewLines.reduce((sum, line) => sum + (Number(line.tax_rate) || 0), 0) /
+        previewLines.length || 18;
+
+    setPdfBusy(true);
+    setError(null);
+    try {
+      const input = purchaseOrderPdfInputFromOrder(
+        {
+          document_number: nextPo || "DRAFT-PO",
+          document_date: documentDate,
+          company_po_number: nextPo || "DRAFT-PO",
+          payment_terms: paymentTerms,
+          lines: previewLines,
+        },
+        {
+          name: selectedVendor.label,
+          address: vendorBillingAddressText || selectedVendorEntry?.address || "",
+        },
+        {
+          taxPct,
+          billingAddress,
+          shippingAddress,
+        },
+      );
+      await previewPurchaseOrderPdf(input, { watermark: true });
+    } catch (err) {
+      setError(
+        err instanceof Error && err.message.trim()
+          ? err.message
+          : "Failed to preview draft PO PDF",
+      );
+    } finally {
+      setPdfBusy(false);
     }
   }
 
@@ -997,7 +1059,7 @@ export function ProcurementManualCreatePoPage() {
                       disabled={busy || Boolean(line.fromStock)}
                       readOnly={Boolean(line.fromStock)}
                       onChange={(e) => {
-                        const n = Math.max(1, Math.floor(toNumber(e.target.value)));
+                        const n = Math.max(0, Math.floor(toNumber(e.target.value)));
                         updatePoLine(line.id, { quantity: n });
                       }}
                     />
@@ -1109,8 +1171,19 @@ export function ProcurementManualCreatePoPage() {
         </Link>
         <Button
           type="button"
+          variant="outline"
           className="cursor-pointer transition-colors duration-200"
-          disabled={busy || loading || !vendorId}
+          disabled={busy || loading || pdfBusy || !vendorId}
+          onClick={() => void onPreviewDraftPdf()}
+          title="Preview draft PO PDF with DRAFT watermark"
+        >
+          <Eye className="mr-1.5 size-3.5" />
+          {pdfBusy ? "Preparing…" : "Preview PO PDF"}
+        </Button>
+        <Button
+          type="button"
+          className="cursor-pointer transition-colors duration-200"
+          disabled={busy || loading || pdfBusy || !vendorId}
           onClick={() => void onCreatePo()}
         >
           {busy ? "Creating PO…" : "Create purchase order"}

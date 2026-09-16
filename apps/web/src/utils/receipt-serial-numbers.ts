@@ -1,3 +1,5 @@
+import { containsUnsafeMarkup } from "@/lib/text-safety";
+
 /** Placeholder when a unit has no serial number. */
 export const RECEIPT_SERIAL_NA = "NA";
 
@@ -34,6 +36,9 @@ export function validateSerialSlots(
     const value = (slots[i] ?? "").trim();
     if (!value || value.toUpperCase() === RECEIPT_SERIAL_NA) {
       return `Serial ${i + 1} for ${productLabel} is required.`;
+    }
+    if (containsUnsafeMarkup(value)) {
+      return `Serial ${i + 1} for ${productLabel} cannot contain HTML or script content.`;
     }
   }
   return null;

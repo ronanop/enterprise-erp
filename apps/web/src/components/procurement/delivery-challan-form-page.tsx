@@ -191,7 +191,13 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
   const [itemsSourceMode, setItemsSourceMode] = useState<ChallanItemsSourceMode>("full_po");
   const [selectedGrnKeys, setSelectedGrnKeys] = useState<string[]>([]);
   const [linkedGrnNumbers, setLinkedGrnNumbers] = useState<string[]>([]);
-  const [grnKind, setGrnKind] = useState<GrnChallanKind | "">("");
+  const [grnKind, setGrnKind] = useState<GrnChallanKind | "">(() =>
+    kindParam === "billing" || kindParam === "delivery_challan"
+      ? kindParam
+      : challanId
+        ? ""
+        : "delivery_challan",
+  );
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
   const [loadedOrder, setLoadedOrder] = useState<ProcOrder | null>(null);
@@ -880,7 +886,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       itemsSourceMode,
       selectedGrnKeys: resolveSaveGrnKeys(),
       selectedGrnNumbers,
-      grnKind: grnKind || undefined,
+      grnKind: grnKind === "billing" || grnKind === "delivery_challan" ? grnKind : "delivery_challan",
       invoiceNumber: invoiceNumber.trim() || undefined,
       invoiceDate: invoiceDate.trim() || undefined,
       lines,
@@ -947,47 +953,52 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
       const status = getDeliveryStatus(saved.id);
       if (status) syncOvfTimelineForDeliveryStatus(saved, status, null);
     }
-    const gk = grnKind === "billing" || grnKind === "delivery_challan" ? grnKind : undefined;
+    const resolvedKind: GrnChallanKind =
+      grnKind === "billing" || grnKind === "delivery_challan"
+        ? grnKind
+        : "delivery_challan";
     const saveKeys = resolveSaveGrnKeys();
-    const batchKey = saveKeys[0] || null;
-    if (gk && batchKey) {
-      let pendingOrderId = orderId;
-      let source: "grn" | "ovf_stock" | "ovf_grn_stock" = "grn";
-      if (batchKey.startsWith("ovf-stock:")) {
-        source = "ovf_stock";
-        pendingOrderId = ovfIdParam?.trim() || orderId;
-      } else if (batchKey.startsWith("ovf-grn-stock:")) {
-        source = "ovf_grn_stock";
-      }
-      if (pendingOrderId) {
-        upsertPendingGrnChallan({
-          orderId: pendingOrderId,
-          batchKey,
-          grnNumber:
-            selectedGrnNumbers.length > 0
-              ? selectedGrnNumbers.join(", ")
-              : source === "ovf_stock"
+    const batchKey = saveKeys[0] || `saved:${saved.id}`;
+    let pendingOrderId = orderId || saved.orderId || saved.id;
+    let source: "grn" | "ovf_stock" | "ovf_grn_stock" = "grn";
+    if (batchKey.startsWith("ovf-stock:")) {
+      source = "ovf_stock";
+      pendingOrderId = ovfIdParam?.trim() || pendingOrderId;
+    } else if (batchKey.startsWith("ovf-grn-stock:")) {
+      source = "ovf_grn_stock";
+    }
+    upsertPendingGrnChallan({
+      orderId: pendingOrderId,
+      batchKey,
+      grnNumber:
+        selectedGrnNumbers.length > 0
+          ? selectedGrnNumbers.join(", ")
+          : source === "ovf_stock"
+            ? "-"
+            : batchKey.startsWith("ovf-")
+              ? "-"
+              : batchKey.startsWith("saved:")
                 ? "-"
-                : batchKey.startsWith("ovf-")
-                  ? "-"
-                  : batchKey,
-          purchaseOrderNumber: purchaseOrderNumber.trim(),
-          vendorName: vendorName.trim(),
-          customerName: customerName.trim(),
-          kind: gk,
-          status: "saved",
-          docNumber:
-            grnKind === "billing"
-              ? invoiceNumber.trim() || challanNumber.trim()
-              : challanNumber.trim(),
-          docDate:
-            grnKind === "billing"
-              ? invoiceDate.trim() || challanDate.trim()
-              : challanDate.trim(),
-          savedRecordId: recordId,
-          source,
-        });
-      }
+                : batchKey,
+      purchaseOrderNumber: purchaseOrderNumber.trim(),
+      vendorName: vendorName.trim(),
+      customerName: customerName.trim(),
+      kind: resolvedKind,
+      status: "saved",
+      docNumber:
+        resolvedKind === "billing"
+          ? invoiceNumber.trim() || challanNumber.trim() || numberToSave
+          : challanNumber.trim() || numberToSave,
+      docDate:
+        resolvedKind === "billing"
+          ? invoiceDate.trim() || challanDate.trim()
+          : challanDate.trim(),
+      savedRecordId: saved.id,
+      source,
+    });
+    // Keep stored challan kind aligned with the tab it belongs to.
+    if (saved.grnKind !== resolvedKind) {
+      upsertDeliveryChallan({ ...saved, grnKind: resolvedKind });
     }
     setHasSaved(true);
     if (!embedded) {

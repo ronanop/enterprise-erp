@@ -22,7 +22,9 @@ def render_template(template: str | None, payload: dict | None) -> str:
     def _replace(match: re.Match[str]) -> str:
         key = match.group(1)
         if key in data and data[key] is not None:
-            return str(data[key])
+            from shared.text_safety import escape_html_text
+
+            return escape_html_text(data[key])
         return match.group(0)
 
     return _VAR_RE.sub(_replace, text)

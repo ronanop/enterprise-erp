@@ -14,6 +14,10 @@ export function safeAppHref(href: string): string {
   if (!trimmed.startsWith("/") || trimmed.startsWith("//") || trimmed.includes("\\")) {
     return "#";
   }
+  // Block embedded active schemes even inside relative paths (defense in depth).
+  if (/javascript:|vbscript:|data\s*:/i.test(trimmed)) {
+    return "#";
+  }
   return trimmed;
 }
 

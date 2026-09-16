@@ -46,27 +46,27 @@ import { deriveGrnStatus, filterOrdersByPoBucket, parsePoOverviewBucket, countPo
 
 type StatusFilter = "all" | "draft" | "open" | "partial" | "closed" | "cancelled";
 
-function formatPoStatusLabel(status: string | null | undefined): string {
+/** List Status column: approval state only (not GRN / receipt lifecycle). */
+function formatPoApprovalStatusLabel(status: string | null | undefined): string {
   const raw = (status || "").trim().toLowerCase();
   if (!raw) return "-";
-  if (raw === "draft") return "Draft";
   if (raw === "cancelled" || raw === "canceled") return "Cancelled";
-  if (
-    raw === "issued" ||
-    raw === "approved" ||
-    raw === "open" ||
-    raw === "sent" ||
-    raw === "submitted"
-  ) {
-    return "Approved";
+  if (raw === "draft" || raw === "submitted") return "Pending approval";
+  return "Approved";
+}
+
+function poApprovalStatusBadgeClass(status: string | null | undefined): string {
+  const label = formatPoApprovalStatusLabel(status);
+  if (label === "Pending approval") {
+    return "border-amber-200 bg-amber-50 text-amber-900";
   }
-  if (raw === "partial" || raw === "partially_received") return "Partial";
-  if (raw === "closed" || raw === "received" || raw === "completed") return "Closed";
-  return raw
-    .split(/[_\s]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+  if (label === "Approved") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-900";
+  }
+  if (label === "Cancelled") {
+    return "border-red-200 bg-red-50 text-red-800";
+  }
+  return "";
 }
 
 function parseStatusFilter(value: string | null): StatusFilter {
@@ -124,6 +124,7 @@ function orderMatchesQuery(
       textTokenMatch(approved, token) ||
       textTokenMatch(vendor, token) ||
       textTokenMatch(row.status, token) ||
+      textTokenMatch(formatPoApprovalStatusLabel(row.status), token) ||
       grnStatusMatchesSearch(row.grn_status ?? "pending", token)
     );
   });
@@ -443,7 +444,14 @@ export function OrdersListPage() {
                   <td className="px-3 py-3.5">
                     {vendors[row.vendor_id]?.label || row.vendor_id.slice(0, 8)}
                   </td>
-                  <td className="px-3 py-3.5">{formatPoStatusLabel(row.status)}</td>
+                  <td className="px-3 py-3.5">
+                    <Badge
+                      variant="outline"
+                      className={cn("font-medium", poApprovalStatusBadgeClass(row.status))}
+                    >
+                      {formatPoApprovalStatusLabel(row.status)}
+                    </Badge>
+                  </td>
                   <td className="px-3 py-3.5 tabular-nums">{formatInr(row.total_amount)}</td>
                   <td className="px-3 py-3.5">
                     <Badge variant={grnBadgeVariant(row.grn_status ?? "pending")} className="uppercase">

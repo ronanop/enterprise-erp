@@ -109,12 +109,35 @@ function challanRecordToQueueRow(record: DeliveryChallanRecord): PendingGrnChall
 
 /** Pending queue rows plus saved challans not already linked in the queue. */
 export function listDeliveryChallanQueueByKind(kind: GrnChallanKind): PendingGrnChallan[] {
-  const queueRows = readAll().filter((row) => row.kind === kind);
+  const allSaved = listDeliveryChallans();
+  const savedById = new Map(allSaved.map((record) => [record.id, record]));
+
+  const queueRows = readAll()
+    .filter((row) => row.kind === kind)
+    .map((row) => {
+      // Heal older saves that never got status/doc fields written back to the queue.
+      if (row.status === "saved" && row.docNumber && row.savedRecordId) return row;
+      const savedId = row.savedRecordId;
+      if (!savedId) return row;
+      const saved = savedById.get(savedId);
+      if (!saved) return row;
+      const healed = challanRecordToQueueRow(saved);
+      return {
+        ...row,
+        status: "saved" as const,
+        docNumber: healed.docNumber || row.docNumber,
+        docDate: healed.docDate || row.docDate,
+        savedRecordId: saved.id,
+        customerName: healed.customerName || row.customerName,
+        vendorName: healed.vendorName || row.vendorName,
+        purchaseOrderNumber: healed.purchaseOrderNumber || row.purchaseOrderNumber,
+      };
+    });
   const linkedSavedIds = new Set(
     queueRows.map((row) => row.savedRecordId).filter((id): id is string => Boolean(id)),
   );
 
-  const savedRows = listDeliveryChallans()
+  const savedRows = allSaved
     .filter((record) => (record.grnKind || "delivery_challan") === kind)
     .filter((record) => !linkedSavedIds.has(record.id))
     .map(challanRecordToQueueRow);

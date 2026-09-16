@@ -673,6 +673,19 @@ class ScmLineReceiptUpdateRequest(BaseModel):
     billing_quantity: float | None = None
     delivery_challan_quantity: float | None = None
 
+    @field_validator("serial_numbers", mode="before")
+    @classmethod
+    def validate_serial_numbers(cls, value: object) -> list[str] | None:
+        from shared.text_safety import sanitize_plain_text_list
+
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            return None
+        return sanitize_plain_text_list(
+            [str(item) for item in value],
+            field="serial_numbers",
+        )
 
 class ScmVendorPoLineResponse(BaseModel):
     id: UUID
@@ -772,6 +785,22 @@ class ScmInventoryImportLineRequest(BaseModel):
     description: str | None = None
     order_id: UUID | None = None
 
+    @field_validator("serial_number", "product_name")
+    @classmethod
+    def reject_markup(cls, value: str) -> str:
+        from shared.text_safety import assert_safe_plain_text
+
+        return assert_safe_plain_text(value, field="value")
+
+    @field_validator("description")
+    @classmethod
+    def reject_description_markup(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        from shared.text_safety import assert_safe_plain_text
+
+        return assert_safe_plain_text(value, field="description")
+
 
 class ScmInventoryImportRequest(BaseModel):
     lines: list[ScmInventoryImportLineRequest] = Field(default_factory=list)
@@ -779,6 +808,13 @@ class ScmInventoryImportRequest(BaseModel):
 
 class ScmInventorySerialUpdate(BaseModel):
     serial_number: str = Field(..., min_length=1, max_length=120)
+
+    @field_validator("serial_number")
+    @classmethod
+    def reject_serial_markup(cls, value: str) -> str:
+        from shared.text_safety import assert_safe_plain_text
+
+        return assert_safe_plain_text(value, field="serial_number")
 
 
 class ScmInventoryDescriptionUpdate(BaseModel):

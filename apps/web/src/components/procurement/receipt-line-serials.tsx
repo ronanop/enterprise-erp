@@ -25,10 +25,15 @@ export type ReceiptSerialTableLine = {
   lineId: string;
   lineNo: number;
   productLabel: string;
+  productName?: string;
+  description?: string;
+  hsnSac?: string;
   additional: number;
   billingQuantity: number;
   disposition: GrnLineDisposition;
   unitKinds?: GrnUnitKind[];
+  /** Max receive qty still allowed for this line (remaining on PO). */
+  maxAdditional?: number;
 };
 
 type ReceiptSerialsTableProps = {
@@ -36,7 +41,8 @@ type ReceiptSerialsTableProps = {
   serialDraft: Record<string, string[]>;
   disabled?: boolean;
   onChange: (lineId: string, slots: string[]) => void;
-  onUnitKindChange?: (lineId: string, unitIndex: number, kind: GrnUnitKind) => void;
+  onDispositionChange?: (lineId: string, kind: GrnUnitKind) => void;
+  onQuantityChange?: (lineId: string, quantity: number) => void;
   onImportError?: (message: string | null) => void;
 };
 
@@ -95,17 +101,86 @@ export function deliveryChallanQuantityFromUnitKinds(
   return quantityFromUnitKinds(kinds, receiveQty, "delivery_challan");
 }
 
-function UnitKindSlide({
+/** Map a single line-level disposition to billing / DC qty (stock = neither). */
+export function quantitiesFromLineDisposition(
+  kind: GrnUnitKind,
+  receiveQty: number,
+): {
+  disposition: GrnLineDisposition;
+  billingQuantity: number;
+  deliveryChallanQuantity: number;
+  unitKinds: GrnUnitKind[];
+} {
+  const qty = Math.max(0, receiveQty);
+  const units = Math.max(serialUnitCount(qty), qty > 0 ? 1 : 0);
+  const unitKinds = resizeUnitKinds(
+    Array.from({ length: units }, () => kind),
+    units,
+  );
+  if (kind === "bill") {
+    return {
+      disposition: "bill",
+      billingQuantity: qty,
+      deliveryChallanQuantity: 0,
+      unitKinds,
+    };
+  }
+  if (kind === "delivery_challan") {
+    return {
+      disposition: "delivery_challan",
+      billingQuantity: 0,
+      deliveryChallanQuantity: qty,
+      unitKinds,
+    };
+  }
+  return {
+    disposition: "stock",
+    billingQuantity: 0,
+    deliveryChallanQuantity: 0,
+    unitKinds,
+  };
+}
+
+export function lineDispositionKind(line: {
+  disposition?: GrnLineDisposition;
+  billingQuantity?: number;
+  unitKinds?: GrnUnitKind[];
+  additional?: number;
+}): GrnUnitKind {
+  if (line.disposition === "bill") return "bill";
+  if (line.disposition === "delivery_challan") return "delivery_challan";
+  if (line.disposition === "stock") return "stock";
+  const kinds = line.unitKinds || [];
+  if (kinds.length > 0 && kinds.every((k) => k === "bill")) return "bill";
+  if (kinds.length > 0 && kinds.every((k) => k === "delivery_challan")) {
+    return "delivery_challan";
+  }
+  const receiveQty = Number(line.additional) || 0;
+  if ((line.billingQuantity || 0) >= receiveQty - 1e-9 && receiveQty > 0) return "bill";
+  return "stock";
+}
+
+export function serialsTextFromSlots(slots: string[]): string {
+  return slots.map((s) => s.trim()).filter(Boolean).join(", ");
+}
+
+export function slotsFromSerialsText(text: string, unitCount: number): string[] {
+  const parsed = text
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  return resizeSerialSlots(parsed, unitCount);
+}
+
+function DispositionSlide({
   kind,
   disabled,
   productLabel,
-  unitIndex,
   onChange,
 }: {
   kind: GrnUnitKind;
   disabled?: boolean;
   productLabel: string;
-  unitIndex: number;
   onChange: (kind: GrnUnitKind) => void;
 }) {
   const activeIndex = Math.max(0, UNIT_KIND_ORDER.indexOf(kind));
@@ -120,7 +195,7 @@ function UnitKindSlide({
   return (
     <div
       role="group"
-      aria-label={`Stock, billing, or delivery challan for unit ${unitIndex + 1} of ${productLabel}`}
+      aria-label={`Stock, billing, or delivery challan for ${productLabel}`}
       className={cn(
         "relative inline-flex h-8 w-[11.25rem] shrink-0 overflow-hidden rounded-lg border p-0.5",
         "transition-[border-color,background-color] duration-200 motion-reduce:transition-none",
@@ -170,17 +245,20 @@ export function ReceiptSerialsTable({
   serialDraft,
   disabled,
   onChange,
-  onUnitKindChange,
+  onDispositionChange,
+  onQuantityChange,
   onImportError,
 }: ReceiptSerialsTableProps) {
   const [importingLineId, setImportingLineId] = useState<string | null>(null);
+  const [serialTextDraft, setSerialTextDraft] = useState<Record<string, string>>({});
 
   if (lines.length === 0) return null;
 
-  function setSlot(lineId: string, slots: string[], index: number, value: string) {
-    const next = [...slots];
-    next[index] = value;
-    onChange(lineId, next);
+  function displaySerialText(lineId: string, slots: string[]): string {
+    if (Object.prototype.hasOwnProperty.call(serialTextDraft, lineId)) {
+      return serialTextDraft[lineId] ?? "";
+    }
+    return serialsTextFromSlots(slots);
   }
 
   async function onImportLine(line: ReceiptSerialTableLine, file: File) {
@@ -199,6 +277,11 @@ export function ReceiptSerialsTable({
       const slots = result.serialDraft[line.lineId];
       if (slots) {
         onChange(line.lineId, slots);
+        setSerialTextDraft((prev) => {
+          const next = { ...prev };
+          delete next[line.lineId];
+          return next;
+        });
       }
       onImportError?.(result.warning ?? null);
     } finally {
@@ -209,150 +292,156 @@ export function ReceiptSerialsTable({
   return (
     <div className={procurementUi.tableShell}>
       <div className={procurementUi.tableScroll}>
-        <table className={cn(procurementUi.table, "min-w-[760px]")}>
+        <table className={cn(procurementUi.table, "min-w-[920px]")}>
           <thead className={procurementUi.thead}>
             <tr>
               <th className={cn(procurementUi.th, "w-12 text-center")}>S No.</th>
               <th className={procurementUi.th}>Product</th>
-              <th className={cn(procurementUi.th, "w-20 text-right")}>Receiving</th>
-              <th className={cn(procurementUi.th, "w-16 text-right")}>Unit</th>
+              <th className={procurementUi.th}>Description</th>
+              <th className={cn(procurementUi.th, "w-24")}>HSN/SAC</th>
               <th className={cn(procurementUi.th, "w-[11.5rem] text-center")}>Stock / Billing / DC</th>
+              <th className={cn(procurementUi.th, "w-24 text-right")}>Qty</th>
               <th className={procurementUi.th}>Serial number</th>
               <th className={cn(procurementUi.th, "w-[7.5rem] text-center")}>Import</th>
             </tr>
           </thead>
           <tbody>
-            {lines.flatMap((line, lineIndex) => {
+            {lines.map((line, lineIndex) => {
               const receiveQty = line.additional;
               const unitCount = serialUnitCount(receiveQty);
-              const rowCount = Math.max(unitCount, 1);
               const slots = resizeSerialSlots(serialDraft[line.lineId] || [], unitCount);
-              const kinds = resizeUnitKinds(line.unitKinds, rowCount);
+              const disposition = lineDispositionKind(line);
               const lineImporting = importingLineId === line.lineId;
-              const productSNo = lineIndex + 1;
-              const rowspanCell = "align-middle";
-              const receiveLabel = formatQtyLabel(receiveQty);
+              const fractionalOnly = unitCount <= 0 && receiveQty > 0;
+              const serialText = displaySerialText(line.lineId, slots);
+              const maxQty = line.maxAdditional ?? receiveQty;
+              const productName = (line.productName || line.productLabel || "-").trim() || "-";
+              const description = (line.description || "").trim() || "-";
+              const hsnSac = (line.hsnSac || "").trim() || "-";
 
-              return Array.from({ length: rowCount }, (_, index) => {
-                const value = slots[index] ?? "";
-                const fractionalOnly = unitCount <= 0;
-                const unitKind = kinds[index] ?? "stock";
-                return (
-                  <tr key={`${line.lineId}-${index}`} className={procurementUi.tr}>
-                    {index === 0 ? (
-                      <td
-                        rowSpan={rowCount}
+              return (
+                <tr key={line.lineId} className={procurementUi.tr}>
+                  <td
+                    className={cn(
+                      procurementUi.tdNumeric,
+                      "text-center font-medium tabular-nums align-middle",
+                    )}
+                  >
+                    {lineIndex + 1}
+                  </td>
+                  <td className={cn(procurementUi.td, "min-w-[120px] align-middle")}>
+                    <span className="font-medium text-foreground">{productName}</span>
+                  </td>
+                  <td className={cn(procurementUi.td, "min-w-[140px] align-middle text-muted-foreground")}>
+                    {description}
+                  </td>
+                  <td className={cn(procurementUi.td, "align-middle tabular-nums text-muted-foreground")}>
+                    {hsnSac}
+                  </td>
+                  <td className={cn(procurementUi.td, "align-middle text-center")}>
+                    {onDispositionChange ? (
+                      <DispositionSlide
+                        kind={disposition}
+                        disabled={disabled || lineImporting}
+                        productLabel={line.productLabel}
+                        onChange={(kind) => onDispositionChange(line.lineId, kind)}
+                      />
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        {disposition === "bill"
+                          ? "Billing"
+                          : disposition === "delivery_challan"
+                            ? "DC"
+                            : "Stock"}
+                      </span>
+                    )}
+                  </td>
+                  <td className={cn(procurementUi.tdNumeric, "align-middle text-right")}>
+                    {onQuantityChange ? (
+                      <Input
+                        type="number"
+                        min={0}
+                        max={maxQty}
+                        step="1"
+                        inputMode="decimal"
+                        className="h-8 w-full min-w-[4.5rem] cursor-text text-right tabular-nums text-xs transition-colors duration-200"
+                        value={formatQtyLabel(receiveQty)}
+                        disabled={disabled || lineImporting}
+                        aria-label={`Quantity for ${line.productLabel}`}
+                        onChange={(e) => {
+                          const next = Number(e.target.value);
+                          if (!Number.isFinite(next) || next < 0) return;
+                          onQuantityChange(line.lineId, Math.min(maxQty, next));
+                          setSerialTextDraft((prev) => {
+                            const copy = { ...prev };
+                            delete copy[line.lineId];
+                            return copy;
+                          });
+                        }}
+                      />
+                    ) : (
+                      <span className="font-medium tabular-nums">{formatQtyLabel(receiveQty)}</span>
+                    )}
+                  </td>
+                  <td className={cn(procurementUi.td, "align-middle")}>
+                    {fractionalOnly ? (
+                      <span className="text-xs text-muted-foreground">
+                        No serial for fractional qty
+                      </span>
+                    ) : unitCount <= 0 ? (
+                      <span className="text-xs text-muted-foreground">Enter qty first</span>
+                    ) : (
+                      <Input
+                        className="h-8 w-full min-w-[180px] cursor-text font-mono text-xs transition-colors duration-200"
+                        value={serialText}
+                        disabled={disabled || lineImporting}
+                        placeholder={`e.g. SN1, SN2, … (${unitCount})`}
+                        aria-label={`Serial numbers for ${line.productLabel}`}
+                        onChange={(e) => {
+                          const text = e.target.value;
+                          setSerialTextDraft((prev) => ({ ...prev, [line.lineId]: text }));
+                          onChange(line.lineId, slotsFromSerialsText(text, unitCount));
+                        }}
+                        onBlur={() => {
+                          setSerialTextDraft((prev) => {
+                            const copy = { ...prev };
+                            delete copy[line.lineId];
+                            return copy;
+                          });
+                        }}
+                      />
+                    )}
+                  </td>
+                  <td className={cn(procurementUi.td, "text-center align-middle")}>
+                    {unitCount <= 0 ? (
+                      <span className="text-xs text-muted-foreground">-</span>
+                    ) : (
+                      <label
                         className={cn(
-                          procurementUi.tdNumeric,
-                          rowspanCell,
-                          "text-center font-medium tabular-nums",
+                          buttonVariants({ size: "sm", variant: "outline" }),
+                          "h-7 cursor-pointer gap-1 px-2 text-[11px] transition-colors duration-200",
+                          (disabled || lineImporting) && "pointer-events-none opacity-50",
                         )}
+                        title="Import serials for this product"
                       >
-                        {productSNo}
-                      </td>
-                    ) : null}
-                    {index === 0 ? (
-                      <>
-                        <td
-                          rowSpan={rowCount}
-                          className={cn(procurementUi.td, rowspanCell, "min-w-[160px]")}
-                        >
-                          <span className="font-medium text-foreground">{line.productLabel}</span>
-                        </td>
-                        <td
-                          rowSpan={rowCount}
-                          className={cn(
-                            procurementUi.tdNumeric,
-                            rowspanCell,
-                            "text-right font-medium tabular-nums",
-                          )}
-                        >
-                          {receiveLabel}
-                        </td>
-                      </>
-                    ) : null}
-                    <td
-                      className={cn(
-                        procurementUi.tdNumeric,
-                        "align-middle text-right tabular-nums text-muted-foreground",
-                      )}
-                    >
-                      {fractionalOnly ? "-" : index + 1}
-                    </td>
-                    <td className={cn(procurementUi.td, "align-middle text-center")}>
-                      {onUnitKindChange ? (
-                        <UnitKindSlide
-                          kind={unitKind}
+                        <Upload className="size-3" aria-hidden />
+                        Import
+                        <input
+                          type="file"
+                          accept={RECEIPT_SERIAL_FILE_ACCEPT}
+                          className="sr-only"
                           disabled={disabled || lineImporting}
-                          productLabel={line.productLabel}
-                          unitIndex={index}
-                          onChange={(kind) => onUnitKindChange(line.lineId, index, kind)}
-                        />
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          {unitKind === "bill"
-                            ? "Billing"
-                            : unitKind === "delivery_challan"
-                              ? "DC"
-                              : "Stock"}
-                        </span>
-                      )}
-                    </td>
-                    <td className={cn(procurementUi.td, "align-middle")}>
-                      {fractionalOnly ? (
-                        <span className="text-xs text-muted-foreground">
-                          No serial for fractional qty
-                        </span>
-                      ) : (
-                        <Input
-                          className="h-8 w-full min-w-[140px] cursor-text font-mono text-xs transition-colors duration-200"
-                          value={value}
-                          disabled={disabled || lineImporting}
-                          placeholder="Enter serial number"
-                          aria-label={`Serial ${index + 1} for ${line.productLabel}`}
-                          onFocus={(e) => {
-                            e.currentTarget.select();
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (file) void onImportLine(line, file);
                           }}
-                          onChange={(e) => setSlot(line.lineId, slots, index, e.target.value)}
                         />
-                      )}
-                    </td>
-                    {index === 0 ? (
-                      <td
-                        rowSpan={rowCount}
-                        className={cn(procurementUi.td, rowspanCell, "text-center")}
-                      >
-                        {fractionalOnly ? (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        ) : (
-                          <label
-                            className={cn(
-                              buttonVariants({ size: "sm", variant: "outline" }),
-                              "h-7 cursor-pointer gap-1 px-2 text-[11px] transition-colors duration-200",
-                              (disabled || lineImporting) && "pointer-events-none opacity-50",
-                            )}
-                            title="Import serials for all units of this product"
-                          >
-                            <Upload className="size-3" aria-hidden />
-                            Import serials
-                            <input
-                              type="file"
-                              accept={RECEIPT_SERIAL_FILE_ACCEPT}
-                              className="sr-only"
-                              disabled={disabled || lineImporting}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                e.target.value = "";
-                                if (file) void onImportLine(line, file);
-                              }}
-                            />
-                          </label>
-                        )}
-                      </td>
-                    ) : null}
-                  </tr>
-                );
-              });
+                      </label>
+                    )}
+                  </td>
+                </tr>
+              );
             })}
           </tbody>
         </table>

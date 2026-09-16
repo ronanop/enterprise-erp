@@ -106,6 +106,8 @@ export function DeliveryChallanListPage() {
   }, [load]);
 
   const pendingForTab = tab === "billing" ? pendingBilling : pendingDc;
+  const openRows = pendingForTab.filter((r) => !r.status || r.status === "pending");
+  const historyRows = pendingForTab.filter((r) => r.status === "saved");
   const pendingDcCount = pendingDc.filter((r) => !r.status || r.status === "pending").length;
   const pendingBillingCount = pendingBilling.filter((r) => !r.status || r.status === "pending").length;
 
@@ -126,7 +128,7 @@ export function DeliveryChallanListPage() {
               Refresh
             </Button>
             <Link
-              href={`/procurement/delivery-challan/new?returnTo=${LIST_RETURN_TO}`}
+              href={`/procurement/delivery-challan/new?kind=${tab}&returnTo=${LIST_RETURN_TO}`}
               className={cn(
                 buttonVariants({ size: "sm" }),
                 "cursor-pointer transition-colors duration-200",
@@ -186,16 +188,30 @@ export function DeliveryChallanListPage() {
       </p>
 
       <PendingGrnQueueCard
-        label={tab === "billing" ? "Billing GRNs" : "Delivery challan GRNs"}
-        rows={pendingForTab}
+        label={tab === "billing" ? "Pending billing" : "Pending delivery challans"}
+        rows={openRows}
+        isBilling={tab === "billing"}
+        actionLabel="Open"
+        billTick={billTick}
+        onBill={(challanId) => setBillChallanId(challanId)}
+        emptyLabel={
+          tab === "billing"
+            ? "No pending billing documents."
+            : "No pending delivery challans."
+        }
+      />
+
+      <PendingGrnQueueCard
+        label={tab === "billing" ? "Billing history" : "Delivery challan history"}
+        rows={historyRows}
         isBilling={tab === "billing"}
         actionLabel="View"
         billTick={billTick}
         onBill={(challanId) => setBillChallanId(challanId)}
         emptyLabel={
           tab === "billing"
-            ? "No billing documents yet."
-            : "No delivery challans yet."
+            ? "No saved billing documents yet. Create or complete a billing document to see it here."
+            : "No saved delivery challans yet. Create or complete a DC to see it here."
         }
       />
 
@@ -232,6 +248,10 @@ function PendingGrnQueueCard({
   const router = useRouter();
 
   return (
+    <div className="space-y-2">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </h2>
     <div className={procurementUi.tableShell} aria-label={label}>
       <div className={procurementUi.tableScroll}>
         <table className={cn(procurementUi.table, "min-w-[980px]")}>
@@ -322,6 +342,7 @@ function PendingGrnQueueCard({
           </tbody>
         </table>
       </div>
+    </div>
     </div>
   );
 }

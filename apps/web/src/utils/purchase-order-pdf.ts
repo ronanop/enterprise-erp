@@ -253,23 +253,33 @@ export function purchaseOrderPdfInputFromOrder(
     lines?: Array<{
       product_code?: string | null;
       product_name?: string | null;
+      description?: string | null;
+      hsn_code?: string | null;
       quantity: number;
       unit_cost: number;
       rate_currency?: string | null;
+      tax_rate?: number | null;
     }>;
   },
   vendor: { name: string; address?: string },
-  options?: { taxPct?: number },
+  options?: {
+    taxPct?: number;
+    billingAddress?: string;
+    shippingAddress?: string;
+  },
 ): PurchaseOrderPdfInput {
   const lines = (order.lines || []).map((ln) => {
+    const name = (ln.product_name || "").trim();
+    const desc = (ln.description || "").trim();
     const { partNo, description } = resolvePoPdfLineLabels(
       ln.product_code,
-      ln.product_name,
+      desc ? `${name} - ${desc}` : name,
     );
     const isUsd = (ln.rate_currency || "INR").toUpperCase() === "USD";
     return {
-      partNo,
-      description,
+      partNo: name || partNo,
+      description: desc || description,
+      hsnCode: (ln.hsn_code || "").trim() || undefined,
       qty: Number(ln.quantity) || 0,
       unitPriceInr: Number(ln.unit_cost) || 0,
       rateCurrency: isUsd ? ("USD" as const) : ("INR" as const),
@@ -284,6 +294,10 @@ export function purchaseOrderPdfInputFromOrder(
       );
   const taxPct = options?.taxPct ?? 18;
   const companyPo = (order.company_po_number || "").trim();
+  const billing =
+    (options?.billingAddress || "").trim() || KAILASH_BILLING;
+  const shipping =
+    (options?.shippingAddress || "").trim() || KAILASH_BILLING;
   return {
     company: {
       name: DEFAULT_CACHE_COMPANY.name,
@@ -300,8 +314,8 @@ export function purchaseOrderPdfInputFromOrder(
     orderRef: (order.order_ref_cache || "").trim() || undefined,
     poNumber: companyPo || order.document_number || "PO",
     date: order.document_date || new Date().toISOString().slice(0, 10),
-    billingAddress: KAILASH_BILLING,
-    shippingAddress: KAILASH_BILLING,
+    billingAddress: billing,
+    shippingAddress: shipping,
     currency: allUsd ? "USD" : "INR",
     paymentTerms: order.payment_terms || "Net 30 Days",
     authorizedSignatoryName: (order.approved_by_name || "").trim() || undefined,
@@ -328,10 +342,35 @@ export async function downloadOrderPdf(
   );
 }
 
+/** Open PO PDF in a new tab. Draft previews always include the DRAFT PO watermark. */
+export async function previewOrderPdf(
+  order: Parameters<typeof purchaseOrderPdfInputFromOrder>[0],
+  vendor: { name: string; address?: string },
+  options?: {
+    taxPct?: number;
+    watermark?: boolean;
+    billingAddress?: string;
+    shippingAddress?: string;
+  },
+): Promise<void> {
+  const input = purchaseOrderPdfInputFromOrder(order, vendor, {
+    taxPct: options?.taxPct,
+    billingAddress: options?.billingAddress,
+    shippingAddress: options?.shippingAddress,
+  });
+  await previewPurchaseOrderPdf(input, {
+    watermark: options?.watermark !== false,
+  });
+}
+
 export async function previewPurchaseOrderPdf(
   input: PurchaseOrderPdfInput,
+  options?: { watermark?: boolean },
 ): Promise<void> {
-  await downloadPurchaseOrderPdf(input, undefined, { preview: true });
+  await downloadPurchaseOrderPdf(input, undefined, {
+    preview: true,
+    watermark: options?.watermark !== false,
+  });
 }
 
 /**

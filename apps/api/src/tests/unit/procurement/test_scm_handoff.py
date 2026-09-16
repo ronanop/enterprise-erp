@@ -59,7 +59,7 @@ class _FakeOrderService:
         return self.order
 
 
-def test_finalize_rejects_non_crm_source():
+def test_finalize_rejects_non_scm_source():
     order = SimpleNamespace(
         id=uuid4(),
         source_module="procurement",
@@ -72,6 +72,31 @@ def test_finalize_rejects_non_crm_source():
     svc._orders = _FakeOrdersRepo()
     with pytest.raises(InvalidDocumentState):
         svc.finalize_scm_po(SimpleNamespace(), order.id)
+
+
+def test_finalize_allows_inventory_initiated(monkeypatch):
+    order = SimpleNamespace(
+        id=uuid4(),
+        source_module="procurement",
+        source_document_type="inventory_initiated",
+        status=OrderStatus.DRAFT.value,
+        lines=[SimpleNamespace(is_deleted=False)],
+        entity_code="CDT",
+        company_po_number="PO/CDT/001",
+        company_id=uuid4(),
+        version=1,
+    )
+    svc = ScmHandoffService.__new__(ScmHandoffService)
+    svc._order_service = _FakeOrderService(order)
+    svc._orders = _FakeOrdersRepo()
+    svc._db = SimpleNamespace(flush=lambda: None)
+    svc._audit = SimpleNamespace(log_entity_change=lambda **_k: None)
+    monkeypatch.setattr(
+        "modules.procurement.service.scm_handoff_service.utcnow",
+        lambda: date.today(),
+    )
+    result = svc.finalize_scm_po(SimpleNamespace(user_id=uuid4(), tenant_id=uuid4()), order.id)
+    assert result.status == OrderStatus.SENT.value
 
 
 def test_create_po_blocks_duplicate(monkeypatch):

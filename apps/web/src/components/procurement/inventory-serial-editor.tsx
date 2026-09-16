@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Input } from "@/components/ui/input";
+import { containsUnsafeMarkup } from "@/lib/text-safety";
 import { cn } from "@/lib/utils";
 import { formatApiError } from "@/services/api-client";
 import {
@@ -49,6 +50,11 @@ export function InventorySerialEditor({
     if (next === prev) return;
     if (!next) {
       onError("Serial number cannot be empty.");
+      setValue(prev);
+      return;
+    }
+    if (containsUnsafeMarkup(next)) {
+      onError("Serial number cannot contain HTML or script content.");
       setValue(prev);
       return;
     }

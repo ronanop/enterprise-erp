@@ -1507,17 +1507,27 @@ class ScmHandoffService:
         )
         return order
 
+    def _is_scm_finalizable(self, order: ProcOrderHeader) -> bool:
+        """CRM OVF handoff POs and inventory/manual draft POs share SCM finalize."""
+        module = (getattr(order, "source_module", None) or "").strip().lower()
+        doc_type = (getattr(order, "source_document_type", None) or "").strip().lower()
+        if module == self.SOURCE_MODULE and doc_type == self.SOURCE_DOC_TYPE:
+            return True
+        return module == "procurement" and doc_type == "inventory_initiated"
+
     def finalize_scm_po(
         self,
         ctx: TenantContext,
         order_id: UUID,
         order: ProcOrderHeader | None = None,
     ) -> ProcOrderHeader:
-        """Issue vendor PO after OVF commercial lock - draft → sent (CRM-sourced only)."""
+        """Issue vendor PO - draft → sent (CRM OVF or inventory-initiated)."""
         if order is None or order.id != order_id:
             order = self._order_service.get_order(ctx, order_id)
-        if order.source_module != self.SOURCE_MODULE or order.source_document_type != self.SOURCE_DOC_TYPE:
-            raise InvalidDocumentState("Only CRM OVF-sourced POs can use SCM finalize")
+        if not self._is_scm_finalizable(order):
+            raise InvalidDocumentState(
+                "Only CRM OVF or inventory-initiated POs can use SCM finalize"
+            )
         if order.status != OrderStatus.DRAFT.value:
             raise InvalidDocumentState("Only draft SCM POs can be finalized")
         active_lines = [ln for ln in (order.lines or []) if not getattr(ln, "is_deleted", False)]
@@ -1735,6 +1745,12 @@ class ScmHandoffService:
                     if not value:
                         raise ConflictException(
                             "Each received unit needs a serial number or NA"
+                        )
+                    from shared.text_safety import contains_unsafe_markup
+
+                    if contains_unsafe_markup(value):
+                        raise ConflictException(
+                            "Serial numbers cannot contain HTML or script content"
                         )
                     normalized_serials.append(value)
             elif serial_numbers:

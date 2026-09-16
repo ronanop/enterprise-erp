@@ -75,9 +75,7 @@ import { receiptBatchKey } from "@/utils/delivery-challan-grn";
 import { addPendingGrnChallan } from "@/utils/grn-challan-pending";
 import { splitPoProductFields } from "@/utils/po-fulfillment-metrics";
 import {
-  billingQuantityFromUnitKinds,
-  deliveryChallanQuantityFromUnitKinds,
-  dispositionFromBillingQuantity,
+  quantitiesFromLineDisposition,
   resizeUnitKinds,
 } from "@/components/procurement/receipt-line-serials";
 import { receiptGrnLabelForOrder } from "@/utils/receipt-grn-label";
@@ -537,6 +535,9 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         return;
       }
       const qty = Math.min(orderedQty, savedReceived + row.additional);
+      const deliveryChallanQuantity =
+        row.deliveryChallanQuantity ??
+        (row.disposition === "delivery_challan" ? row.additional : 0);
       pending.push({
         ...row,
         orderedQty,
@@ -545,10 +546,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         serials: serialSlotsForSave(slots),
         billing: row.billingQuantity > 0,
         billingQuantity: row.billingQuantity,
-        deliveryChallanQuantity: deliveryChallanQuantityFromUnitKinds(
-          resizeUnitKinds(row.unitKinds, Math.max(serialUnitCount(row.additional), 1)),
-          row.additional,
-        ),
+        deliveryChallanQuantity,
       });
     }
 
@@ -766,7 +764,12 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       if (raw === "" || raw === ".") continue;
 
       const additional = Number(raw);
-      const label = line.product_name || line.product_code || `Line ${line.line_number}`;
+      const fields = splitPoProductFields(line);
+      const label =
+        fields.productName ||
+        line.product_name ||
+        line.product_code ||
+        `Line ${line.line_number}`;
       if (!Number.isFinite(additional) || additional <= 0) {
         return { ok: false, message: `Enter a valid receive qty for ${label} (1-${remaining}).` };
       }
@@ -783,9 +786,14 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         lineId: line.id,
         lineNo: line.line_number,
         productLabel: label,
+        productName: fields.productName || label,
+        description: fields.description || "",
+        hsnSac: fields.hsnSac || "",
         additional,
+        maxAdditional: remaining,
         disposition: "stock",
         billingQuantity: 0,
+        deliveryChallanQuantity: 0,
         unitKinds: resizeUnitKinds(undefined, Math.max(serialUnitCount(additional), 1)),
       });
     }
@@ -993,11 +1001,11 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     [order],
   );
   const tableMinWidth = showReceiptColumns
-    ? "min-w-[1000px]"
+    ? "min-w-[1180px]"
     : showGrnWorkspace
-      ? "min-w-[860px]"
-      : "min-w-[640px]";
-  const emptyColSpan = showReceiptColumns ? 9 : showGrnWorkspace ? 8 : 5;
+      ? "min-w-[1040px]"
+      : "min-w-[820px]";
+  const emptyColSpan = showReceiptColumns ? 11 : showGrnWorkspace ? 10 : 7;
   const backToScm = searchParams.get("from") === "scm";
   const backToGrns = searchParams.get("from") === "grns";
   const statusLabel = (order?.status || "").toLowerCase();
@@ -1432,6 +1440,8 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                   <tr>
                     <th className="px-3 py-2 font-bold">S No.</th>
                     <th className="px-3 py-2 font-bold">Product</th>
+                    <th className="px-3 py-2 font-bold">Description</th>
+                    <th className="px-3 py-2 font-bold">HSN/SAC</th>
                     <th className="px-3 py-2 font-bold">Ordered</th>
                     <th className="px-3 py-2 text-center font-bold">Receive now</th>
                     {showReceiptColumns ? (
@@ -1459,11 +1469,20 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                       savedReceived + (Number.isFinite(additional) ? additional : 0),
                     );
                     const status = receiptStatusFromQty(orderedQty, projectedReceived);
+                    const fields = splitPoProductFields(ln);
 
                     return (
                       <tr key={ln.id} className="border-b border-border/70 align-top">
                         <td className="px-3 py-2 tabular-nums">{index + 1}</td>
-                        <td className="px-3 py-2">{ln.product_name || ln.product_code || "-"}</td>
+                        <td className="px-3 py-2 font-medium">
+                          {fields.productName || ln.product_code || "-"}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {fields.description || "-"}
+                        </td>
+                        <td className="px-3 py-2 tabular-nums text-muted-foreground">
+                          {fields.hsnSac || "-"}
+                        </td>
                         <td className="px-3 py-2 tabular-nums">{orderedQty}</td>
                         <td className="px-3 py-2 text-center">
                           {locked ? (
@@ -1626,33 +1645,51 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           onSerialDraftChange={(lineId, slots) =>
             setSerialDraft((prev) => ({ ...prev, [lineId]: slots }))
           }
-          onUnitKindChange={(lineId, unitIndex, kind) => {
+          onDispositionChange={(lineId, kind) => {
             setPendingReceiptLines((prev) =>
               prev.map((row) => {
                 if (row.lineId !== lineId) return row;
-                const rowCount = Math.max(serialUnitCount(row.additional), 1);
-                const unitKinds = resizeUnitKinds(row.unitKinds, rowCount);
-                unitKinds[unitIndex] = kind;
-                const billingQuantity = billingQuantityFromUnitKinds(
-                  unitKinds,
-                  row.additional,
-                );
-                const deliveryChallanQuantity = deliveryChallanQuantityFromUnitKinds(
-                  unitKinds,
-                  row.additional,
-                );
+                const next = quantitiesFromLineDisposition(kind, row.additional);
                 return {
                   ...row,
-                  unitKinds,
-                  billingQuantity,
-                  disposition: dispositionFromBillingQuantity(
-                    row.additional,
-                    billingQuantity,
-                    deliveryChallanQuantity,
-                  ),
+                  ...next,
                 };
               }),
             );
+          }}
+          onQuantityChange={(lineId, quantity) => {
+            setPendingReceiptLines((prev) =>
+              prev.map((row) => {
+                if (row.lineId !== lineId) return row;
+                const capped = Math.max(
+                  0,
+                  Math.min(row.maxAdditional ?? quantity, quantity),
+                );
+                const kind =
+                  row.disposition === "bill"
+                    ? "bill"
+                    : row.disposition === "delivery_challan"
+                      ? "delivery_challan"
+                      : "stock";
+                return {
+                  ...row,
+                  additional: capped,
+                  ...quantitiesFromLineDisposition(kind, capped),
+                };
+              }),
+            );
+            setSerialDraft((draft) => {
+              const current = pendingReceiptLines.find((row) => row.lineId === lineId);
+              const max = current?.maxAdditional ?? quantity;
+              const capped = Math.max(0, Math.min(max, quantity));
+              return {
+                ...draft,
+                [lineId]: receiptSerialSlotsWithNaDefaults(
+                  draft[lineId] || [],
+                  serialUnitCount(capped),
+                ),
+              };
+            });
           }}
           onSerialImportError={setReceiptModalError}
           vendorInvoice={vendorInvoiceDraft}

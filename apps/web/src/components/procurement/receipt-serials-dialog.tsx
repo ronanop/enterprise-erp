@@ -28,10 +28,15 @@ export type ReceiptSerialDialogLine = {
   lineId: string;
   lineNo: number;
   productLabel: string;
+  productName?: string;
+  description?: string;
+  hsnSac?: string;
   additional: number;
   billingQuantity: number;
   disposition: GrnLineDisposition;
   unitKinds?: GrnUnitKind[];
+  maxAdditional?: number;
+  deliveryChallanQuantity?: number;
 };
 
 export type VendorInvoiceDraft = {
@@ -58,7 +63,8 @@ type ReceiptSerialsDialogProps = {
   busy?: boolean;
   error?: string | null;
   onSerialDraftChange: (lineId: string, slots: string[]) => void;
-  onUnitKindChange?: (lineId: string, unitIndex: number, kind: GrnUnitKind) => void;
+  onDispositionChange?: (lineId: string, kind: GrnUnitKind) => void;
+  onQuantityChange?: (lineId: string, quantity: number) => void;
   onSerialImportError?: (message: string | null) => void;
   vendorInvoice: VendorInvoiceDraft;
   onVendorInvoiceChange: Dispatch<SetStateAction<VendorInvoiceDraft>>;
@@ -74,7 +80,8 @@ export function ReceiptSerialsDialog({
   busy,
   error,
   onSerialDraftChange,
-  onUnitKindChange,
+  onDispositionChange,
+  onQuantityChange,
   onSerialImportError,
   vendorInvoice,
   onVendorInvoiceChange,
@@ -382,7 +389,8 @@ export function ReceiptSerialsDialog({
                 serialDraft={serialDraft}
                 disabled={busy}
                 onChange={onSerialDraftChange}
-                onUnitKindChange={onUnitKindChange}
+                onDispositionChange={onDispositionChange}
+                onQuantityChange={onQuantityChange}
                 onImportError={onSerialImportError}
               />
             )}

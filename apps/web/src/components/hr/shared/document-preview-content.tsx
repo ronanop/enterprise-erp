@@ -279,14 +279,16 @@ function DocxPreview({
   }
 
   return (
-    <div
+    <iframe
+      title="Document preview"
+      srcDoc={html}
+      sandbox=""
       className={cn(
-        "prose prose-sm max-w-none rounded-md border border-border/60 bg-white p-4 text-foreground shadow-sm dark:prose-invert",
-        "max-h-[65vh] overflow-auto",
+        "w-full rounded-md border border-border/60 bg-white shadow-sm",
+        "min-h-[320px] max-h-[65vh]",
         className,
       )}
       onContextMenu={viewOnly ? (e) => e.preventDefault() : undefined}
-      dangerouslySetInnerHTML={{ __html: html }}
     />
   );
 }

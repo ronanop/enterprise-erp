@@ -16,6 +16,8 @@ import { Bell, CheckCheck, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { formatNotificationDateTime } from "@/lib/format-notification-datetime";
+import { safeAppHref } from "@/lib/html";
+import { safeHref } from "@/lib/text-safety";
 import {
   CRM_APPROVAL_SURFACE_DISMISS_EVENT,
   dedupeCrmRejectionsByEntity,
@@ -500,7 +502,7 @@ export function AppTopbarNotifications() {
                     <CrmAlertBody item={item} />
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <Link
-                        href={item.href}
+                        href={safeHref(item.href)}
                         className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-border/80 bg-background px-2.5 text-xs font-medium transition-colors duration-200 hover:bg-muted"
                         onClick={() => {
                           setOpen(false);
@@ -538,7 +540,7 @@ export function AppTopbarNotifications() {
                   <ProjectAlertBody alert={alert} />
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <Link
-                      href={alert.form_path}
+                      href={safeAppHref(alert.form_path || "")}
                       className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-border/80 bg-background px-2.5 text-xs font-medium transition-colors duration-200 hover:bg-muted"
                       onClick={() => {
                         setOpen(false);
@@ -598,7 +600,7 @@ export function AppTopbarNotifications() {
                 </div>
                 <div className="mt-2">
                   <Link
-                    href={item.href}
+                    href={safeHref(item.href)}
                     className="inline-flex h-7 cursor-pointer items-center rounded-lg bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-opacity duration-200 hover:opacity-90"
                     onClick={() => onDismissCrmSurface(item)}
                   >
@@ -629,7 +631,7 @@ export function AppTopbarNotifications() {
                 </div>
                 <div className="mt-2">
                   <Link
-                    href={alert.form_path}
+                    href={safeAppHref(alert.form_path || "")}
                     className="inline-flex h-7 cursor-pointer items-center rounded-lg bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-opacity duration-200 hover:opacity-90"
                     onClick={() => {
                       setProjectPopups((prev) => prev.filter((row) => row.id !== alert.id));
