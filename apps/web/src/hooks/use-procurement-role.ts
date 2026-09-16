@@ -25,9 +25,9 @@ export function useProcurementRole() {
     role,
     ready,
     isAdmin,
-    /** @deprecated Local role override removed — ERP module admin assignment is the source of truth. */
+    /** @deprecated Local role override removed - ERP module admin assignment is the source of truth. */
     setProcurementRole: (_next: ProcurementRole) => {},
-    /** @deprecated Local role toggle removed — use Organization module admin assignment. */
+    /** @deprecated Local role toggle removed - use Organization module admin assignment. */
     switchRole: () => role,
   };
 }

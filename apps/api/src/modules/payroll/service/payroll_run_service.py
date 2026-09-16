@@ -77,7 +77,7 @@ class PayrollRunService:
         if period is None:
             raise NotFoundException("Payroll period not found for this run")
         if period.start_date is None or period.end_date is None:
-            raise AppException("Payroll period must have start_date and end_date (generate 20–20 period first)")
+            raise AppException("Payroll period must have start_date and end_date (generate 20-20 period first)")
         period_start = period.start_date
         period_end = period.end_date
 
@@ -101,7 +101,7 @@ class PayrollRunService:
         target_id = getattr(row, "target_employee_id", None)
         if target_id is not None:
             salaries = [s for s in salaries if s.employee_id == target_id]
-            # FNF may still need a line when salary was already ended — fall back to employment CTC
+            # FNF may still need a line when salary was already ended - fall back to employment CTC
             if not salaries and employment_by_employee.get(target_id):
                 emp_fact = employment_by_employee[target_id]
                 gross_input = emp_fact.get("ctc_amount")

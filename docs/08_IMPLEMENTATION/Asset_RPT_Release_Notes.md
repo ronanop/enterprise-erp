@@ -1,6 +1,6 @@
 # Asset RPT Release Notes
 
-## FP-ASSET-018 — Asset Reports
+## FP-ASSET-018 - Asset Reports
 
 ### Added
 

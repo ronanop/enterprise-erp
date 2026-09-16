@@ -1,4 +1,4 @@
-"""Integration Hub port — connector UUID refs only."""
+"""Integration Hub port - connector UUID refs only."""
 
 from uuid import UUID
 

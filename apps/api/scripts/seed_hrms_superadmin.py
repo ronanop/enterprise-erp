@@ -2,9 +2,10 @@
 
 Creates:
   - Login: hr@cachedigitech.com / CacheHr@2026
-  - user_type super_admin, SUPER_ADMIN role
+  - user_type employee (not ERP admin)
+  - HR module admin + HR_ADMIN + HR_SUPERADMIN roles
   - No master_employee row (hidden from employee directory / ESS)
-  - hr.superadmin:manage granted only to SUPER_ADMIN
+  - hr.superadmin:manage on HR_SUPERADMIN (not platform SUPER_ADMIN)
   - HR_ADMIN role gets full HRMS sidebar permissions (not Superadmin Panel)
 
 Usage (from apps/api):
@@ -200,6 +201,7 @@ def main() -> None:
         super_role = ensure_role(db, tenant.id, "SUPER_ADMIN", "Super Admin")
         tenant_role = ensure_role(db, tenant.id, "TENANT_ADMIN", "Tenant Admin")
         hr_admin_role = ensure_role(db, tenant.id, "HR_ADMIN", "HR Admin")
+        hr_super_role = ensure_role(db, tenant.id, "HR_SUPERADMIN", "HR Superadmin")
 
         all_codes = [
             r[0]
@@ -212,6 +214,7 @@ def main() -> None:
         revoke_code_from_role(db, tenant_role.id, HR_SUPERADMIN_PERMISSION)
         revoke_code_from_role(db, hr_admin_role.id, HR_SUPERADMIN_PERMISSION)
         grant_codes(db, tenant.id, hr_admin_role.id, HR_ADMIN_WORKSPACE_PERMISSIONS)
+        grant_codes(db, tenant.id, hr_super_role.id, [HR_SUPERADMIN_PERMISSION])
 
         service = UserService(db)
         user = db.scalar(
@@ -227,7 +230,7 @@ def main() -> None:
                 email=HRMS_ADMIN_EMAIL,
                 password=HRMS_ADMIN_PASSWORD,
                 display_name=HRMS_ADMIN_NAME,
-                user_type="super_admin",
+                user_type="employee",
                 created_by=None,
             )
             user = db.scalar(select(SecUser).where(SecUser.id == created.id))
@@ -235,25 +238,49 @@ def main() -> None:
         else:
             user.password_hash = PasswordHasher.hash_password(HRMS_ADMIN_PASSWORD)
             user.display_name = HRMS_ADMIN_NAME
-            user.user_type = "super_admin"
+            user.user_type = "employee"
             user.status = "active"
             user.failed_login_count = 0
             user.locked_until = None
             user.must_change_password = False
 
-        already = db.scalar(
-            select(SecUserRole).where(
-                SecUserRole.user_id == user.id,
-                SecUserRole.role_id == super_role.id,
-            )
+        # Strip platform SUPER_ADMIN if present - HRMS Superadmin is not an ERP admin.
+        db.execute(
+            text(
+                """
+                DELETE FROM foundation.sec_user_role ur
+                USING foundation.sec_role r
+                WHERE ur.role_id = r.id
+                  AND ur.user_id = :uid
+                  AND upper(r.role_code) IN ('SUPER_ADMIN', 'TENANT_ADMIN')
+                """
+            ),
+            {"uid": str(user.id)},
         )
-        if not already:
-            service.assign_role(
-                tenant_id=tenant.id,
-                user_id=user.id,
-                role_id=super_role.id,
-                assigned_by=None,
+
+        for role in (hr_admin_role, hr_super_role):
+            already = db.scalar(
+                select(SecUserRole).where(
+                    SecUserRole.user_id == user.id,
+                    SecUserRole.role_id == role.id,
+                )
             )
+            if not already:
+                service.assign_role(
+                    tenant_id=tenant.id,
+                    user_id=user.id,
+                    role_id=role.id,
+                    assigned_by=None,
+                )
+
+        from modules.foundation.repository.user_module_repository import UserModuleRepository
+
+        UserModuleRepository(db).replace_admin_keys(
+            tenant_id=tenant.id,
+            user_id=user.id,
+            module_keys=["hr"],
+            assigned_by=None,
+        )
 
         company = db.scalar(
             select(OrgCompany).where(
@@ -296,8 +323,8 @@ def main() -> None:
         print("HRMS Superadmin seeded")
         print(f"  Email    : {HRMS_ADMIN_EMAIL}")
         print(f"  Password : {HRMS_ADMIN_PASSWORD}")
-        print("  Role     : SUPER_ADMIN (hidden from employee directory)")
-        print("  Login    : ERP web — not Employee App")
+        print("  Access   : HR module admin + HR_SUPERADMIN (not ERP admin)")
+        print("  Login    : ERP web - not Employee App")
         print("=" * 60)
         print("Sign out and sign in again so the session reloads permissions.")
     except Exception:

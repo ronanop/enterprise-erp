@@ -105,7 +105,7 @@ export default function AssetScanPage() {
         <p className="mt-2 text-center text-xs text-[#434655]">
           {scanning && cameraOk
             ? "Point camera at asset QR code"
-            : "Camera unavailable — enter code below"}
+            : "Camera unavailable - enter code below"}
         </p>
       </div>
 

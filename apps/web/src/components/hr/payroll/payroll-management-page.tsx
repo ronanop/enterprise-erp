@@ -340,7 +340,7 @@ export function PayrollManagementPage() {
               {k.label}
             </p>
             <p className={cn("mt-1 font-semibold tabular-nums text-foreground", k.money ? "text-sm" : "text-xl")}>
-              {loading ? "—" : k.value}
+              {loading ? "-" : k.value}
             </p>
           </div>
         ))}
@@ -602,11 +602,11 @@ export function PayrollManagementPage() {
                           <td className="px-3 py-2 font-mono text-xs">{s.employeeId}</td>
                           <td className="px-3 py-2 font-medium">{s.employeeName}</td>
                           <td className="px-3 py-2">{s.structureName}</td>
-                          <td className="px-3 py-2 text-xs">{s.effectiveDate || "—"}</td>
+                          <td className="px-3 py-2 text-xs">{s.effectiveDate || "-"}</td>
                           <td className="px-3 py-2 tabular-nums">{formatInr(s.monthlyCtc)}</td>
                           <td className="px-3 py-2 tabular-nums">{formatInr(s.annualCtc)}</td>
                           <td className="px-3 py-2">{s.payrollGroup}</td>
-                          <td className="px-3 py-2 font-mono text-xs">{s.bankAccount || "—"}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{s.bankAccount || "-"}</td>
                           <td className="px-3 py-2 uppercase">{s.taxRegime}</td>
                           <td className="px-3 py-2">
                             <HrStatusBadge status={s.salaryStatus} />
@@ -651,7 +651,7 @@ export function PayrollManagementPage() {
               {pageRuns.length === 0 ? (
                 <HrEmptyState
                   title="No payroll runs"
-                  description="Choose a pay cycle (e.g. 20th–20th) and run payroll to sync attendance and leave."
+                  description="Choose a pay cycle (e.g. 20th-20th) and run payroll to sync attendance and leave."
                 />
               ) : (
                 <>
@@ -762,7 +762,7 @@ export function PayrollManagementPage() {
                   </div>
                   {selectedRun ? (
                     <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm">
-                      <h3 className="text-sm font-semibold">Attendance basis — {selectedRun.runCode}</h3>
+                      <h3 className="text-sm font-semibold">Attendance basis - {selectedRun.runCode}</h3>
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         Cycle {selectedRun.cycleLabel}. Net pay is prorated by payable days ÷ working days in
                         cycle.
@@ -1074,7 +1074,7 @@ export function PayrollManagementPage() {
                                 </Button>
                               </div>
                             ) : (
-                              "—"
+                              "-"
                             )}
                           </td>
                         </tr>

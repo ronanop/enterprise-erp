@@ -9,11 +9,11 @@ import { env } from "@/utils/env";
 
 const CONVAI_SCRIPT = "https://unpkg.com/@elevenlabs/convai-widget-embed";
 
-/** Temporarily disabled — set true to restore the "Need help?" Convai widget. */
+/** Temporarily disabled - set true to restore the "Need help?" Convai widget. */
 const CONVAI_WIDGET_ENABLED = false;
 
 /**
- * ElevenLabs Convai embed — shown on authenticated app routes only.
+ * ElevenLabs Convai embed - shown on authenticated app routes only.
  * Fixed bottom-right with safe-area padding so it clears ERP chrome.
  */
 export function ElevenLabsConvaiWidget() {

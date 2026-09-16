@@ -1,5 +1,5 @@
 /**
- * Leave cycle rules (calendar 1–last day). Payroll 20–20 is separate.
+ * Leave cycle rules (calendar 1-last day). Payroll 20-20 is separate.
  * Monthly credit for month M posts after M ends; until then it cannot be used.
  * Past leave dates are allowed after credit posts so prior holidays can be covered.
  */
@@ -85,12 +85,12 @@ export function validateLeaveCycleOnApply(input: {
     return {
       ok: false,
       error:
-        "Cannot apply leave for a future calendar month before it starts. Leave cycle is calendar 1–last day (not payroll 20–20). Monthly credit posts after month end; then you may cover past dates in that month.",
+        "Cannot apply leave for a future calendar month before it starts. Leave cycle is calendar 1-last day (not payroll 20-20). Monthly credit posts after month end; then you may cover past dates in that month.",
     };
   }
 
   const info =
-    "Leave dates use the calendar month (1–last day). Days 21–30/31 are still that month’s leave — not the next payroll 20–20 cycle. Monthly credit is added after month end.";
+    "Leave dates use the calendar month (1-last day). Days 21-30/31 are still that month’s leave - not the next payroll 20-20 cycle. Monthly credit is added after month end.";
 
   if (input.available == null) {
     return { ok: true, info };

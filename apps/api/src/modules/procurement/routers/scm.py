@@ -1,4 +1,4 @@
-"""SCM workspace routers — OVF queue, create vendor PO, GRN line updates."""
+"""SCM workspace routers - OVF queue, create vendor PO, GRN line updates."""
 
 from typing import Annotated
 from uuid import UUID

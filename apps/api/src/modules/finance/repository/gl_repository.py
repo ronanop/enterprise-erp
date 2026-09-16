@@ -1,4 +1,4 @@
-"""General ledger repository — read and post only."""
+"""General ledger repository - read and post only."""
 
 from datetime import date
 from uuid import UUID, uuid4

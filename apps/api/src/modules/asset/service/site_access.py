@@ -1,4 +1,4 @@
-"""IT site Location / Building access — IT domain admin or module admin or RBAC."""
+"""IT site Location / Building access - IT domain admin or module admin or RBAC."""
 
 from __future__ import annotations
 

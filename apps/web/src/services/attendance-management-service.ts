@@ -267,13 +267,13 @@ function defaultExtension(partial?: Partial<AttendanceExtension>): AttendanceExt
     isLate: partial?.isLate ?? false,
     isEarlyExit: partial?.isEarlyExit ?? false,
     missedPunch: partial?.missedPunch ?? false,
-    departmentName: partial?.departmentName ?? "—",
+    departmentName: partial?.departmentName ?? "-",
     departmentId: partial?.departmentId ?? "",
-    designationName: partial?.designationName ?? "—",
+    designationName: partial?.designationName ?? "-",
     employeeCode: partial?.employeeCode ?? "",
     employeeName: partial?.employeeName ?? "",
-    shiftName: partial?.shiftName ?? "—",
-    managerName: partial?.managerName ?? "—",
+    shiftName: partial?.shiftName ?? "-",
+    managerName: partial?.managerName ?? "-",
   };
 }
 
@@ -762,7 +762,7 @@ function resolveRegularizeChoice(
     return {
       status: "half_day",
       portion: halfPortion,
-      label: halfPortion === "first_half" ? "half day — 1st half" : "half day — 2nd half",
+      label: halfPortion === "first_half" ? "half day - 1st half" : "half day - 2nd half",
     };
   }
   if (kind === "absent") {

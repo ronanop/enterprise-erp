@@ -1,6 +1,6 @@
-# CR-004 — Risks & Mitigations
+# CR-004 - Risks & Mitigations
 
-**Phase:** 1 — Documentation only
+**Phase:** 1 - Documentation only
 
 ---
 

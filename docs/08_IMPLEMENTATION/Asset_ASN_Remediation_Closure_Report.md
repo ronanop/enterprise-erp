@@ -16,21 +16,21 @@
 
 ## 2. Files Modified
 
-- `apps/api/src/modules/asset/service/assignment_service.py` — cancel_draft order; unused `_db` removed
-- `apps/api/src/tests/unit/asset/test_assignment_concurrency.py` — **new**
-- `apps/api/src/tests/integration/asset/test_asset_assignment_workflow.py` — reopen/resubmit test
-- `apps/api/src/tests/unit/asset/test_workflow_codes.py` — include transfer code; expect len 6
-- `apps/web/src/components/assets/asset-assignment-workspace.tsx` — allocation type filter
-- `apps/web/src/components/assets/asset-registration-workspace.tsx` — typecheck fixes (generic list parse; Link without unsupported `asChild`)
-- `apps/web/src/components/projects/project-form-page.tsx` — typecheck fix unblocking production build (`load` return typing)
-- `docs/08_IMPLEMENTATION/Asset_ASN_Deployment_Guide.md` — cancel_draft rationale
-- `docs/08_IMPLEMENTATION/Asset_ASN_Remediation_Closure_Report.md` — this report
+- `apps/api/src/modules/asset/service/assignment_service.py` - cancel_draft order; unused `_db` removed
+- `apps/api/src/tests/unit/asset/test_assignment_concurrency.py` - **new**
+- `apps/api/src/tests/integration/asset/test_asset_assignment_workflow.py` - reopen/resubmit test
+- `apps/api/src/tests/unit/asset/test_workflow_codes.py` - include transfer code; expect len 6
+- `apps/web/src/components/assets/asset-assignment-workspace.tsx` - allocation type filter
+- `apps/web/src/components/assets/asset-registration-workspace.tsx` - typecheck fixes (generic list parse; Link without unsupported `asChild`)
+- `apps/web/src/components/projects/project-form-page.tsx` - typecheck fix unblocking production build (`load` return typing)
+- `docs/08_IMPLEMENTATION/Asset_ASN_Deployment_Guide.md` - cancel_draft rationale
+- `docs/08_IMPLEMENTATION/Asset_ASN_Remediation_Closure_Report.md` - this report
 
 ## 3. Additional Tests Added
 
-- `test_repository_rejects_stale_version` — optimistic locking / version conflict
-- `test_shared_asset_allows_multiple_assignments` — shared asset skips exclusive pending check
-- `test_int_asn_reopen_and_resubmit_creates_new_workflow_instance` — reopen after reject + resubmit new WF instance
+- `test_repository_rejects_stale_version` - optimistic locking / version conflict
+- `test_shared_asset_allows_multiple_assignments` - shared asset skips exclusive pending check
+- `test_int_asn_reopen_and_resubmit_creates_new_workflow_instance` - reopen after reject + resubmit new WF instance
 
 ## 4. Build & CI Results
 
@@ -40,7 +40,7 @@
 | Ruff (remediation-touched files) | **PASS** |
 | `npm run typecheck` (apps/web) | **PASS** |
 | `npm run build` (apps/web) | **PASS** |
-| `npm run lint` (apps/web) | Pre-existing repo-wide ESLint failures (111 errors) — not introduced by FP-ASSET-003 |
+| `npm run lint` (apps/web) | Pre-existing repo-wide ESLint failures (111 errors) - not introduced by FP-ASSET-003 |
 | Full monorepo CI workflow | No GitHub Actions workflow present in repo; local quality gates used per README |
 
 ## 5. Migration Verification

@@ -25,14 +25,14 @@ import {
 type SortKey = CompanyListColumnId;
 
 function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
 }
 
 function formatSource(source: string | null | undefined): string {
-  if (!source) return "—";
+  if (!source) return "-";
   return source.replaceAll("_", " ");
 }
 
@@ -128,13 +128,13 @@ export function CompanyListPage() {
           </Link>
         );
       case "phone":
-        return row.phone ?? "—";
+        return row.phone ?? "-";
       case "customer_email":
-        return row.customer_email ?? "—";
+        return row.customer_email ?? "-";
       case "account_owner":
         return row.account_owner_id
-          ? ownerLabelById.get(row.account_owner_id) ?? "—"
-          : "—";
+          ? ownerLabelById.get(row.account_owner_id) ?? "-"
+          : "-";
       case "created_at":
         return formatDateTime(row.created_at);
       case "updated_at":
@@ -142,7 +142,7 @@ export function CompanyListPage() {
       case "source":
         return formatSource(row.source);
       default:
-        return "—";
+        return "-";
     }
   }
 
@@ -152,7 +152,6 @@ export function CompanyListPage() {
     <CrmPage>
       <PageHeader
         title="Company"
-        description="Sales accounts — the only entry point for creating leads. Convert a company's lead through Opportunity, Quote, and OVF to Won."
         actions={
           <Link
             href="/crm/companies/new"

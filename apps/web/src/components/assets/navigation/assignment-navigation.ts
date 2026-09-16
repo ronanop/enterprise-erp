@@ -1,7 +1,7 @@
 /**
- * CR-004 Phase 4 Task 6 — Assignment Navigation (routing SSOT for Assignment module).
+ * CR-004 Phase 4 Task 6 - Assignment Navigation (routing SSOT for Assignment module).
  *
- * Navigation only — no UI, no business logic, no fetch.
+ * Navigation only - no UI, no business logic, no fetch.
  * AssetNavigation delegates Issue/Return hrefs here.
  */
 
@@ -45,7 +45,7 @@ export function buildReturnWizardHref(params: ReturnWizardHrefParams = {}): stri
   return `${assignmentNavigationPaths.return}?${q.toString()}`;
 }
 
-/** @deprecated Prefer buildAssignmentWizardHref — kept for call-site compatibility. */
+/** @deprecated Prefer buildAssignmentWizardHref - kept for call-site compatibility. */
 export const buildIssueWizardHref = buildAssignmentWizardHref;
 
 export type AssignmentNavigation = {

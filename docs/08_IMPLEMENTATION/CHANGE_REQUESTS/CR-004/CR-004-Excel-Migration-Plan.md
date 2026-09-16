@@ -1,6 +1,6 @@
-# CR-004 — Excel Migration Plan
+# CR-004 - Excel Migration Plan
 
-**Phase:** 4.1 — Architecture (execution in Phase 7 per roadmap)  
+**Phase:** 4.1 - Architecture (execution in Phase 7 per roadmap)  
 **Principle:** One-time **load** into existing tables; no parallel Excel database  
 **Prerequisites:** Phase 5 assignment enrichment; stable `operational_status` backfill rules
 
@@ -55,26 +55,26 @@ Align import template to **ownership matrix** (`CR-004-Phase-4.1-Excel-Gap-Analy
 | Serial | No | `serial_number` |
 | Manufacturer / Model / CPU / RAM | No | discovery JSON or product link |
 | Charger / Other Items | No | component rows or skip |
-| Earlier Used By | No | **Do not import** — recompute from history after load |
+| Earlier Used By | No | **Do not import** - recompute from history after load |
 
 ---
 
 ## 4. Migration phases
 
-### Phase A — Prepare (with 4.1 analysis)
+### Phase A - Prepare (with 4.1 analysis)
 
 - [x] Lock ownership matrix
 - [ ] Customer signs column mapping
 - [ ] Freeze Excel version (file hash, date)
 - [ ] Master data ready: employees, branches, categories
 
-### Phase B — Enrichment (roadmap Phase 5)
+### Phase B - Enrichment (roadmap Phase 5)
 
 - [ ] Alembic: `delivery_challan_ref`, `remarks` on `ast_asset_assignment`
 - [ ] API + Assignment UI
 - [ ] Return condition on API + UI
 
-### Phase C — Tooling (roadmap Phase 7)
+### Phase C - Tooling (roadmap Phase 7)
 
 | Deliverable | Description |
 |-------------|-------------|
@@ -83,15 +83,15 @@ Align import template to **ownership matrix** (`CR-004-Phase-4.1-Excel-Gap-Analy
 | Dry-run mode | No commit; counts only |
 | Reconciliation | Ops status vs active assignment |
 
-### Phase D — Execution
+### Phase D - Execution
 
 1. **Dry-run** on copy of production DB (staging).
 2. Fix master data gaps (unknown employee IDs, branch typos).
 3. **Production import** in maintenance window.
 4. Reconciliation job + manual spot checks (sample 50 rows).
-5. **Excel freeze** — read-only archive.
+5. **Excel freeze** - read-only archive.
 
-### Phase E — Hypercare (2 weeks)
+### Phase E - Hypercare (2 weeks)
 
 - Daily bucket count comparison (dashboard vs Excel archive)
 - Assignment corrections via ERP only
@@ -134,7 +134,7 @@ RUN reconciliation
 |------|----------|
 | Duplicate `asset_code` in file | Error |
 | Assigned row without Employee ID | Error |
-| Unknown Employee ID | Error (or warning + skip row — policy) |
+| Unknown Employee ID | Error (or warning + skip row - policy) |
 | Active assignment + non-ASSIGNED ops status | Error |
 | ASSIGNED ops without active assignment | Error |
 | RETIRED/DISPOSED with active assignment | Error |

@@ -2,11 +2,11 @@
 
 Creates:
   - Team-role users used to drive the sales blueprint demo:
-      sales.user@example.com       (CRM_SALES_MANAGER — creates companies,
+      sales.user@example.com       (CRM_SALES_MANAGER - creates companies,
                                      leads, quotes, OVFs)
-      presales.user@example.com    (CRM_PRESALES — decides BOQ approvals)
-      accounts.user@example.com    (CRM_ACCOUNTS — visibility into quotes/OVF)
-      management.user@example.com  (CRM_MANAGEMENT — decides quote-margin and
+      presales.user@example.com    (CRM_PRESALES - decides BOQ approvals)
+      accounts.user@example.com    (CRM_ACCOUNTS - visibility into quotes/OVF)
+      management.user@example.com  (CRM_MANAGEMENT - decides quote-margin and
                                      customer-PO approvals)
     All demo accounts share the password "Secure1!".
   - A handful of CrmProduct catalog rows (hardware / software / services).
@@ -319,7 +319,7 @@ def seed_calipers_company(db, ctx: TenantContext, branch: OrgBranch, owner: SecU
         shipping_state="Karnataka",
         shipping_code="560103",
         shipping_country="India",
-        description="Mid-market IT consulting firm — demo Sales Account for the CRM blueprint walkthrough.",
+        description="Mid-market IT consulting firm - demo Sales Account for the CRM blueprint walkthrough.",
         account_owner_id=owner.id,
     )
 

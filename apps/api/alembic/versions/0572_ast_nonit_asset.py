@@ -1,6 +1,6 @@
 """Non-IT asset register tables + permissions + default asset types.
 
-Additive only — does not alter `ast_asset` / IT tables.
+Additive only - does not alter `ast_asset` / IT tables.
 """
 
 import sys

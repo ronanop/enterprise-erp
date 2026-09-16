@@ -1,1 +1,1 @@
-"""Payroll Management module — Sprint 12."""
+"""Payroll Management module - Sprint 12."""

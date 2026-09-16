@@ -150,11 +150,11 @@ class ContentWriterAdapter:
                 )
             elif code == "carousel":
                 body = (
-                    f"Slide 1 — {hook}\n"
-                    f"Slide 2 — The gap: {topic} without an owner.\n"
-                    f"Slide 3 — Proof: {proof}.\n"
-                    f"Slide 4 — How {voice_bit} would say it ({keyword}).\n"
-                    "Slide 5 — One CTA. Nothing else."
+                    f"Slide 1 - {hook}\n"
+                    f"Slide 2 - The gap: {topic} without an owner.\n"
+                    f"Slide 3 - Proof: {proof}.\n"
+                    f"Slide 4 - How {voice_bit} would say it ({keyword}).\n"
+                    "Slide 5 - One CTA. Nothing else."
                 )
             else:
                 body = (
@@ -167,7 +167,7 @@ class ContentWriterAdapter:
                     "code": code,
                     "label": label,
                     "shape": shape,
-                    "headline": f"{topic} — {label}",
+                    "headline": f"{topic} - {label}",
                     "hook": hook[:240],
                     "body": body.strip(),
                     "cta": "Reply with the one metric you want on the next draft.",
@@ -217,7 +217,7 @@ class ContentWriterAdapter:
                     "code": code,
                     "label": label,
                     "shape": shape,
-                    "headline": str(item.get("headline") or f"{topic} — {label}")[:500],
+                    "headline": str(item.get("headline") or f"{topic} - {label}")[:500],
                     "hook": str(item.get("hook") or "")[:1000],
                     "body": str(item.get("body") or "").strip(),
                     "cta": str(item.get("cta") or "One next step.")[:500],
@@ -258,7 +258,7 @@ class ContentWriterAdapter:
             "Cut the CTA to one verb. Delete the second ask.",
         ]
         if not has_example:
-            lines.append("There is no approved post yet — add one line that only this brand would say.")
+            lines.append("There is no approved post yet - add one line that only this brand would say.")
         elif not has_guidelines:
             lines.append(f"Match the {keyword} word choice from the last approved post, not a generic closer.")
         else:

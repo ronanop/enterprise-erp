@@ -432,7 +432,7 @@ def main() -> None:
         for row in created_users:
             print(f"  {row['email']}")
             print(f"    Role         : {row['role']}")
-            print(f"    Employee     : {row['employee_code'] or '—'} ({row['employee_id'] or 'no employee link'})")
+            print(f"    Employee     : {row['employee_code'] or '-'} ({row['employee_id'] or 'no employee link'})")
         print("=" * 72)
         print("Sign out and sign in again so permissions reload.")
         print("Assign tickets: login as service.head@example.com -> open ticket -> Assign Owner panel.")

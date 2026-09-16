@@ -314,7 +314,7 @@ export function SiteOnsiteFormPage({ projectId }: { projectId: string }) {
   return (
     <ProjectsRecordForm
       title="On-site"
-      description="Step 4b — MO request, on-site deliveries, IM material, and material handover."
+      description="Step 4b - MO request, on-site deliveries, IM material, and material handover."
       backHref={
         stageFormMeta.readOnly
           ? (stageFormMeta.backHref ?? `/projects/projects/${projectId}`)

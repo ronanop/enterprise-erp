@@ -1,5 +1,5 @@
 /**
- * HRMS workspace config — aligned with FRD-09 screen inventory
+ * HRMS workspace config - aligned with FRD-09 screen inventory
  * and apps/api HR routers (Employee → Attendance → Leave → Performance).
  */
 

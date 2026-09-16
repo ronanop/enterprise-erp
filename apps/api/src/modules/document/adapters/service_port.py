@@ -1,4 +1,4 @@
-"""Service port — UUID-only stubs; no svc_* FK / ORM writes."""
+"""Service port - UUID-only stubs; no svc_* FK / ORM writes."""
 
 from uuid import UUID
 

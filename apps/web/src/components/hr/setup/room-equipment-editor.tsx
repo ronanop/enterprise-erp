@@ -86,7 +86,7 @@ export function parseRoomEquipmentForm(value: string | undefined): RoomEquipment
 }
 
 export function formatRoomEquipmentSummary(items: RoomEquipmentItem[]): string {
-  if (!items.length) return "—";
+  if (!items.length) return "-";
   return items
     .map((i) => {
       let s = i.name;

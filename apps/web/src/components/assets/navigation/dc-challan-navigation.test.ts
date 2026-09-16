@@ -56,7 +56,7 @@ describe("dc-challan-navigation", () => {
   });
 
   it("treats deployed_to as a manual-entry challan", () => {
-    expect(isManualEntryDcChallan({ deployed_to: "Airtel — Gurugram office" })).toBe(true);
+    expect(isManualEntryDcChallan({ deployed_to: "Airtel - Gurugram office" })).toBe(true);
     expect(isManualEntryDcChallan({ deployed_to: "" })).toBe(false);
     expect(isManualEntryDcChallan({})).toBe(false);
   });

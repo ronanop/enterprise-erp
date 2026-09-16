@@ -13,7 +13,7 @@
 - **Structure:** Page header → clickable KPI strip → search + **filter popover + chips** (inventory pattern, not an always-open filter card) → dense table → sectioned detail drawer
 - **Drawer sections:** Asset · Employee (code for directory; deployed-to instead of code for manual-entry) · Timeline · Documents (stored PDF/JPEG/PNG with View / Download / Print; no URL paste)
 - Manual SCM upload is labelled as a fallback until SCM is connected
-- Uploading the signed copy also marks the challan signed — there is no separate Mark Signed action
+- Uploading the signed copy also marks the challan signed - there is no separate Mark Signed action
 - Replace document (IT `:receive` only) asks for confirmation; the previous file remains in audit history
 - Print opens the document itself (hidden iframe), not the workspace page
 - **Bulk bar:** Select pending rows → Send to SCM; show per-item skip reasons
@@ -31,6 +31,6 @@
 
 - StatCards filter the list on click
 - Create DC is employee-only when launched from an assignment; Case 2 (asset, no assignment) remains allowed
-- Create modal uses searchable asset typeahead (Ready to Move / Assigned only) plus an assignment confirm chip — never raw UUIDs
+- Create modal uses searchable asset typeahead (Ready to Move / Assigned only) plus an assignment confirm chip - never raw UUIDs
 - Deep links from inventory/assignment skip the picker and show a read-only confirmation preview
 - No purple/pink gradients; Lucide icons only

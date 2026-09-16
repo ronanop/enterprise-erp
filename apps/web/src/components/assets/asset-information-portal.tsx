@@ -28,7 +28,7 @@ import { ApiClientError } from "@/services/api-client";
 import { escapeHtml, openPrintDocument } from "@/lib/html";
 
 function dash(value?: string | null): string {
-  return value && String(value).trim() ? String(value) : "—";
+  return value && String(value).trim() ? String(value) : "-";
 }
 
 type Props = {
@@ -136,7 +136,7 @@ export function AssetInformationPortalView({ assetId }: Props) {
     <div className="space-y-4">
       <PageHeader
         title="Asset Information Portal"
-        description={`${portal.asset_code} — read-only overview, custody, protection, and QR self-service.`}
+        description={`${portal.asset_code} - read-only overview, custody, protection, and QR self-service.`}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -177,7 +177,7 @@ export function AssetInformationPortalView({ assetId }: Props) {
                 label="Category"
                 value={
                   portal.category_code
-                    ? `${portal.category_code} — ${portal.category_name ?? ""}`
+                    ? `${portal.category_code} - ${portal.category_name ?? ""}`
                     : portal.category_name
                 }
               />
@@ -276,7 +276,7 @@ export function AssetInformationPortalView({ assetId }: Props) {
               </div>
               <p className="break-all text-xs text-muted-foreground">{selfServiceUrl}</p>
               <p className="text-xs text-muted-foreground">
-                QR is generated in the browser only — never stored on the server.
+                QR is generated in the browser only - never stored on the server.
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -332,7 +332,7 @@ function Field({
   return (
     <div>
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      {badge && display !== "—" ? (
+      {badge && display !== "-" ? (
         <Badge variant="secondary" className="mt-1 font-mono text-xs">
           {display}
         </Badge>

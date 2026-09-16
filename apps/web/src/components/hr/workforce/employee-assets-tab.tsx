@@ -184,8 +184,8 @@ export function EmployeeAssetsTab({ employee }: { employee: EmployeeRecord }) {
                         </div>
                       </div>
                     </td>
-                    <td className="px-3 py-2.5 align-top">{row.serialNumber || "—"}</td>
-                    <td className="px-3 py-2.5 align-top capitalize">{row.assetType || "—"}</td>
+                    <td className="px-3 py-2.5 align-top">{row.serialNumber || "-"}</td>
+                    <td className="px-3 py-2.5 align-top capitalize">{row.assetType || "-"}</td>
                     <td className="px-3 py-2.5 align-top">{formatAssetDate(row.allocatedAt)}</td>
                     <td className="px-3 py-2.5 align-top">
                       <HrStatusBadge status={row.assignmentStatus ?? row.assetStatus} />

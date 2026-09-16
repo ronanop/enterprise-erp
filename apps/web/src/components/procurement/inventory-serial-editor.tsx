@@ -15,7 +15,7 @@ function isMissingSerial(value: string | null | undefined): boolean {
   const text = (value ?? "").trim();
   if (!text) return true;
   const upper = text.toUpperCase();
-  return upper === "—" || upper === "-" || upper === "NA" || upper === "N/A";
+  return upper === "-" || upper === "-" || upper === "NA" || upper === "N/A";
 }
 
 function displaySerial(value: string | null | undefined): string {
@@ -72,7 +72,7 @@ export function InventorySerialEditor({
   if (!canEdit) {
     return (
       <span className="font-mono text-xs text-muted-foreground">
-        {displaySerial(row.serial_number) || "—"}
+        {displaySerial(row.serial_number) || "-"}
       </span>
     );
   }

@@ -1,10 +1,10 @@
 /**
- * CR-004 Phase 5B-2B Task 4 — Inventory soft-refresh bridge.
+ * CR-004 Phase 5B-2B Task 4 - Inventory soft-refresh bridge.
  *
  * Wizards mark inventory stale on success; inventory consumes the flag and
  * reloads list data without a full browser reload.
  *
- * Dashboard KPI cache: none exists — refresh deferred (see Task 4 doc).
+ * Dashboard KPI cache: none exists - refresh deferred (see Task 4 doc).
  */
 
 const INVENTORY_STALE_KEY = "cr004.inventory.stale";
@@ -26,7 +26,7 @@ export function markInventoryStale(payload: Omit<InventoryStalePayload, "at">): 
   try {
     window.sessionStorage.setItem(INVENTORY_STALE_KEY, JSON.stringify(full));
   } catch {
-    /* private mode / quota — ignore */
+    /* private mode / quota - ignore */
   }
 }
 

@@ -16,7 +16,7 @@ import {
   YAxis,
 } from "recharts";
 
-/** Matches CRM / HR / ERP chart palette — no purple gradients. */
+/** Matches CRM / HR / ERP chart palette - no purple gradients. */
 export const SERVICE_CHART_COLORS = {
   sky: "#0369A1",
   skyDark: "#0C4A6E",
@@ -168,7 +168,7 @@ function ChartLegend({
   );
 }
 
-/** Horizontal bars — ticket lifecycle stages */
+/** Horizontal bars - ticket lifecycle stages */
 export function ServiceStatusBarChart({
   data,
   loading,
@@ -233,7 +233,7 @@ export function ServiceStatusBarChart({
   );
 }
 
-/** Vertical columns — within SLA vs breached */
+/** Vertical columns - within SLA vs breached */
 export function ServiceSlaComplianceBarChart({
   data,
   loading,
@@ -320,7 +320,7 @@ export function ServiceSlaComplianceBarChart({
   );
 }
 
-/** Donut — tickets by support mode (remote / onsite / OEM) */
+/** Donut - tickets by support mode (remote / onsite / OEM) */
 export function ServiceSupportModeChart({
   data,
   loading,

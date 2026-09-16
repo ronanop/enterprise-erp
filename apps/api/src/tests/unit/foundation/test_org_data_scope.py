@@ -1,4 +1,4 @@
-"""Org data scope helpers — platform vs module-admin vs member visibility."""
+"""Org data scope helpers - platform vs module-admin vs member visibility."""
 
 from uuid import uuid4
 

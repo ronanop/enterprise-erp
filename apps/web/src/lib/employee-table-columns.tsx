@@ -9,7 +9,7 @@ export function excelEntityCell(row: EmployeeRecord): string {
   const blob = `${row.extension.employment.entityName || ""} ${row.companyName || ""}`.toLowerCase();
   if (blob.includes("technolog")) return "Technologies";
   if (blob.includes("digitech")) return "Digitech";
-  return row.extension.employment.entityName?.trim() || "—";
+  return row.extension.employment.entityName?.trim() || "-";
 }
 
 export function excelOrganisationCell(row: EmployeeRecord): string {
@@ -17,12 +17,12 @@ export function excelOrganisationCell(row: EmployeeRecord): string {
   if (blob.includes("digitech") || blob.includes("technolog") || blob.includes("cache")) {
     return "Cache";
   }
-  return row.companyName || row.branchName || "—";
+  return row.companyName || row.branchName || "-";
 }
 
 function dash(value?: string | null): string {
   const v = (value ?? "").trim();
-  return v || "—";
+  return v || "-";
 }
 
 function genderLabel(row: EmployeeRecord): string {
@@ -46,7 +46,7 @@ export function renderEmployeeCell(key: EmployeeTableColumnKey, row: EmployeeRec
     case "branch":
       return dash(row.branchName || row.extension.employment.branchName);
     case "location":
-      return row.locationName && row.locationName !== "—"
+      return row.locationName && row.locationName !== "-"
         ? row.locationName
         : dash(row.extension.employment.location);
     case "designation":
@@ -55,7 +55,7 @@ export function renderEmployeeCell(key: EmployeeTableColumnKey, row: EmployeeRec
       return dash(row.departmentName || row.extension.employment.departmentName);
     case "reportingManager":
       return dash(
-        row.reportingManagerName && row.reportingManagerName !== "—"
+        row.reportingManagerName && row.reportingManagerName !== "-"
           ? row.reportingManagerName
           : row.extension.employment.reportingManagerName,
       );
@@ -92,7 +92,7 @@ export function renderEmployeeCell(key: EmployeeTableColumnKey, row: EmployeeRec
     case "status":
       return <HrStatusBadge status={lifecycleLabel(row.lifecycleStatus)} />;
     default:
-      return "—";
+      return "-";
   }
 }
 

@@ -148,7 +148,7 @@ export function PortalDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="Portal"
-        description="Customer self-service — accounts, sessions, projected order/invoice views, tickets, and service requests."
+        description="Customer self-service - accounts, sessions, projected order/invoice views, tickets, and service requests."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -200,28 +200,28 @@ export function PortalDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Active accounts"
-          value={loading ? "—" : String(kpis.activeAccounts)}
+          value={loading ? "-" : String(kpis.activeAccounts)}
           hint={`${data?.accounts.length ?? 0} accounts · ${data?.profiles.length ?? 0} profiles`}
           icon={Users}
           tone={kpis.activeAccounts > 0 ? "success" : "default"}
         />
         <FinanceKpiCard
           label="Active sessions"
-          value={loading ? "—" : String(kpis.activeSessions)}
+          value={loading ? "-" : String(kpis.activeSessions)}
           hint={`${data?.sessions.length ?? 0} sessions · ${data?.loginAudits.length ?? 0} audits`}
           icon={UserCircle}
           tone={kpis.activeSessions > 0 ? "default" : "success"}
         />
         <FinanceKpiCard
           label="Open tickets"
-          value={loading ? "—" : String(kpis.openTickets)}
+          value={loading ? "-" : String(kpis.openTickets)}
           hint={`${data?.tickets.length ?? 0} tickets · ${data?.threads.length ?? 0} threads`}
           icon={Ticket}
           tone={kpis.openTickets > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Service requests"
-          value={loading ? "—" : String(kpis.openRequests)}
+          value={loading ? "-" : String(kpis.openRequests)}
           hint={`${data?.serviceRequests.length ?? 0} requests · ${data?.orderViews.length ?? 0} order views`}
           icon={Wrench}
           tone={kpis.openRequests > 0 ? "default" : "success"}
@@ -361,14 +361,14 @@ export function PortalDashboard() {
                     >
                       <td className="max-w-[180px] truncate px-4 py-2.5">
                         <p className="font-medium text-foreground">
-                          {String(row.account_number ?? "—")}
+                          {String(row.account_number ?? "-")}
                         </p>
                       </td>
                       <td className="max-w-[200px] truncate px-4 py-2.5 text-xs text-muted-foreground">
-                        {String(row.login_email ?? "—")}
+                        {String(row.login_email ?? "-")}
                       </td>
                       <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                        {String(row.display_name ?? "—")}
+                        {String(row.display_name ?? "-")}
                       </td>
                       <td className="px-4 py-2.5">
                         <FinanceStatusBadge
@@ -419,15 +419,15 @@ export function PortalDashboard() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-medium">
-                      {String(row.ticket_number ?? "—")}
+                      {String(row.ticket_number ?? "-")}
                     </p>
                     <FinanceStatusBadge
                       status={asStatus(row.status) || String(row.status ?? "")}
                     />
                   </div>
                   <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                    {String(row.subject ?? "—")} ·{" "}
-                    {String(row.priority ?? "—")}
+                    {String(row.subject ?? "-")} ·{" "}
+                    {String(row.priority ?? "-")}
                   </p>
                 </li>
               ))

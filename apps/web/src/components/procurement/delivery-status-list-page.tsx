@@ -248,10 +248,10 @@ export function DeliveryStatusListPage() {
                     {formatUniquePoLabels(row.purchaseOrderNumber)}
                   </td>
                   <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
-                    {row.grnSummary || "—"}
+                    {row.grnSummary || "-"}
                   </td>
                   <td className={cn(procurementUi.tdNumeric)}>
-                    {String(row.billInvoiceNumber || row.cacheInvoiceNumber || "").trim() || "—"}
+                    {String(row.billInvoiceNumber || row.cacheInvoiceNumber || "").trim() || "-"}
                   </td>
                   <td className={procurementUi.td}>
                     <Badge

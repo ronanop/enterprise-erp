@@ -1,4 +1,4 @@
-# Asset Assignment — Deployment Guide (FP-ASSET-003)
+# Asset Assignment - Deployment Guide (FP-ASSET-003)
 
 ## 1. Migrations
 

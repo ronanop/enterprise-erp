@@ -87,7 +87,7 @@ ol { padding-left: 2.2em; list-style-position: outside; }
 li { margin: 2px 0; }
 ol li { padding-left: 0.35em; }
 
-/* Tables — critical for print fidelity */
+/* Tables - critical for print fidelity */
 table {
   width: 100% !important;
   max-width: 100% !important;
@@ -257,7 +257,7 @@ def replace_mermaid_with_images(md_text: str) -> str:
                 body.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
             )
             return (
-                '<p class="figure-caption">Diagram (render failed — source):</p>'
+                '<p class="figure-caption">Diagram (render failed - source):</p>'
                 f"<pre>{escaped}</pre>"
             )
 
@@ -283,7 +283,7 @@ def build_html(md_text: str) -> str:
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Enterprise ERP Platform — Master Architecture</title>
+  <title>Enterprise ERP Platform - Master Architecture</title>
   <style>{CSS}</style>
 </head>
 <body>
@@ -322,7 +322,7 @@ def html_to_pdf() -> None:
             header_template=(
                 '<div style="font-size:8px; width:100%; text-align:right; '
                 'color:#64748b; padding-right:12mm;">'
-                "Enterprise ERP — Master Architecture</div>"
+                "Enterprise ERP - Master Architecture</div>"
             ),
             footer_template=(
                 '<div style="font-size:8px; width:100%; text-align:center; '

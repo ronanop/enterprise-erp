@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { Pencil } from "lucide-react";
 
 import { erpModules } from "@/config/modules";
-import { isModuleAdmin } from "@/lib/module-access";
+import { allErpModuleKeys, hasAllModulesAdmin, isModuleAdmin } from "@/lib/module-access";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -94,13 +94,14 @@ export function UserModulesCell({
   if (isModuleAdmin(userType)) {
     return (
       <Badge variant="secondary" className="font-normal">
-        All modules
+        ERP admin
       </Badge>
     );
   }
 
-  const visible = adminModuleKeys.slice(0, 3);
-  const extra = adminModuleKeys.length - visible.length;
+  const allModules = hasAllModulesAdmin(adminModuleKeys);
+  const visible = allModules ? [] : adminModuleKeys.slice(0, 3);
+  const extra = allModules ? 0 : adminModuleKeys.length - visible.length;
 
   async function save() {
     setSaving(true);
@@ -116,9 +117,15 @@ export function UserModulesCell({
     }
   }
 
+  const draftAllModules = hasAllModulesAdmin(draft);
+
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {adminModuleKeys.length === 0 ? (
+      {allModules ? (
+        <Badge variant="secondary" className="font-normal">
+          All modules
+        </Badge>
+      ) : adminModuleKeys.length === 0 ? (
         <span className="text-xs text-muted-foreground">None</span>
       ) : (
         <>
@@ -165,9 +172,28 @@ export function UserModulesCell({
           >
             <p className="text-xs font-semibold text-foreground">Module admins</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              Selected people get the same module panel as ERP admin, plus a Users tab to assign module users.
+              Selected people get the same module panel as ERP admin for those modules, plus a Users
+              tab to assign module users. Use All modules for every module at once.
             </p>
             <div className="erp-scroll mt-3 max-h-[240px] space-y-1 overflow-y-auto pr-1">
+              <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border/60 bg-muted/40 px-2 py-1.5 text-xs transition-colors hover:bg-muted/80">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 size-3.5 cursor-pointer accent-primary"
+                  checked={draftAllModules}
+                  onChange={() => {
+                    setDraft((prev) =>
+                      hasAllModulesAdmin(prev) ? [] : allErpModuleKeys(),
+                    );
+                  }}
+                />
+                <span>
+                  <span className="font-medium text-foreground">All modules</span>
+                  <span className="block text-[10px] text-muted-foreground">
+                    Full module-admin access across the ERP (not ERP admin)
+                  </span>
+                </span>
+              </label>
               {erpModules.map((mod) => {
                 const checked = draft.includes(mod.key);
                 return (

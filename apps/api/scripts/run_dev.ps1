@@ -1,4 +1,4 @@
-# Dev API server — reload only watches src/ (not scripts/, alembic/, etc.)
+# Dev API server - reload only watches src/ (not scripts/, alembic/, etc.)
 # Usage from apps/api:
 #   .\scripts\run_dev.ps1
 

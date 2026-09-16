@@ -1,4 +1,4 @@
-"""Asset register service — C-01 master_asset link on approve (FP-ASSET-REG-001)."""
+"""Asset register service - C-01 master_asset link on approve (FP-ASSET-REG-001)."""
 
 from uuid import UUID
 
@@ -151,7 +151,7 @@ class AssetService:
 
         The type master is authoritative for what "type" means. The legacy
         ``asset_type`` column remains NOT NULL for existing readers and is
-        defaulted to ``fixed`` when omitted — not dual-written from type name.
+        defaulted to ``fixed`` when omitted - not dual-written from type name.
         """
         type_id = fields.get("asset_type_id")
         if type_id is not None:

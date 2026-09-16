@@ -1,4 +1,4 @@
-"""Email channel delivery engine — template render + Graph send (C-05)."""
+"""Email channel delivery engine - template render + Graph send (C-05)."""
 
 from __future__ import annotations
 

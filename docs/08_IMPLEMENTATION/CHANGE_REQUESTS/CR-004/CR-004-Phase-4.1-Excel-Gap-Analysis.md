@@ -1,15 +1,15 @@
-# CR-004 Phase 4.1 — Excel Migration Architecture (Gap Analysis)
+# CR-004 Phase 4.1 - Excel Migration Architecture (Gap Analysis)
 
 **Date:** 2026-08-03  
-**Mode:** Analysis only — **no implementation**  
+**Mode:** Analysis only - **no implementation**  
 **Scope:** Assignment module vs customer Excel workflow; migration architecture  
-**Baseline:** Phases 2A–2C (operational status), 3.4 (inventory register), locked D-001–D-014
+**Baseline:** Phases 2A-2C (operational status), 3.4 (inventory register), locked D-001-D-014
 
 ---
 
 ## Executive summary
 
-The customer’s **Employee Asset Register** is a single Excel grid plus **bucket tabs** (Ready To Move, Assigned, Not Given To Anyone, Not Working). The platform already models custody through **`ast_asset_assignment`** documents and IT buckets through **`ast_asset.operational_status`** (CR-004 Phases 2–3). **Inventory and dashboard UX** (Phase 3.4) expose Excel-like views; the **Assignment workspace** still reflects generic FP-ASSET allocation (employee/department/project/branch) rather than the Excel issue/return narrative.
+The customer’s **Employee Asset Register** is a single Excel grid plus **bucket tabs** (Ready To Move, Assigned, Not Given To Anyone, Not Working). The platform already models custody through **`ast_asset_assignment`** documents and IT buckets through **`ast_asset.operational_status`** (CR-004 Phases 2-3). **Inventory and dashboard UX** (Phase 3.4) expose Excel-like views; the **Assignment workspace** still reflects generic FP-ASSET allocation (employee/department/project/branch) rather than the Excel issue/return narrative.
 
 **Migration is not a new module.** It is **field ownership discipline**, **assignment enrichment** (challan, remarks), **return-outcome UX** aligned to Excel tabs, and a **one-time import** into existing tables (roadmap Phase 7).
 
@@ -29,17 +29,17 @@ The customer’s **Employee Asset Register** is a single Excel grid plus **bucke
 
 | Field | Purpose |
 |-------|---------|
-| `document_number` | Governance doc id (`AASN-*`) — not in Excel |
+| `document_number` | Governance doc id (`AASN-*`) - not in Excel |
 | `asset_id` | Link to register row |
 | `allocation_type` | `employee`, `department`, `project`, `branch`, `warehouse` |
 | `employee_id` / `department_id` / `project_id` | Allocatee |
-| `allocated_at` | Set on **activate** (system timestamp) — Excel **Issue Date** |
-| `expected_return_at` | Optional — partial Excel equivalent |
+| `allocated_at` | Set on **activate** (system timestamp) - Excel **Issue Date** |
+| `expected_return_at` | Optional - partial Excel equivalent |
 | `returned_at` | Set on return |
 | `status` | `draft` → … → `active` / `returned` / `cancelled` |
-| `workflow_*` | Platform workflow — **not in Excel** |
+| `workflow_*` | Platform workflow - **not in Excel** |
 
-**Absent (locked for Phase 5 — D-010):** `delivery_challan_ref`, `remarks`.
+**Absent (locked for Phase 5 - D-010):** `delivery_challan_ref`, `remarks`.
 
 ### 1.2 Service behavior
 
@@ -99,7 +99,7 @@ Excel treats the **register row** as editable truth. ERP treats **assignment doc
 | Issue remarks | Missing on ORM/API/UI | Phase 5 (D-010) |
 | Return condition in API/UI | Partial (service only) | Phase 5 + Assignment UX |
 | User-editable issue date | Missing (system `allocated_at`) | Policy: optional `allocated_at` on activate or import mapping |
-| “Earlier used by” in list/drawer | Partial (placeholder `—`) | Phase 5 read API / composer |
+| “Earlier used by” in list/drawer | Partial (placeholder `-`) | Phase 5 read API / composer |
 | IT register Excel export | Missing | Phase 7 report composer |
 | One-time Excel import | Missing | Phase 7 (`CR-004-Excel-Migration-Plan.md`) |
 
@@ -111,7 +111,7 @@ Excel treats the **register row** as editable truth. ERP treats **assignment doc
 | `custodian_employee_id` on `ast_asset` | Mirrors assignment | **Assignment** authority; asset field is legacy sync (D-014) |
 | Brand/model on assignment | Excel row duplication | **Derived** from product/discovery |
 | Configuration on asset custom columns | Duplicate discovery | **Asset Master** via `discovery_profile_json` only |
-| Second “issued assets” table | Shadow register | **Forbidden** — use assignment history |
+| Second “issued assets” table | Shadow register | **Forbidden** - use assignment history |
 
 ### 3.3 Derived fields (do not migrate as columns)
 
@@ -173,11 +173,11 @@ Legend: **AM** Asset Master · **AS** Assignment · **AH** Assignment History ·
 | Remarks | **AS** (planned `remarks`) |
 | Current Holder | **DV** (**AS** + ops status) |
 | Ready / Assigned / Retired / Not Working / Disposed | **AM** (`operational_status`) |
-| Lifecycle (finance) | **AM** (`status`) — **NR** for daily IT Excel |
-| Assignment document # | **AS** — **NR** in Excel |
+| Lifecycle (finance) | **AM** (`status`) - **NR** for daily IT Excel |
+| Assignment document # | **AS** - **NR** in Excel |
 | Workflow status | **NR** |
-| Department (org) | **EM** / org — **DV** in register |
-| Expected return | **AS** — **NR** in typical Excel |
+| Department (org) | **EM** / org - **DV** in register |
+| Expected return | **AS** - **NR** in typical Excel |
 
 Full matrix detail: `CR-004-Assignment-Data-Model.md`.
 
@@ -196,7 +196,7 @@ Full matrix detail: `CR-004-Assignment-Data-Model.md`.
 
 | Stage | Action |
 |-------|--------|
-| **4.1 (this phase)** | Lock ownership, gaps, workflows — documentation |
+| **4.1 (this phase)** | Lock ownership, gaps, workflows - documentation |
 | **5** | Schema + API + UI for challan, remarks, return condition |
 | **7** | Import template, validation, dry-run, reconcile ops vs assignment |
 | **Cutover** | Freeze Excel; import; reconciliation job; sign-off on bucket counts |

@@ -1,6 +1,6 @@
-# CR-004 — Assignment Workflow (Current vs Excel)
+# CR-004 - Assignment Workflow (Current vs Excel)
 
-**Phase:** 4.1 — Architecture documentation  
+**Phase:** 4.1 - Architecture documentation  
 **Scope:** Assignment lifecycle, operational status coupling, Excel equivalence
 
 ---
@@ -100,19 +100,19 @@ Assignment **module** remains system of record for issue/return; inventory does 
 
 ## 5. Workflow gaps (prioritized)
 
-### P0 — Excel parity blockers
+### P0 - Excel parity blockers
 
 1. **Return condition** exposed on API and Assignment UI (good / outdated / dead).
 2. **`delivery_challan_ref` and `remarks`** on create/activate path (D-010).
 3. **Import** sets `allocated_at` from Excel Issue Date when loading historical active rows.
 
-### P1 — Operational clarity
+### P1 - Operational clarity
 
 4. IT command to **retire** or **mark pending disposal** from register without full assignment (stock not issued).
 5. **Earlier used by** panel fed from assignment history API.
 6. Reconciliation: `ASSIGNED` ⇔ exactly one active employee assignment.
 
-### P2 — Governance / training
+### P2 - Governance / training
 
 7. Document simplified IT path when workflow governance disabled.
 8. Optional **backdated** `allocated_at` with audit (policy).

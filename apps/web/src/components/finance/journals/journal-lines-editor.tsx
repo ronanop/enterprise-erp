@@ -269,7 +269,7 @@ export function JournalLinesEditor({
                     />
                   ) : (
                     <span className="text-xs text-muted-foreground">
-                      {line.description || "—"}
+                      {line.description || "-"}
                     </span>
                   )}
                 </td>
@@ -323,7 +323,7 @@ export function JournalLinesEditor({
                         })
                       }
                     >
-                      <option value="">—</option>
+                      <option value="">-</option>
                       {costCenters.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.label}
@@ -332,7 +332,7 @@ export function JournalLinesEditor({
                     </FinanceSelect>
                   ) : (
                     <span className="text-[11px] text-muted-foreground">
-                      {line.cost_center_id?.slice(0, 8) ?? "—"}
+                      {line.cost_center_id?.slice(0, 8) ?? "-"}
                     </span>
                   )}
                 </td>
@@ -344,7 +344,7 @@ export function JournalLinesEditor({
                         patchLocal(line.id!, { tax_id: e.target.value || null })
                       }
                     >
-                      <option value="">—</option>
+                      <option value="">-</option>
                       {taxes.map((t) => (
                         <option key={t.id} value={t.id}>
                           {t.label}
@@ -353,7 +353,7 @@ export function JournalLinesEditor({
                     </FinanceSelect>
                   ) : (
                     <span className="text-[11px] text-muted-foreground">
-                      {line.tax_id?.slice(0, 8) ?? "—"}
+                      {line.tax_id?.slice(0, 8) ?? "-"}
                     </span>
                   )}
                 </td>

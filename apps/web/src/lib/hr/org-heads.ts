@@ -4,10 +4,10 @@ export function managerDisplayName(
   employeeId: string | undefined | null,
   managers: { id: string; label: string }[],
 ): string {
-  if (!employeeId) return "—";
+  if (!employeeId) return "-";
   const m = managers.find((x) => x.id === employeeId);
-  if (!m) return "—";
-  return m.label.split(" (")[0]?.trim() || "—";
+  if (!m) return "-";
+  return m.label.split(" (")[0]?.trim() || "-";
 }
 
 export function resolveBranchHeadName(

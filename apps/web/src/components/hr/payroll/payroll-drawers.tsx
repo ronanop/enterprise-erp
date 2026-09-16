@@ -299,7 +299,7 @@ export function RunPayrollDrawer({
         <div className="rounded-xl border border-hrms-mint bg-hrms-mint px-3 py-2 text-xs text-foreground">
           <p className="font-medium">Pay period</p>
           <p className="mt-0.5 tabular-nums">
-            {loadingPreview ? "Calculating…" : cycleLabel || "—"}
+            {loadingPreview ? "Calculating…" : cycleLabel || "-"}
           </p>
         </div>
         <div>
@@ -322,7 +322,7 @@ export function RunPayrollDrawer({
                 {previewLines.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-2 py-3 text-muted-foreground">
-                      {loadingPreview ? "Loading…" : "No attendance in cycle — full month salary used."}
+                      {loadingPreview ? "Loading…" : "No attendance in cycle - full month salary used."}
                     </td>
                   </tr>
                 ) : (

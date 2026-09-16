@@ -46,7 +46,7 @@ export function HrStatusBadge({ status }: { status: string }) {
         tone,
       )}
     >
-      {status || "—"}
+      {status || "-"}
     </span>
   );
 }
@@ -240,7 +240,7 @@ export function HrTable({
               >
                 {columns.map((col) => (
                   <td key={col.key} className={cn("px-3 py-2.5 align-middle", col.className)}>
-                    {row[col.key] ?? "—"}
+                    {row[col.key] ?? "-"}
                   </td>
                 ))}
               </tr>

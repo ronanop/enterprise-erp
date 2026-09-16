@@ -1,4 +1,4 @@
-# Asset Location — Release Notes (FP-ASSET-012)
+# Asset Location - Release Notes (FP-ASSET-012)
 
 **Release:** FP-ASSET-012  
 **Date:** 2026-07-30

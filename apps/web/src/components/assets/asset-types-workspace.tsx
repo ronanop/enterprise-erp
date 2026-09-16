@@ -266,7 +266,7 @@ export function AssetTypesWorkspace() {
                 </label>
                 <Input
                   id="it-type-description"
-                  placeholder="Optional — what this type covers"
+                  placeholder="Optional - what this type covers"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="h-10"

@@ -1,4 +1,4 @@
-# ADR-ASSET-DEP-001 — Asset Depreciation
+# ADR-ASSET-DEP-001 - Asset Depreciation
 
 **Status:** Accepted  
 **Date:** 2026-07-29  
@@ -25,7 +25,7 @@ Depreciation existed as a thin scaffold (CRUD + status-only calculate + Finance 
 | DEP-08 | Seed `asset.depreciation:update`; PATCH requires it |
 | DEP-09 | Dedicated `AssetDepreciationWorkspace` |
 | DEP-10 | Additive migration only (permission, index, ADEP backfill) |
-| DEP-11 | Scheduler creates drafts only — never calculate/post |
+| DEP-11 | Scheduler creates drafts only - never calculate/post |
 | DEP-12 | Alembic after `0470` → `0471_ast_depreciation_governance` |
 | DEP-13 | No `AST_DEPRECIATION_APPROVAL` / no workflow_* columns |
 | DEP-14 | Post updates `current_book_value`; reverse restores book value |
@@ -33,9 +33,9 @@ Depreciation existed as a thin scaffold (CRUD + status-only calculate + Finance 
 
 ## Formula notes
 
-- **SL:** monthly = (purchase_cost − salvage) / useful_life_months; cap so book ≥ salvage  
+- **SL:** monthly = (purchase_cost - salvage) / useful_life_months; cap so book ≥ salvage  
 - **WDV:** monthly = current_book_value / useful_life_months; cap at salvage  
-- **UoP:** (cost − salvage) × (units_produced / estimated_total_units)
+- **UoP:** (cost - salvage) × (units_produced / estimated_total_units)
 
 ## References
 

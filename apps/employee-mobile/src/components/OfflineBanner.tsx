@@ -17,7 +17,7 @@ export function OfflineBanner() {
 
   return (
     <View style={styles.banner}>
-      <Text style={styles.text}>You&apos;re offline — some actions may fail</Text>
+      <Text style={styles.text}>You&apos;re offline - some actions may fail</Text>
     </View>
   );
 }

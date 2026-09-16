@@ -28,19 +28,19 @@ For a physical phone against local ERP, set `EXPO_PUBLIC_API_URL` to your machin
 
 ## Phase status
 
-### Phase 0 — Foundation
+### Phase 0 - Foundation
 - Expo Router, SecureStore auth, login, tabs shell, theme/UI
 
-### Phase 1 — Daily-use MVP
+### Phase 1 - Daily-use MVP
 - Home, attendance punch/history, leave, payslips, profile, notifications, face verify
 
-### Phase 2 — Manager + requests
+### Phase 2 - Manager + requests
 - Approvals, team leave, correction/WFH/on-duty/comp-off, notification deep links
 
-### Phase 3 — Workplace extras
+### Phase 3 - Workplace extras
 - Documents, announcements, compliance, support, rooms, assets, profile bank/emergency/education/security
 
-### Phase 4 — Career + unlock (current)
+### Phase 4 - Career + unlock (current)
 - Performance reviews list
 - Training assignments list
 - Separation / resignation request + history

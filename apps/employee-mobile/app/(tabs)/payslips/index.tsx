@@ -111,7 +111,7 @@ export default function PayslipsScreen() {
             />
             <Mini
               label="Status"
-              value={latest.payment_status?.slice(0, 8) ?? "—"}
+              value={latest.payment_status?.slice(0, 8) ?? "-"}
             />
           </View>
         </GradientCard>

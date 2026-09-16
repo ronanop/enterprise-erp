@@ -1,5 +1,5 @@
 /**
- * OVF PDF export — table-first layout (Zoho-style print).
+ * OVF PDF export - table-first layout (Zoho-style print).
  * Overview fields and charge lines are rendered as bordered tables, not free text.
  */
 import { jsPDF } from "jspdf";
@@ -590,7 +590,7 @@ export async function exportOvfPdf(input: OvfExportInput): Promise<void> {
   downloadPdf(doc, buildOvfExportFilename(input.ovf, input.quoteName));
 }
 
-/** Open OVF PDF in a new tab (print preview — same file Export downloads). */
+/** Open OVF PDF in a new tab (print preview - same file Export downloads). */
 export async function openOvfPrintPreview(input: OvfExportInput): Promise<void> {
   const doc = await buildOvfPdfDocument(input);
   openPdfInNewTab(doc, buildOvfExportFilename(input.ovf, input.quoteName));

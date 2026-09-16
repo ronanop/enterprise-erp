@@ -1,4 +1,4 @@
-"""HR employee profile ORM — extends master_employee (C-01)."""
+"""HR employee profile ORM - extends master_employee (C-01)."""
 
 from datetime import date
 from uuid import UUID, uuid4

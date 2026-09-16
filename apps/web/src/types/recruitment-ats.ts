@@ -1,4 +1,4 @@
-/** Enterprise ATS — Recruitment types */
+/** Enterprise ATS - Recruitment types */
 
 export type JobStatus = "open" | "closed" | "on_hold";
 export type JobPriority = "low" | "medium" | "high" | "critical";

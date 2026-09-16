@@ -1,4 +1,4 @@
-"""Assets module admin — ERP admins, org-assigned module admins, or asset RBAC admin."""
+"""Assets module admin - ERP admins, org-assigned module admins, or asset RBAC admin."""
 
 from __future__ import annotations
 

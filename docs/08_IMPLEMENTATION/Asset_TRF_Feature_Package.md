@@ -1,4 +1,4 @@
-# FP-ASSET-002 — Asset Transfer Feature Package
+# FP-ASSET-002 - Asset Transfer Feature Package
 
 **Status:** Implemented (remediation complete)  
 **ADR:** ADR-ASSET-TRF-001
@@ -38,8 +38,8 @@ List query: `page`, `page_size`, `company_id`, `asset_id`, `branch_id`, `status`
 
 ## Migrations
 
-- `0466_ast_transfer_governance` — columns, workflow, permissions
-- `0467_ast_transfer_pending_index` — partial index on pending transfers
+- `0466_ast_transfer_governance` - columns, workflow, permissions
+- `0467_ast_transfer_pending_index` - partial index on pending transfers
 
 ## Tests
 

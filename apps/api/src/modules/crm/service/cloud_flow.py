@@ -18,7 +18,7 @@ STANDARD_DOC_ACTIONS = frozenset({"attach_boq", "attach_sow", "send_boq_approval
 CLOUD_DOC_ACTIONS = frozenset({"attach_contract", "send_cloud_discount_approval"})
 CLOUD_UNLOCKING = frozenset({"approve_cloud_discount", "reject_cloud_discount"})
 
-# Hardware resale / DR / quote path — not used for cloud consumption deals.
+# Hardware resale / DR / quote path - not used for cloud consumption deals.
 HARDWARE_PIPELINE_ACTIONS = frozenset(
     {
         "deal_reg",

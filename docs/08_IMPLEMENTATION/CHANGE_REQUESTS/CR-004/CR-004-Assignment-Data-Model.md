@@ -1,6 +1,6 @@
-# CR-004 — Assignment Data Model (Excel Alignment)
+# CR-004 - Assignment Data Model (Excel Alignment)
 
-**Phase:** 4.1 — Architecture documentation  
+**Phase:** 4.1 - Architecture documentation  
 **Status:** Current state + target state for Excel migration  
 **Authority:** `CR-004-Decision-Log.md` D-010, D-014; ERD_15 §6.4
 
@@ -33,35 +33,35 @@ ast_asset_component ─┘ (charger, accessories)
 
 ---
 
-## 3. `ast_asset_assignment` — current vs target
+## 3. `ast_asset_assignment` - current vs target
 
 ### 3.1 Current (implemented)
 
 | Column | Type | Excel role | Owner |
 |--------|------|------------|--------|
-| `id` | UUID | — | AS |
-| `document_number` | string | — | AS (NR in Excel) |
+| `id` | UUID | - | AS |
+| `document_number` | string | - | AS (NR in Excel) |
 | `asset_id` | FK | Implicit row key | AS |
 | `allocation_type` | enum string | Usually `employee` | AS |
 | `employee_id` | FK nullable | Employee ID | AS → **EM** |
-| `department_id` | FK nullable | — | NR for Excel |
-| `project_id` | UUID nullable | — | NR for Excel |
+| `department_id` | FK nullable | - | NR for Excel |
+| `project_id` | UUID nullable | - | NR for Excel |
 | `allocated_at` | timestamptz | Issue Date | AS |
 | `expected_return_at` | date | Rare in Excel | AS |
 | `returned_at` | timestamptz | End of issue | AS |
 | `status` | string | In use vs returned | AS |
-| `workflow_status` | string | — | NR |
-| `workflow_instance_id` | FK | — | NR |
-| Tenant scope | mixin | — | AS |
+| `workflow_status` | string | - | NR |
+| `workflow_instance_id` | FK | - | NR |
+| Tenant scope | mixin | - | AS |
 
-### 3.2 Target additive (Phase 5 — locked D-010)
+### 3.2 Target additive (Phase 5 - locked D-010)
 
 | Column | Type | Excel role | Owner |
 |--------|------|------------|--------|
 | `delivery_challan_ref` | string(100) nullable | Delivery Challan | AS |
 | `remarks` | text nullable | Remarks (issue) | AS |
 
-**Optional:** FK to `asset-documents` for scanned challan PDF — document module owns bytes; assignment holds reference only.
+**Optional:** FK to `asset-documents` for scanned challan PDF - document module owns bytes; assignment holds reference only.
 
 ### 3.3 API DTO alignment
 
@@ -74,7 +74,7 @@ ast_asset_component ─┘ (charger, accessories)
 
 ---
 
-## 4. `ast_asset` — fields Excel users see on same row
+## 4. `ast_asset` - fields Excel users see on same row
 
 | Column | Excel column | Owner | Notes |
 |--------|--------------|--------|-------|
@@ -87,7 +87,7 @@ ast_asset_component ─┘ (charger, accessories)
 | `operational_status` | Tab / bucket | **AM** | READY, ASSIGNED, RETIRED, PENDING_DISPOSAL, DISPOSED |
 | `status` | Lifecycle | **AM** | Finance register; import → `active` for IT stock |
 | `discovery_profile_json` | Configuration source | **AM** | Not assignment |
-| `custodian_employee_id` | — | **Mirror** | Set on activate; **not** IT SSOT (D-014) |
+| `custodian_employee_id` | - | **Mirror** | Set on activate; **not** IT SSOT (D-014) |
 
 ---
 
@@ -115,7 +115,7 @@ Assignment `branch_id` must match asset branch at create (validator). Import set
 
 ## 7. Derived read model (register / export)
 
-Composer inputs — **no new tables**:
+Composer inputs - **no new tables**:
 
 | Output column | Sources |
 |---------------|---------|

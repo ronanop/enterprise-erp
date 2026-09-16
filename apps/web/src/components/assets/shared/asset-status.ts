@@ -44,7 +44,7 @@ export function isNonItAssetStatus(value: string): value is NonItAssetStatusValu
 
 /**
  * Distinct badge/pill colors for operational + lifecycle states.
- * Reuse everywhere in Asset Management — do not invent per-screen palettes.
+ * Reuse everywhere in Asset Management - do not invent per-screen palettes.
  */
 export const statusColorMap = {
   operational: {
@@ -214,19 +214,19 @@ export function operationalStatusHelpText(
 ): string | null {
   const ops = String(operationalStatus ?? "").toUpperCase();
   if (ops === "RETIRED") {
-    return "Retired — not available for assignment.";
+    return "Retired - not available for assignment.";
   }
   if (ops === "PENDING_DISPOSAL") {
-    return "Pending Disposal — disposal workflow in progress.";
+    return "Pending Disposal - disposal workflow in progress.";
   }
   if (ops === "DISPOSED") {
-    return "Disposed — asset has completed the disposal workflow.";
+    return "Disposed - asset has completed the disposal workflow.";
   }
   if (ops === "IN_USE_AS_COMPONENT") {
-    return "In use as a component — not available for assignment or transfer.";
+    return "In use as a component - not available for assignment or transfer.";
   }
   if (ops === "IN_MAINTENANCE") {
-    return "In maintenance — not available for assignment or transfer.";
+    return "In maintenance - not available for assignment or transfer.";
   }
   return null;
 }

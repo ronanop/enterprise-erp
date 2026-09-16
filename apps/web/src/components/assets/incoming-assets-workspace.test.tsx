@@ -1,5 +1,5 @@
 /**
- * Incoming Assets workspace — Sub-phase 1 (IT receiving).
+ * Incoming Assets workspace - Sub-phase 1 (IT receiving).
  * @vitest-environment jsdom
  */
 

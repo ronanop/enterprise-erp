@@ -37,11 +37,11 @@ export default function AssetDetailScreen() {
           </Card>
           <Card style={{ paddingHorizontal: 0, paddingVertical: 0 }}>
             <ListRow title="Type" subtitle={row.asset_type} />
-            <ListRow title="Serial" subtitle={row.serial_number ?? "—"} />
+            <ListRow title="Serial" subtitle={row.serial_number ?? "-"} />
             <ListRow title="Status" subtitle={row.status} />
             <ListRow
               title="Assignment"
-              subtitle={row.assignment_status ?? "—"}
+              subtitle={row.assignment_status ?? "-"}
             />
           </Card>
           <Button

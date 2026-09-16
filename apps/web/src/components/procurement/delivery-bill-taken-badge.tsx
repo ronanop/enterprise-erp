@@ -14,7 +14,7 @@ import type { DeliveryBillStatus } from "@/utils/delivery-status-storage";
 
 export function DeliveryBillTakenBadge({
   status,
-  noneLabel = "—",
+  noneLabel = "-",
 }: {
   status: DeliveryBillStatus | "none";
   noneLabel?: string;

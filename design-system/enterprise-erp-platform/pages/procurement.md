@@ -17,20 +17,20 @@
 
 ### Spacing Overrides
 
-- **Content Density:** Very high (9/10) — KPI `p-3`, table rows ~36px, funnel gaps `8px`
+- **Content Density:** Very high (9/10) - KPI `p-3`, table rows ~36px, funnel gaps `8px`
 
 ### Typography Overrides
 
-- Page title: medium weight ~1.5–1.65rem
+- Page title: medium weight ~1.5-1.65rem
 - KPI values: tabular numerals ~1.5rem
-- Funnel labels: 11–12px uppercase tracking
+- Funnel labels: 11-12px uppercase tracking
 
 ### Color Overrides
 
 - Keep MASTER light shell
 - Pipeline stages: slate → sky → teal → emerald with conversion % as text
 - Status: approved/received/posted green · draft/submitted/open amber · rejected/cancelled red
-- Vendor score: red &lt;60 · amber 60–79 · green ≥80
+- Vendor score: red &lt;60 · amber 60-79 · green ≥80
 - No purple gradients; no oversized display type
 
 ### Component Overrides

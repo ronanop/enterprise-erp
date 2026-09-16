@@ -1,4 +1,4 @@
-# Asset CMP — Release Notes
+# Asset CMP - Release Notes
 
 ## FP-ASSET-019 Asset Components
 

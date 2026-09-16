@@ -87,7 +87,7 @@ export function ProcurementPipelineFunnel({
                 {stage.title}
               </p>
               <p className="mt-1.5 font-mono text-xl font-semibold tabular-nums text-foreground">
-                {loading ? "—" : stage.count.toLocaleString("en-IN")}
+                {loading ? "-" : stage.count.toLocaleString("en-IN")}
               </p>
               {!loading ? (
                 <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-muted">

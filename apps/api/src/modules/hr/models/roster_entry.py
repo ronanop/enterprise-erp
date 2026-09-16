@@ -1,4 +1,4 @@
-"""HR roster entry ORM — daily employee/shift assignments."""
+"""HR roster entry ORM - daily employee/shift assignments."""
 
 from datetime import date
 from uuid import UUID, uuid4

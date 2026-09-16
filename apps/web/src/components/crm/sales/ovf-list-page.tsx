@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ClipboardCheck } from "lucide-react";
 
-import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
@@ -23,7 +23,7 @@ type SortKey =
   | "created_at";
 
 function formatCreatedDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -90,15 +90,7 @@ export function OvfListPage({
       {!embedded ? (
         <PageHeader
           title="OVF"
-          description="Order Value Forms — approval, SCM share, and deal-won. Created only from an eligible Opportunity once the customer PO is approved."
         />
-      ) : null}
-
-      {!embedded ? (
-        <CrmInfoBanner>
-          OVFs are created only from an Opportunity after the customer PO is approved — open the
-          opportunity to create one.
-        </CrmInfoBanner>
       ) : null}
 
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
@@ -154,17 +146,17 @@ export function OvfListPage({
                         {row.blueprint_state.replaceAll("_", " ")}
                       </Badge>
                     </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{row.po_number ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{row.po_number ?? "-"}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">{row.total_margin_pct}%</td>
                     <td className="px-4 py-2.5">
                       {row.deal_won ? (
                         <Badge variant="success">{formatInr(row.deal_won_amount ?? 0)}</Badge>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </td>
                     <td className="px-4 py-2.5">
-                      {row.shared_to_scm ? <Badge variant="secondary">Shared</Badge> : <span className="text-muted-foreground">—</span>}
+                      {row.shared_to_scm ? <Badge variant="secondary">Shared</Badge> : <span className="text-muted-foreground">-</span>}
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">{formatCreatedDate(row.created_at)}</td>
                   </tr>

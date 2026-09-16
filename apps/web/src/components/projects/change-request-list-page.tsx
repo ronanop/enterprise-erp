@@ -83,7 +83,7 @@ export function ChangeRequestListPage() {
         sort: (r) => Number(r.budget_impact_amount ?? 0),
         className: "text-right tabular-nums text-foreground",
         cell: (r) =>
-          r.budget_impact_amount == null ? "—" : formatInr(r.budget_impact_amount),
+          r.budget_impact_amount == null ? "-" : formatInr(r.budget_impact_amount),
       },
       {
         key: "schedule_impact_days",
@@ -92,7 +92,7 @@ export function ChangeRequestListPage() {
         sort: (r) => r.schedule_impact_days ?? 0,
         className: "text-right tabular-nums",
         cell: (r) =>
-          r.schedule_impact_days == null ? "—" : `${r.schedule_impact_days} d`,
+          r.schedule_impact_days == null ? "-" : `${r.schedule_impact_days} d`,
       },
       {
         key: "created_at",

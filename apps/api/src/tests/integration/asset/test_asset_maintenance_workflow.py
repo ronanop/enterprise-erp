@@ -127,7 +127,7 @@ def test_int_mnt_approve_schedule_start_complete_asset_status(wf_db, tenant_ids)
         patch.object(svc._validator._maintenances, "find_open_for_asset", return_value=None),
     ):
         svc.submit(creator_ctx, maintenance.id)
-        # 2-step workflow: executive + manager — both as approver role in test
+        # 2-step workflow: executive + manager - both as approver role in test
         svc.approve(approver_ctx, maintenance.id)
         approved = svc.approve(approver_ctx, maintenance.id)
         assert approved.status == "approved"

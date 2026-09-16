@@ -240,7 +240,7 @@ export function OnboardingPoliciesPanel() {
                     <p className="line-clamp-1 text-[11px] text-muted-foreground">
                       {row.fileName
                         ? `PDF: ${row.fileName}${row.body ? " · + written content" : ""}`
-                        : row.body || "—"}
+                        : row.body || "-"}
                     </p>
                   </td>
                   <td className="px-3 py-2 text-xs">{policyEntityLabel(row)}</td>
@@ -295,7 +295,7 @@ export function OnboardingPoliciesPanel() {
         description={
           mode === "view"
             ? "Preview of policy content shown on the onboarding portal."
-            : "Provide written content, upload a PDF, or both — at least one is required. Select the entity this policy belongs to."
+            : "Provide written content, upload a PDF, or both - at least one is required. Select the entity this policy belongs to."
         }
         footer={
           mode === "view" ? (
@@ -427,7 +427,7 @@ export function OnboardingPoliciesPanel() {
           >
             {mode === "view" ? (
               <div className="max-h-80 overflow-y-auto rounded-lg border border-border/70 bg-muted/20 p-3 text-sm whitespace-pre-wrap">
-                {body || "—"}
+                {body || "-"}
               </div>
             ) : (
               <SetupTextarea value={body} onChange={(e) => setBody(e.target.value)} rows={10} />

@@ -8,7 +8,7 @@ This module connects the ERP UI to a **private** ElevenLabs agent. Speech recogn
 Browser (Next.js)                    ERP API (FastAPI)              ElevenLabs Cloud
 ─────────────────                    ─────────────────              ────────────────
 @elevenlabs/react                    GET /api/v1/voice-agent/         Agent (prompt, KB,
-ConversationProvider                   signed-url  + JWT              tools) — dashboard
+ConversationProvider                   signed-url  + JWT              tools) - dashboard
   ├─ clientTools:                      XI_API_KEY + AGENT_ID
   │    navigateToCRM, showLead         GET /api/v1/leads/{id}  ◄── server tools (webhooks)
   └─ startSession({ signedUrl })       GET /api/v1/orders/{id} ◄── configured in dashboard
@@ -28,15 +28,15 @@ Create and configure the agent in the ElevenLabs UI: **MCP server** (see `mcp-se
 
 ## Frontend (`apps/web/src/modules/voice-agent/`)
 
-- `VoiceAgentProvider` — wraps `ConversationProvider` and registers shared **client tools** (`agent-assistant`).
-- `VoiceAgentControls` — mic consent, `getUserMedia`, fetches signed URL, `useConversationControls` / `useConversationStatus`.
+- `VoiceAgentProvider` - wraps `ConversationProvider` and registers shared **client tools** (`agent-assistant`).
+- `VoiceAgentControls` - mic consent, `getUserMedia`, fetches signed URL, `useConversationControls` / `useConversationStatus`.
 - Route: `/voice-agent`.
 
 ## Backend (`apps/api/src/modules/voice_agent/`)
 
-- `GET /api/v1/voice-agent/signed-url` — authenticated; returns `{ signed_url }` (expires ~15 minutes).
-- `GET /api/v1/leads/{id}` — authenticated stub for agent server tools.
-- `GET /api/v1/orders/{id}` — authenticated stub for agent server tools.
+- `GET /api/v1/voice-agent/signed-url` - authenticated; returns `{ signed_url }` (expires ~15 minutes).
+- `GET /api/v1/leads/{id}` - authenticated stub for agent server tools.
+- `GET /api/v1/orders/{id}` - authenticated stub for agent server tools.
 
 Replace stubs with CRM/Sales services when wiring production tools.
 

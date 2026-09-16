@@ -1,4 +1,4 @@
-# CR-004 Phase 5A-2 — Assignment Business Layer
+# CR-004 Phase 5A-2 - Assignment Business Layer
 
 **Scope:** Business logic for assignment enrichment (D-010) and return condition API. No UI, import, inventory, or reports.
 
@@ -43,7 +43,7 @@ Return condition mapping remains in `assignment_return_condition.py` (`good` / `
 
 ## Repository
 
-- `complete_return(ctx, row_id, *, status, returned_at, return_remarks)` — return completion update (status, timestamp, remarks).
+- `complete_return(ctx, row_id, *, status, returned_at, return_remarks)` - return completion update (status, timestamp, remarks).
 
 ---
 
@@ -59,9 +59,9 @@ Return condition mapping remains in `assignment_return_condition.py` (`good` / `
 
 ## Audit
 
-- `create` / `update` — enrichment snapshot in `new_value` where applicable.
-- `return` — `return_condition`, `return_remarks`, plus custodian clear payload.
-- `assignment_activate` — includes delivery reference fields when present on assignment.
+- `create` / `update` - enrichment snapshot in `new_value` where applicable.
+- `return` - `return_condition`, `return_remarks`, plus custodian clear payload.
+- `assignment_activate` - includes delivery reference fields when present on assignment.
 
 ---
 

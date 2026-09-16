@@ -138,11 +138,11 @@ export function JournalRegisterPage() {
                         {item.journal_number}
                       </Link>
                     </td>
-                    <td className="px-2 py-1.5 font-mono text-xs">{item.journal_date ?? "—"}</td>
-                    <td className="px-2 py-1.5 text-xs">{item.journal_type ?? "—"}</td>
-                    <td className="px-2 py-1.5 text-xs">{item.reference ?? "—"}</td>
+                    <td className="px-2 py-1.5 font-mono text-xs">{item.journal_date ?? "-"}</td>
+                    <td className="px-2 py-1.5 text-xs">{item.journal_type ?? "-"}</td>
+                    <td className="px-2 py-1.5 text-xs">{item.reference ?? "-"}</td>
                     <td className="px-2 py-1.5 text-xs text-muted-foreground">
-                      {item.description ?? "—"}
+                      {item.description ?? "-"}
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">
                       {formatInrPrecise(item.total_debit)}
@@ -157,7 +157,7 @@ export function JournalRegisterPage() {
                       {item.workflow_status ? (
                         <FinanceStatusBadge status={item.workflow_status} />
                       ) : (
-                        "—"
+                        "-"
                       )}
                     </td>
                   </tr>

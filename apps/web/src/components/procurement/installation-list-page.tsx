@@ -49,10 +49,10 @@ function loadInstallationRows(): InstallationListRow[] {
             status.cachePoNumber ||
             challan.companyPoNumber ||
             challan.purchaseOrderNumber ||
-            "—",
-          customerName: status.customerName || challan.customerName || "—",
-          deliveredDate: status.actualDeliveryDate || "—",
-          challanOrInvoice: invoice || challanNo || "—",
+            "-",
+          customerName: status.customerName || challan.customerName || "-",
+          deliveredDate: status.actualDeliveryDate || "-",
+          challanOrInvoice: invoice || challanNo || "-",
         },
       ];
     } catch {

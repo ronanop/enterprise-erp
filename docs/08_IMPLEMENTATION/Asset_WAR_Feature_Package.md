@@ -1,4 +1,4 @@
-# FP-ASSET-009 — Asset Warranty (Feature Package)
+# FP-ASSET-009 - Asset Warranty (Feature Package)
 
 **Status:** Implemented  
 **ADR:** ADR-ASSET-WAR-001

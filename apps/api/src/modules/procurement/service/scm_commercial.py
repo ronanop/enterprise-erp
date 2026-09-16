@@ -7,7 +7,7 @@ def scm_total_margin_amount(
     customer_total: float,
     vendor_total: float,
 ) -> float:
-    """Net margin after freight, additional charges, and finance — matches SCM OVF view."""
+    """Net margin after freight, additional charges, and finance - matches SCM OVF view."""
     products = summary.get("products_margin_amount")
     if products is None:
         products = customer_total - vendor_total

@@ -1,4 +1,4 @@
-"""Project admin inbox — stage-save alerts from assignees."""
+"""Project admin inbox - stage-save alerts from assignees."""
 
 from typing import Annotated
 from uuid import UUID

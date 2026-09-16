@@ -1,4 +1,4 @@
-# FP-ASSET-007 — Release Notes
+# FP-ASSET-007 - Release Notes
 
 ## Summary
 

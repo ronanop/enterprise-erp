@@ -1,4 +1,4 @@
-"""HR employee asset custody — list, assign, and return via asset assignments."""
+"""HR employee asset custody - list, assign, and return via asset assignments."""
 
 from datetime import date, datetime, timezone
 from uuid import UUID

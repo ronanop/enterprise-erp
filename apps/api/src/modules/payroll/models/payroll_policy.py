@@ -1,4 +1,4 @@
-"""Company payroll policy ORM (Phase 0 — rules lock)."""
+"""Company payroll policy ORM (Phase 0 - rules lock)."""
 
 from datetime import date
 from decimal import Decimal

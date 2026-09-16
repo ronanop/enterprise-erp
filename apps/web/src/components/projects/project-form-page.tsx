@@ -205,7 +205,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           if (fromChallan > 0) receivedQtyDigits = digitsOnly(fromChallan);
         }
       } catch {
-        // Prefill enrichment is best-effort — base PO prefill still loads.
+        // Prefill enrichment is best-effort - base PO prefill still loads.
       }
     }
 
@@ -276,7 +276,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
             rfai_number: rfaiYes ? orNull(v.rfai_number) : null,
           },
         });
-        // Intake was captured on create — move to Survey so admin assigns Survey from Project Tracking.
+        // Intake was captured on create - move to Survey so admin assigns Survey from Project Tracking.
         if (siteName) {
           try {
             await advanceSiteInstallation(saved.id, "complete_intake");
@@ -431,7 +431,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
     ];
 
     const poIntakeSubtitle =
-      "Step 1 — Prefills from CRM (title) and SCM Installation / GRN quantities when available.";
+      "Step 1 - Prefills from CRM (title) and SCM Installation / GRN quantities when available.";
 
     return [
       {
@@ -439,8 +439,8 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
         subtitle: showPoReadonlyIntake
           ? poIntakeSubtitle
           : isEdit
-            ? "Step 1 — Customer → Site → Project Manager → RFAI."
-            : "Step 1 — Customer → Site → Project Manager → RFAI. Project title / rack / server fields prefill from SCM Installation when available.",
+            ? "Step 1 - Customer → Site → Project Manager → RFAI."
+            : "Step 1 - Customer → Site → Project Manager → RFAI. Project title / rack / server fields prefill from SCM Installation when available.",
         icon: MapPin,
         fields: intakeFields,
       },
@@ -453,11 +453,11 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
       description={
         isEdit
           ? linkedPoId || poId
-            ? "Step 1 — Intake / Site request prefilled from the SCM purchase order."
-            : "Step 1 — Intake / Site request. Schedule is managed from the project timeline."
+            ? "Step 1 - Intake / Site request prefilled from the SCM purchase order."
+            : "Step 1 - Intake / Site request. Schedule is managed from the project timeline."
           : poId
-            ? "Step 1 — Intake / Site request prefilled from the SCM purchase order. After create you continue to Assign Survey owner."
-            : "Step 1 — Intake / Site request. After create you continue to Assign Survey owner."
+            ? "Step 1 - Intake / Site request prefilled from the SCM purchase order. After create you continue to Assign Survey owner."
+            : "Step 1 - Intake / Site request. After create you continue to Assign Survey owner."
       }
       backHref={poId ? "/projects/po-queue" : "/projects/projects"}
       backLabel={poId ? "Back to PO queue" : "Back to projects"}

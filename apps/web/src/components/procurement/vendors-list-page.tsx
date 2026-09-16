@@ -141,7 +141,7 @@ export function VendorsListPage() {
       .map((part) => part?.trim())
       .filter(Boolean)
       .join(" ");
-    return name || "—";
+    return name || "-";
   }
 
   function openAddDialog() {
@@ -191,7 +191,7 @@ export function VendorsListPage() {
     try {
       if (editing) {
         if (editing.version == null) {
-          setDialogError("Missing vendor version — refresh and try again.");
+          setDialogError("Missing vendor version - refresh and try again.");
           return;
         }
         const updated = await updateVendorOption({
@@ -363,12 +363,12 @@ export function VendorsListPage() {
                       <td className="px-3 py-2 tabular-nums text-muted-foreground">{index + 1}</td>
                       <td className="px-3 py-2 font-medium">{row.label}</td>
                       <td className="px-3 py-2">{contactDisplayName(row)}</td>
-                      <td className="px-3 py-2 capitalize">{row.vendorType || "—"}</td>
+                      <td className="px-3 py-2 capitalize">{row.vendorType || "-"}</td>
                       <td className="max-w-[280px] px-3 py-2">
                         <div className="truncate" title={row.addresses.join(" | ") || row.address}>
                           {row.addresses.length > 1
                             ? `${row.addresses[0]} (+${row.addresses.length - 1} more)`
-                            : row.address || "—"}
+                            : row.address || "-"}
                         </div>
                       </td>
                       <td className="px-3 py-2 tabular-nums">
@@ -385,7 +385,7 @@ export function VendorsListPage() {
                         )}
                       </td>
                       <td className="px-3 py-2 tabular-nums">
-                        {poCount > 0 ? formatInr(poTotal) : "—"}
+                        {poCount > 0 ? formatInr(poTotal) : "-"}
                       </td>
                       <td className="px-3 py-2">
                         <button
@@ -427,8 +427,8 @@ export function VendorsListPage() {
                                       <td className="px-3 py-2 font-medium tabular-nums">
                                         {po.company_po_number || po.document_number}
                                       </td>
-                                      <td className="px-3 py-2 tabular-nums">{po.document_date || "—"}</td>
-                                      <td className="px-3 py-2">{po.customer_name || "—"}</td>
+                                      <td className="px-3 py-2 tabular-nums">{po.document_date || "-"}</td>
+                                      <td className="px-3 py-2">{po.customer_name || "-"}</td>
                                       <td className="px-3 py-2 tabular-nums">
                                         {formatInr(po.total_amount)}
                                       </td>

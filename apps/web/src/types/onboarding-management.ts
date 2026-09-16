@@ -1,4 +1,4 @@
-/** Enterprise Digital Onboarding — types */
+/** Enterprise Digital Onboarding - types */
 
 export type OnboardingCaseStatus =
   | "draft"

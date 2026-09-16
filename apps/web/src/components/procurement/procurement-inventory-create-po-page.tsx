@@ -58,7 +58,7 @@ function productLabel(row: ProcurementInventoryRow): string {
 
 function poGrnLabel(value: string | null | undefined): string {
   const text = (value || "").trim();
-  return text || "—";
+  return text || "-";
 }
 
 function keysForPoGrnGroup(
@@ -453,7 +453,7 @@ export function ProcurementInventoryCreatePoPage() {
             <Input
               readOnly
               className="h-8 font-mono text-sm font-medium tabular-nums"
-              value={peekBusy ? "Loading…" : nextPo || "—"}
+              value={peekBusy ? "Loading…" : nextPo || "-"}
             />
           </FinanceField>
 

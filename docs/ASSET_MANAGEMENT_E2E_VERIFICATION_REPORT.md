@@ -1,7 +1,7 @@
 # Asset Management E2E Verification Report
 
 **Generated:** 2026-08-09 18:55 UTC  
-**Mode:** Read/test only — no application code or schema changes  
+**Mode:** Read/test only - no application code or schema changes  
 **Harness:** Live API + Postgres (`psql`) + UI HTTP route smoke (no Playwright)  
 
 ## Summary (top)
@@ -187,24 +187,24 @@ Core register→assign→component→return→retire→start-disposal→reinstat
 
 ## Critical Production Bugs
 
-### BUG-TRF-CREATE-01 — HIGH
+### BUG-TRF-CREATE-01 - HIGH
 
 - **Workflow:** Transfer create (`POST /assets/asset-transfers`)
 - **Reproduction:** READY asset → create transfer with `to_branch_id` + `to_location_label` (seed has a single branch; same-branch location move attempted)
 - **Expected:** HTTP 200 draft transfer
 - **Actual:** HTTP **500** `TypeError: AssetTransferRepository.create() got multiple values for keyword argument 'asset_id'`
 - **API status:** 500
-- **Root cause:** `TransferService.create` passes `asset_id=asset.id` and also `**fields` containing `asset_id` (`apps/api/src/modules/asset/service/transfer_service.py` ~107–119)
+- **Root cause:** `TransferService.create` passes `asset_id=asset.id` and also `**fields` containing `asset_id` (`apps/api/src/modules/asset/service/transfer_service.py` ~107-119)
 - **DB state:** no transfer row (request failed before commit)
 - **Production impact:** Transfer workspace cannot create transfers
 
-### ENV-FIN-PERIOD / DSP-POST — HIGH (environment)
+### ENV-FIN-PERIOD / DSP-POST - HIGH (environment)
 
 - **Workflow:** Disposal post → DISPOSED
 - **Reproduction:** PENDING_DISPOSAL → disposal create/submit/approve → `POST .../post`
 - **Expected:** ops `DISPOSED` + finance journal
 - **Actual:** HTTP **404** `No open period for journal date`; ops stayed `PENDING_DISPOSAL`
-- **Evidence:** Only open period `2025-04-01`–`2025-04-30`
+- **Evidence:** Only open period `2025-04-01`-`2025-04-30`
 - **Production impact:** Cannot complete terminal disposal in this environment
 
 ## Edge Case Results
@@ -290,8 +290,8 @@ Core register→assign→component→return→retire→start-disposal→reinstat
 
 ## Recommended Fix Order
 
-1. **BUG-TRF-CREATE-01** — remove duplicate `asset_id` kwarg in `TransferService.create`
-2. **Disposal post / finance period** — align `journal_date` with open periods or seed a current open period
-3. **Incoming/QC seed data** — enable receiving track E2E
+1. **BUG-TRF-CREATE-01** - remove duplicate `asset_id` kwarg in `TransferService.create`
+2. **Disposal post / finance period** - align `journal_date` with open periods or seed a current open period
+3. **Incoming/QC seed data** - enable receiving track E2E
 4. Optional: Playwright for Add Asset / Issue / Return wizards
 

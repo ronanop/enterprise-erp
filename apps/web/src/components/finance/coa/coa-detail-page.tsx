@@ -198,7 +198,7 @@ export function CoaDetailPage({ accountId }: { accountId: string }) {
     <div className="space-y-4">
       <PageHeader
         title={`${account.account_code} · ${account.account_name}`}
-        description={`${accountTypeLabel(account.account_type)} · ${account.account_group_name ?? "—"}`}
+        description={`${accountTypeLabel(account.account_type)} · ${account.account_group_name ?? "-"}`}
         actions={
           <div className="flex flex-wrap gap-2">
             <Link

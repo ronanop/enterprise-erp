@@ -109,7 +109,7 @@ export function JournalAuditTimeline({ events, resolveUser }: Props) {
                   <p className="mt-0.5 text-[10px] opacity-80">
                     {event.created_at
                       ? new Date(event.created_at).toLocaleString("en-IN")
-                      : "—"}
+                      : "-"}
                   </p>
                   {event.detail ? (
                     <p className="mt-1 text-[11px] opacity-90">{event.detail}</p>

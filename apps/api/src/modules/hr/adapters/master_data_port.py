@@ -1,4 +1,4 @@
-"""Master Data port — HR never ORM-writes master_* tables."""
+"""Master Data port - HR never ORM-writes master_* tables."""
 
 from datetime import date
 from uuid import UUID

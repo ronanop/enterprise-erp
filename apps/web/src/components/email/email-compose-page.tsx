@@ -48,7 +48,7 @@ export function EmailComposePage() {
         event_type: "email.compose",
       });
       if (!result) {
-        setError("Send failed — no response from server");
+        setError("Send failed - no response from server");
         return;
       }
       setMessage(`Email ${result.status} → ${result.recipient_address}`);
@@ -113,7 +113,7 @@ export function EmailComposePage() {
               .filter((t) => t.template_code !== "EMAIL_DIRECT")
               .map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.template_code} — {t.template_name}
+                  {t.template_code} - {t.template_name}
                 </option>
               ))}
           </FinanceSelect>

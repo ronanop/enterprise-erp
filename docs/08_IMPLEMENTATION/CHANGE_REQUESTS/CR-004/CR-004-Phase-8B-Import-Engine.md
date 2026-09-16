@@ -1,4 +1,4 @@
-# CR-004 Phase 8B — Excel Import Engine
+# CR-004 Phase 8B - Excel Import Engine
 
 **Date:** 2026-08-05  
 **Scope:** Import **validated** Phase 8A preview rows into ERP via existing business services  

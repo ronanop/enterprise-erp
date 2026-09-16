@@ -1,5 +1,5 @@
 /**
- * Projects workspace config — aligned with FRD-11 / ERD_14
+ * Projects workspace config - aligned with FRD-11 / ERD_14
  * and apps/api project routers (Project → Budget).
  */
 

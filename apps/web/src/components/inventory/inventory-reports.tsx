@@ -39,14 +39,14 @@ function reportColumns(tab: ReportKey): { key: string; label: string; align?: "r
 }
 
 function shortId(value: unknown): string {
-  if (value == null || value === "") return "—";
+  if (value == null || value === "") return "-";
   const s = String(value);
   if (/^[0-9a-f-]{36}$/i.test(s)) return `${s.slice(0, 8)}…`;
   return s;
 }
 
 function formatCell(key: string, value: unknown): string {
-  if (value == null || value === "") return "—";
+  if (value == null || value === "") return "-";
   if (key.includes("qty") || key.includes("quantity")) return formatQty(asNumber(value));
   if (key.endsWith("_id")) return shortId(value);
   return String(value);
@@ -101,7 +101,7 @@ export function InventoryReports() {
     <div className="space-y-5">
       <PageHeader
         title="Inventory reports"
-        description="Stock summary and batch expiry — generated from live warehouse balances."
+        description="Stock summary and batch expiry - generated from live warehouse balances."
         actions={
           <div className="flex items-center gap-2">
             <Button

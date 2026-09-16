@@ -52,7 +52,7 @@ function wrapAddressLines(
 }
 
 /**
- * GRN copy PDF — logo + company address left; vendor address to the right.
+ * GRN copy PDF - logo + company address left; vendor address to the right.
  */
 export async function downloadGoodsReceiptPdf(
   input: GoodsReceiptPdfInput,
@@ -76,7 +76,7 @@ export async function downloadGoodsReceiptPdf(
   const vendorAddressLines = input.vendorAddressLines || [];
   const vendorGst = (input.vendorGstNumber || "").trim();
 
-  // —— Logo (left) + title (right) ——
+  // -- Logo (left) + title (right) --
   const logo = await loadCacheLogo();
   const logoW = 42;
   let logoH = 16;
@@ -93,7 +93,7 @@ export async function downloadGoodsReceiptPdf(
 
   const grnHeader = dash(input.grnNumber);
 
-  // —— Company (left under logo) | Vendor (right side) ——
+  // -- Company (left under logo) | Vendor (right side) --
   const leftX = margin;
 
   const companyBody = wrapAddressLines(
@@ -104,7 +104,7 @@ export async function downloadGoodsReceiptPdf(
   const vendorBody = wrapAddressLines(
     doc,
     [
-      vendorName || "—",
+      vendorName || "-",
       ...vendorAddressLines,
       vendorGst ? `GST: ${vendorGst}` : "",
     ],
@@ -138,7 +138,7 @@ export async function downloadGoodsReceiptPdf(
   doc.line(margin, y, rightEdge, y);
   y += 8;
 
-  // —— Items table: S No. | ITEM | RECEIVED QTY | BILLING ——
+  // -- Items table: S No. | ITEM | RECEIVED QTY | BILLING --
   const cols = [16, contentW - 16 - 32 - 28, 32, 28];
   const headers = ["S No.", "ITEM", "RECEIVED QTY", "BILLING"];
   doc.setFillColor(241, 245, 249);
@@ -186,7 +186,7 @@ export async function downloadGoodsReceiptPdf(
     );
 
     x = margin;
-    doc.text(String(ln.lineNo || "—"), x + cols[0] / 2, y + 6.5, { align: "center" });
+    doc.text(String(ln.lineNo || "-"), x + cols[0] / 2, y + 6.5, { align: "center" });
     x += cols[0];
     let dy = y + 6.5;
     for (const line of desc) {
@@ -220,7 +220,7 @@ export async function downloadGoodsReceiptPdf(
   doc.line(margin, y, rightEdge, y);
   y += 8;
 
-  // —— Footer meta ——
+  // -- Footer meta --
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(100, 100, 100);
@@ -236,7 +236,7 @@ export async function downloadGoodsReceiptPdf(
 
 function formatGrnFooterDate(isoDate: string): string {
   const raw = (isoDate || "").trim();
-  if (!raw) return "—";
+  if (!raw) return "-";
   const d = new Date(raw.includes("T") ? raw : `${raw}T00:00:00`);
   if (Number.isNaN(d.getTime())) return formatPoDate(raw);
   const day = d.getDate();

@@ -1,4 +1,4 @@
-"""Procurement port — read purchase orders for PO → project pipeline."""
+"""Procurement port - read purchase orders for PO → project pipeline."""
 
 from uuid import UUID
 

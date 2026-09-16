@@ -52,7 +52,7 @@ export function ReturnComponentsStep({ state, onChange }: ReturnComponentsStepPr
             className={cn("rounded-lg border border-border px-3 py-2 transition-colors duration-200")}
           >
             <div className="text-sm font-medium">{line.label}</div>
-            <div className="text-xs text-muted-foreground">S/N: {line.serialNumber || "—"}</div>
+            <div className="text-xs text-muted-foreground">S/N: {line.serialNumber || "-"}</div>
             <label className="mt-2 block text-xs font-medium text-muted-foreground">
               Outcome
               <select

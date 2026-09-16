@@ -110,7 +110,7 @@ export function ProjectRiskListPage() {
   return (
     <ProjectsRecordList
       title="Risk Register"
-      description="Identified project risks with impact, probability, owner, and mitigation plan — reviewed on a schedule until closed."
+      description="Identified project risks with impact, probability, owner, and mitigation plan - reviewed on a schedule until closed."
       panelTitle="Risk register"
       panelSubtitle="Impact × probability"
       icon={AlertTriangle}

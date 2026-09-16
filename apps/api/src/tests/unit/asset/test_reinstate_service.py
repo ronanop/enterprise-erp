@@ -1,4 +1,4 @@
-"""Phase 5E — Reinstate (PENDING_DISPOSAL → READY_TO_MOVE) unit tests."""
+"""Phase 5E - Reinstate (PENDING_DISPOSAL → READY_TO_MOVE) unit tests."""
 
 from contextlib import ExitStack
 from types import SimpleNamespace

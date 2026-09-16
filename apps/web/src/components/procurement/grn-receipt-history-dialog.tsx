@@ -28,7 +28,7 @@ type BatchSection = {
 };
 
 function formatReceiptAt(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value.slice(0, 10);
   return d.toLocaleString(undefined, {
@@ -45,12 +45,12 @@ function batchUnitsReceived(batch: ScmReceiptBatch): number {
 }
 
 function formatSerials(serials: string[] | null | undefined): string {
-  if (!serials?.length) return "—";
+  if (!serials?.length) return "-";
   return serials.join(", ");
 }
 
 function formatInvoiceDate(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return value.slice(0, 10);
 }
 
@@ -360,7 +360,7 @@ export function GrnReceiptHistoryDialog({
                           <div>
                             <dt className="text-muted-foreground">Invoice no.</dt>
                             <dd className="tabular-nums text-foreground">
-                              {batch.vendor_invoice_number?.trim() || "—"}
+                              {batch.vendor_invoice_number?.trim() || "-"}
                             </dd>
                           </div>
                           <div>
@@ -374,7 +374,7 @@ export function GrnReceiptHistoryDialog({
                             <dd className="tabular-nums text-foreground">
                               {batch.vendor_invoice_quantity != null
                                 ? batch.vendor_invoice_quantity
-                                : "—"}
+                                : "-"}
                             </dd>
                           </div>
                           <div>
@@ -382,7 +382,7 @@ export function GrnReceiptHistoryDialog({
                             <dd className="tabular-nums text-foreground">
                               {batch.vendor_invoice_subtotal != null
                                 ? batch.vendor_invoice_subtotal
-                                : "—"}
+                                : "-"}
                             </dd>
                           </div>
                         </dl>
@@ -412,7 +412,7 @@ export function GrnReceiptHistoryDialog({
                                     {ln.line_number}
                                   </td>
                                   <td className="px-2.5 py-2 text-foreground">
-                                    {ln.product_name || "—"}
+                                    {ln.product_name || "-"}
                                   </td>
                                   <td className="px-2.5 py-2 tabular-nums">{ln.quantity}</td>
                                   <td className="px-2.5 py-2 tabular-nums text-foreground">

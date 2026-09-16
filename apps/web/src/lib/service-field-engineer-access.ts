@@ -16,7 +16,7 @@ export function hasServiceFieldEngineerRole(
   );
 }
 
-/** Field-engineer login with no service-engineer update rights — FE dashboard only. */
+/** Field-engineer login with no service-engineer update rights - FE dashboard only. */
 export function isServiceFieldEngineerOnly(
   roleCodes: string[] | undefined | null,
   permissions: string[] | undefined | null,

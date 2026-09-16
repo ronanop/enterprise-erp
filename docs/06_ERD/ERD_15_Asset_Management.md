@@ -1,28 +1,28 @@
-# ERD_15 — Asset Management Domain
+# ERD_15 - Asset Management Domain
 
-**Document:** Enterprise ERD — Asset Management Domain  
+**Document:** Enterprise ERD - Asset Management Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 15 Implementation Planning  
+**Status:** Locked - Ready for Sprint 15 Implementation Planning  
 **Schema:** `asset`  
 **Table Prefix:** `ast_`  
 **Aligned To:** BRD v1.0 · FRD-12 Asset Management · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-12 Asset Management Domain](../02_FRD/FRD-12-Asset-Management-Domain.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.9-beta](../07_RELEASES/ERP_Core_v1.9-beta.md)  
 
-> **C-01 note:** Platform identity for assets remains **`master.master_asset`**. `ast_asset` is the **operational lifecycle register** (1:1 / N:1 via `master_asset_id`). Supplier party is **`master.master_vendor`** (FRD “supplier” synonym — no new `master_supplier` table).
+> **C-01 note:** Platform identity for assets remains **`master.master_asset`**. `ast_asset` is the **operational lifecycle register** (1:1 / N:1 via `master_asset_id`). Supplier party is **`master.master_vendor`** (FRD “supplier” synonym - no new `master_supplier` table).
 
 ---
 
 ## 1. Module Overview
 
-The Asset Management Domain manages the **physical and digital asset lifecycle**: categorization, registration, components, assignment / transfer / location tracking, warranty and insurance, preventive / corrective maintenance and service history, depreciation schedules, disposal and revaluation, physical audits, checklists and meter readings, documents, notifications, and reporting — from purchase/capitalization readiness through disposal.
+The Asset Management Domain manages the **physical and digital asset lifecycle**: categorization, registration, components, assignment / transfer / location tracking, warranty and insurance, preventive / corrective maintenance and service history, depreciation schedules, disposal and revaluation, physical audits, checklists and meter readings, documents, notifications, and reporting - from purchase/capitalization readiness through disposal.
 
-Asset Management **depends on** Foundation, Organization, Master Data, and Finance (posting adapter). It **consumes existing masters only (C-01)** — **`master_asset`** (identity), **`master_employee`**, **`master_product`**, **`master_vendor`** (supplier), and **`org_department`**. It **must never duplicate** asset, employee, product, vendor/supplier, department, or company masters.
+Asset Management **depends on** Foundation, Organization, Master Data, and Finance (posting adapter). It **consumes existing masters only (C-01)** - **`master_asset`** (identity), **`master_employee`**, **`master_product`**, **`master_vendor`** (supplier), and **`org_department`**. It **must never duplicate** asset, employee, product, vendor/supplier, department, or company masters.
 
 **Finance remains the only accounting system.** Asset never ORM-writes `fin_*` tables. Depreciation / disposal / revaluation journals use **`finance_journal_id`** (and optional **`depreciation_batch_id`** UUID); GL posting occurs **only** through `PostingService.post_system_journal()`.
 
-Procurement, Inventory, HR, Payroll, Project, Manufacturing, Quality, CRM, and Recruitment remain **isolated** except authorized UUID / employee-assignment refs — **no FKs** to `proc_*` / `inv_*` / `prj_*` / `mfg_*` / `qm_*` / `pay_*` / `hr_*` / `crm_*` / `rec_*`, and **no peer ORM writes**.
+Procurement, Inventory, HR, Payroll, Project, Manufacturing, Quality, CRM, and Recruitment remain **isolated** except authorized UUID / employee-assignment refs - **no FKs** to `proc_*` / `inv_*` / `prj_*` / `mfg_*` / `qm_*` / `pay_*` / `hr_*` / `crm_*` / `rec_*`, and **no peer ORM writes**.
 
 **Business Tables: 20**  
 **Schema: `asset`**
@@ -61,28 +61,28 @@ Finance GL events · Service / Helpdesk consumers (future)
 
 ### API Mount (planned)
 
-**`/api/v1/assets`** — routers for all aggregates (asset-categories, assets, asset-components, asset-assignments, asset-transfers, asset-locations, asset-warranties, asset-insurances, maintenance-plans, asset-maintenances, service-histories, asset-depreciations, asset-disposals, asset-revaluations, asset-audits, asset-documents, asset-checklists, meter-readings, asset-notifications, reports).
+**`/api/v1/assets`** - routers for all aggregates (asset-categories, assets, asset-components, asset-assignments, asset-transfers, asset-locations, asset-warranties, asset-insurances, maintenance-plans, asset-maintenances, service-histories, asset-depreciations, asset-disposals, asset-revaluations, asset-audits, asset-documents, asset-checklists, meter-readings, asset-notifications, reports).
 
 ---
 
 ## 2. Scope
 
 ### In Scope
-- **Asset categories** and **asset registration** linked to **`master_asset`** — FRD-12 §4–§5
+- **Asset categories** and **asset registration** linked to **`master_asset`** - FRD-12 §4-§5
 - **Components** (BOM-like subordinate parts of an asset)
-- **Assignment** to employee / department / location (shared-asset rule) — FRD-12 §6
-- **Transfer** and **location** history / current location tracking — FRD-12 §7
+- **Assignment** to employee / department / location (shared-asset rule) - FRD-12 §6
+- **Transfer** and **location** history / current location tracking - FRD-12 §7
 - **Warranty** and **insurance** policies with expiry
-- **Maintenance plans**, **maintenance work orders**, **service history** — FRD-12 §8
-- **Depreciation** schedule / run rows with Finance posting — FRD-12 §9
+- **Maintenance plans**, **maintenance work orders**, **service history** - FRD-12 §8
+- **Depreciation** schedule / run rows with Finance posting - FRD-12 §9
 - **Disposal** and **revaluation** with workflow and Finance posting
 - **Physical asset audits**, **checklists**, **meter readings**
 - **Documents**, **notifications**, **reports**
 - Workflow, audit, RBAC, Celery stubs (planning)
 
 ### Out of Scope (Phase 2 / Separate)
-- Full **lease accounting sub-ledger** tables — Phase 1: `asset_type=leased` flag + metadata
-- Duplicate `ast_employee` / `ast_product` / `ast_vendor` / `ast_department` / second asset identity master — **forbidden (C-01)**
+- Full **lease accounting sub-ledger** tables - Phase 1: `asset_type=leased` flag + metadata
+- Duplicate `ast_employee` / `ast_product` / `ast_vendor` / `ast_department` / second asset identity master - **forbidden (C-01)**
 - Direct writes to `fin_*`, `hr_*`, `pay_*`, `proc_*`, `inv_*`, `prj_*`, `mfg_*`, `qm_*`, `crm_*`, `rec_*`, `sales_*`
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 - Analytics cubes / `ana_fact_asset`
@@ -94,7 +94,7 @@ Finance GL events · Service / Helpdesk consumers (future)
 - Supplier references use **`master_vendor`** (supplier synonym)
 - Soft delete + version on mutable asset tables
 - Document numbers company-scoped
-- One **active exclusive** employee assignment per asset unless `is_shared=true` — FRD-12 §6
+- One **active exclusive** employee assignment per asset unless `is_shared=true` - FRD-12 §6
 - Depreciation / disposal / revaluation: create Asset row → Finance `PostingService.post_system_journal()` → store `finance_journal_id`
 
 ### Dependencies
@@ -105,13 +105,13 @@ Finance GL events · Service / Helpdesk consumers (future)
 | ERD_02 Organization | `org_company`, `org_branch`, `org_department` (optional `org_location` UUID) |
 | ERD_03 Master Data | **`master_asset`**, **`master_employee`**, **`master_product`**, **`master_vendor`** |
 | ERD_04 Finance | **`PostingService.post_system_journal()`**; `finance_journal_id` / `depreciation_batch_id` UUID storage |
-| ERD_06 Procurement | Optional `purchase_order_id` / `grn_id` UUID — **no FK** |
-| ERD_07 Inventory | Optional `inventory_receipt_id` / `inventory_issue_id` UUID — **no FK** |
-| ERD_14 Project | Optional `project_id` UUID — **no FK** |
-| ERD_08 Manufacturing | Optional `production_order_id` UUID — **no FK** |
-| ERD_09 Quality | Optional `quality_inspection_id` UUID — **no FK** |
-| ERD_11 HR | Employee assignment via master only — **no `hr_*` writes** |
-| ERD_12 Payroll | Optional labor **read** — **no `pay_*` writes** |
+| ERD_06 Procurement | Optional `purchase_order_id` / `grn_id` UUID - **no FK** |
+| ERD_07 Inventory | Optional `inventory_receipt_id` / `inventory_issue_id` UUID - **no FK** |
+| ERD_14 Project | Optional `project_id` UUID - **no FK** |
+| ERD_08 Manufacturing | Optional `production_order_id` UUID - **no FK** |
+| ERD_09 Quality | Optional `quality_inspection_id` UUID - **no FK** |
+| ERD_11 HR | Employee assignment via master only - **no `hr_*` writes** |
+| ERD_12 Payroll | Optional labor **read** - **no `pay_*` writes** |
 
 ---
 
@@ -119,26 +119,26 @@ Finance GL events · Service / Helpdesk consumers (future)
 
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
-| 1 | `ast_asset_category` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 1 | `ast_asset_category` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 2 | `ast_asset` | Transaction / Register | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 3 | `ast_asset_component` | Detail | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 3 | `ast_asset_component` | Detail | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 4 | `ast_asset_assignment` | Assignment | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 5 | `ast_asset_transfer` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 6 | `ast_asset_location` | Tracking | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 7 | `ast_asset_warranty` | Policy | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 8 | `ast_asset_insurance` | Policy | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 9 | `ast_asset_maintenance_plan` | Plan | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 5 | `ast_asset_transfer` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 6 | `ast_asset_location` | Tracking | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 7 | `ast_asset_warranty` | Policy | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 8 | `ast_asset_insurance` | Policy | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 9 | `ast_asset_maintenance_plan` | Plan | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 10 | `ast_asset_maintenance` | Work Order | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 11 | `ast_asset_service_history` | History | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 12 | `ast_asset_depreciation` | Financial | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 11 | `ast_asset_service_history` | History | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 12 | `ast_asset_depreciation` | Financial | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 13 | `ast_asset_disposal` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 14 | `ast_asset_revaluation` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 15 | `ast_asset_audit` | Assurance | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 16 | `ast_asset_document` | Document | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 17 | `ast_asset_checklist` | Checklist | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 18 | `ast_asset_meter_reading` | Meter | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 19 | `ast_asset_notification` | Notification | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 20 | `ast_asset_report` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 15 | `ast_asset_audit` | Assurance | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 16 | `ast_asset_document` | Document | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 17 | `ast_asset_checklist` | Checklist | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 18 | `ast_asset_meter_reading` | Meter | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 19 | `ast_asset_notification` | Notification | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 20 | `ast_asset_report` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | - |
 
 **Business Tables: 20**  
 **Schema: `asset`**
@@ -239,8 +239,8 @@ Optional UUID-only (no FK): purchase_order_id, grn_id, inventory_receipt_id,
 
 | Column | Notes |
 |--------|-------|
-| `category_code` | UK — IT, FURNITURE, VEHICLE, MACHINERY, INFRA, SOFTWARE — FRD-12 §4 |
-| `category_name` | — |
+| `category_code` | UK - IT, FURNITURE, VEHICLE, MACHINERY, INFRA, SOFTWARE - FRD-12 §4 |
+| `category_name` | - |
 | `default_useful_life_months` | INT optional |
 | `default_depreciation_method` | straight_line, wdv, units_of_production |
 | `gl_asset_account_id` / `gl_accum_depr_account_id` / `gl_expense_account_id` | UUID optional Finance COA refs (**no write**) |
@@ -255,26 +255,26 @@ Optional UUID-only (no FK): purchase_order_id, grn_id, inventory_receipt_id,
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
 | `tenant_id` / `company_id` / `branch_id` | UUID | NO | Scope |
-| `document_number` / `asset_code` | VARCHAR(50) | NO | `AST-YYYY-NNNNNN` — FRD-12 §4 |
-| `asset_name` | VARCHAR(255) | NO | — |
+| `document_number` / `asset_code` | VARCHAR(50) | NO | `AST-YYYY-NNNNNN` - FRD-12 §4 |
+| `asset_name` | VARCHAR(255) | NO | - |
 | `asset_category_id` | UUID | NO | FK → `ast_asset_category` |
-| `asset_type` | VARCHAR(40) | NO | fixed, consumable, digital, leased — FRD-12 §5 |
-| `master_asset_id` | UUID | YES | FK → `master.master_asset` — **mandatory when approved/active (C-01)** |
+| `asset_type` | VARCHAR(40) | NO | fixed, consumable, digital, leased - FRD-12 §5 |
+| `master_asset_id` | UUID | YES | FK → `master.master_asset` - **mandatory when approved/active (C-01)** |
 | `product_id` | UUID | YES | FK → `master_product` |
 | `supplier_vendor_id` | UUID | YES | FK → `master_vendor` |
-| `serial_number` / `barcode` / `qr_code` / `rfid_tag` | VARCHAR | YES | Tracking — FRD-12 §7 |
-| `purchase_date` | DATE | YES | — |
-| `purchase_cost` / `current_book_value` / `salvage_value` | NUMERIC(18,4) | YES | — |
-| `currency_code` | VARCHAR(10) | NO | — |
+| `serial_number` / `barcode` / `qr_code` / `rfid_tag` | VARCHAR | YES | Tracking - FRD-12 §7 |
+| `purchase_date` | DATE | YES | - |
+| `purchase_cost` / `current_book_value` / `salvage_value` | NUMERIC(18,4) | YES | - |
+| `currency_code` | VARCHAR(10) | NO | - |
 | `depreciation_method` | VARCHAR(40) | YES | straight_line, wdv, units_of_production |
-| `useful_life_months` | INT | YES | — |
+| `useful_life_months` | INT | YES | - |
 | `department_id` | UUID | YES | FK → `org_department` (home dept) |
 | `custodian_employee_id` | UUID | YES | FK → `master_employee` (denormalized current) |
-| `purchase_order_id` / `grn_id` | UUID | YES | **UUID only — no proc FK** |
-| `inventory_receipt_id` / `inventory_issue_id` | UUID | YES | **UUID only — no inv FK** |
-| `project_id` | UUID | YES | **UUID only — no prj FK** |
-| `production_order_id` / `quality_inspection_id` | UUID | YES | **UUID only — no FK** |
-| `is_shared` | BOOLEAN | NO | default false — FRD-12 §6 |
+| `purchase_order_id` / `grn_id` | UUID | YES | **UUID only - no proc FK** |
+| `inventory_receipt_id` / `inventory_issue_id` | UUID | YES | **UUID only - no inv FK** |
+| `project_id` | UUID | YES | **UUID only - no prj FK** |
+| `production_order_id` / `quality_inspection_id` | UUID | YES | **UUID only - no FK** |
+| `is_shared` | BOOLEAN | NO | default false - FRD-12 §6 |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, active, in_maintenance, transferred, disposed, written_off, cancelled |
 | `workflow_*` | | | Asset approval |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
@@ -289,7 +289,7 @@ Optional UUID-only (no FK): purchase_order_id, grn_id, inventory_receipt_id,
 | Column | Notes |
 |--------|-------|
 | `asset_id` | FK parent |
-| `component_code` / `component_name` | — |
+| `component_code` / `component_name` | - |
 | `product_id` | FK optional → `master_product` |
 | `serial_number` | optional |
 | `quantity` | NUMERIC |
@@ -304,10 +304,10 @@ Optional UUID-only (no FK): purchase_order_id, grn_id, inventory_receipt_id,
 |--------|-------|
 | `document_number` | `AASN-YYYY-NNNNNN` |
 | `asset_id` | FK |
-| `allocation_type` | employee, department, project, branch, warehouse — FRD-12 §6 |
+| `allocation_type` | employee, department, project, branch, warehouse - FRD-12 §6 |
 | `employee_id` | FK optional → `master_employee` |
 | `department_id` | FK optional → `org_department` |
-| `project_id` | UUID optional — **no FK** |
+| `project_id` | UUID optional - **no FK** |
 | `allocated_at` / `expected_return_at` / `returned_at` | TIMESTAMPTZ / DATE |
 | `status` | draft, submitted, approved, active, returned, cancelled |
 | `workflow_*` | Assignment approval |
@@ -335,7 +335,7 @@ Optional UUID-only (no FK): purchase_order_id, grn_id, inventory_receipt_id,
 | Column | Notes |
 |--------|-------|
 | `asset_id` | FK |
-| `location_label` | VARCHAR — building / floor / room / bin |
+| `location_label` | VARCHAR - building / floor / room / bin |
 | `org_location_id` | UUID optional → org_location (**prefer UUID; optional FK if org_location available**) |
 | `effective_from` / `effective_to` | TIMESTAMPTZ |
 | `is_current` | BOOLEAN |
@@ -376,8 +376,8 @@ Optional UUID-only (no FK): purchase_order_id, grn_id, inventory_receipt_id,
 |--------|-------|
 | `document_number` | `AMPL-YYYY-NNNNNN` |
 | `asset_id` | FK |
-| `plan_name` | — |
-| `maintenance_type` | preventive, corrective, emergency, annual_service — FRD-12 §8 |
+| `plan_name` | - |
+| `maintenance_type` | preventive, corrective, emergency, annual_service - FRD-12 §8 |
 | `frequency_days` / `frequency_meter_units` | optional |
 | `next_due_date` | DATE |
 | `status` | draft, active, paused, closed |
@@ -424,7 +424,7 @@ Optional UUID-only (no FK): purchase_order_id, grn_id, inventory_receipt_id,
 | `method` | straight_line, wdv, units_of_production |
 | `depreciation_amount` / `book_value_after` | NUMERIC |
 | `units_produced` | NUMERIC optional |
-| `depreciation_batch_id` | UUID **batch grouping — no fin_* write** |
+| `depreciation_batch_id` | UUID **batch grouping - no fin_* write** |
 | `finance_journal_id` | UUID **after** `PostingService.post_system_journal()` |
 | `idempotency_key` | VARCHAR(100) |
 | `status` | draft, calculated, posted, failed, reversed |
@@ -468,7 +468,7 @@ Optional UUID-only (no FK): purchase_order_id, grn_id, inventory_receipt_id,
 | Column | Notes |
 |--------|-------|
 | `document_number` | `AAUD-YYYY-NNNNNN` |
-| `asset_id` | FK optional (null = company sweep header style — Phase 1 prefer per-asset rows) |
+| `asset_id` | FK optional (null = company sweep header style - Phase 1 prefer per-asset rows) |
 | `audit_date` | DATE |
 | `auditor_employee_id` | FK → `master_employee` |
 | `found_status` | found, missing, damaged, relocated |
@@ -483,7 +483,7 @@ Optional UUID-only (no FK): purchase_order_id, grn_id, inventory_receipt_id,
 |--------|-------|
 | `asset_id` | FK |
 | `document_type` | invoice, warranty, insurance, manual, photo, other |
-| `document_name` | — |
+| `document_name` | - |
 | `storage_uri` / `content_hash` | Phase 1 metadata |
 | `status` | active, superseded, archived |
 
@@ -494,7 +494,7 @@ Optional UUID-only (no FK): purchase_order_id, grn_id, inventory_receipt_id,
 | Column | Notes |
 |--------|-------|
 | `asset_id` / `maintenance_id` / `audit_id` | optional parent FKs |
-| `checklist_code` / `checklist_name` | — |
+| `checklist_code` / `checklist_name` | - |
 | `items_json` | JSONB checklist items + results |
 | `completed_at` | TIMESTAMPTZ |
 | `status` | draft, completed, cancelled |
@@ -680,7 +680,7 @@ Seed workflows only; instance rows use Foundation `wf_instance`.
 |-------|-----------|
 | Row audit | Standard columns on all mutable `ast_*` tables |
 | Business audit | `AuditService` on asset approve, assignment approve, maintenance complete, depreciation post, disposal/revaluation post, physical audit complete |
-| Notifications | Maintenance due, warranty/insurance expiry, audit reminders — Foundation + `ast_asset_notification` |
+| Notifications | Maintenance due, warranty/insurance expiry, audit reminders - Foundation + `ast_asset_notification` |
 
 ---
 
@@ -725,7 +725,7 @@ Seed workflows only; instance rows use Foundation `wf_instance`.
 
 Prior Alembic head: **`0244_seed_project_workflows`**.
 
-Revision budget **`0245`–`0266` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`ast_asset_warranty` and `ast_asset_insurance` share one migration**.
+Revision budget **`0245`-`0266` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`ast_asset_warranty` and `ast_asset_insurance` share one migration**.
 
 | Order | Revision ID (≤32 chars) | Migration | Tables / Actions |
 |-------|-------------------------|-----------|------------------|
@@ -779,9 +779,9 @@ Revision budget **`0245`–`0266` (22 revisions)**. Schema + 20 tables + permiss
 | Organization | company, branch, **department** | Direct FK |
 | Master Data | **`master_asset` · employee · product · vendor** | FK + AssetService for identity create/update (C-01) |
 | Finance | **`PostingService.post_system_journal()`** | Adapter; store `finance_journal_id` / `depreciation_batch_id` |
-| Procurement / Inventory | Acquisition & stock movement trail | UUID only — **no FK** |
-| Project / MFG / Quality | Optional operational context | UUID only — **no FK** |
-| HR / Payroll | Assignment continuity; optional labor read | Master FK / read port — **no writes** |
+| Procurement / Inventory | Acquisition & stock movement trail | UUID only - **no FK** |
+| Project / MFG / Quality | Optional operational context | UUID only - **no FK** |
+| HR / Payroll | Assignment continuity; optional labor read | Master FK / read port - **no writes** |
 
 ### 16.2 Downstream
 
@@ -796,7 +796,7 @@ Revision budget **`0245`–`0266` (22 revisions)**. Schema + 20 tables + permiss
 | Rule | Enforcement |
 |------|-------------|
 | C-01 | Asset identity via `master_asset`; people/product/vendor via masters; no duplicate masters |
-| Supplier synonym | Use `master_vendor` — do not create `master_supplier` |
+| Supplier synonym | Use `master_vendor` - do not create `master_supplier` |
 | No Finance ORM writes | Only `PostingService.post_system_journal()` |
 | Peer isolation | UUID-only for Proc / Inv / Project / MFG / QM; no CRM / Recruitment writes |
 | Architecture Lock v1.1 | Unchanged; Modular Monolith · Clean Architecture · DDD preserved |
@@ -813,12 +813,12 @@ Revision budget **`0245`–`0266` (22 revisions)**. Schema + 20 tables + permiss
 | 4 | Consumes masters only (C-01); `master_asset` remains authoritative identity | ✅ |
 | 5 | Finance posting only via PostingService; store finance UUID refs | ✅ |
 | 6 | Proc / Inv / Project / MFG / QM UUID-only; no CRM / Recruitment writes | ✅ |
-| 7 | Migration order `0245`–`0266`, revision IDs ≤ 32 chars | ✅ |
+| 7 | Migration order `0245`-`0266`, revision IDs ≤ 32 chars | ✅ |
 | 8 | Workflows + RBAC + API mount + Celery stubs documented | ✅ |
 | 9 | Lease sub-ledger deferred without blocking Sprint 15 | ✅ |
 | 10 | Architecture Lock v1.1 preserved; no prior module redesign | ✅ |
 
-### ERD Phase Gate — Asset Summary
+### ERD Phase Gate - Asset Summary
 
 | Metric | Value |
 |--------|-------|
@@ -826,10 +826,10 @@ Revision budget **`0245`–`0266` (22 revisions)**. Schema + 20 tables + permiss
 | Schema | **`asset`** |
 | Prefix | `ast_` |
 | API mount | `/api/v1/assets` |
-| Migration range | `0245` – `0266` |
+| Migration range | `0245` - `0266` |
 | Prior head | `0244_seed_project_workflows` |
 | Planned head | `0266_seed_asset_workflows` |
-| Document Status | **Locked — Ready for Sprint 15 Implementation Planning** |
+| Document Status | **Locked - Ready for Sprint 15 Implementation Planning** |
 
 ---
 

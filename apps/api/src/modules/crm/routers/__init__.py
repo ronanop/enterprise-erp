@@ -666,7 +666,7 @@ def report_summary(
 
 
 # ---------------------------------------------------------------------------
-# Sales CRM (Zoho-replacement) routers — defined in their own modules and
+# Sales CRM (Zoho-replacement) routers - defined in their own modules and
 # re-exported here so `modules.crm.router` can import everything from this
 # package the same way it does for the legacy CRM routers above.
 # ---------------------------------------------------------------------------

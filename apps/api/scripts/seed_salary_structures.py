@@ -103,7 +103,7 @@ def main() -> None:
             )
         ) if tenant else None
         if not tenant or not company or not admin:
-            raise SystemExit("DEMOCO / admin missing — run seed_demo_data first")
+            raise SystemExit("DEMOCO / admin missing - run seed_demo_data first")
 
         tid, cid, aid = tenant.id, company.id, admin.id
 
@@ -179,7 +179,7 @@ def main() -> None:
                         "updated_by": aid,
                     },
                 )
-            print(f"  {code} — {name}")
+            print(f"  {code} - {name}")
 
         db.commit()
         print(f"Done. Components={len(comps)} Structures={len(STRUCTURES)}")

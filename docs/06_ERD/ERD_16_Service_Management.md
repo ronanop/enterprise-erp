@@ -1,28 +1,28 @@
-# ERD_16 — Service Management Domain
+# ERD_16 - Service Management Domain
 
-**Document:** Enterprise ERD — Service Management Domain  
+**Document:** Enterprise ERD - Service Management Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 16 Implementation Planning  
+**Status:** Locked - Ready for Sprint 16 Implementation Planning  
 **Schema:** `service`  
 **Table Prefix:** `svc_`  
 **Aligned To:** BRD v1.0 · FRD-16 Service Management · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-16 Service Management Domain](../02_FRD/FRD-16-Service-Management-Domain.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.10-beta](../07_RELEASES/ERP_Core_v1.10-beta.md)  
 
-> **C-01 note:** Customer, employee, asset identity, and product catalog remain **`master.master_customer`**, **`master.master_employee`**, **`master.master_asset`**, and **`master.master_product`**. Service Management **never** invents parallel masters. Optional operational Asset register / maintenance-plan context uses **`asset_id` / `maintenance_plan_id` UUID only** — **no FK to `ast_*`**.
+> **C-01 note:** Customer, employee, asset identity, and product catalog remain **`master.master_customer`**, **`master.master_employee`**, **`master.master_asset`**, and **`master.master_product`**. Service Management **never** invents parallel masters. Optional operational Asset register / maintenance-plan context uses **`asset_id` / `maintenance_plan_id` UUID only** - **no FK to `ast_*`**.
 
 ---
 
 ## 1. Module Overview
 
-The Service Management Domain manages **service delivery and maintenance operations**: service categorization, customer service requests, tickets, technician assignment and scheduling, work orders / tasks / checklists, field visits, materials and time / expense capture, SLA and escalation, feedback and resolution, service contracts, documents, notifications, and reporting — from request intake through completion and billing readiness.
+The Service Management Domain manages **service delivery and maintenance operations**: service categorization, customer service requests, tickets, technician assignment and scheduling, work orders / tasks / checklists, field visits, materials and time / expense capture, SLA and escalation, feedback and resolution, service contracts, documents, notifications, and reporting - from request intake through completion and billing readiness.
 
-Service Management **depends on** Foundation, Organization, and Master Data. It **consumes existing masters only (C-01)** — **`master_customer`**, **`master_employee`**, **`master_asset`**, **`master_product`**, and **`org_department`**. It **must never duplicate** customer, employee, asset, product, department, or company masters.
+Service Management **depends on** Foundation, Organization, and Master Data. It **consumes existing masters only (C-01)** - **`master_customer`**, **`master_employee`**, **`master_asset`**, **`master_product`**, and **`org_department`**. It **must never duplicate** customer, employee, asset, product, department, or company masters.
 
 **Finance remains the only accounting system.** Service never ORM-writes `fin_*` tables. Billable / recoverable postings use **`finance_journal_id`**; GL posting occurs **only** through `PostingService.post_system_journal()`.
 
-Asset, CRM, Project, Inventory, Procurement, Manufacturing, Quality, HR, Payroll, and Recruitment remain **isolated** except authorized UUID / employee refs — **no FKs** to `ast_*` / `crm_*` / `prj_*` / `inv_*` / `proc_*` / `mfg_*` / `qm_*` / `hr_*` / `pay_*` / `rec_*`, and **no peer ORM writes**.
+Asset, CRM, Project, Inventory, Procurement, Manufacturing, Quality, HR, Payroll, and Recruitment remain **isolated** except authorized UUID / employee refs - **no FKs** to `ast_*` / `crm_*` / `prj_*` / `inv_*` / `proc_*` / `mfg_*` / `qm_*` / `hr_*` / `pay_*` / `rec_*`, and **no peer ORM writes**.
 
 **Business Tables: 20**  
 **Schema: `service`**
@@ -61,28 +61,28 @@ Finance AR / revenue events · Helpdesk consumers (future · FRD-17)
 
 ### API Mount (planned)
 
-**`/api/v1/service`** — routers for all aggregates (service-categories, service-requests, service-tickets, service-assignments, service-schedules, work-orders, service-tasks, service-checklists, service-visits, service-materials, time-entries, service-expenses, service-slas, service-escalations, service-feedback, service-resolutions, service-documents, service-notifications, service-contracts, reports).
+**`/api/v1/service`** - routers for all aggregates (service-categories, service-requests, service-tickets, service-assignments, service-schedules, work-orders, service-tasks, service-checklists, service-visits, service-materials, time-entries, service-expenses, service-slas, service-escalations, service-feedback, service-resolutions, service-documents, service-notifications, service-contracts, reports).
 
 ---
 
 ## 2. Scope
 
 ### In Scope
-- **Service categories** and **service request** intake — FRD-16 §4
+- **Service categories** and **service request** intake - FRD-16 §4
 - **Tickets** as triage / queue units linked to requests
-- **Assignment** and **schedule** for technicians — FRD-16 §10–§11
-- **Work orders**, **tasks**, **checklists**, **visits** — FRD-16 §6–§9
-- **Materials**, **time entries**, **expenses** (parts / labor / cost) — FRD-16 §12 · §14
-- **SLA** policies / status and **escalation** — FRD-16 §13
+- **Assignment** and **schedule** for technicians - FRD-16 §10-§11
+- **Work orders**, **tasks**, **checklists**, **visits** - FRD-16 §6-§9
+- **Materials**, **time entries**, **expenses** (parts / labor / cost) - FRD-16 §12 · §14
+- **SLA** policies / status and **escalation** - FRD-16 §13
 - **Feedback** and **resolution** / closure
-- **Service contracts** (AMC / warranty / support / managed) — FRD-16 §5
+- **Service contracts** (AMC / warranty / support / managed) - FRD-16 §5
 - **Documents**, **notifications**, **reports**
 - Workflow, audit, RBAC, Celery stubs (planning)
 
 ### Out of Scope (Phase 2 / Separate)
-- Full **Helpdesk / omnichannel desk** product (FRD-17) — Phase 1: optional ticket bridge fields only
-- Advanced **route optimization / geo-tracking platform** — Phase 1: lat/long metadata stubs only
-- Duplicate `svc_customer` / `svc_employee` / `svc_asset` / `svc_product` / `svc_department` masters — **forbidden (C-01)**
+- Full **Helpdesk / omnichannel desk** product (FRD-17) - Phase 1: optional ticket bridge fields only
+- Advanced **route optimization / geo-tracking platform** - Phase 1: lat/long metadata stubs only
+- Duplicate `svc_customer` / `svc_employee` / `svc_asset` / `svc_product` / `svc_department` masters - **forbidden (C-01)**
 - Direct writes to `fin_*`, `ast_*`, `crm_*`, `prj_*`, `inv_*`, `proc_*`, `mfg_*`, `qm_*`, `hr_*`, `pay_*`, `rec_*`, `sales_*`
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 - Analytics cubes / `ana_fact_service`
@@ -91,10 +91,10 @@ Finance AR / revenue events · Helpdesk consumers (future · FRD-17)
 - **Identity:** customers / employees / assets / products always resolve through Master Data services (C-01)
 - `svc_service_category` is a Service-domain catalog (not a Master Data table)
 - Optional `master_asset_id` FK → `master.master_asset` when asset identity is known
-- Optional `asset_id` / `maintenance_plan_id` are **UUID-only** links to Asset operational tables — **no `ast_*` FK**
+- Optional `asset_id` / `maintenance_plan_id` are **UUID-only** links to Asset operational tables - **no `ast_*` FK**
 - Soft delete + version on mutable service tables
-- Document numbers company-scoped (`SR-YYYY-NNNNNN`, `WO-SRV-YYYY-NNNNNN`, `SC-YYYY-NNNNNN` — FRD-16)
-- No overlapping active exclusive technician assignments for the same time window — FRD-16 §11
+- Document numbers company-scoped (`SR-YYYY-NNNNNN`, `WO-SRV-YYYY-NNNNNN`, `SC-YYYY-NNNNNN` - FRD-16)
+- No overlapping active exclusive technician assignments for the same time window - FRD-16 §11
 - Billable expense / service revenue: create Service row → Finance `PostingService.post_system_journal()` → store `finance_journal_id`
 
 ### Dependencies
@@ -105,15 +105,15 @@ Finance AR / revenue events · Helpdesk consumers (future · FRD-17)
 | ERD_02 Organization | `org_company`, `org_branch`, `org_department` |
 | ERD_03 Master Data | **`master_customer`**, **`master_employee`**, **`master_asset`**, **`master_product`** |
 | ERD_04 Finance | **`PostingService.post_system_journal()`**; `finance_journal_id` UUID storage |
-| ERD_15 Asset | Optional `asset_id` / `maintenance_plan_id` UUID — **no FK** |
-| ERD_05 CRM | Optional `crm_opportunity_id` / `crm_customer_id` UUID — **no FK** |
-| ERD_14 Project | Optional `project_id` UUID — **no FK** |
-| ERD_07 Inventory | Optional `inventory_issue_id` / `inventory_receipt_id` UUID — **no FK** |
-| ERD_06 Procurement | Optional `purchase_order_id` UUID — **no FK** |
-| ERD_08 Manufacturing | Optional `production_order_id` UUID — **no FK** |
-| ERD_09 Quality | Optional `quality_inspection_id` UUID — **no FK** |
-| ERD_11 HR | Employee via master only — **no `hr_*` writes** |
-| ERD_12 Payroll | Optional labor **read** — **no `pay_*` writes** |
+| ERD_15 Asset | Optional `asset_id` / `maintenance_plan_id` UUID - **no FK** |
+| ERD_05 CRM | Optional `crm_opportunity_id` / `crm_customer_id` UUID - **no FK** |
+| ERD_14 Project | Optional `project_id` UUID - **no FK** |
+| ERD_07 Inventory | Optional `inventory_issue_id` / `inventory_receipt_id` UUID - **no FK** |
+| ERD_06 Procurement | Optional `purchase_order_id` UUID - **no FK** |
+| ERD_08 Manufacturing | Optional `production_order_id` UUID - **no FK** |
+| ERD_09 Quality | Optional `quality_inspection_id` UUID - **no FK** |
+| ERD_11 HR | Employee via master only - **no `hr_*` writes** |
+| ERD_12 Payroll | Optional labor **read** - **no `pay_*` writes** |
 | ERD_13 Recruitment | **No writes** |
 
 ---
@@ -122,26 +122,26 @@ Finance AR / revenue events · Helpdesk consumers (future · FRD-17)
 
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
-| 1 | `svc_service_category` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 1 | `svc_service_category` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 2 | `svc_service_request` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 3 | `svc_service_ticket` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 4 | `svc_service_assignment` | Assignment | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 5 | `svc_service_schedule` | Schedule | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 3 | `svc_service_ticket` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 4 | `svc_service_assignment` | Assignment | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 5 | `svc_service_schedule` | Schedule | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 6 | `svc_service_work_order` | Work Order | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 7 | `svc_service_task` | Detail | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 8 | `svc_service_checklist` | Checklist | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 9 | `svc_service_visit` | Field Visit | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 10 | `svc_service_material` | Detail | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 11 | `svc_service_time_entry` | Labor | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 12 | `svc_service_expense` | Cost / Financial | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 13 | `svc_service_sla` | Policy | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 7 | `svc_service_task` | Detail | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 8 | `svc_service_checklist` | Checklist | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 9 | `svc_service_visit` | Field Visit | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 10 | `svc_service_material` | Detail | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 11 | `svc_service_time_entry` | Labor | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 12 | `svc_service_expense` | Cost / Financial | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 13 | `svc_service_sla` | Policy | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 14 | `svc_service_escalation` | Event | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 15 | `svc_service_feedback` | Quality | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 15 | `svc_service_feedback` | Quality | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 16 | `svc_service_resolution` | Closure | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 17 | `svc_service_document` | Document | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 18 | `svc_service_notification` | Notification | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 17 | `svc_service_document` | Document | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 18 | `svc_service_notification` | Notification | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 19 | `svc_service_contract` | Contract | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 20 | `svc_service_report` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 20 | `svc_service_report` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | - |
 
 **Business Tables: 20**  
 **Schema: `service`**
@@ -243,8 +243,8 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 
 | Column | Notes |
 |--------|-------|
-| `category_code` | UK — INSTALL, BREAKDOWN, PREVENTIVE, AMC, CONSULTING, OTHER — FRD-16 |
-| `category_name` | — |
+| `category_code` | UK - INSTALL, BREAKDOWN, PREVENTIVE, AMC, CONSULTING, OTHER - FRD-16 |
+| `category_name` | - |
 | `default_priority` | low, medium, high, critical |
 | `default_sla_id` | optional UUID → `svc_service_sla` (soft; set after SLA exists or leave null Phase 1) |
 | `is_billable_default` | BOOLEAN |
@@ -259,24 +259,24 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
 | `tenant_id` / `company_id` / `branch_id` | UUID | NO | Scope |
-| `document_number` | VARCHAR(50) | NO | `SR-YYYY-NNNNNN` — FRD-16 §4 |
+| `document_number` | VARCHAR(50) | NO | `SR-YYYY-NNNNNN` - FRD-16 §4 |
 | `category_id` | UUID | NO | FK → `svc_service_category` |
-| `customer_id` | UUID | NO | FK → `master_customer` — **C-01** |
+| `customer_id` | UUID | NO | FK → `master_customer` - **C-01** |
 | `requested_by_employee_id` | UUID | YES | FK → `master_employee` (internal requester) |
 | `department_id` | UUID | YES | FK → `org_department` |
 | `contract_id` | UUID | YES | FK → `svc_service_contract` |
-| `service_type` | VARCHAR(40) | NO | preventive, corrective, breakdown, installation, inspection, other — FRD-16 §7–§9 |
+| `service_type` | VARCHAR(40) | NO | preventive, corrective, breakdown, installation, inspection, other - FRD-16 §7-§9 |
 | `priority` | VARCHAR(20) | NO | low, medium, high, critical |
 | `channel` | VARCHAR(40) | YES | portal, email, phone, mobile, helpdesk, manual |
-| `subject` / `description` | VARCHAR / TEXT | NO / YES | — |
-| `master_asset_id` | UUID | YES | FK → `master.master_asset` — **C-01 identity** |
-| `asset_id` | UUID | YES | **UUID only — no `ast_*` FK** (operational Asset register) |
-| `maintenance_plan_id` | UUID | YES | **UUID only — no `ast_*` FK** |
-| `crm_opportunity_id` / `crm_customer_id` | UUID | YES | **UUID only — no CRM FK** |
-| `project_id` | UUID | YES | **UUID only — no prj FK** |
-| `requested_at` / `due_at` | TIMESTAMPTZ | YES | — |
+| `subject` / `description` | VARCHAR / TEXT | NO / YES | - |
+| `master_asset_id` | UUID | YES | FK → `master.master_asset` - **C-01 identity** |
+| `asset_id` | UUID | YES | **UUID only - no `ast_*` FK** (operational Asset register) |
+| `maintenance_plan_id` | UUID | YES | **UUID only - no `ast_*` FK** |
+| `crm_opportunity_id` / `crm_customer_id` | UUID | YES | **UUID only - no CRM FK** |
+| `project_id` | UUID | YES | **UUID only - no prj FK** |
+| `requested_at` / `due_at` | TIMESTAMPTZ | YES | - |
 | `sla_id` | UUID | YES | FK → `svc_service_sla` |
-| `sla_status` | VARCHAR(30) | YES | within_sla, at_risk, breached — FRD-16 §13 |
+| `sla_status` | VARCHAR(30) | YES | within_sla, at_risk, breached - FRD-16 §13 |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, new, assigned, in_progress, resolved, closed, cancelled |
 | `workflow_*` | | | Service request approval |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
@@ -306,12 +306,12 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 | Column | Notes |
 |--------|-------|
 | `document_number` | `SASN-YYYY-NNNNNN` |
-| `request_id` / `ticket_id` / `work_order_id` | parent FKs (at least one required — service-enforced) |
+| `request_id` / `ticket_id` / `work_order_id` | parent FKs (at least one required - service-enforced) |
 | `technician_employee_id` | FK → `master_employee` |
 | `role_on_job` | primary, secondary, observer |
 | `assigned_at` / `unassigned_at` | TIMESTAMPTZ |
 | `status` | draft, active, completed, cancelled |
-| **Service rule:** no overlapping exclusive assignments for same technician window — FRD-16 §11 |
+| **Service rule:** no overlapping exclusive assignments for same technician window - FRD-16 §11 |
 
 ---
 
@@ -334,18 +334,18 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `document_number` | VARCHAR(50) | NO | `WO-SRV-YYYY-NNNNNN` — FRD-16 §6 |
+| `document_number` | VARCHAR(50) | NO | `WO-SRV-YYYY-NNNNNN` - FRD-16 §6 |
 | `request_id` | UUID | NO | FK → `svc_service_request` |
 | `ticket_id` | UUID | YES | FK → `svc_service_ticket` |
 | `work_order_type` | VARCHAR(40) | NO | preventive, corrective, breakdown, installation, other |
 | `primary_technician_id` | UUID | YES | FK → `master_employee` |
-| `scheduled_date` / `completed_date` | DATE | YES | — |
-| `asset_id` / `maintenance_plan_id` | UUID | YES | **UUID only — no `ast_*` FK** |
-| `inventory_issue_id` / `inventory_receipt_id` | UUID | YES | **UUID only — no inv FK** |
-| `purchase_order_id` | UUID | YES | **UUID only — no proc FK** |
-| `project_id` | UUID | YES | **UUID only — no prj FK** |
-| `production_order_id` / `quality_inspection_id` | UUID | YES | **UUID only — no FK** |
-| `estimated_hours` / `actual_hours` | NUMERIC(10,2) | YES | — |
+| `scheduled_date` / `completed_date` | DATE | YES | - |
+| `asset_id` / `maintenance_plan_id` | UUID | YES | **UUID only - no `ast_*` FK** |
+| `inventory_issue_id` / `inventory_receipt_id` | UUID | YES | **UUID only - no inv FK** |
+| `purchase_order_id` | UUID | YES | **UUID only - no proc FK** |
+| `project_id` | UUID | YES | **UUID only - no prj FK** |
+| `production_order_id` / `quality_inspection_id` | UUID | YES | **UUID only - no FK** |
+| `estimated_hours` / `actual_hours` | NUMERIC(10,2) | YES | - |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, assigned, in_progress, completed, closed, cancelled |
 | `workflow_*` | | | Work order approval |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
@@ -357,7 +357,7 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 | Column | Notes |
 |--------|-------|
 | `work_order_id` | FK |
-| `task_code` / `task_name` | — |
+| `task_code` / `task_name` | - |
 | `sequence_no` | INT |
 | `assignee_employee_id` | FK optional |
 | `planned_hours` / `actual_hours` | NUMERIC |
@@ -371,7 +371,7 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 | Column | Notes |
 |--------|-------|
 | `work_order_id` / `visit_id` / `task_id` | optional parent FKs |
-| `checklist_code` / `checklist_name` | — |
+| `checklist_code` / `checklist_name` | - |
 | `items_json` | JSONB items + pass/fail results |
 | `completed_at` | TIMESTAMPTZ |
 | `completed_by_employee_id` | FK optional |
@@ -388,7 +388,7 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 | `technician_employee_id` | FK → `master_employee` |
 | `visit_started_at` / `visit_ended_at` | TIMESTAMPTZ |
 | `site_address` | TEXT optional |
-| `geo_lat` / `geo_lng` | NUMERIC optional — Phase 1 metadata |
+| `geo_lat` / `geo_lng` | NUMERIC optional - Phase 1 metadata |
 | `customer_signoff_name` | VARCHAR optional |
 | `status` | planned, checked_in, completed, cancelled |
 | **UK:** `(company_id, document_number)` |
@@ -400,7 +400,7 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 | Column | Notes |
 |--------|-------|
 | `work_order_id` | FK |
-| `product_id` | FK → `master_product` — **C-01** |
+| `product_id` | FK → `master_product` - **C-01** |
 | `quantity` | NUMERIC(18,4) |
 | `unit_cost` / `line_amount` | NUMERIC(18,4) |
 | `inventory_issue_id` | UUID **no FK** |
@@ -419,7 +419,7 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 | `is_billable` | BOOLEAN |
 | `labor_rate` / `amount` | NUMERIC optional |
 | `status` | draft, submitted, approved, void |
-| **Note:** payroll cost **read-only** via adapter if needed — **no `pay_*` writes** |
+| **Note:** payroll cost **read-only** via adapter if needed - **no `pay_*` writes** |
 
 ---
 
@@ -447,7 +447,7 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 | `sla_code` / `sla_name` | UK `(company_id, sla_code)` |
 | `contract_id` | FK optional → `svc_service_contract` |
 | `priority` | low, medium, high, critical |
-| `response_minutes` / `resolution_minutes` | INT — FRD-16 §13 |
+| `response_minutes` / `resolution_minutes` | INT - FRD-16 §13 |
 | `business_hours_only` | BOOLEAN |
 | `status` | active, inactive |
 
@@ -460,7 +460,7 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 | `document_number` | `SESC-YYYY-NNNNNN` |
 | `request_id` / `ticket_id` / `work_order_id` | parent FKs |
 | `sla_id` | FK optional |
-| `escalation_level` | SMALLINT — FRD-16 §9 mandatory for breakdown |
+| `escalation_level` | SMALLINT - FRD-16 §9 mandatory for breakdown |
 | `reason_code` | sla_at_risk, sla_breached, customer_complaint, management |
 | `escalated_to_employee_id` | FK → `master_employee` |
 | `escalated_at` | TIMESTAMPTZ |
@@ -476,7 +476,7 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 |--------|-------|
 | `request_id` / `work_order_id` | FKs |
 | `customer_id` | FK → `master_customer` |
-| `rating` | SMALLINT 1–5 |
+| `rating` | SMALLINT 1-5 |
 | `comments` | TEXT |
 | `captured_at` | TIMESTAMPTZ |
 | `channel` | portal, email, sms, phone |
@@ -508,7 +508,7 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 |--------|-------|
 | `request_id` / `work_order_id` / `contract_id` / `visit_id` | optional parent FKs |
 | `document_type` | photo, report, contract, invoice_copy, customer_signoff, other |
-| `document_name` | — |
+| `document_name` | - |
 | `storage_uri` / `content_hash` | Phase 1 metadata |
 | `status` | active, superseded, archived |
 
@@ -519,7 +519,7 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 | Column | Notes |
 |--------|-------|
 | `request_id` / `work_order_id` / `contract_id` | optional parents |
-| `notification_type` | request_assigned, technician_assigned, sla_at_risk, sla_breached, wo_completed, feedback_due, contract_expiry, other — FRD-16 §17 |
+| `notification_type` | request_assigned, technician_assigned, sla_at_risk, sla_breached, wo_completed, feedback_due, contract_expiry, other - FRD-16 §17 |
 | `recipient_user_id` / `recipient_employee_id` / `recipient_customer_id` | UUID refs |
 | `payload_json` | JSONB |
 | `sent_at` | TIMESTAMPTZ |
@@ -532,7 +532,7 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 
 | Column | Notes |
 |--------|-------|
-| `document_number` | `SC-YYYY-NNNNNN` — FRD-16 §5 |
+| `document_number` | `SC-YYYY-NNNNNN` - FRD-16 §5 |
 | `customer_id` | FK → `master_customer` |
 | `contract_type` | amc, warranty, support, managed_services |
 | `start_date` / `end_date` | DATE |
@@ -686,9 +686,9 @@ Optional UUID-only (no FK): asset_id, maintenance_plan_id, crm_opportunity_id,
 | Workflow Code | Document | Path |
 |---------------|----------|------|
 | `SVC_REQUEST_APPROVAL` | Service Request | Coordinator → Service Manager |
-| `SVC_WORK_ORDER_APPROVAL` | Work Order | Coordinator → Service Manager — FRD-16 §16 |
+| `SVC_WORK_ORDER_APPROVAL` | Work Order | Coordinator → Service Manager - FRD-16 §16 |
 | `SVC_COMPLETION_APPROVAL` | Service Resolution / Completion | Engineer → Service Manager → (optional) Customer confirm |
-| `SVC_SLA_ESCALATION` | Escalation | Agent → Supervisor → Manager — FRD-16 §16 |
+| `SVC_SLA_ESCALATION` | Escalation | Agent → Supervisor → Manager - FRD-16 §16 |
 | `SVC_CONTRACT_APPROVAL` | Service Contract | Service Manager → SERVICE_ADMIN → (optional) Finance |
 
 Seed workflows only; instance rows use Foundation `wf_instance`.
@@ -701,7 +701,7 @@ Seed workflows only; instance rows use Foundation `wf_instance`.
 |-------|-----------|
 | Row audit | Standard columns on all mutable `svc_*` tables |
 | Business audit | `AuditService` on request approve, WO approve, assignment change, SLA breach / escalation, resolution complete, contract approve, expense post |
-| Notifications | Assignment, SLA risk/breach, WO complete, feedback due, contract expiry — Foundation + `svc_service_notification` |
+| Notifications | Assignment, SLA risk/breach, WO complete, feedback due, contract expiry - Foundation + `svc_service_notification` |
 
 ---
 
@@ -738,7 +738,7 @@ Seed workflows only; instance rows use Foundation `wf_instance`.
 | Role | Intent |
 |------|--------|
 | `SERVICE_MANAGER` | Approve requests / WOs / contracts; own SLA breaches |
-| `SERVICE_ENGINEER` | Field execution — assignments, visits, tasks, time, materials |
+| `SERVICE_ENGINEER` | Field execution - assignments, visits, tasks, time, materials |
 | `SERVICE_COORDINATOR` | Intake, scheduling, dispatch, day-to-day queue |
 | `SERVICE_ADMIN` | Cross-company admin, category / SLA / contract governance |
 
@@ -748,7 +748,7 @@ Seed workflows only; instance rows use Foundation `wf_instance`.
 
 Prior Alembic head: **`0266_seed_asset_workflows`**.
 
-Revision budget **`0267`–`0288` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`svc_service_time_entry` and `svc_service_expense` share one migration**.
+Revision budget **`0267`-`0288` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`svc_service_time_entry` and `svc_service_expense` share one migration**.
 
 | Order | Revision ID (≤32 chars) | Migration | Tables / Actions |
 |-------|-------------------------|-----------|------------------|
@@ -804,10 +804,10 @@ Revision budget **`0267`–`0288` (22 revisions)**. Schema + 20 tables + permiss
 | Organization | company, branch, **department** | Direct FK |
 | Master Data | **`master_customer` · employee · asset · product** | FK + services (C-01) |
 | Finance | **`PostingService.post_system_journal()`** | Adapter; store `finance_journal_id` |
-| Asset | Operational asset / maintenance plan context | UUID only — **no `ast_*` FK** |
-| CRM / Project / Inventory / Procurement / MFG / Quality | Optional operational context | UUID only — **no FK** |
-| HR / Payroll | Technician continuity; optional labor read | Master FK / read port — **no writes** |
-| Recruitment | — | **No writes** |
+| Asset | Operational asset / maintenance plan context | UUID only - **no `ast_*` FK** |
+| CRM / Project / Inventory / Procurement / MFG / Quality | Optional operational context | UUID only - **no FK** |
+| HR / Payroll | Technician continuity; optional labor read | Master FK / read port - **no writes** |
+| Recruitment | - | **No writes** |
 
 ### 16.2 Downstream
 
@@ -822,7 +822,7 @@ Revision budget **`0267`–`0288` (22 revisions)**. Schema + 20 tables + permiss
 | Rule | Enforcement |
 |------|-------------|
 | C-01 | Customer / employee / asset identity / product via masters only; no duplicate masters |
-| Asset isolation | `asset_id` / `maintenance_plan_id` UUID only — **no FK to `ast_*`** |
+| Asset isolation | `asset_id` / `maintenance_plan_id` UUID only - **no FK to `ast_*`** |
 | No Finance ORM writes | Only `PostingService.post_system_journal()` |
 | Peer isolation | UUID-only for CRM / Project / Inv / Proc / MFG / QM; no Recruitment writes; no HR/Payroll writes |
 | Architecture Lock v1.1 | Unchanged; Modular Monolith · Clean Architecture · DDD preserved |
@@ -839,12 +839,12 @@ Revision budget **`0267`–`0288` (22 revisions)**. Schema + 20 tables + permiss
 | 4 | Consumes masters only (C-01) | ✅ |
 | 5 | Finance posting only via PostingService; store finance UUID refs | ✅ |
 | 6 | Asset / CRM / Project / Inv / Proc / MFG / QM UUID-only; no Recruitment writes | ✅ |
-| 7 | Migration order `0267`–`0288`, revision IDs ≤ 32 chars | ✅ |
+| 7 | Migration order `0267`-`0288`, revision IDs ≤ 32 chars | ✅ |
 | 8 | Workflows + RBAC + API mount + Celery stubs documented | ✅ |
 | 9 | Helpdesk omnichannel / advanced geo deferred without blocking Sprint 16 | ✅ |
 | 10 | Architecture Lock v1.1 preserved; no prior module redesign | ✅ |
 
-### ERD Phase Gate — Service Summary
+### ERD Phase Gate - Service Summary
 
 | Metric | Value |
 |--------|-------|
@@ -852,10 +852,10 @@ Revision budget **`0267`–`0288` (22 revisions)**. Schema + 20 tables + permiss
 | Schema | **`service`** |
 | Prefix | `svc_` |
 | API mount | `/api/v1/service` |
-| Migration range | `0267` – `0288` |
+| Migration range | `0267` - `0288` |
 | Prior head | `0266_seed_asset_workflows` |
 | Planned head | `0288_seed_service_workflows` |
-| Document Status | **Locked — Ready for Sprint 16 Implementation Planning** |
+| Document Status | **Locked - Ready for Sprint 16 Implementation Planning** |
 
 ---
 

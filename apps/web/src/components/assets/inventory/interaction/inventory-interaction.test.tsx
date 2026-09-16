@@ -38,7 +38,7 @@ const drawerData = {
     employeeId: "EMP-001",
     phone: "9123456789",
     issuedDate: "Aug 1, 2026",
-    earlierUsedBy: "—",
+    earlierUsedBy: "-",
     make: "Lenovo",
     model: "T14",
     configuration: "i7 · 16GB",
@@ -47,20 +47,20 @@ const drawerData = {
     operationalStatus: "ASSIGNED",
     lifecycleStatus: "active",
     accessories: [],
-    dcNumber: "—",
-    dcStatus: "—",
+    dcNumber: "-",
+    dcStatus: "-",
     dcSignature: "Not Signed",
-    assignmentRemarks: "—",
-    returnRemarks: "—",
+    assignmentRemarks: "-",
+    returnRemarks: "-",
   },
   assignment: { employee: "Asha Nair", issueDate: "Aug 1, 2026", department: "IT" },
   additional: {
-    earlierUsedBy: "—",
-    deliveryChallan: "—",
-    deliveryReferenceStatus: "—",
-    remarks: "—",
-    assignmentRemarks: "—",
-    returnRemarks: "—",
+    earlierUsedBy: "-",
+    deliveryChallan: "-",
+    deliveryReferenceStatus: "-",
+    remarks: "-",
+    assignmentRemarks: "-",
+    returnRemarks: "-",
   },
 };
 
@@ -259,7 +259,7 @@ describe("SummarySection", () => {
       <SummarySection
         assetTag="AST-1"
         laptopName="Laptop"
-        currentHolder="—"
+        currentHolder="-"
         branch="Noida"
         operationalStatus="READY_TO_MOVE"
         lifecycleStatus="active"
@@ -274,7 +274,7 @@ describe("SummarySection", () => {
 
 describe("AssignmentSection", () => {
   it("shows empty assignment state", () => {
-    render(<AssignmentSection assignment={{ employee: "—", issueDate: "—", department: "—" }} />);
+    render(<AssignmentSection assignment={{ employee: "-", issueDate: "-", department: "-" }} />);
     expect(screen.getByText("No active assignment")).toBeInTheDocument();
   });
 
@@ -290,7 +290,7 @@ describe("AssignmentSection", () => {
 
 describe("ConfigurationSection", () => {
   it("shows empty configuration", () => {
-    render(<ConfigurationSection configuration="—" />);
+    render(<ConfigurationSection configuration="-" />);
     expect(screen.getByText("No configuration on file")).toBeInTheDocument();
   });
 });
@@ -347,13 +347,13 @@ describe("mapInventoryRowToDrawerData", () => {
       issueDate: "Aug 1",
       location: "HQ",
       expandable: {
-        earlierUsedBy: "—",
-        deliveryChallan: "—",
-        deliveryReferenceStatus: "—",
-        phoneNumber: "—",
+        earlierUsedBy: "-",
+        deliveryChallan: "-",
+        deliveryReferenceStatus: "-",
+        phoneNumber: "-",
         remarks: "note",
         assignmentRemarks: "note",
-        returnRemarks: "—",
+        returnRemarks: "-",
       },
       assignmentHistory: [],
     });

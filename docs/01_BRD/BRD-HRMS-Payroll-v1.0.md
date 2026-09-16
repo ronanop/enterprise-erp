@@ -1,4 +1,4 @@
-# BRD — Human Resource Management System (HRMS) & Payroll
+# BRD - Human Resource Management System (HRMS) & Payroll
 
 | Attribute | Value |
 |-----------|-------|
@@ -10,7 +10,7 @@
 | **Date** | 23 July 2026 |
 | **Upstream** | [ERP_BRD_v1.0.md](./ERP_BRD_v1.0.md) |
 | **Downstream** | [FRD-09-HR-Domain.md](../02_FRD/FRD-09-HR-Domain.md), [FRD-10-Payroll-Domain.md](../02_FRD/FRD-10-Payroll-Domain.md) |
-| **Flows & diagrams** | [FLOW-HRMS-Payroll-Diagrams-v1.0.md](./FLOW-HRMS-Payroll-Diagrams-v1.0.md) — all arrow flows in one file |
+| **Flows & diagrams** | [FLOW-HRMS-Payroll-Diagrams-v1.0.md](./FLOW-HRMS-Payroll-Diagrams-v1.0.md) - all arrow flows in one file |
 
 ---
 
@@ -18,9 +18,9 @@
 
 This Business Requirements Document defines the **complete HRMS and Payroll** capability for the Enterprise ERP Platform.
 
-HRMS manages the **people lifecycle** — from requisition and hiring through attendance, leave, shifts, performance, training, and exit.
+HRMS manages the **people lifecycle** - from requisition and hiring through attendance, leave, shifts, performance, training, and exit.
 
-Payroll manages the **compensation lifecycle** — salary structures, monthly processing, statutory deductions, payslips, bank transfer, and finance posting.
+Payroll manages the **compensation lifecycle** - salary structures, monthly processing, statutory deductions, payslips, bank transfer, and finance posting.
 
 Together they form an integrated **People → Time → Pay → Finance** value chain.
 
@@ -32,13 +32,13 @@ Together they form an integrated **People → Time → Pay → Finance** value c
 | Accurate pay | Attendance, leave, and OT feed payroll automatically |
 | Compliance | PF, ESI, PT, TDS, labour statutes tracked and auditable |
 | Manager productivity | Self-service leave, attendance corrections, approvals |
-| Audit readiness | Who changed what, when — for every HR/Payroll action |
+| Audit readiness | Who changed what, when - for every HR/Payroll action |
 
 ---
 
 ## 2. Scope
 
-### 2.1 In Scope — HRMS
+### 2.1 In Scope - HRMS
 
 | Module | Business Capability |
 |--------|---------------------|
@@ -54,7 +54,7 @@ Together they form an integrated **People → Time → Pay → Finance** value c
 | Separation | Resignation, clearance, final settlement inputs |
 | ESS (Portal) | Employee self-service for leave, attendance, payslip |
 
-### 2.2 In Scope — Payroll
+### 2.2 In Scope - Payroll
 
 | Module | Business Capability |
 |--------|---------------------|
@@ -187,7 +187,7 @@ Employee created in Workforce (EMP-######)
 
 - Requisition number format: `REQ-YYYY-######`
 - Offer cannot be sent without approved requisition
-- Employee ID is never a database ObjectId — business code only
+- Employee ID is never a database ObjectId - business code only
 
 ### 5.2 Employee Management (Workforce)
 
@@ -218,7 +218,7 @@ Assign Shift (Permanent / Temporary / Rotation)
       ↓
 Optional: Create Rotation Cycle (Morning → Evening → Night → Off)
       ↓
-Roster Calendar (Weekly / Monthly) — drag & drop
+Roster Calendar (Weekly / Monthly) - drag & drop
       ↓
 Shift Swap Request → Manager → HR → Approved
       ↓
@@ -479,7 +479,7 @@ Employee Archived
 
 | System | Owns | Consumes |
 |--------|------|----------|
-| Master Data | Employee identity, department, manager | — |
+| Master Data | Employee identity, department, manager | - |
 | HR | Profile, employment, attendance, leave, shifts, docs | Master employee |
 | Payroll | Structures, runs, payslips, tax | HR attendance/leave facts, employee bank |
 | Finance | GL journals, payables | Payroll posting payload |
@@ -527,7 +527,7 @@ Employee Archived
 2. Workflow and Notification engines are available for approvals/alerts.  
 3. Finance Chart of Accounts includes payroll expense/payable accounts.  
 4. Statutory rates are configurable per FY (not hard-coded).  
-5. Biometric devices integrate via API adapters — not in core UI.
+5. Biometric devices integrate via API adapters - not in core UI.
 
 ---
 

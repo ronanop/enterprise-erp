@@ -1,4 +1,4 @@
-# HR Recruitment ATS — Page Override
+# HR Recruitment ATS - Page Override
 
 > Follow MASTER tokens. This file only clarifies layout for the ATS hub.
 
@@ -29,4 +29,4 @@ Avoid purple gradients and dark-mode-by-default.
 
 ## Density
 
-High; Lucide icons; 150–300ms transitions; cursor-pointer on controls.
+High; Lucide icons; 150-300ms transitions; cursor-pointer on controls.

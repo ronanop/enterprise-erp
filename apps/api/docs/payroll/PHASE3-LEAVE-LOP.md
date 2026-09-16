@@ -1,4 +1,4 @@
-# Payroll Phase 3 — Attendance + leave → LOP
+# Payroll Phase 3 - Attendance + leave → LOP
 
 ## Rules
 
@@ -14,7 +14,7 @@ Per scheduled day:
 | Paid attendance statuses (present, WFH, holiday, etc.) | No LOP |
 
 ```text
-paid_days = N − LOP
+paid_days = N - LOP
 ```
 
 ## HR → payroll data

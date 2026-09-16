@@ -74,7 +74,7 @@ const COMPANY_SOURCES = [
 ] as const;
 
 function textOrDash(value: string | null | undefined): string {
-  return value?.trim() || "—";
+  return value?.trim() || "-";
 }
 
 function ReadOnlyValue({ value }: { value: string }) {
@@ -94,7 +94,7 @@ function CompanyReadOnlyField({ label, value }: { label: string; value: string }
 }
 
 function formatSourceLabel(source: string): string {
-  if (!source.trim()) return "—";
+  if (!source.trim()) return "-";
   if ((COMPANY_SOURCES as readonly string[]).includes(source)) {
     return source === "other" ? "other" : source.replaceAll("_", " ");
   }
@@ -103,7 +103,7 @@ function formatSourceLabel(source: string): string {
 
 function formatFollowupDate(row: CrmFollowup): string {
   const iso = row.followup_at;
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
   const yyyy = d.getFullYear();
@@ -114,17 +114,17 @@ function formatFollowupDate(row: CrmFollowup): string {
 
 function formatFollowupTime(row: CrmFollowup): string {
   const iso = row.followup_at;
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso.length >= 16 ? iso.slice(11, 16) : "—";
+  if (Number.isNaN(d.getTime())) return iso.length >= 16 ? iso.slice(11, 16) : "-";
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 function formatFollowupTaskDeadline(row: CrmFollowup): string {
   const date = formatFollowupDate(row);
   const time = formatFollowupTime(row);
-  if (date === "—") return "—";
-  return time === "—" ? date : `${date} ${time}`;
+  if (date === "-") return "-";
+  return time === "-" ? date : `${date} ${time}`;
 }
 
 function CompanyProfileReadOnly({
@@ -285,7 +285,7 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
 
   const employeeName = (id: string | null) => {
     if (!id) return "Unassigned";
-    return employees.find((employee) => employee.id === id)?.label ?? "—";
+    return employees.find((employee) => employee.id === id)?.label ?? "-";
   };
   const openMeetings = meetings.filter((m) => m.status === "scheduled");
   const openFollowups = followups.filter((f) => f.status === "scheduled");
@@ -328,7 +328,7 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
               <MeetingsDataTable
                 rows={meetings.slice(0, 5)}
                 hostName={employeeName}
-                emptyMessage='No meetings yet — use "Meeting" above to schedule one.'
+                emptyMessage='No meetings yet - use "Meeting" above to schedule one.'
               />
             </CrmListPanel>
           </div>
@@ -374,7 +374,7 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
                     {followups.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
-                          No follow-ups yet — use “Follow Up” above to schedule one.
+                          No follow-ups yet - use “Follow Up” above to schedule one.
                         </td>
                       </tr>
                     ) : (

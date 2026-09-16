@@ -123,8 +123,8 @@ describe("delivery reference formatting", () => {
   });
 
   it("returns dash for empty status", () => {
-    expect(formatDeliveryReferenceStatus(null)).toBe("—");
-    expect(formatDeliveryReferenceStatus("")).toBe("—");
+    expect(formatDeliveryReferenceStatus(null)).toBe("-");
+    expect(formatDeliveryReferenceStatus("")).toBe("-");
   });
 
   it("prefers number in challan display", () => {
@@ -161,8 +161,8 @@ describe("assignment remarks display", () => {
   });
 
   it("returns dash for blank", () => {
-    expect(formatAssignmentRemarksDisplay("  ")).toBe("—");
-    expect(formatAssignmentRemarksDisplay(null)).toBe("—");
+    expect(formatAssignmentRemarksDisplay("  ")).toBe("-");
+    expect(formatAssignmentRemarksDisplay(null)).toBe("-");
   });
 
   it("keeps plain remarks", () => {
@@ -188,8 +188,8 @@ describe("resolveAssigneeLabel", () => {
   });
 
   it("returns dash when empty", () => {
-    expect(resolveAssigneeLabel(null, {})).toBe("—");
-    expect(resolveAssigneeLabel({}, {})).toBe("—");
+    expect(resolveAssigneeLabel(null, {})).toBe("-");
+    expect(resolveAssigneeLabel({}, {})).toBe("-");
   });
 });
 
@@ -206,7 +206,7 @@ describe("deriveEarlierUsedBy", () => {
         [{ id: "1", status: "active", employee_id: "emp-new" }],
         employeeLabels,
       ),
-    ).toBe("—");
+    ).toBe("-");
   });
 
   it("uses most recent returned when multiple", () => {
@@ -236,7 +236,7 @@ describe("deriveEarlierUsedBy", () => {
         [{ id: "c", status: "cancelled", employee_id: "emp-old" }],
         employeeLabels,
       ),
-    ).toBe("—");
+    ).toBe("-");
   });
 });
 
@@ -310,7 +310,7 @@ describe("buildRegisterParityExpandable", () => {
   it("phone is dash when no active assignment", () => {
     const returnedOnly = [historyWithReturnAndActive[0]];
     const exp = buildRegisterParityExpandable(returnedOnly, employeeLookup);
-    expect(exp.phoneNumber).toBe("—");
+    expect(exp.phoneNumber).toBe("-");
     expect(exp.earlierUsedBy).toBe("Priya Sharma (EMP-004)");
   });
 
@@ -321,17 +321,17 @@ describe("buildRegisterParityExpandable", () => {
         employee_id: "emp-blank-phone",
       },
     ];
-    expect(buildRegisterParityExpandable(history, employeeLookup).phoneNumber).toBe("—");
-    expect(buildRegisterParityExpandable(history, {}).phoneNumber).toBe("—");
+    expect(buildRegisterParityExpandable(history, employeeLookup).phoneNumber).toBe("-");
+    expect(buildRegisterParityExpandable(history, {}).phoneNumber).toBe("-");
   });
 
   it("empty history yields dashes", () => {
     const exp = buildRegisterParityExpandable([]);
-    expect(exp.earlierUsedBy).toBe("—");
-    expect(exp.deliveryChallan).toBe("—");
-    expect(exp.assignmentRemarks).toBe("—");
-    expect(exp.returnRemarks).toBe("—");
-    expect(exp.phoneNumber).toBe("—");
+    expect(exp.earlierUsedBy).toBe("-");
+    expect(exp.deliveryChallan).toBe("-");
+    expect(exp.assignmentRemarks).toBe("-");
+    expect(exp.returnRemarks).toBe("-");
+    expect(exp.phoneNumber).toBe("-");
   });
 });
 
@@ -339,15 +339,15 @@ describe("resolveEmployeeCode / mobile / issued date", () => {
   it("resolves employee_code and mobile", () => {
     expect(resolveEmployeeCode("emp-new", employeeLookup)).toBe("EMP-001");
     expect(resolveEmployeeMobile("emp-new", employeeLookup)).toBe("9123456789");
-    expect(resolveEmployeeCode("missing", employeeLookup)).toBe("—");
-    expect(resolveEmployeeMobile("missing", employeeLookup)).toBe("—");
-    expect(resolveEmployeeMobile(null, employeeLookup)).toBe("—");
+    expect(resolveEmployeeCode("missing", employeeLookup)).toBe("-");
+    expect(resolveEmployeeMobile("missing", employeeLookup)).toBe("-");
+    expect(resolveEmployeeMobile(null, employeeLookup)).toBe("-");
   });
 
   it("formats issued date from allocated_at", () => {
     expect(formatIssuedDate("2026-01-01T00:00:00Z")).toContain("2026");
-    expect(formatIssuedDate(null)).toBe("—");
-    expect(formatIssuedDate("  ")).toBe("—");
+    expect(formatIssuedDate(null)).toBe("-");
+    expect(formatIssuedDate("  ")).toBe("-");
   });
 });
 
@@ -419,10 +419,10 @@ describe("mapAssetToInventoryRow register parity", () => {
         employeeLookup,
       },
     );
-    expect(row.currentHolder).toBe("—");
-    expect(row.employeeId).toBe("—");
-    expect(row.issueDate).toBe("—");
-    expect(row.expandable.phoneNumber).toBe("—");
+    expect(row.currentHolder).toBe("-");
+    expect(row.employeeId).toBe("-");
+    expect(row.issueDate).toBe("-");
+    expect(row.expandable.phoneNumber).toBe("-");
     expect(row.expandable.earlierUsedBy).toBe("Priya Sharma (EMP-004)");
   });
 
@@ -456,7 +456,7 @@ describe("mapAssetToInventoryRow register parity", () => {
       "expandable.phoneNumber",
     ]);
     expect(assertRegisterParityCoverage(keys).missing).toEqual([]);
-    expect(row.expandable.phoneNumber).toBe("—");
+    expect(row.expandable.phoneNumber).toBe("-");
   });
 });
 
@@ -481,7 +481,7 @@ function sampleRow(overrides: Partial<InventoryRowViewModel> = {}): InventoryRow
       earlierUsedBy: "Priya Sharma (EMP-004)",
       deliveryChallan: "DR-42",
       deliveryReferenceStatus: "Issued",
-      phoneNumber: "—",
+      phoneNumber: "-",
       remarks: "Handle carefully",
       assignmentRemarks: "Handle carefully",
       returnRemarks: "screen scratch",
@@ -539,7 +539,7 @@ describe("AssignmentSection register fields", () => {
 
   it("shows empty state when no enrichment", () => {
     render(
-      <AssignmentSection assignment={{ employee: "—", issueDate: "—", department: "—" }} />,
+      <AssignmentSection assignment={{ employee: "-", issueDate: "-", department: "-" }} />,
     );
     expect(screen.getByText("No active assignment")).toBeInTheDocument();
   });
@@ -548,9 +548,9 @@ describe("AssignmentSection register fields", () => {
     render(
       <AssignmentSection
         assignment={{
-          employee: "—",
-          issueDate: "—",
-          department: "—",
+          employee: "-",
+          issueDate: "-",
+          department: "-",
           assignmentRemarks: "note",
         }}
       />,
@@ -580,7 +580,7 @@ describe("AdditionalInfoSection earlier used by", () => {
 
   it("defaults to dashes", () => {
     render(<AdditionalInfoSection />);
-    expect(screen.getByTestId("drawer-earlier-used-by")).toHaveTextContent("—");
+    expect(screen.getByTestId("drawer-earlier-used-by")).toHaveTextContent("-");
   });
 });
 

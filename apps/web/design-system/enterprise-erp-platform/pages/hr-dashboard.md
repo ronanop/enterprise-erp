@@ -16,7 +16,7 @@ World-class HRMS executive dashboard (SuccessFactors / Workday / Darwinbox style
 
 | Token | Value | Notes |
 |-------|-------|-------|
-| Primary | `#2563EB` | Match MASTER — not darker blue from persist script |
+| Primary | `#2563EB` | Match MASTER - not darker blue from persist script |
 | Accent | `#059669` | Success / present / approved |
 | Background | `#F8FAFC` | Light enterprise |
 | Foreground | `#0F172A` | High contrast |
@@ -25,8 +25,8 @@ World-class HRMS executive dashboard (SuccessFactors / Workday / Darwinbox style
 
 **Typography:** Plus Jakarta Sans (MASTER)  
 **Density:** High data-dense dashboard  
-**Motion:** Subtle 150–300ms; respect `prefers-reduced-motion`  
-**Icons:** Lucide only — no emoji  
+**Motion:** Subtle 150-300ms; respect `prefers-reduced-motion`  
+**Icons:** Lucide only - no emoji  
 
 ## Layout
 

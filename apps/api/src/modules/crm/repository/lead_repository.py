@@ -25,11 +25,12 @@ class LeadRepository(CrmScopedRepository):
         company_id: UUID,
         company_account_id: UUID | None = None,
         owner_employee_id: UUID | None = None,
+        created_by: UUID | None = None,
     ):
         stmt = select(CrmLead).where(
             CrmLead.company_id == company_id,
             CrmLead.is_deleted.is_(False),
-            # Converted leads live under Opportunities — keep Leads free of duplicates.
+            # Converted leads live under Opportunities - keep Leads free of duplicates.
             CrmLead.blueprint_state != "converted",
             CrmLead.converted_opportunity_id.is_(None),
         )
@@ -37,6 +38,8 @@ class LeadRepository(CrmScopedRepository):
             stmt = stmt.where(CrmLead.company_account_id == company_account_id)
         if owner_employee_id is not None:
             stmt = stmt.where(CrmLead.owner_employee_id == owner_employee_id)
+        if created_by is not None:
+            stmt = stmt.where(CrmLead.created_by == created_by)
         stmt = self.apply_crm_filter(stmt, CrmLead, ctx, branch_scoped=True)
         stmt = stmt.order_by(CrmLead.created_at.desc())
         return list(self.db.scalars(stmt).all())
@@ -47,7 +50,7 @@ class LeadRepository(CrmScopedRepository):
         company_id: UUID,
         lead_ids: list[UUID],
     ) -> list[CrmLead]:
-        """Load leads by id, including converted — used for opportunity report joins."""
+        """Load leads by id, including converted - used for opportunity report joins."""
         if not lead_ids:
             return []
         stmt = select(CrmLead).where(

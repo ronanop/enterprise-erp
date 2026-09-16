@@ -1,4 +1,4 @@
-"""IT Asset Location Master (city / site) — not Organization org_location."""
+"""IT Asset Location Master (city / site) - not Organization org_location."""
 
 from uuid import UUID, uuid4
 

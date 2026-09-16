@@ -1,4 +1,4 @@
-"""Sales inventory adapters — reserve / issue / receive."""
+"""Sales inventory adapters - reserve / issue / receive."""
 
 from decimal import Decimal
 from uuid import UUID

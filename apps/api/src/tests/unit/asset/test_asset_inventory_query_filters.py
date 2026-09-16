@@ -1,4 +1,4 @@
-"""Phase 5F — Asset inventory server-side filter composition tests."""
+"""Phase 5F - Asset inventory server-side filter composition tests."""
 
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch

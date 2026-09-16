@@ -1,4 +1,4 @@
-"""Unit tests — Excel import schemas & domain constants (CR-004 Phase 8B)."""
+"""Unit tests - Excel import schemas & domain constants (CR-004 Phase 8B)."""
 
 from __future__ import annotations
 

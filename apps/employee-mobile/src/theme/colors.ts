@@ -1,4 +1,4 @@
-/** Kinetic Executive ESS — Stitch Luminary HR mobile palette */
+/** Kinetic Executive ESS - Stitch Luminary HR mobile palette */
 
 export const colors = {
   background: "#f8f9ff",

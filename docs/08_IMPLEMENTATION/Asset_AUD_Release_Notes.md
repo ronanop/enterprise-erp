@@ -1,4 +1,4 @@
-# FP-ASSET-008 — Release Notes
+# FP-ASSET-008 - Release Notes
 
 ## Summary
 

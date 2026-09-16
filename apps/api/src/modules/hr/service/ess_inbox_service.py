@@ -196,7 +196,7 @@ class HrEssInboxService:
                     source_id=row.id,
                     category="ot_allotment",
                     status=st,
-                    title=f"OT / Overday — {ot_type}",
+                    title=f"OT / Overday - {ot_type}",
                     employee_id=row.employee_id,
                     employee_name=_emp_name(self._master, ctx, row.employee_id),
                     document_number=getattr(row, "document_number", None),

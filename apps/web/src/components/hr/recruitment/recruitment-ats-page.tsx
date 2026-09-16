@@ -388,8 +388,8 @@ export function RecruitmentAtsPage() {
             c.email,
             SOURCE_LABELS[c.source] ?? c.source,
             `${c.experienceYears}y`,
-            c.expectedSalary ? `₹${c.expectedSalary.toLocaleString("en-IN")}` : "—",
-            c.resumeName || "—",
+            c.expectedSalary ? `₹${c.expectedSalary.toLocaleString("en-IN")}` : "-",
+            c.resumeName || "-",
           ])}
           page={page}
           total={candidates.length}
@@ -402,7 +402,7 @@ export function RecruitmentAtsPage() {
                 variant="outline"
                 className="cursor-pointer"
                 onClick={() => {
-                  toast(`${selected.size} candidates selected — use Pipeline to advance`);
+                  toast(`${selected.size} candidates selected - use Pipeline to advance`);
                 }}
               >
                 Bulk ({selected.size})
@@ -440,11 +440,11 @@ export function RecruitmentAtsPage() {
               const c = dir?.candidates.find((x) => x.id === i.candidateId);
               return [
                 i.interviewCode,
-                c?.fullName ?? "—",
+                c?.fullName ?? "-",
                 i.interviewType,
                 `${i.date} ${i.time}`,
                 i.mode,
-                i.interviewer || "—",
+                i.interviewer || "-",
                 <HrStatusBadge key="st" status={i.status} />,
               ];
             })}
@@ -468,9 +468,9 @@ export function RecruitmentAtsPage() {
               const c = dir?.candidates.find((x) => x.id === o.candidateId);
               return [
                 o.offerCode,
-                c?.fullName ?? "—",
-                o.ctc ? `₹${o.ctc.toLocaleString("en-IN")}` : "—",
-                o.joiningDate || "—",
+                c?.fullName ?? "-",
+                o.ctc ? `₹${o.ctc.toLocaleString("en-IN")}` : "-",
+                o.joiningDate || "-",
                 <HrStatusBadge key="s" status={OFFER_STATUS_LABELS[o.status]} />,
                 <div key="a" className="flex gap-1">
                   {o.status === "sent" ? (
@@ -482,7 +482,7 @@ export function RecruitmentAtsPage() {
                         onClick={() => {
                           void (async () => {
                             await updateOfferStatus(o.id, "accepted");
-                            toast("Offer accepted — start Onboarding");
+                            toast("Offer accepted - start Onboarding");
                             await load();
                           })();
                         }}
@@ -528,7 +528,7 @@ export function RecruitmentAtsPage() {
           headers={["File", "Candidate", "Type", "Uploaded"]}
           rows={(dir?.documents ?? []).map((d) => {
             const c = dir?.candidates.find((x) => x.id === d.candidateId);
-            return [d.fileName, c?.fullName ?? "—", d.kind, new Date(d.uploadedAt).toLocaleString()];
+            return [d.fileName, c?.fullName ?? "-", d.kind, new Date(d.uploadedAt).toLocaleString()];
           })}
           page={1}
           total={dir?.documents.length ?? 0}

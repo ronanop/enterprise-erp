@@ -1,4 +1,4 @@
-# FP-ASSET-011 — Asset Maintenance Plan (Feature Package)
+# FP-ASSET-011 - Asset Maintenance Plan (Feature Package)
 
 **Status:** Implemented  
 **ADR:** ADR-ASSET-MPL-001

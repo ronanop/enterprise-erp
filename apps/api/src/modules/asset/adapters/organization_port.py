@@ -1,4 +1,4 @@
-"""Organization port — read organization hierarchy entities."""
+"""Organization port - read organization hierarchy entities."""
 
 from uuid import UUID
 

@@ -8,7 +8,7 @@ import { ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-/** Shared layout tokens — aligned with CRM workspace UI. */
+/** Shared layout tokens - aligned with CRM workspace UI. */
 export const procurementUi = {
   page: "space-y-5",
   tableShell: "overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm",
@@ -33,7 +33,7 @@ export const procurementUi = {
   sectionTitle: "text-xs font-semibold uppercase tracking-[0.06em] text-muted-foreground",
 } as const;
 
-/** Page vertical rhythm — matches CRM dashboard. */
+/** Page vertical rhythm - matches CRM dashboard. */
 export function ProcurementPage({
   children,
   className,

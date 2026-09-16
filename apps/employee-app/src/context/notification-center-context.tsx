@@ -81,7 +81,7 @@ export function NotificationCenterProvider({ children }: { children: React.React
         showToast(latest);
       }
     } catch {
-      // silent — offline or auth blip
+      // silent - offline or auth blip
     }
   }, [showToast]);
 

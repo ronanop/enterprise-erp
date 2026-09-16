@@ -1,4 +1,4 @@
-# CR-004 Phase 3.3A — Asset Operations Layout
+# CR-004 Phase 3.3A - Asset Operations Layout
 
 **Status:** Complete (layout only)  
 **Date:** 2026-08-03  
@@ -58,7 +58,7 @@ Demo queue rows are static placeholders inside the component (not API data).
 
 ## Next
 
-**Phase 3.3B** — Wire layout to `/assets`, `dashboard-summary` client, and live queue lists (per frontend plan).
+**Phase 3.3B** - Wire layout to `/assets`, `dashboard-summary` client, and live queue lists (per frontend plan).
 
 ---
 

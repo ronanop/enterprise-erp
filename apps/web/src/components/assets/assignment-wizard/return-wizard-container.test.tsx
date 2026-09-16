@@ -79,7 +79,7 @@ beforeEach(() => {
   );
 });
 
-describe("ReturnWizardContainer — load", () => {
+describe("ReturnWizardContainer - load", () => {
   it("requires assignmentId or assetId", async () => {
     render(<ReturnWizardContainer service={service} listEmployees={listEmployees} />);
     await waitFor(() => {
@@ -185,7 +185,7 @@ describe("ReturnWizardContainer — load", () => {
   });
 });
 
-describe("ReturnWizardContainer — loading & retry", () => {
+describe("ReturnWizardContainer - loading & retry", () => {
   it("shows wizard after successful load", async () => {
     render(
       <ReturnWizardContainer assignmentId="asg-1" service={service} listEmployees={listEmployees} />,
@@ -222,7 +222,7 @@ describe("ReturnWizardContainer — loading & retry", () => {
   });
 });
 
-describe("ReturnWizardContainer — submit", () => {
+describe("ReturnWizardContainer - submit", () => {
   it("submits return and calls onSuccess", async () => {
     const onSuccess = vi.fn();
     const user = userEvent.setup();
@@ -312,7 +312,7 @@ describe("ReturnWizardContainer — submit", () => {
   });
 });
 
-describe("ReturnWizardContainer — return condition", () => {
+describe("ReturnWizardContainer - return condition", () => {
   it("submits outdated condition", async () => {
     const user = userEvent.setup();
     render(
@@ -375,7 +375,7 @@ describe("ReturnWizardContainer — return condition", () => {
   });
 });
 
-describe("ReturnWizardContainer — return remarks", () => {
+describe("ReturnWizardContainer - return remarks", () => {
   it("includes remarks and reason in payload", async () => {
     const user = userEvent.setup();
     render(
@@ -421,7 +421,7 @@ describe("ReturnWizardContainer — return remarks", () => {
   });
 });
 
-describe("ReturnWizardContainer — assignee fallback", () => {
+describe("ReturnWizardContainer - assignee fallback", () => {
   it("falls back when employee not in roster", async () => {
     listEmployees.mockResolvedValue([]);
     render(
@@ -441,7 +441,7 @@ describe("ReturnWizardContainer — assignee fallback", () => {
   });
 });
 
-describe("ReturnWizardContainer — service contract", () => {
+describe("ReturnWizardContainer - service contract", () => {
   it("does not call returnAsset until confirm", async () => {
     const user = userEvent.setup();
     render(

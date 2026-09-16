@@ -83,6 +83,6 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         except RedisError as exc:
             logger.warning("API rate limit skipped (Redis unavailable): %s", exc)
             return await call_next(request)
-        except Exception as exc:  # noqa: BLE001 — never block requests on limiter bugs
+        except Exception as exc:  # noqa: BLE001 - never block requests on limiter bugs
             logger.warning("API rate limit skipped: %s", exc)
             return await call_next(request)

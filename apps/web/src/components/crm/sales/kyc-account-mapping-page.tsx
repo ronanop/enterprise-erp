@@ -69,7 +69,7 @@ export function KycAccountMappingPage({
   }, [load]);
 
   const employeeName = (id: string | null) =>
-    id ? employees.find((employee) => employee.id === id)?.label ?? id.slice(0, 8) : "—";
+    id ? employees.find((employee) => employee.id === id)?.label ?? id.slice(0, 8) : "-";
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -117,7 +117,6 @@ export function KycAccountMappingPage({
       {!embedded ? (
         <PageHeader
           title="KYC - Account Mapping"
-          description="Company account KYC profile — ownership, source, industry, and external customer IDs."
           actions={actions}
         />
       ) : null}
@@ -178,12 +177,12 @@ export function KycAccountMappingPage({
                     <td className="px-4 py-2.5 text-muted-foreground">
                       {employeeName(row.account_owner_id)}
                     </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{row.industry || "—"}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{row.industry || "-"}</td>
                     <td className="px-4 py-2.5 capitalize text-muted-foreground">
-                      {(row.source || "—").replaceAll("_", " ")}
+                      {(row.source || "-").replaceAll("_", " ")}
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">
-                      {row.customer_id_ext || "—"}
+                      {row.customer_id_ext || "-"}
                     </td>
                     <td className="px-4 py-2.5">
                       <FinanceStatusBadge status={row.status} />

@@ -295,13 +295,13 @@ function TrainingRow({ program: p }: { program: TrainingProgram }) {
   return (
     <tr className="border-b border-border/40 hover:bg-muted/30">
       <td className="px-3 py-2 text-xs font-medium">{p.name}</td>
-      <td className="px-3 py-2 text-xs">{p.startDate || "—"}</td>
+      <td className="px-3 py-2 text-xs">{p.startDate || "-"}</td>
       <td className="px-3 py-2 text-xs">
-        {p.startTime || "—"}
-        {p.endTime ? `–${p.endTime}` : ""}
+        {p.startTime || "-"}
+        {p.endTime ? `-${p.endTime}` : ""}
       </td>
-      <td className="px-3 py-2 text-xs">{p.hostName || "—"}</td>
-      <td className="px-3 py-2 text-xs">{p.roomName || "—"}</td>
+      <td className="px-3 py-2 text-xs">{p.hostName || "-"}</td>
+      <td className="px-3 py-2 text-xs">{p.roomName || "-"}</td>
       <td className="px-3 py-2 text-xs">{p.attendeeCount}</td>
       <td className="px-3 py-2">
         <HrStatusBadge status={p.status} />
@@ -391,7 +391,7 @@ function CreateTrainingDrawer({
                   .map((e) => ({ id: e.id, label: e.label })),
               })
                 .then(() => {
-                  toast("Training created — attendees will be notified on the day", "success");
+                  toast("Training created - attendees will be notified on the day", "success");
                   onSaved();
                   onClose();
                 })

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Enterprise ERP Platform — Master Architecture</title>
+  <title>Enterprise ERP Platform - Master Architecture</title>
   <style>
 @page {
   size: A4;
@@ -65,7 +65,7 @@ ol { padding-left: 2.2em; list-style-position: outside; }
 li { margin: 2px 0; }
 ol li { padding-left: 0.35em; }
 
-/* Tables — critical for print fidelity */
+/* Tables - critical for print fidelity */
 table {
   width: 100% !important;
   max-width: 100% !important;
@@ -155,11 +155,11 @@ blockquote {
 </style>
 </head>
 <body>
-<h1 id="enterprise-erp-platform-master-architecture-document">Enterprise ERP Platform — Master Architecture Document</h1>
+<h1 id="enterprise-erp-platform-master-architecture-document">Enterprise ERP Platform - Master Architecture Document</h1>
 <p><strong>Document type:</strong> Solution Architecture &amp; Shipping Master<br />
 <strong>Product:</strong> Enterprise ERP Platform (ConnectPlus-aligned portfolio)<br />
 <strong>Baseline:</strong> Architecture Lock v1.1 · ADR-001 · ADR-002<br />
-<strong>Classification:</strong> Internal — Confidential<br />
+<strong>Classification:</strong> Internal - Confidential<br />
 <strong>Audience:</strong> Engineering, Architecture, DevOps, Product  </p>
 <p>This is the <strong>master architecture document</strong> for the full ERP portfolio. It consolidates system design, current locked technology stack, module features and flows, Mermaid architecture diagrams, and shipping strategies for <strong>on-premise</strong> and <strong>AWS</strong>. Calendar timelines and month-based phase dates are intentionally omitted.</p>
 <hr />
@@ -214,7 +214,7 @@ blockquote {
 </tr>
 <tr>
 <td>11</td>
-<td><a href="#11-module-catalog--full-portfolio">Module Catalog — Full Portfolio</a></td>
+<td><a href="#11-module-catalog--full-portfolio">Module Catalog - Full Portfolio</a></td>
 </tr>
 <tr>
 <td>12</td>
@@ -252,7 +252,7 @@ blockquote {
 </table>
 <hr />
 <h2 id="1-executive-summary">1. Executive Summary</h2>
-<p>The Enterprise ERP Platform is a <strong>modular monolith</strong> ERP ecosystem covering foundation platform services and twenty-plus business domains — Finance, CRM, Sales, Procurement, Inventory, Manufacturing, Quality, HR, Payroll, Projects, Assets, Service, Helpdesk, Documents, GRC, Analytics, Integration, Ecommerce, Portal, Marketing, and employee self-service — with roadmap extensions for AI Assistant / Virtual E.A., Licensing, and Backup &amp; DR.</p>
+<p>The Enterprise ERP Platform is a <strong>modular monolith</strong> ERP ecosystem covering foundation platform services and twenty-plus business domains - Finance, CRM, Sales, Procurement, Inventory, Manufacturing, Quality, HR, Payroll, Projects, Assets, Service, Helpdesk, Documents, GRC, Analytics, Integration, Ecommerce, Portal, Marketing, and employee self-service - with roadmap extensions for AI Assistant / Virtual E.A., Licensing, and Backup &amp; DR.</p>
 <p>Every module shares:</p>
 <ul>
 <li>One identity and RBAC model  </li>
@@ -364,8 +364,8 @@ blockquote {
 <h3 id="23-sell-together-and-sell-alone">2.3 Sell-together and sell-alone</h3>
 <p>Every module must satisfy:</p>
 <ol>
-<li><strong>Licensing contract</strong> — entitlement service (roadmap) disables unlicensed APIs, UI, and jobs (not merely hides menus).  </li>
-<li><strong>Degradation contract</strong> — defined behavior when a sibling module is absent (e.g. Sales exports invoices when Finance is not licensed).  </li>
+<li><strong>Licensing contract</strong> - entitlement service (roadmap) disables unlicensed APIs, UI, and jobs (not merely hides menus).  </li>
+<li><strong>Degradation contract</strong> - defined behavior when a sibling module is absent (e.g. Sales exports invoices when Finance is not licensed).  </li>
 </ol>
 <hr />
 <h2 id="3-architectural-principles">3. Architectural Principles</h2>
@@ -403,7 +403,7 @@ blockquote {
 </tr>
 <tr>
 <td>Config over customization</td>
-<td>Workflows, settings, custom fields — not forks</td>
+<td>Workflows, settings, custom fields - not forks</td>
 </tr>
 <tr>
 <td>One artifact, many destinations</td>
@@ -592,7 +592,7 @@ blockquote {
 </tr>
 <tr>
 <td>Secrets</td>
-<td>Env / secret store — never commit production secrets</td>
+<td>Env / secret store - never commit production secrets</td>
 </tr>
 <tr>
 <td>Data</td>
@@ -650,7 +650,7 @@ blockquote {
 <li>UUID primary keys  </li>
 <li>Table/prefix standards per domain  </li>
 <li>Alembic-only schema changes  </li>
-<li>Soft delete — no physical DELETE on business tables  </li>
+<li>Soft delete - no physical DELETE on business tables  </li>
 <li>No cross-module foreign-key coupling across bounded contexts  </li>
 </ul>
 <div class="figure"><p class="figure-caption">Figure 5</p><img class="diagram" src="diagrams/diagram_05.png" alt="Architecture diagram 5" /></div>
@@ -732,7 +732,7 @@ blockquote {
 <div class="figure"><p class="figure-caption">Figure 14</p><img class="diagram" src="diagrams/diagram_14.png" alt="Architecture diagram 14" /></div>
 
 <hr />
-<h2 id="11-module-catalog-full-portfolio">11. Module Catalog — Full Portfolio</h2>
+<h2 id="11-module-catalog-full-portfolio">11. Module Catalog - Full Portfolio</h2>
 <p>Maturity legend: <strong>Implemented</strong> · <strong>Partial</strong> · <strong>Scaffold</strong> · <strong>Roadmap</strong>.</p>
 <hr />
 <h3 id="111-foundation-auth-rbac-workflow-audit-settings">11.1 Foundation (Auth, RBAC, Workflow, Audit, Settings)</h3>
@@ -1434,7 +1434,7 @@ blockquote {
 </tr>
 </tbody>
 </table>
-<p><strong>Features:</strong> CRM campaigns; marketing FRD scope — platforms/accounts, content requests, AI/Celery generation pipeline, versions/scores, brand voice, research/trends, competitors, calendar, publish jobs (stub), analytics summary; ecommerce promos/coupons adjacent.</p>
+<p><strong>Features:</strong> CRM campaigns; marketing FRD scope - platforms/accounts, content requests, AI/Celery generation pipeline, versions/scores, brand voice, research/trends, competitors, calendar, publish jobs (stub), analytics summary; ecommerce promos/coupons adjacent.</p>
 <p><strong>Key flows:</strong> Campaign → content request → generate → score → calendar → publish/approve.</p>
 <hr />
 <h2 id="12-roadmap-platform-extensions">12. Roadmap Platform Extensions</h2>
@@ -1446,12 +1446,12 @@ blockquote {
 <h3 id="122-virtual-executive-assistant">12.2 Virtual Executive Assistant</h3>
 <p><strong>Target features:</strong> Skills/performance graph; assessments/certifications; reminders; calendar/meeting assist; email draft/summarize; proactive insights; human-in-the-loop for consequential actions; consent/transparency controls.</p>
 <h3 id="123-licensing-server-side-activation">12.3 Licensing &amp; Server-side Activation</h3>
-<p><strong>Target features:</strong> Module entitlements, seats, license keys, online/offline activation, metering, renewal/expiry, grace periods, license audit — required for sell-alone and on-prem.</p>
+<p><strong>Target features:</strong> Module entitlements, seats, license keys, online/offline activation, metering, renewal/expiry, grace periods, license audit - required for sell-alone and on-prem.</p>
 <div class="figure"><p class="figure-caption">Figure 16</p><img class="diagram" src="diagrams/diagram_16.png" alt="Architecture diagram 16" /></div>
 
 <h3 id="124-data-backup-dr">12.4 Data Backup &amp; DR</h3>
 <p><strong>Target features:</strong> Scheduled full/incremental/WAL backups; encryption; restore verification; per-tenant PITR tooling; DR runbooks; RPO/RTO targets; alignment with GRC BCM.</p>
-<p>Ops today: PostgreSQL external hosting, manual dumps under <code>backups/</code>, SDD/DBS standards — product module still roadmap.</p>
+<p>Ops today: PostgreSQL external hosting, manual dumps under <code>backups/</code>, SDD/DBS standards - product module still roadmap.</p>
 <hr />
 <h2 id="13-integration-strategy">13. Integration Strategy</h2>
 <h3 id="131-hub-pattern">13.1 Hub pattern</h3>
@@ -1521,7 +1521,7 @@ blockquote {
 </tr>
 <tr>
 <td><strong>Standard</strong></td>
-<td>~100–1,000 users</td>
+<td>~100-1,000 users</td>
 <td>K3s cluster; HA Postgres (Patroni or managed); replicated Redis/RabbitMQ; MinIO erasure coding</td>
 </tr>
 <tr>
@@ -1549,7 +1549,7 @@ blockquote {
 </tr>
 <tr>
 <td>Config</td>
-<td><code>.env</code> / sealed secrets — DB URL, JWT, Graph/SSO optional, storage endpoints</td>
+<td><code>.env</code> / sealed secrets - DB URL, JWT, Graph/SSO optional, storage endpoints</td>
 </tr>
 <tr>
 <td>Licensing</td>
@@ -1561,7 +1561,7 @@ blockquote {
 </tr>
 <tr>
 <td>AI</td>
-<td>Customer LLM keys, vendor gateway, or local GPU inference — config only, no code fork</td>
+<td>Customer LLM keys, vendor gateway, or local GPU inference - config only, no code fork</td>
 </tr>
 <tr>
 <td>Existing artifacts</td>
@@ -1739,7 +1739,7 @@ blockquote {
 </tr>
 <tr>
 <td>Secrets</td>
-<td>Secrets Manager / sealed secrets — not git</td>
+<td>Secrets Manager / sealed secrets - not git</td>
 </tr>
 </tbody>
 </table>
@@ -1904,7 +1904,7 @@ blockquote {
 </table>
 <p>No deviation from Architecture Lock v1.1 without EARB approval and an updated ADR.</p>
 <hr />
-<h2 id="appendix-a-connect-ownership-implementation-focus">Appendix A — Connect ownership (implementation focus)</h2>
+<h2 id="appendix-a-connect-ownership-implementation-focus">Appendix A - Connect ownership (implementation focus)</h2>
 <p>Primary engineer ownership for delivery prioritization:</p>
 <ol>
 <li>User Login / Access &amp; RBAC  </li>
@@ -1919,7 +1919,7 @@ blockquote {
 <li>Emailer &amp; Notification System  </li>
 </ol>
 <hr />
-<h2 id="appendix-b-related-source-anchors">Appendix B — Related source anchors</h2>
+<h2 id="appendix-b-related-source-anchors">Appendix B - Related source anchors</h2>
 <table>
 <thead>
 <tr>

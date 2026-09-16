@@ -59,7 +59,7 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div className="text-sm font-medium tabular-nums text-foreground">
-        {(value ?? "").trim() || "—"}
+        {(value ?? "").trim() || "-"}
       </div>
     </div>
   );
@@ -341,7 +341,7 @@ export function DeliveryStatusEditPanel({ challanId }: DeliveryStatusEditPanelPr
                       {form.podDocument.fileName}
                     </button>
                   ) : (
-                    <div className="text-sm font-medium text-foreground">—</div>
+                    <div className="text-sm font-medium text-foreground">-</div>
                   )}
                 </div>
               </>
@@ -432,7 +432,7 @@ function GrnItemsTable({ rows }: { rows: DeliveryStatusGrnItemRow[] }) {
             {rows.map((row) => (
               <tr key={row.id} className={procurementUi.tr}>
                 <td className={procurementUi.td}>{row.product}</td>
-                <td className={procurementUi.tdMuted}>{row.description || "—"}</td>
+                <td className={procurementUi.tdMuted}>{row.description || "-"}</td>
                 <td className={cn(procurementUi.tdNumeric, "text-right font-medium")}>
                   {row.grnQty}
                 </td>

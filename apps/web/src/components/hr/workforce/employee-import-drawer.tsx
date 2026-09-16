@@ -150,7 +150,7 @@ export function EmployeeImportDrawer({
     setBusy(true);
     try {
       const result = await bulkImportEmployees(rows);
-      const msg = `Import done — created ${result.created}, updated ${result.updated}, skipped ${result.skipped}`;
+      const msg = `Import done - created ${result.created}, updated ${result.updated}, skipped ${result.skipped}`;
       setResultSummary(msg);
       toast(msg, result.skipped && !result.created && !result.updated ? "error" : "success");
       if (result.warnings?.length) {
@@ -227,7 +227,7 @@ export function EmployeeImportDrawer({
           ) : null}
         </div>
 
-        <SetupField label="Upload file" hint="CSV or Excel — then map each column below">
+        <SetupField label="Upload file" hint="CSV or Excel - then map each column below">
           <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-border px-3 py-6 text-xs text-muted-foreground hover:bg-muted/30">
             <Upload className="size-4" />
             {fileName || "Choose CSV or Excel file"}

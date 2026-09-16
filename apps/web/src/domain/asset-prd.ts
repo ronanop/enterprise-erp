@@ -113,9 +113,9 @@ export function brandModelLabel(asset: AssetsRow): string {
     return [make, model].filter(Boolean).join(" ");
   }
   const profile = parseDiscoveryProfile(asset);
-  if (!profile) return "—";
+  if (!profile) return "-";
   const parts = [profile.manufacturer, profile.model].filter(Boolean);
-  return parts.length ? parts.join(" ") : "—";
+  return parts.length ? parts.join(" ") : "-";
 }
 
 export type PrdActivityItem = {

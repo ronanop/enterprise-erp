@@ -12,7 +12,7 @@ import * as ui from "@/theme/classes";
 function formatSlot(start: string | null, end: string | null): string {
   if (!start && !end) return "All day";
   const fmt = (t: string) => t.slice(0, 5);
-  if (start && end) return `${fmt(start)} – ${fmt(end)}`;
+  if (start && end) return `${fmt(start)} - ${fmt(end)}`;
   return start ? fmt(start) : end ? fmt(end) : "";
 }
 

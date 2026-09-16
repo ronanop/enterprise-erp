@@ -76,7 +76,7 @@ function emptySummary(): DcChallanSummary {
 }
 
 function formatWhen(value?: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return value.replace("T", " ").slice(0, 16);
 }
 
@@ -570,11 +570,11 @@ export function AssetDcChallanWorkspace() {
                       <StatusBadge kind="dcChallan" status={row.status} />
                     </td>
                     <td className="px-3 py-2">
-                      <div className="font-medium">{row.asset_name ?? "—"}</div>
+                      <div className="font-medium">{row.asset_name ?? "-"}</div>
                       <div className="font-mono text-xs text-muted-foreground">{row.asset_tag}</div>
                     </td>
                     <td className="px-3 py-2">
-                      <div>{row.employee_name ?? "—"}</div>
+                      <div>{row.employee_name ?? "-"}</div>
                       <div className="text-xs text-muted-foreground">{row.employee_code}</div>
                     </td>
                     <td className="px-3 py-2">{row.assignment_id ? "Yes" : "No"}</td>
@@ -645,16 +645,16 @@ export function AssetDcChallanWorkspace() {
               <dl className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <dt className="text-xs text-muted-foreground">Tag</dt>
-                  <dd className="font-mono text-xs">{drawerRow.asset_tag ?? "—"}</dd>
+                  <dd className="font-mono text-xs">{drawerRow.asset_tag ?? "-"}</dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Serial</dt>
-                  <dd>{drawerRow.serial_number ?? "—"}</dd>
+                  <dd>{drawerRow.serial_number ?? "-"}</dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Make / model</dt>
                   <dd>
-                    {[drawerRow.make, drawerRow.model].filter(Boolean).join(" ") || "—"}
+                    {[drawerRow.make, drawerRow.model].filter(Boolean).join(" ") || "-"}
                   </dd>
                 </div>
               </dl>
@@ -665,7 +665,7 @@ export function AssetDcChallanWorkspace() {
               <dl className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <dt className="text-xs text-muted-foreground">Name</dt>
-                  <dd>{drawerRow.employee_name ?? "—"}</dd>
+                  <dd>{drawerRow.employee_name ?? "-"}</dd>
                 </div>
                 {isManualEmployee ? (
                   <div>
@@ -675,16 +675,16 @@ export function AssetDcChallanWorkspace() {
                 ) : (
                   <div>
                     <dt className="text-xs text-muted-foreground">Code</dt>
-                    <dd>{drawerRow.employee_code ?? "—"}</dd>
+                    <dd>{drawerRow.employee_code ?? "-"}</dd>
                   </div>
                 )}
                 <div>
                   <dt className="text-xs text-muted-foreground">Email</dt>
-                  <dd>{drawerRow.employee_email ?? "—"}</dd>
+                  <dd>{drawerRow.employee_email ?? "-"}</dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Phone</dt>
-                  <dd>{drawerRow.employee_phone || "—"}</dd>
+                  <dd>{drawerRow.employee_phone || "-"}</dd>
                 </div>
               </dl>
             </section>

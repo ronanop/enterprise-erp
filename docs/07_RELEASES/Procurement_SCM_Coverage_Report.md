@@ -1,4 +1,4 @@
-# Procurement & Supply Chain — Coverage Report
+# Procurement & Supply Chain - Coverage Report
 
 | Field | Value |
 |-------|--------|
@@ -22,10 +22,10 @@ Percentages are **product readiness** estimates (not line-of-code), using four l
 
 **Status labels**
 
-- ✅ **Complete** — Usable in production-style demos; gaps are polish or edge cases  
-- 🟡 **Partial** — Core path works; missing FRD items or UI depth  
-- 🔵 **API only** — Backend exists; little or no product UI  
-- ⬜ **Not started / stub** — Schema or placeholder only  
+- ✅ **Complete** - Usable in production-style demos; gaps are polish or edge cases  
+- 🟡 **Partial** - Core path works; missing FRD items or UI depth  
+- 🔵 **API only** - Backend exists; little or no product UI  
+- ⬜ **Not started / stub** - Schema or placeholder only  
 
 ---
 
@@ -61,7 +61,7 @@ Interpretation: **Supply chain execution (SCM → PO → GRN/receipt)** is the m
 
 ### 2.3 Full procurement module (all `modules.ts` resources)
 
-Includes upstream **requisitions, RFQs, vendor quotations, comparisons, returns, performance** — mostly API with generic list UI.
+Includes upstream **requisitions, RFQs, vendor quotations, comparisons, returns, performance** - mostly API with generic list UI.
 
 | Category | Overall % |
 |----------|-----------|
@@ -72,7 +72,7 @@ Includes upstream **requisitions, RFQs, vendor quotations, comparisons, returns,
 
 ---
 
-## 3. Master checklist — procurement module resources
+## 3. Master checklist - procurement module resources
 
 Source: `apps/web/src/config/modules.ts` (`key: "procurement"`).
 
@@ -99,9 +99,9 @@ Source: `apps/web/src/config/modules.ts` (`key: "procurement"`).
 
 ---
 
-## 4. Supply chain — detailed checklist (what is properly completed)
+## 4. Supply chain - detailed checklist (what is properly completed)
 
-### 4.1 SCM — CRM OVF handoff ✅ (~85%)
+### 4.1 SCM - CRM OVF handoff ✅ (~85%)
 
 | Item | Done | Evidence |
 |------|------|----------|
@@ -289,11 +289,11 @@ Use this as a demo / UAT “green” list for **Supply Chain + Procurement opera
 
 ## 7. Recommended next milestones (priority)
 
-1. **Vendor invoices (AP)** — Dedicated UI + GRN/PO → invoice creation (~+15% on module).  
-2. **Contracts** — Workspace UI + optional link on SCM create PO (~+8%).  
-3. **Unify GRN story** — Either promote classic GRN docs or document SCM receipts as canonical (~clarity).  
-4. **Upstream P2P** — One guided PR→RFQ→PO path (~+10% module).  
-5. **Server-backed delivery** — Replace or sync local challan storage (~+5% supply chain).
+1. **Vendor invoices (AP)** - Dedicated UI + GRN/PO → invoice creation (~+15% on module).  
+2. **Contracts** - Workspace UI + optional link on SCM create PO (~+8%).  
+3. **Unify GRN story** - Either promote classic GRN docs or document SCM receipts as canonical (~clarity).  
+4. **Upstream P2P** - One guided PR→RFQ→PO path (~+10% module).  
+5. **Server-backed delivery** - Replace or sync local challan storage (~+5% supply chain).
 
 ---
 

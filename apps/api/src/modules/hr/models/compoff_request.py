@@ -1,4 +1,4 @@
-"""Comp Off allocation request ORM — Emp → Mgr → HR → balance credit."""
+"""Comp Off allocation request ORM - Emp → Mgr → HR → balance credit."""
 
 from datetime import date, datetime
 from decimal import Decimal

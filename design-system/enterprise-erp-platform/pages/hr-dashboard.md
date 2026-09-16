@@ -19,11 +19,11 @@
 
 ### Spacing Overrides
 
-- **Content Density:** High — optimize for information display
+- **Content Density:** High - optimize for information display
 
 ### Typography Overrides
 
-- No overrides — use Master typography
+- No overrides - use Master typography
 
 ### Color Overrides
 
@@ -45,6 +45,6 @@
 
 ## Recommendations
 
-- Effects: Hover tooltips, row highlighting on hover, smooth 150–200ms transitions
+- Effects: Hover tooltips, row highlighting on hover, smooth 150-200ms transitions
 - Charts: Donut for part-to-whole (≤5 categories); Area for trends; Funnel for hiring pipeline
 - CTA Placement: Primary CTA in nav + After metrics

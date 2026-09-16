@@ -39,10 +39,10 @@ function formatTime(value: string | null | undefined) {
 function formatTimeRange(start: string | null | undefined, end: string | null | undefined) {
   const s = formatTime(start);
   const e = formatTime(end);
-  if (s && e) return `${s}–${e}`;
+  if (s && e) return `${s}-${e}`;
   if (s) return s;
   if (e) return e;
-  return "—";
+  return "-";
 }
 
 function canDecideRequest(status: TrainingRequest["status"]) {
@@ -142,8 +142,8 @@ export function MeetingRoomPage() {
                       <td className="px-4 py-3 text-sm capitalize text-muted-foreground">{r.requestType}</td>
                       <td className="px-4 py-3 text-sm tabular-nums">{r.requestDate}</td>
                       <td className="px-4 py-3 text-sm tabular-nums">{formatTimeRange(r.startTime, r.endTime)}</td>
-                      <td className="px-4 py-3 text-sm">{r.hostName || "—"}</td>
-                      <td className="px-4 py-3 text-sm">{r.roomName || "—"}</td>
+                      <td className="px-4 py-3 text-sm">{r.hostName || "-"}</td>
+                      <td className="px-4 py-3 text-sm">{r.roomName || "-"}</td>
                       <td className="px-4 py-3 text-center text-sm tabular-nums">{r.attendees.length}</td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         {canDecideRequest(r.status) ? (
@@ -283,15 +283,15 @@ function RequestDetailModal({
               label="Time"
               value={formatTimeRange(request.startTime, request.endTime)}
             />
-            <DetailField label="Host" value={request.hostName || "—"} />
-            <DetailField label="Room" value={request.roomName || "—"} />
+            <DetailField label="Host" value={request.hostName || "-"} />
+            <DetailField label="Room" value={request.roomName || "-"} />
           </div>
 
           {request.isRecurring ? (
             <p className="text-xs text-muted-foreground">Repeats {request.recurrenceRule}</p>
           ) : null}
 
-          <DetailField label="Agenda" value={request.agenda || "—"} />
+          <DetailField label="Agenda" value={request.agenda || "-"} />
 
           <div>
             <h4 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

@@ -1,4 +1,4 @@
-"""Resolution service — chargeable posts via Finance PostingService only."""
+"""Resolution service - chargeable posts via Finance PostingService only."""
 
 from datetime import datetime, timezone
 from decimal import Decimal

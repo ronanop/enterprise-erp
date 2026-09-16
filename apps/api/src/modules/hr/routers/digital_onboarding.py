@@ -89,7 +89,7 @@ def list_digital_onboarding(
 
 
 class DigitalOnboardingClearRequest(BaseModel):
-    """Explicit empty body — reject mass-assignment style extra fields."""
+    """Explicit empty body - reject mass-assignment style extra fields."""
 
     model_config = ConfigDict(extra="forbid")
 

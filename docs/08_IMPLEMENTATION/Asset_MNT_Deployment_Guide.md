@@ -1,4 +1,4 @@
-# Asset Maintenance — Deployment Guide (FP-ASSET-004)
+# Asset Maintenance - Deployment Guide (FP-ASSET-004)
 
 ## 1. Migrations
 
@@ -29,6 +29,6 @@ Confirm `AST_MAINTENANCE_APPROVAL` exists per tenant (seeded in `0266`).
 
 Maintenance does **not** post GL (ADR MNT-08). `cost_amount` is operational only.
 
-## 5. Accepted risk — open work-order exclusivity
+## 5. Accepted risk - open work-order exclusivity
 
 Exclusivity (one open WO per asset) is enforced in application code. The partial index `ix_ast_asset_maintenance_asset_status_open` speeds lookups; it is **not** UNIQUE. Do not rely on the database alone to prevent concurrent duplicate open work orders. On rare race conflicts, the second request may succeed; remediate operationally or retry. Reopen re-validates exclusivity so a cancelled WO cannot be reopened while another open WO exists.

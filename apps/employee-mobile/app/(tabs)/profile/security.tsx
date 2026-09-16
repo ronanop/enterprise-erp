@@ -101,9 +101,9 @@ export default function SecurityScreen() {
 
       <Text style={styles.section}>KYC</Text>
       <Card style={{ paddingHorizontal: 0, paddingVertical: 0 }}>
-        <ListRow title="Aadhaar" subtitle={kyc?.aadhaar_number ?? "—"} />
-        <ListRow title="PAN" subtitle={kyc?.pan_number ?? "—"} />
-        <ListRow title="UAN" subtitle={kyc?.uan_number ?? "—"} />
+        <ListRow title="Aadhaar" subtitle={kyc?.aadhaar_number ?? "-"} />
+        <ListRow title="PAN" subtitle={kyc?.pan_number ?? "-"} />
+        <ListRow title="UAN" subtitle={kyc?.uan_number ?? "-"} />
       </Card>
       <Text style={styles.section}>Face unlock</Text>
       <Card style={{ paddingHorizontal: 0, paddingVertical: 0 }}>

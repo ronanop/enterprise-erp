@@ -197,7 +197,7 @@ export function CandidateDrawer({ open, onClose, jobs, onSubmit }: Props) {
         </div>
         <SetupField label="Apply to job (optional)">
           <SetupSelect value={jobId} onChange={(e) => setJobId(e.target.value)}>
-            <option value="">None — add to talent pool only</option>
+            <option value="">None - add to talent pool only</option>
             {jobs
               .filter((j) => j.status === "open")
               .map((j) => (

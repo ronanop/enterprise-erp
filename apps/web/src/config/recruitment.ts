@@ -1,5 +1,5 @@
 /**
- * Recruitment workspace config — aligned with FRD-09 §§4–8 / ERD_13
+ * Recruitment workspace config - aligned with FRD-09 §§4-8 / ERD_13
  * and apps/api recruitment routers (Requisition → Onboarding).
  */
 

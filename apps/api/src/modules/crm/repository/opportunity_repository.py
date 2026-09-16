@@ -19,11 +19,21 @@ class OpportunityRepository(CrmScopedRepository):
         stmt = self.apply_crm_filter(stmt, CrmOpportunity, ctx, branch_scoped=branch_scoped)
         return self.db.scalar(stmt)
 
-    def list_opportunities(self, ctx: TenantContext, company_id: UUID):
+    def list_opportunities(
+        self,
+        ctx: TenantContext,
+        company_id: UUID,
+        *,
+        opportunity_ids: list[UUID] | None = None,
+    ):
         stmt = select(CrmOpportunity).where(
             CrmOpportunity.company_id == company_id,
             CrmOpportunity.is_deleted.is_(False),
         )
+        if opportunity_ids is not None:
+            if not opportunity_ids:
+                return []
+            stmt = stmt.where(CrmOpportunity.id.in_(opportunity_ids))
         stmt = self.apply_crm_filter(stmt, CrmOpportunity, ctx, branch_scoped=True)
         stmt = stmt.order_by(CrmOpportunity.created_at.desc())
         return list(self.db.scalars(stmt).all())

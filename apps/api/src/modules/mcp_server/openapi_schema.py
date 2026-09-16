@@ -101,4 +101,4 @@ def build_input_schema(openapi: dict[str, Any], endpoint: ExposedEndpoint) -> di
 def access_description_prefix(access: str) -> str:
     if access == "read":
         return "[READ-ONLY] "
-    return "[MUTATING — requires approval] "
+    return "[MUTATING - requires approval] "

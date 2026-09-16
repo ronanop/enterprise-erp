@@ -101,7 +101,7 @@ export function candidateDisplayName(row: RecruitmentRow): string {
   const first = typeof row.first_name === "string" ? row.first_name : "";
   const last = typeof row.last_name === "string" ? row.last_name : "";
   const joined = `${first} ${last}`.trim();
-  return joined || String(row.candidate_code ?? row.document_number ?? "—");
+  return joined || String(row.candidate_code ?? row.document_number ?? "-");
 }
 
 export async function loadRecruitmentOverview(): Promise<RecruitmentOverview> {

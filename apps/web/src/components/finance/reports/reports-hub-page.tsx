@@ -141,20 +141,20 @@ export function ReportsHubPage() {
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <FinanceKpiCard label="Available Reports" value={String(catalog.length || "—")} icon={FileSpreadsheet} />
+        <FinanceKpiCard label="Available Reports" value={String(catalog.length || "-")} icon={FileSpreadsheet} />
         <FinanceKpiCard
           label="Trial Balance Accounts"
-          value={tbAccounts != null ? String(tbAccounts) : "—"}
+          value={tbAccounts != null ? String(tbAccounts) : "-"}
           icon={Scale}
         />
         <FinanceKpiCard
           label="TB Difference"
-          value={tbDifference != null ? formatInrPrecise(tbDifference) : "—"}
+          value={tbDifference != null ? formatInrPrecise(tbDifference) : "-"}
           icon={Scale}
           tone={tbDifference != null && Math.abs(tbDifference) > 0.01 ? "warning" : "success"}
           hint="Should be zero when balanced"
         />
-        <FinanceKpiCard label="Report Categories" value={String(grouped.size || "—")} icon={BarChart3} />
+        <FinanceKpiCard label="Report Categories" value={String(grouped.size || "-")} icon={BarChart3} />
       </div>
 
       {loading && catalog.length === 0 ? (

@@ -229,7 +229,7 @@ class ProjectService:
 
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
-        # Site workflow payload (optional) — stripped before project insert
+        # Site workflow payload (optional) - stripped before project insert
         site_fields = fields.pop("site_installation", None)
         proc_order_id = fields.get("proc_order_id")
         if proc_order_id is not None:
@@ -297,11 +297,11 @@ class ProjectService:
                 except NotFoundException:
                     customer_label = None
             if customer_label and site_name:
-                fields["project_name"] = f"{customer_label} — {site_name}"
+                fields["project_name"] = f"{customer_label} - {site_name}"
             elif site_name:
                 fields["project_name"] = site_name
             elif customer_label:
-                fields["project_name"] = f"{customer_label} — Site Request"
+                fields["project_name"] = f"{customer_label} - Site Request"
             else:
                 fields["project_name"] = "Site Installation Request"
 

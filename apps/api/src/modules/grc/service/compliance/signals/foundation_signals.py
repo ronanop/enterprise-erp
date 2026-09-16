@@ -32,7 +32,7 @@ def signal_audit_trail_active(
         return ComplianceSignalResult(
             requirement_code=code,
             status="compliant",
-            summary=f"Audit trail active — {count} events in the last 30 days.",
+            summary=f"Audit trail active - {count} events in the last 30 days.",
             details={"event_count_30d": count},
         )
     return ComplianceSignalResult(

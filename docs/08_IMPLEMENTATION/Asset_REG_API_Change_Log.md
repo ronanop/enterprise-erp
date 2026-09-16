@@ -1,11 +1,11 @@
-# Asset Registration — API Change Log (FP-ASSET-REG-001)
+# Asset Registration - API Change Log (FP-ASSET-REG-001)
 
 ## Schemas
 
-- `AssetCreate` / `AssetRegistrationCreate` — full FRD registration fields
-- `AssetUpdate` / `AssetRegistrationUpdate` — draft-only mutable fields
-- `AssetListResult` — paginated list payload
-- `GrnPrefillResponse` — GRN prefill DTO
+- `AssetCreate` / `AssetRegistrationCreate` - full FRD registration fields
+- `AssetUpdate` / `AssetRegistrationUpdate` - draft-only mutable fields
+- `AssetListResult` - paginated list payload
+- `GrnPrefillResponse` - GRN prefill DTO
 
 ## Endpoints (`/api/v1/assets/assets`)
 

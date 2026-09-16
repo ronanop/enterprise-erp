@@ -439,7 +439,7 @@ class EssService:
         if latitude is None or longitude is None:
             raise AppException("GPS coordinates required for punch at this location")
         if not locations:
-            # Policy requires GPS but no fence configured — accept any coords.
+            # Policy requires GPS but no fence configured - accept any coords.
             return
         for loc in locations:
             dist = _haversine_meters(

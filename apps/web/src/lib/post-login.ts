@@ -22,7 +22,7 @@ function normalizeCompanies(data: unknown): OrgCompanyOption[] {
     .filter((c) => c.id && c.company_name);
 }
 
-/** Resolve where to navigate after login — may route through company selection. */
+/** Resolve where to navigate after login - may route through company selection. */
 export async function resolvePostLoginNavigation(
   email: string,
   next?: string | null,

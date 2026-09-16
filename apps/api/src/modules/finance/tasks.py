@@ -9,7 +9,7 @@ from workers.celery_app import celery_app
 
 @celery_app.task(name="finance.process_recurring_journals")
 def process_recurring_journals() -> dict:
-    """Stub — recurring journal templates deferred to Sprint 5+."""
+    """Stub - recurring journal templates deferred to Sprint 5+."""
     return {"status": "stub", "processed": 0}
 
 

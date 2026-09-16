@@ -184,7 +184,7 @@ def _hr_admin_workspace_permissions() -> list[str]:
 # Full HRMS sidebar access for assigned HR Admins (never includes superadmin panel).
 HR_ADMIN_WORKSPACE_PERMISSIONS = _hr_admin_workspace_permissions()
 
-# Named role packs (checklist Phase 13.2) — codes used by seed/resync migrations
+# Named role packs (checklist Phase 13.2) - codes used by seed/resync migrations
 HR_ROLE_PACKS: list[tuple[str, str, list[str]]] = [
     ("HR_EMPLOYEE", "Employee", HR_EMPLOYEE_PERMISSIONS),
     ("HR_MANAGER", "Manager", HR_MANAGER_PERMISSIONS),

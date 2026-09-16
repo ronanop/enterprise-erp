@@ -95,13 +95,13 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
       setBranch((prev) => prev || branches[0]?.label || "Head Office");
       setEntityId((prev) => prev || entityOpts[0]?.value || "");
       if (!m.designations.length) {
-        toast("No designations found — add them in HR Setup → Designations", "error");
+        toast("No designations found - add them in HR Setup → Designations", "error");
       }
       if (!entityOpts.length) {
-        toast("No legal entities found — add them in HR Setup → Legal Entities", "error");
+        toast("No legal entities found - add them in HR Setup → Legal Entities", "error");
       }
       if (!branches.length) {
-        toast("No branches found — add them in Org Setup → Branches", "error");
+        toast("No branches found - add them in Org Setup → Branches", "error");
       }
     });
   }, [open]);
@@ -249,7 +249,7 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
           <SetupField
             label="Personal mail"
             required
-            hint="Candidate login email — an auto-generated password is emailed to this address"
+            hint="Candidate login email - an auto-generated password is emailed to this address"
           >
             <SetupInput
               type="email"
@@ -390,12 +390,12 @@ export function StartOnboardingDrawer({ open, onClose, onSubmit }: Props) {
                     placeholder={
                       masters.branches.length
                         ? "Select company branch…"
-                        : "No branches — add in Org Setup → Branches"
+                        : "No branches - add in Org Setup → Branches"
                     }
                   />
         </div>
 
-        <SetupField label="Invitation link expiry (days)" hint="Secure portal link validity (1–90)">
+        <SetupField label="Invitation link expiry (days)" hint="Secure portal link validity (1-90)">
           <SetupInput
             type="number"
             min={1}

@@ -143,7 +143,7 @@ function receiptBadgeVariant(
 }
 
 function formatOrderStatusLabel(status: string): string {
-  return status.replaceAll("_", " ").trim() || "—";
+  return status.replaceAll("_", " ").trim() || "-";
 }
 
 function orderStatusBadgeClass(status: string, pendingApproval: boolean): string {
@@ -235,7 +235,7 @@ function formatOrderTotal(order: {
   return isUsdOrder(order) ? formatUsd(order.total_amount) : formatInr(order.total_amount);
 }
 
-/** Unit cost draft — never above the PO unit cost. */
+/** Unit cost draft - never above the PO unit cost. */
 function normalizeCostInput(raw: string, maxAllowed: number): string {
   const value = raw.trim();
   if (value === "" || value === ".") return value;
@@ -639,7 +639,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           } catch (uploadErr) {
             const uploadDetail =
               uploadErr instanceof ApiClientError
-                ? [uploadErr.message, ...uploadErr.errors].filter(Boolean).join(" — ")
+                ? [uploadErr.message, ...uploadErr.errors].filter(Boolean).join(" - ")
                 : uploadErr instanceof Error && uploadErr.message.trim()
                   ? uploadErr.message
                   : "Failed to save vendor invoice";
@@ -699,7 +699,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
             return { label: row.productLabel, quantity };
           })
           .filter((row) => row.quantity > 1e-9);
-        if (parts.length === 0) return "—";
+        if (parts.length === 0) return "-";
         if (parts.length === 1) {
           const qty = Number.isInteger(parts[0].quantity)
             ? String(parts[0].quantity)
@@ -740,7 +740,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     } catch (err) {
       const detail =
         err instanceof ApiClientError
-          ? [err.message, ...err.errors].filter(Boolean).join(" — ")
+          ? [err.message, ...err.errors].filter(Boolean).join(" - ")
           : err instanceof Error && err.message.trim()
             ? err.message
             : "Failed to update received qty";
@@ -768,7 +768,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       const additional = Number(raw);
       const label = line.product_name || line.product_code || `Line ${line.line_number}`;
       if (!Number.isFinite(additional) || additional <= 0) {
-        return { ok: false, message: `Enter a valid receive qty for ${label} (1–${remaining}).` };
+        return { ok: false, message: `Enter a valid receive qty for ${label} (1-${remaining}).` };
       }
       if (additional > remaining) {
         setQtyDraft((prev) => ({ ...prev, [line.id]: String(remaining) }));
@@ -882,7 +882,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
   const showReceiptColumns = showGrnWorkspace && !allLinesDelivered;
 
   useEffect(() => {
-    // Wait until the PO has loaded — otherwise tab=grn is cleared while order is still null.
+    // Wait until the PO has loaded - otherwise tab=grn is cleared while order is still null.
     if (!order) return;
     if (!canReceipt && viewMode === "grn") {
       setPoView("po");
@@ -932,7 +932,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
       }));
       return;
     }
-    // Scale unit cost with receive portion of remaining — never above PO unit cost.
+    // Scale unit cost with receive portion of remaining - never above PO unit cost.
     const scaled = Math.min(original, original * (qty / remaining));
     setCostDraft((prev) => ({
       ...prev,
@@ -1151,10 +1151,10 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
           )}
         >
           {approvalRejected
-            ? "Admin rejected this finalize request. Edit the PO if needed, then resubmit for approval — the same company PO number is kept."
+            ? "Admin rejected this finalize request. Edit the PO if needed, then resubmit for approval - the same company PO number is kept."
             : approvalPendingFlag
               ? isAdmin
-                ? "A finalize request is waiting. Accept or reject it on Approval — do not issue this PO from here."
+                ? "A finalize request is waiting. Accept or reject it on Approval - do not issue this PO from here."
                 : "Sent for admin approval. GRN, receipt, and delivery challan stay locked until an admin accepts and issues this PO."
               : "Draft PO. Send for admin approval before recording GRN or delivery."}
           {isAdmin && approvalPendingFlag ? (
@@ -1216,10 +1216,10 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                         order.ovf_no.trim()
                       )
                     ) : (
-                      "—"
+                      "-"
                     )}
                   </DetailItem>
-                  <DetailItem label="PO date">{order.document_date || "—"}</DetailItem>
+                  <DetailItem label="PO date">{order.document_date || "-"}</DetailItem>
                   <DetailItem label="Status">
                     <Badge
                       variant="outline"
@@ -1233,11 +1233,11 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                         : formatOrderStatusLabel(statusLabel)}
                     </Badge>
                   </DetailItem>
-                  <DetailItem label="Customer">{order.customer_name?.trim() || "—"}</DetailItem>
-                  <DetailItem label="Vendor">{vendorName || "—"}</DetailItem>
-                  <DetailItem label="Vendor GST">{vendorGst?.trim() || "—"}</DetailItem>
+                  <DetailItem label="Customer">{order.customer_name?.trim() || "-"}</DetailItem>
+                  <DetailItem label="Vendor">{vendorName || "-"}</DetailItem>
+                  <DetailItem label="Vendor GST">{vendorGst?.trim() || "-"}</DetailItem>
                   <DetailItem label="Vendor payment terms">
-                    {order.payment_terms?.trim() || "—"}
+                    {order.payment_terms?.trim() || "-"}
                   </DetailItem>
                   <DetailItem label="Amount">{formatOrderTotal(order)}</DetailItem>
                 </dl>
@@ -1286,10 +1286,10 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                               {fields.productName}
                             </td>
                             <td className="px-3 py-2.5 text-muted-foreground">
-                              {fields.description || "—"}
+                              {fields.description || "-"}
                             </td>
                             <td className="px-3 py-2.5 tabular-nums text-muted-foreground">
-                              {fields.hsnSac || "—"}
+                              {fields.hsnSac || "-"}
                             </td>
                             <td className="px-3 py-2.5 text-right tabular-nums">
                               {Number(ln.quantity) || 0}
@@ -1463,7 +1463,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                     return (
                       <tr key={ln.id} className="border-b border-border/70 align-top">
                         <td className="px-3 py-2 tabular-nums">{index + 1}</td>
-                        <td className="px-3 py-2">{ln.product_name || ln.product_code || "—"}</td>
+                        <td className="px-3 py-2">{ln.product_name || ln.product_code || "-"}</td>
                         <td className="px-3 py-2 tabular-nums">{orderedQty}</td>
                         <td className="px-3 py-2 text-center">
                           {locked ? (

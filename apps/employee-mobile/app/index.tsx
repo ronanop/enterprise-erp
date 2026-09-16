@@ -3,7 +3,7 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useAuth } from "@/context/auth-context";
 import { colors } from "@/theme/colors";
 
-/** Initial bootstrap — wait for auth, then show the branded app splash. */
+/** Initial bootstrap - wait for auth, then show the branded app splash. */
 export default function Index() {
   const { status } = useAuth();
 

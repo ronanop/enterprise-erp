@@ -461,7 +461,7 @@ export function EdocOtherDocumentsPanel() {
           </SetupField>
           <SetupField
             label="Attachments"
-            hint={`PDF, Office, images — max ${formatBytes(MAX_ORG_DOC_ATTACHMENT_BYTES)} each, up to ${MAX_ORG_DOC_ATTACHMENTS} files`}
+            hint={`PDF, Office, images - max ${formatBytes(MAX_ORG_DOC_ATTACHMENT_BYTES)} each, up to ${MAX_ORG_DOC_ATTACHMENTS} files`}
           >
             {!readOnly ? (
               <label className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-border/70 bg-muted/20 px-3 py-4 text-center text-xs text-muted-foreground hover:bg-muted/40">
@@ -612,7 +612,7 @@ export function EdocOtherDocumentsPanel() {
                 <>
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-medium">
-                      Group members ({groupMembers.length}) — select who receives this
+                      Group members ({groupMembers.length}) - select who receives this
                     </p>
                     <div className="flex gap-1">
                       <Button

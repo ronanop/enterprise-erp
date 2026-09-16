@@ -7,7 +7,7 @@ type Props = {
   readOnly?: boolean;
 };
 
-/** Attachments panel — API-ready shell until Finance↔DMS link for COA exists. */
+/** Attachments panel - API-ready shell until Finance↔DMS link for COA exists. */
 export function CoaAttachmentsPanel({ accountId, readOnly }: Props) {
   return (
     <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">

@@ -60,7 +60,7 @@ export function InvitationDrawer({ open, caseRow, onClose, onSend }: Props) {
     <SetupDrawer
       open={open}
       onClose={onClose}
-      title={isReupload ? "Notify candidate — re-upload" : "Onboarding Invitation"}
+      title={isReupload ? "Notify candidate - re-upload" : "Onboarding Invitation"}
       description={
         isReupload
           ? `Portal reopened for ${caseRow.candidateName}. Email the login credentials so they can sign in and re-upload.`
@@ -88,7 +88,7 @@ export function InvitationDrawer({ open, caseRow, onClose, onSend }: Props) {
         <div className="rounded-lg border border-border/70 bg-muted/30 p-3 text-xs">
           <p className="font-medium text-foreground">{caseRow.caseCode}</p>
           <p className="mt-1 text-muted-foreground">
-            Join {caseRow.joiningDate || "—"}
+            Join {caseRow.joiningDate || "-"}
           </p>
           {isReupload ? (
             <p className="mt-2 text-amber-800">
@@ -106,10 +106,10 @@ export function InvitationDrawer({ open, caseRow, onClose, onSend }: Props) {
         </div>
 
         <div className="rounded-lg border border-amber-300/80 bg-amber-50 px-3 py-2.5 text-xs text-amber-950">
-          <p className="font-semibold">HR testing — candidate login</p>
+          <p className="font-semibold">HR testing - candidate login</p>
           <p className="mt-1 text-amber-900/90">
             Same email and auto-generated password are emailed to the candidate. Use these if the
-            token/link is missing — they sign in again at the login page.
+            token/link is missing - they sign in again at the login page.
           </p>
         </div>
 

@@ -1,5 +1,5 @@
 /**
- * Enterprise ATS service — API-first with local cache fallback.
+ * Enterprise ATS service - API-first with local cache fallback.
  */
 
 import { resourceService } from "@/services/api-client";
@@ -151,13 +151,13 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
         id: String(r.id ?? crypto.randomUUID()),
         jobCode: String(r.document_number ?? `JOB-${String(i + 1).padStart(6, "0")}`),
         title: String(r.requisition_title ?? r.title ?? "Role"),
-        department: String(r.department_name ?? r.department_id ?? "—"),
-        designation: String(r.designation_name ?? r.designation_id ?? "—"),
+        department: String(r.department_name ?? r.department_id ?? "-"),
+        designation: String(r.designation_name ?? r.designation_id ?? "-"),
         employmentType: (String(r.employment_type ?? "full_time") as JobOpening["employmentType"]),
         branch: String(r.branch_name ?? r.branch_id ?? "Head Office"),
-        location: String(r.location ?? r.city ?? "—"),
-        hiringManager: String(r.hiring_manager_name ?? "—"),
-        recruiter: String(r.recruiter_name ?? "—"),
+        location: String(r.location ?? r.city ?? "-"),
+        hiringManager: String(r.hiring_manager_name ?? "-"),
+        recruiter: String(r.recruiter_name ?? "-"),
         positions: Number(r.openings_count ?? 1),
         filled: Number(r.filled_count ?? 0),
         salaryMin: Number(r.salary_band_min ?? 0),
@@ -260,7 +260,7 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
           candidateId: String(o.candidate_id ?? ""),
           jobId: String(o.job_requisition_id ?? ""),
           applicationId: String(o.application_id ?? ""),
-          department: String(o.department_name ?? o.department_id ?? "—"),
+          department: String(o.department_name ?? o.department_id ?? "-"),
           joiningDate: String(o.joining_date ?? ""),
           ctc: Number(o.offered_ctc ?? o.ctc ?? 0),
           expiryDate: String(o.offer_valid_until ?? ""),
@@ -277,7 +277,7 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
   }
 
   const departments = Array.from(
-    new Set(jobs.map((j) => j.department).filter((d) => d && d !== "—")),
+    new Set(jobs.map((j) => j.department).filter((d) => d && d !== "-")),
   ).sort();
 
   return {
@@ -386,7 +386,7 @@ export async function createJob(input: CreateJobInput): Promise<JobOpening> {
   saveJobs(all);
   appendAtsAudit({
     action: "create_job",
-    detail: `Created ${row.jobCode} — ${row.title}${row.apiId ? " (API)" : " (local)"}`,
+    detail: `Created ${row.jobCode} - ${row.title}${row.apiId ? " (API)" : " (local)"}`,
     actor: actor(),
     entityId: row.id,
   });
@@ -501,7 +501,7 @@ export async function createCandidate(input: CreateCandidateInput): Promise<AtsC
   saveCandidates(all);
   appendAtsAudit({
     action: "create_candidate",
-    detail: `Added ${row.candidateCode} — ${row.fullName}${row.apiId ? " (API)" : " (local)"}`,
+    detail: `Added ${row.candidateCode} - ${row.fullName}${row.apiId ? " (API)" : " (local)"}`,
     actor: actor(),
     entityId: row.id,
   });

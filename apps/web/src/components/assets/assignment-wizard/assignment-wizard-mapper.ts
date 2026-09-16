@@ -234,13 +234,13 @@ export function buildReturnSummary(
   assigneeLabel: string,
 ): ReturnSummaryView {
   return {
-    assetCode: asset.asset_code ?? "—",
-    assetName: asset.asset_name ?? "—",
-    serialNumber: asset.serial_number ?? "—",
+    assetCode: asset.asset_code ?? "-",
+    assetName: asset.asset_name ?? "-",
+    serialNumber: asset.serial_number ?? "-",
     operationalStatus: asset.operational_status ?? assignment.status,
     documentNumber: assignment.document_number,
     assigneeLabel,
-    allocatedAt: assignment.allocated_at?.slice(0, 10) ?? "—",
-    deliveryReferenceNumber: assignment.delivery_reference_number ?? "—",
+    allocatedAt: assignment.allocated_at?.slice(0, 10) ?? "-",
+    deliveryReferenceNumber: assignment.delivery_reference_number ?? "-",
   };
 }

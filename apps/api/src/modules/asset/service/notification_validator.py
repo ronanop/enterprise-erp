@@ -140,7 +140,7 @@ class NotificationValidator:
                     raise NotificationValidationError(
                         f"{key} is immutable after delivery_status becomes sent or read"
                     )
-            # Allow empty patch of only version — reject any metadata change attempt
+            # Allow empty patch of only version - reject any metadata change attempt
             mutable = {
                 k
                 for k, v in fields.items()

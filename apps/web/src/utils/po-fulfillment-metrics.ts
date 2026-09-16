@@ -61,7 +61,7 @@ function round6(n: number): number {
   return Math.round(n * 1e6) / 1e6;
 }
 
-/** Split stored `product — description | HSN …` names into separate display fields. */
+/** Split stored `product - description | HSN …` names into separate display fields. */
 export function splitPoProductFields(line: {
   product_name?: string | null;
   product_code?: string | null;
@@ -79,7 +79,7 @@ export function splitPoProductFields(line: {
 
   if (explicitDesc) {
     const productName =
-      withoutHsn.split(" — ")[0]?.trim() || withoutHsn || "Unnamed product";
+      withoutHsn.split(" - ")[0]?.trim() || withoutHsn || "Unnamed product";
     return {
       productName,
       description: explicitDesc,
@@ -87,7 +87,7 @@ export function splitPoProductFields(line: {
     };
   }
 
-  const sep = " — ";
+  const sep = " - ";
   const sepIndex = withoutHsn.indexOf(sep);
   if (sepIndex >= 0) {
     const productName = withoutHsn.slice(0, sepIndex).trim() || "Unnamed product";
@@ -109,7 +109,7 @@ export function splitPoProductFields(line: {
 function productLabel(line: PoFulfillmentLineInput): string {
   const { productName, description } = splitPoProductFields(line);
   if (!description) return productName;
-  return `${productName} — ${description}`;
+  return `${productName} - ${description}`;
 }
 
 export function buildPoFulfillmentMetrics(

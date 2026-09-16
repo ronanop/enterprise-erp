@@ -1,4 +1,4 @@
-/** Kinetic Executive ESS — Stitch Luminary HR mobile palette */
+/** Kinetic Executive ESS - Stitch Luminary HR mobile palette */
 
 export const colors = {
   background: "#f8f9ff",
@@ -112,7 +112,7 @@ export const quickLabel =
 export const quickPill =
   "flex items-center justify-center gap-2 rounded-2xl border border-white/55 bg-white/80 px-3 py-3.5 text-xs font-semibold text-[#004ac6] shadow-[0_6px_20px_rgba(0,0,0,0.06)] backdrop-blur-xl transition active:scale-[0.98] ring-1 ring-[#c3c6d7]/20";
 
-/** Header notifications — icon-only (no card), matches avatar row height */
+/** Header notifications - icon-only (no card), matches avatar row height */
 export const notificationBellButton =
   "relative inline-flex h-10 w-10 shrink-0 items-center justify-center leading-none text-[#004ac6] transition active:scale-95";
 

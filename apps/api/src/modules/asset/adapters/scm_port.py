@@ -1,6 +1,6 @@
 """SCM adapter for DC challan outbound requests and status pushes.
 
-This phase is log-only — no HTTP to Procurement/SCM. Branch/company on the
+This phase is log-only - no HTTP to Procurement/SCM. Branch/company on the
 challan row is pinned at create and is not rewritten if the asset later transfers.
 """
 

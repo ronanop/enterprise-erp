@@ -33,7 +33,7 @@ export const HEADER_HEIGHT = 56;
 export const NAV_HEIGHT = 64;
 
 export const tokens = StyleSheet.create({
-  /** ui.card — rounded-2xl bg-white/80 shadow border outlineVariant/30 */
+  /** ui.card - rounded-2xl bg-white/80 shadow border outlineVariant/30 */
   card: {
     borderRadius: RADIUS_CARD,
     backgroundColor: CARD_SURFACE,
@@ -46,7 +46,7 @@ export const tokens = StyleSheet.create({
     elevation: 2,
   },
 
-  /** ui.cardFlush — card with overflow hidden, no inner padding */
+  /** ui.cardFlush - card with overflow hidden, no inner padding */
   cardFlush: {
     borderRadius: RADIUS_CARD,
     overflow: "hidden",
@@ -60,7 +60,7 @@ export const tokens = StyleSheet.create({
     elevation: 2,
   },
 
-  /** ui.cardSoft — tinted surface card */
+  /** ui.cardSoft - tinted surface card */
   cardSoft: {
     borderRadius: RADIUS_CARD,
     overflow: "hidden",
@@ -69,7 +69,7 @@ export const tokens = StyleSheet.create({
     borderColor: "rgba(195,198,215,0.2)",
   },
 
-  /** ui.cardPeach — gradient handled by LinearCard; this is the shadow shell */
+  /** ui.cardPeach - gradient handled by LinearCard; this is the shadow shell */
   cardPeach: {
     borderRadius: RADIUS_CARD,
     overflow: "hidden",
@@ -80,7 +80,7 @@ export const tokens = StyleSheet.create({
     elevation: 6,
   },
 
-  /** ui.btn — primary pill */
+  /** ui.btn - primary pill */
   btn: {
     flexDirection: "row",
     alignItems: "center",
@@ -97,7 +97,7 @@ export const tokens = StyleSheet.create({
     elevation: 4,
   },
 
-  /** ui.btnPunchOut — soft blue pill */
+  /** ui.btnPunchOut - soft blue pill */
   btnPunchOut: {
     flexDirection: "row",
     alignItems: "center",
@@ -111,7 +111,7 @@ export const tokens = StyleSheet.create({
     borderColor: "rgba(195,198,215,0.4)",
   },
 
-  /** ui.btnSecondary — white outlined pill */
+  /** ui.btnSecondary - white outlined pill */
   btnSecondary: {
     flexDirection: "row",
     alignItems: "center",
@@ -125,7 +125,7 @@ export const tokens = StyleSheet.create({
     paddingVertical: 13.6,
   },
 
-  /** ui.btnLogout — red rounded rect */
+  /** ui.btnLogout - red rounded rect */
   btnLogout: {
     flexDirection: "row",
     alignItems: "center",
@@ -137,7 +137,7 @@ export const tokens = StyleSheet.create({
     paddingVertical: 13.6,
   },
 
-  /** ui.btnGhost — small tinted pill */
+  /** ui.btnGhost - small tinted pill */
   btnGhost: {
     flexDirection: "row",
     alignItems: "center",
@@ -178,7 +178,7 @@ export const tokens = StyleSheet.create({
     paddingVertical: 14,
   },
 
-  /** ui.iconTile — h-9 w-9 rounded-xl */
+  /** ui.iconTile - h-9 w-9 rounded-xl */
   iconTile: {
     height: 36,
     width: 36,
@@ -199,7 +199,7 @@ export const tokens = StyleSheet.create({
     backgroundColor: colors.surfaceHigh,
   },
 
-  /** ui.quickIconPremium — glass tile */
+  /** ui.quickIconPremium - glass tile */
   quickIconPremium: {
     aspectRatio: 1,
     maxWidth: 76,
@@ -236,7 +236,7 @@ export const tokens = StyleSheet.create({
     elevation: 2,
   },
 
-  /** ui.glassNav — sticky header / bottom nav surface */
+  /** ui.glassNav - sticky header / bottom nav surface */
   glassNav: {
     backgroundColor: colors.background,
     borderColor: "rgba(195,198,215,0.3)",
@@ -244,27 +244,27 @@ export const tokens = StyleSheet.create({
 });
 
 export const text = StyleSheet.create({
-  /** h1 on PageHeader — text-[1.65rem] font-bold */
+  /** h1 on PageHeader - text-[1.65rem] font-bold */
   pageTitle: {
     fontSize: 26.4,
     fontWeight: "700",
     letterSpacing: -0.4,
     color: colors.onSurface,
   },
-  /** header title — text-lg font-bold */
+  /** header title - text-lg font-bold */
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
     letterSpacing: -0.2,
     color: colors.onSurface,
   },
-  /** SectionLabel h2 — text-lg font-semibold */
+  /** SectionLabel h2 - text-lg font-semibold */
   sectionHeading: {
     fontSize: 18,
     fontWeight: "600",
     color: colors.onSurface,
   },
-  /** ui.sectionTitle — 0.72rem bold uppercase tracking-[0.08em] */
+  /** ui.sectionTitle - 0.72rem bold uppercase tracking-[0.08em] */
   sectionTitle: {
     fontSize: 11.5,
     fontWeight: "700",
@@ -275,7 +275,7 @@ export const text = StyleSheet.create({
   body: { fontSize: 14, color: colors.onSurface },
   muted: { fontSize: 14, color: colors.onSurfaceVariant },
   mutedSm: { fontSize: 12, color: colors.onSurfaceVariant },
-  /** ui.quickLabel — compact quick-action caption */
+  /** ui.quickLabel - compact quick-action caption */
   quickLabel: {
     fontSize: 12,
     fontWeight: "600",

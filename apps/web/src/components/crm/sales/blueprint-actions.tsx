@@ -74,7 +74,7 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   attach_contract: {
     label: "Attach Contract",
     fields: [{ key: "file_name", label: "Contract file", type: "file", required: true }],
-    description: "Optional for cloud deals — customer contract or invoice evidence.",
+    description: "Optional for cloud deals - customer contract or invoice evidence.",
   },
   send_cloud_discount_approval: {
     label: "Send Cloud Discount for Approval",
@@ -97,7 +97,7 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
       },
     ],
     description:
-      "Customer is onboarded on the payer account — closes the opportunity for sales; billing continues monthly.",
+      "Customer is onboarded on the payer account - closes the opportunity for sales; billing continues monthly.",
   },
   send_boq_approval: {
     label: "Send BOQ for Approval",
@@ -655,7 +655,7 @@ export function BlueprintStateBadge({ state, label }: { state?: string; label?: 
   const text =
     label?.trim() ||
     state?.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) ||
-    "—";
+    "-";
   return (
     <Badge className="rounded-full border-transparent bg-blue-600 px-3 py-0.5 text-xs font-semibold text-white hover:bg-blue-600">
       {text}

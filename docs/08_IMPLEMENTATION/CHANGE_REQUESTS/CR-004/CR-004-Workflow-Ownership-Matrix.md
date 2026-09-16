@@ -1,4 +1,4 @@
-# CR-004 — Workflow Ownership Matrix
+# CR-004 - Workflow Ownership Matrix
 
 **Status:** LOCKED (Phase 2B-2)  
 **Rule:** All `operational_status` changes go through `AssetOperationalStatusService` only.
@@ -7,9 +7,9 @@
 |----------------|---------------|--------------------|---------------|
 | Register asset approved / activated | `AssetService` | `initialize_ready_to_move` | `READY_TO_MOVE` |
 | Assignment activated | `AssignmentService` | `assign` | `ASSIGNED` |
-| Return — good condition | `AssignmentService` | `return_to_ready` | `READY_TO_MOVE` |
-| Return — outdated | `AssignmentService` | `retire` | `RETIRED` |
-| Return — dead / not working | `AssignmentService` | `mark_pending_disposal` | `PENDING_DISPOSAL` |
+| Return - good condition | `AssignmentService` | `return_to_ready` | `READY_TO_MOVE` |
+| Return - outdated | `AssignmentService` | `retire` | `RETIRED` |
+| Return - dead / not working | `AssignmentService` | `mark_pending_disposal` | `PENDING_DISPOSAL` |
 | Disposal posted (completion) | `DisposalService` | `complete_disposal` | `DISPOSED` |
 
 ## Forbidden
@@ -23,4 +23,4 @@ Each successful transition logs via `log_operational_status_change` with old/new
 
 ## Concurrency
 
-`expected_version` on asset row (optimistic lock) — conflicts raise `OperationalStatusConflict`.
+`expected_version` on asset row (optimistic lock) - conflicts raise `OperationalStatusConflict`.

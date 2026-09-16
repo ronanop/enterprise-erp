@@ -1,7 +1,7 @@
-# Asset Workflow Governance — Implementation Report (FP-ASSET-WF-GOV-001)
+# Asset Workflow Governance - Implementation Report (FP-ASSET-WF-GOV-001)
 
 **Date:** 2026-07-29  
-**Status:** Complete — pending review  
+**Status:** Complete - pending review  
 **Compliance:** Architecture Lock C-04 (workflow-backed approvals)
 
 ## Summary
@@ -62,7 +62,7 @@ Submit endpoints unchanged in path; behaviour creates `wf_instance` when governa
 ## Testing Summary
 
 ```
-pytest src/tests/unit/asset src/tests/security/asset src/tests/integration/asset — all passed
+pytest src/tests/unit/asset src/tests/security/asset src/tests/integration/asset - all passed
 ```
 
 See also: `Asset_WF_GOV_Testing_Report.md` (includes INT-WF-01/02/06).

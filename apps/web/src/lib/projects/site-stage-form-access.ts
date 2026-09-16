@@ -148,7 +148,7 @@ export function isAssignedStepActive(assignedStage: string, workflowStage: strin
   return current === assigned;
 }
 
-/** Assignee may open this step — standalone; no prior-step progress required. */
+/** Assignee may open this step - standalone; no prior-step progress required. */
 export function canOpenAssignedStageForm(
   site: SiteInstallation,
   assignedStage: Exclude<SiteStageFormKey, "assignment">,

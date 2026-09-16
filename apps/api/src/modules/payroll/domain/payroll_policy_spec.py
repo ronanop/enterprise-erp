@@ -45,10 +45,10 @@ DEFAULT_ATTENDANCE_PAY_RULES: AttendancePayRules = {
 
 
 def default_company_payroll_policy_fields() -> dict[str, Any]:
-    """TechBank / standard package: 20–20 pay, calendar leave, 60/50 split, fixed PF."""
+    """TechBank / standard package: 20-20 pay, calendar leave, 60/50 split, fixed PF."""
     return {
         "policy_code": "DEFAULT",
-        "policy_name": "Standard monthly payroll (20th–20th)",
+        "policy_name": "Standard monthly payroll (20th-20th)",
         "status": "active",
         "payroll_cycle_type": PayrollCycleType.DAY_20_TO_20.value,
         "payroll_cycle_start_day": 20,
@@ -67,8 +67,8 @@ def default_company_payroll_policy_fields() -> dict[str, Any]:
         "attendance_rules_json": dict(DEFAULT_ATTENDANCE_PAY_RULES),
         "notes": (
             "Gross X: Basic=60%×X, HRA=50%×Basic, Special=remainder. "
-            "Payable gross = X×(paid_days/N) with N from shift schedule in 20–20 period. "
-            "Net = payable_gross − fixed PF total (3700). Leave balance credits on calendar month end."
+            "Payable gross = X×(paid_days/N) with N from shift schedule in 20-20 period. "
+            "Net = payable_gross - fixed PF total (3700). Leave balance credits on calendar month end."
         ),
     }
 

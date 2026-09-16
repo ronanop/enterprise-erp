@@ -402,7 +402,7 @@ export function AssetRegistrationQueueWorkspace() {
                               }}
                             />
                           ) : (
-                            row.serial_number || "—"
+                            row.serial_number || "-"
                           )}
                         </td>
                         <td className="px-3 py-2">
@@ -416,7 +416,7 @@ export function AssetRegistrationQueueWorkspace() {
                               }}
                             />
                           ) : (
-                            row.make || "—"
+                            row.make || "-"
                           )}
                         </td>
                         <td className="px-3 py-2">
@@ -430,7 +430,7 @@ export function AssetRegistrationQueueWorkspace() {
                               }}
                             />
                           ) : (
-                            row.model || "—"
+                            row.model || "-"
                           )}
                         </td>
                         <td
@@ -447,7 +447,7 @@ export function AssetRegistrationQueueWorkspace() {
                               }}
                             />
                           ) : (
-                            row.configuration || "—"
+                            row.configuration || "-"
                           )}
                         </td>
                         <td className="px-3 py-2">
@@ -461,10 +461,10 @@ export function AssetRegistrationQueueWorkspace() {
                               }}
                             />
                           ) : (
-                            row.location || "—"
+                            row.location || "-"
                           )}
                         </td>
-                        <td className="px-3 py-2">{row.grn_document_number || "—"}</td>
+                        <td className="px-3 py-2">{row.grn_document_number || "-"}</td>
                         <td className="px-3 py-2 text-xs text-muted-foreground">
                           {row.errors?.length ? row.errors.join("; ") : "Valid"}
                         </td>
@@ -723,14 +723,14 @@ export function AssetRegistrationQueueWorkspace() {
                       <td className="px-3 py-2">
                         <div className="font-medium">{row.product_name ?? "Product"}</div>
                         <div className="text-xs text-muted-foreground">
-                          {row.product_code ?? "—"}
+                          {row.product_code ?? "-"}
                         </div>
                       </td>
                       <td className="px-3 py-2 font-mono text-xs">
-                        {row.serial_number || "—"}
+                        {row.serial_number || "-"}
                       </td>
                       <td className="px-3 py-2">{row.grn_document_number}</td>
-                      <td className="px-3 py-2">{row.po_document_number ?? "—"}</td>
+                      <td className="px-3 py-2">{row.po_document_number ?? "-"}</td>
                       <td className="px-3 py-2">{branchLabel(row.branch_id)}</td>
                       <td className="px-3 py-2">{regBadge(row.qc_status)}</td>
                       <td className="px-3 py-2">{regBadge(row.registration_status)}</td>

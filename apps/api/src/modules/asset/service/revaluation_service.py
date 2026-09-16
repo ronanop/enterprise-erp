@@ -1,4 +1,4 @@
-"""RevaluationService — book-value revaluation governance (FP-ASSET-007)."""
+"""RevaluationService - book-value revaluation governance (FP-ASSET-007)."""
 
 from decimal import Decimal
 from uuid import UUID

@@ -1,4 +1,4 @@
-# ADR-ASSET-CHK-001 — Asset Checklist Management
+# ADR-ASSET-CHK-001 - Asset Checklist Management
 
 **Status:** Accepted  
 **Date:** 2026-07-30  

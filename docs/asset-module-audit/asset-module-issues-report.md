@@ -1,4 +1,4 @@
-# Asset Management Module — Issues Report
+# Asset Management Module - Issues Report
 
 **Generated:** 2026-08-25  
 **Companion:** `asset-module-analysis-report.md` (factual inventory)  
@@ -15,7 +15,7 @@
 |---|---|
 | **Supposed to happen** | Users pick / manage cities and buildings used by registration, inventory, transfers, and reports (`AssetLocationsPlaceholderWorkspace` copy). |
 | **Actually happens** | Route `/assets/locations` renders a “coming in Phase R1” card. No list, no CRUD, no API. Add Asset instead writes a string `location_label` from hardcoded `ASSET_SITE_CATALOG` (`config/asset-site-catalog.ts`). |
-| **Likely root cause** | Product explicitly deferred Asset Location Master. UI still ships a sidebar item that looks like a real workspace. File: `apps/web/src/components/assets/asset-locations-placeholder-workspace.tsx` lines 8–38. |
+| **Likely root cause** | Product explicitly deferred Asset Location Master. UI still ships a sidebar item that looks like a real workspace. File: `apps/web/src/components/assets/asset-locations-placeholder-workspace.tsx` lines 8-38. |
 | **Suggested fix** | Either (A) implement Location Master and wire Add Asset / inventory filters to it, or (B) hide the nav item until R1 and send users to a documented interim (site catalog or org locations). Do not leave a full nav entry that only explains it is unimplemented. |
 | **Severity** | **Major** (sidebar promises a capability that does not exist). |
 
@@ -43,7 +43,7 @@
 | | |
 |---|---|
 | **Supposed to happen** | Header actions for notifications / user (inferred from `aria-label`). |
-| **Actually happens** | Icon `Button`s with no `onClick`. Labels: `"Notifications (placeholder)"`, `"Profile (placeholder)"`. Covered by tests that **assert the placeholders exist** (`asset-operations-dashboard.test.tsx` ~75–78). File: `asset-operations-dashboard.tsx` ~188–205. |
+| **Actually happens** | Icon `Button`s with no `onClick`. Labels: `"Notifications (placeholder)"`, `"Profile (placeholder)"`. Covered by tests that **assert the placeholders exist** (`asset-operations-dashboard.test.tsx` ~75-78). File: `asset-operations-dashboard.tsx` ~188-205. |
 | **Suggested fix** | Remove the buttons, or wire Bell to `/assets/asset-notifications` (or Foundation inbox) and User to the app profile menu. Update the test that currently locks in dead controls. |
 | **Severity** | **Minor** (visual chrome) but looks unfinished on the primary landing page. |
 
@@ -75,13 +75,13 @@
 | **Suggested fix** | If governance is on, stop after submit and show “Awaiting approval.” If off, keep the chain. Branch on a small settings/info endpoint rather than catching 422. |
 | **Severity** | **Major** in governed tenants; **Minor** if flag is always off in the target deploy. |
 
-### 1.8 Transfer create — historical production bug (code now looks fixed)
+### 1.8 Transfer create - historical production bug (code now looks fixed)
 
 | | |
 |---|---|
 | **Supposed to happen** | `POST /asset-transfers` creates a draft. |
 | **Actually happened (2026-08-09 E2E)** | HTTP 500 `TypeError` duplicate `asset_id` (`docs/ASSET_MANAGEMENT_E2E_VERIFICATION_REPORT.md` BUG-TRF-CREATE-01). |
-| **Current code** | `transfer_service.py` `create()` strips `asset_id` from `**fields` before `self._repo.create(..., asset_id=asset.id, **payload)` (lines 107–119). |
+| **Current code** | `transfer_service.py` `create()` strips `asset_id` from `**fields` before `self._repo.create(..., asset_id=asset.id, **payload)` (lines 107-119). |
 | **Suggested fix** | Re-run the transfer create E2E. Do not treat as open unless it fails again. |
 | **Severity** | **Unclear / previously blocker.** Infer **closed in source**; confirm at runtime. |
 
@@ -117,7 +117,7 @@
 | | |
 |---|---|
 | **Supposed to happen** | Condition + component outcomes complete before POST return. |
-| **Actually happens** | `validateReturnStep` always returns `null` (`wizard-validation.ts` 39–43). Footer `onNext` / `onFinish` do not block. Backend **will** 422 if issued components exist and `component_returns` is missing — user sees that only after the last step. |
+| **Actually happens** | `validateReturnStep` always returns `null` (`wizard-validation.ts` 39-43). Footer `onNext` / `onFinish` do not block. Backend **will** 422 if issued components exist and `component_returns` is missing - user sees that only after the last step. |
 | **Suggested fix** | Mirror backend rules on the client: require a condition; require an outcome per issued component. |
 | **Severity** | **Major** (late errors; extra Next clicks). |
 
@@ -134,7 +134,7 @@
 
 | | |
 |---|---|
-| **What happens** | `list_asset_categories` loads all matching rows then slices (`routers/__init__.py` ~194–198). Fine at small N; will degrade. |
+| **What happens** | `list_asset_categories` loads all matching rows then slices (`routers/__init__.py` ~194-198). Fine at small N; will degrade. |
 | **Suggested fix** | Use repository `search` with offset/limit like other aggregates. |
 | **Severity** | **Minor** until category count grows. |
 
@@ -144,23 +144,23 @@
 
 | Screen | What’s wrong | File | Suggested fix |
 |---|---|---|---|
-| All `/assets/*` | **Two (often three) scrollbars**: document/`<main>` grows with content; module rail has its own `overflow-y-auto`; when not standalone, `AppSidebar` is a third `h-dvh` scroller. | `assets-module-sidebar.tsx` 52–56; `layout.tsx`; `app-shell.tsx`; `app-sidebar.tsx` 46–82 | See §3. |
+| All `/assets/*` | **Two (often three) scrollbars**: document/`<main>` grows with content; module rail has its own `overflow-y-auto`; when not standalone, `AppSidebar` is a third `h-dvh` scroller. | `assets-module-sidebar.tsx` 52-56; `layout.tsx`; `app-shell.tsx`; `app-sidebar.tsx` 46-82 | See §3. |
 | Module sidebar (desktop) | Icon-only 64px rail; labels only on hover. Hover expand overlays content (`absolute` + `z-20`) which is intentional, but **19 items × 5 groups** still overflow the `max-h` and force an inner scrollbar. | `assets-module-sidebar.tsx` | Reduce groups, collapse groups, or use a single viewport scroller (§3). |
 | Module sidebar (mobile) | Full nav stacked **above** the page (`lg:hidden`). User scrolls the page **and** a tall nav. | same | Convert to a sheet/drawer or compact select. |
-| Dashboard | Extra inner padding `px-1 py-2` on top of `AppShell` main padding; Bell/User dead controls; “Asset Operations” vs module title “Asset Management”. | `asset-operations-dashboard.tsx` 175–184 | Drop nested padding; remove placeholders; align naming. |
+| Dashboard | Extra inner padding `px-1 py-2` on top of `AppShell` main padding; Bell/User dead controls; “Asset Operations” vs module title “Asset Management”. | `asset-operations-dashboard.tsx` 175-184 | Drop nested padding; remove placeholders; align naming. |
 | Dashboard vs sidebar | Cards/pipeline still advertise Depreciation, Audits, etc. that the locked rail hides. | `config/assets.ts` `assetsWorkspaceGroups`, `assetsPipelineStages`, `assetsQuickLinks` | Align cards with `assetManagementNav` or restore those items to the rail. |
 | Add Asset location | “Location” / “Building” are a **static catalog**, not `/assets/locations` and not org locations. | `asset-add-form.tsx` + `asset-site-catalog.ts` | After Location Master, bind selects to API. Until then, label “Site (catalog)”. |
 | Disposal / depreciation / revaluation post | Debit/credit/fiscal year as raw UUID placeholders `xxxxxxxx-xxxx-…`. | `asset-disposal-workspace.tsx` ~870+ (same pattern on dep/rev) | Account pickers from Finance, not paste-UUID. |
 | Service history create | `parts_replaced_json` as a JSON textarea with example `[{"part":"filter","qty":1}]`. | `asset-service-history-workspace.tsx` ~690 | Structured line editor. |
 | Documents | URL + checksum fields. | `asset-document-workspace.tsx` | See §1.10. |
-| QR print | `window.open` + `document.write(<img>)` — fragile with popup blockers; no print CSS for label size. | `asset-qr-workspace.tsx` `printLabel` | Dedicated print stylesheet / `window.print` on a label layout. |
+| QR print | `window.open` + `document.write(<img>)` - fragile with popup blockers; no print CSS for label size. | `asset-qr-workspace.tsx` `printLabel` | Dedicated print stylesheet / `window.print` on a label layout. |
 | Assignment wizard steps | `EmployeeStep` / `AssetStep` / `IssuedItemsStep` default to **demo names** (`Priya Sharma`, `LT-2024-014`) if props omitted. Container usually passes real lists; Story/miswire risk. | `wizard-mock-data.ts`; step default params | Remove production defaults; require props or empty state. |
 | Icon reuse | `UserCheck` for Departments **and** Asset Assignment. | `config/assets.ts` | Distinct icons (e.g. `Building2` vs `UserCheck`). |
 | Unused tab nav | `AssetsWorkspaceNav` unused; would show Depreciation/Audits contrary to locked rail. | `assets-workspace-nav.tsx` | Delete or reuse after aligning items. |
 | Generic workspaces | Dense list+form pages (maintenance, insurance, …) use the same ad-hoc filter row; not the inventory `InventoryFilterBar` pattern. Feels like a second product. | `asset-*-workspace.tsx` | Share filter/toolbar primitives; keep density but match inventory typography/spacing. |
 | Finance UUID + JSON | Breaks “Swiss / data-dense admin” vs rest of ERP pickers. | several workspaces | Use the same combobox pattern as org/employee selects. |
 
-**Responsive:** Inventory table `min-w` + `overflow-x-auto` is present in dashboard branch breakdown (`min-w-[520px]`). Inventory main table relies on page overflow. At 375px, stacked sidebar + filters + wide table will require horizontal scroll — expected for density, but the **module sidebar on mobile** consumes a large first-screen budget before the table.
+**Responsive:** Inventory table `min-w` + `overflow-x-auto` is present in dashboard branch breakdown (`min-w-[520px]`). Inventory main table relies on page overflow. At 375px, stacked sidebar + filters + wide table will require horizontal scroll - expected for density, but the **module sidebar on mobile** consumes a large first-screen budget before the table.
 
 ---
 
@@ -193,7 +193,7 @@ CRM/Projects in standalone mode swap the primary sidebar. Assets standalone stil
    ```tsx
    className="… max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain"
    ```
-   (`assets-module-sidebar.tsx` lines 52–56)  
+   (`assets-module-sidebar.tsx` lines 52-56)  
    Parent: `lg:sticky lg:top-4 lg:self-start` (`layout.tsx` uses `lg:items-start`, so the aside does not stretch to main height).  
    Nav groups (~19 links + 5 uppercase headers + dividers) exceed `100dvh - 5.5rem` → **second scrollbar on the rail**.
 
@@ -210,7 +210,7 @@ CRM/Projects in standalone mode swap the primary sidebar. Assets standalone stil
 
 `lg:items-start` prevents the sidebar from sharing the main column height. Combined with `max-h` + `overflow-y-auto` on the rail, the rail **must** scroll independently of the page.
 
-**Mobile:** the full-label nav is **in document flow** (not `max-h`). It lengthens the page. Only the window scrolls — unless some child also overflows.
+**Mobile:** the full-label nav is **in document flow** (not `max-h`). It lengthens the page. Only the window scrolls - unless some child also overflows.
 
 ### 3.3 Exact fix (pick one scroller)
 
@@ -243,9 +243,9 @@ CRM/Projects in standalone mode swap the primary sidebar. Assets standalone stil
 
 | Issue | Detail |
 |---|---|
-| Information density | 5 sections, 19 destinations. Hover-to-expand hides labels until mouseover — high memory load for new users. |
+| Information density | 5 sections, 19 destinations. Hover-to-expand hides labels until mouseover - high memory load for new users. |
 | Active state | Implemented (`aria-current`, primary tint). Add Asset vs All Assets special-case is correct. Issue/return wizard URLs under `/assets/asset-assignments/*` will prefix-match **Asset Assignment** (OK). |
-| Grouping | Locked “current scope” omits depreciation/audits while dashboard still promotes them — hierarchy is inconsistent. |
+| Grouping | Locked “current scope” omits depreciation/audits while dashboard still promotes them - hierarchy is inconsistent. |
 | Icon consistency | Duplicate `UserCheck`; Lucide otherwise fine. |
 | Responsiveness | Mobile full list is too tall; no hamburger. Desktop overlay rail can cover the first columns of the inventory table on hover (`z-20`). |
 | Dual chrome | App sidebar + module sidebar is unique vs modules that only use `AppSidebar`. Standalone tab removes app sidebar (good) but operators in a non-standalone tab get **triple** scroll. |
@@ -256,20 +256,20 @@ CRM/Projects in standalone mode swap the primary sidebar. Assets standalone stil
 
 ### 4.1 What uses a wizard?
 
-**A. Issue asset (assignment)** — primary product wizard  
+**A. Issue asset (assignment)** - primary product wizard  
 
 - Entry: `/assets/asset-assignments/new`  
 - Components: `AssignmentWizard` + `AssignmentWizardContainer`  
 - Stepper: `WizardStepper` / `WizardProgressBar` (`wizard-stepper.tsx`)  
 - Step ids: `ASSIGNMENT_WIZARD_STEPS` in `wizard-types.ts`
 
-**B. Return asset** — second 5-step wizard  
+**B. Return asset** - second 5-step wizard  
 
 - Entry: `/assets/asset-assignments/return`  
 - `ReturnWizard` + `ReturnWizardContainer`  
 - `RETURN_WIZARD_STEPS`
 
-**C. Excel import** — third stepper (pipeline, not the assignment UX)  
+**C. Excel import** - third stepper (pipeline, not the assignment UX)  
 
 - `/assets/inventory-import`  
 - Steps: `select` → `parse` → `template` → `mapping` → `validate` → `preview` (`excel-import.types.ts`)
@@ -278,7 +278,7 @@ Add Asset is **already** a single scrolling page with sections (not a stepper). 
 
 There is also a **non-wizard** assignment create form on `AssetAssignmentWorkspace` (list page). Two UIs for the same API.
 
-### 4.2 Issue wizard — current steps
+### 4.2 Issue wizard - current steps
 
 | # | id | Fields / actions |
 |---|---|---|
@@ -298,7 +298,7 @@ Per-step validation (`validateAssignmentStep`): employee/dept/project required b
 
 Allocation type → which party field shows is **conditional**, not a reason for a separate page.
 
-### 4.3 Return wizard — current steps
+### 4.3 Return wizard - current steps
 
 | # | id | Fields / actions |
 |---|---|---|
@@ -314,15 +314,15 @@ Allocation type → which party field shows is **conditional**, not a reason for
 
 ### 4.4 Proposed single-page (non-stepped) redesign
 
-**Issue asset — one scrollable page, three cards:**
+**Issue asset - one scrollable page, three cards:**
 
-1. **Custody** — allocation type + employee/dept/project (conditional reveal) + expected return + asset picker (filter READY_TO_MOVE). When asset changes, accessory checklist **appears below** (same page).  
-2. **Delivery challan** — DC number/status/signature + remarks.  
-3. **Review strip** (optional sticky footer) — summary + Save draft + Submit.
+1. **Custody** - allocation type + employee/dept/project (conditional reveal) + expected return + asset picker (filter READY_TO_MOVE). When asset changes, accessory checklist **appears below** (same page).  
+2. **Delivery challan** - DC number/status/signature + remarks.  
+3. **Review strip** (optional sticky footer) - summary + Save draft + Submit.
 
 No Next. Issued items stay **disabled/hidden until an asset is selected** (preserve the only hard dependency).
 
-**Return asset — one page:**
+**Return asset - one page:**
 
 - Summary header (read-only).  
 - Condition radios.  
@@ -364,7 +364,7 @@ Ordered by severity, then effort (quick wins first within a tier).
 
 | Issue | Type | File(s) | Severity | Suggested fix | Effort |
 |---|---|---|---|---|---|
-| Nested page + module-rail scrollbars | UI | `assets-module-sidebar.tsx`, `assets/layout.tsx`, `app-shell.tsx` | Major | Viewport-lock shell; one scroller for main; rail `h-full overflow-y-auto` **or** shorten nav and drop inner overflow | S–M |
+| Nested page + module-rail scrollbars | UI | `assets-module-sidebar.tsx`, `assets/layout.tsx`, `app-shell.tsx` | Major | Viewport-lock shell; one scroller for main; rail `h-full overflow-y-auto` **or** shorten nav and drop inner overflow | S-M |
 | Locations nav is a placeholder | UX | `asset-locations-placeholder-workspace.tsx`, `config/assets.ts` | Major | Hide nav or ship Location Master and bind Add Asset | S (hide) / L (build) |
 | Excel import orphaned | UX | `inventory-export-toolbar.tsx`, `config/assets.ts`, `inventory-import/page.tsx` | Major | Add Import action + optional nav item | S |
 | Issue + return 5-step wizards | UX | `assignment-wizard/*`, `wizard-types.ts`, `wizard-validation.ts` | Major | Single-page sections; keep conditional accessories; real return validation | M |
@@ -393,7 +393,7 @@ Ordered by severity, then effort (quick wins first within a tier).
 
 ## Suggested implementation order (follow-up prompts)
 
-1. **Scrollbar + layout lock** (shell + assets layout + rail overflow) — no product debate.  
+1. **Scrollbar + layout lock** (shell + assets layout + rail overflow) - no product debate.  
 2. **Issue/return wizards → single page** (highest daily-path UX).  
 3. **Nav honesty:** hide Locations or build it; add Import; align dashboard cards; delete dead nav component.  
 4. **Dashboard placeholders and icon duplication.**  

@@ -84,7 +84,7 @@ class PayrollPeriodService:
         cycle_start_day: int | None = None,
         skip_existing: bool = True,
     ) -> list[PayPayrollPeriod]:
-        """Create 20–20 (or policy) payroll periods; idempotent when ``skip_existing``."""
+        """Create 20-20 (or policy) payroll periods; idempotent when ``skip_existing``."""
         if count < 1 or count > 24:
             raise AppException("count must be between 1 and 24")
         cid = self._scope.resolve_company_id(ctx, company_id)

@@ -41,7 +41,7 @@ function DetailBlock({ label, value }: { label: string; value: string }) {
           text.includes("\n") && "whitespace-pre-wrap",
         )}
       >
-        {text || "—"}
+        {text || "-"}
       </div>
     </div>
   );
@@ -81,19 +81,19 @@ function ChallanItemsTable({ lines }: { lines: DeliveryChallanLine[] }) {
                   <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
                     {index + 1}
                   </td>
-                  <td className={procurementUi.tdMuted}>{line.product.trim() || "—"}</td>
-                  <td className={procurementUi.td}>{line.itemName.trim() || "—"}</td>
-                  <td className={procurementUi.tdMuted}>{line.hsnSac.trim() || "—"}</td>
+                  <td className={procurementUi.tdMuted}>{line.product.trim() || "-"}</td>
+                  <td className={procurementUi.td}>{line.itemName.trim() || "-"}</td>
+                  <td className={procurementUi.tdMuted}>{line.hsnSac.trim() || "-"}</td>
                   <td className={cn(procurementUi.tdNumeric, "text-right")}>
-                    {line.quantitySent.trim() || "—"}
+                    {line.quantitySent.trim() || "-"}
                   </td>
                   <td className={cn(procurementUi.tdNumeric, "text-right")}>
-                    {line.rate.trim() ? formatInrPdf(rate) : "—"}
+                    {line.rate.trim() ? formatInrPdf(rate) : "-"}
                   </td>
                   <td className={cn(procurementUi.tdNumeric, "text-right font-medium")}>
-                    {amount > 0 ? formatInrPdf(amount) : "—"}
+                    {amount > 0 ? formatInrPdf(amount) : "-"}
                   </td>
-                  <td className={procurementUi.tdMuted}>{line.shipTo.trim() || "—"}</td>
+                  <td className={procurementUi.tdMuted}>{line.shipTo.trim() || "-"}</td>
                 </tr>
               );
             })}

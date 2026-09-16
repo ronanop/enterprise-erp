@@ -400,7 +400,7 @@ export function JournalCreatePage() {
                     </td>
                     <td className="px-3 py-2">
                       <FinanceSelect {...register(`lines.${index}.cost_center_id`)}>
-                        <option value="">—</option>
+                        <option value="">-</option>
                         {costCenters.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.label}
@@ -416,7 +416,7 @@ export function JournalCreatePage() {
                     </td>
                     <td className="px-3 py-2">
                       <FinanceSelect {...register(`lines.${index}.tax_id`)}>
-                        <option value="">—</option>
+                        <option value="">-</option>
                         {taxes.map((t) => (
                           <option key={t.id} value={t.id}>
                             {t.label}

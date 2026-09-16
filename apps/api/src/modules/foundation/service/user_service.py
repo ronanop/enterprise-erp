@@ -4,11 +4,15 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import AppException, ConflictException, NotFoundException
+from core.config import settings
+from core.exceptions import AppException, ConflictException, ForbiddenException, NotFoundException
 from modules.foundation.domain.erp_modules import (
+    ERP_MODULE_KEYS,
     ERP_MODULE_KEY_SET,
     effective_admin_module_keys,
     effective_module_keys,
+    has_all_modules_admin,
+    resolve_session_user_type,
 )
 from modules.foundation.domain.entities import UserEntity
 from modules.foundation.repository.session_repository import SessionRepository
@@ -30,13 +34,19 @@ class UserService:
 
     @staticmethod
     def to_response(user: UserEntity) -> UserResponse:
+        resolved_type = resolve_session_user_type(
+            user.user_type,
+            user.email,
+            user.role_codes,
+            platform_admin_emails=settings.microsoft_platform_admin_email_set(),
+        )
         return UserResponse(
             id=user.id,
             tenant_id=user.tenant_id,
             email=user.email,
             display_name=user.display_name,
             employee_id=user.employee_id,
-            user_type=user.user_type,
+            user_type=resolved_type,
             status=user.status,
             mfa_enabled=user.mfa_enabled,
             role_ids=user.role_ids,
@@ -57,6 +67,10 @@ class UserService:
         effective = self.effective_modules_for_user(user)
         return user, assigned, admin_keys, effective
 
+    def _is_erp_platform_admin(self, user: UserEntity) -> bool:
+        email = (user.email or "").strip().lower()
+        return bool(email and email in settings.microsoft_platform_admin_email_set())
+
     def set_user_modules(
         self,
         *,
@@ -66,11 +80,30 @@ class UserService:
         updated_by: UUID | None,
     ) -> UserEntity:
         user = self.get_user(tenant_id, user_id)
+        if self._is_erp_platform_admin(user):
+            raise AppException("ERP admin module access cannot be changed")
+
+        actor: UserEntity | None = None
+        if updated_by is not None:
+            actor = self._repo.get_by_id(tenant_id, updated_by)
+
         previous_admin_keys = list(user.admin_module_keys)
         normalized = sorted({k.strip() for k in module_keys if k and k.strip()})
         invalid = [k for k in normalized if k not in ERP_MODULE_KEY_SET]
         if invalid:
             raise AppException(f"Unknown module keys: {', '.join(invalid)}")
+
+        granting_all = has_all_modules_admin(normalized)
+        previously_all = has_all_modules_admin(previous_admin_keys)
+        if (granting_all or previously_all) and not (
+            actor is not None and self._is_erp_platform_admin(actor)
+        ):
+            raise ForbiddenException("Only ERP admins can grant or revoke All modules access")
+
+        # Explicit All-modules grant always stores the full key set.
+        if granting_all:
+            normalized = list(ERP_MODULE_KEYS)
+
         self._modules.replace_admin_keys(
             tenant_id=tenant_id,
             user_id=user_id,

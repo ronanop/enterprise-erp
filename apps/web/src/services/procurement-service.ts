@@ -1285,7 +1285,7 @@ export async function listPurchaseOrders(options?: {
     try {
       return await fetchPurchaseOrders();
     } catch (err) {
-      // One short retry — API is often briefly unreachable right after Docker recreate.
+      // One short retry - API is often briefly unreachable right after Docker recreate.
       if (err instanceof ApiClientError && err.status === 0) {
         await new Promise((resolve) => setTimeout(resolve, 1500));
         return fetchPurchaseOrders();

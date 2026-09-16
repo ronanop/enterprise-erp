@@ -1,4 +1,4 @@
-# HRMS & Payroll — Complete Process Flows & Diagrams
+# HRMS & Payroll - Complete Process Flows & Diagrams
 
 | Attribute | Value |
 |-----------|-------|
@@ -292,7 +292,7 @@ flowchart TD
   B3 --> C
   B4 --> C
   B5 --> C
-  C -->|No| D[Show errors — block submit]
+  C -->|No| D[Show errors - block submit]
   C -->|Yes| E[Submit for approval]
   E --> F[Approval workflow]
   F --> G[Approved]

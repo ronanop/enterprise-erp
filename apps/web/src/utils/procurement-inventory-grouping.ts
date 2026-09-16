@@ -23,14 +23,14 @@ export type InventoryPoGroup = {
 };
 
 function productName(row: ProcurementInventoryRow): string {
-  return row.product_name?.trim() || "—";
+  return row.product_name?.trim() || "-";
 }
 
 export function groupInventoryByPoAndGrn(rows: ProcurementInventoryRow[]): InventoryPoGroup[] {
   const poMap = new Map<string, { po: InventoryPoGroup; grnMap: Map<string, InventoryGrnGroup> }>();
 
   for (const row of rows) {
-    const poLabel = row.company_po_number?.trim() || "—";
+    const poLabel = row.company_po_number?.trim() || "-";
     const poKey = `${poLabel}::${row.order_id ?? "none"}`;
     let bucket = poMap.get(poKey);
     if (!bucket) {
@@ -85,13 +85,13 @@ export function groupInventoryByPoAndGrn(rows: ProcurementInventoryRow[]): Inven
 }
 
 export function formatGrnProductSummary(lines: InventoryGrnLineSummary[]): string {
-  if (lines.length === 0) return "—";
+  if (lines.length === 0) return "-";
   return lines.map((l) => `${l.productName} (${l.units})`).join(", ");
 }
 
 export function formatGrnSerialSummary(lines: InventoryGrnLineSummary[]): string {
   const serials = lines.flatMap((l) => l.serials).filter(Boolean);
-  if (serials.length === 0) return "—";
+  if (serials.length === 0) return "-";
   const unique = [...new Set(serials)];
   const naOnly =
     unique.length > 0 && unique.every((s) => s.toUpperCase() === "NA");

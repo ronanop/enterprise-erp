@@ -1,4 +1,4 @@
-# FP-ASSET-009 — Release Notes
+# FP-ASSET-009 - Release Notes
 
 ## Asset Warranty Management
 
@@ -12,7 +12,7 @@ Productizes warranty coverage for registered assets.
 - RBAC actions: activate, extend, expire
 - Optimistic locking on lifecycle actions
 - One open warranty per asset (active or extended)
-- **Coverage duration changes require Extend** — PATCH cannot change `end_date` on an active warranty (lifecycle preserved)
+- **Coverage duration changes require Extend** - PATCH cannot change `end_date` on an active warranty (lifecycle preserved)
 
 ### Not included
 

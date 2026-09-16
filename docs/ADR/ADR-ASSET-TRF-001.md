@@ -1,4 +1,4 @@
-# ADR-ASSET-TRF-001 — Asset Transfer
+# ADR-ASSET-TRF-001 - Asset Transfer
 
 **Status:** Accepted  
 **Date:** 2026-07-29  

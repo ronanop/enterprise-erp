@@ -169,7 +169,7 @@ export function InterviewDrawer({
           <SetupTextarea value={feedback} onChange={(e) => setFeedback(e.target.value)} rows={2} />
         </SetupField>
         <div className="grid gap-3 sm:grid-cols-2">
-          <SetupField label="Rating (1–5)">
+          <SetupField label="Rating (1-5)">
             <SetupInput
               type="number"
               min={1}

@@ -64,7 +64,7 @@ export function ApprovalBanner({
   locked?: boolean;
   approvalStatus?: string | null;
   label?: string;
-  /** Exact lock reason — overrides status-based message when provided. */
+  /** Exact lock reason - overrides status-based message when provided. */
   reason?: string | null;
   boqAttached?: boolean;
   boqApproved?: boolean;
@@ -81,14 +81,14 @@ export function ApprovalBanner({
       sowAttached,
       sowApproved,
     }) ||
-    `${label} is locked — pending a decision in My Jobs.`;
+    `${label} is locked - pending a decision in My Jobs.`;
 
   return (
     <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-destructive shadow-sm">
       <span className="flex min-w-0 items-start gap-2 font-medium">
         <Lock className="mt-0.5 size-4 shrink-0" />
         <span className="min-w-0">
-          {label} is locked — {resolved.replace(/^This record is locked — /i, "")}
+          {label} is locked - {resolved.replace(/^This record is locked - /i, "")}
         </span>
       </span>
       <Link

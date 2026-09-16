@@ -1,11 +1,11 @@
-# CR-004 — Dashboard Wireframe (IT Admin Landing)
+# CR-004 - Dashboard Wireframe (IT Admin Landing)
 
 **Route:** `/assets` (exact)  
 **Replaces:** Generic ERP workspace card grid as primary content (cards may move to “More” or footer links in 3.2).
 
 ---
 
-## ASCII wireframe — Desktop (≥1280px)
+## ASCII wireframe - Desktop (≥1280px)
 
 ```text
 ┌──────────────────────────────────────────────────────────────────────────────┐
@@ -63,7 +63,7 @@
 | Pending Disposal | `.../pending-disposal` | `pending_disposal` |
 | Disposed | `.../disposed` | `disposed` |
 
-**Visual:** Swiss minimal cards — border `#E2E8F0`, number `Fira Code` semibold, label `Fira Sans` 12px muted. Hover: subtle shadow + `cursor-pointer`. Active filter: accent left border `#0369A1`.
+**Visual:** Swiss minimal cards - border `#E2E8F0`, number `Fira Code` semibold, label `Fira Sans` 12px muted. Hover: subtle shadow + `cursor-pointer`. Active filter: accent left border `#0369A1`.
 
 **Loading:** Skeleton 6 cards. **Error:** Inline alert + retry on `dashboard-summary`.
 
@@ -74,7 +74,7 @@
 | Option | Behavior |
 |--------|----------|
 | **All** | `GET dashboard-summary` without `branch_id`; show `by_branch` optional tooltip breakdown |
-| **Noida / Mumbai / Dubai** | Example branch names from org master — not hardcoded in prod; design shows 3+1 pattern |
+| **Noida / Mumbai / Dubai** | Example branch names from org master - not hardcoded in prod; design shows 3+1 pattern |
 
 Changing branch refetches summary + both queues + recent activity lists with `branch_id` query param.
 
@@ -110,7 +110,7 @@ Row click → asset detail workspace.
 | Recent Returns | `status=returned&limit=5` | Doc #, Asset tag, Returned at |
 | Recent Registrations | `GET /assets/assets?limit=5` (client sort `created_at` desc) | Asset code, Name, Created |
 
-**Gap:** No unified activity feed API — compose three calls (documented; no backend in 3.1).
+**Gap:** No unified activity feed API - compose three calls (documented; no backend in 3.1).
 
 ---
 
@@ -122,7 +122,7 @@ Row click → asset detail workspace.
 - Queues | Activity 50/50 split.
 - Sidebar visible (app shell).
 
-### Tablet (768–1279px)
+### Tablet (768-1279px)
 
 - KPI 3×2 grid.
 - Quick actions horizontal scroll if needed.
@@ -150,4 +150,4 @@ Row click → asset detail workspace.
 
 ## Out of scope (3.1)
 
-Charts, executive report widgets, lifecycle funnel strip (depreciation pipeline) — not on IT Admin landing.
+Charts, executive report widgets, lifecycle funnel strip (depreciation pipeline) - not on IT Admin landing.

@@ -146,7 +146,7 @@ function setupColumnWidths(columns: { key: string }[]): string[] {
 }
 
 function formatAuditWhen(value: unknown): string {
-  if (value == null || String(value).trim() === "") return "—";
+  if (value == null || String(value).trim() === "") return "-";
   const raw = String(value).trim();
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return raw;
@@ -160,7 +160,7 @@ function formatAuditWhen(value: unknown): string {
 }
 
 function formatAuditWho(value: unknown, usersById: Record<string, string>): string {
-  if (value == null || String(value).trim() === "") return "—";
+  if (value == null || String(value).trim() === "") return "-";
   const id = String(value).trim();
   if (usersById[id]) return usersById[id];
   if (id === "current.user") {
@@ -184,14 +184,14 @@ function resolveEmployeeLabel(
   value: unknown,
   employees: { value: string; label: string }[],
 ): string {
-  if (value == null || value === "" || value === "—") return "—";
+  if (value == null || value === "" || value === "-") return "-";
   const id = String(value).trim();
   const found = employees.find((e) => e.value === id);
   if (found) {
-    // Label is often "Name · CODE" — show name only in the grid
+    // Label is often "Name · CODE" - show name only in the grid
     return found.label.split(" · ")[0]?.trim() || found.label;
   }
-  if (/^[0-9a-f-]{36}$/i.test(id)) return "—";
+  if (/^[0-9a-f-]{36}$/i.test(id)) return "-";
   return id;
 }
 
@@ -363,7 +363,7 @@ export function SetupEntityPanel({
     const initial: Record<string, string> = {};
     const usedCodes = [...codes];
     for (const f of fields) {
-      // Only mint the entity identity code — never state_code / country_code / etc.
+      // Only mint the entity identity code - never state_code / country_code / etc.
       const isIdentityCode =
         f.key === codeKey || f.key === "code" || f.key === "document_number";
       if (isIdentityCode) {
@@ -859,7 +859,7 @@ export function SetupEntityPanel({
           </div>
           <div className="flex w-full items-center justify-between border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
             <span>
-              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of{" "}
+              Showing {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, filtered.length)} of{" "}
               {filtered.length}
             </span>
             <div className="flex gap-1">

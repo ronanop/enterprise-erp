@@ -301,14 +301,14 @@ export function ArHubPage() {
       {tab === "dashboard" ? (
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <FinanceKpiCard label="Outstanding Receivables" value={summary ? formatInrPrecise(summary.outstanding_receivables) : "—"} icon={Wallet} />
-            <FinanceKpiCard label="Collected Today" value={summary ? formatInrPrecise(summary.collected_today) : "—"} icon={Banknote} tone="success" />
-            <FinanceKpiCard label="Overdue Invoices" value={String(summary?.overdue_invoices ?? "—")} icon={AlertCircle} hint={summary ? formatInrPrecise(summary.overdue_amount) : undefined} />
-            <FinanceKpiCard label="Current Month Collections" value={summary ? formatInrPrecise(summary.current_month_collections) : "—"} icon={TrendingUp} />
-            <FinanceKpiCard label="Customer Count" value={String(summary?.customer_count ?? "—")} icon={Users} />
-            <FinanceKpiCard label="Collection Efficiency" value={summary ? `${summary.collection_efficiency.toFixed(1)}%` : "—"} icon={Clock} />
-            <FinanceKpiCard label="Open Invoices" value={String(summary?.open_invoice_count ?? "—")} icon={Wallet} />
-            <FinanceKpiCard label="Receipts" value={String(summary?.receipt_count ?? "—")} icon={Banknote} />
+            <FinanceKpiCard label="Outstanding Receivables" value={summary ? formatInrPrecise(summary.outstanding_receivables) : "-"} icon={Wallet} />
+            <FinanceKpiCard label="Collected Today" value={summary ? formatInrPrecise(summary.collected_today) : "-"} icon={Banknote} tone="success" />
+            <FinanceKpiCard label="Overdue Invoices" value={String(summary?.overdue_invoices ?? "-")} icon={AlertCircle} hint={summary ? formatInrPrecise(summary.overdue_amount) : undefined} />
+            <FinanceKpiCard label="Current Month Collections" value={summary ? formatInrPrecise(summary.current_month_collections) : "-"} icon={TrendingUp} />
+            <FinanceKpiCard label="Customer Count" value={String(summary?.customer_count ?? "-")} icon={Users} />
+            <FinanceKpiCard label="Collection Efficiency" value={summary ? `${summary.collection_efficiency.toFixed(1)}%` : "-"} icon={Clock} />
+            <FinanceKpiCard label="Open Invoices" value={String(summary?.open_invoice_count ?? "-")} icon={Wallet} />
+            <FinanceKpiCard label="Receipts" value={String(summary?.receipt_count ?? "-")} icon={Banknote} />
           </div>
 
           {summary?.aging && summary.aging.length > 0 ? (

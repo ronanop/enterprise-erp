@@ -146,7 +146,7 @@ export function EcommerceDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="Ecommerce"
-        description="External channel commerce — stores, listings, carts, orders, payments, shipments, returns, and promotions."
+        description="External channel commerce - stores, listings, carts, orders, payments, shipments, returns, and promotions."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -193,28 +193,28 @@ export function EcommerceDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Active stores"
-          value={loading ? "—" : String(kpis.activeStores)}
+          value={loading ? "-" : String(kpis.activeStores)}
           hint={`${data?.stores.length ?? 0} stores · ${data?.channels.length ?? 0} channels`}
           icon={Store}
           tone={kpis.activeStores > 0 ? "success" : "default"}
         />
         <FinanceKpiCard
           label="Open carts"
-          value={loading ? "—" : String(kpis.openCarts)}
+          value={loading ? "-" : String(kpis.openCarts)}
           hint={`${data?.carts.length ?? 0} carts · ${data?.listings.length ?? 0} listings`}
           icon={Package}
           tone={kpis.openCarts > 0 ? "default" : "success"}
         />
         <FinanceKpiCard
           label="Open orders"
-          value={loading ? "—" : String(kpis.processingOrders)}
+          value={loading ? "-" : String(kpis.processingOrders)}
           hint={`${data?.orders.length ?? 0} orders · ${countByStatus(data?.payments ?? [], ["captured", "paid"])} paid`}
           icon={ShoppingBag}
           tone={kpis.processingOrders > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Shipments"
-          value={loading ? "—" : String(kpis.shipments)}
+          value={loading ? "-" : String(kpis.shipments)}
           hint={`${countByStatus(data?.shipments ?? [], ["shipped", "delivered"])} in transit · ${data?.returns.length ?? 0} returns`}
           icon={Truck}
           tone={kpis.shipments > 0 ? "default" : "success"}
@@ -340,7 +340,7 @@ export function EcommerceDashboard() {
                     >
                       <td className="max-w-[220px] truncate px-4 py-2.5">
                         <p className="font-medium text-foreground">
-                          {String(row.order_number ?? "—")}
+                          {String(row.order_number ?? "-")}
                         </p>
                         <p className="truncate text-[11px] text-muted-foreground">
                           {String(row.placed_at ?? "").slice(0, 19).replace("T", " ")}
@@ -350,7 +350,7 @@ export function EcommerceDashboard() {
                         {formatMoney(row)}
                       </td>
                       <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                        {String(row.currency ?? "—")}
+                        {String(row.currency ?? "-")}
                       </td>
                       <td className="px-4 py-2.5">
                         <FinanceStatusBadge
@@ -393,7 +393,7 @@ export function EcommerceDashboard() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-medium">
-                      {String(row.shipment_number ?? "—")}
+                      {String(row.shipment_number ?? "-")}
                     </p>
                     <FinanceStatusBadge
                       status={asStatus(row.status) || String(row.status ?? "")}
@@ -401,7 +401,7 @@ export function EcommerceDashboard() {
                   </div>
                   <p className="mt-1 text-[11px] text-muted-foreground">
                     {String(row.carrier_code ?? "carrier")} ·{" "}
-                    {String(row.tracking_number ?? "—")}
+                    {String(row.tracking_number ?? "-")}
                   </p>
                 </li>
               ))
@@ -412,7 +412,7 @@ export function EcommerceDashboard() {
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
           <div className="mb-3">
             <h2 className="text-base font-extrabold tracking-tight">Channel type mix</h2>
-            <p className="text-[11px] text-muted-foreground">FRD-22 §9–§13</p>
+            <p className="text-[11px] text-muted-foreground">FRD-22 §9-§13</p>
           </div>
           {loading ? (
             <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>

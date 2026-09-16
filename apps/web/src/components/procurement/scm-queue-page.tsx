@@ -49,7 +49,7 @@ type QueueFilter = "all" | "open" | "close" | "hold";
 type OvfStatus = ScmOvfQueueStatus;
 
 function formatReceivedDate(value?: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) {
     return String(value).slice(0, 10);
@@ -84,7 +84,7 @@ function parseQueueFilter(value: string | null): QueueFilter {
 
 function payTermsLabel(days: number | null | undefined): string {
   const value = Number(days) || 0;
-  if (value <= 0) return "—";
+  if (value <= 0) return "-";
   return `Net ${value} days`;
 }
 
@@ -499,7 +499,7 @@ export function ScmQueuePage() {
                         <span className="inline-flex flex-wrap items-center gap-1.5">
                           {(() => {
                             const labels = queuePoNumberLabels(row);
-                            if (labels.length === 0) return <span>—</span>;
+                            if (labels.length === 0) return <span>-</span>;
                             return (
                               <span className="flex flex-col gap-0.5">
                                 {labels.map((label) => (
@@ -523,7 +523,7 @@ export function ScmQueuePage() {
                         />
                       </span>
                     </td>
-                    <td className="px-3 py-2">{row.customer_name || "—"}</td>
+                    <td className="px-3 py-2">{row.customer_name || "-"}</td>
                     <td className="px-3 py-2 text-muted-foreground">
                       {payTermsLabel(row.customer_payment_days)}
                     </td>

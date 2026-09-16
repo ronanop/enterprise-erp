@@ -1,4 +1,4 @@
-"""PO queue for Project Management — shared installation POs without a linked project."""
+"""PO queue for Project Management - shared installation POs without a linked project."""
 
 from datetime import datetime, timezone
 from decimal import Decimal

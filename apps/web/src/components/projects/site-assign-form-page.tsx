@@ -84,7 +84,7 @@ export function SiteAssignFormPage({ projectId }: { projectId: string }) {
         ...stageAssignmentSection(deliveryType),
         title: "Assign Survey owner",
         subtitle:
-          "Step 2 — Select the Survey owner. SCM, Installation, and Acceptance owners are assigned later from Project Tracking after each step completes.",
+          "Step 2 - Select the Survey owner. SCM, Installation, and Acceptance owners are assigned later from Project Tracking after each step completes.",
         icon: Users,
       },
     ],

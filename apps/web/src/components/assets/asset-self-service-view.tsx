@@ -16,7 +16,7 @@ import {
 import { ApiClientError } from "@/services/api-client";
 
 function dash(value?: string | null): string {
-  return value && String(value).trim() ? String(value) : "—";
+  return value && String(value).trim() ? String(value) : "-";
 }
 
 type Props = {
@@ -109,7 +109,7 @@ export function AssetSelfServiceView({ assetId }: Props) {
             label="Category"
             value={
               portal.category_code
-                ? `${portal.category_code} — ${portal.category_name ?? ""}`
+                ? `${portal.category_code} - ${portal.category_name ?? ""}`
                 : portal.category_name
             }
           />
@@ -120,7 +120,7 @@ export function AssetSelfServiceView({ assetId }: Props) {
             label="Assignment"
             value={
               portal.assignment
-                ? `${portal.assignment.assignee_label ?? portal.assignment.allocation_type ?? "—"} (${portal.assignment.status})`
+                ? `${portal.assignment.assignee_label ?? portal.assignment.allocation_type ?? "-"} (${portal.assignment.status})`
                 : null
             }
           />
@@ -128,7 +128,7 @@ export function AssetSelfServiceView({ assetId }: Props) {
             label="Warranty"
             value={
               portal.warranty
-                ? `${portal.warranty.warranty_type ?? "—"} · ${portal.warranty.status ?? ""} · ends ${portal.warranty.end_date ?? "—"}`
+                ? `${portal.warranty.warranty_type ?? "-"} · ${portal.warranty.status ?? ""} · ends ${portal.warranty.end_date ?? "-"}`
                 : null
             }
           />
@@ -136,7 +136,7 @@ export function AssetSelfServiceView({ assetId }: Props) {
             label="Insurance"
             value={
               portal.insurance
-                ? `${portal.insurance.insurer_name ?? "—"} · ${portal.insurance.policy_number ?? ""} · ${portal.insurance.status ?? ""}`
+                ? `${portal.insurance.insurer_name ?? "-"} · ${portal.insurance.policy_number ?? ""} · ${portal.insurance.status ?? ""}`
                 : null
             }
             className="sm:col-span-2"
@@ -164,7 +164,7 @@ function Row({
   return (
     <div className={className}>
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      {badge && display !== "—" ? (
+      {badge && display !== "-" ? (
         <Badge variant="secondary" className="mt-1 font-mono text-xs">
           {display}
         </Badge>

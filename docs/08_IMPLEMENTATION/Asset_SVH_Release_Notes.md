@@ -1,4 +1,4 @@
-# Asset Service History — Release Notes (FP-ASSET-013)
+# Asset Service History - Release Notes (FP-ASSET-013)
 
 **Release:** FP-ASSET-013  
 **Date:** 2026-07-30

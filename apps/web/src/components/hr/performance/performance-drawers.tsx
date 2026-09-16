@@ -575,7 +575,7 @@ export function ReviewDrawer({
           <SetupTextarea value={finalComments} onChange={(e) => setFinalComments(e.target.value)} rows={2} />
         </SetupField>
         <div className="grid gap-3 sm:grid-cols-2">
-          <SetupField label="Overall rating (1–5)">
+          <SetupField label="Overall rating (1-5)">
             <SetupInput
               type="number"
               min={1}

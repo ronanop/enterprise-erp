@@ -42,9 +42,9 @@ import {
 } from "@/utils/installation-storage";
 
 function textOrDash(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "-";
   const text = String(value).trim();
-  return text || "—";
+  return text || "-";
 }
 
 type AutoFields = {

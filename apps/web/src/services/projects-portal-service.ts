@@ -91,7 +91,7 @@ export function formatInrPrecise(value: number | string | null | undefined): str
 
 /** `2026-07-27` from an ISO timestamp or date string. */
 export function formatDate(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value.slice(0, 10);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
@@ -101,13 +101,13 @@ export function formatDate(value: string | null | undefined): string {
 
 export function formatHours(value: number | string | null | undefined): string {
   const n = typeof value === "number" ? value : Number(value ?? 0);
-  if (!Number.isFinite(n)) return "—";
+  if (!Number.isFinite(n)) return "-";
   return `${n.toFixed(2)} h`;
 }
 
 /** Turns `in_progress` into `In progress` for display. */
 export function humanizeStatus(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const spaced = value.replace(/_/g, " ");
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
@@ -1534,7 +1534,7 @@ export async function listEmployeeOptions(): Promise<Option[]> {
   return listProjectMemberOptions();
 }
 
-/** @deprecated Use listProjectMemberOptions — same module-assigned user list. */
+/** @deprecated Use listProjectMemberOptions - same module-assigned user list. */
 export async function listProjectManagementTeamOptions(): Promise<Option[]> {
   return listProjectMemberOptions();
 }
@@ -1666,7 +1666,7 @@ export type ProjectsOverview = {
   risks: ProjectRisk[];
   changeRequests: ChangeRequest[];
   documents: ProjectDocument[];
-  /** True when at least one endpoint failed — the rest is still usable. */
+  /** True when at least one endpoint failed - the rest is still usable. */
   partial: boolean;
   statusCodes: number[];
 };

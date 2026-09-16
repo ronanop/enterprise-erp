@@ -382,7 +382,7 @@ export function FollowupFormDialog({
 
           <FieldRow label="Internal Team Member" required>
             <Input
-              value={teamMemberLabel || "—"}
+              value={teamMemberLabel || "-"}
               disabled
               aria-readonly="true"
               title="Set from your logged-in user account"

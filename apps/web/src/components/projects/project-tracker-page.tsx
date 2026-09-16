@@ -175,9 +175,9 @@ export function ProjectTrackerPage() {
                     <p>{tracker.file_name}</p>
                     <p className="text-xs text-muted-foreground">{formatBytes(tracker.file_size)}</p>
                   </td>
-                  <td className="max-w-70 px-4 py-2.5 text-muted-foreground">{tracker.remarks || "—"}</td>
+                  <td className="max-w-70 px-4 py-2.5 text-muted-foreground">{tracker.remarks || "-"}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">
-                    {tracker.created_at ? new Date(tracker.created_at).toLocaleString() : "—"}
+                    {tracker.created_at ? new Date(tracker.created_at).toLocaleString() : "-"}
                   </td>
                   <td className="px-4 py-2.5 text-right">
                     <Button

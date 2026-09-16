@@ -91,7 +91,7 @@ class ServiceChannelNotifier:
                     f"{message}\n\n"
                     f"Ticket: {request.document_number}\n"
                     f"Subject: {request.subject}\n\n"
-                    f"— Support Team"
+                    f"- Support Team"
                 ),
                 reply_to=settings.smtp_from_address or None,
             )

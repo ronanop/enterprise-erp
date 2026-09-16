@@ -165,7 +165,7 @@ def resolve_arrival_status(
     """
     Resolve check-in status from arrival window policy.
 
-    Example: window 10:00–11:00, after → half_day
+    Example: window 10:00-11:00, after → half_day
     - before/during window (and within grace of shift start): present or late
     - after ok_until: half_day / absent / late (per after_status)
     """

@@ -112,66 +112,66 @@ from modules.project.service import (
 )
 from shared.schemas import APIResponse
 
-projects_router = APIRouter(prefix="/projects", tags=["Project — Project"])
+projects_router = APIRouter(prefix="/projects", tags=["Project - Project"])
 
-project_phases_router = APIRouter(prefix="/project-phases", tags=["Project — ProjectPhase"])
+project_phases_router = APIRouter(prefix="/project-phases", tags=["Project - ProjectPhase"])
 
 project_milestones_router = APIRouter(
-    prefix="/project-milestones", tags=["Project — ProjectMilestone"]
+    prefix="/project-milestones", tags=["Project - ProjectMilestone"]
 )
 
-project_tasks_router = APIRouter(prefix="/project-tasks", tags=["Project — ProjectTask"])
+project_tasks_router = APIRouter(prefix="/project-tasks", tags=["Project - ProjectTask"])
 
 task_dependencies_router = APIRouter(
-    prefix="/task-dependencies", tags=["Project — TaskDependency"]
+    prefix="/task-dependencies", tags=["Project - TaskDependency"]
 )
 
 task_assignments_router = APIRouter(
-    prefix="/task-assignments", tags=["Project — TaskAssignment"]
+    prefix="/task-assignments", tags=["Project - TaskAssignment"]
 )
 
-timesheets_router = APIRouter(prefix="/timesheets", tags=["Project — Timesheet"])
+timesheets_router = APIRouter(prefix="/timesheets", tags=["Project - Timesheet"])
 
 timesheet_entries_router = APIRouter(
-    prefix="/timesheet-entries", tags=["Project — TimesheetEntry"]
+    prefix="/timesheet-entries", tags=["Project - TimesheetEntry"]
 )
 
-resource_plans_router = APIRouter(prefix="/resource-plans", tags=["Project — ResourcePlan"])
+resource_plans_router = APIRouter(prefix="/resource-plans", tags=["Project - ResourcePlan"])
 
 resource_allocations_router = APIRouter(
-    prefix="/resource-allocations", tags=["Project — ResourceAllocation"]
+    prefix="/resource-allocations", tags=["Project - ResourceAllocation"]
 )
 
-project_budgets_router = APIRouter(prefix="/project-budgets", tags=["Project — ProjectBudget"])
+project_budgets_router = APIRouter(prefix="/project-budgets", tags=["Project - ProjectBudget"])
 
-project_costs_router = APIRouter(prefix="/project-costs", tags=["Project — ProjectCost"])
+project_costs_router = APIRouter(prefix="/project-costs", tags=["Project - ProjectCost"])
 
-project_issues_router = APIRouter(prefix="/project-issues", tags=["Project — ProjectIssue"])
+project_issues_router = APIRouter(prefix="/project-issues", tags=["Project - ProjectIssue"])
 
-project_risks_router = APIRouter(prefix="/project-risks", tags=["Project — ProjectRisk"])
+project_risks_router = APIRouter(prefix="/project-risks", tags=["Project - ProjectRisk"])
 
-change_requests_router = APIRouter(prefix="/change-requests", tags=["Project — ChangeRequest"])
+change_requests_router = APIRouter(prefix="/change-requests", tags=["Project - ChangeRequest"])
 
 project_documents_router = APIRouter(
-    prefix="/project-documents", tags=["Project — ProjectDocument"]
+    prefix="/project-documents", tags=["Project - ProjectDocument"]
 )
 
 project_comments_router = APIRouter(
-    prefix="/project-comments", tags=["Project — ProjectComment"]
+    prefix="/project-comments", tags=["Project - ProjectComment"]
 )
 
 project_status_history_router = APIRouter(
-    prefix="/project-status-history", tags=["Project — ProjectStatusHistory"]
+    prefix="/project-status-history", tags=["Project - ProjectStatusHistory"]
 )
 
 project_notifications_router = APIRouter(
-    prefix="/project-notifications", tags=["Project — ProjectNotification"]
+    prefix="/project-notifications", tags=["Project - ProjectNotification"]
 )
 
-reports_router = APIRouter(prefix="/reports", tags=["Project — ProjectReport"])
+reports_router = APIRouter(prefix="/reports", tags=["Project - ProjectReport"])
 
 site_installations_router = APIRouter(
-    prefix="/site-installations", tags=["Project — SiteInstallation"]
+    prefix="/site-installations", tags=["Project - SiteInstallation"]
 )
 @projects_router.get("", response_model=APIResponse[list[ProjectResponse]])
 def list_projects(

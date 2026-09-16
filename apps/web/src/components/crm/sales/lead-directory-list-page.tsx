@@ -36,7 +36,6 @@ const META: Record<
   LeadDirectoryKind,
   {
     title: string;
-    description: string;
     subtitle: string;
     primary: (lead: SalesLead) => string | null | undefined;
     secondary: (lead: SalesLead) => string | null | undefined;
@@ -47,7 +46,6 @@ const META: Record<
 > = {
   oem: {
     title: "OEM",
-    description: "OEM partner master. Add new OEMs from the lead form (New OEM).",
     subtitle: "OEM partners",
     primary: (l) => l.oem_name,
     secondary: (l) => l.oem_contact_person || l.oem_contact_email || l.oem_contact_number,
@@ -56,7 +54,6 @@ const META: Record<
   },
   distributor: {
     title: "Distributor",
-    description: "Distributor details captured on sales leads.",
     subtitle: "Distributors from leads",
     primary: (l) => l.distributor_name,
     secondary: (l) =>
@@ -66,7 +63,6 @@ const META: Record<
   },
   entity: {
     title: "Entity",
-    description: "Billing / contracting entities captured on sales leads.",
     subtitle: "Billing entities from leads",
     primary: (l) => l.entity_name,
     secondary: (l) => l.entity_gst || l.entity_email || l.entity_contact,
@@ -74,7 +70,6 @@ const META: Record<
   },
   end_customer: {
     title: "End Customer",
-    description: "End customers linked to sales leads.",
     subtitle: "End customers from leads",
     primary: (l) => l.end_customer_name,
     secondary: (l) => l.end_customer_location,
@@ -89,8 +84,8 @@ function toDirectoryRows(leads: SalesLead[], kind: LeadDirectoryKind): Directory
   if (!meta.dedupeByPrimary) {
     return withPrimary.map((lead) => ({
       id: lead.id,
-      primary: meta.primary(lead)?.trim() || "—",
-      secondary: meta.secondary(lead)?.trim() || "—",
+      primary: meta.primary(lead)?.trim() || "-",
+      secondary: meta.secondary(lead)?.trim() || "-",
       leadId: lead.id,
       leadLabel: fullName(lead),
       leadCode: lead.lead_code,
@@ -101,7 +96,7 @@ function toDirectoryRows(leads: SalesLead[], kind: LeadDirectoryKind): Directory
 
   const map = new Map<string, DirectoryRow>();
   for (const lead of withPrimary) {
-    const primary = meta.primary(lead)?.trim() || "—";
+    const primary = meta.primary(lead)?.trim() || "-";
     const key = primary.toLowerCase();
     const existing = map.get(key);
     if (existing) {
@@ -111,7 +106,7 @@ function toDirectoryRows(leads: SalesLead[], kind: LeadDirectoryKind): Directory
     map.set(key, {
       id: key,
       primary,
-      secondary: meta.secondary(lead)?.trim() || "—",
+      secondary: meta.secondary(lead)?.trim() || "-",
       leadId: lead.id,
       leadLabel: fullName(lead),
       leadCode: lead.lead_code,
@@ -123,7 +118,7 @@ function toDirectoryRows(leads: SalesLead[], kind: LeadDirectoryKind): Directory
 }
 
 function oemContactLabel(oem: Oem): string {
-  return oem.contact_person || oem.contact_email || oem.contact_number || "—";
+  return oem.contact_person || oem.contact_email || oem.contact_number || "-";
 }
 
 function toOemDirectoryRows(oems: Oem[], leads: SalesLead[]): DirectoryRow[] {
@@ -148,7 +143,7 @@ function toOemDirectoryRows(oems: Oem[], leads: SalesLead[]): DirectoryRow[] {
       primary: oem.oem_name,
       secondary: oemContactLabel(oem),
       leadId: sample?.id ?? "",
-      leadLabel: sample ? fullName(sample) : "—",
+      leadLabel: sample ? fullName(sample) : "-",
       leadCode: sample?.lead_code ?? oem.oem_code,
       status: oem.status,
       leadCount: usage?.count ?? 0,
@@ -234,7 +229,6 @@ export function LeadDirectoryListPage({
       {!embedded ? (
         <PageHeader
           title={meta.title}
-          description={meta.description}
         />
       ) : null}
 
@@ -280,8 +274,8 @@ export function LeadDirectoryListPage({
                   <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
                     No {meta.title.toLowerCase()} records yet
                     {kind === "oem"
-                      ? " — add them from a lead form (choose New OEM)."
-                      : " — add them when creating a lead."}
+                      ? " - add them from a lead form (choose New OEM)."
+                      : " - add them when creating a lead."}
                   </td>
                 </tr>
               ) : (
@@ -312,7 +306,7 @@ export function LeadDirectoryListPage({
                           <div className="text-[11px] text-muted-foreground">{row.leadCode}</div>
                         </>
                       ) : (
-                        <span className="text-muted-foreground">{row.leadCode || "—"}</span>
+                        <span className="text-muted-foreground">{row.leadCode || "-"}</span>
                       )}
                     </td>
                     <td className="px-4 py-2.5 capitalize text-muted-foreground">

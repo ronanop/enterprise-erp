@@ -355,7 +355,7 @@ export function EmployeeWizardPage() {
                   <span>
                     <span className="block text-sm font-medium">{c.candidateName}</span>
                     <span className="block text-[11px] text-muted-foreground">
-                      {c.caseCode} · {c.candidateEmail} · {c.designation || "—"}
+                      {c.caseCode} · {c.candidateEmail} · {c.designation || "-"}
                     </span>
                   </span>
                   <span className="flex items-center gap-1 text-[11px] text-primary">
@@ -387,7 +387,7 @@ export function EmployeeWizardPage() {
                     {block.lines.length ? (
                       block.lines.map((line) => <li key={line}>{line}</li>)
                     ) : (
-                      <li className="text-muted-foreground">—</li>
+                      <li className="text-muted-foreground">-</li>
                     )}
                   </ul>
                 </div>
@@ -610,7 +610,7 @@ export function EmployeeWizardPage() {
             <SetupField label="Permanent address (same fields)">
               <SetupTextarea
                 value={draft.personal.permanentAddress.line1}
-                placeholder="Line 1, city, state — or copy from current"
+                placeholder="Line 1, city, state - or copy from current"
                 onChange={(e) => patchPersonal({ permanentAddress: { ...draft.personal.permanentAddress, line1: e.target.value } })}
               />
             </SetupField>
@@ -751,10 +751,10 @@ export function EmployeeWizardPage() {
                 </SetupSelect>
               </SetupField>
               <SetupField label="Branch head" hint="Set in HR Setup → Branches">
-                <SetupInput readOnly value={draft.employment.branchHeadName || "—"} />
+                <SetupInput readOnly value={draft.employment.branchHeadName || "-"} />
               </SetupField>
               <SetupField label="Department head" hint="Set in HR Setup → Departments">
-                <SetupInput readOnly value={draft.employment.departmentHeadName || "—"} />
+                <SetupInput readOnly value={draft.employment.departmentHeadName || "-"} />
               </SetupField>
               <SetupField label="Designation" required>
                 {options?.designations.length ? (
@@ -1122,7 +1122,7 @@ function BankStep({
       </SetupField>
       <SetupField label="Account number" required>
         <SetupInput
-          placeholder="9–18 digit account number"
+          placeholder="9-18 digit account number"
           inputMode="numeric"
           value={b.accountNumber}
           onChange={(e) => set({ accountNumber: e.target.value })}
@@ -1167,7 +1167,7 @@ function SalaryStep({
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Optional — select a Payroll salary structure when available.
+        Optional - select a Payroll salary structure when available.
       </p>
       <EmsFormGrid>
         <SetupField label="Basic salary">
@@ -1342,7 +1342,7 @@ function EducationStep({
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Optional — add education history and upload marksheets / certificates (PDF or image).
+        Optional - add education history and upload marksheets / certificates (PDF or image).
       </p>
       {rows.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border/80 px-3 py-6 text-center text-xs text-muted-foreground">
@@ -1480,7 +1480,7 @@ function PreviousEmploymentStep({
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
-        Optional — previous employer details are not mandatory for direct hire.
+        Optional - previous employer details are not mandatory for direct hire.
       </p>
       {rows.length === 0 ? (
         <p className="rounded-lg border border-dashed border-border/80 px-3 py-6 text-center text-xs text-muted-foreground">

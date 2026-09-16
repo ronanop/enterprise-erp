@@ -308,7 +308,7 @@ export function AssetInsuranceWorkspace() {
     <div className="space-y-6">
       <PageHeader
         title="Asset insurance"
-        description="Insurance policy lifecycle — draft, activate, renew, expire, close. No approval workflow."
+        description="Insurance policy lifecycle - draft, activate, renew, expire, close. No approval workflow."
       />
 
       {error ? (
@@ -484,7 +484,7 @@ export function AssetInsuranceWorkspace() {
                   <SelectContent>
                     {assetOptions.map((asset) => (
                       <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                        {asset.asset_code} — {asset.asset_name}
+                        {asset.asset_code} - {asset.asset_name}
                       </SelectItem>
                     ))}
                   </SelectContent>

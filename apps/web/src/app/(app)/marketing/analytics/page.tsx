@@ -71,37 +71,37 @@ export default function MarketingAnalyticsPage() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <FinanceKpiCard
           label="Campaigns"
-          value={loading ? "—" : String(data.campaigns_total)}
+          value={loading ? "-" : String(data.campaigns_total)}
           icon={Megaphone}
         />
         <FinanceKpiCard
           label="Active"
-          value={loading ? "—" : String(data.campaigns_active)}
+          value={loading ? "-" : String(data.campaigns_active)}
           icon={CheckCircle2}
         />
         <FinanceKpiCard
           label="Content requests"
-          value={loading ? "—" : String(data.content_requests_total)}
+          value={loading ? "-" : String(data.content_requests_total)}
           icon={FileText}
         />
         <FinanceKpiCard
           label="Drafts"
-          value={loading ? "—" : String(data.content_drafts)}
+          value={loading ? "-" : String(data.content_drafts)}
           icon={FileText}
         />
         <FinanceKpiCard
           label="Approved"
-          value={loading ? "—" : String(data.content_approved)}
+          value={loading ? "-" : String(data.content_approved)}
           icon={CheckCircle2}
         />
         <FinanceKpiCard
           label="Calendar upcoming"
-          value={loading ? "—" : String(data.calendar_upcoming)}
+          value={loading ? "-" : String(data.calendar_upcoming)}
           icon={CalendarDays}
         />
         <FinanceKpiCard
           label="Research reports"
-          value={loading ? "—" : String(data.research_reports)}
+          value={loading ? "-" : String(data.research_reports)}
           icon={BarChart3}
         />
       </div>

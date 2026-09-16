@@ -49,7 +49,7 @@ def load_models() -> None:
             continue
         try:
             # Allowlisted module names only (regex + prefix checks above).
-            m = importlib.import_module(module_name)  # noqa: S307 — not user input
+            m = importlib.import_module(module_name)  # noqa: S307 - not user input
         except Exception:
             continue
         for attr in dir(m):

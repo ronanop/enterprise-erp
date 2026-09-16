@@ -1,5 +1,5 @@
 /**
- * CR-004 Phase 8B — client wrapper around POST /assets/assets/import.
+ * CR-004 Phase 8B - client wrapper around POST /assets/assets/import.
  */
 
 import type {

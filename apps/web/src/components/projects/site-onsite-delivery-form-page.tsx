@@ -229,7 +229,7 @@ export function SiteOnsiteDeliveryFormPage({ projectId }: { projectId: string })
   return (
     <ProjectsRecordForm
       title="Onsite Delivery"
-      description="Step 4 — MO request and on-site deliveries (server / rack / PDU)."
+      description="Step 4 - MO request and on-site deliveries (server / rack / PDU)."
       backHref={
         stageFormMeta.readOnly
           ? (stageFormMeta.backHref ?? `/projects/projects/${projectId}`)

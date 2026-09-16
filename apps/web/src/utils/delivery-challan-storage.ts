@@ -46,7 +46,7 @@ export type DeliveryChallanRecord = {
   taxRemarks: string;
   preparedBy: string;
   deliveredBy: string;
-  /** Vendor name — reference only; PDF uses customer fields separately. */
+  /** Vendor name - reference only; PDF uses customer fields separately. */
   vendorName: string;
   itemsSourceMode: ChallanItemsSourceMode;
   selectedGrnKeys: string[];
@@ -73,7 +73,7 @@ const STORAGE_KEY = "erp.procurement.delivery-challans";
 function normalizeLine(line: Partial<DeliveryChallanLine> & { id: string }): DeliveryChallanLine {
   let product = (line.product ?? "").trim();
   let itemName = (line.itemName ?? "").trim();
-  // Legacy / wrong mapping put product name in description — move it to product.
+  // Legacy / wrong mapping put product name in description - move it to product.
   if (!product && itemName) {
     product = itemName;
     itemName = "";
@@ -199,7 +199,7 @@ export function formatChallanGrnSummary(
   const nums = resolveChallanDisplayGrnNumbers(record, inventory);
   if (nums.length > 0) return formatGeneratedGrnNumbers(nums);
   if (record.itemsSourceMode === "full_po") return "Full PO";
-  return "—";
+  return "-";
 }
 
 export function upsertDeliveryChallan(
@@ -224,7 +224,7 @@ export function upsertDeliveryChallan(
 
 export function formatChallanItemsSummary(lines: DeliveryChallanLine[]): string {
   const items = lines.filter((ln) => (ln.itemName || "").trim() || (ln.product || "").trim());
-  if (items.length === 0) return "—";
+  if (items.length === 0) return "-";
   if (items.length === 1) {
     const label = (items[0].itemName || "").trim() || (items[0].product || "").trim() || "Item";
     return `${label} (${items[0].quantitySent || "0"})`;

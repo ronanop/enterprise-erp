@@ -1,4 +1,4 @@
-"""AssetComponentService — lightweight + asset-linked child components (FP-ASSET-019).
+"""AssetComponentService - lightweight + asset-linked child components (FP-ASSET-019).
 
 Option B: component rows under a parent asset. Optional ``component_asset_id``
 links a real ``ast_asset`` (ops ``IN_USE_AS_COMPONENT`` while attached).
@@ -429,7 +429,7 @@ class AssetComponentService:
             version=int(claimed.version or 1),
         )
 
-        # Cascade: ops-only DISPOSED for linked child — no finance/disposal workflow.
+        # Cascade: ops-only DISPOSED for linked child - no finance/disposal workflow.
         if child_id is not None:
             child = self._assets.lock_for_update(ctx, child_id)
             if child is not None:

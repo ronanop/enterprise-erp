@@ -1,4 +1,4 @@
-"""Non-IT access helpers — domain membership OR RBAC (either path is enough)."""
+"""Non-IT access helpers - domain membership OR RBAC (either path is enough)."""
 
 from __future__ import annotations
 

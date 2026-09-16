@@ -129,7 +129,7 @@ export default function EducationSkillsPage() {
               >
                 <div>
                   <p className="font-medium text-[#0b1c30]">{e.degree}</p>
-                  <p className="text-sm text-[#434655]">{e.institution || "—"}</p>
+                  <p className="text-sm text-[#434655]">{e.institution || "-"}</p>
                 </div>
                 <button
                   type="button"

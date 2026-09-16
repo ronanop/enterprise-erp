@@ -30,7 +30,7 @@ export function escapeCsvCell(value: string): string {
   return value;
 }
 
-/** Deterministic CSV (UTF-8 BOM) from export rows — header order locked. */
+/** Deterministic CSV (UTF-8 BOM) from export rows - header order locked. */
 export function buildInventoryCsvString(rows: InventoryExportRow[]): string {
   const headers = getInventoryExportColumnLabels();
   const lines = [headers.map(escapeCsvCell).join(",")];
@@ -118,7 +118,7 @@ export function triggerInventoryDownload(
   }
 }
 
-/** Parse CSV text (for tests) — simple split respecting quotes. */
+/** Parse CSV text (for tests) - simple split respecting quotes. */
 export function parseCsvLines(csv: string): string[][] {
   const text = csv.replace(/^\uFEFF/, "");
   const lines = text.split(/\r?\n/).filter((l) => l.length > 0);

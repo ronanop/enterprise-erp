@@ -48,7 +48,7 @@ type StatusFilter = "all" | "draft" | "open" | "partial" | "closed" | "cancelled
 
 function formatPoStatusLabel(status: string | null | undefined): string {
   const raw = (status || "").trim().toLowerCase();
-  if (!raw) return "—";
+  if (!raw) return "-";
   if (raw === "draft") return "Draft";
   if (raw === "cancelled" || raw === "canceled") return "Cancelled";
   if (
@@ -90,7 +90,7 @@ function isCancelled(status: string): boolean {
   return status.toLowerCase() === "cancelled";
 }
 
-/** Match list filter — numeric tokens prefer company PO sequence (005 → PO/CDT/005). */
+/** Match list filter - numeric tokens prefer company PO sequence (005 → PO/CDT/005). */
 function orderMatchesQuery(
   row: ProcOrder,
   vendorLabel: string,
@@ -435,10 +435,10 @@ export function OrdersListPage() {
                 >
                   <td className="px-3 py-3.5 tabular-nums text-muted-foreground">{index + 1}</td>
                   <td className="px-3 py-3.5 font-medium tabular-nums">
-                    {row.company_po_number || row.document_number || "—"}
+                    {row.company_po_number || row.document_number || "-"}
                   </td>
                   <td className={cn(procurementUi.tdNumeric, "py-3.5 text-muted-foreground")}>
-                    {row.document_date || "—"}
+                    {row.document_date || "-"}
                   </td>
                   <td className="px-3 py-3.5">
                     {vendors[row.vendor_id]?.label || row.vendor_id.slice(0, 8)}

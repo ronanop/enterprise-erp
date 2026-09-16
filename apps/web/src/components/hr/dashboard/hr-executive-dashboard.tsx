@@ -453,7 +453,7 @@ export function HrExecutiveDashboardPage() {
                         {k.label}
                       </p>
                       <p className="mt-0.5 text-2xl font-semibold tabular-nums leading-none text-foreground">
-                        {loading ? "—" : (k.value ?? 0).toLocaleString("en-IN")}
+                        {loading ? "-" : (k.value ?? 0).toLocaleString("en-IN")}
                       </p>
                     </div>
                   </div>
@@ -634,8 +634,8 @@ function AttendanceBar({
 
 function eventDisplayTitle(event: CalendarEvent): string {
   return event.title
-    .replace(/\s+[—–-]\s*Birthday\s*$/i, "")
-    .replace(/\s+[—–-]\s*\d+\s*Year(?:s)?\s*Anniversary\s*$/i, "")
+    .replace(/\s+[---]\s*Birthday\s*$/i, "")
+    .replace(/\s+[---]\s*\d+\s*Year(?:s)?\s*Anniversary\s*$/i, "")
     .replace(/\s+Anniversary\s*$/i, "")
     .trim();
 }

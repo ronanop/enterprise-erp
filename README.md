@@ -2,7 +2,7 @@
 
 Multi-Industry, Multi-Company, Enterprise-Grade ERP Platform.
 
-**Architecture Baseline:** v1.1 — LOCKED  
+**Architecture Baseline:** v1.1 - LOCKED  
 **Status:** Sprint 0 Foundation Complete
 
 ## Architecture
@@ -57,7 +57,7 @@ docker compose up -d
 
 Services: Redis, RabbitMQ, MinIO, OpenSearch
 
-PostgreSQL is **not** in Docker — use the native instance on `172.16.200.26:5432` (`DATABASE_URL` in `.env`).
+PostgreSQL is **not** in Docker - use the native instance on `172.16.200.26:5432` (`DATABASE_URL` in `.env`).
 
 ### 3. Backend API
 
@@ -128,4 +128,4 @@ Sprint 0 delivers platform foundation only:
 
 ## License
 
-Proprietary — Internal Use Only
+Proprietary - Internal Use Only

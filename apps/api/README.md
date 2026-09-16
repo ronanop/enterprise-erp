@@ -20,7 +20,7 @@ cp ../../.env.example ../../.env
 ## Run
 
 ```bash
-# From apps/api — watch only src/ so editing scripts/ does not crash reload
+# From apps/api - watch only src/ so editing scripts/ does not crash reload
 uvicorn main:app --reload --reload-dir src --host 0.0.0.0 --port 8000 --app-dir src
 ```
 

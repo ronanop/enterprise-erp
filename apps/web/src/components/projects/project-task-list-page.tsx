@@ -49,7 +49,7 @@ export function ProjectTaskListPage() {
         label: "Task No.",
         sort: (r) => r.document_number,
         className: "font-mono text-xs text-muted-foreground",
-        cell: (r) => r.document_number ?? "—",
+        cell: (r) => r.document_number ?? "-",
       },
       {
         key: "project_id",
@@ -89,7 +89,7 @@ export function ProjectTaskListPage() {
         align: "right",
         sort: (r) => Number(r.estimated_hours ?? 0),
         className: "text-right tabular-nums",
-        cell: (r) => (r.estimated_hours == null ? "—" : formatHours(r.estimated_hours)),
+        cell: (r) => (r.estimated_hours == null ? "-" : formatHours(r.estimated_hours)),
       },
       {
         key: "percent_complete",

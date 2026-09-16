@@ -1,4 +1,4 @@
-"""MeterReadingService — asset meter reading management (FP-ASSET-015)."""
+"""MeterReadingService - asset meter reading management (FP-ASSET-015)."""
 
 from datetime import datetime
 from uuid import UUID

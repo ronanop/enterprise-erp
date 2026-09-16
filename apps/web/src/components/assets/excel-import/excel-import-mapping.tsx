@@ -54,7 +54,7 @@ export function ExcelImportMappingPanel({
                       onChange(field.key, e.target.value ? e.target.value : null)
                     }
                   >
-                    <option value="">— Not mapped —</option>
+                    <option value="">- Not mapped -</option>
                     {headers.map((h) => (
                       <option key={h} value={h}>
                         {h}

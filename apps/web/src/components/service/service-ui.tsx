@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Service module UI shells — same visual language as CRM (`crm-ui.tsx`).
+ * Service module UI shells - same visual language as CRM (`crm-ui.tsx`).
  */
 export {
   CRM_SECTION_TITLE as SERVICE_SECTION_TITLE,

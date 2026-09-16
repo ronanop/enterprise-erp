@@ -15,6 +15,7 @@ from modules.crm.repository.interaction_repository import InteractionRepository
 from modules.crm.repository.meeting_repository import MeetingRepository
 from modules.crm.repository.task_repository import TaskRepository
 from modules.crm.repository.visit_log_repository import VisitLogRepository
+from modules.crm.service.crm_record_visibility import CrmRecordVisibility
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import (
@@ -35,15 +36,17 @@ class InteractionService:
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
         self._engine = InteractionEngine()
+        self._visibility = CrmRecordVisibility(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_interactions(ctx, cid)
+        return self._visibility.filter_created_rows(ctx, self._repo.list_interactions(ctx, cid))
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)
         if row is None:
             raise NotFoundException("Interaction not found")
+        self._visibility.ensure_created_access(ctx, row, label="interaction")
         return row
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
@@ -63,6 +66,7 @@ class TaskService:
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
         self._engine = TaskEngine()
+        self._visibility = CrmRecordVisibility(db)
 
     def list(
         self,
@@ -72,12 +76,15 @@ class TaskService:
         opportunity_id: UUID | None = None,
     ):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_tasks(ctx, cid, opportunity_id=opportunity_id)
+        return self._visibility.filter_created_rows(
+            ctx, self._repo.list_tasks(ctx, cid, opportunity_id=opportunity_id)
+        )
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)
         if row is None:
             raise NotFoundException("Task not found")
+        self._visibility.ensure_created_access(ctx, row, label="task")
         return row
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
@@ -105,6 +112,7 @@ class FollowupService:
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
         self._engine = FollowupEngine()
+        self._visibility = CrmRecordVisibility(db)
 
     def list(
         self,
@@ -114,12 +122,15 @@ class FollowupService:
         company_account_id: UUID | None = None,
     ):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_followups(ctx, cid, company_account_id=company_account_id)
+        return self._visibility.filter_created_rows(
+            ctx, self._repo.list_followups(ctx, cid, company_account_id=company_account_id)
+        )
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)
         if row is None:
             raise NotFoundException("Follow-up not found")
+        self._visibility.ensure_created_access(ctx, row, label="follow-up")
         return row
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
@@ -139,6 +150,7 @@ class MeetingService:
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
         self._engine = MeetingEngine()
+        self._visibility = CrmRecordVisibility(db)
 
     def list(
         self,
@@ -148,12 +160,15 @@ class MeetingService:
         company_account_id: UUID | None = None,
     ):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_meetings(ctx, cid, company_account_id=company_account_id)
+        return self._visibility.filter_created_rows(
+            ctx, self._repo.list_meetings(ctx, cid, company_account_id=company_account_id)
+        )
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)
         if row is None:
             raise NotFoundException("Meeting not found")
+        self._visibility.ensure_created_access(ctx, row, label="meeting")
         return row
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):

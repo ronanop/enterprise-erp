@@ -178,7 +178,7 @@ async function loadCompanyNavCounts(
   };
 }
 
-/** Internal company/opportunity sidebar — fixed under the app topbar, full remaining height. */
+/** Internal company/opportunity sidebar - fixed under the app topbar, full remaining height. */
 export function CompanyWorkspaceNav({
   companyAccountId,
   scope = "company",
@@ -230,7 +230,7 @@ export function CompanyWorkspaceNav({
     if (!kind) return false;
     if (kind === "task" || kind === "attachment") return isOpportunityScope;
     if (kind === "lead" || kind === "meeting" || kind === "kyc" || kind === "contact") return isCompanyScope;
-    // Company sidebar: no hover "+" — create from the follow-ups page / opportunity only.
+    // Company sidebar: no hover "+" - create from the follow-ups page / opportunity only.
     if (kind === "followup") return isOpportunityScope;
     return false;
   }
@@ -349,7 +349,7 @@ export function CompanyWorkspaceNav({
       {/*
         Reserves horizontal space for the fixed nav. Negative margin cancels
         AppShell main padding so the slot starts at the primary sidebar edge
-        (same left as the docked fixed aside) — removes the white gap.
+        (same left as the docked fixed aside) - removes the white gap.
       */}
       <div
         ref={spacerRef}
@@ -448,7 +448,7 @@ export function CompanyWorkspaceNav({
                             typeof count !== "number" && "text-muted-foreground/50",
                           )}
                         >
-                          {typeof count === "number" ? count : "—"}
+                          {typeof count === "number" ? count : "-"}
                         </span>
                         {showQuickCreate ? (
                           <button

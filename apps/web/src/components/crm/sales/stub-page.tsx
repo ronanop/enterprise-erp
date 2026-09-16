@@ -5,10 +5,10 @@ import { Construction } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 
 /** Placeholder for teamspace tabs not yet built out (Calls, KYC, Reports, Analytics). */
-export function StubPage({ title, description }: { title: string; description?: string }) {
+export function StubPage({ title }: { title: string }) {
   return (
     <div className="space-y-4">
-      <PageHeader title={title} description={description ?? "This area is coming soon."} />
+      <PageHeader title={title} />
       <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-border/80 bg-card px-6 py-16 text-center shadow-sm">
         <span className="flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
           <Construction className="size-5" />

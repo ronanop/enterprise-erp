@@ -1,4 +1,4 @@
-"""Inventory application service — sole façade for stock mutations."""
+"""Inventory application service - sole façade for stock mutations."""
 
 from decimal import Decimal
 from uuid import UUID

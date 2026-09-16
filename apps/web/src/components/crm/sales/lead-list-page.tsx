@@ -74,7 +74,6 @@ export function LeadListPage({
       {!embedded ? (
         <PageHeader
           title="Leads"
-          description="Active sales-blueprint leads. After conversion, the deal continues under Opportunities only."
         />
       ) : null}
 
@@ -127,7 +126,7 @@ export function LeadListPage({
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">{row.mobile}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">
-                      {row.expected_amount ? formatInr(row.expected_amount) : "—"}
+                      {row.expected_amount ? formatInr(row.expected_amount) : "-"}
                     </td>
                     <td className="px-4 py-2.5">
                       <Badge variant="outline" className="capitalize">

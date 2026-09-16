@@ -1,4 +1,4 @@
-# ADR-ASSET-AUD-001 — Asset Audit (Physical Verification)
+# ADR-ASSET-AUD-001 - Asset Audit (Physical Verification)
 
 **Status:** Accepted  
 **Date:** 2026-07-30  

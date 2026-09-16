@@ -1,4 +1,4 @@
-"""GRC integration — cross-module reads / UUID stubs; no peer ORM writes."""
+"""GRC integration - cross-module reads / UUID stubs; no peer ORM writes."""
 
 from uuid import UUID
 

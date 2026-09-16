@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * CR-004 Phase 5B-2B Task 2 — Assignment Wizard Container
+ * CR-004 Phase 5B-2B Task 2 - Assignment Wizard Container
  *
  * Owns load/save/submit/activate orchestration. Wizard stays presentational.
- * No router, no query params, no fetch() — AssignmentFrontendService only.
+ * No router, no query params, no fetch() - AssignmentFrontendService only.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -54,7 +54,7 @@ export type AssignmentWizardContainerService = {
 export type AssignmentWizardContainerProps = {
   /** When set, loads an existing draft via loadDraft. */
   draftId?: string;
-  /** Optional seed values (not from URL — parent-provided). */
+  /** Optional seed values (not from URL - parent-provided). */
   initialState?: Partial<AssignmentWizardState>;
   onCancel?: () => void;
   /** Called after successful submit (+ best-effort activate). */
@@ -106,7 +106,7 @@ export function AssignmentWizardContainer({
   const [employees, setEmployees] = useState<WizardSelectOption[]>([]);
   const [assets, setAssets] = useState<WizardAssetOption[]>([]);
   const [issuedItems, setIssuedItems] = useState<WizardIssuedItemOption[]>([]);
-  const [branchLabel, setBranchLabel] = useState("—");
+  const [branchLabel, setBranchLabel] = useState("-");
   const [unavailableAssetMessage, setUnavailableAssetMessage] = useState<string | null>(null);
   const [unlinkedDcChallans, setUnlinkedDcChallans] = useState<
     Array<{ id: string; dcNumber: string; employeeName?: string | null }>
@@ -148,7 +148,7 @@ export function AssignmentWizardContainer({
           components,
         );
         const match = readyAssets.find((a) => a.id === row.asset_id);
-        setBranchLabel(match?.branchLabel ?? (row.branch_id.slice(0, 8) || "—"));
+        setBranchLabel(match?.branchLabel ?? (row.branch_id.slice(0, 8) || "-"));
       } else if (next.assetId) {
         const match = readyAssets.find((a) => a.id === next.assetId);
         if (match) {
@@ -319,7 +319,7 @@ export function AssignmentWizardContainer({
         try {
           await service.activateAssignment(row.id);
         } catch {
-          /* Multi-step workflow may leave status=submitted — still success for caller. */
+          /* Multi-step workflow may leave status=submitted - still success for caller. */
         }
         onSuccessRef.current?.(row.id);
       } catch (err) {

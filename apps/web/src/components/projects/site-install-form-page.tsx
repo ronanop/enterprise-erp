@@ -453,8 +453,8 @@ export function SiteInstallFormPage({ projectId }: { projectId: string }) {
       title={isRackOnly ? "Installation" : "Installation & Configuration"}
       description={
         isRackOnly
-          ? "Step 6 — Confirm rack installation, then continue to Acceptance."
-          : "Step 6 — Installation and configuration in one step. Next: Acceptance."
+          ? "Step 6 - Confirm rack installation, then continue to Acceptance."
+          : "Step 6 - Installation and configuration in one step. Next: Acceptance."
       }
       backHref={
         stageFormMeta.readOnly

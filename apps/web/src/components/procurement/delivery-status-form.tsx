@@ -119,7 +119,7 @@ export function DeliveryStatusForm({
       <DeliverySectionCard title="Cache invoice" icon={FileText}>
         <p className="mb-3 text-xs text-muted-foreground">
           Optional. DC is delivery without taking a bill. Record the customer bill later
-          (any time — even after delivery status or installation).
+          (any time - even after delivery status or installation).
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <FinanceField label="Cache invoice number" error={fieldErrors.cacheInvoiceNumber}>

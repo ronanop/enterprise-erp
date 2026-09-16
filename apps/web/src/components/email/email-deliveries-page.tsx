@@ -79,14 +79,14 @@ export function EmailDeliveriesPage() {
                 <td className="px-3 py-2.5">
                   <Badge variant="outline">{row.status}</Badge>
                 </td>
-                <td className="px-3 py-2.5 font-mono text-xs">{row.recipient_address ?? "—"}</td>
-                <td className="max-w-[220px] truncate px-3 py-2.5">{row.subject ?? "—"}</td>
-                <td className="px-3 py-2.5 text-muted-foreground">{row.event_type ?? "—"}</td>
+                <td className="px-3 py-2.5 font-mono text-xs">{row.recipient_address ?? "-"}</td>
+                <td className="max-w-[220px] truncate px-3 py-2.5">{row.subject ?? "-"}</td>
+                <td className="px-3 py-2.5 text-muted-foreground">{row.event_type ?? "-"}</td>
                 <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
-                  {row.delivered_at ?? "—"}
+                  {row.delivered_at ?? "-"}
                 </td>
                 <td className="max-w-[240px] truncate px-3 py-2.5 font-mono text-[11px] text-muted-foreground">
-                  {row.provider_response ?? "—"}
+                  {row.provider_response ?? "-"}
                 </td>
               </tr>
             ))}

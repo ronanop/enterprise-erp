@@ -1,5 +1,5 @@
 /**
- * Mobile env — use absolute API URL (no Next.js proxy).
+ * Mobile env - use absolute API URL (no Next.js proxy).
  * Default mock mode so Phase 0 runs without a backend.
  */
 export const env = {

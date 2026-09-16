@@ -1,6 +1,6 @@
-# CR-004 — Workflow Analysis (Current vs Customer)
+# CR-004 - Workflow Analysis (Current vs Customer)
 
-**Phase:** 1 — Documentation only
+**Phase:** 1 - Documentation only
 
 ---
 
@@ -45,7 +45,7 @@
 | Document lifecycle | `TransferService` + `AssetTransferEngine` | draft → completed |
 | Complete | Updates asset `branch_id`, optional `custodian_employee_id` | Supports branch inventory moves |
 
-**Maps to Excel:** Branch inventory corrections (Noida/Mumbai/Dubai) partially — branch on asset exists via `BranchMixin`.
+**Maps to Excel:** Branch inventory corrections (Noida/Mumbai/Dubai) partially - branch on asset exists via `BranchMixin`.
 
 ---
 

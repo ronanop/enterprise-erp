@@ -133,7 +133,7 @@ export function GrcDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="GRC"
-        description="Governance, risk & compliance — policies, controls, risk register, compliance, audits, CAPA, and incidents."
+        description="Governance, risk & compliance - policies, controls, risk register, compliance, audits, CAPA, and incidents."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -180,28 +180,28 @@ export function GrcDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Open risks"
-          value={loading ? "—" : String(kpis.openRisks)}
+          value={loading ? "-" : String(kpis.openRisks)}
           hint={`${data?.risks.length ?? 0} risks · ${data?.riskCategories.length ?? 0} categories`}
           icon={ShieldAlert}
           tone={kpis.openRisks > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Active controls"
-          value={loading ? "—" : String(kpis.activeControls)}
+          value={loading ? "-" : String(kpis.activeControls)}
           hint={`${data?.controls.length ?? 0} controls · ${data?.controlTests.length ?? 0} tests`}
           icon={ShieldCheck}
           tone={kpis.activeControls > 0 ? "success" : "default"}
         />
         <FinanceKpiCard
           label="Planned audits"
-          value={loading ? "—" : String(kpis.plannedAudits)}
+          value={loading ? "-" : String(kpis.plannedAudits)}
           hint={`${data?.audits.length ?? 0} audits · ${data?.auditPlans.length ?? 0} plans`}
           icon={ClipboardCheck}
           tone={kpis.plannedAudits > 0 ? "default" : "success"}
         />
         <FinanceKpiCard
           label="Open CAPAs"
-          value={loading ? "—" : String(kpis.openCapas)}
+          value={loading ? "-" : String(kpis.openCapas)}
           hint={`${data?.correctiveActions.length ?? 0} CAPA · ${data?.incidents.length ?? 0} incidents`}
           icon={TriangleAlert}
           tone={kpis.openCapas > 0 ? "danger" : "success"}
@@ -327,17 +327,17 @@ export function GrcDashboard() {
                     >
                       <td className="max-w-[220px] truncate px-4 py-2.5">
                         <p className="font-medium text-foreground">
-                          {String(row.risk_title ?? row.risk_number ?? "—")}
+                          {String(row.risk_title ?? row.risk_number ?? "-")}
                         </p>
                         <p className="truncate text-[11px] text-muted-foreground">
                           {String(row.risk_number ?? "")}
                         </p>
                       </td>
                       <td className="px-4 py-2.5 text-xs capitalize text-muted-foreground">
-                        {String(row.risk_level ?? "—").replaceAll("_", " ")}
+                        {String(row.risk_level ?? "-").replaceAll("_", " ")}
                       </td>
                       <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                        {String(row.owner_employee_id ?? "—").slice(0, 8)}
+                        {String(row.owner_employee_id ?? "-").slice(0, 8)}
                       </td>
                       <td className="px-4 py-2.5">
                         <FinanceStatusBadge
@@ -380,7 +380,7 @@ export function GrcDashboard() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-medium">
-                      {String(row.capa_number ?? row.document_number ?? "—")}
+                      {String(row.capa_number ?? row.document_number ?? "-")}
                     </p>
                     <FinanceStatusBadge
                       status={asStatus(row.status) || String(row.status ?? "")}

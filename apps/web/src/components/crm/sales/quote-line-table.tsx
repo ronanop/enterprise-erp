@@ -313,7 +313,7 @@ export function QuoteLineTable({
                   <tr key={line.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                     <td className="px-3 py-2 font-mono text-xs">{line.line_no}</td>
                     <td className="px-3 py-2">{line.product_name}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{line.hsn_sac ?? "—"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{line.hsn_sac ?? "-"}</td>
                     <td className="px-3 py-2 capitalize text-muted-foreground">{line.line_type}</td>
                     <td className="px-3 py-2">{line.qty}</td>
                     <td className="px-3 py-2">{formatInrPrecise(line.unit_cost)}</td>

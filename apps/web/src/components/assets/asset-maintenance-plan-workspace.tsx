@@ -288,7 +288,7 @@ export function AssetMaintenancePlanWorkspace() {
     <div className="space-y-6">
       <PageHeader
         title="Maintenance plans"
-        description="Preventive maintenance schedules — draft, activate, pause, resume, close. No approval workflow."
+        description="Preventive maintenance schedules - draft, activate, pause, resume, close. No approval workflow."
       />
 
       {error ? (
@@ -444,7 +444,7 @@ export function AssetMaintenancePlanWorkspace() {
                             </div>
                           </td>
                           <td className="px-3 py-2 font-mono text-xs">
-                            {row.next_due_date ?? "—"}
+                            {row.next_due_date ?? "-"}
                           </td>
                           <td className="px-3 py-2">{statusBadge(row)}</td>
                         </tr>
@@ -483,7 +483,7 @@ export function AssetMaintenancePlanWorkspace() {
                     </SelectItem>
                     {assetOptions.map((asset) => (
                       <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                        {asset.asset_code} — {asset.asset_name}
+                        {asset.asset_code} - {asset.asset_name}
                       </SelectItem>
                     ))}
                   </SelectContent>

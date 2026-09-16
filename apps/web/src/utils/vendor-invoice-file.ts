@@ -1,4 +1,4 @@
-/** File picker hint — PDF, photos, Excel, and common document types. */
+/** File picker hint - PDF, photos, Excel, and common document types. */
 export const VENDOR_INVOICE_FILE_ACCEPT =
   "image/*,.pdf,.xlsx,.xls,.xlsm,.csv,.txt,.doc,.docx,.heic,.heif,.gif,.bmp,.tif,.tiff,.webp,.jpeg,.jpg,.png,application/pdf,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 

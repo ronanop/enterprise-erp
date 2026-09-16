@@ -1,5 +1,5 @@
 /**
- * GRC workspace config — aligned with FRD-20 / ERD_19
+ * GRC workspace config - aligned with FRD-20 / ERD_19
  * and apps/api grc routers (Risk → CAPA).
  */
 

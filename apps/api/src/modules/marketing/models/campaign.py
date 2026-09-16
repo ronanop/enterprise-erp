@@ -50,7 +50,7 @@ class MktCampaign(Base, *MktMasterMixin):
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     budget_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     currency_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
-    # Soft link to CRM campaign — no cross-module FK (C-02)
+    # Soft link to CRM campaign - no cross-module FK (C-02)
     crm_campaign_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True, index=True)
     owner_user_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True, index=True)
     priority: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")

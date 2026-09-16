@@ -1,5 +1,5 @@
 /**
- * HR Setup data layer — API resources + local configuration store.
+ * HR Setup data layer - API resources + local configuration store.
  */
 
 import { ApiClientError, resourceService } from "@/services/api-client";
@@ -45,7 +45,7 @@ function normalizeRows(data: unknown): SetupRow[] {
   return [];
 }
 
-/** KYC / HR document catalog — drives onboarding Upload Documents step. */
+/** KYC / HR document catalog - drives onboarding Upload Documents step. */
 export const DEFAULT_DOCUMENT_TYPES: SetupRow[] = [
   {
     id: "doc-type-photo",
@@ -220,7 +220,7 @@ const DEFAULT_EMPLOYMENT_TYPES: SetupRow[] = [
 ];
 
 const DEFAULT_LOCAL: Partial<Record<HrSetupTabId, SetupRow[]>> = {
-  // Empty defaults — no seeded demo rows; API is SoR where available.
+  // Empty defaults - no seeded demo rows; API is SoR where available.
   "job-levels": [],
   grades: [],
   "employment-types": [],
@@ -818,7 +818,7 @@ export function cell(row: SetupRow, ...keys: string[]): string {
     const v = row[k];
     if (v != null && String(v).trim() !== "") return String(v);
   }
-  return "—";
+  return "-";
 }
 
 export type SetupMasterOption = { value: string; label: string };

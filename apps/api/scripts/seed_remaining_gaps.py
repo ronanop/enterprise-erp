@@ -90,7 +90,7 @@ def main() -> None:
             select(SecUser).where(SecUser.email == "admin@example.com").limit(1)
         )
         if not all([tenant, company, branch, admin]):
-            raise SystemExit("Demo tenant/company/branch/admin missing — run seed_demo_data first")
+            raise SystemExit("Demo tenant/company/branch/admin missing - run seed_demo_data first")
 
         tid, cid, bid, aid = tenant.id, company.id, branch.id, admin.id
         employees = list(
@@ -244,7 +244,7 @@ def main() -> None:
                     "base_credit_amount": Decimal("0.0000"),
                     "currency_code": "INR",
                     "exchange_rate": Decimal("1.00000000"),
-                    "description": "Opening cash — demo",
+                    "description": "Opening cash - demo",
                     "posted_by": aid,
                     "version": 1,
                 },
@@ -268,7 +268,7 @@ def main() -> None:
                     "base_credit_amount": Decimal("10000.0000"),
                     "currency_code": "INR",
                     "exchange_rate": Decimal("1.00000000"),
-                    "description": "Sales revenue — demo",
+                    "description": "Sales revenue - demo",
                     "posted_by": aid,
                     "version": 1,
                 },
@@ -437,7 +437,7 @@ def main() -> None:
                     "tenant_id": tid,
                     "company_id": cid,
                     "sync_job_id": sync_job.id,
-                    "message": "Bank statement sync completed — 12 records",
+                    "message": "Bank statement sync completed - 12 records",
                 },
                 {
                     "branch_id": bid,

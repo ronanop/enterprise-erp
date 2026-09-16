@@ -39,7 +39,7 @@ export function FieldRow({ label, value }: { label: string; value?: string }) {
     <View style={[tokens.listRow, styles.fieldRow]}>
       <Text style={text.muted}>{label}</Text>
       <Text style={styles.fieldValue} numberOfLines={1}>
-        {value || "—"}
+        {value || "-"}
       </Text>
     </View>
   );

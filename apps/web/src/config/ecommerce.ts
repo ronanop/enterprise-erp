@@ -1,5 +1,5 @@
 /**
- * Ecommerce workspace config — aligned with FRD-22 / ERD_22
+ * Ecommerce workspace config - aligned with FRD-22 / ERD_22
  * and apps/api ecommerce routers (Listing → Return).
  */
 

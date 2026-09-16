@@ -1,4 +1,4 @@
-"""PO queue handoff — Installation share to Projects PO Queue (server-side)."""
+"""PO queue handoff - Installation share to Projects PO Queue (server-side)."""
 
 from datetime import datetime
 from uuid import UUID, uuid4

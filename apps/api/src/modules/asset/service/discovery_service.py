@@ -73,7 +73,7 @@ class AssetDiscoveryService:
     ) -> DiscoveryApplyResult:
         if not preview_confirmed:
             raise DiscoveryValidationError(
-                "preview_confirmed must be true — parse/preview before apply"
+                "preview_confirmed must be true - parse/preview before apply"
             )
         preview = self.parse(ctx, asset_id, platform=platform, raw_output=raw_output)
         profile = dict(preview.profile)

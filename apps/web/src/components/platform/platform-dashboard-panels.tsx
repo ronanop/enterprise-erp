@@ -97,7 +97,7 @@ export function DepartmentAnalyticsPanel({
           },
           {
             label: "Highest volume",
-            value: loading ? "…" : (topModule?.title ?? "—"),
+            value: loading ? "…" : (topModule?.title ?? "-"),
             hint: topModule ? `${topModule.recordCount.toLocaleString("en-IN")} records` : undefined,
           },
           {
@@ -279,7 +279,7 @@ export function ModuleHealthPanel({
           return (
             <div key={row.label} className={cn("rounded-lg border px-3 py-2.5 text-center", row.tone)}>
               <Icon className="mx-auto size-4" aria-hidden />
-              <p className="mt-1 text-lg font-semibold tabular-nums">{loading ? "—" : row.value}</p>
+              <p className="mt-1 text-lg font-semibold tabular-nums">{loading ? "-" : row.value}</p>
               <p className="text-[10px] font-medium tracking-wide uppercase opacity-80">{row.label}</p>
             </div>
           );
@@ -301,7 +301,7 @@ export function ModuleHealthPanel({
                 {row.name}
               </span>
               <span className="font-semibold tabular-nums text-foreground">
-                {loading ? "—" : `${total ? Math.round((row.value / total) * 100) : 0}%`}
+                {loading ? "-" : `${total ? Math.round((row.value / total) * 100) : 0}%`}
               </span>
             </li>
           ))}

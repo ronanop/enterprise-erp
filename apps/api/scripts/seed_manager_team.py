@@ -482,7 +482,7 @@ def seed(db) -> None:
                 "updated_by": admin_id,
             },
         )
-        # ensure() path may miss update on existing — force critical fields
+        # ensure() path may miss update on existing - force critical fields
         emp.department_id = departments[dept_code].id
         emp.first_name = first
         emp.last_name = last
@@ -676,7 +676,7 @@ def seed(db) -> None:
     print(f"{'Code':<10} {'Name':<18} {'Reports to':<10} {'Login':<28}")
     print("-" * 64)
     for code, first, last, _email, login, *_rest, manager_code in TEAM:
-        print(f"{code:<10} {first + ' ' + last:<18} {(manager_code or '—'):<10} {login:<28}")
+        print(f"{code:<10} {first + ' ' + last:<18} {(manager_code or '-'):<10} {login:<28}")
     print("-" * 64)
     print(f"Password for all logins: {DEMO_PASSWORD}")
     print()

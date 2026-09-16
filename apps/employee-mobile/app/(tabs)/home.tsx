@@ -290,7 +290,7 @@ export default function HomeScreen() {
             active
             time={
               today?.check_in_at
-                ? `${formatTime(today.check_in_at)} — now`
+                ? `${formatTime(today.check_in_at)} - now`
                 : "Attendance"
             }
             title={

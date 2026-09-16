@@ -1,5 +1,5 @@
 /**
- * Company account PDF export — OVF-style two-column field layout.
+ * Company account PDF export - OVF-style two-column field layout.
  */
 import { jsPDF } from "jspdf";
 
@@ -82,7 +82,7 @@ function formatAddress(parts: Array<string | null | undefined>): string {
 
 function contactPerson(company: Company): string {
   const phone = company.phone?.trim();
-  if (phone && phone !== "—") return pdfSafe(phone);
+  if (phone && phone !== "-") return pdfSafe(phone);
   const name = [company.first_name, company.last_name]
     .map((p) => p?.trim())
     .filter(Boolean)

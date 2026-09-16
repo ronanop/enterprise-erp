@@ -87,7 +87,7 @@ export default function RoomsScreen() {
           <Text style={styles.meta}>
             {b.room_name} · {formatDisplayDateDDMMYYYY(b.request_date)}
             {b.start_time ? ` · ${b.start_time}` : ""}
-            {b.end_time ? `–${b.end_time}` : ""}
+            {b.end_time ? `-${b.end_time}` : ""}
           </Text>
         </Card>
       ))}

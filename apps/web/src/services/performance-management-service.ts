@@ -1,5 +1,5 @@
 /**
- * Enterprise Performance Management service — local rich store + HR API merge.
+ * Enterprise Performance Management service - local rich store + HR API merge.
  */
 
 import { loadHrOverview } from "@/services/hr-service";
@@ -174,7 +174,7 @@ export async function loadPerformanceDirectory(): Promise<PerformanceDirectory> 
         category: "kpi" as const,
         employeeName: String(g.employee_name ?? g.employee_id ?? "Employee"),
         assignedBy: actor(),
-        department: String(g.department_name ?? "—"),
+        department: String(g.department_name ?? "-"),
         priority: "medium" as const,
         weightage: Number(g.weightage ?? 10),
         targetValue: Number(g.target_value ?? 100),
@@ -315,7 +315,7 @@ export async function loadPerformanceDirectory(): Promise<PerformanceDirectory> 
         ...departments,
         ...goals.map((g) => g.department),
         ...kpis.map((k) => k.department),
-      ].filter((d) => d && d !== "—"),
+      ].filter((d) => d && d !== "-"),
     ),
   ).sort();
 
@@ -441,7 +441,7 @@ export async function createGoal(
   const all = load<PerformanceGoal>(KEYS.goals);
   all.unshift(row);
   save(KEYS.goals, all);
-  appendPmsAudit({ action: "goal_created", detail: `${row.goalCode} — ${row.title}`, actor: actor() });
+  appendPmsAudit({ action: "goal_created", detail: `${row.goalCode} - ${row.title}`, actor: actor() });
   return row;
 }
 
@@ -786,7 +786,7 @@ export async function createAppraisal(
   save(KEYS.appraisals, all);
   appendPmsAudit({
     action: "appraisal_started",
-    detail: `${row.appraisalCode} — ${row.employeeName}`,
+    detail: `${row.appraisalCode} - ${row.employeeName}`,
     actor: actor(),
   });
   return row;

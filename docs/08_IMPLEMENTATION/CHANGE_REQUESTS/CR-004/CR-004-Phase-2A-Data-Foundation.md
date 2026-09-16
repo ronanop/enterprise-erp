@@ -1,4 +1,4 @@
-# CR-004 Phase 2A — Data Foundation (Operational Status)
+# CR-004 Phase 2A - Data Foundation (Operational Status)
 
 **Scope:** Data layer only. No engine, validator, transition service, APIs, routes, frontend, or assignment/disposal hooks.
 
@@ -32,7 +32,7 @@ Operational status is **orthogonal** to `AssetStatus` (`ast_asset.status`).
 | Table | `asset.ast_asset` |
 | Column | `operational_status VARCHAR(30) NULL` |
 | Index | `ix_asset_ast_asset_operational_status` |
-| CHECK | `ck_ast_asset_operational_status` — NULL or one of the five enum values |
+| CHECK | `ck_ast_asset_operational_status` - NULL or one of the five enum values |
 
 **Migration:** `apps/api/alembic/versions/0486_ast_operational_status.py`  
 **Revises:** `0485_ast_discovery_profile`

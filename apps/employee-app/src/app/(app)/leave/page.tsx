@@ -327,7 +327,7 @@ export default function LeavePage() {
         </div>
         <ul className="space-y-2">
           {[
-            { name: "Diwali — Festival of Lights", date: "Oct 31, Thursday", tag: "Mandatory", color: "#f59e0b" },
+            { name: "Diwali - Festival of Lights", date: "Oct 31, Thursday", tag: "Mandatory", color: "#f59e0b" },
             { name: "Christmas Day", date: "Dec 25, Wednesday", tag: "Restricted", color: "#10B981" },
             { name: "New Year's Eve", date: "Dec 31, Tuesday", tag: "Mandatory", color: "#2563eb" },
           ].map((h) => (

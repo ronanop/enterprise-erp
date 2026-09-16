@@ -1,4 +1,4 @@
-"""Sub-phase 4D — delivery challan signature enrichment tests."""
+"""Sub-phase 4D - delivery challan signature enrichment tests."""
 
 import pytest
 

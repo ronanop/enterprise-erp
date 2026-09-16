@@ -16,7 +16,7 @@ import {
 const POLL_MS = 45_000;
 
 function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value.slice(0, 16).replace("T", " ");
   return d.toLocaleString(undefined, {

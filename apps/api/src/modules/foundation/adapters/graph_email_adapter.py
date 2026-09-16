@@ -80,7 +80,7 @@ class GraphEmailAdapter:
             )
         try:
             token = self.acquire_token()
-        except Exception as exc:  # noqa: BLE001 — surface provider error to delivery log
+        except Exception as exc:  # noqa: BLE001 - surface provider error to delivery log
             return GraphSendResult(
                 ok=False,
                 status_code=401,

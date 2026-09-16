@@ -471,11 +471,11 @@ export function HrSuperadminPage() {
                               </p>
                             </td>
                             <td className="px-3 py-3 text-muted-foreground">
-                              {admin.designation || emp?.designationName || "—"}
+                              {admin.designation || emp?.designationName || "-"}
                             </td>
                             <td className="px-3 py-3">
                               <p className="text-foreground">
-                                {entityNames.length ? entityNames.join(", ") : "—"}
+                                {entityNames.length ? entityNames.join(", ") : "-"}
                               </p>
                               {entities.length > 0 ? (
                                 <ul className="mt-2 space-y-1">
@@ -534,7 +534,7 @@ export function HrSuperadminPage() {
                     <li key={emp.id} className="border-b border-border/70 py-3 last:border-b-0">
                       <PersonRow
                         name={emp.displayName}
-                        meta={`${emp.employeeCode} · ${emp.officialEmail} · ${emp.designationName || "—"}`}
+                        meta={`${emp.employeeCode} · ${emp.officialEmail} · ${emp.designationName || "-"}`}
                       >
                         <ToggleSwitch
                           checked={false}
@@ -573,7 +573,7 @@ export function HrSuperadminPage() {
                         <PersonRow
                           name={row.display_name}
                           meta={`${row.employee_code} · ${row.email} · ${
-                            entityNames.length ? entityNames.join(", ") : row.designation || "—"
+                            entityNames.length ? entityNames.join(", ") : row.designation || "-"
                           }`}
                         >
                           <ToggleSwitch
@@ -643,7 +643,7 @@ export function HrSuperadminPage() {
                             ) : null}
                           </td>
                           <td className="px-3 py-2.5 align-middle">
-                            <p className="leading-4">{row.actor_name || "—"}</p>
+                            <p className="leading-4">{row.actor_name || "-"}</p>
                             {row.actor_email ? (
                               <p className="mt-0.5 text-[10px] leading-3 text-muted-foreground">{row.actor_email}</p>
                             ) : null}
@@ -652,7 +652,7 @@ export function HrSuperadminPage() {
                             className="max-w-xs truncate px-3 py-2.5 align-middle text-muted-foreground"
                             title={row.summary}
                           >
-                            {row.summary || "—"}
+                            {row.summary || "-"}
                           </td>
                         </tr>
                       ))}

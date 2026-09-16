@@ -175,7 +175,7 @@ describe("AssetDcChallanWorkspace", () => {
           employee_code: null,
           employee_phone: "9876543210",
           employee_email: "",
-          deployed_to: "Airtel — Gurugram office",
+          deployed_to: "Airtel - Gurugram office",
         },
       ],
       total: 1,
@@ -185,7 +185,7 @@ describe("AssetDcChallanWorkspace", () => {
     render(<AssetDcChallanWorkspace />);
     await waitFor(() => expect(screen.getByText("DC-2026-000001")).toBeInTheDocument());
     await user.click(screen.getByText("DC-2026-000001"));
-    expect(screen.getByTestId("dc-challan-deployed-to")).toHaveTextContent("Airtel — Gurugram office");
+    expect(screen.getByTestId("dc-challan-deployed-to")).toHaveTextContent("Airtel - Gurugram office");
     expect(screen.queryByText(/missing code/i)).toBeNull();
     expect(screen.queryByText(/^Code$/)).toBeNull();
     expect(screen.getByText(/Employee email is blank/)).toBeInTheDocument();

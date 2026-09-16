@@ -89,7 +89,7 @@ export function ProjectCostListPage() {
         label: "Journal",
         sort: (r) => r.finance_journal_id,
         className: "font-mono text-xs text-muted-foreground",
-        cell: (r) => (r.finance_journal_id ? r.finance_journal_id.slice(0, 8) : "—"),
+        cell: (r) => (r.finance_journal_id ? r.finance_journal_id.slice(0, 8) : "-"),
       },
       {
         key: "created_at",

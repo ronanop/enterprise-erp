@@ -2,7 +2,7 @@
 
 Accepts either a ``file_path`` (already-stored reference) or inline
 ``content_base64`` which is decoded and written to the local uploads
-directory — this keeps the demo self-contained without requiring a full
+directory - this keeps the demo self-contained without requiring a full
 multipart/object-storage pipeline.
 """
 
@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.exceptions import NotFoundException
 from modules.crm.repository.attachment_repository import AttachmentRepository
+from modules.crm.service.crm_record_visibility import CrmRecordVisibility
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.foundation.domain.value_objects import TenantContext
 
@@ -28,6 +29,7 @@ class AttachmentService:
         self._db = db
         self._repo = AttachmentRepository(db)
         self._scope = CrmScopeValidator(db)
+        self._visibility = CrmRecordVisibility(db)
 
     def list_for_entity(self, ctx: TenantContext, entity_type: str, entity_id: UUID):
         return self._repo.list_for_entity(ctx, entity_type, entity_id)
@@ -40,7 +42,8 @@ class AttachmentService:
         company_id: UUID | None = None,
     ):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_by_category(ctx, cid, category=category)
+        rows = self._repo.list_by_category(ctx, cid, category=category)
+        return self._visibility.filter_created_rows(ctx, rows)
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)

@@ -1,4 +1,4 @@
-/** Enterprise Attendance Management — view models */
+/** Enterprise Attendance Management - view models */
 
 export type AttendanceStatusCode =
   | "present"

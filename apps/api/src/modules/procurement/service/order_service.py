@@ -253,7 +253,7 @@ class OrderService:
         )
         line.tax_amount = float(totals.tax_amount)
         line.line_total = float(totals.line_total)
-        # Relationship is kept in sync by the repository — refresh totals in place.
+        # Relationship is kept in sync by the repository - refresh totals in place.
         if "lines" not in order.__dict__:
             self._db.expire(order, ["lines"])
             order = self.get_order(ctx, order_id)

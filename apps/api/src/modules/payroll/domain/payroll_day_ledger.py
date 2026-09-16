@@ -41,7 +41,7 @@ def is_scheduled_working_day(
         return False
     if roster_shift_id and roster_status == "published":
         return True
-    # No published roster: count as scheduled working day (shift expected Mon–Fri etc. via weekly-off rules).
+    # No published roster: count as scheduled working day (shift expected Mon-Fri etc. via weekly-off rules).
     return True
 
 

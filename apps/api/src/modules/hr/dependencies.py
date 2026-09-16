@@ -26,7 +26,7 @@ __all__ = [
 
 
 def get_db() -> Generator[Session]:
-    """HR request-scoped unit of work — commit on success, roll back on failure."""
+    """HR request-scoped unit of work - commit on success, roll back on failure."""
     db = SessionLocal()
     try:
         yield db

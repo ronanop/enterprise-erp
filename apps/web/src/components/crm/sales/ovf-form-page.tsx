@@ -565,8 +565,8 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
               readOnly
               className={`${NUMBER_NO_SPIN} cursor-default bg-muted/50`}
               value={marginAmountDisplay}
-              placeholder="—"
-              title="Customer − Vendor − Freight − Finance Cost"
+              placeholder="-"
+              title="Customer - Vendor - Freight - Finance Cost"
             />
           </FinanceField>
           <FinanceField label="Vendor Payments Terms">
@@ -584,7 +584,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
               readOnly
               className={`${NUMBER_NO_SPIN} cursor-default bg-muted/50`}
               value={marginPctDisplay}
-              placeholder="—"
+              placeholder="-"
               title="Total Margin Amount ÷ Customer Total × 100"
             />
           </FinanceField>

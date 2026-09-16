@@ -529,8 +529,8 @@ export function MarketingCampaignsPage() {
                       <td className="px-4 py-2.5">
                         <FinanceStatusBadge status={row.status} />
                       </td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{row.start_date ?? "—"}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{row.end_date ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{row.start_date ?? "-"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{row.end_date ?? "-"}</td>
                       <td className="px-4 py-2.5 text-right">
                         <Button
                           type="button"
@@ -563,7 +563,7 @@ export function MarketingCampaignsPage() {
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-sm font-semibold text-foreground">
-                  Deliverables — {openCampaign.campaign_name}
+                  Deliverables - {openCampaign.campaign_name}
                 </p>
                 <Badge variant="secondary" className="font-normal tabular-nums">
                   {deliverablesLoading ? "…" : `${deliverables.length} items`}
@@ -845,16 +845,16 @@ export function MarketingCampaignsPage() {
                         {formatDeliverableType(item.deliverable_type)}
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">
-                        {item.content_provider_name ?? "—"}
+                        {item.content_provider_name ?? "-"}
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">
-                        {item.approval_head_name ?? "—"}
+                        {item.approval_head_name ?? "-"}
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">
-                        {item.editor_name ?? "—"}
+                        {item.editor_name ?? "-"}
                       </td>
                       <td className="px-4 py-2.5 tabular-nums text-muted-foreground">
-                        {item.due_date ?? "—"}
+                        {item.due_date ?? "-"}
                       </td>
                       <td className="px-4 py-2.5">
                         <FinanceStatusBadge status={item.status} />

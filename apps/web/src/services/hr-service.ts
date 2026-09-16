@@ -125,7 +125,7 @@ export function employeeDisplayName(row: HrRow): string {
   const first = typeof row.first_name === "string" ? row.first_name : "";
   const last = typeof row.last_name === "string" ? row.last_name : "";
   const name = `${first} ${last}`.trim();
-  return name || String(row.employee_code ?? row.document_number ?? "—");
+  return name || String(row.employee_code ?? row.document_number ?? "-");
 }
 
 export async function loadHrOverview(): Promise<HrOverview> {

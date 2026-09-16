@@ -105,7 +105,7 @@ beforeEach(() => {
   returnAsset.mockResolvedValue({ ...activeRow, status: "returned" });
 });
 
-describe("Container callbacks — Issue success path", () => {
+describe("Container callbacks - Issue success path", () => {
   it("prefills asset from inventory seed", async () => {
     render(
       <AssignmentWizardContainer
@@ -183,7 +183,7 @@ describe("Container callbacks — Issue success path", () => {
   });
 });
 
-describe("Container callbacks — Return success path", () => {
+describe("Container callbacks - Return success path", () => {
   it("loads return flow from inventory assetId", async () => {
     render(
       <ReturnWizardContainer assetId="a1" service={returnService} listEmployees={listEmployees} />,

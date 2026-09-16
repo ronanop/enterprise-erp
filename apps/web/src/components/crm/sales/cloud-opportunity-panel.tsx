@@ -118,19 +118,19 @@ export function CloudOpportunityPanel({ opportunity, cloudVariant, disabled, onS
     >
       <CrmDetailGrid>
         <CrmDetailItem label="Cloud flow">{VARIANT_LABELS[variantKey] ?? variantKey}</CrmDetailItem>
-        <CrmDetailItem label="Sub-product">{opportunity.cloud_sub_product || "—"}</CrmDetailItem>
+        <CrmDetailItem label="Sub-product">{opportunity.cloud_sub_product || "-"}</CrmDetailItem>
         <CrmDetailItem label="Distributor discount">
           {opportunity.distributor_discount_percent != null
             ? `${opportunity.distributor_discount_percent}% (locked)`
-            : "—"}
+            : "-"}
         </CrmDetailItem>
         <CrmDetailItem label="Profitability (spread)">
           {profitability != null ? `${profitability}%` : opportunity.profitability_percent != null
             ? `${opportunity.profitability_percent}%`
-            : "—"}
+            : "-"}
         </CrmDetailItem>
         {opportunity.onboarding_done ? (
-          <CrmDetailItem label="Onboarding date">{opportunity.onboarding_date || "—"}</CrmDetailItem>
+          <CrmDetailItem label="Onboarding date">{opportunity.onboarding_date || "-"}</CrmDetailItem>
         ) : null}
       </CrmDetailGrid>
 
@@ -195,7 +195,7 @@ export function CloudOpportunityPanel({ opportunity, cloudVariant, disabled, onS
 
         {showMigrationCredits ? (
           <>
-            <FinanceField label="Phase 1 credits — Assess (~10% ARR)">
+            <FinanceField label="Phase 1 credits - Assess (~10% ARR)">
               <Input
                 type="number"
                 min={0}
@@ -206,7 +206,7 @@ export function CloudOpportunityPanel({ opportunity, cloudVariant, disabled, onS
                 placeholder="Funding amount"
               />
             </FinanceField>
-            <FinanceField label="Phase 2 credits — Mobilize (~15% ARR)">
+            <FinanceField label="Phase 2 credits - Mobilize (~15% ARR)">
               <Input
                 type="number"
                 min={0}
@@ -216,7 +216,7 @@ export function CloudOpportunityPanel({ opportunity, cloudVariant, disabled, onS
                 disabled={disabled || busy}
               />
             </FinanceField>
-            <FinanceField label="Phase 3 credits — Migrate (~25% ARR)">
+            <FinanceField label="Phase 3 credits - Migrate (~25% ARR)">
               <Input
                 type="number"
                 min={0}

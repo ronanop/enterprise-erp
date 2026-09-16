@@ -1,4 +1,4 @@
-"""HR integration facade — Master Data sync + Payroll-ready read exports."""
+"""HR integration facade - Master Data sync + Payroll-ready read exports."""
 
 from uuid import UUID
 

@@ -31,15 +31,15 @@ function formatDate(iso: string): string {
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso.length >= 16 ? iso.slice(11, 16) : "—";
+  if (Number.isNaN(d.getTime())) return iso.length >= 16 ? iso.slice(11, 16) : "-";
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
 function formatTaskDeadline(iso: string): string {
   const date = formatDate(iso);
   const time = formatTime(iso);
-  if (date === "—" || !iso) return "—";
-  return time === "—" ? date : `${date} ${time}`;
+  if (date === "-" || !iso) return "-";
+  return time === "-" ? date : `${date} ${time}`;
 }
 
 export function FollowupsListPage({
@@ -129,7 +129,6 @@ export function FollowupsListPage({
       {!embedded ? (
         <PageHeader
           title="Customer Follow Ups"
-          description="Scheduled customer follow-ups with date, time, remark, and internal owner."
           actions={actions}
         />
       ) : null}
@@ -179,7 +178,7 @@ export function FollowupsListPage({
                 sorted.map((row) => (
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                     <td className="px-4 py-2.5 font-medium">
-                      {row.customer_name || "—"}
+                      {row.customer_name || "-"}
                       <div className="text-[11px] font-normal text-muted-foreground">
                         {row.followup_code}
                       </div>
@@ -187,7 +186,7 @@ export function FollowupsListPage({
                     <td className="px-4 py-2.5 text-muted-foreground">{formatDate(row.followup_at)}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">{formatTime(row.followup_at)}</td>
                     <td className="max-w-[240px] px-4 py-2.5 text-muted-foreground">
-                      <span className="line-clamp-2">{row.notes || "—"}</span>
+                      <span className="line-clamp-2">{row.notes || "-"}</span>
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">
                       {formatTaskDeadline(row.followup_at)}

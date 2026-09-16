@@ -25,7 +25,7 @@ from modules.organization.models.company import OrgCompany  # noqa: E402
 FRAMEWORKS: list[dict] = [
     {
         "framework_code": "IN-DPDP",
-        "framework_name": "India — Digital Personal Data Protection Act",
+        "framework_name": "India - Digital Personal Data Protection Act",
         "framework_type": "regulatory",
         "jurisdiction": "India",
         "description": "Personal data protection, consent, safeguards, and breach readiness.",
@@ -46,7 +46,7 @@ FRAMEWORKS: list[dict] = [
     },
     {
         "framework_code": "IN-GST",
-        "framework_name": "India — Goods and Services Tax",
+        "framework_name": "India - Goods and Services Tax",
         "framework_type": "regulatory",
         "jurisdiction": "India",
         "description": "GST invoicing, tax register, and indirect tax compliance.",
@@ -67,7 +67,7 @@ FRAMEWORKS: list[dict] = [
     },
     {
         "framework_code": "IN-LABOUR",
-        "framework_name": "India — Labour & Payroll Statutory",
+        "framework_name": "India - Labour & Payroll Statutory",
         "framework_type": "regulatory",
         "jurisdiction": "India",
         "description": "PF, ESI, TDS on salary, and state professional tax obligations.",
@@ -160,7 +160,7 @@ def main() -> None:
     try:
         tenant = db.scalar(select(SecTenant).where(SecTenant.tenant_code == "BOOTSTRAP"))
         if tenant is None:
-            print("No BOOTSTRAP tenant — run seed_demo_data first.")
+            print("No BOOTSTRAP tenant - run seed_demo_data first.")
             return
         company = db.scalar(
             select(OrgCompany).where(OrgCompany.tenant_id == tenant.id).limit(1)
@@ -172,7 +172,7 @@ def main() -> None:
             select(MasterEmployee).where(MasterEmployee.tenant_id == tenant.id).limit(1)
         )
         if employee is None:
-            print("No employee master — run org/master seeds first.")
+            print("No employee master - run org/master seeds first.")
             return
 
         created_fw = 0

@@ -101,7 +101,7 @@ class TransferService:
             fields["to_location_label"] = label
             if fields.get("to_org_location_id") is None:
                 fields["to_org_location_id"] = org_id
-            # Stash for execute — not persisted on transfer row
+            # Stash for execute - not persisted on transfer row
             fields["_site_location_id"] = to_location_id
             fields["_site_building_id"] = to_building_id
 
@@ -138,7 +138,7 @@ class TransferService:
                 "_site_building_id",
             }
         }
-        # Persist site master ids in transfer_notes marker only if unused — instead
+        # Persist site master ids in transfer_notes marker only if unused - instead
         # re-resolve from to_location_label at execute via SiteLocationService.
         row = self._repo.create(
             ctx,

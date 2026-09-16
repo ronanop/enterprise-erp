@@ -1,4 +1,4 @@
-# ADR-ASSET-INS-001 — Asset Insurance Management
+# ADR-ASSET-INS-001 - Asset Insurance Management
 
 **Status:** Accepted  
 **Date:** 2026-07-30  

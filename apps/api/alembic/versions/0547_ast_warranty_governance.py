@@ -127,7 +127,7 @@ def upgrade() -> None:
             ),
         )
 
-    # ERD §6.7 has no document_number on warranty — sequence backfill is N/A.
+    # ERD §6.7 has no document_number on warranty - sequence backfill is N/A.
 
     conn = op.get_bind()
     now = datetime.now(timezone.utc)

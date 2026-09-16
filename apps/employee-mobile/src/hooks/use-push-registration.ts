@@ -47,7 +47,7 @@ export function usePushRegistration(enabled: boolean) {
       });
       setRegistered(true);
     } catch {
-      // Missing projectId / native module — ignore in Phase 1
+      // Missing projectId / native module - ignore in Phase 1
       if (env.useMock) setRegistered(true);
     }
   }, [enabled]);

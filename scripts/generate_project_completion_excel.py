@@ -562,7 +562,7 @@ def build_workbook(rows: list[Row]) -> Workbook:
     grouped = group_rows_by_module(rows)
     order = module_order(rows)
 
-    title_a1 = "Enterprise ERP Platform — Project Completion"
+    title_a1 = "Enterprise ERP Platform - Project Completion"
     title_a2 = f"As of {date.today().isoformat()} · Release baseline ERP Core v1.18-beta"
 
     detail_headers = [
@@ -768,9 +768,9 @@ def build_workbook(rows: list[Row]) -> Workbook:
     ws_leg["A1"].font = Font(bold=True, size=12)
     notes = [
         "Modules & Submodules: each main module has a bold summary row, then indented submodule rows underneath (column B).",
-        "Use Excel outline controls (rows 1–7) to collapse/expand submodule lists per module.",
+        "Use Excel outline controls (rows 1-7) to collapse/expand submodule lists per module.",
         "Executive Summary lists every submodule name under each main module in column C.",
-        "Submodule names are taken from approved FRD-01–FRD-22, Portal (ERD-23), Recruitment, ESS, and platform extensions "
+        "Submodule names are taken from approved FRD-01-FRD-22, Portal (ERD-23), Recruitment, ESS, and platform extensions "
         "(Virtual E.A., Self Learning, Document Management, Licensing, Monitoring & Analytics).",
         "Backend % reflects API/services/models signals in apps/api/src/modules (keyword + package presence).",
         "Frontend % reflects Next.js admin UI coverage under apps/web/src/app/(app) (page count + submodule weighting).",

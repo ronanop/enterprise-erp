@@ -1,4 +1,4 @@
-# Asset Document Management — Release Notes (FP-ASSET-016)
+# Asset Document Management - Release Notes (FP-ASSET-016)
 
 **Release:** FP-ASSET-016  
 **ADR:** ADR-ASSET-DOC-001

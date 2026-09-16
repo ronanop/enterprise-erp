@@ -39,7 +39,7 @@ def run_agent_pipeline(
         f"Tone: {tone or 'professional'} · Type: {content_type}"
     )
     content = {
-        "headline": f"{topic} — what matters now",
+        "headline": f"{topic} - what matters now",
         "hook": f"Stop guessing on {topic}. Start with signal.",
         "body": body,
         "cta": "Save this for your next campaign planning session.",

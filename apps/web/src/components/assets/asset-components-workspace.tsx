@@ -333,7 +333,7 @@ export function AssetComponentsWorkspace() {
     <AssetsPremiumPage testId="asset-components-workspace">
       <PageHeader
         title="Asset Components"
-        description="Install accessories on a parent asset — lightweight types or attach a registered asset."
+        description="Install accessories on a parent asset - lightweight types or attach a registered asset."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -488,7 +488,7 @@ export function AssetComponentsWorkspace() {
                         <Badge variant="secondary">{row.status}</Badge>
                       </td>
                       <td className="px-4 py-2.5 tabular-nums">
-                        {row.quantity != null ? String(row.quantity) : "—"}
+                        {row.quantity != null ? String(row.quantity) : "-"}
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         <Button
@@ -677,7 +677,7 @@ export function AssetComponentsWorkspace() {
                                   {a.asset_code} · {a.asset_name}
                                 </span>
                                 <span className="mt-0.5 block text-xs text-muted-foreground">
-                                  S/N: {a.serial_number?.trim() || "—"} · {a.operational_status}
+                                  S/N: {a.serial_number?.trim() || "-"} · {a.operational_status}
                                 </span>
                               </span>
                             </label>
@@ -779,7 +779,7 @@ export function AssetComponentsWorkspace() {
                 </p>
                 <p>
                   <span className="text-muted-foreground">S/N: </span>
-                  {selected.serial_number?.trim() || "—"}
+                  {selected.serial_number?.trim() || "-"}
                 </p>
                 {selected.status === "active" && !selected.component_asset_id ? (
                   <div className="flex flex-wrap gap-2 pt-2">
@@ -905,7 +905,7 @@ export function AssetComponentsWorkspace() {
                           {h.status} · {h.component_name}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {h.created_at ?? "—"} · S/N {h.serial_number || "—"}
+                          {h.created_at ?? "-"} · S/N {h.serial_number || "-"}
                         </div>
                       </li>
                     ))}

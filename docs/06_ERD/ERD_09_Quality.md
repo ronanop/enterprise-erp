@@ -1,13 +1,13 @@
-# ERD_09 — Quality Management Domain
+# ERD_09 - Quality Management Domain
 
-**Document:** Enterprise ERD — Quality Management Domain  
+**Document:** Enterprise ERD - Quality Management Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 9 Implementation Planning  
+**Status:** Locked - Ready for Sprint 9 Implementation Planning  
 **Schema:** `quality`  
 **Table Prefix:** `qm_`  
 **Aligned To:** BRD v1.0 · FRD-14 · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-14 Quality Management Domain](../02_FRD/FRD-14-Quality-Management-Domain.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.3-beta](../07_RELEASES/ERP_Core_v1.3-beta.md)  
 
 ---
@@ -16,7 +16,7 @@
 
 The Quality Management Domain ensures **product and process quality** across the procure-to-stock and make-to-stock / make-to-order flows: inspection planning, sampling, characteristic measurement, incoming / in-process / final inspections, defect capture, NCR, CAPA (root cause · corrective · preventive), supplier quality, customer complaints, quality audits, and quality scores.
 
-Quality **does not** write `inv_*` tables — quarantine hold / release / reject movements go through the **Inventory Service** (`source_module = quality`). Valued quality / scrap / warranty costs go through **Finance** via `PostingService.post_system_journal` only. GRN, production order, and sales complaint links are **UUID + `source_module`** (no FK to `proc_*` / `mfg_*` / `sales_*` / `inv_*`).
+Quality **does not** write `inv_*` tables - quarantine hold / release / reject movements go through the **Inventory Service** (`source_module = quality`). Valued quality / scrap / warranty costs go through **Finance** via `PostingService.post_system_journal` only. GRN, production order, and sales complaint links are **UUID + `source_module`** (no FK to `proc_*` / `mfg_*` / `sales_*` / `inv_*`).
 
 **Business Tables: 18**  
 **Schema: `quality`**
@@ -63,31 +63,31 @@ BI (future)
 ## 2. Scope
 
 ### In Scope
-- Inspection plans by product / category and inspection type (incoming, in_process, final, customer_return) — FRD-14 §4
-- Sampling plans (lot size bands, sample size, AQL / accept-reject counts) — FRD-14 planning
-- Quality characteristics (dimension, weight, visual, packaging, label, custom) with UOM / tolerances — FRD-14 §8 checklist intent
-- Incoming inspection triggered by GRN; results accepted / rejected / conditional — FRD-14 §5
+- Inspection plans by product / category and inspection type (incoming, in_process, final, customer_return) - FRD-14 §4
+- Sampling plans (lot size bands, sample size, AQL / accept-reject counts) - FRD-14 planning
+- Quality characteristics (dimension, weight, visual, packaging, label, custom) with UOM / tolerances - FRD-14 §8 checklist intent
+- Incoming inspection triggered by GRN; results accepted / rejected / conditional - FRD-14 §5
 - Incoming inspection lines capturing measured characteristics vs spec
-- In-process inspection against production order / operation — FRD-14 §6
-- Final inspection for finished goods: approved / rejected / rework_required — FRD-14 §7
-- Defect types (master) and defect instances linked to inspections / NCR — FRD-14 §9
-- NCR with severity (minor / major / critical) and approval workflow — FRD-14 §9, §16
-- CAPA with separate root-cause, corrective-action, and preventive-action child records — FRD-14 §10
-- Supplier quality scorecards by vendor / period — FRD-14 supplier QC
-- Customer complaints with investigation → NCR → CAPA — FRD-14 §13
-- Quality audits (internal / supplier / process / compliance) — FRD-14 §11
-- Quality score KPI snapshots (FPY, defect rate, rework rate, complaint rate, supplier score) — FRD-14 §14
+- In-process inspection against production order / operation - FRD-14 §6
+- Final inspection for finished goods: approved / rejected / rework_required - FRD-14 §7
+- Defect types (master) and defect instances linked to inspections / NCR - FRD-14 §9
+- NCR with severity (minor / major / critical) and approval workflow - FRD-14 §9, §16
+- CAPA with separate root-cause, corrective-action, and preventive-action child records - FRD-14 §10
+- Supplier quality scorecards by vendor / period - FRD-14 supplier QC
+- Customer complaints with investigation → NCR → CAPA - FRD-14 §13
+- Quality audits (internal / supplier / process / compliance) - FRD-14 §11
+- Quality score KPI snapshots (FPY, defect rate, rework rate, complaint rate, supplier score) - FRD-14 §14
 - Inventory Service integration only for quarantine / hold / release / reject
 - Finance system-journal hooks for quality cost / scrap cost / warranty cost where valued
 - Workflow, audit, RBAC, notifications, Celery (audit due, CAPA overdue, failed inspection alerts)
 
 ### Out of Scope (Phase 2 / Separate ERD)
-- **Full compliance register / evidence repository tables** (`qm_compliance_*`) — FRD-14 §12; Sprint 9 stores standard codes on audit only
-- **Separate audit findings child table** — findings captured as NCR / defect linked to audit UUID in Phase 1; dedicated `qm_audit_finding` Phase 2 if needed
-- **Lab / LIMS instruments & calibration** — deferred
-- **Certificate of Analysis (CoA) attachment store** — use Foundation document/attachment if present; no duplicate blob tables
-- **Duplicate product / vendor / customer / warehouse masters** — C-01; use `master_*`
-- **Direct `inv_*` / `fin_*` / `proc_*` / `mfg_*` / `sales_*` ORM writes** — service ports + UUID refs only
+- **Full compliance register / evidence repository tables** (`qm_compliance_*`) - FRD-14 §12; Sprint 9 stores standard codes on audit only
+- **Separate audit findings child table** - findings captured as NCR / defect linked to audit UUID in Phase 1; dedicated `qm_audit_finding` Phase 2 if needed
+- **Lab / LIMS instruments & calibration** - deferred
+- **Certificate of Analysis (CoA) attachment store** - use Foundation document/attachment if present; no duplicate blob tables
+- **Duplicate product / vendor / customer / warehouse masters** - C-01; use `master_*`
+- **Direct `inv_*` / `fin_*` / `proc_*` / `mfg_*` / `sales_*` ORM writes** - service ports + UUID refs only
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 - Analytics cubes / `ana_fact_quality`
 
@@ -115,7 +115,7 @@ BI (future)
 | ERD_04 Finance | `fin_period`, `fin_journal_header` (ref only) + PostingService |
 | ERD_05 Sales | Logical UUID refs (complaint / return) |
 | ERD_06 Procurement | Logical UUID refs (GRN header/line) |
-| ERD_07 Inventory | Inventory Service API only — no FK to `inv_*` |
+| ERD_07 Inventory | Inventory Service API only - no FK to `inv_*` |
 | ERD_08 Manufacturing | Logical UUID refs (production order / operation / scrap / receipt) |
 
 ---
@@ -124,24 +124,24 @@ BI (future)
 
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
-| 1 | `qm_inspection_plan` | Quality Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 2 | `qm_sampling_plan` | Quality Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 3 | `qm_quality_characteristic` | Quality Master | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 1 | `qm_inspection_plan` | Quality Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 2 | `qm_sampling_plan` | Quality Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 3 | `qm_quality_characteristic` | Quality Master | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 4 | `qm_incoming_inspection` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 5 | `qm_incoming_inspection_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 6 | `qm_inprocess_inspection` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 5 | `qm_incoming_inspection_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 6 | `qm_inprocess_inspection` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 7 | `qm_final_inspection` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 8 | `qm_defect_type` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 9 | `qm_defect` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 8 | `qm_defect_type` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 9 | `qm_defect` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 10 | `qm_ncr` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 11 | `qm_capa` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 12 | `qm_root_cause` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 13 | `qm_corrective_action` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 14 | `qm_preventive_action` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 15 | `qm_supplier_quality` | Scorecard | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 12 | `qm_root_cause` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 13 | `qm_corrective_action` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 14 | `qm_preventive_action` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 15 | `qm_supplier_quality` | Scorecard | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 16 | `qm_customer_complaint` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 17 | `qm_quality_audit` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 18 | `qm_quality_score` | KPI Snapshot | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 18 | `qm_quality_score` | KPI Snapshot | ✅ | ✅ | optional | ✅ | ✅ | - |
 
 > **Notes:** Incoming inspection + NCR + CAPA + final inspection + customer complaint + audit carry workflow seeds in Sprint 9. In-process inspection uses status lifecycle without a dedicated approval workflow seed (supervisor confirmation in application). FRD checklist concepts map to `qm_quality_characteristic` (+ plan linkage), not a separate checklist table.
 
@@ -242,14 +242,14 @@ Quality Score ← period KPI snapshot
 | `id` | UUID | NO | PK |
 | `tenant_id` / `company_id` | UUID | NO | Scope |
 | `branch_id` | UUID | YES | Optional |
-| `plan_code` | VARCHAR(50) | NO | UK per company — `QPL-YYYY-NNNNNN` |
-| `plan_name` | VARCHAR(255) | NO | — |
+| `plan_code` | VARCHAR(50) | NO | UK per company - `QPL-YYYY-NNNNNN` |
+| `plan_name` | VARCHAR(255) | NO | - |
 | `product_id` | UUID | YES | FK → `master_product` (null = category-level) |
 | `product_category` | VARCHAR(100) | YES | Free/category label when product not set |
 | `inspection_type` | VARCHAR(30) | NO | incoming, in_process, final, customer_return |
 | `sampling_plan_id` | UUID | YES | FK → `qm_sampling_plan` |
 | `status` | VARCHAR(30) | NO | draft, active, obsolete |
-| `notes` | TEXT | YES | — |
+| `notes` | TEXT | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
 
 **UK:** `(company_id, plan_code)` where not deleted.
@@ -262,12 +262,12 @@ Quality Score ← period KPI snapshot
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
 | Scope | UUID | NO | tenant/company |
-| `sampling_code` | VARCHAR(50) | NO | UK — `SMP-YYYY-NNNNNN` |
-| `sampling_name` | VARCHAR(255) | YES | — |
+| `sampling_code` | VARCHAR(50) | NO | UK - `SMP-YYYY-NNNNNN` |
+| `sampling_name` | VARCHAR(255) | YES | - |
 | `lot_size_from` / `lot_size_to` | NUMERIC(18,4) | YES | Band |
-| `sample_size` | NUMERIC(18,4) | NO | — |
+| `sample_size` | NUMERIC(18,4) | NO | - |
 | `accept_count` | SMALLINT | NO | DEFAULT 0 |
-| `reject_count` | SMALLINT | NO | — |
+| `reject_count` | SMALLINT | NO | - |
 | `aql_percent` | NUMERIC(9,4) | YES | Optional AQL |
 | `status` | VARCHAR(30) | NO | active, inactive |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
@@ -282,10 +282,10 @@ Quality Score ← period KPI snapshot
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope | UUID | NO | — |
+| Scope | UUID | NO | - |
 | `inspection_plan_id` | UUID | YES | FK → plan (optional shared characteristics) |
 | `characteristic_code` | VARCHAR(50) | NO | UK per company |
-| `characteristic_name` | VARCHAR(255) | NO | — |
+| `characteristic_name` | VARCHAR(255) | NO | - |
 | `characteristic_type` | VARCHAR(30) | NO | numeric, pass_fail, text, visual |
 | `uom_id` | UUID | YES | FK → `master_uom` for numeric |
 | `target_value` / `min_value` / `max_value` | NUMERIC(18,4) | YES | Spec limits |
@@ -316,7 +316,7 @@ Quality Score ← period KPI snapshot
 | `workflow_*` | Incoming release / reject approval when conditional/reject |
 | `source_module` | `procurement` |
 | `source_document_type` | `grn` / `grn_line` |
-| `source_document_id` / `source_line_id` | GRN UUIDs — **no FK** |
+| `source_document_id` / `source_line_id` | GRN UUIDs - **no FK** |
 | `inspector_employee_id` | FK → `master_employee` |
 | `inspected_at` | TIMESTAMPTZ |
 | `inventory_event_id` | Logical UUID of inventory movement (idempotency) |
@@ -324,8 +324,8 @@ Quality Score ← period KPI snapshot
 
 **Line:** `line_number`, `characteristic_id`, `measured_value` (NUMERIC/null), `measured_text`, `pass_fail` (pass/fail/na), `is_out_of_spec` BOOLEAN, `defect_type_id` optional, `notes`, `status`.
 
-**On complete — Accepted:** Inventory Service release from quarantine → available (`source_module=quality`).  
-**On complete — Rejected:** Inventory remain/reject; initiate vendor return via Procurement Service + UUID refs (no direct `proc_*` write from Quality ORM).  
+**On complete - Accepted:** Inventory Service release from quarantine → available (`source_module=quality`).  
+**On complete - Rejected:** Inventory remain/reject; initiate vendor return via Procurement Service + UUID refs (no direct `proc_*` write from Quality ORM).  
 **Conditional:** remains on quality hold until approved release.
 
 ---
@@ -335,8 +335,8 @@ Quality Score ← period KPI snapshot
 | Column | Notes |
 |--------|-------|
 | `document_number` | `IPQC-YYYY-NNNNNN` |
-| `production_order_id` | UUID — **no FK** to `mfg_*` |
-| `production_operation_id` | UUID optional — no FK |
+| `production_order_id` | UUID - **no FK** to `mfg_*` |
+| `production_operation_id` | UUID optional - no FK |
 | `operation_seq` | SMALLINT optional |
 | `product_id`, `inspection_plan_id`, `inspector_employee_id` | Masters |
 | `result` | pending, accepted, rejected, rework_required |
@@ -353,8 +353,8 @@ Quality Score ← period KPI snapshot
 | Column | Notes |
 |--------|-------|
 | `document_number` | `FQC-YYYY-NNNNNN` |
-| `production_order_id` / `production_receipt_id` | UUID refs — no FK |
-| `product_id`, `warehouse_id`, qty fields | — |
+| `production_order_id` / `production_receipt_id` | UUID refs - no FK |
+| `product_id`, `warehouse_id`, qty fields | - |
 | `result` | pending, approved, rejected, rework_required |
 | `status` | draft, submitted, approved, completed, cancelled |
 | `workflow_*` | Final release approval |
@@ -368,8 +368,8 @@ Rejected → Manufacturing scrap and/or rework WO UUID refs; Inventory quarantin
 
 | Column | Notes |
 |--------|-------|
-| `defect_type_code` | UK per company — `DFT-…` or stable code |
-| `defect_type_name` | — |
+| `defect_type_code` | UK per company - `DFT-…` or stable code |
+| `defect_type_name` | - |
 | `severity_default` | minor, major, critical |
 | `category` | material, process, packaging, labeling, other |
 | `status` | active, inactive |
@@ -407,7 +407,7 @@ Rejected → Manufacturing scrap and/or rework WO UUID refs; Inventory quarantin
 
 ---
 
-### 6.11–6.14 CAPA cluster
+### 6.11-6.14 CAPA cluster
 
 **`qm_capa`:** `CAPA-YYYY-NNNNNN`, `ncr_id` FK, `capa_type` (corrective, preventive, both), `status` draft → submitted → approved → in_progress → verified → closed / cancelled, `workflow_*`, `owner_employee_id`, dates (`due_date`, `verified_at`).
 
@@ -438,7 +438,7 @@ Rejected → Manufacturing scrap and/or rework WO UUID refs; Inventory quarantin
 | `document_number` | `CQC-YYYY-NNNNNN` |
 | `customer_id` | FK → `master_customer` |
 | `complaint_type` | defective_product, packaging, performance, wrong_product, other |
-| `product_id`, `quantity`, `description` | — |
+| `product_id`, `quantity`, `description` | - |
 | `status` | draft, investigating, ncr_raised, capa_linked, closed, cancelled |
 | `workflow_*` | Optional complaint closure |
 | `ncr_id` | FK optional |
@@ -454,7 +454,7 @@ Rejected → Manufacturing scrap and/or rework WO UUID refs; Inventory quarantin
 | `audit_type` | internal, supplier, process, compliance |
 | `audit_standard` | ISO9001, ISO27001, ISO14001, FDA, GMP, other / free text |
 | `vendor_id` | Optional for supplier audit |
-| `planned_start` / `planned_end` / `actual_*` | — |
+| `planned_start` / `planned_end` / `actual_*` | - |
 | `status` | planned, in_progress, completed, closed, cancelled |
 | `workflow_*` | Audit closure (Auditor → Quality Head) |
 | `lead_auditor_employee_id` | FK |
@@ -466,10 +466,10 @@ Rejected → Manufacturing scrap and/or rework WO UUID refs; Inventory quarantin
 
 | Column | Notes |
 |--------|-------|
-| `score_code` optional / period key | — |
+| `score_code` optional / period key | - |
 | `score_dimension` | company, product, vendor, customer |
 | `dimension_ref_id` | UUID of product/vendor/customer when applicable |
-| `period_start` / `period_end` | — |
+| `period_start` / `period_end` | - |
 | KPIs | `first_pass_yield`, `defect_rate`, `rework_rate`, `complaint_rate`, `supplier_quality_score` NUMERIC |
 | `status` | draft, published |
 | Celery or service job refreshes from inspection/NCR/complaint facts |
@@ -513,7 +513,7 @@ Rejected → Manufacturing scrap and/or rework WO UUID refs; Inventory quarantin
 | Finance | `period_id`, `finance_journal_id` | `finance.*` (refs only) |
 | Org | `tenant_id`, `company_id`, `branch_id`, optional `cost_center_id` | foundation / organization |
 
-**No FK to:** `inv_*`, `proc_*`, `mfg_*`, `sales_*` — UUID + `source_module` / `source_document_type` only.
+**No FK to:** `inv_*`, `proc_*`, `mfg_*`, `sales_*` - UUID + `source_module` / `source_document_type` only.
 
 ---
 
@@ -578,12 +578,12 @@ Characteristic / defect type codes may be non-year business codes (still company
 
 | Trigger | Inventory API | Procurement / Manufacturing | Finance |
 |---------|---------------|----------------------------|---------|
-| Incoming accepted | Release quarantine → available | — | Optional quality cost accrual |
+| Incoming accepted | Release quarantine → available | - | Optional quality cost accrual |
 | Incoming rejected | Reject / hold scrap path | Purchase return / debit via Proc Service | Scrap / reject expense journal |
-| Incoming conditional | Quality hold | — | — |
+| Incoming conditional | Quality hold | - | - |
 | Final approved | Allow FG receipt / release | Production receipt confirm | FG valued receipt (MFG/Inv existing) |
 | Final rejected | Quarantine / reject | Scrap / rework UUID | Scrap expense via MFG or Quality posting |
-| Complaint warranty | Optional stock return receive | — | Warranty expense journal |
+| Complaint warranty | Optional stock return receive | - | Warranty expense journal |
 
 **Idempotency:** `(source_module, source_document_type, source_document_id[, line_id])` on Inventory side.  
 **Concurrency:** optimistic `version` on headers and CAPA.
@@ -688,7 +688,7 @@ Prior Alembic head: **`0114_seed_mfg_workflows`**.
 |--------|-----|----------|---------|
 | Foundation | FRD-01 | tenant, user, workflow, audit, RBAC | Direct FK |
 | Organization | FRD-02 | company, branch, cost center | Direct FK |
-| Master Data | FRD-03 | product, uom, warehouse, employee, vendor, customer | Direct FK — C-01 |
+| Master Data | FRD-03 | product, uom, warehouse, employee, vendor, customer | Direct FK - C-01 |
 | Finance | FRD-04 | period, journal posting API | FK refs + PostingService |
 | Procurement | FRD-07 | GRN identity | UUID + service for returns |
 | Inventory | FRD-08 | quarantine / hold / release / reject | Application service only |
@@ -700,7 +700,7 @@ Prior Alembic head: **`0114_seed_mfg_workflows`**.
 | Module | FRD | Pattern |
 |--------|-----|---------|
 | BI | FRD-18 | Read-only quality facts |
-| Manufacturing / Procurement | — | Gatekeepers call Quality status before stock/FG release |
+| Manufacturing / Procurement | - | Gatekeepers call Quality status before stock/FG release |
 
 **Rule:** Quality never bypasses Inventory or Finance engines for stock or GL, and never writes peer domain tables directly.
 
@@ -749,20 +749,20 @@ Normalize FRD loose paths under `/quality/*` (modular monolith style).
 | 3 | Aligned to FRD-14; incoming / in-process / final / NCR / CAPA / audit / complaints covered | ✅ |
 | 4 | Inventory-only stock writes; Finance system journals only | ✅ |
 | 5 | No FKs to `inv_*` / `proc_*` / `mfg_*` / `sales_*` | ✅ |
-| 6 | Migration order `0115`–`0135`, revision IDs ≤ 32 chars | ✅ |
+| 6 | Migration order `0115`-`0135`, revision IDs ≤ 32 chars | ✅ |
 | 7 | Workflows + RBAC + Celery documented | ✅ |
 | 8 | Cross-module dependencies documented | ✅ |
 | 9 | Compliance register / audit findings child deferred without blocking Sprint 9 | ✅ |
 | 10 | No Architecture Lock changes; Architecture Lock v1.1 preserved | ✅ |
 
-### ERD Phase Gate — Quality Summary
+### ERD Phase Gate - Quality Summary
 
 | Metric | Value |
 |--------|-------|
 | Business Tables | **18** |
 | Schema | **`quality`** |
 | Prefix | `qm_` |
-| Migration range | `0115` – `0135` |
+| Migration range | `0115` - `0135` |
 | Prior head | `0114_seed_mfg_workflows` |
 | Planned head | `0135_seed_qm_workflows` |
 

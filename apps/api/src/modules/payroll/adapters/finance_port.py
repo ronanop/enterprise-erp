@@ -1,4 +1,4 @@
-"""Finance port — JournalService + PostingService.post_system_journal only."""
+"""Finance port - JournalService + PostingService.post_system_journal only."""
 
 from decimal import Decimal
 from uuid import UUID

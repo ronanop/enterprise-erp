@@ -556,7 +556,7 @@ export function AssetDepreciationWorkspace() {
                   <SelectContent>
                     {assetOptions.map((asset) => (
                       <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                        {asset.asset_code} — {asset.asset_name}
+                        {asset.asset_code} - {asset.asset_name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -642,8 +642,8 @@ export function AssetDepreciationWorkspace() {
                       {selected.method}
                     </div>
                     <div className="text-muted-foreground">
-                      Amount {selected.depreciation_amount ?? "—"} · Book after{" "}
-                      {selected.book_value_after ?? "—"}
+                      Amount {selected.depreciation_amount ?? "-"} · Book after{" "}
+                      {selected.book_value_after ?? "-"}
                     </div>
                     <div className="text-muted-foreground">
                       Batch {shortId(selected.depreciation_batch_id)} · Journal{" "}
@@ -791,7 +791,7 @@ export function AssetDepreciationWorkspace() {
                   <SelectContent>
                     {assetOptions.map((asset) => (
                       <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                        {asset.asset_code} — {asset.asset_name}
+                        {asset.asset_code} - {asset.asset_name}
                       </SelectItem>
                     ))}
                   </SelectContent>

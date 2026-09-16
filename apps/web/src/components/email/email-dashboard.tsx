@@ -74,12 +74,12 @@ export function EmailDashboard() {
       const result = await testEmailConnection();
       if (!result) {
         setTestOk(false);
-        setTestMessage("Failed — no response from server");
+        setTestMessage("Failed - no response from server");
         setTestDetails([]);
         return;
       }
       setTestOk(result.ok);
-      setTestMessage(result.ok ? `OK — ${result.message}` : `Failed — ${result.message}`);
+      setTestMessage(result.ok ? `OK - ${result.message}` : `Failed - ${result.message}`);
       const lines: string[] = [];
       if (result.status_code) lines.push(`HTTP / status: ${result.status_code}`);
       if (result.from_email) lines.push(`From mailbox: ${result.from_email}`);
@@ -94,7 +94,7 @@ export function EmailDashboard() {
         if (d.env_files_found?.length) {
           lines.push(`Env files loaded: ${d.env_files_found.join(" | ")}`);
         } else if (d.env_files_found) {
-          lines.push("Env files loaded: (none found — check apps/api/.env)");
+          lines.push("Env files loaded: (none found - check apps/api/.env)");
         }
         if (d.hint) lines.push(`Hint: ${d.hint}`);
       }
@@ -106,7 +106,7 @@ export function EmailDashboard() {
     } catch (err) {
       setTestOk(false);
       const msg = err instanceof ApiClientError ? err.message : "Connection test failed";
-      setTestMessage(`Failed — ${msg}`);
+      setTestMessage(`Failed - ${msg}`);
       const lines = [`Error: ${msg}`];
       if (err instanceof ApiClientError) {
         lines.push(`HTTP status: ${err.status}`);
@@ -237,11 +237,11 @@ export function EmailDashboard() {
             </div>
             <div className="flex items-center justify-between gap-2">
               <dt className="text-muted-foreground">From</dt>
-              <dd className="font-mono text-xs text-foreground">{provider?.from_email ?? "—"}</dd>
+              <dd className="font-mono text-xs text-foreground">{provider?.from_email ?? "-"}</dd>
             </div>
             <div className="flex items-center justify-between gap-2">
               <dt className="text-muted-foreground">Delivery mode</dt>
-              <dd className="text-foreground">{provider?.delivery_mode ?? "—"}</dd>
+              <dd className="text-foreground">{provider?.delivery_mode ?? "-"}</dd>
             </div>
             <div className="flex items-center justify-between gap-2">
               <dt className="text-muted-foreground">Tenant / Client / Secret</dt>
@@ -279,7 +279,7 @@ export function EmailDashboard() {
                   <p className="truncate font-medium text-foreground">
                     {row.subject || row.event_type || "Email"}
                   </p>
-                  <p className="truncate text-xs text-muted-foreground">{row.recipient_address ?? "—"}</p>
+                  <p className="truncate text-xs text-muted-foreground">{row.recipient_address ?? "-"}</p>
                 </div>
                 <Badge variant="outline" className={`shrink-0 tone-${statusTone(row.status)}`}>
                   {row.status}

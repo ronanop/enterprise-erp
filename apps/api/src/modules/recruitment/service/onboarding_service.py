@@ -1,4 +1,4 @@
-"""Onboarding service — employee conversion via adapters only."""
+"""Onboarding service - employee conversion via adapters only."""
 
 from uuid import UUID
 
@@ -75,7 +75,7 @@ class OnboardingService:
         designation: str,
         management_group_id: UUID | None = None,
     ):
-        """Create employee in onboarding status — Emp ID / Active / payroll wait for activation."""
+        """Create employee in onboarding status - Emp ID / Active / payroll wait for activation."""
         from uuid import uuid4
 
         row = self.get(ctx, row_id)
@@ -124,7 +124,7 @@ class OnboardingService:
             payroll_eligible=False,
             management_group_id=management_group_id,
         )
-        # Stay in onboarding — activation assigns Emp ID, shift, payroll_eligible, then Active
+        # Stay in onboarding - activation assigns Emp ID, shift, payroll_eligible, then Active
         row.hr_employment_request_id = employment.id
         row.payroll_handoff_status = PayrollHandoffStatus.PENDING.value
 

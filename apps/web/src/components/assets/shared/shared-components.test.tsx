@@ -30,7 +30,7 @@ describe("StatCard", () => {
 
   it("changes StatCard title for empty test without label clash", () => {
     render(<StatCard title="Assigned" empty />);
-    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getByText("-")).toBeInTheDocument();
   });
 
   it("renders skeleton when loading", () => {

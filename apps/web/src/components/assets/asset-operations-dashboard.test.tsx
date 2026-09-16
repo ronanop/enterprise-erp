@@ -88,7 +88,7 @@ describe("AssetOperationsDashboard layout", () => {
     expect(screen.getByRole("heading", { level: 1, name: "IT Asset Operations" })).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Operational status, location mix, and transfer activity — click a KPI to open All Assets filtered.",
+        "Operational status, location mix, and transfer activity - click a KPI to open All Assets filtered.",
       ),
     ).toBeInTheDocument();
   });
@@ -156,7 +156,7 @@ describe("AssetOperationsDashboard layout", () => {
 
   it("shows empty KPI dashes when kpis null and not loading", () => {
     renderDashboard({ kpis: null, kpisLoading: false });
-    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(6);
+    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(6);
   });
 
   it("applies responsive KPI grid classes", () => {

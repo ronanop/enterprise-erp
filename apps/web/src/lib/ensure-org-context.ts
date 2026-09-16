@@ -74,7 +74,7 @@ export async function ensureOrgContextReady(): Promise<"ready" | "needs_company"
           ctxRes.data?.branch_id ? String(ctxRes.data.branch_id) : null,
         );
       } catch {
-        // Context already valid on server — continue even if switch fails
+        // Context already valid on server - continue even if switch fails
         const stored = getStoredOrgContext();
         if (!stored?.companyId || stored.companyId !== serverCompanyId) {
           setStoredOrgContext({
@@ -89,10 +89,10 @@ export async function ensureOrgContextReady(): Promise<"ready" | "needs_company"
       return "ready";
     }
   } catch {
-    /* fall through — try stored / company list */
+    /* fall through - try stored / company list */
   }
 
-  // 2) Browser still remembers last company — push it back to Redis
+  // 2) Browser still remembers last company - push it back to Redis
   const stored = getStoredOrgContext();
   if (stored?.companyId) {
     try {

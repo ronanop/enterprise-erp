@@ -387,7 +387,7 @@ export function OnboardingManagementPage() {
       await copyInvitationLink(row);
       openInvitationMailto(row);
       toast(
-        `Onboarding ${row.caseCode} created. Login email and password emailed — shown below for testing.`,
+        `Onboarding ${row.caseCode} created. Login email and password emailed - shown below for testing.`,
       );
       await load();
       setInviteCase(row);
@@ -437,7 +437,7 @@ export function OnboardingManagementPage() {
       setInviteCase(updated);
       await load();
     } else {
-      toast("Could not send invitation — save the case and try again", "error");
+      toast("Could not send invitation - save the case and try again", "error");
     }
   }
 
@@ -531,7 +531,7 @@ export function OnboardingManagementPage() {
               </div>
               <div>
                 <p className="text-xl font-semibold tabular-nums text-foreground">
-                  {loading && !dir ? "—" : value.toLocaleString("en-IN")}
+                  {loading && !dir ? "-" : value.toLocaleString("en-IN")}
                 </p>
                 <p className="mt-0.5 text-[10px] text-muted-foreground">{card.hint}</p>
               </div>
@@ -707,12 +707,12 @@ export function OnboardingManagementPage() {
                               </div>
                             </td>
                             <td className="px-3 py-3 align-middle whitespace-nowrap">
-                              {row.joiningDate || "—"}
+                              {row.joiningDate || "-"}
                             </td>
                             <td className="px-3 py-3 align-middle">
-                              {row.entityName || "—"}
+                              {row.entityName || "-"}
                             </td>
-                            <td className="px-3 py-3 align-middle">{row.department || "—"}</td>
+                            <td className="px-3 py-3 align-middle">{row.department || "-"}</td>
                             <td className="px-3 py-3 align-middle">
                               <div className="flex min-w-[7rem] items-center gap-2">
                                 <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
@@ -1073,8 +1073,8 @@ export function OnboardingManagementPage() {
                               setInviteCase(next);
                               toast(
                                 copied
-                                  ? "Document rejected — portal reopened. Login credentials copied — email them from the invitation drawer."
-                                  : "Document rejected — portal reopened. Use the invitation drawer to email login credentials.",
+                                  ? "Document rejected - portal reopened. Login credentials copied - email them from the invitation drawer."
+                                  : "Document rejected - portal reopened. Use the invitation drawer to email login credentials.",
                               );
                               void load();
                             })();
@@ -1123,8 +1123,8 @@ export function OnboardingManagementPage() {
                           Candidate agreed to policies
                           {sigName ? ` · signature: ${sigName}` : ""}
                           {!sigUrl
-                            ? " — no signature image / stamped PDFs yet (legacy typed name)."
-                            : " — stamped PDFs not available yet."}
+                            ? " - no signature image / stamped PDFs yet (legacy typed name)."
+                            : " - stamped PDFs not available yet."}
                         </p>
                         <ul className="space-y-1.5">
                           {(acceptedIds.length
@@ -1262,8 +1262,8 @@ export function OnboardingManagementPage() {
               setInviteCase(next);
               toast(
                 copied
-                  ? "Document rejected — portal reopened. Login credentials copied — email them from the invitation drawer."
-                  : "Document rejected — portal reopened. Use the invitation drawer to email login credentials.",
+                  ? "Document rejected - portal reopened. Login credentials copied - email them from the invitation drawer."
+                  : "Document rejected - portal reopened. Use the invitation drawer to email login credentials.",
               );
             } else {
               toast("Document verified");

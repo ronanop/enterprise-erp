@@ -24,7 +24,7 @@ export type ProcurementInventoryStockTableRow = {
   units: number;
 };
 
-/** How stock entered inventory — GRN/PO receipt vs Add stock / Excel import. */
+/** How stock entered inventory - GRN/PO receipt vs Add stock / Excel import. */
 export type InventoryAddedBy = "po" | "manual" | "mixed";
 
 export type GrnStockByProductRow = {
@@ -78,7 +78,7 @@ function productLabel(row: ProcurementInventoryRow): string {
   return name || "Unnamed product";
 }
 
-/** Case-insensitive product key — same item from different POs/GRNs merges in stock views. */
+/** Case-insensitive product key - same item from different POs/GRNs merges in stock views. */
 export function inventoryProductKey(name: string | null | undefined): string {
   return (name || "").trim().toLowerCase();
 }
@@ -86,8 +86,8 @@ export function inventoryProductKey(name: string | null | undefined): string {
 function formatSerialSummaryFromRows(rows: ProcurementInventoryRow[]): string {
   const serials = rows
     .map((row) => (row.serial_number ?? "").trim())
-    .filter((serial) => serial && serial.toUpperCase() !== "NA" && serial !== "—" && serial !== "-");
-  if (serials.length === 0) return "—";
+    .filter((serial) => serial && serial.toUpperCase() !== "NA" && serial !== "-" && serial !== "-");
+  if (serials.length === 0) return "-";
   const unique = [...new Set(serials)];
   if (unique.length <= 3) return unique.join(", ");
   return `${unique.slice(0, 3).join(", ")} +${unique.length - 3} more`;
@@ -95,12 +95,12 @@ function formatSerialSummaryFromRows(rows: ProcurementInventoryRow[]): string {
 
 function formatGrnSummaryFromRows(rows: ProcurementInventoryRow[]): string {
   const grns = [...new Set(rows.map((row) => row.grn_number?.trim()).filter(Boolean))] as string[];
-  if (grns.length === 0) return "—";
+  if (grns.length === 0) return "-";
   if (grns.length <= 2) return grns.join(", ");
   return `${grns.slice(0, 2).join(", ")} +${grns.length - 2} more`;
 }
 
-/** One row per product — aggregates units from all POs/GRNs for the same product name. */
+/** One row per product - aggregates units from all POs/GRNs for the same product name. */
 export function groupGrnStockByProduct(rows: ProcurementInventoryRow[]): GrnStockByProductRow[] {
   const map = new Map<string, { displayName: string; lines: ProcurementInventoryRow[] }>();
   for (const row of rows) {
@@ -135,7 +135,7 @@ export function groupGrnStockByProduct(rows: ProcurementInventoryRow[]): GrnStoc
             ? descriptions[0]!
             : descriptions.length > 1
               ? "Multiple"
-              : "—",
+              : "-",
         serialSummary: formatSerialSummaryFromRows(lines),
         grnSummary: formatGrnSummaryFromRows(lines),
         hasReversal: lines.some((row) => row.source === "grn_reversal"),
@@ -153,7 +153,7 @@ function unitCostOf(row: ProcurementInventoryRow): number {
   return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
-/** Stock on hand from GRN receipts only — units received but not yet billed. */
+/** Stock on hand from GRN receipts only - units received but not yet billed. */
 export function isGrnNonBilledStockRow(row: ProcurementInventoryRow): boolean {
   return row.source === "grn";
 }
@@ -200,7 +200,7 @@ export function formatInventoryUnitLabel(
   totalInGroup: number,
 ): string {
   const serial = (row.serial_number ?? "").trim();
-  if (hasTrackedSerial(serial) && serial.toUpperCase() !== "—" && serial !== "-") {
+  if (hasTrackedSerial(serial) && serial.toUpperCase() !== "-" && serial !== "-") {
     return serial;
   }
   const index = row.unit_index > 0 ? row.unit_index : position;
@@ -343,8 +343,8 @@ export function buildProcurementInventoryStockSummary(
   const poGrnMap = new Map<string, ProcurementInventoryStockTableRow>();
   for (const row of rows) {
     const productName = productLabel(row);
-    const companyPoNumber = row.company_po_number?.trim() || "—";
-    const grnNumber = row.grn_number?.trim() || "—";
+    const companyPoNumber = row.company_po_number?.trim() || "-";
+    const grnNumber = row.grn_number?.trim() || "-";
     const key = `${productName}\0${companyPoNumber}\0${grnNumber}`;
     const entry = poGrnMap.get(key) ?? {
       productName,

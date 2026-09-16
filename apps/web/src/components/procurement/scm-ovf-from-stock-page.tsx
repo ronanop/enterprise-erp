@@ -136,7 +136,7 @@ export function ScmOvfFromStockPage({ ovfId }: { ovfId: string }) {
     setError(null);
     try {
       await fulfillOvfFromStock(ovfId, lines);
-      // Allocate only — DC / billing later when ready to ship (stock now, or after PO remainder).
+      // Allocate only - DC / billing later when ready to ship (stock now, or after PO remainder).
       router.replace(
         fromItemPlan
           ? `${ovfItemPlanHref(ovfId)}?stockAllocated=1`
@@ -187,7 +187,7 @@ export function ScmOvfFromStockPage({ ovfId }: { ovfId: string }) {
       />
 
       <p className="text-sm text-muted-foreground">
-        This only reserves stock against the OVF. It does not create a delivery challan — you choose
+        This only reserves stock against the OVF. It does not create a delivery challan - you choose
         inventory, PO, or combined shipping on the OVF page afterward.
       </p>
       {error ? (
@@ -256,7 +256,7 @@ export function ScmOvfFromStockPage({ ovfId }: { ovfId: string }) {
                             {units.map((unit) => {
                               const id = unit.stock_unit_id!;
                               const checked = selected.includes(id);
-                              const serial = (unit.serial_number || "—").trim() || "—";
+                              const serial = (unit.serial_number || "-").trim() || "-";
                               return (
                                 <li key={id}>
                                   <label className="flex cursor-pointer items-center gap-2.5 text-sm text-slate-700 transition-colors duration-200 hover:text-foreground">
@@ -310,7 +310,7 @@ export function ScmOvfFromStockPage({ ovfId }: { ovfId: string }) {
                               Deducting:{" "}
                               <span className="font-mono text-slate-700">
                                 {selectedUnits
-                                  .map((unit) => (unit.serial_number || "—").trim() || "—")
+                                  .map((unit) => (unit.serial_number || "-").trim() || "-")
                                   .join(", ")}
                               </span>
                             </p>

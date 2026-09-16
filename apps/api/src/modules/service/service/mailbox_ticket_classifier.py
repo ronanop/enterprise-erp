@@ -49,9 +49,9 @@ def skip_ticket_reason(*, subject: str, from_address: str) -> str | None:
 def classify_mailbox_message(*, subject: str, from_address: str) -> str:
     """
     Returns one of:
-      - not_ticket — automated/noise sender
-      - likely_ticket — subject matches configured patterns
-      - review — real mail, rules not configured or subject unmatched
+      - not_ticket - automated/noise sender
+      - likely_ticket - subject matches configured patterns
+      - review - real mail, rules not configured or subject unmatched
     """
     if is_noise_sender(from_address):
         return "not_ticket"
@@ -62,5 +62,5 @@ def classify_mailbox_message(*, subject: str, from_address: str) -> str:
     if resolved_subject_patterns():
         return "review"
 
-    # No subject rules yet — show all real mail for manual review.
+    # No subject rules yet - show all real mail for manual review.
     return "review"

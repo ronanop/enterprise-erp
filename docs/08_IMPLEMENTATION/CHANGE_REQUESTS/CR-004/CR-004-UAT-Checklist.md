@@ -1,4 +1,4 @@
-# CR-004 — UAT Checklist
+# CR-004 - UAT Checklist
 
 **Date:** 2026-08-05  
 **Purpose:** Business / IT Admin acceptance tests for CR-004  
@@ -43,7 +43,7 @@ Use: `[ ]` pending · `[x]` pass · `[F]` fail · `N/A`
 | C8 | Pagination | Page change works | `[ ]` |
 | C9 | Open drawer | Summary + assignment sections | `[ ]` |
 | C10 | Current Holder on assigned asset | Employee label shown | `[ ]` |
-| C11 | Earlier Used By | **Known gap:** may show `—` until S1 | `[ ]` / `N/A` |
+| C11 | Earlier Used By | **Known gap:** may show `-` until S1 | `[ ]` / `N/A` |
 | C12 | Action: Assign | Navigates to Issue wizard with asset prefilled | `[ ]` |
 | C13 | Action: Return | Navigates to Return wizard | `[ ]` |
 | C14 | Drawer closes on Assign/Return | Drawer not left open | `[ ]` |
@@ -131,7 +131,7 @@ Use: `[ ]` pending · `[x]` pass · `[F]` fail · `N/A`
 
 | # | Scenario | Expected | Result |
 |---|----------|----------|--------|
-| J1 | All five Excel buckets operable in ERP | Pass C2–C5, E2–E4, F2 | `[ ]` |
+| J1 | All five Excel buckets operable in ERP | Pass C2-C5, E2-E4, F2 | `[ ]` |
 | J2 | Challan + remarks visible without API tools | **Gap until inventory wiring** | `[ ]` |
 | J3 | Earlier Used By shows prior employee | **Gap until history derivation** | `[ ]` |
 | J4 | Export register to Excel-like file | **Gap until Phase 7 report** | `[ ]` |
@@ -147,4 +147,4 @@ Use: `[ ]` pending · `[x]` pass · `[F]` fail · `N/A`
 | Business Owner | | | Excel stop GO / NO-GO |
 | Engineering | | | Defects logged |
 
-**Recommended:** Pilot GO only if B–I pass; Excel stop only if J1–J5 pass.
+**Recommended:** Pilot GO only if B-I pass; Excel stop only if J1-J5 pass.

@@ -1,4 +1,4 @@
-"""CRM Product catalog application service (lightweight — quote/OVF line lookups)."""
+"""CRM Product catalog application service (lightweight - quote/OVF line lookups)."""
 
 from uuid import UUID
 

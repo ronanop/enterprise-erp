@@ -21,6 +21,7 @@ from modules.crm.service.cloud_flow import (
     cloud_variant_from_lead,
 )
 from modules.crm.service.crm_module_admin import CrmModuleAdminService
+from modules.crm.service.crm_record_visibility import CrmRecordVisibility
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import (
@@ -78,6 +79,7 @@ class LeadService:
         self._integration = CRMIntegrationService(db)
         self._audit = AuditService(db)
         self._crm_admin = CrmModuleAdminService(db)
+        self._visibility = CrmRecordVisibility(db)
 
     def list(
         self,
@@ -86,18 +88,20 @@ class LeadService:
         company_account_id: UUID | None = None,
     ):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        owner_filter: UUID | None = None
-        if not self._crm_admin.is_admin(ctx):
-            owner_filter = self._current_employee_id(ctx)
-            if owner_filter is None:
+        created_by: UUID | None = None
+        if self._visibility.requires_creator_scope(ctx):
+            created_by = self._visibility.current_user_id(ctx)
+            if created_by is None:
                 return []
-        return self._repo.list_leads(ctx, cid, company_account_id, owner_employee_id=owner_filter)
+        return self._repo.list_leads(
+            ctx, cid, company_account_id, created_by=created_by
+        )
 
     def get(self, ctx: TenantContext, lead_id: UUID) -> CrmLead:
         row = self._repo.get(ctx, lead_id)
         if row is None:
             raise NotFoundException("Lead not found")
-        self._ensure_lead_owner_or_admin(ctx, row)
+        self._visibility.ensure_lead_access(ctx, row)
         self._ensure_display_snapshot(ctx, row)
         return row
 
@@ -108,12 +112,8 @@ class LeadService:
             return None
 
     def _ensure_lead_owner_or_admin(self, ctx: TenantContext, lead: CrmLead) -> None:
-        if self._crm_admin.is_admin(ctx):
-            return
-        employee_id = self._current_employee_id(ctx)
-        if employee_id is None or lead.owner_employee_id != employee_id:
-            raise ForbiddenException("You can only access leads assigned to you")
-
+        """Backward-compatible alias - visibility is creator-based for non-admins."""
+        self._visibility.ensure_lead_access(ctx, lead)
     def _ensure_display_snapshot(self, ctx: TenantContext, lead: CrmLead) -> None:
         """Backfill blank address/entity fields from the linked company account."""
         if lead.company_account_id is None:
@@ -474,8 +474,8 @@ class LeadService:
             pipeline_id = pipelines[0].id
         resolved_name = (opportunity_name or "").strip() or (
             lead.project_title
-            or (f"{lead.first_name} {lead.last_name or ''}".strip() + " — Opportunity")
-            or f"{lead.company_name or 'Lead'} — Opportunity"
+            or (f"{lead.first_name} {lead.last_name or ''}".strip() + " - Opportunity")
+            or f"{lead.company_name or 'Lead'} - Opportunity"
         )
         resolved_revenue = (
             expected_revenue
@@ -485,7 +485,7 @@ class LeadService:
         if lead.company_account_id is not None:
             # Sales-blueprint lead (rule #1/#2): lifecycle is governed by
             # ``blueprint_state``, not the legacy ``status`` qualification
-            # gate — only require it to still be in the initial "open" state
+            # gate - only require it to still be in the initial "open" state
             # and unlocked.
             if lead.blueprint_state != "open":
                 raise ConflictException(
@@ -497,7 +497,7 @@ class LeadService:
             self._engine.validate_convertible(lead)
         customer_id = existing_customer_id or lead.customer_id
         # ``crm_company`` is an optional, non-duplicate link to
-        # ``master_customer`` (per the sales-account spec) — sales-blueprint
+        # ``master_customer`` (per the sales-account spec) - sales-blueprint
         # leads therefore don't auto-create a master_customer on convert;
         # legacy (non-blueprint) leads keep the previous auto-create-customer
         # behaviour for backward compatibility.
@@ -522,7 +522,7 @@ class LeadService:
             "current_stage": "qualification",
         }
         # Rule #2: an Opportunity is only ever created "for the sales process"
-        # (i.e. blueprint-enabled) via this lead-convert path — direct
+        # (i.e. blueprint-enabled) via this lead-convert path - direct
         # POST /crm/opportunities calls leave blueprint_state unset.
         if lead.company_account_id is not None:
             opp_fields["company_account_id"] = lead.company_account_id

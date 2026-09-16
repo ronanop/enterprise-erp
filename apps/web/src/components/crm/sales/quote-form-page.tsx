@@ -407,7 +407,7 @@ export function QuoteFormPage({
     const marginAmount = rows.reduce((sum, row) => sum + row.totalMarginValue, 0);
     const grandTotal = sellTotal;
     const freight = Number(form.freight) || 0;
-    // Mean of each row's Margin % — only rows that look like real line items
+    // Mean of each row's Margin % - only rows that look like real line items
     // (have a product, price, or non-zero margin) so blank "Add row" lines don't dilute.
     const activeMarginPcts = lines
       .filter((line) => {

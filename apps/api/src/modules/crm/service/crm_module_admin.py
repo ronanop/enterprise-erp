@@ -1,4 +1,4 @@
-"""CRM module admin — ERP admins, platform emails, or assigned CRM module admins."""
+"""CRM module admin - ERP admins, platform emails, or assigned CRM module admins."""
 
 from __future__ import annotations
 

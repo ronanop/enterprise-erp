@@ -1,4 +1,4 @@
-# Asset Checklist — Migration Notes (FP-ASSET-014)
+# Asset Checklist - Migration Notes (FP-ASSET-014)
 
 ## Revision
 
@@ -61,4 +61,4 @@ Soft-delete alternative: set `is_deleted = true` on superseded rows if business 
 ## Performance note
 
 Text search uses `ILIKE` on `checklist_code`, `checklist_name`, and joined asset fields.  
-For very large tenants, consider a future additive migration with `pg_trgm` GIN indexes — **not in scope for 0479**.
+For very large tenants, consider a future additive migration with `pg_trgm` GIN indexes - **not in scope for 0479**.

@@ -207,7 +207,7 @@ export function CompanyOverviewDealPanels({
                         <div className="text-[11px] font-normal text-muted-foreground">{formatCrmCode(row.opportunity_code)}</div>
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">
-                        {companyCustomerName.trim() || "—"}
+                        {companyCustomerName.trim() || "-"}
                       </td>
                       <td className="px-4 py-2.5">
                         <Badge variant="outline" className="capitalize">
@@ -216,7 +216,7 @@ export function CompanyOverviewDealPanels({
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">{formatInr(row.expected_revenue)}</td>
                       <td className="max-w-[240px] px-4 py-2.5 text-muted-foreground">
-                        <span className="line-clamp-2">{row.notes?.trim() || "—"}</span>
+                        <span className="line-clamp-2">{row.notes?.trim() || "-"}</span>
                       </td>
                     </tr>
                   ))
@@ -272,7 +272,7 @@ export function CompanyOverviewDealPanels({
                 ) : (
                   quotes.slice(0, PREVIEW_LIMIT).map((row) => {
                     const opportunity = opportunityById.get(row.opportunity_id);
-                    const subject = row.subject?.trim() || row.project_title?.trim() || "—";
+                    const subject = row.subject?.trim() || row.project_title?.trim() || "-";
                     return (
                       <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                         <td className="px-4 py-2.5 font-medium text-foreground">
@@ -284,7 +284,7 @@ export function CompanyOverviewDealPanels({
                               {opportunity.opportunity_name}
                             </Link>
                           ) : (
-                            "—"
+                            "-"
                           )}
                           {row.quote_no ? (
                             <div className="text-[11px] font-normal text-muted-foreground">{formatCrmCode(row.quote_no)}</div>
@@ -369,7 +369,7 @@ export function CompanyOverviewDealPanels({
                               {opportunity.opportunity_name}
                             </Link>
                           ) : (
-                            row.quote_name?.trim() || "—"
+                            row.quote_name?.trim() || "-"
                           )}
                           <div className="text-[11px] font-normal text-muted-foreground">
                             <Link href={`/crm/ovf/${row.id}`} className="cursor-pointer hover:underline">
@@ -377,7 +377,7 @@ export function CompanyOverviewDealPanels({
                             </Link>
                           </div>
                         </td>
-                        <td className="px-4 py-2.5 text-muted-foreground">{row.po_number ?? "—"}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground">{row.po_number ?? "-"}</td>
                         <td className="px-4 py-2.5 text-muted-foreground">
                           {formatInr(row.total_margin_amount)}
                         </td>
@@ -423,15 +423,15 @@ export function CompanyOverviewDealPanels({
                   contacts.slice(0, PREVIEW_LIMIT).map((row) => (
                     <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                       <td className="px-4 py-2.5 font-medium text-foreground">
-                        {companyCustomerName.trim() || "—"}
+                        {companyCustomerName.trim() || "-"}
                         <div className="text-[11px] font-normal text-muted-foreground">
                           {[row.first_name, row.last_name].filter(Boolean).join(" ")}
                           {row.is_primary ? " · Primary" : ""}
                         </div>
                       </td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{row.title?.trim() || "—"}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{row.mobile ?? row.phone ?? "—"}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{row.email ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{row.title?.trim() || "-"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{row.mobile ?? row.phone ?? "-"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{row.email ?? "-"}</td>
                     </tr>
                   ))
                 )}
@@ -481,7 +481,7 @@ function DocumentPreviewTable({
                       {row.opportunityName ?? row.opportunityId.slice(0, 8)}
                     </Link>
                   ) : (
-                    "—"
+                    "-"
                   )}
                   {row.opportunityCode ? (
                     <div className="text-[11px] font-normal text-muted-foreground">{row.opportunityCode}</div>

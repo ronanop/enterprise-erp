@@ -1,4 +1,4 @@
-/** Dashboard status buckets — shared with ticket list deep-links. */
+/** Dashboard status buckets - shared with ticket list deep-links. */
 export const SERVICE_STATUS_GROUPS = [
   {
     key: "registered",

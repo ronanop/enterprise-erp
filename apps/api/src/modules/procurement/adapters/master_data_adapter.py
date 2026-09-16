@@ -71,7 +71,7 @@ class ProcurementMasterDataAdapter:
 
     @classmethod
     def score_vendor_label_for_oem(cls, label: str, oem: str) -> int:
-        """Deprecated alias — OEM is brand, not vendor. Prefer distributor matching."""
+        """Deprecated alias - OEM is brand, not vendor. Prefer distributor matching."""
         return cls.score_vendor_label_for_party(label, oem)
 
     def match_vendor_name_by_distributor(
@@ -137,7 +137,7 @@ class ProcurementMasterDataAdapter:
         uoms = self._uoms.list_uoms(ctx, company_id=company_id)
         if not uoms:
             raise NotFoundException(
-                "No UOM found — create a base UOM in Master Data before creating SCM POs"
+                "No UOM found - create a base UOM in Master Data before creating SCM POs"
             )
         for uom in uoms:
             code = (getattr(uom, "uom_code", None) or "").upper()
@@ -183,7 +183,7 @@ class ProcurementMasterDataAdapter:
                     is_inventory_tracked=False,
                 )
         except (IntegrityError, DuplicateMasterCodeError):
-            # Concurrent create or stale code sequence — reuse whatever won.
+            # Concurrent create or stale code sequence - reuse whatever won.
             recovered = self._find_scm_placeholder(ctx, company_id)
             if recovered is not None:
                 return recovered
@@ -227,7 +227,7 @@ class ProcurementMasterDataAdapter:
             if existing is not None:
                 resolved[key] = existing
                 continue
-            # Avoid N× create_product — reuse one generic SCM product; line keeps the real name.
+            # Avoid N× create_product - reuse one generic SCM product; line keeps the real name.
             if placeholder is None:
                 placeholder = self._get_or_create_scm_placeholder(
                     ctx,

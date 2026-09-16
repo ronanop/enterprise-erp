@@ -154,7 +154,7 @@ export function GlReportPage() {
                           {line.journal_number}
                         </Link>
                       ) : (
-                        "—"
+                        "-"
                       )}
                     </td>
                     <td className="px-2 py-1.5 text-xs">
@@ -167,7 +167,7 @@ export function GlReportPage() {
                       </Link>
                     </td>
                     <td className="px-2 py-1.5 text-xs text-muted-foreground">
-                      {line.description ?? "—"}
+                      {line.description ?? "-"}
                     </td>
                     <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">
                       {formatInrPrecise(line.debit_amount)}

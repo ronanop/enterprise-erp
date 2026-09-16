@@ -108,7 +108,7 @@ export function formatUsdPdf(value: number): string {
 
 export function formatPoDate(value: string | Date): string {
   const d = typeof value === "string" ? new Date(value) : value;
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "-";
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${String(d.getDate()).padStart(2, "0")}-${months[d.getMonth()]}-${d.getFullYear()}`;
 }
@@ -120,11 +120,11 @@ export function formatPoDateSlash(value: string | Date): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(raw);
   if (m) return `${m[3]}/${m[2]}/${m[1]}`;
   const d = typeof value === "string" ? new Date(value) : value;
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "-";
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 
 export function dash(value: string | null | undefined): string {
   const text = value?.trim();
-  return text ? text : "—";
+  return text ? text : "-";
 }

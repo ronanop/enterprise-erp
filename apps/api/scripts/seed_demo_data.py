@@ -433,7 +433,7 @@ def seed_demo_operating_branches(
 
 
 # Extra Cache companies (older seed). DEMOCO is now "Cache Digitech" with
-# Mumbai / Sultanpur / Greater Kailash branches + work locations — keep that as SoT.
+# Mumbai / Sultanpur / Greater Kailash branches + work locations - keep that as SoT.
 DUPLICATE_CACHE_COMPANY_CODES = ("CACHEDIG", "CACHETECH")
 
 
@@ -473,7 +473,7 @@ def soft_delete_duplicate_cache_org(db, tenant: SecTenant, admin: SecUser) -> in
 
 
 def seed_cache_org(db, tenant: SecTenant, admin: SecUser) -> list[tuple[OrgCompany, OrgBranch, OrgLocation]]:
-    """Legacy no-op — Cache Digitech operating units live on DEMOCO now."""
+    """Legacy no-op - Cache Digitech operating units live on DEMOCO now."""
     soft_delete_duplicate_cache_org(db, tenant, admin)
     return []
 

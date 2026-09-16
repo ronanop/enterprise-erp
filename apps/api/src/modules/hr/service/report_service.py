@@ -1,4 +1,4 @@
-"""HR report service — summary + CSV/PDF exports (stdlib only)."""
+"""HR report service - summary + CSV/PDF exports (stdlib only)."""
 
 from __future__ import annotations
 

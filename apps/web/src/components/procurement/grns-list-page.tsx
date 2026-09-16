@@ -54,7 +54,7 @@ function isPartialOrDelivered(grnStatus: string | null | undefined): boolean {
 
 function formatPoCreatedDate(row: ScmVendorPo): string {
   const raw = row.created_at || row.document_date;
-  if (!raw) return "—";
+  if (!raw) return "-";
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) {
     return String(raw).slice(0, 10);
@@ -391,7 +391,7 @@ export function GrnsListPage() {
                     onClick={() => router.push(orderHref)}
                   >
                     <td className="px-3 py-2 font-medium tabular-nums">
-                      {row.company_po_number || row.document_number || "—"}
+                      {row.company_po_number || row.document_number || "-"}
                     </td>
                     <td className="px-3 py-2 tabular-nums">{formatPoCreatedDate(row)}</td>
                     <td className="px-3 py-2">
@@ -399,10 +399,10 @@ export function GrnsListPage() {
                     </td>
                     <td className="px-3 py-2 tabular-nums">{formatInr(vendorAmt)}</td>
                     <td className="px-3 py-2 tabular-nums">
-                      {customerAmt > 0 ? formatInr(customerAmt) : "—"}
+                      {customerAmt > 0 ? formatInr(customerAmt) : "-"}
                     </td>
                     <td className="px-3 py-2 tabular-nums">
-                      {customerAmt > 0 || Number(row.margin_amount) ? formatInr(marginAmt) : "—"}
+                      {customerAmt > 0 || Number(row.margin_amount) ? formatInr(marginAmt) : "-"}
                     </td>
                     <td className="px-3 py-2">
                       <Badge variant={grnBadgeVariant(row.grn_status)} className="uppercase">

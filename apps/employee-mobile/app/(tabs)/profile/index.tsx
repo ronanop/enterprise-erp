@@ -111,7 +111,7 @@ export default function ProfileScreen() {
               <Avatar name={me.display_name} size="xl" ring />
             </View>
             <Text style={styles.name}>{me.display_name}</Text>
-            <Text style={styles.designation}>{me.designation || "—"}</Text>
+            <Text style={styles.designation}>{me.designation || "-"}</Text>
             <View style={styles.idPill}>
               <Text style={styles.idText}>ID: {me.employee_code}</Text>
             </View>
@@ -120,7 +120,7 @@ export default function ProfileScreen() {
           <View style={styles.doubleGrid}>
             <InfoCard
               label="Designation"
-              value={me.designation || "—"}
+              value={me.designation || "-"}
             />
             <InfoCard
               label="Role"
@@ -193,7 +193,7 @@ export default function ProfileScreen() {
                 for configuration, bulk operations, and helpdesk agent tools.
               </Text>
               <Text style={styles.adminMeta}>
-                Role: {me.ess_role ?? "admin"} · {me.role_codes?.join(", ") || "—"}
+                Role: {me.ess_role ?? "admin"} · {me.role_codes?.join(", ") || "-"}
               </Text>
             </View>
           ) : null}
@@ -223,7 +223,7 @@ function InfoCard({ label, value }: { label: string; value: string }) {
     <Card style={styles.infoCard}>
       <Text style={styles.infoLabel}>{label}</Text>
       <Text style={styles.infoValue} numberOfLines={1}>
-        {value || "—"}
+        {value || "-"}
       </Text>
     </Card>
   );

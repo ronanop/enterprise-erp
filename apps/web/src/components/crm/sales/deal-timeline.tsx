@@ -48,7 +48,7 @@ const HARDWARE_STEPS: StepDef[] = [
   { key: "won", label: "Won", icon: Trophy },
 ];
 
-/** Billing Shift, POC/Assessment — no quote, DR, or OVF. */
+/** Billing Shift, POC/Assessment - no quote, DR, or OVF. */
 const CLOUD_CONSUMPTION_STEPS: StepDef[] = [
   { key: "company", label: "Company", icon: Building2 },
   { key: "lead", label: "Lead", icon: Target },
@@ -57,7 +57,7 @@ const CLOUD_CONSUMPTION_STEPS: StepDef[] = [
   { key: "won", label: "Active", icon: Trophy },
 ];
 
-/** MAP / Cloud Migration — optional OEM migration quote before onboarding. */
+/** MAP / Cloud Migration - optional OEM migration quote before onboarding. */
 const CLOUD_MIGRATION_STEPS: StepDef[] = [
   { key: "company", label: "Company", icon: Building2 },
   { key: "lead", label: "Lead", icon: Target },
@@ -241,7 +241,7 @@ export function DealTimeline({
         })}
         {lost ? (
           <span className="ml-2 inline-flex shrink-0 items-center gap-1 rounded-md bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">
-            <X className="size-3" /> Lost — exited blueprint
+            <X className="size-3" /> Lost - exited blueprint
           </span>
         ) : null}
       </div>

@@ -1,4 +1,4 @@
-"""Procurement finance posting — invoice AP / return debit note."""
+"""Procurement finance posting - invoice AP / return debit note."""
 
 from uuid import UUID
 

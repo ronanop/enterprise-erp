@@ -45,7 +45,7 @@ export function CompanyContextBadge() {
             setStoredOrgContext({ companyId: match.id, companyName: match.company_name });
           }
         } else if (stored?.companyId) {
-          // Server lost Redis company scope — re-apply stored company so Org Setup works
+          // Server lost Redis company scope - re-apply stored company so Org Setup works
           try {
             await contextService.switchContext({
               company_id: stored.companyId,

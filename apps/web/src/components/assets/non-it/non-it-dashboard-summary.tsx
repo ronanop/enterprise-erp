@@ -237,7 +237,7 @@ export function NonItDashboardSummarySection({
             icon={Boxes}
             tone={TONES.total!}
             loading={loading}
-            value={summary ? String(total) : "—"}
+            value={summary ? String(total) : "-"}
             onClick={onStatusClick ? () => onStatusClick("") : undefined}
           />
           <KpiCard
@@ -245,7 +245,7 @@ export function NonItDashboardSummarySection({
             icon={Package}
             tone={TONES.stock!}
             loading={loading}
-            value={summary ? String(inStock) : "—"}
+            value={summary ? String(inStock) : "-"}
             share={pct(inStock, total)}
             onClick={onStatusClick ? () => onStatusClick("IN_STOCK") : undefined}
           />
@@ -254,7 +254,7 @@ export function NonItDashboardSummarySection({
             icon={UserCheck}
             tone={TONES.assigned!}
             loading={loading}
-            value={summary ? String(assigned) : "—"}
+            value={summary ? String(assigned) : "-"}
             share={pct(assigned, total)}
             onClick={onStatusClick ? () => onStatusClick("ASSIGNED") : undefined}
           />
@@ -263,7 +263,7 @@ export function NonItDashboardSummarySection({
             icon={Wrench}
             tone={TONES.maintenance!}
             loading={loading}
-            value={summary ? String(maintenance) : "—"}
+            value={summary ? String(maintenance) : "-"}
             share={pct(maintenance, total)}
             onClick={onStatusClick ? () => onStatusClick("MAINTENANCE") : undefined}
           />
@@ -272,7 +272,7 @@ export function NonItDashboardSummarySection({
             icon={Archive}
             tone={TONES.disposed!}
             loading={loading}
-            value={summary ? String(disposed) : "—"}
+            value={summary ? String(disposed) : "-"}
             share={pct(disposed, total)}
             onClick={onStatusClick ? () => onStatusClick("DISPOSED") : undefined}
           />

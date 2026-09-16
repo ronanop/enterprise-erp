@@ -1,4 +1,4 @@
-"""Unit tests — AssetExcelImportEngine (CR-004 Phase 8B)."""
+"""Unit tests - AssetExcelImportEngine (CR-004 Phase 8B)."""
 
 from __future__ import annotations
 

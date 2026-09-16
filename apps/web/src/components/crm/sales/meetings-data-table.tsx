@@ -145,7 +145,7 @@ export function MeetingsDataTable({
                   {meetingTypeLabel(row.meeting_mode)}
                 </td>
                 <td className="max-w-[200px] px-4 py-2.5 text-muted-foreground">
-                  <span className="line-clamp-2">{row.location?.trim() || "—"}</span>
+                  <span className="line-clamp-2">{row.location?.trim() || "-"}</span>
                 </td>
                 <td className="px-4 py-2.5 text-muted-foreground">
                   {meetingRelatedToLabel(row.related_to)}

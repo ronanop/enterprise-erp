@@ -1,4 +1,4 @@
-# ADR-ASSET-REV-001 — Asset Revaluation
+# ADR-ASSET-REV-001 - Asset Revaluation
 
 **Status:** Accepted  
 **Date:** 2026-07-30  
@@ -18,7 +18,7 @@ Asset Revaluation existed as a thin scaffold (CRUD + workflow stubs + Finance po
 | REV-01 | Scope = `ast_asset_revaluation` governance + Finance post + book sync; no reporting |
 | REV-02 | Reuse `AST_REVALUATION_APPROVAL` (0266); no new workflow codes |
 | REV-03 | Approve ≠ revalue; `current_book_value` updates **only** after successful Finance post |
-| REV-04 | Reuse `AssetFinanceAdapter.post_revaluation`; amount = \|new − old\|; operator accounts |
+| REV-04 | Reuse `AssetFinanceAdapter.post_revaluation`; amount = \|new - old\|; operator accounts |
 | REV-05 | Capture `old_book_value` from asset; require `new_book_value` and `reason` |
 | REV-06 | Eligible assets: active / in_maintenance; block disposed and written_off |
 | REV-07 | Block open disposal; open-revaluation exclusivity at application layer |

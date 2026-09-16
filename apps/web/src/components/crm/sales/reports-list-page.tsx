@@ -26,9 +26,9 @@ import {
 } from "@/services/crm-reports-service";
 
 function formatLastUpdated(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "-";
   return d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
 }
 
@@ -105,7 +105,6 @@ export function ReportsListPage() {
     <CrmPage>
       <PageHeader
         title="Reports"
-        description="Build custom CRM reports from module columns, preview results, and export to Excel."
         actions={
           <Button type="button" size="sm" className="cursor-pointer" onClick={openCreate}>
             <Plus className="size-3.5" />
@@ -166,7 +165,7 @@ export function ReportsListPage() {
                       </Link>
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">
-                      {row.folder_name?.trim() || "—"}
+                      {row.folder_name?.trim() || "-"}
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">
                       {moduleLabelByKey.get(row.primary_module) ?? row.primary_module}
@@ -225,7 +224,7 @@ export function ReportsListPage() {
                   <Input
                     value={reportNameDraft}
                     onChange={(e) => setReportNameDraft(e.target.value)}
-                    placeholder="e.g. Open Opportunities — Q3"
+                    placeholder="e.g. Open Opportunities - Q3"
                     aria-label="Report name"
                     className="h-9 cursor-text"
                     autoFocus

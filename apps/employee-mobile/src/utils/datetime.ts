@@ -1,7 +1,7 @@
 /** Locale-safe date/time helpers for mobile. */
 
 export function formatTime(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return new Date(value).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
@@ -9,7 +9,7 @@ export function formatTime(value: string | null | undefined): string {
 }
 
 export function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return new Date(value).toLocaleString();
 }
 
@@ -47,7 +47,7 @@ export function isIsoInRange(
 export function formatDisplayDateDDMMYYYY(
   iso: string | null | undefined,
 ): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = parseIsoDate(iso.slice(0, 10));
   if (Number.isNaN(d.getTime())) return iso;
   const day = String(d.getDate()).padStart(2, "0");
@@ -70,9 +70,9 @@ export function formatLeaveRangeLine(
 }
 
 export function formatHours(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "-";
   const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n) || n < 0) return "—";
+  if (!Number.isFinite(n) || n < 0) return "-";
   const totalMinutes = Math.round(n * 60);
   const h = Math.floor(totalMinutes / 60);
   const m = totalMinutes % 60;
@@ -83,7 +83,7 @@ export function formatHoursLabel(
   value: string | number | null | undefined,
 ): string {
   const base = formatHours(value);
-  return base === "—" ? "—" : `${base} hours`;
+  return base === "-" ? "-" : `${base} hours`;
 }
 
 export function hoursBetween(
@@ -119,6 +119,6 @@ export function greetingForNow(now = new Date()): string {
 
 export function formatMoney(value: string | number | null | undefined): string {
   const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n)) return "—";
+  if (!Number.isFinite(n)) return "-";
   return `₹${n.toLocaleString("en-IN")}`;
 }

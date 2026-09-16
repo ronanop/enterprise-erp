@@ -1,6 +1,6 @@
 /**
  * Pure helpers for Inventory → Assignment/Return workflow integration.
- * No router imports — callers supply navigation + drawer close.
+ * No router imports - callers supply navigation + drawer close.
  */
 
 import type { InventoryMenuActionId } from "@/components/assets/inventory/interaction/inventory-interaction.types";

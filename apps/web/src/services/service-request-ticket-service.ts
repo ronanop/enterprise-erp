@@ -361,7 +361,7 @@ export async function getSlaComplianceSummary(opts?: { mine?: boolean }): Promis
     return summary;
   }
 
-  // Older API builds only return closed-ticket counts — derive active breaches from SLA tracker.
+  // Older API builds only return closed-ticket counts - derive active breaches from SLA tracker.
   const tracker = await listSlaTracker({ mine: opts?.mine });
   return {
     ...summary,

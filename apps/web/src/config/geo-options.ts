@@ -2,7 +2,7 @@
 
 export type GeoOption = { value: string; label: string };
 
-/** Indian states and union territories (full names — employee address forms). */
+/** Indian states and union territories (full names - employee address forms). */
 export const INDIA_STATE_OPTIONS: GeoOption[] = [
   "Andaman and Nicobar Islands",
   "Andhra Pradesh",

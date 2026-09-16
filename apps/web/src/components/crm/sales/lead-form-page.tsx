@@ -686,7 +686,7 @@ export function LeadFormPage({
               </FinanceSelect>
             ) : (
               <Input
-                value={ownerDisplayLabel || "—"}
+                value={ownerDisplayLabel || "-"}
                 disabled
                 aria-readonly="true"
                 title="Assigned from your logged-in user account"

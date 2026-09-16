@@ -47,7 +47,7 @@ def main() -> None:
             )
         )
         if not tenant or not company or not admin:
-            raise SystemExit("DEMOCO / admin missing — run seed_demo_data first")
+            raise SystemExit("DEMOCO / admin missing - run seed_demo_data first")
 
         for code, name, year, month, paid, attach in TYPES:
             row = db.scalar(

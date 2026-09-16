@@ -1,4 +1,4 @@
-"""Inventory stock ledger ORM model — append-only."""
+"""Inventory stock ledger ORM model - append-only."""
 
 from datetime import datetime
 from uuid import UUID, uuid4

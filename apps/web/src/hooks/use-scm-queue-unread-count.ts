@@ -18,7 +18,7 @@ function unreadScmFromOverview(): number {
   return getUnseenScmOvfIds(ids).length;
 }
 
-/** Unseen SCM queue OVFs — same source as the topbar bell badge. */
+/** Unseen SCM queue OVFs - same source as the topbar bell badge. */
 export function useScmQueueUnreadCount(): number {
   const signedIn = useClientAuth();
   const pathname = usePathname();

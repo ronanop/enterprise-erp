@@ -163,7 +163,7 @@ function KpiCard({
         </span>
       </div>
       <p className="mt-2.5 text-[1.55rem] font-light leading-none tracking-tight text-foreground/85 tabular-nums">
-        {loading ? "—" : value}
+        {loading ? "-" : value}
       </p>
     </Link>
   );
@@ -336,7 +336,7 @@ function OverviewHistogram({
   );
 }
 
-/** Inventory chart accents — MASTER navy/sky + stock teal (no purple). */
+/** Inventory chart accents - MASTER navy/sky + stock teal (no purple). */
 const STOCK_BAR_TOP = "#0369A1";
 const STOCK_BAR_REST = ["#0EA5E9", "#0D9488", "#14B8A6", "#64748B", "#94A3B8"];
 const OEM_PIE_COLORS = [
@@ -456,19 +456,19 @@ function InventoryStockPanel({
       <div className="mb-4 grid grid-cols-2 gap-2.5 xl:grid-cols-3">
         <InventoryStat
           label="Stock value"
-          value={loading ? "—" : formatInr(totalStockValue)}
+          value={loading ? "-" : formatInr(totalStockValue)}
           icon={IndianRupee}
           tint="sky"
         />
         <InventoryStat
           label="Stock units"
-          value={loading ? "—" : totalUnits.toLocaleString("en-IN")}
+          value={loading ? "-" : totalUnits.toLocaleString("en-IN")}
           icon={Boxes}
           tint="teal"
         />
         <InventoryStat
           label="OEM coverage"
-          value={loading ? "—" : oemCount.toLocaleString("en-IN")}
+          value={loading ? "-" : oemCount.toLocaleString("en-IN")}
           icon={PackageCheck}
           tint="cyan"
         />
@@ -481,7 +481,7 @@ function InventoryStockPanel({
               Top products by units
             </p>
             <p className="text-[11px] tabular-nums font-medium text-sky-900/70">
-              {loading ? "—" : `${totalUnits.toLocaleString("en-IN")} units`}
+              {loading ? "-" : `${totalUnits.toLocaleString("en-IN")} units`}
             </p>
           </div>
           {loading ? (

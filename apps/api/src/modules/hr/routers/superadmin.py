@@ -1,4 +1,4 @@
-"""HRMS Superadmin Panel API — assign employees as HR Admins."""
+"""HRMS Superadmin Panel API - assign employees as HR Admins."""
 
 from typing import Annotated
 from uuid import UUID

@@ -1,4 +1,4 @@
-"""Master Data port — CRM never writes master_* except via CustomerService."""
+"""Master Data port - CRM never writes master_* except via CustomerService."""
 
 from uuid import UUID
 

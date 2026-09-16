@@ -1,5 +1,5 @@
 /**
- * Shared HR master connector — single source of truth for employees, shifts,
+ * Shared HR master connector - single source of truth for employees, shifts,
  * salary structures, departments, and branches across HRMS modules.
  */
 
@@ -149,9 +149,9 @@ export function registerLocalEmployee(
     branchId: "",
     branchName: employment.branchName,
     companyId: "",
-    companyName: "—",
+    companyName: "-",
     locationId: "",
-    locationName: employment.location || "—",
+    locationName: employment.location || "-",
     reportingManagerId: "",
     reportingManagerName: employment.reportingManagerName,
     employmentType: employment.employmentType,

@@ -29,7 +29,7 @@ async def lifespan(application: FastAPI):
 
 
 def create_app() -> FastAPI:
-    # Never enable Starlette debug error pages in the served app — they leak stack traces
+    # Never enable Starlette debug error pages in the served app - they leak stack traces
     # (AppScan Integer Overflow / Application Error findings). Use logs instead.
     application = FastAPI(
         title=settings.app_name,

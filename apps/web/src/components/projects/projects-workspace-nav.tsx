@@ -25,7 +25,7 @@ export type ProjectsNavGroup = {
 };
 
 /**
- * Projects module sidebar — primary workspace links for delivery admins and members.
+ * Projects module sidebar - primary workspace links for delivery admins and members.
  */
 export const PROJECTS_NAV_GROUPS: readonly ProjectsNavGroup[] = [
   {

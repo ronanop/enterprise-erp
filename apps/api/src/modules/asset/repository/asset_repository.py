@@ -25,10 +25,10 @@ class AssetListFilters:
     operational_status: str | None = None
     asset_category_id: UUID | None = None
     search: str | None = None
-    # Phase 5F — server-authoritative inventory filters
+    # Phase 5F - server-authoritative inventory filters
     asset_type: str | None = None  # legacy enum filter (kept for API compat)
     asset_type_id: UUID | None = None  # IT type master filter
-    # IT / Non-IT partition — callers default to IT when omitted
+    # IT / Non-IT partition - callers default to IT when omitted
     asset_domain: str | None = "IT"
     department_id: UUID | None = None
     location_id: UUID | None = None
@@ -631,7 +631,7 @@ class AssetRepository(AstScopedRepository):
             from core.exceptions import ConflictException
 
             raise ConflictException("Asset version conflict; refresh and retry")
-        # CR-004 Phase 2A: operational transitions not implemented — ignore writes.
+        # CR-004 Phase 2A: operational transitions not implemented - ignore writes.
         fields.pop("operational_status", None)
         for k, v in fields.items():
             if v is not None or k in {

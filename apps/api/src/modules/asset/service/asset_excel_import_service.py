@@ -108,7 +108,7 @@ class AssetExcelImportService:
                         )
                     )
             self._db.commit()
-        except Exception as exc:  # noqa: BLE001 — rollback only this batch
+        except Exception as exc:  # noqa: BLE001 - rollback only this batch
             self._db.rollback()
             reason = f"{ExcelImportSkipReason.BATCH_ROLLED_BACK.value}: {exc}"
             batch_results = [

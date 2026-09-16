@@ -51,7 +51,7 @@ export default function PersonalInformationPage() {
 
           <Card title="Bio Data" icon={<IconUser size={18} />} iconBg="bg-[#dbe1ff] text-[#004ac6]">
             <Row label="Date of Birth" value="June 12, 1994" />
-            <Row label="Gender" value="—" />
+            <Row label="Gender" value="-" />
             <Row label="Nationality" value="India" />
           </Card>
 

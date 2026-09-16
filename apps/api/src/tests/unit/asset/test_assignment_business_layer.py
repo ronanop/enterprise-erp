@@ -1,4 +1,4 @@
-"""CR-004 Phase 5A-2 — assignment enrichment business layer tests."""
+"""CR-004 Phase 5A-2 - assignment enrichment business layer tests."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# FP-ASSET-010 — Deployment Guide
+# FP-ASSET-010 - Deployment Guide
 
 ## Prerequisites
 

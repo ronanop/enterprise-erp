@@ -297,7 +297,7 @@ export function SiteScmFormPage({ projectId }: { projectId: string }) {
   return (
     <ProjectsRecordForm
       title="SCM / Logistics"
-      description="Step 3 — Site materials, quantities, and warehouse delivery. Next: Onsite Delivery, then Material Handover."
+      description="Step 3 - Site materials, quantities, and warehouse delivery. Next: Onsite Delivery, then Material Handover."
       backHref={
         stageFormMeta.readOnly
           ? (stageFormMeta.backHref ?? `/projects/projects/${projectId}`)

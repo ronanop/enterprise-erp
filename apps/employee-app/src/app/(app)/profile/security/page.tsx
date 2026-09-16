@@ -83,7 +83,7 @@ export default function SecuritySettingsPage() {
               ? status.enabled
                 ? "Required after password login"
                 : "Enrolled but turned off"
-              : "Not enrolled — others could use your password"}
+              : "Not enrolled - others could use your password"}
           </p>
         </div>
       </section>

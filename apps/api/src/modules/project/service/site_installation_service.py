@@ -1,4 +1,4 @@
-"""SiteInstallationService — workflow + WBS seeding for site delivery projects."""
+"""SiteInstallationService - workflow + WBS seeding for site delivery projects."""
 
 from __future__ import annotations
 
@@ -150,7 +150,7 @@ class SiteInstallationService:
             delivery_type=delivery,
             workflow_stage=SiteWorkflowStage.INTAKE.value,
             status=SiteInstallationStatus.ACTIVE.value,
-            # Survey is the first delivery step — starts on project creation day
+            # Survey is the first delivery step - starts on project creation day
             survey_assigned_date=date.today(),
             **fields,
         )
@@ -347,7 +347,7 @@ class SiteInstallationService:
             raise NotFoundException("Site installation not found")
         try:
             self._notify_admins_stage_saved(ctx, project, row, updated, fields, stage_key)
-        except Exception:  # noqa: BLE001 — alerts must not roll back the save
+        except Exception:  # noqa: BLE001 - alerts must not roll back the save
             pass
         return updated
 
@@ -566,7 +566,7 @@ class SiteInstallationService:
         if no_labels:
             bits.append(f"No: {', '.join(no_labels)}")
         if bits:
-            message = f"{stage_label} checkpoints updated on site {site_name} — {'; '.join(bits)}."
+            message = f"{stage_label} checkpoints updated on site {site_name} - {'; '.join(bits)}."
         else:
             message = f"{stage_label} has been marked {progress_label} on site {site_name}."
         payload_base = {
@@ -724,7 +724,7 @@ class SiteInstallationService:
             lines.append(f"<p>Marked No: {joined}</p>")
         lines.append(f'<p><a href="{deep_link}">Open stage</a></p>')
         body_html = "\n".join(lines)
-        subject = f"[Projects] {stage_label} — {progress} ({site_name})"
+        subject = f"[Projects] {stage_label} - {progress} ({site_name})"
 
         try:
             from modules.foundation.service.notification_service import (
@@ -740,7 +740,7 @@ class SiteInstallationService:
                 payload_json=dict(payload),
                 created_by=ctx.user_id,
             )
-        except Exception:  # noqa: BLE001 — email is best-effort
+        except Exception:  # noqa: BLE001 - email is best-effort
             pass
 
     def list_stage_save_alerts(self, ctx: TenantContext, *, limit: int = 50) -> list[dict]:
@@ -892,7 +892,7 @@ class SiteInstallationService:
         return updated
 
     def _resolve_scm_head_employee_id(self, ctx: TenantContext) -> UUID | None:
-        """Temporary SCM owner for testing — prefer known employee id, else email."""
+        """Temporary SCM owner for testing - prefer known employee id, else email."""
         by_id = self._db.scalar(
             select(MasterEmployee.id).where(
                 MasterEmployee.tenant_id == ctx.tenant_id,
@@ -1001,9 +1001,9 @@ class SiteInstallationService:
 
         recipient_id = project.project_manager_employee_id
         if recipient_id is None:
-            # Fall back to any module admin path — still persist for portfolio inbox if no PM
+            # Fall back to any module admin path - still persist for portfolio inbox if no PM
             raise InvalidSiteInstallationState(
-                "Project manager is not set — cannot notify admin of No answers"
+                "Project manager is not set - cannot notify admin of No answers"
             )
 
         labels = [
@@ -1209,7 +1209,7 @@ class SiteInstallationService:
         }
 
     def list_my_jobs(self, ctx: TenantContext, *, completed: bool = False) -> list[dict]:
-        """Delivery steps assigned to the signed-in employee — active or completed."""
+        """Delivery steps assigned to the signed-in employee - active or completed."""
         if ctx.user_id is None:
             return []
 

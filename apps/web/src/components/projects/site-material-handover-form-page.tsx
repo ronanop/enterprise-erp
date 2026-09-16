@@ -205,7 +205,7 @@ export function SiteMaterialHandoverFormPage({ projectId }: { projectId: string 
   return (
     <ProjectsRecordForm
       title="Material Handover"
-      description="Step 5 — IM material, power-on material, and WH → site handover."
+      description="Step 5 - IM material, power-on material, and WH → site handover."
       backHref={
         stageFormMeta.readOnly
           ? (stageFormMeta.backHref ?? `/projects/projects/${projectId}`)

@@ -195,7 +195,7 @@ export function fullPoChallanLines(
   });
 }
 
-/** One challan line per product — stock units with the same name are summed. */
+/** One challan line per product - stock units with the same name are summed. */
 export function mergeOvfStockAllocationsToChallanLines(
   allocations: ScmOvfStockAllocation[] | null | undefined,
   ovf?: ScmOvfPreview | null,
@@ -215,7 +215,7 @@ export function mergeOvfStockAllocationsToChallanLines(
     const prev = byProduct.get(key);
     if (prev) {
       prev.qty += qty;
-      if (serial && serial !== "—" && serial !== "-" && !prev.serials.includes(serial)) {
+      if (serial && serial !== "-" && serial !== "-" && !prev.serials.includes(serial)) {
         prev.serials.push(serial);
       }
     } else {
@@ -223,7 +223,7 @@ export function mergeOvfStockAllocationsToChallanLines(
         product,
         qty,
         serials:
-          serial && serial !== "—" && serial !== "-" ? [serial] : [],
+          serial && serial !== "-" && serial !== "-" ? [serial] : [],
       });
     }
   }
@@ -259,7 +259,7 @@ export function ovfInventorySelectionToChallanLines(
     .map((row) => {
       const serial = (row.serial_number || "").trim();
       const serialLabel =
-        serial && serial !== "—" && serial !== "-" ? serial : "";
+        serial && serial !== "-" && serial !== "-" ? serial : "";
       const invRow = row.stock_unit_id
         ? inventoryByStockUnit.get(String(row.stock_unit_id))
         : undefined;
@@ -306,7 +306,7 @@ export function mergeGrnInventoryStockToChallanLines(
     const prev = byProduct.get(key);
     if (prev) {
       prev.qty += qty;
-      if (serial && serial !== "—" && serial !== "-" && !prev.serials.includes(serial)) {
+      if (serial && serial !== "-" && serial !== "-" && !prev.serials.includes(serial)) {
         prev.serials.push(serial);
       }
       if (!prev.rate && rate) prev.rate = rate;
@@ -316,7 +316,7 @@ export function mergeGrnInventoryStockToChallanLines(
         product,
         qty,
         serials:
-          serial && serial !== "—" && serial !== "-" ? [serial] : [],
+          serial && serial !== "-" && serial !== "-" ? [serial] : [],
         rate,
         description: rowDescription,
       });
@@ -442,7 +442,7 @@ export function resolveChallanReceiptBatches(
 
 /**
  * After a GRN is posted, create (or reuse) a challan for that receipt batch
- * so delivery status can be set immediately — partial or full GRN.
+ * so delivery status can be set immediately - partial or full GRN.
  */
 export async function createDeliveryChallanForLatestGrn(input: {
   order: ProcOrder;
@@ -553,7 +553,7 @@ function lineDescription(
   if (fromField && fromField.toLowerCase() !== product.trim().toLowerCase()) {
     return fromField;
   }
-  const sep = " — ";
+  const sep = " - ";
   const idx = product.indexOf(sep);
   if (idx > 0) return product.slice(idx + sep.length).trim();
   return "";
@@ -565,14 +565,14 @@ export function deliveryStatusGrnItemRowsFromChallan(
   return (challan.lines || [])
     .filter((line) => (line.product || "").trim() || (line.itemName || "").trim() || (line.quantitySent || "").trim())
     .map((line, index) => {
-      const product = (line.product || "").trim() || (line.itemName || "").trim() || "—";
+      const product = (line.product || "").trim() || (line.itemName || "").trim() || "-";
       return {
         id: line.id || `challan-line-${index}`,
         product,
-        description: lineDescription(product, line.itemName) || "—",
-        orderedQty: "—",
-        grnQty: (line.quantitySent || "").trim() || "—",
-        unitCost: (line.rate || "").trim() || "—",
+        description: lineDescription(product, line.itemName) || "-",
+        orderedQty: "-",
+        grnQty: (line.quantitySent || "").trim() || "-",
+        unitCost: (line.rate || "").trim() || "-",
       };
     });
 }
@@ -595,7 +595,7 @@ export function deliveryStatusGrnItemRowsFromBatches(
         `Line ${ln.line_number}`
       ).trim();
       const description =
-        lineDescription(product, ol?.description || ol?.product_code) || "—";
+        lineDescription(product, ol?.description || ol?.product_code) || "-";
       const prev = byLine.get(ln.order_line_id);
       if (prev) {
         const nextQty = (Number(prev.grnQty) || 0) + qty;
@@ -605,9 +605,9 @@ export function deliveryStatusGrnItemRowsFromBatches(
           id: ln.order_line_id,
           product,
           description,
-          orderedQty: ol ? String(Number(ol.quantity) || 0) : "—",
+          orderedQty: ol ? String(Number(ol.quantity) || 0) : "-",
           grnQty: String(qty),
-          unitCost: ol ? String(Number(ol.unit_cost) || 0) : "—",
+          unitCost: ol ? String(Number(ol.unit_cost) || 0) : "-",
         });
       }
     }

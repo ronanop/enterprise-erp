@@ -1,4 +1,4 @@
-"""Sub-phase 4A — make/model/configuration + location on registration."""
+"""Sub-phase 4A - make/model/configuration + location on registration."""
 
 from datetime import date
 from decimal import Decimal

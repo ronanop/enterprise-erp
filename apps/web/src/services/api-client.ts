@@ -170,7 +170,7 @@ async function parseErrorMessage(response: Response): Promise<string> {
   }
 }
 
-/** Multipart upload. Do not set Content-Type — the browser must supply the boundary. */
+/** Multipart upload. Do not set Content-Type - the browser must supply the boundary. */
 export async function apiUpload<T>(
   path: string,
   formData: FormData,
@@ -393,7 +393,7 @@ export const resourceService = {
   delete: <T = null>(apiPath: string, id: string) =>
     apiClient<T>(`${apiPath}/${id}`, { method: "DELETE" }),
 
-  /** POST `/{apiPath}/{id}/{action}` — e.g. submit, approve, post, reverse */
+  /** POST `/{apiPath}/{id}/{action}` - e.g. submit, approve, post, reverse */
   action: <T = Record<string, unknown>>(
     apiPath: string,
     id: string,

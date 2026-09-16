@@ -5,7 +5,7 @@
 
 ---
 
-## CR-001 — Asset Category Management Enhancement
+## CR-001 - Asset Category Management Enhancement
 
 **Status:** Completed (2026-07-30)
 
@@ -20,7 +20,7 @@
 
 ---
 
-## CR-002 — Asset Information Portal + QR Self-Service
+## CR-002 - Asset Information Portal + QR Self-Service
 
 **Status:** Completed (2026-07-31)
 
@@ -32,7 +32,7 @@
 
 ---
 
-## CR-003 — Asset Discovery Module
+## CR-003 - Asset Discovery Module
 
 **Status:** Completed (2026-07-31)
 
@@ -69,15 +69,15 @@
 
 ## Pending
 
-### CR-004 — IT Asset Operations & Inventory Management
+### CR-004 - IT Asset Operations & Inventory Management
 
-**Phase 1 status:** Complete (2026-08-03) — documentation only  
+**Phase 1 status:** Complete (2026-08-03) - documentation only  
 
-**Phase 1.1 status:** Complete (2026-08-03) — **architecture lock** (`CR-004-Decision-Log.md`)
+**Phase 1.1 status:** Complete (2026-08-03) - **architecture lock** (`CR-004-Decision-Log.md`)
 
 - Business analysis, workflow mapping, gap analysis, transition matrix
 - Architecture recommendation + locked decisions (ops status column, engine, no PATCH, derived Current Holder)
-- Implementation roadmap (Phases 2–7)
+- Implementation roadmap (Phases 2-7)
 - Folder: `docs/08_IMPLEMENTATION/CHANGE_REQUESTS/CR-004/`
 
-**Implementation:** Not started — **Phase 2** (backend foundation) approved to begin when stakeholders sign off decision log
+**Implementation:** Not started - **Phase 2** (backend foundation) approved to begin when stakeholders sign off decision log

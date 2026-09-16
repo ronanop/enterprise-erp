@@ -67,7 +67,7 @@ function parseListPayload<T>(data: unknown): ListPayload<T> {
 }
 
 function formatDateTime(value?: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return value.slice(0, 16).replace("T", " ");
 }
 
@@ -474,7 +474,7 @@ export function AssetChecklistWorkspace() {
                           <td className="px-3 py-2 font-mono text-xs">{row.checklist_code}</td>
                           <td className="px-3 py-2">{row.checklist_name}</td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">
-                            {asset?.asset_code ?? row.asset_id ?? "—"}
+                            {asset?.asset_code ?? row.asset_id ?? "-"}
                           </td>
                           <td className="px-3 py-2">
                             <Badge variant="secondary" className="font-mono text-xs">
@@ -534,7 +534,7 @@ export function AssetChecklistWorkspace() {
                       </SelectItem>
                       {assetOptions.map((asset) => (
                         <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                          {asset.asset_code} — {asset.asset_name}
+                          {asset.asset_code} - {asset.asset_name}
                         </SelectItem>
                       ))}
                     </SelectContent>

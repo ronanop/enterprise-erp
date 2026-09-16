@@ -1,6 +1,6 @@
 # Asset NTF Release Notes
 
-## FP-ASSET-017 — Asset Notification
+## FP-ASSET-017 - Asset Notification
 
 ### Added
 
@@ -8,7 +8,7 @@
 - Lifecycle: active → archived; delivery pending → sent → read / pending → failed
 - APIs for archive, mark-read, mark-sent, mark-failed
 - RBAC `asset.notification:*`
-- `AssetNotificationWorkspace` (ops inbox for metadata — not a messaging composer)
+- `AssetNotificationWorkspace` (ops inbox for metadata - not a messaging composer)
 
 ### Clarified
 

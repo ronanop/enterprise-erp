@@ -74,7 +74,7 @@ EMPLOYEES = [
     ("EMP-008", "Sana", "Qureshi", "sana.qureshi@example.com", "DES-CSL", "Customer Support Lead", "mid", "SAL", date(2024, 1, 22), "820000", "female", "EMP-001"),
 ]
 
-# Canonical Cache HR department master — keep Technical Delivery; drop OPS/QA/CS extras.
+# Canonical Cache HR department master - keep Technical Delivery; drop OPS/QA/CS extras.
 DEPARTMENTS = [
     ("HR", "Human Resources"),
     ("FIN", "Finance"),
@@ -796,7 +796,7 @@ def seed(db) -> None:
                 status_day = "present"
                 check_in = punch_at(day, 9, in_off % 25)
                 check_out = punch_at(day, 18, 5 + (out_off % 35))
-                # ~8.5–9.25h so OT shows for some employees
+                # ~8.5-9.25h so OT shows for some employees
                 hours = Decimal("8.50") + (Decimal(out_off % 5) / Decimal("10"))
                 total_hours = hours
                 notes = f"Location:{loc}"

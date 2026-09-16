@@ -128,7 +128,7 @@ export function AnalyticsDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="Analytics"
-        description="Business intelligence — dashboards, KPIs, metrics, datasets, reports, alerts, and data exports."
+        description="Business intelligence - dashboards, KPIs, metrics, datasets, reports, alerts, and data exports."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -175,28 +175,28 @@ export function AnalyticsDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Dashboards"
-          value={loading ? "—" : String(kpis.dashboards)}
+          value={loading ? "-" : String(kpis.dashboards)}
           hint={`${data?.widgets.length ?? 0} widgets · ${countByStatus(data?.dashboards ?? [], ["published", "active"])} live`}
           icon={LayoutDashboard}
           tone={kpis.dashboards > 0 ? "default" : "success"}
         />
         <FinanceKpiCard
           label="Active KPIs"
-          value={loading ? "—" : String(kpis.activeKpis)}
+          value={loading ? "-" : String(kpis.activeKpis)}
           hint={`${data?.kpis.length ?? 0} KPIs · ${data?.metrics.length ?? 0} metrics`}
           icon={Target}
           tone={kpis.activeKpis > 0 ? "success" : "default"}
         />
         <FinanceKpiCard
           label="Active alerts"
-          value={loading ? "—" : String(kpis.activeAlerts)}
+          value={loading ? "-" : String(kpis.activeAlerts)}
           hint={`${data?.alertRules.length ?? 0} rules · ${data?.subscriptions.length ?? 0} subscriptions`}
           icon={Bell}
           tone={kpis.activeAlerts > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Reports"
-          value={loading ? "—" : String(kpis.reports)}
+          value={loading ? "-" : String(kpis.reports)}
           hint={`${data?.schedules.length ?? 0} schedules · ${data?.datasets.length ?? 0} datasets`}
           icon={FileBarChart}
           tone={kpis.reports > 0 ? "default" : "success"}
@@ -322,17 +322,17 @@ export function AnalyticsDashboard() {
                     >
                       <td className="max-w-[220px] truncate px-4 py-2.5">
                         <p className="font-medium text-foreground">
-                          {String(row.dashboard_name ?? row.dashboard_number ?? "—")}
+                          {String(row.dashboard_name ?? row.dashboard_number ?? "-")}
                         </p>
                         <p className="truncate text-[11px] text-muted-foreground">
                           {String(row.dashboard_number ?? "")}
                         </p>
                       </td>
                       <td className="px-4 py-2.5 text-xs capitalize text-muted-foreground">
-                        {String(row.dashboard_type ?? "—").replaceAll("_", " ")}
+                        {String(row.dashboard_type ?? "-").replaceAll("_", " ")}
                       </td>
                       <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                        {String(row.dashboard_code ?? "—")}
+                        {String(row.dashboard_code ?? "-")}
                       </td>
                       <td className="px-4 py-2.5">
                         <FinanceStatusBadge
@@ -375,7 +375,7 @@ export function AnalyticsDashboard() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-medium">
-                      {String(row.alert_number ?? row.alert_code ?? "—")}
+                      {String(row.alert_number ?? row.alert_code ?? "-")}
                     </p>
                     <FinanceStatusBadge
                       status={asStatus(row.status) || String(row.status ?? "")}
@@ -394,7 +394,7 @@ export function AnalyticsDashboard() {
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
           <div className="mb-3">
             <h2 className="text-base font-extrabold tracking-tight">Dashboard type mix</h2>
-            <p className="text-[11px] text-muted-foreground">FRD-18 §4–§5</p>
+            <p className="text-[11px] text-muted-foreground">FRD-18 §4-§5</p>
           </div>
           {loading ? (
             <p className="py-6 text-center text-sm text-muted-foreground">Loading…</p>

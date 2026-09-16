@@ -41,7 +41,7 @@ const STEPS: Step[] = [
   {
     id: "features",
     title: "Everything in One Place",
-    body: "Leaves, salary, documents, meetings, and tasks—all together.",
+    body: "Leaves, salary, documents, meetings, and tasks-all together.",
     image: "/onboarding/features.png",
     imageAlt: "Floating premium feature cards",
     cta: "Next",

@@ -2,7 +2,7 @@
  * Projects domain option lists.
  *
  * Values mirror the CHECK constraints on the `project.prj_*` tables
- * (ERD_14 §6) — labels are the FRD-11 display names.
+ * (ERD_14 §6) - labels are the FRD-11 display names.
  */
 
 export type Choice = { value: string; label: string };
@@ -277,7 +277,7 @@ export const SITE_WORKFLOW_STAGES: Choice[] = [
 ];
 
 function labelFrom(choices: Choice[], value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return choices.find((c) => c.value === value)?.label ?? value;
 }
 
@@ -295,7 +295,7 @@ export const siteDeliveryTypeLabel = (v: string | null | undefined) =>
 export const siteWorkflowStageLabel = (v: string | null | undefined) => {
   // Legacy stage before install+config merge
   if (v === "configuration") return "Installation & Configuration";
-  // Removed dedicated assign step — owners assigned from Project Tracking
+  // Removed dedicated assign step - owners assigned from Project Tracking
   if (v === "assignment") return "Survey";
   // Historic combined on-site stage
   if (v === "onsite") return "Onsite Delivery";

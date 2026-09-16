@@ -154,7 +154,7 @@ export function ProjectDocumentFormPage({
   return (
     <ProjectsRecordForm
       title={isEdit ? "Edit Document" : "New Document"}
-      description="Documents are versioned — mark the old record superseded rather than deleting it."
+      description="Documents are versioned - mark the old record superseded rather than deleting it."
       backHref="/projects/project-documents"
       backLabel="Back to documents"
       submitLabel={isEdit ? "Save changes" : "Create Document"}

@@ -1,5 +1,5 @@
 /**
- * Incoming Assets QC workspace — Sub-phase 2.
+ * Incoming Assets QC workspace - Sub-phase 2.
  * @vitest-environment jsdom
  */
 
@@ -104,7 +104,7 @@ describe("IncomingAssetsQcWorkspace", () => {
   it("renders QC header, queue row, and badges", async () => {
     render(<IncomingAssetsQcWorkspace />);
     expect(
-      await screen.findByRole("heading", { name: "Incoming Assets — QC" }),
+      await screen.findByRole("heading", { name: "Incoming Assets - QC" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Accept makes them eligible/i)).toBeInTheDocument();
     await waitFor(() => expect(searchMock).toHaveBeenCalled());

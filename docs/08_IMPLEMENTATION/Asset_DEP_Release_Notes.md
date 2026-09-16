@@ -1,4 +1,4 @@
-# FP-ASSET-006 — Release Notes
+# FP-ASSET-006 - Release Notes
 
 ## Summary
 

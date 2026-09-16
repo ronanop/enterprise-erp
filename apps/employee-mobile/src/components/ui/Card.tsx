@@ -25,7 +25,7 @@ export function Card({ children, variant = "default", style }: Props) {
   );
 }
 
-/** PWA cardPeach — gradient hero card used for net pay / celebrations. */
+/** PWA cardPeach - gradient hero card used for net pay / celebrations. */
 export function GradientCard({
   children,
   style,

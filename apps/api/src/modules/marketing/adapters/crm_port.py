@@ -1,4 +1,4 @@
-"""Marketing CRM adapter — read-only UUID validation (no cross-module DB writes)."""
+"""Marketing CRM adapter - read-only UUID validation (no cross-module DB writes)."""
 
 from uuid import UUID
 

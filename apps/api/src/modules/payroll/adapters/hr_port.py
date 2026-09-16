@@ -1,4 +1,4 @@
-"""HR port — wraps HRIntegrationService payroll read facts."""
+"""HR port - wraps HRIntegrationService payroll read facts."""
 
 from uuid import UUID
 

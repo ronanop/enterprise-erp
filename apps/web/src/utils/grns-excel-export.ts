@@ -100,7 +100,7 @@ function findBatchForGrn(
   return batches.find((b) => Number(b.sequence) === seq);
 }
 
-/** One product per line — Excel shows these as separate rows inside the cell. */
+/** One product per line - Excel shows these as separate rows inside the cell. */
 function joinItemLines(lines: string[]): string {
   return lines.filter(Boolean).join("\n");
 }

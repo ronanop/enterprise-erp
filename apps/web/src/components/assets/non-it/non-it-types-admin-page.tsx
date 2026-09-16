@@ -532,7 +532,7 @@ export function NonItTypesAdminPage() {
                 </label>
                 <Input
                   id="type-description"
-                  placeholder="Optional — what this type covers, typical use"
+                  placeholder="Optional - what this type covers, typical use"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="h-10"

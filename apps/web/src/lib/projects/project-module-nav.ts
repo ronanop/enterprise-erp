@@ -1,6 +1,6 @@
 import type { ProjectsNavGroup } from "@/components/projects/projects-workspace-nav";
 
-/** Delivery queues and portfolio admin surfaces — module admin only. */
+/** Delivery queues and portfolio admin surfaces - module admin only. */
 const ADMIN_ONLY_HREFS = new Set([
   "/projects/po-queue",
   "/projects/tracker",

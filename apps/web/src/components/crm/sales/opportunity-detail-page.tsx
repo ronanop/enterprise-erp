@@ -371,7 +371,6 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
 
           <PageHeader
             title={`${opp.opportunity_name} · ${formatCrmCode(opp.opportunity_code)}`}
-            description={`Expected revenue ${formatInr(opp.expected_revenue)}`}
             actions={
               <div className="flex flex-wrap items-center gap-2">
                 {opp.lead_id && opp.company_account_id ? (
@@ -457,7 +456,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
               </div>
               {quotes.length === 0 ? (
                 <p className="px-4 py-6 text-xs text-muted-foreground">
-                  No quotes yet — use “Create Quote” to draft one.
+                  No quotes yet - use “Create Quote” to draft one.
                 </p>
               ) : (
                 <div className="erp-scroll overflow-x-auto">
@@ -505,7 +504,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
               {ovfs.length === 0 ? (
                 <p className="px-4 py-6 text-xs text-muted-foreground">
                   {acceptedQuote
-                    ? "No OVF yet — use “Create OVF” after the customer PO is approved."
+                    ? "No OVF yet - use “Create OVF” after the customer PO is approved."
                     : "Create OVF once a Quote is accepted and the customer PO is approved."}
                 </p>
               ) : (
@@ -532,7 +531,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
                             </Badge>
                           </td>
                           <td className="px-4 py-2">
-                            {o.deal_won ? formatInr(o.deal_won_amount ?? 0) : "—"}
+                            {o.deal_won ? formatInr(o.deal_won_amount ?? 0) : "-"}
                           </td>
                         </tr>
                       ))}

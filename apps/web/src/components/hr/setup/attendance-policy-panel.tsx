@@ -365,7 +365,7 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
                   <td className="px-3 py-2 text-muted-foreground">
                     {row.arrival_policy_enabled
                       ? row.applies_to_all_shifts !== false
-                        ? `${hhmm(row.arrival_window_start) || "—"} → ${hhmm(row.arrival_ok_until) || "—"} · after ${String(row.arrival_after_status || "half_day")}`
+                        ? `${hhmm(row.arrival_window_start) || "-"} → ${hhmm(row.arrival_ok_until) || "-"} · after ${String(row.arrival_after_status || "half_day")}`
                         : `${Array.isArray(row.shift_windows_json) ? row.shift_windows_json.length : 0} shift window(s)`
                       : "Disabled"}
                   </td>
@@ -572,7 +572,7 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
                         onChange={(e) => setWindowStart(e.target.value)}
                       />
                     </SetupField>
-                    <SetupField label="OK until" required hint="Arrive by this time — still full day">
+                    <SetupField label="OK until" required hint="Arrive by this time - still full day">
                       <SetupInput
                         type="time"
                         value={okUntil}
@@ -720,7 +720,7 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
               >
                 <p className="text-xs font-semibold">First punch in · Last punch out</p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  Ignores middle punches for attendance times. Hours = last − first.
+                  Ignores middle punches for attendance times. Hours = last - first.
                 </p>
               </button>
               <button
@@ -735,7 +735,7 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
               >
                 <p className="text-xs font-semibold">Every punch (pair sessions)</p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  Pairs punches 1–2, 3–4… and sums session hours (break-aware).
+                  Pairs punches 1-2, 3-4… and sums session hours (break-aware).
                 </p>
               </button>
             </div>

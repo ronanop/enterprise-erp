@@ -1,6 +1,6 @@
-# CR-004 — Architecture Decision Log
+# CR-004 - Architecture Decision Log
 
-**Phase:** 1.1 — Architecture Lock  
+**Phase:** 1.1 - Architecture Lock  
 **Status:** LOCKED (documentation only; no code)  
 **Baseline:** Platform Architecture Lock v1.1 + CR-004 Phase 1  
 **Date:** 2026-08-03
@@ -12,10 +12,10 @@
 | Area | Finding | Resolution (locked) |
 |------|---------|---------------------|
 | Enum naming | Phase 1 used `OperationalStatus` / `OperationalStatusEngine` interchangeably | **Locked names:** `AssetOperationalStatus`, `AssetOperationalStatusEngine` |
-| Admin “mark retired” vs no PATCH | Roadmap mentioned admin endpoints; Task 1.1 forbids direct PATCH | **Dedicated transition commands only** (`POST .../operational-transitions/{action}` or service methods)—never `operational_status` on generic asset update |
+| Admin “mark retired” vs no PATCH | Roadmap mentioned admin endpoints; Task 1.1 forbids direct PATCH | **Dedicated transition commands only** (`POST .../operational-transitions/{action}` or service methods)-never `operational_status` on generic asset update |
 | Current Holder vs `custodian_employee_id` | Assignment SSOT listed denormalized custodian | **IT Current Holder is derived** from active assignment; `custodian_employee_id` remains FP-ASSET sync mirror, not CR-004 authority |
 | `PENDING_DISPOSAL` → `READY_TO_MOVE` | Transition matrix allows conditional reinstate | **Locked:** only via explicit **Reinstate** business command after maintenance policy (Phase 3+); not silent PATCH |
-| CR-001 category guard | Architecture noted ambiguity for RETIRED | **Locked:** CR-001 guard **unchanged**—uses existing `count_operational_by_category` on registration `status`; ops status does not alter CR-001 |
+| CR-001 category guard | Architecture noted ambiguity for RETIRED | **Locked:** CR-001 guard **unchanged**-uses existing `count_operational_by_category` on registration `status`; ops status does not alter CR-001 |
 | Service naming | Phase 1 allowed `AssetService` methods | **Locked:** `AssetOperationalStatusService` as sole writer (thin wrapper acceptable inside asset module) |
 | Sidebar optional item | Architecture mentioned optional IT Inventory link | **Locked:** no new sidebar items; filtered views only |
 
@@ -25,7 +25,7 @@ No unresolved conflicts remain for implementation.
 
 ## Decision register
 
-### D-001 — Operational status persistence
+### D-001 - Operational status persistence
 
 | | |
 |--|--|
@@ -37,7 +37,7 @@ No unresolved conflicts remain for implementation.
 
 ---
 
-### D-002 — Operational status domain model
+### D-002 - Operational status domain model
 
 | | |
 |--|--|
@@ -45,11 +45,11 @@ No unresolved conflicts remain for implementation.
 | **Implementation** | Domain enum **`AssetOperationalStatus`** (`READY_TO_MOVE`, `ASSIGNED`, `RETIRED`, `PENDING_DISPOSAL`, `DISPOSED`) |
 | **Reason** | Prevent string literals; explicit domain concept independent of `AssetStatus`. |
 
-**Not implemented in Phase 1.1** — documented for Phase 2+.
+**Not implemented in Phase 1.1** - documented for Phase 2+.
 
 ---
 
-### D-003 — Lifecycle vs operational status
+### D-003 - Lifecycle vs operational status
 
 | | |
 |--|--|
@@ -61,7 +61,7 @@ Operational Status **is its own domain concept**.
 
 ---
 
-### D-004 — Transition ownership
+### D-004 - Transition ownership
 
 | | |
 |--|--|
@@ -85,7 +85,7 @@ Operational Status **is its own domain concept**.
 
 ---
 
-### D-005 — Engine responsibilities
+### D-005 - Engine responsibilities
 
 | | |
 |--|--|
@@ -105,7 +105,7 @@ Persistence only via `AssetOperationalStatusService` → `AssetRepository`.
 
 ---
 
-### D-006 — Sidebar & navigation
+### D-006 - Sidebar & navigation
 
 | | |
 |--|--|
@@ -115,7 +115,7 @@ Persistence only via `AssetOperationalStatusService` → `AssetRepository`.
 
 ---
 
-### D-007 — Discovery (CR-003)
+### D-007 - Discovery (CR-003)
 
 | | |
 |--|--|
@@ -125,7 +125,7 @@ Persistence only via `AssetOperationalStatusService` → `AssetRepository`.
 
 ---
 
-### D-008 — Information Portal (CR-002)
+### D-008 - Information Portal (CR-002)
 
 | | |
 |--|--|
@@ -135,7 +135,7 @@ Persistence only via `AssetOperationalStatusService` → `AssetRepository`.
 
 ---
 
-### D-009 — Transition API shape
+### D-009 - Transition API shape
 
 | | |
 |--|--|
@@ -145,7 +145,7 @@ Persistence only via `AssetOperationalStatusService` → `AssetRepository`.
 
 ---
 
-### D-010 — Assignment enrichment
+### D-010 - Assignment enrichment
 
 | | |
 |--|--|
@@ -155,7 +155,7 @@ Persistence only via `AssetOperationalStatusService` → `AssetRepository`.
 
 ---
 
-### D-011 — Components & accessories
+### D-011 - Components & accessories
 
 | | |
 |--|--|
@@ -165,7 +165,7 @@ Persistence only via `AssetOperationalStatusService` → `AssetRepository`.
 
 ---
 
-### D-012 — Branch inventory
+### D-012 - Branch inventory
 
 | | |
 |--|--|
@@ -175,7 +175,7 @@ Persistence only via `AssetOperationalStatusService` → `AssetRepository`.
 
 ---
 
-### D-013 — Operational Timeline
+### D-013 - Operational Timeline
 
 | | |
 |--|--|
@@ -183,11 +183,11 @@ Persistence only via `AssetOperationalStatusService` → `AssetRepository`.
 | **Implementation** | **Future scope** (Phase 8+ / post CR-004) |
 | **Reason** | Audit engine + transition logs sufficient for v1; timeline is UX enhancement. |
 
-See `CR-004-Implementation-Roadmap.md` — Future enhancements.
+See `CR-004-Implementation-Roadmap.md` - Future enhancements.
 
 ---
 
-### D-014 — Current Holder (IT)
+### D-014 - Current Holder (IT)
 
 | | |
 |--|--|
@@ -201,7 +201,7 @@ See `CR-004-Implementation-Roadmap.md` — Future enhancements.
 IF operational_status == ASSIGNED
    AND exists active assignment (employee allocation)
 THEN current_holder = employee from assignment (join master_employee)
-ELSE current_holder = null / "—" / "Unassigned"
+ELSE current_holder = null / "-" / "Unassigned"
 ```
 
 Do **not** introduce `current_holder_id` column.  
@@ -224,7 +224,7 @@ Existing `custodian_employee_id` may mirror assignment for legacy FP-ASSET paths
 | Components | Asset module | `ast_asset_component` | Accessories |
 | Previous user | Assignment history | Prior assignment rows | Derived query |
 | Delivery challan | Assignment (Phase 5) | `delivery_challan_ref` | Not on asset |
-| Current Holder | **Derived** | — | Active assignment + `ASSIGNED` |
+| Current Holder | **Derived** | - | Active assignment + `ASSIGNED` |
 | Branch | Organization | `org_branch` / `branch_id` | Filter dimension |
 
 **No duplicated ownership.**
@@ -239,7 +239,7 @@ Existing `custodian_employee_id` may mirror assignment for legacy FP-ASSET paths
 | Implementation | Blocked until Phase 2 kickoff |
 
 **Next document:** `CR-004-Architecture-Recommendation.md` (§ Architecture Lock)  
-**Next phase:** Phase 2B-2+ — HTTP transition commands, assignment/disposal hooks, audit wiring
+**Next phase:** Phase 2B-2+ - HTTP transition commands, assignment/disposal hooks, audit wiring
 
 ---
 
@@ -247,10 +247,10 @@ Existing `custodian_employee_id` may mirror assignment for legacy FP-ASSET paths
 
 | Item | Status |
 |------|--------|
-| `AssetOperationalStatusEngine` | Implemented — pure rules in `operational_status_rules.py` |
-| `OperationalStatusValidator` | Implemented — no persistence |
-| `AssetOperationalStatusService` | Implemented — internal only; no routes |
-| Repository `set_operational_status` | Implemented — persist only, no validation |
+| `AssetOperationalStatusEngine` | Implemented - pure rules in `operational_status_rules.py` |
+| `OperationalStatusValidator` | Implemented - no persistence |
+| `AssetOperationalStatusService` | Implemented - internal only; no routes |
+| Repository `set_operational_status` | Implemented - persist only, no validation |
 | Phase 2B-1 transition matrix | **Subset** of full matrix: five allowed edges only (see `CR-004-Phase-2B1-Business-Layer.md`) |
 | Audit event names | Constants only; no Audit engine calls |
 | Assignment / disposal hooks | **Integrated** (Phase 2B-2) |

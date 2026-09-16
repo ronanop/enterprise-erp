@@ -1,4 +1,4 @@
-# HR Onboarding — Page Override
+# HR Onboarding - Page Override
 
 > Overrides MASTER only where noted. Otherwise follow `MASTER.md`.
 
@@ -22,7 +22,7 @@
 
 ## Layout
 
-- PageHeader + KPI card grid (6–8 cards)
+- PageHeader + KPI card grid (6-8 cards)
 - Tabbed hub: Cases | Checklist | Documents | Portal progress | Reports | Audit
 - Drawers for Start Onboarding, Send Invitation, Verify, Activate
 - Progress stepper for candidate portal (7 steps)
@@ -30,4 +30,4 @@
 
 ## Density
 
-High dashboard density; subtle motion (150–300ms); Lucide icons only.
+High dashboard density; subtle motion (150-300ms); Lucide icons only.

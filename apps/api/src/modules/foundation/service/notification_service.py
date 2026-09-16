@@ -1,4 +1,4 @@
-"""Notification service — Foundation Notification Engine (C-05 / DG-04)."""
+"""Notification service - Foundation Notification Engine (C-05 / DG-04)."""
 
 from __future__ import annotations
 
@@ -195,9 +195,9 @@ class NotificationService:
                             tok.token,
                             tok.platform,
                         )
-                    except Exception:  # noqa: BLE001 — broker optional in local
+                    except Exception:  # noqa: BLE001 - broker optional in local
                         pass
-            except Exception:  # noqa: BLE001 — push fan-out must not break primary send
+            except Exception:  # noqa: BLE001 - push fan-out must not break primary send
                 pass
 
         return event
@@ -275,7 +275,7 @@ class NotificationService:
             return
         try:
             send_notification_task.delay(str(event_id), str(delivery_id))
-        except Exception:  # noqa: BLE001 — fall back to sync if broker unavailable
+        except Exception:  # noqa: BLE001 - fall back to sync if broker unavailable
             EmailDeliveryEngine(self._db).deliver(event_id, delivery_id)
 
 

@@ -51,7 +51,7 @@ function sampleRow(overrides: Partial<InventoryRowViewModel> = {}): InventoryRow
       earlierUsedBy: "Priya",
       deliveryChallan: "DR-42",
       deliveryReferenceStatus: "Issued",
-      phoneNumber: "—",
+      phoneNumber: "-",
       remarks: "Handle carefully",
       assignmentRemarks: "Handle carefully",
       returnRemarks: "ok",
@@ -633,20 +633,20 @@ describe("workspace export wiring", () => {
   it("maps dash placeholders through", () => {
     const row = mapInventoryRowToExportRow(
       sampleRow({
-        currentHolder: "—",
+        currentHolder: "-",
         expandable: {
-          earlierUsedBy: "—",
-          deliveryChallan: "—",
-          deliveryReferenceStatus: "—",
-          phoneNumber: "—",
-          remarks: "—",
-          assignmentRemarks: "—",
-          returnRemarks: "—",
+          earlierUsedBy: "-",
+          deliveryChallan: "-",
+          deliveryReferenceStatus: "-",
+          phoneNumber: "-",
+          remarks: "-",
+          assignmentRemarks: "-",
+          returnRemarks: "-",
         },
       }),
     );
-    expect(row.currentHolder).toBe("—");
-    expect(row.earlierUsedBy).toBe("—");
+    expect(row.currentHolder).toBe("-");
+    expect(row.earlierUsedBy).toBe("-");
   });
 
   it("filtered export query includes category", async () => {

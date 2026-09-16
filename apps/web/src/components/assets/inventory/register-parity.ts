@@ -1,5 +1,5 @@
 /**
- * CR-004 Phase 6 Sprint 1 — Excel register parity (read model only).
+ * CR-004 Phase 6 Sprint 1 - Excel register parity (read model only).
  * Derives display fields from existing assignment + asset payloads. No new APIs.
  */
 
@@ -136,7 +136,7 @@ export const REGISTER_PARITY_FIELDS = [
 
 export type RegisterParityField = (typeof REGISTER_PARITY_FIELDS)[number];
 
-const EMPTY = "—";
+const EMPTY = "-";
 
 export const DELIVERY_REFERENCE_STATUS_LABELS: Record<string, string> = {
   not_applicable: "Not applicable",
@@ -230,13 +230,13 @@ export function formatDeliveryChallanSummary(
   status: string | null | undefined,
   signature: string | null | undefined,
 ): string {
-  const num = number?.trim() || "—";
+  const num = number?.trim() || "-";
   const st = formatDeliveryReferenceStatus(status);
   const sig = formatDeliveryChallanSignatureStatus(signature);
   if (st === EMPTY && (!signature || !String(signature).trim())) {
     return num;
   }
-  return `${num} · ${st === EMPTY ? "—" : st} · ${sig}`;
+  return `${num} · ${st === EMPTY ? "-" : st} · ${sig}`;
 }
 
 /** Excel-facing delivery challan cell: number, or status when N/A. */
@@ -345,7 +345,7 @@ export type RegisterParityExpandable = {
   deliverySignature: string;
   deliveryChallanSummary: string;
   phoneNumber: string;
-  /** @deprecated Prefer assignmentRemarks — kept for Excel “Remarks” label. */
+  /** @deprecated Prefer assignmentRemarks - kept for Excel “Remarks” label. */
   remarks: string;
   assignmentRemarks: string;
   returnRemarks: string;
@@ -404,7 +404,7 @@ export function buildRegisterParityExpandable(
       current?.delivery_reference_status,
       current?.delivery_challan_signature_status,
     ),
-    // Phone only for current active/approved assignee — never from returned fallback.
+    // Phone only for current active/approved assignee - never from returned fallback.
     phoneNumber: resolveEmployeeMobile(
       active?.employee_id ? String(active.employee_id) : null,
       lookup,

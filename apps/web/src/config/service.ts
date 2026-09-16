@@ -1,5 +1,5 @@
 /**
- * Service workspace config — SOP request ticket workflow only.
+ * Service workspace config - SOP request ticket workflow only.
  */
 
 import type { LucideIcon } from "lucide-react";

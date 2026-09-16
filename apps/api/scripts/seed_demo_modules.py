@@ -3716,7 +3716,7 @@ def seed_assets(db, tenant_id, company_id, branch_id, admin_id, dept_id, employe
         {
             "branch_id": branch_id,
             "document_number": "AST-0001",
-            "asset_name": f"Dell Latitude 5540 — {laptop_custodian.first_name}",
+            "asset_name": f"Dell Latitude 5540 - {laptop_custodian.first_name}",
             "asset_category_id": cat.id,
             "asset_type": "fixed",
             "supplier_vendor_id": vendor.id,
@@ -3740,7 +3740,7 @@ def seed_assets(db, tenant_id, company_id, branch_id, admin_id, dept_id, employe
         db,
         AstAsset,
         {"tenant_id": tenant_id, "company_id": company_id, "asset_code": "AST-LAP-001"},
-        {"asset_name": f"Dell Latitude 5540 — {laptop_custodian.first_name}"},
+        {"asset_name": f"Dell Latitude 5540 - {laptop_custodian.first_name}"},
     )
     ensure(
         db,
@@ -4080,7 +4080,7 @@ def seed_service(db, tenant_id, company_id, branch_id, admin_id, customer, emplo
         },
     )
     for doc_number, subject, service_type in [
-        ("SR-0002", "AC repair — Floor 2", "corrective"),
+        ("SR-0002", "AC repair - Floor 2", "corrective"),
         ("SR-0003", "Laptop screen replacement", "corrective"),
     ]:
         ensure(
@@ -5666,7 +5666,7 @@ def seed_ecommerce(db, tenant_id, company_id, admin_id, product, employees, cust
         {
             "sales_channel_id": channel.id,
             "product_id": product.id,
-            "title": "Demo Widget — Online Store Listing",
+            "title": "Demo Widget - Online Store Listing",
             "attributes_json": {"color": "blue"},
             "status": "draft",
             "created_by": admin_id,
@@ -5683,7 +5683,7 @@ def seed_ecommerce(db, tenant_id, company_id, admin_id, product, employees, cust
                 {
                     "sales_channel_id": channel.id,
                     "product_id": sensor_kit.id,
-                    "title": "Industrial Sensor Kit — Online Store Listing",
+                    "title": "Industrial Sensor Kit - Online Store Listing",
                     "attributes_json": {"category": "industrial"},
                     "status": "draft",
                     "created_by": admin_id,

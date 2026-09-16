@@ -431,7 +431,7 @@ class DcChallanService:
                 reason = getattr(exc, "message", None) or str(exc)
                 results.append(DcChallanBulkSendItem(id=row_id, ok=False, reason=reason))
                 skipped += 1
-            except Exception as exc:  # noqa: BLE001 — per-item skip, do not abort batch
+            except Exception as exc:  # noqa: BLE001 - per-item skip, do not abort batch
                 results.append(DcChallanBulkSendItem(id=row_id, ok=False, reason=str(exc)))
                 skipped += 1
         return DcChallanBulkSendResult(results=results, sent_count=sent, skipped_count=skipped)

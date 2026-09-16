@@ -65,7 +65,7 @@ export default function AssetDetailsPage() {
             </div>
             <div className="flex justify-between gap-2">
               <span className="text-[#434655]">Serial</span>
-              <span className="font-semibold text-[#0b1c30]">{asset.serial_number || "—"}</span>
+              <span className="font-semibold text-[#0b1c30]">{asset.serial_number || "-"}</span>
             </div>
             {asset.qr_code ? (
               <div className="flex justify-between gap-2">
@@ -76,7 +76,7 @@ export default function AssetDetailsPage() {
             <div className="flex justify-between gap-2">
               <span className="text-[#434655]">Assignment</span>
               <span className="font-semibold text-[#0b1c30]">
-                {asset.assignment_status || "—"}
+                {asset.assignment_status || "-"}
               </span>
             </div>
           </div>

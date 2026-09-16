@@ -1,4 +1,4 @@
-/** HR offboarding (exit) — view models mapped from /hr/separation API */
+/** HR offboarding (exit) - view models mapped from /hr/separation API */
 
 export type SeparationType = "resignation" | "termination" | "retirement" | "death" | "other";
 

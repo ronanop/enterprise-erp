@@ -70,7 +70,7 @@ describe("resolveBranchLabel", () => {
   });
 
   it("returns dash for empty branch", () => {
-    expect(resolveBranchLabel(null, branchLookup)).toBe("—");
+    expect(resolveBranchLabel(null, branchLookup)).toBe("-");
   });
 
   it("falls back to short id", () => {
@@ -177,8 +177,8 @@ describe("mapAssignmentsToActivityRows", () => {
 
 describe("formatAssignmentTimestamp", () => {
   it("returns dash for invalid values", () => {
-    expect(formatAssignmentTimestamp(null)).toBe("—");
-    expect(formatAssignmentTimestamp("")).toBe("—");
+    expect(formatAssignmentTimestamp(null)).toBe("-");
+    expect(formatAssignmentTimestamp("")).toBe("-");
   });
 });
 

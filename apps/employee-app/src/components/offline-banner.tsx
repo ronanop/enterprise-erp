@@ -22,7 +22,7 @@ export function OfflineBanner() {
   return (
     <div className="flex items-center justify-center gap-2 bg-amber-500 px-4 py-2.5 text-center text-sm font-semibold text-white">
       <IconAlert size={16} />
-      Offline — leave and punch need a connection.
+      Offline - leave and punch need a connection.
     </div>
   );
 }

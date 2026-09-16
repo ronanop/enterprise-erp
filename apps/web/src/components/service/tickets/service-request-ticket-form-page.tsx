@@ -490,7 +490,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
       ) : null}
 
       <div className="space-y-4">
-        <Section title="Section 1 — Basic Information">
+        <Section title="Section 1 - Basic Information">
           <Field label="Mode of Action">
             <select className={selectCls} value={form.mode_of_action} disabled>
               <option value="">Assigned engineer chooses after opening the ticket…</option>
@@ -565,7 +565,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           </Field>
         </Section>
 
-        <Section title="Section 3 — Asset Details">
+        <Section title="Section 3 - Asset Details">
           <div className="sm:col-span-2 rounded-md border border-dashed border-border/60 bg-muted/20 px-3 py-2.5 text-xs leading-relaxed text-muted-foreground">
             Asset name and serial are filled automatically from the inbound email when the ticket is created.
             After opening the ticket, review and confirm them on the ticket page (fix missing fields or changes there).
@@ -601,7 +601,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           </Field>
         </Section>
 
-        <Section title="Section 4 — Ticket Information">
+        <Section title="Section 4 - Ticket Information">
           <Field label="Category of Ticket">
             <select className={selectCls} value={form.ticket_category} disabled>
               <option value="">Assigned engineer chooses after opening the ticket…</option>
@@ -630,7 +630,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           </div>
         </Section>
 
-        <Section title="Section 5 — Reference Information">
+        <Section title="Section 5 - Reference Information">
           <Field label="Service Request Number"><Input value={form.reference_sr_number} onChange={(e) => set("reference_sr_number", e.target.value)} /></Field>
           <Field label="CKT ID"><Input value={form.ckt_id} onChange={(e) => set("ckt_id", e.target.value)} /></Field>
           <Field label="Customer Reference / LSI"><Input value={form.lsi} onChange={(e) => set("lsi", e.target.value)} /></Field>
@@ -638,7 +638,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           <Field label="Customer Reference"><Input value={form.customer_reference} onChange={(e) => set("customer_reference", e.target.value)} /></Field>
         </Section>
 
-        <Section title="Section 6 — End Customer Details">
+        <Section title="Section 6 - End Customer Details">
           <Field label="Customer Name"><Input value={form.end_customer_name} onChange={(e) => set("end_customer_name", e.target.value)} /></Field>
           <Field label="Email"><Input value={form.end_customer_email} onChange={(e) => set("end_customer_email", e.target.value)} /></Field>
           <Field label="Coordinator"><Input value={form.coordinator_name} onChange={(e) => set("coordinator_name", e.target.value)} /></Field>
@@ -677,7 +677,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
           </div>
         </Section>
 
-        <Section title="Section 7 — Additional Information">
+        <Section title="Section 7 - Additional Information">
           <Field label="Start Work Date"><Input type="datetime-local" value={form.start_work_date} onChange={(e) => set("start_work_date", e.target.value)} /></Field>
           <Field label="Due Date"><Input type="datetime-local" value={form.due_at} onChange={(e) => set("due_at", e.target.value)} /></Field>
           <Field label="Channel" required>
@@ -716,7 +716,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
         </Section>
 
         {showFe ? (
-          <Section title="Section 9 — Field Engineer Visit">
+          <Section title="Section 9 - Field Engineer Visit">
             <Field label="Field Engineer Name"><Input value={form.fe_engineer_name} onChange={(e) => set("fe_engineer_name", e.target.value)} /></Field>
             <Field label="Contact Number"><Input value={form.fe_engineer_contact} onChange={(e) => set("fe_engineer_contact", e.target.value)} /></Field>
             <Field label="Distance from FE Location"><Input value={form.fe_distance} onChange={(e) => set("fe_distance", e.target.value)} /></Field>
@@ -740,7 +740,7 @@ export function ServiceRequestTicketFormPage({ ticketId }: { ticketId?: string }
         ) : null}
 
         {showOem ? (
-          <Section title="Section 10 — OEM Support">
+          <Section title="Section 10 - OEM Support">
             <Field label="OEM Name"><Input value={form.oem_name} onChange={(e) => set("oem_name", e.target.value)} /></Field>
             <Field label="OEM Ticket Number"><Input value={form.oem_ticket_number} onChange={(e) => set("oem_ticket_number", e.target.value)} /></Field>
             <Field label="Ticket Type">

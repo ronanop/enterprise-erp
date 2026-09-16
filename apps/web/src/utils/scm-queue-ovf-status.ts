@@ -54,7 +54,7 @@ function openDistributorCount(row: ScmOvfStatusSource): number {
  * - Hold  = SCM parked the OVF (or cancelled without a live PO)
  * - Draft = reserved (mapped into Open KPIs); not used when PO creation closes the OVF
  *
- * Important: do not use `can_create_po` alone — the API keeps it true while a draft
+ * Important: do not use `can_create_po` alone - the API keeps it true while a draft
  * exists so the Create PO screen can reopen the draft for editing.
  */
 export function deriveScmOvfQueueStatus(

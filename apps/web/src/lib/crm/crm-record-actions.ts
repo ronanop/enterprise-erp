@@ -61,7 +61,7 @@ export function salesLeadToCreateInput(lead: SalesLead): LeadCreateFromCompanyIn
     state: lead.state ?? null,
     zip: lead.zip ?? null,
     country: lead.country ?? null,
-    oem_name: lead.oem_name ?? "—",
+    oem_name: lead.oem_name ?? "-",
     oem_contact_person: lead.oem_contact_person ?? null,
     oem_contact_number: lead.oem_contact_number ?? null,
     oem_contact_email: lead.oem_contact_email ?? null,
@@ -92,8 +92,8 @@ export async function cloneCompanyRecord(company: Company, router: ReturnType<ty
 export async function printCompanyPreview(company: Company) {
   const employees = await listCrmMemberOptions().catch(() => []);
   const nameFor = (id: string | null) => {
-    if (!id) return "—";
-    return employees.find((e) => e.id === id)?.label ?? "—";
+    if (!id) return "-";
+    return employees.find((e) => e.id === id)?.label ?? "-";
   };
   exportCompanyPdf({
     company,
@@ -109,8 +109,8 @@ export async function printCompanyPreview(company: Company) {
 export async function downloadCompanyExport(company: Company) {
   const employees = await listCrmMemberOptions().catch(() => []);
   const nameFor = (id: string | null) => {
-    if (!id) return "—";
-    return employees.find((e) => e.id === id)?.label ?? "—";
+    if (!id) return "-";
+    return employees.find((e) => e.id === id)?.label ?? "-";
   };
   downloadCompanyPdf({
     company,
@@ -218,10 +218,10 @@ export async function printQuotePreview(quote: Quote, lines: QuoteLine[]) {
     quote,
     lines,
     seller,
-    customerName: quote.entity_name || quote.account_name || "—",
-    customerAddress: quote.entity_address || "—",
+    customerName: quote.entity_name || quote.account_name || "-",
+    customerAddress: quote.entity_address || "-",
     subject: quote.subject || quote.project_title || quote.quote_no,
-    ownerName: quote.owner_name || "—",
+    ownerName: quote.owner_name || "-",
     termsOverride: quote.terms,
   });
 }
@@ -232,10 +232,10 @@ export async function downloadQuoteExport(quote: Quote, lines: QuoteLine[]) {
     quote,
     lines,
     seller,
-    customerName: quote.entity_name || quote.account_name || "—",
-    customerAddress: quote.entity_address || "—",
+    customerName: quote.entity_name || quote.account_name || "-",
+    customerAddress: quote.entity_address || "-",
     subject: quote.subject || quote.project_title || quote.quote_no,
-    ownerName: quote.owner_name || "—",
+    ownerName: quote.owner_name || "-",
     termsOverride: quote.terms,
   });
 }

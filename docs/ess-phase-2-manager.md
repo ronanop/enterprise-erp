@@ -1,9 +1,9 @@
-# ESS PWA — Phase 2 (Manager workflow + notifications)
+# ESS PWA - Phase 2 (Manager workflow + notifications)
 
 ## Delivered
 
 ### Approvals hub
-- **API:** `GET /ess/approvals` — pending items for **direct reports** only (leave submitted, on-duty, comp-off, attendance corrections).
+- **API:** `GET /ess/approvals` - pending items for **direct reports** only (leave submitted, on-duty, comp-off, attendance corrections).
 - **Actions:**  
   - `POST /ess/team-leave/{id}/manager-approve` | `reject` (existing)  
   - `POST /ess/team-compoff/{id}/manager-approve` | `reject`  
@@ -28,4 +28,4 @@ Use a manager linked in `seed_manager_team` with direct reports who have submitt
 
 - Push / FCM popups (Phase 4)
 - WFH approvals (Phase 3)
-- Company-wide HR inbox (`/hr/ess-inbox`) — remains on HRMS web
+- Company-wide HR inbox (`/hr/ess-inbox`) - remains on HRMS web

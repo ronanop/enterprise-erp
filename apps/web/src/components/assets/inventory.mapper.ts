@@ -52,7 +52,7 @@ export type InventoryExpandableFields = {
   deliverySignature?: string;
   deliveryChallanSummary?: string;
   phoneNumber: string;
-  /** @deprecated Prefer assignmentRemarks — kept for Excel “Remarks” label. */
+  /** @deprecated Prefer assignmentRemarks - kept for Excel “Remarks” label. */
   remarks: string;
   assignmentRemarks: string;
   returnRemarks: string;
@@ -79,7 +79,7 @@ export type InventoryRowViewModel = {
   assignmentHistory: AssignmentHistoryEntryView[];
   /** Active assignment id when present (deep-link Case 1). */
   activeAssignmentId?: string | null;
-  /** Active assignment allocation_type — DC create is employee-only this phase. */
+  /** Active assignment allocation_type - DC create is employee-only this phase. */
   assignmentAllocationType?: string | null;
 };
 
@@ -151,12 +151,12 @@ export { groupAssignmentsByAssetId };
 
 function discoveryManufacturer(asset: AssetsRow): string {
   const profile = parseDiscoveryProfile(asset);
-  return profile?.manufacturer?.trim() || "—";
+  return profile?.manufacturer?.trim() || "-";
 }
 
 function discoveryModel(asset: AssetsRow): string {
   const profile = parseDiscoveryProfile(asset);
-  return profile?.model?.trim() || "—";
+  return profile?.model?.trim() || "-";
 }
 
 export function persistedOrDiscovery(
@@ -185,9 +185,9 @@ export function configurationSummary(asset: AssetsRow): string {
     return asset.configuration.trim();
   }
   const profile = parseDiscoveryProfile(asset);
-  if (!profile) return "—";
+  if (!profile) return "-";
   const parts = [profile.cpu, profile.ram, profile.os_name].filter(Boolean);
-  return parts.length ? parts.join(" · ") : "—";
+  return parts.length ? parts.join(" · ") : "-";
 }
 
 export function mapAssetToInventoryRow(
@@ -215,35 +215,35 @@ export function mapAssetToInventoryRow(
   const operational =
     typeof asset.operational_status === "string" && asset.operational_status
       ? asset.operational_status
-      : "—";
-  const lifecycle = typeof asset.status === "string" ? asset.status : "—";
+      : "-";
+  const lifecycle = typeof asset.status === "string" ? asset.status : "-";
 
   const holderLabel = assignment
     ? resolveAssigneeLabel(assignment as RegisterAssignmentLike, employeeLookup)
-    : "—";
+    : "-";
   const employeeIdRaw = assignment?.employee_id ? String(assignment.employee_id) : "";
   const employeeCode = employeeIdRaw
     ? resolveEmployeeCode(employeeIdRaw, employeeLookup)
-    : "—";
+    : "-";
 
   const it = resolveItRegistrationFields(asset);
 
   return {
     id,
-    assetTag: String(asset.asset_code ?? asset.document_number ?? "—"),
-    laptopName: String(asset.asset_name ?? "—"),
+    assetTag: String(asset.asset_code ?? asset.document_number ?? "-"),
+    laptopName: String(asset.asset_name ?? "-"),
     serialNumber:
       typeof asset.serial_number === "string" && asset.serial_number.trim()
         ? asset.serial_number.trim()
-        : "—",
+        : "-",
     manufacturer: it.make,
     model: it.model,
     configuration: it.configuration,
-    currentHolder: holderLabel === "—" && assignment ? "Assigned" : holderLabel,
+    currentHolder: holderLabel === "-" && assignment ? "Assigned" : holderLabel,
     // Prefer employee_code; do not show raw UUID when code is unavailable.
     employeeId: employeeCode,
-    department: ctx.departmentLabels[deptKey] ?? (deptKey ? deptKey.slice(0, 8) : "—"),
-    branch: ctx.branchLabels[branchKey] ?? (branchKey ? branchKey.slice(0, 8) : "—"),
+    department: ctx.departmentLabels[deptKey] ?? (deptKey ? deptKey.slice(0, 8) : "-"),
+    branch: ctx.branchLabels[branchKey] ?? (branchKey ? branchKey.slice(0, 8) : "-"),
     operationalStatus: operational,
     lifecycleStatus: lifecycle,
     // Issued Date = allocated_at only (system set on activation).
@@ -251,9 +251,9 @@ export function mapAssetToInventoryRow(
       ? formatIssuedDate(
           typeof assignment.allocated_at === "string" ? assignment.allocated_at : null,
         )
-      : "—",
-    // Prefer current ast_asset_location keyed by asset id — never fake with branch.
-    location: ctx.locationLabels[id] ?? "—",
+      : "-",
+    // Prefer current ast_asset_location keyed by asset id - never fake with branch.
+    location: ctx.locationLabels[id] ?? "-",
     expandable,
     assignmentHistory: mapAssignmentHistoryEntries(history, employeeLookup),
     activeAssignmentId: assignment?.id ? String(assignment.id) : null,

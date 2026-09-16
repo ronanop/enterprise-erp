@@ -247,5 +247,5 @@ export function profilePhotoFromExtension(
 
 export function displayOrDash(value: string | undefined | null): string {
   const v = (value || "").trim();
-  return !v || v === "—" ? "—" : v;
+  return !v || v === "-" ? "-" : v;
 }

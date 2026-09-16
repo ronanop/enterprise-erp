@@ -72,18 +72,18 @@ export function MarketingWorkloadBoard() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <FinanceKpiCard
           label="Overloaded"
-          value={loading ? "—" : String(data.overloaded.length)}
+          value={loading ? "-" : String(data.overloaded.length)}
           tone={data.overloaded.length ? "warning" : "success"}
           icon={Users}
         />
         <FinanceKpiCard
           label="Underutilized"
-          value={loading ? "—" : String(data.underutilized.length)}
+          value={loading ? "-" : String(data.underutilized.length)}
           icon={Gauge}
         />
         <FinanceKpiCard
           label="My utilization"
-          value={loading ? "—" : `${data.me.utilization_pct}%`}
+          value={loading ? "-" : `${data.me.utilization_pct}%`}
           hint={`${data.me.active_tasks} active tasks`}
           icon={Gauge}
         />

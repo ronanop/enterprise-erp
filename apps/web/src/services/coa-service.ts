@@ -273,5 +273,5 @@ export function isCoaEditable(status?: string | null) {
 export function accountTypeLabel(type?: string | null) {
   const t = (type ?? "").toLowerCase();
   if (t === "revenue") return "Income";
-  return t ? t.charAt(0).toUpperCase() + t.slice(1) : "—";
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : "-";
 }

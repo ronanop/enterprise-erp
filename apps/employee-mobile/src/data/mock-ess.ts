@@ -1023,7 +1023,7 @@ export const mockApi = {
     return delay(ok(null, "Rejected"));
   },
 
-  // —— Phase 3 ——
+  // -- Phase 3 --
   bank: () =>
     delay(
       ok<EssBank>({
@@ -1303,7 +1303,7 @@ export const mockApi = {
     );
   },
 
-  // —— Phase 4 ——
+  // -- Phase 4 --
   training: () => delay(ok([...mockTraining])),
 
   performance: () => delay(ok([...mockPerformance])),

@@ -51,7 +51,7 @@ export default function PersonalInformationScreen() {
             </View>
             <Text style={styles.name}>{me.display_name}</Text>
             <Text style={styles.meta}>
-              {me.designation || "—"} · ID: {me.employee_code}
+              {me.designation || "-"} · ID: {me.employee_code}
             </Text>
           </View>
 
@@ -61,7 +61,7 @@ export default function PersonalInformationScreen() {
             iconBackground={colors.primaryFixed}
           >
             <InfoRow label="Date of Birth" value="June 12, 1994" />
-            <InfoRow label="Gender" value="—" />
+            <InfoRow label="Gender" value="-" />
             <InfoRow label="Nationality" value="India" />
           </InfoCard>
 
@@ -94,7 +94,7 @@ export default function PersonalInformationScreen() {
             onPress={() => setMessage("Update request submitted for HR review")}
           />
           <Text style={styles.updated}>
-            Last updated on {me.date_of_joining || "—"}
+            Last updated on {me.date_of_joining || "-"}
           </Text>
         </>
       ) : null}
@@ -137,7 +137,7 @@ function ContactTile({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.contactTile}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <Text style={styles.contactValue}>{value || "—"}</Text>
+      <Text style={styles.contactValue}>{value || "-"}</Text>
     </View>
   );
 }

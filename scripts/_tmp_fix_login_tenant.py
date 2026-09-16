@@ -14,7 +14,7 @@ with e.begin() as c:
         )
     ).fetchall()
     print("before", rows)
-    # Prefer CRM tenant (d3dab809...) — rename empty-tenant duplicates so login resolves correctly
+    # Prefer CRM tenant (d3dab809...) - rename empty-tenant duplicates so login resolves correctly
     updated = c.execute(
         text(
             "update foundation.sec_user set email = email || '.empty-tenant' "

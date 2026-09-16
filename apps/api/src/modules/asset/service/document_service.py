@@ -1,4 +1,4 @@
-"""DocumentService — asset document metadata management (FP-ASSET-016)."""
+"""DocumentService - asset document metadata management (FP-ASSET-016)."""
 
 from uuid import UUID
 

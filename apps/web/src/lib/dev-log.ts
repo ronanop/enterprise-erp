@@ -1,4 +1,4 @@
-/** Client-safe logging — never prints raw Error objects (CWE-209). */
+/** Client-safe logging - never prints raw Error objects (CWE-209). */
 
 export function devWarn(message: string): void {
   if (process.env.NODE_ENV !== "production") {

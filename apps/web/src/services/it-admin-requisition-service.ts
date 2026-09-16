@@ -1,5 +1,5 @@
 /**
- * IT & Admin — requisitions (ID card, visiting card, t-shirts, gifts).
+ * IT & Admin - requisitions (ID card, visiting card, t-shirts, gifts).
  * Local PWA store until a dedicated API exists.
  */
 

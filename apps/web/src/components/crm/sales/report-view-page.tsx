@@ -23,7 +23,6 @@ import {
   cloneSavedCrmReport,
   exportCrmReportXlsx,
   getSavedCrmReport,
-  listCrmReportModules,
   runSavedCrmReport,
   type CrmReportRunResult,
   type CrmSavedReport,
@@ -33,7 +32,6 @@ export function ReportViewPage({ reportId }: { reportId: string }) {
   const router = useRouter();
   const { user } = useAuthUser();
   const [report, setReport] = useState<CrmSavedReport | null>(null);
-  const [moduleLabel, setModuleLabel] = useState("");
   const [run, setRun] = useState<CrmReportRunResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,18 +42,12 @@ export function ReportViewPage({ reportId }: { reportId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const [saved, result, mods] = await Promise.all([
+      const [saved, result] = await Promise.all([
         getSavedCrmReport(reportId),
         runSavedCrmReport(reportId),
-        listCrmReportModules().catch(() => []),
       ]);
       setReport(saved);
       setRun(result);
-      setModuleLabel(
-        mods.find((m) => m.key === saved.primary_module)?.label ??
-          result.module_label ??
-          saved.primary_module,
-      );
     } catch (err) {
       setReport(null);
       setRun(null);
@@ -108,11 +100,6 @@ export function ReportViewPage({ reportId }: { reportId: string }) {
     <CrmPage>
       <PageHeader
         title={report?.report_name ?? (loading ? "Report" : "Report")}
-        description={
-          moduleLabel || report?.primary_module
-            ? `${moduleLabel || report?.primary_module} · Live data (refreshed when opened)`
-            : "Live data (refreshed when opened)"
-        }
         backHref="/crm/reports"
         backLabel="Reports"
         actions={

@@ -24,7 +24,7 @@ const STAGE_META: Record<
 > = {
   intake: {
     title: "Intake & RFAI",
-    description: "Site requests awaiting RFAI capture — requestor, circle, cloud, and site.",
+    description: "Site requests awaiting RFAI capture - requestor, circle, cloud, and site.",
     empty: "No sites in Intake. Create a project to start the delivery workflow.",
   },
   assignment: {
@@ -35,12 +35,12 @@ const STAGE_META: Record<
   },
   survey: {
     title: "Survey",
-    description: "Sites in survey — space, power, tile details, and survey completion.",
+    description: "Sites in survey - space, power, tile details, and survey completion.",
     empty: "No sites in Survey.",
   },
   scm: {
     title: "SCM / Logistics",
-    description: "Material movement — quantities and warehouse delivery dates.",
+    description: "Material movement - quantities and warehouse delivery dates.",
     empty: "No sites in SCM / Logistics.",
   },
   onsite_delivery: {
@@ -56,7 +56,7 @@ const STAGE_META: Record<
   installation: {
     title: "Installation & Configuration",
     description:
-      "In-scope install work — rack-only sites skip server / OS / configuration; other scopes include stacking, power, cabling, and config as applicable.",
+      "In-scope install work - rack-only sites skip server / OS / configuration; other scopes include stacking, power, cabling, and config as applicable.",
     empty: "No sites in Installation & Configuration.",
   },
   acceptance: {
@@ -117,31 +117,31 @@ export function SiteInstallationListPage({ stage }: { stage?: string }) {
         label: "Site Name",
         sort: (r) => r.site_name,
         className: "font-medium text-foreground",
-        cell: (r) => r.site_name || "—",
+        cell: (r) => r.site_name || "-",
       },
       {
         key: "rfai_number",
         label: "RFAI",
         sort: (r) => r.rfai_number,
-        cell: (r) => r.rfai_number || "—",
+        cell: (r) => r.rfai_number || "-",
       },
       {
         key: "circle",
         label: "Circle",
         sort: (r) => r.circle,
-        cell: (r) => r.circle || "—",
+        cell: (r) => r.circle || "-",
       },
       {
         key: "cloud_name",
         label: "Cloud",
         sort: (r) => r.cloud_name,
-        cell: (r) => r.cloud_name || "—",
+        cell: (r) => r.cloud_name || "-",
       },
       {
         key: "requestor_name",
         label: "Requestor",
         sort: (r) => r.requestor_name,
-        cell: (r) => r.requestor_name || "—",
+        cell: (r) => r.requestor_name || "-",
       },
       {
         key: "delivery_type",

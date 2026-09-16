@@ -1,4 +1,4 @@
-"""Portfolio follow-ups — sent (admin) or received (assignees)."""
+"""Portfolio follow-ups - sent (admin) or received (assignees)."""
 
 from typing import Annotated
 from uuid import UUID

@@ -191,7 +191,7 @@ export function AssetReportsWorkspace() {
 
   const kpis = dashboard?.kpis ?? {};
   const categoryChart = (dashboard?.by_category ?? []).map((row) => ({
-    name: String(row.category_code || row.category_name || "—"),
+    name: String(row.category_code || row.category_name || "-"),
     count: Number(row.count ?? 0),
   }));
 
@@ -317,7 +317,7 @@ export function AssetReportsWorkspace() {
                   <strong>{String(dashboard?.health?.policies_expiring ?? 0)}</strong>
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Generated {dashboard?.generated_at ?? "—"}
+                  Generated {dashboard?.generated_at ?? "-"}
                 </p>
               </CardContent>
             </Card>
@@ -561,7 +561,7 @@ export function AssetReportsWorkspace() {
                   </p>
                   <p>
                     <span className="text-muted-foreground">Generated:</span>{" "}
-                    {selectedSnap.generated_at ?? "—"}
+                    {selectedSnap.generated_at ?? "-"}
                   </p>
                   <pre className="max-h-64 overflow-auto rounded border bg-muted/30 p-2 text-xs">
                     {JSON.stringify(selectedSnap.metrics_json, null, 2)}

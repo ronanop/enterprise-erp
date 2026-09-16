@@ -206,7 +206,7 @@ class BiometricDeviceService:
             with socket.create_connection((str(ip).strip(), int(port)), timeout=3):
                 return True, f"Device reachable at {ip}:{port}"
         except OSError as exc:
-            return False, f"Cannot reach {ip}:{port} — {exc}"
+            return False, f"Cannot reach {ip}:{port} - {exc}"
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)

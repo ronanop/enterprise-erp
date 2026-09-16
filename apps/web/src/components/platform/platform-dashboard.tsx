@@ -279,19 +279,19 @@ function HealthSummaryStrip({
         <div className="rounded-lg border border-emerald-200/80 bg-emerald-50/80 px-2.5 py-2">
           <p className="text-[10px] font-medium text-emerald-800/80 uppercase">Live</p>
           <p className="mt-0.5 text-lg font-semibold tabular-nums text-emerald-900">
-            {loading ? "—" : live}
+            {loading ? "-" : live}
           </p>
         </div>
         <div className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-2.5 py-2">
           <p className="text-[10px] font-medium text-amber-900/80 uppercase">Partial</p>
           <p className="mt-0.5 text-lg font-semibold tabular-nums text-amber-950">
-            {loading ? "—" : partial}
+            {loading ? "-" : partial}
           </p>
         </div>
         <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
           <p className="text-[10px] font-medium text-slate-600 uppercase">Offline</p>
           <p className="mt-0.5 text-lg font-semibold tabular-nums text-slate-800">
-            {loading ? "—" : offline}
+            {loading ? "-" : offline}
           </p>
         </div>
       </div>
@@ -300,7 +300,7 @@ function HealthSummaryStrip({
           <div className="flex items-center justify-between gap-2 text-[11px]">
             <span className="text-muted-foreground">API coverage</span>
             <span className="font-semibold tabular-nums text-foreground">
-              {loading ? "—" : `${coverage}%`}
+              {loading ? "-" : `${coverage}%`}
             </span>
           </div>
           <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
@@ -391,7 +391,7 @@ export function PlatformDashboard() {
     );
   }
 
-  // Only show "no modules" after a confirmed successful /auth/me — never on failed loads.
+  // Only show "no modules" after a confirmed successful /auth/me - never on failed loads.
   if (!showLoading && authStatus === "authenticated" && user && !hasModules) {
     return (
       <div className="space-y-5">
@@ -463,7 +463,7 @@ export function PlatformDashboard() {
 
       {data?.partial && !authBlocked ? (
         <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-2.5 text-xs text-amber-950">
-          Some module endpoints were slow or unavailable. Showing available analytics — refresh or check Module health for details.
+          Some module endpoints were slow or unavailable. Showing available analytics - refresh or check Module health for details.
         </div>
       ) : null}
 
@@ -480,7 +480,7 @@ export function PlatformDashboard() {
                   : "sm:grid-cols-2 lg:grid-cols-4",
           )}
         >
-          {(headline.length ? headline.slice(0, 4) : [{ label: "Modules", value: "—", hint: "Assigned modules" }]).map(
+          {(headline.length ? headline.slice(0, 4) : [{ label: "Modules", value: "-", hint: "Assigned modules" }]).map(
             (stat) => (
               <CrmHeadlineStat
                 key={stat.label}

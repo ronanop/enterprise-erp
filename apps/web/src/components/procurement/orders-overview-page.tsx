@@ -202,7 +202,7 @@ export function OrdersOverviewPage() {
               {PO_OVERVIEW_BUCKET_LABELS[key]}
             </p>
             <p className="mt-2 font-mono text-2xl font-medium tabular-nums">
-              {loading ? "—" : String(bucketCounts[key])}
+              {loading ? "-" : String(bucketCounts[key])}
             </p>
             <Button
               type="button"
@@ -280,7 +280,7 @@ export function OrdersOverviewPage() {
                   <td className={procurementUi.td}>
                     {vendors[row.vendor_id]?.label || row.vendor_id.slice(0, 8)}
                   </td>
-                  <td className={procurementUi.td}>{orderCustomerOrApproverLabel(row) || "—"}</td>
+                  <td className={procurementUi.td}>{orderCustomerOrApproverLabel(row) || "-"}</td>
                   <td className={cn(procurementUi.tdNumeric)}>{formatInr(row.total_amount)}</td>
                   <td className={procurementUi.td}>
                     <Badge variant={grnBadgeVariant(row.grn_status ?? "pending")} className="uppercase">

@@ -1,4 +1,4 @@
-"""Organization port — read org_department only."""
+"""Organization port - read org_department only."""
 
 from uuid import UUID
 

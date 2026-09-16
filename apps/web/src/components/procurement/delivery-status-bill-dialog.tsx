@@ -173,13 +173,13 @@ export function DeliveryStatusBillDialog({
           challanDeliveredQuantity(challan),
         ),
       )
-    : "—";
+    : "-";
 
   return (
     <ConfirmDialog
       open={open}
       title="Bill taken"
-      description="DC is delivery without a bill. When you receive the customer bill, record it here — even after delivery status or installation."
+      description="DC is delivery without a bill. When you receive the customer bill, record it here - even after delivery status or installation."
       confirmLabel={busy ? "Saving…" : "Save bill status"}
       cancelLabel="Cancel"
       busy={busy}
@@ -200,7 +200,7 @@ export function DeliveryStatusBillDialog({
             <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               Challan
             </div>
-            <div className="font-medium tabular-nums">{challan?.challanNumber || "—"}</div>
+            <div className="font-medium tabular-nums">{challan?.challanNumber || "-"}</div>
           </div>
           <div>
             <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -212,14 +212,14 @@ export function DeliveryStatusBillDialog({
             <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               DC quantity
             </div>
-            <div className="font-medium tabular-nums">{challanQty || "—"}</div>
+            <div className="font-medium tabular-nums">{challanQty || "-"}</div>
           </div>
           <div>
             <div className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               PO
             </div>
             <div className="font-medium tabular-nums">
-              {challan?.companyPoNumber || challan?.purchaseOrderNumber || "—"}
+              {challan?.companyPoNumber || challan?.purchaseOrderNumber || "-"}
             </div>
           </div>
         </div>

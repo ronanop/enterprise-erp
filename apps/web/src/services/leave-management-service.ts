@@ -83,7 +83,7 @@ export function deriveLeaveAudit(dir: LeaveDirectory | null): LeaveAuditEntry[] 
         id: h.id || `hist-${r.id}-${h.at}`,
         requestId: r.id,
         action: h.action,
-        detail: `${r.employeeName} (${r.employeeCode}) · ${r.leaveTypeName} · ${r.fromDate}–${r.toDate}${
+        detail: `${r.employeeName} (${r.employeeCode}) · ${r.leaveTypeName} · ${r.fromDate}-${r.toDate}${
           h.comment ? ` · ${h.comment}` : ""
         }`,
         actor: h.actor || "system",
@@ -95,7 +95,7 @@ export function deriveLeaveAudit(dir: LeaveDirectory | null): LeaveAuditEntry[] 
         id: `req-${r.id}`,
         requestId: r.id,
         action: r.status === "approved" ? "approved" : r.status === "rejected" ? "rejected" : "recorded",
-        detail: `${r.employeeName} (${r.employeeCode}) · ${r.leaveTypeName} · ${r.fromDate}–${r.toDate} · ${r.totalDays}d`,
+        detail: `${r.employeeName} (${r.employeeCode}) · ${r.leaveTypeName} · ${r.fromDate}-${r.toDate} · ${r.totalDays}d`,
         actor: r.approverName || "system",
         at: r.appliedOn || `${r.fromDate}T12:00:00`,
       },
@@ -106,7 +106,7 @@ export function deriveLeaveAudit(dir: LeaveDirectory | null): LeaveAuditEntry[] 
     id: `type-${t.id}`,
     requestId: t.id,
     action: "leave_type_policy",
-    detail: `${t.name} (${t.code}) · max ${t.maxDays || "—"}/yr · ${t.daysPerMonth || "—"}/mo · ${t.isPaid ? "paid" : "unpaid"} · CF ${
+    detail: `${t.name} (${t.code}) · max ${t.maxDays || "-"}/yr · ${t.daysPerMonth || "-"}/mo · ${t.isPaid ? "paid" : "unpaid"} · CF ${
       t.carryForwardAllowed ? "yes" : "no"
     } · approval ${t.approvalRequired ? "required" : "optional"}`,
     actor: "system",
@@ -263,17 +263,17 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
       employeeId: String(row.employee_id),
       employeeName: emp?.displayName ?? String(row.employee_id).slice(0, 8),
       employeeCode: emp?.employeeCode ?? "",
-      departmentName: emp?.departmentName ?? "—",
+      departmentName: emp?.departmentName ?? "-",
       branchId: String(row.branch_id ?? ""),
       leaveTypeId: String(row.leave_type_id),
-      leaveTypeName: lt?.name ?? "—",
+      leaveTypeName: lt?.name ?? "-",
       leaveTypeCode: lt?.code ?? "",
       fromDate: String(row.start_date ?? ""),
       toDate: String(row.end_date ?? ""),
       totalDays: Number(row.days_count ?? 0),
       appliedOn: String(row.created_at ?? row.start_date ?? ""),
       status: apiStatus,
-      approverName: emp?.reportingManagerName ?? "—",
+      approverName: emp?.reportingManagerName ?? "-",
       reason: String(row.reason ?? ""),
       version: Number(row.version ?? 1),
       extension: ext,
@@ -306,7 +306,7 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
       employeeCode: emp?.employeeCode ?? "",
       branchId: String(row.branch_id ?? emp?.branchId ?? ""),
       leaveTypeId: String(row.leave_type_id),
-      leaveTypeName: lt?.name ?? "—",
+      leaveTypeName: lt?.name ?? "-",
       leaveTypeCode: lt?.code ?? "",
       balanceYear: Number(row.balance_year ?? new Date().getFullYear()),
       allocated: opening + accrued,
@@ -508,7 +508,7 @@ export function validateLeaveApplication(
       text: `Insufficient balance. Available ${bal.available} day(s), requested ${netDays}.`,
     });
   } else if (!bal) {
-    messages.push({ tone: "warn", text: "No leave balance record found for this type — policy check skipped." });
+    messages.push({ tone: "warn", text: "No leave balance record found for this type - policy check skipped." });
   }
   if (cycle.info) {
     messages.push({ tone: "info", text: cycle.info });
@@ -532,7 +532,7 @@ export function validateLeaveApplication(
   if (overlap) {
     messages.push({
       tone: "error",
-      text: `Overlapping leave exists (${overlap.documentNumber}: ${overlap.fromDate}–${overlap.toDate}).`,
+      text: `Overlapping leave exists (${overlap.documentNumber}: ${overlap.fromDate}-${overlap.toDate}).`,
     });
   }
 
@@ -541,7 +541,7 @@ export function validateLeaveApplication(
     const probationEnd = new Date(join);
     probationEnd.setDate(probationEnd.getDate() + 90);
     if (new Date(payload.fromDate) < probationEnd && lt && !["SL", "CL"].includes(lt.code)) {
-      messages.push({ tone: "warn", text: "Employee may be in probation — some leave types restricted." });
+      messages.push({ tone: "warn", text: "Employee may be in probation - some leave types restricted." });
     }
   }
 
@@ -619,7 +619,7 @@ export async function applyLeave(payload: ApplyLeavePayload, dir: LeaveDirectory
   appendLeaveAudit({
     requestId: id,
     action: "leave_applied",
-    detail: `${emp?.label ?? payload.employeeId} · ${lt?.name ?? ""} · ${payload.fromDate}–${payload.toDate}`,
+    detail: `${emp?.label ?? payload.employeeId} · ${lt?.name ?? ""} · ${payload.fromDate}-${payload.toDate}`,
     actor: actor(),
   });
 }
@@ -820,7 +820,7 @@ export async function generateCarryForward(
       id: crypto.randomUUID(),
       employeeId: it.employee_id,
       employeeName: empById.get(it.employee_id)?.label ?? it.employee_id.slice(0, 8),
-      leaveTypeName: typeById.get(it.leave_type_id)?.name ?? "—",
+      leaveTypeName: typeById.get(it.leave_type_id)?.name ?? "-",
       unusedDays: it.unused_days,
       carriedDays: it.carried_days,
       maxAllowed: maxCarry,

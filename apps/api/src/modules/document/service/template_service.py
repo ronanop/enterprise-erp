@@ -1,4 +1,4 @@
-"""TemplateService — templates and template fields."""
+"""TemplateService - templates and template fields."""
 
 from uuid import UUID
 

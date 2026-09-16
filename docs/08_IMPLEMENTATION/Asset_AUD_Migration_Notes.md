@@ -1,4 +1,4 @@
-# FP-ASSET-008 — Migration Notes
+# FP-ASSET-008 - Migration Notes
 
 ## Revision
 

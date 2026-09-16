@@ -1,5 +1,5 @@
 /**
- * Onboarding policy documents — editable in Org Setup / eDoc, consumed by candidate portal.
+ * Onboarding policy documents - editable in Org Setup / eDoc, consumed by candidate portal.
  * Each policy can have written content and/or an uploaded PDF/file.
  *
  * Large PDFs are stored in IndexedDB (localStorage quota is ~5 MB and cannot hold
@@ -169,7 +169,7 @@ async function loadFromStorage(): Promise<OnboardingPolicyDoc[]> {
       await idbSetJson(STORAGE_KEY, fromLs);
       clearLocalStoragePolicies();
     } catch {
-      /* keep LS if IDB fails — may already be over quota */
+      /* keep LS if IDB fails - may already be over quota */
     }
     return cache;
   }

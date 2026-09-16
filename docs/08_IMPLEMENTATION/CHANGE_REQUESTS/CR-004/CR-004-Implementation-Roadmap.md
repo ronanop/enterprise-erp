@@ -1,12 +1,12 @@
-# CR-004 — Implementation Roadmap
+# CR-004 - Implementation Roadmap
 
-**Phase 1:** Analysis — Complete  
-**Phase 1.1:** Architecture Lock — Complete (`CR-004-Decision-Log.md`)  
-**Phases 2–7:** Implementation (not started)
+**Phase 1:** Analysis - Complete  
+**Phase 1.1:** Architecture Lock - Complete (`CR-004-Decision-Log.md`)  
+**Phases 2-7:** Implementation (not started)
 
 ---
 
-## Phase 2 — Backend foundation (data + read model)
+## Phase 2 - Backend foundation (data + read model)
 
 **Goal:** Persist operational status **without transition behavior** or user-facing commands.
 
@@ -26,7 +26,7 @@
 
 ---
 
-## Phase 3 — Operational status engine & workflow hooks
+## Phase 3 - Operational status engine & workflow hooks
 
 **Goal:** Enforce transition matrix; sole write path.
 
@@ -45,7 +45,7 @@
 
 ---
 
-## Phase 4 — IT register UX (filtered views)
+## Phase 4 - IT register UX (filtered views)
 
 **Goal:** Replace Excel tabs.
 
@@ -61,7 +61,7 @@
 
 ---
 
-## Phase 5 — Assignment enrichment
+## Phase 5 - Assignment enrichment
 
 | Deliverable | Notes |
 |-------------|-------|
@@ -71,7 +71,7 @@
 
 ---
 
-## Phase 6 — IT dashboard
+## Phase 6 - IT dashboard
 
 | Deliverable | Notes |
 |-------------|-------|
@@ -81,7 +81,7 @@
 
 ---
 
-## Phase 7 — Reporting, import, hardening
+## Phase 7 - Reporting, import, hardening
 
 | Deliverable | Notes |
 |-------------|-------|
@@ -93,7 +93,7 @@
 
 ---
 
-## Future enhancements (post Phase 7 — NOT in scope)
+## Future enhancements (post Phase 7 - NOT in scope)
 
 | Enhancement | Description |
 |-------------|-------------|

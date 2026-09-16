@@ -141,7 +141,7 @@ class DocumentValidator:
         parsed = urlparse(value)
         scheme = (parsed.scheme or "").lower()
         if not scheme:
-            # Relative path / object key without scheme — treat as opaque relative pointer.
+            # Relative path / object key without scheme - treat as opaque relative pointer.
             if value.startswith("//"):
                 raise DocumentValidationError("storage_uri scheme is not allowed")
             if len(value) > 500:

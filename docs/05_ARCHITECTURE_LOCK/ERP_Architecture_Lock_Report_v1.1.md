@@ -3,7 +3,7 @@
 **Document Type:** Final Architecture Approval & Sprint 0 Gate  
 **Prepared By:** CTO · Principal Enterprise Architect · ERP Product Architect · Software Governance Architect  
 **Date:** 2026-07-06  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Scope:** Multi-Industry Enterprise ERP Platform  
 
 ---
@@ -14,10 +14,10 @@ This report certifies that the enterprise documentation stack has reached **Arch
 
 | Document | Version | Status | Governance Role |
 |----------|---------|--------|-----------------|
-| **BRD** — Business Requirements Document | v1.0 | Architecture Baseline Approved | Business intent, scope, domain architecture, stakeholder requirements |
-| **FRD** — Functional Requirements (22 domains) | v1.0 | Architecture Approved (All 22 Domains Locked) | Functional behavior, workflows, acceptance criteria |
-| **SDD** — System Design Document | **v1.1** | Architecture Baseline Approved (ADR-002) | Application, technical, data, and infrastructure architecture |
-| **DBS** — Enterprise Database Standards | **v1.1** | Architecture Baseline Approved (ADR-002) | Database naming, table standards, ORM, migration governance |
+| **BRD** - Business Requirements Document | v1.0 | Architecture Baseline Approved | Business intent, scope, domain architecture, stakeholder requirements |
+| **FRD** - Functional Requirements (22 domains) | v1.0 | Architecture Approved (All 22 Domains Locked) | Functional behavior, workflows, acceptance criteria |
+| **SDD** - System Design Document | **v1.1** | Architecture Baseline Approved (ADR-002) | Application, technical, data, and infrastructure architecture |
+| **DBS** - Enterprise Database Standards | **v1.1** | Architecture Baseline Approved (ADR-002) | Database naming, table standards, ORM, migration governance |
 
 ### Key Architectural Decisions Locked
 
@@ -31,12 +31,12 @@ This report certifies that the enterprise documentation stack has reached **Arch
 | Layer | Completeness |
 |-------|--------------|
 | Business Architecture (BRD) | Complete |
-| Functional Architecture (FRD — 22 domains + Master FRD) | Complete |
-| System Architecture (SDD v1.1 — 4 volumes) | Complete |
+| Functional Architecture (FRD - 22 domains + Master FRD) | Complete |
+| System Architecture (SDD v1.1 - 4 volumes) | Complete |
 | Database Governance (DBS v1.1) | Complete |
-| Estimated documentation readiness | **~92–95%** |
+| Estimated documentation readiness | **~92-95%** |
 
-Remaining work is **implementation-oriented** (ERD, physical schema, Alembic migrations, OpenAPI specs, application scaffold) — not planning-oriented.
+Remaining work is **implementation-oriented** (ERD, physical schema, Alembic migrations, OpenAPI specs, application scaffold) - not planning-oriented.
 
 ### Hierarchy of Compliance
 
@@ -187,7 +187,7 @@ Database (PostgreSQL)
 
 ```text
 modules/<domain>/
-├── router.py          # FastAPI APIRouter — thin handlers only
+├── router.py          # FastAPI APIRouter - thin handlers only
 ├── schemas.py         # Pydantic v2 request/response models
 ├── service.py         # Application / service layer
 ├── domain/            # Entities, business rules
@@ -202,7 +202,7 @@ modules/<domain>/
 | Rule | Requirement |
 |------|-------------|
 | **DG-01** | No direct DB access from UI |
-| **DG-02** | No business logic in routers — handlers delegate to service layer |
+| **DG-02** | No business logic in routers - handlers delegate to service layer |
 | **DG-03** | All approvals through Workflow Engine |
 | **DG-04** | All notifications through Notification Engine |
 | **DG-05** | All integrations through Integration Hub |
@@ -237,15 +237,15 @@ modules/<domain>/
 
 Development must follow the **approved dependency chain**. No business module may be started until its upstream dependencies are implemented and verified.
 
-### Phase 1 — Platform Foundation (Sprint 0 → Sprint N)
+### Phase 1 - Platform Foundation (Sprint 0 → Sprint N)
 
 | Order | Module | FRD | Dependency |
 |-------|--------|-----|------------|
-| 1 | **Foundation** | FRD-01 | None — platform backbone |
+| 1 | **Foundation** | FRD-01 | None - platform backbone |
 | 2 | **Organization** | FRD-02 | Foundation |
 | 3 | **Master Data** | FRD-03 | Foundation, Organization |
 
-### Phase 2 — Foundation Sub-Services (within Foundation Domain)
+### Phase 2 - Foundation Sub-Services (within Foundation Domain)
 
 These are delivered as part of Foundation and must be operational before business modules:
 
@@ -257,7 +257,7 @@ These are delivered as part of Foundation and must be operational before busines
 | **Notification** | Multi-channel notifications (C-05) |
 | **Audit** | Central audit logging (C-06) |
 
-### Phase 3 — Business Modules (post-foundation gate)
+### Phase 3 - Business Modules (post-foundation gate)
 
 Per FRD Enterprise Dependency Chain:
 
@@ -286,7 +286,7 @@ Sales(06)   Sales(06)    Inventory(08) Payroll(10) E-Commerce(22)
                          Manufacturing(13) → Quality(14) → SCM(15)
 ```
 
-**Finance (FRD-04)** is the central financial sink — all revenue, cost, and asset modules post through Finance.
+**Finance (FRD-04)** is the central financial sink - all revenue, cost, and asset modules post through Finance.
 
 ---
 
@@ -317,11 +317,11 @@ All database design and implementation must comply with **DBS v1.1**. The follow
 Mandatory on all master and transaction tables:
 
 ```text
-created_at    TIMESTAMPTZ   — immutable
-created_by    UUID          — immutable
+created_at    TIMESTAMPTZ   - immutable
+created_by    UUID          - immutable
 updated_at    TIMESTAMPTZ
 updated_by    UUID
-version       INTEGER       — optimistic locking
+version       INTEGER       - optimistic locking
 ```
 
 ### Soft Delete
@@ -351,7 +351,7 @@ version       INTEGER       — optimistic locking
 | Composite indexes | Designed by query selectivity |
 | `SELECT *` | Prohibited |
 
-### Migrations — Alembic Only
+### Migrations - Alembic Only
 
 | Rule | Standard |
 |------|----------|
@@ -372,7 +372,7 @@ master_   trx_   ref_   audit_   hist_   wf_   cfg_   int_   ana_   ntf_   sch_ 
 - Declarative Model class names: **PascalCase**
 - Database tables and columns: **snake_case**
 - Models reside in infrastructure layer only
-- API schemas use Pydantic v2 — never expose ORM models directly
+- API schemas use Pydantic v2 - never expose ORM models directly
 
 ---
 
@@ -385,7 +385,7 @@ master_   trx_   ref_   audit_   hist_   wf_   cfg_   int_   ana_   ntf_   sch_ 
 | **JWT Access Token** | Short-lived API authentication |
 | **JWT Refresh Token** | Token renewal |
 | **Session Store** | Redis |
-| **MFA** | MFA Ready — OTP, TOTP support planned |
+| **MFA** | MFA Ready - OTP, TOTP support planned |
 | **SSO / OAuth** | Supported authentication methods |
 
 ### Authorization
@@ -403,7 +403,7 @@ master_   trx_   ref_   audit_   hist_   wf_   cfg_   int_   ana_   ntf_   sch_ 
 |---------|----------|
 | **Central Audit Service** | All auditable operations (C-06, DG-06) |
 | **Retention** | Minimum 10 years |
-| **Audit tables** | Append-only — no updates or deletes |
+| **Audit tables** | Append-only - no updates or deletes |
 | **Audited operations** | Create, Update, Soft Delete, Approve, Reject, Export, Import, Login, Logout, Role Change, Permission Change |
 
 ### Encryption
@@ -469,10 +469,10 @@ Any proposed architecture change must:
 
 | # | Gate Item | Status | Evidence |
 |---|-----------|--------|----------|
-| 1 | **BRD Approved** | ✅ PASS | `docs/01_BRD/ERP_BRD_v1.0.md` — business scope, domain architecture, module definitions |
-| 2 | **FRD Approved** | ✅ PASS | 22 domain FRDs + `Master-FRD.md` — all domains architecture-approved and locked |
-| 3 | **SDD Approved** | ✅ PASS | `docs/03_SDD/ERP_SDD_v1.0.md` v1.1 — ADR-001, ADR-002, 4 volumes complete |
-| 4 | **DBS Approved** | ✅ PASS | `docs/04_DBS/ERP_DBS_v1.0.md` v1.1 — SQLAlchemy 2.0 / Alembic aligned to ADR-002 |
+| 1 | **BRD Approved** | ✅ PASS | `docs/01_BRD/ERP_BRD_v1.0.md` - business scope, domain architecture, module definitions |
+| 2 | **FRD Approved** | ✅ PASS | 22 domain FRDs + `Master-FRD.md` - all domains architecture-approved and locked |
+| 3 | **SDD Approved** | ✅ PASS | `docs/03_SDD/ERP_SDD_v1.0.md` v1.1 - ADR-001, ADR-002, 4 volumes complete |
+| 4 | **DBS Approved** | ✅ PASS | `docs/04_DBS/ERP_DBS_v1.0.md` v1.1 - SQLAlchemy 2.0 / Alembic aligned to ADR-002 |
 | 5 | **Tech Stack Approved** | ✅ PASS | ADR-002 locked: Python/FastAPI/SQLAlchemy/Alembic/Celery + Next.js 16+ frontend |
 | 6 | **Repository Ready** | ✅ PASS | Documentation monorepo established; SDD-defined `apps/api/src/` structure approved for Sprint 0 scaffold |
 
@@ -491,7 +491,7 @@ Any proposed architecture change must:
 
 | Artifact | Owner | Status |
 |----------|-------|--------|
-| Enterprise ERD | Data Architecture | Pending — next phase per DBS |
+| Enterprise ERD | Data Architecture | Pending - next phase per DBS |
 | Physical Database Schema | Data Architecture | Pending |
 | OpenAPI Specifications | Solution Architecture | Pending |
 | Alembic initial migration | Development | Pending (Sprint 0) |
@@ -506,7 +506,7 @@ Having reviewed BRD v1.0, FRD v1.0 (22 domains), SDD v1.1 (ADR-001 + ADR-002), a
 - **Technology stack** (Python/FastAPI/SQLAlchemy/Alembic/Celery + Next.js 16+) is locked
 - **Database governance** (PostgreSQL, UUID, tenant isolation, audit, soft delete, Alembic-only) is locked
 - **Security baseline** (JWT, RBAC, MFA-ready, audit logging, encryption) is locked
-- **Development guardrails** (DG-01–06, PY-01–07, C-01–06) are mandatory
+- **Development guardrails** (DG-01-06, PY-01-07, C-01-06) are mandatory
 - **Module development order** (Foundation → Organization → Master Data → Platform Services → Business Modules) is locked
 - **Forbidden changes** are documented and enforceable
 

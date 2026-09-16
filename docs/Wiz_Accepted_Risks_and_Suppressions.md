@@ -28,7 +28,7 @@ Suggested Wiz resolution reasons:
 
 ---
 
-## A. Recurring SAST — accept / suppress
+## A. Recurring SAST - accept / suppress
 
 ### A1. Path Traversal (Node.js / TypeScript)
 
@@ -98,7 +98,7 @@ Suggested Wiz resolution reasons:
 | **Rule name** | `Arbitrary Code Execution via Insecure Import` |
 | **Path** | `apps/api/scripts/expand_response_schemas.py` |
 | **Decision** | **Out of Scope** / **Risk Accepted** |
-| **Rationale** | Offline codegen utility under `apps/api/scripts/`. Module names come from `pkgutil.walk_packages` and are allowlisted with `_MODEL_MOD_RE` + `modules.*.models*` prefix checks — not HTTP user input. Not part of the FastAPI runtime image entrypoint. |
+| **Rationale** | Offline codegen utility under `apps/api/scripts/`. Module names come from `pkgutil.walk_packages` and are allowlisted with `_MODEL_MOD_RE` + `modules.*.models*` prefix checks - not HTTP user input. Not part of the FastAPI runtime image entrypoint. |
 | **Wiz note** | `Out of scope: offline allowlisted importlib in codegen script, not runtime API. docs/Wiz_Accepted_Risks_and_Suppressions.md §A7.` |
 
 ### A8. Caught Error Details Written to Console
@@ -123,7 +123,7 @@ Suggested Wiz resolution reasons:
 
 ---
 
-## B. Recurring SCA / dependency CVEs — accept or re-verify
+## B. Recurring SCA / dependency CVEs - accept or re-verify
 
 ### B1. `image-size` (CVE-2025-71329 / CVE-2025-71330)
 
@@ -134,7 +134,7 @@ Suggested Wiz resolution reasons:
 | **Mitigation applied** | npm override: `"image-size": "npm:image-size-safe@2.0.3"` |
 | **Rationale** | Official `image-size@2.0.3` was never published on npm; all upstream versions ≤2.0.2 remain vulnerable. Security fork `image-size-safe@2.0.3` is pinned via override. Wiz may still label the package as `image-size`. |
 | **Wiz note** | `Risk accepted: upstream image-size has no published patch; overridden to image-size-safe@2.0.3. Re-check when image-size>=2.0.3 exists on npm. docs/Wiz_Accepted_Risks_and_Suppressions.md §B1.` |
-| **Re-open when** | Official `image-size` ≥ 2.0.3 is published — then drop the fork alias. |
+| **Re-open when** | Official `image-size` ≥ 2.0.3 is published - then drop the fork alias. |
 
 ### B2. Transitive npm packages (keep overrides current)
 
@@ -179,16 +179,16 @@ Production focus:
 ## D. Quick paste cards (for Wiz UI)
 
 ```
-[A1 PATH] FP — resolveWithinRoot containment; .cursor/skills not in runtime. Ref §A1.
-[A2 CSV] FP — _csv_cell formula neutralization. Ref §A2.
-[A3 HREF] FP — safeAppHref/safeEntityHref. Ref §A3.
-[A4 PROTO] FP — isSafeObjectKey. Ref §A4.
-[A5 AUTH] Accepted — intentional public health/SSO; optional_authentication. Ref §A5.
-[A6 JWT] Accepted — Entra RS256 required. Informational. Ref §A6.
-[A7 IMPORT] OOS — allowlisted codegen script. Ref §A7.
-[A8 CONSOLE] OOS — skill CLI only. Ref §A8.
-[A9 REDOS] OOS — local skill on trusted markdown. Ref §A9.
-[B1 IMAGE] Accepted — image-size-safe@2.0.3 override; no upstream patch. Ref §B1.
+[A1 PATH] FP - resolveWithinRoot containment; .cursor/skills not in runtime. Ref §A1.
+[A2 CSV] FP - _csv_cell formula neutralization. Ref §A2.
+[A3 HREF] FP - safeAppHref/safeEntityHref. Ref §A3.
+[A4 PROTO] FP - isSafeObjectKey. Ref §A4.
+[A5 AUTH] Accepted - intentional public health/SSO; optional_authentication. Ref §A5.
+[A6 JWT] Accepted - Entra RS256 required. Informational. Ref §A6.
+[A7 IMPORT] OOS - allowlisted codegen script. Ref §A7.
+[A8 CONSOLE] OOS - skill CLI only. Ref §A8.
+[A9 REDOS] OOS - local skill on trusted markdown. Ref §A9.
+[B1 IMAGE] Accepted - image-size-safe@2.0.3 override; no upstream patch. Ref §B1.
 ```
 
 ---
@@ -198,7 +198,7 @@ Production focus:
 | Trigger | Action |
 |---|---|
 | New Wiz report | Match against this doc first; only open tickets for **new** rules or **unpinned** CVEs |
-| Quarterly | Re-validate A5–A6 and B1 with security owner |
+| Quarterly | Re-validate A5-A6 and B1 with security owner |
 | `image-size` upstream release | Replace fork override; close B1 |
 | New public API route | Must either require auth or be added here under A5 with justification |
 

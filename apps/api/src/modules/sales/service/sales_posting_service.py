@@ -1,4 +1,4 @@
-"""Sales finance posting — invoice AR / return credit note."""
+"""Sales finance posting - invoice AR / return credit note."""
 
 from datetime import datetime, timezone
 from decimal import Decimal

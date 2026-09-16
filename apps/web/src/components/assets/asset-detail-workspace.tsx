@@ -66,7 +66,7 @@ type Tab = "overview" | "assignments" | "maintenance" | "documents" | "activity"
 
 function displayText(value: unknown): string {
   if (typeof value === "string" && value.trim()) return value.trim();
-  return "—";
+  return "-";
 }
 
 export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
@@ -88,7 +88,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [employeeLookup, setEmployeeLookup] = useState<EmployeeLookup>({});
   const [currentLocationLabel, setCurrentLocationLabel] = useState<string | null>(null);
-  const [branchLabel, setBranchLabel] = useState<string>("—");
+  const [branchLabel, setBranchLabel] = useState<string>("-");
   const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false);
 
   const load = useCallback(async () => {
@@ -136,7 +136,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
       setCurrentLocationLabel(currentLoc?.location_label ?? null);
       const branchId = String(row.branch_id ?? "");
       const branchMatch = branches.find((b) => b.id === branchId);
-      setBranchLabel(branchMatch?.label ?? (branchId ? branchId.slice(0, 8) : "—"));
+      setBranchLabel(branchMatch?.label ?? (branchId ? branchId.slice(0, 8) : "-"));
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load asset");
       setAsset(null);
@@ -217,7 +217,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
       expandable,
       currentHolder: active
         ? resolveAssigneeLabel(active, employeeLookup)
-        : "—",
+        : "-",
       employeeId: resolveEmployeeCode(employeeId, employeeLookup),
       phone: resolveEmployeeMobile(employeeId, employeeLookup),
       issuedDate: formatIssuedDate(
@@ -230,7 +230,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
   }, [assignments, employeeLookup]);
 
   const itRegistration = useMemo(
-    () => (asset ? resolveItRegistrationFields(asset) : { make: "—", model: "—", configuration: "—" }),
+    () => (asset ? resolveItRegistrationFields(asset) : { make: "-", model: "-", configuration: "-" }),
     [asset],
   );
 
@@ -423,7 +423,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
                       status={String(asset.operational_status)}
                     />
                   ) : (
-                    String(asset.operational_status ?? "—")
+                    String(asset.operational_status ?? "-")
                   )}
                 </span>
               </p>
@@ -435,7 +435,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
               <p>
                 <span className="text-muted-foreground">Lifecycle Status: </span>
                 <span data-testid="asset-detail-lifecycle-status">
-                  <StatusBadge kind="lifecycle" status={String(asset.status ?? "—")} />
+                  <StatusBadge kind="lifecycle" status={String(asset.status ?? "-")} />
                 </span>
               </p>
               {String(asset.status ?? "").toLowerCase() === "in_maintenance" ? (
@@ -513,7 +513,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
               <p>
                 <span className="text-muted-foreground">Current Location: </span>
                 <span data-testid="asset-detail-current-location">
-                  {currentLocationLabel?.trim() || "—"}
+                  {currentLocationLabel?.trim() || "-"}
                 </span>
               </p>
             </CardContent>
@@ -555,7 +555,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
                         </div>
                       ) : null}
                       <div className="text-xs text-muted-foreground">
-                        S/N: {c.serial_number?.trim() || "—"}
+                        S/N: {c.serial_number?.trim() || "-"}
                       </div>
                       <Badge variant="secondary" className="mt-1">
                         {c.status}
@@ -755,7 +755,7 @@ function AssignmentHistoryDetailList({
               <td className="px-3 py-2">
                 {row.deliveryChallanSummary ||
                   `${row.deliveryReferenceNumber}${
-                    row.deliveryReferenceStatus !== "—"
+                    row.deliveryReferenceStatus !== "-"
                       ? ` (${row.deliveryReferenceStatus})`
                       : ""
                   }`}
@@ -801,7 +801,7 @@ function HistoryList({
             <tr key={String(row.id)} className="border-t">
               {columns.map((c) => (
                 <td key={c} className="px-3 py-2">
-                  {String(row[c] ?? "—")}
+                  {String(row[c] ?? "-")}
                 </td>
               ))}
             </tr>

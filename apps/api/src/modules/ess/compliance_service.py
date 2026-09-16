@@ -1,4 +1,4 @@
-"""ESS Phase 6 — policies, acknowledgments, password change."""
+"""ESS Phase 6 - policies, acknowledgments, password change."""
 
 from __future__ import annotations
 

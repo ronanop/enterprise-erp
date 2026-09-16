@@ -163,7 +163,7 @@ export function EmployeeManagementPage() {
   async function runBulk(status: EmployeeRecord["lifecycleStatus"], title: string) {
     if (!selectedRecords.length) return;
     await Promise.all(selectedRecords.map((r) => setEmployeeLifecycleStatus(r, status, title)));
-    toast(`${title} — ${selectedRecords.length} employee(s)`, "success");
+    toast(`${title} - ${selectedRecords.length} employee(s)`, "success");
     setSelected(new Set());
     void load();
   }
@@ -580,7 +580,7 @@ export function EmployeeManagementPage() {
                                     setConfirm({
                                       title: "Archive Employee",
                                       message:
-                                        "Soft delete — status becomes archived. Record is retained.",
+                                        "Soft delete - status becomes archived. Record is retained.",
                                       action: async () => {
                                         await setEmployeeLifecycleStatus(row, "archived", "Archived");
                                         await load();

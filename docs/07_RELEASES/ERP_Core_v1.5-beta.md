@@ -1,15 +1,15 @@
-# ERP Core v1.5-beta — Release Notes
+# ERP Core v1.5-beta - Release Notes
 
 | Field | Value |
 |-------|--------|
 | **Document Type** | Enterprise Release Notes |
 | **Release Name** | ERP Core v1.5-beta |
 | **Release Status** | Beta Development Release |
-| **Architecture Lock** | v1.1 — Maintained |
+| **Architecture Lock** | v1.1 - Maintained |
 | **Prepared As** | Enterprise Solution Architect · ERP Product Architect · Technical Documentation Lead · Release Manager · Principal Software Engineer |
-| **Classification** | Internal — Confidential |
+| **Classification** | Internal - Confidential |
 | **Predecessor** | [ERP Core v1.4-beta](./ERP_Core_v1.4-beta.md) |
-| **Ready For** | Sprint 11 — Human Resource Management (HRMS) |
+| **Ready For** | Sprint 11 - Human Resource Management (HRMS) |
 
 ---
 
@@ -21,18 +21,18 @@
 | **Status** | Beta Development Release |
 | **Date** | 2026-07-14 |
 | **Previous Release** | ERP Core v1.4-beta |
-| **Architecture Lock** | v1.1 — Preserved |
+| **Architecture Lock** | v1.1 - Preserved |
 | **Recommended Git Tag** | `v1.5-beta` |
 
 ---
 
 ## 2. Sprint 10 Highlights
 
-Sprint 10 delivered the **CRM (Customer Relationship Management)** domain (FRD-05 / ERD_10) as the enterprise customer-relationship layer — without duplicating `master_customer` (C-01) and without writing Sales, Finance, or Quality tables directly.
+Sprint 10 delivered the **CRM (Customer Relationship Management)** domain (FRD-05 / ERD_10) as the enterprise customer-relationship layer - without duplicating `master_customer` (C-01) and without writing Sales, Finance, or Quality tables directly.
 
 | Capability | Delivery |
 |------------|----------|
-| **CRM Module** | `apps/api/src/modules/crm/` — Clean Architecture package (domain, models, repositories, engines, services, routers, adapters, tasks) |
+| **CRM Module** | `apps/api/src/modules/crm/` - Clean Architecture package (domain, models, repositories, engines, services, routers, adapters, tasks) |
 | **Lead Management** | Lead capture, qualification fields, convert lifecycle |
 | **Lead Assignment** | Manual / automatic assignment trail with supersede |
 | **Lead Activities** | Call, meeting, email, task, follow-up, note activity log |
@@ -64,7 +64,7 @@ Sprint 10 delivered the **CRM (Customer Relationship Management)** domain (FRD-0
 
 **Tables:** `crm_lead_source`, `crm_pipeline`, `crm_campaign`, `crm_lead`, `crm_lead_assignment`, `crm_lead_activity`, `crm_opportunity`, `crm_opportunity_stage`, `crm_campaign_member`, `crm_interaction`, `crm_task`, `crm_followup`, `crm_meeting`, `crm_call_log`, `crm_email_log`, `crm_visit_log`, `crm_customer_feedback`, `crm_customer_satisfaction`.
 
-**API mount:** `/api/v1/crm` — lead-sources, leads (+ assign / convert), lead-assignments, lead-activities, pipelines, opportunities (+ close-won / close-lost), opportunity-stages, campaigns (+ activate / members), campaign-members, interactions, tasks, followups, meetings, call-logs, email-logs, visit-logs, customer-feedback, customer-satisfaction, reports.
+**API mount:** `/api/v1/crm` - lead-sources, leads (+ assign / convert), lead-assignments, lead-activities, pipelines, opportunities (+ close-won / close-lost), opportunity-stages, campaigns (+ activate / members), campaign-members, interactions, tasks, followups, meetings, call-logs, email-logs, visit-logs, customer-feedback, customer-satisfaction, reports.
 
 ---
 
@@ -75,9 +75,9 @@ CRM **never** duplicates customer master and **never** writes `sales_*`, finance
 | Module | Integration |
 |--------|-------------|
 | **Master Data** | **`master_customer` only (C-01)**; lead conversion via `CrmMasterDataAdapter` → `CustomerService`; no CRM customer / contact master table |
-| **Sales** | Won opportunity → `CrmSalesAdapter` → `QuotationService`; CRM stores only `sales_quotation_id` / `sales_order_id` UUID — **no FK** to `sales_*` |
-| **Finance** | Customer credit **read** via Sales `CustomerCreditService` only — never writes finance tables |
-| **Quality** | Feedback / satisfaction may hold Quality UUID refs only — **no `qm_*` FK**; never writes quality tables |
+| **Sales** | Won opportunity → `CrmSalesAdapter` → `QuotationService`; CRM stores only `sales_quotation_id` / `sales_order_id` UUID - **no FK** to `sales_*` |
+| **Finance** | Customer credit **read** via Sales `CustomerCreditService` only - never writes finance tables |
+| **Quality** | Feedback / satisfaction may hold Quality UUID refs only - **no `qm_*` FK**; never writes quality tables |
 | **Foundation** | **Workflow** (`CRM_LEAD_CONVERSION`, `CRM_OPPORTUNITY_CLOSE`, `CRM_CAMPAIGN_ACTIVATION`); **Audit** on lead / opportunity / campaign events; **RBAC** (`crm.*` permissions; roles `CRM_SALES_REP`, `CRM_SALES_MANAGER`, `CRM_MARKETING`, `CRM_ADMIN` with `status='active'`) |
 
 ---
@@ -116,8 +116,8 @@ Swagger (`/docs`) and OpenAPI (`/openapi.json`) both return **200**; CRM APIs ar
 
 | Gate | Status |
 |------|--------|
-| **Alembic Upgrade** | **PASS** — head `0156_seed_crm_workflows` |
-| **FastAPI Startup** | **PASS** — Application startup complete |
+| **Alembic Upgrade** | **PASS** - head `0156_seed_crm_workflows` |
+| **FastAPI Startup** | **PASS** - Application startup complete |
 | **Swagger** | **PASS** (`/docs` 200) |
 | **OpenAPI** | **PASS** (`/openapi.json` 200) |
 | **Ruff** | **PASS** |
@@ -139,7 +139,7 @@ Validation completed successfully. Head `0156_seed_crm_workflows` confirmed, app
 
 | Principle | Confirmation |
 |-----------|--------------|
-| **Architecture Lock v1.1** | **Preserved** — no Architecture Lock changes |
+| **Architecture Lock v1.1** | **Preserved** - no Architecture Lock changes |
 | **No redesign** | Prior sprints unmodified except required integration wiring (router / Celery / Alembic env / mypy package registration) |
 | **Clean Architecture** | Router → Service → Repository → Database maintained |
 | **DDD** | CRM domain enums, exceptions, entities, value objects, engines |
@@ -154,10 +154,10 @@ Stack unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreSQL · Redis · 
 | Attribute | Value |
 |-----------|--------|
 | **Next Release** | ERP Core **v1.6-beta** (planned) |
-| **Sprint** | **Sprint 11 — Human Resource Management (HRMS)** |
+| **Sprint** | **Sprint 11 - Human Resource Management (HRMS)** |
 | **Primary FRD** | FRD-09 HR Domain (planned) |
 
-**Planned scope (planning only — no implementation in this release):**
+**Planned scope (planning only - no implementation in this release):**
 
 - Employee Management
 - Departments
@@ -184,8 +184,8 @@ Stack unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreSQL · Redis · 
 | **Alembic head** | **`0156_seed_crm_workflows`** |
 | **Tests** | **158 passed** |
 | **Routes** | **497** FastAPI · **344** OpenAPI · **52** CRM · **34** CRM OpenAPI |
-| **Quality gates** | Alembic · FastAPI · Swagger · OpenAPI · Ruff · MyPy · Pytest — **ALL PASS** |
-| **Next** | **Sprint 11 — Human Resource Management (HRMS)** |
+| **Quality gates** | Alembic · FastAPI · Swagger · OpenAPI · Ruff · MyPy · Pytest - **ALL PASS** |
+| **Next** | **Sprint 11 - Human Resource Management (HRMS)** |
 | **Ready for Git Tag** | **`v1.5-beta`** |
 
 ---
@@ -194,12 +194,12 @@ Stack unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreSQL · Redis · 
 
 | Version | Date | Scope | Alembic Head | Tests |
 |---------|------|--------|--------------|-------|
-| **v1.0-alpha** | 2026-07-13 | Sprints 0–5 (Foundation → Sales) | `0055_seed_sales_workflows` | 77 passed |
-| **v1.1-beta** | 2026-07-13 | Sprints 0–6 (+ Procurement P2P) | `0077_seed_proc_workflows` | 99 passed |
-| **v1.2-beta** | 2026-07-13 | Sprints 0–7 (+ Inventory & Warehouse) | `0094_seed_inv_workflows` | 113 passed |
-| **v1.3-beta** | 2026-07-14 | Sprints 0–8 (+ Manufacturing & Production) | `0114_seed_mfg_workflows` | 127 passed |
-| **v1.4-beta** | 2026-07-14 | Sprints 0–9 (+ Quality Management) | `0135_seed_qm_workflows` | 146 passed |
-| **v1.5-beta** | 2026-07-14 | Sprints 0–10 (+ CRM) | `0156_seed_crm_workflows` | 158 passed |
+| **v1.0-alpha** | 2026-07-13 | Sprints 0-5 (Foundation → Sales) | `0055_seed_sales_workflows` | 77 passed |
+| **v1.1-beta** | 2026-07-13 | Sprints 0-6 (+ Procurement P2P) | `0077_seed_proc_workflows` | 99 passed |
+| **v1.2-beta** | 2026-07-13 | Sprints 0-7 (+ Inventory & Warehouse) | `0094_seed_inv_workflows` | 113 passed |
+| **v1.3-beta** | 2026-07-14 | Sprints 0-8 (+ Manufacturing & Production) | `0114_seed_mfg_workflows` | 127 passed |
+| **v1.4-beta** | 2026-07-14 | Sprints 0-9 (+ Quality Management) | `0135_seed_qm_workflows` | 146 passed |
+| **v1.5-beta** | 2026-07-14 | Sprints 0-10 (+ CRM) | `0156_seed_crm_workflows` | 158 passed |
 
 ```text
 v1.4-beta ──(+ Sprint 10 CRM)──► v1.5-beta ──► Sprint 11 HRMS (planned)

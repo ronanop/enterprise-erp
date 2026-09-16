@@ -186,7 +186,7 @@ export function AssetDiscoveryPanel({
         <div className="space-y-1.5">
           <Label>Discovery command</Label>
           <pre className="max-h-28 overflow-auto rounded-md border bg-muted/40 p-2 text-[11px] leading-relaxed whitespace-pre-wrap break-all">
-            {loadingCommand ? "Loading command…" : command || "—"}
+            {loadingCommand ? "Loading command…" : command || "-"}
           </pre>
         </div>
 
@@ -241,8 +241,8 @@ export function AssetDiscoveryPanel({
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              Serial: {preview.current_serial_number ?? "—"} →{" "}
-              {preview.proposed_serial_number ?? "—"}
+              Serial: {preview.current_serial_number ?? "-"} →{" "}
+              {preview.proposed_serial_number ?? "-"}
             </p>
             <ChangeTable changes={preview.changes} />
             <pre className="max-h-40 overflow-auto rounded-md border bg-muted/30 p-2 text-[11px]">
@@ -295,7 +295,7 @@ function ChangeTable({ changes }: { changes: DiscoveryChangeItem[] }) {
 }
 
 function formatValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "—";
+  if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }

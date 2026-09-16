@@ -1,6 +1,6 @@
-"""Leave cycle apply rules: calendar month 1–31, credit after month end.
+"""Leave cycle apply rules: calendar month 1-31, credit after month end.
 
-Payroll 20–20 is separate. Leave dates belong to the calendar month of each day.
+Payroll 20-20 is separate. Leave dates belong to the calendar month of each day.
 Monthly credit for month M posts after M ends (typically on the 1st of M+1).
 Until then, that month's credit cannot be used. After it posts, past leave dates
 in M may be applied/covered using the newly credited balance.
@@ -64,7 +64,7 @@ def assert_no_future_calendar_month_leave(
         if (d.year, d.month) > (ref.year, ref.month):
             raise InvalidLeaveRequestState(
                 "Cannot apply leave for a future calendar month before it starts. "
-                "Leave cycle is calendar 1–last day (not payroll 20–20). "
+                "Leave cycle is calendar 1-last day (not payroll 20-20). "
                 "Monthly leave credit for a month is added after that month ends; "
                 "after credit posts you may apply leave for past dates in that month."
             )
@@ -94,7 +94,7 @@ def months_waiting_on_unposted_credit(
         if completed < month:
             waiting.append(month)
             continue
-        # Month finished but accrual job not recorded yet — still waiting
+        # Month finished but accrual job not recorded yet - still waiting
         waiting.append(month)
     return waiting
 
@@ -140,7 +140,7 @@ def assert_leave_balance_for_cycle(
             raise InvalidLeaveRequestState(
                 f"Insufficient leave balance ({available} available, {days} required). "
                 f"Monthly credit for {month} is added on or after {credit_on.isoformat()} "
-                f"(after that calendar month ends — leave cycle 1–last day, not payroll 20–20). "
+                f"(after that calendar month ends - leave cycle 1-last day, not payroll 20-20). "
                 f"You cannot use that credit early. After it posts, you may apply leave for "
                 f"these dates (including past dates such as {month}-21…)."
             )

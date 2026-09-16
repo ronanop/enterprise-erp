@@ -21,7 +21,7 @@ import {
 } from "@/services/service-request-ticket-service";
 
 const solutionLabel = (value: string | null) =>
-  SOLUTION_TYPES.find((s) => s.value === value)?.label ?? (value ? formatStatus(value) : "—");
+  SOLUTION_TYPES.find((s) => s.value === value)?.label ?? (value ? formatStatus(value) : "-");
 
 export function ServiceResolvedTicketsPage() {
   const router = useRouter();
@@ -173,7 +173,7 @@ export function ServiceResolvedTicketsPage() {
                       </Link>
                     </td>
                     <td className="max-w-[160px] truncate px-3 py-2">{row.subject}</td>
-                    <td className="px-3 py-2">{row.owner_name ?? "—"}</td>
+                    <td className="px-3 py-2">{row.owner_name ?? "-"}</td>
                     <td className="px-3 py-2">
                       <FinanceStatusBadge status={row.priority} />
                     </td>
@@ -182,13 +182,13 @@ export function ServiceResolvedTicketsPage() {
                     </td>
                     <td className="px-3 py-2">{solutionLabel(row.solution_type)}</td>
                     <td className="max-w-[220px] truncate px-3 py-2 text-muted-foreground">
-                      {row.solution_summary ?? "—"}
+                      {row.solution_summary ?? "-"}
                     </td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">
-                      {row.resolved_at?.slice(0, 16).replace("T", " ") ?? "—"}
+                      {row.resolved_at?.slice(0, 16).replace("T", " ") ?? "-"}
                     </td>
                     <td className="px-3 py-2 text-xs text-muted-foreground">
-                      {row.closed_at?.slice(0, 16).replace("T", " ") ?? "—"}
+                      {row.closed_at?.slice(0, 16).replace("T", " ") ?? "-"}
                     </td>
                   </tr>
                 ))

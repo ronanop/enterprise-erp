@@ -54,7 +54,7 @@ function parseListPayload<T>(data: unknown): ListPayload<T> {
 }
 
 function formatDateTime(value?: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return value.slice(0, 16).replace("T", " ");
 }
 
@@ -444,7 +444,7 @@ export function AssetMeterReadingWorkspace() {
                       </SelectItem>
                       {assetOptions.map((asset) => (
                         <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                          {asset.asset_code} — {asset.asset_name}
+                          {asset.asset_code} - {asset.asset_name}
                         </SelectItem>
                       ))}
                     </SelectContent>

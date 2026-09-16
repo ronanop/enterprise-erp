@@ -8,7 +8,7 @@ import { ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-/** CRM data table column header row — high contrast, readable at a glance. */
+/** CRM data table column header row - high contrast, readable at a glance. */
 export const CRM_TABLE_HEAD_ROW = cn(
   "border-b border-border/80 bg-muted/60 text-xs font-extrabold tracking-wide text-foreground uppercase sm:text-[13px]",
 );
@@ -23,7 +23,7 @@ export const CRM_SECTION_TITLE = cn(
   "text-base font-extrabold tracking-tight text-foreground break-words",
 );
 
-/** Page vertical rhythm — matches CRM dashboard. */
+/** Page vertical rhythm - matches CRM dashboard. */
 export function CrmPage({
   children,
   className,
@@ -115,7 +115,7 @@ export function CrmSection({
   );
 }
 
-/** Card shell for list tables — border + shadow only; toolbar is separate. */
+/** Card shell for list tables - border + shadow only; toolbar is separate. */
 export function CrmListPanel({
   children,
   className,

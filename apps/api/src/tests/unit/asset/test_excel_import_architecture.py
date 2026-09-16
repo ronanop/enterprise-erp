@@ -58,7 +58,7 @@ def test_import_ops_align_with_domain_enum() -> None:
 
 
 def test_ready_to_retired_still_blocked_in_matrix() -> None:
-    """Import must use assignment return path — not direct READY→RETIRED."""
+    """Import must use assignment return path - not direct READY→RETIRED."""
     ready = AssetOperationalStatus.READY_TO_MOVE.value
     retired = AssetOperationalStatus.RETIRED.value
     assert (ready, retired) not in ALLOWED_OPERATIONAL_TRANSITIONS

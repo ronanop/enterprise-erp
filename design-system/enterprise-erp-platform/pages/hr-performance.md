@@ -1,4 +1,4 @@
-# HR Performance — Page Override
+# HR Performance - Page Override
 
 > Follow MASTER tokens. Layout notes for the PMS hub only.
 
@@ -26,4 +26,4 @@ No purple gradients; light mode by default.
 
 ## Density
 
-High; Lucide icons; 150–300ms transitions.
+High; Lucide icons; 150-300ms transitions.

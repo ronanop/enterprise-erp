@@ -140,7 +140,7 @@ export default function LeaveDetailsPage() {
                       ? "Awaiting manager"
                       : rejected
                         ? "Declined"
-                        : "—"
+                        : "-"
                 }
                 done={managerApproved || approved || rejected}
                 active={pending}
@@ -267,5 +267,5 @@ function formatRange(start: string, end: string) {
     day: "numeric",
   };
   if (start === end) return s.toLocaleDateString(undefined, opts);
-  return `${s.toLocaleDateString(undefined, opts)} — ${e.toLocaleDateString(undefined, opts)}`;
+  return `${s.toLocaleDateString(undefined, opts)} - ${e.toLocaleDateString(undefined, opts)}`;
 }

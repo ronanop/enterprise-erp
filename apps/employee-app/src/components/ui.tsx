@@ -224,7 +224,7 @@ export function FieldRow({ label, value }: { label: string; value: string }) {
     <div className={`${ui.listRow} justify-between text-sm`}>
       <span className={ui.muted}>{label}</span>
       <span className="max-w-[62%] truncate text-right font-semibold capitalize text-[#0b1c30]">
-        {value || "—"}
+        {value || "-"}
       </span>
     </div>
   );

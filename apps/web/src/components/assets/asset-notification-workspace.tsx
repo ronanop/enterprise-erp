@@ -421,15 +421,15 @@ export function AssetNotificationWorkspace() {
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">Recipient user</dt>
-                    <dd>{selected.recipient_user_id ?? "—"}</dd>
+                    <dd>{selected.recipient_user_id ?? "-"}</dd>
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">Recipient employee</dt>
-                    <dd>{selected.recipient_employee_id ?? "—"}</dd>
+                    <dd>{selected.recipient_employee_id ?? "-"}</dd>
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">Sent at</dt>
-                    <dd>{selected.sent_at ?? "—"}</dd>
+                    <dd>{selected.sent_at ?? "-"}</dd>
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">Payload</dt>

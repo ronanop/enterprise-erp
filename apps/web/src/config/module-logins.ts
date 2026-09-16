@@ -52,7 +52,7 @@ export const adminLoginAccounts: AdminLoginAccount[] = [
 ];
 
 /**
- * Service workflow demo team — mirrors production roles after SSO assignment:
+ * Service workflow demo team - mirrors production roles after SSO assignment:
  * ERP admin → Service Head (module admin); Head → Service Engineers (module members).
  */
 export const serviceTeamLoginAccounts: ServiceTeamLoginAccount[] = [
@@ -76,7 +76,7 @@ export const serviceTeamLoginAccounts: ServiceTeamLoginAccount[] = [
   },
 ];
 
-/** One demo user per ERP module — email uses the module registry key. */
+/** One demo user per ERP module - email uses the module registry key. */
 export const moduleLoginAccounts: ModuleLoginAccount[] = erpModules.map((mod) => ({
   email: `${mod.key}.user@example.com`,
   displayName: `${mod.title} User`,

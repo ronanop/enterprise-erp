@@ -440,7 +440,7 @@ export default function AttendanceScreen() {
             <View key={row.id} style={styles.activity}>
               <View style={styles.activityIcon}><IconClock size={18} color={colors.onSurfaceVariant} /></View>
               <View style={styles.activityCopy}>
-                <Text style={styles.activityTitle}>Clock In — Office</Text>
+                <Text style={styles.activityTitle}>Clock In - Office</Text>
                 <Text style={styles.activityMeta}>{row.attendance_date}, {formatTime(row.check_in_at)}</Text>
               </View>
               <Text style={styles.activityVerified}>Verified</Text>

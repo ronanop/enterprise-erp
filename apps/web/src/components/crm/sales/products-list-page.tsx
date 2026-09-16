@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Package, Plus } from "lucide-react";
 
-import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { FinanceField, FinanceSelect } from "@/components/finance/journals/finance-form-field";
 import {
   RequiredFieldsDialog,
@@ -133,13 +133,8 @@ export function ProductsListPage({
       {!embedded ? (
         <PageHeader
           title="Products"
-          description="Product / SKU catalog used on Quote and OVF lines."
           actions={actions}
         />
-      ) : null}
-
-      {companyAccountId ? (
-        <CrmInfoBanner>Product catalog is shared across companies.</CrmInfoBanner>
       ) : null}
 
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
@@ -192,7 +187,7 @@ export function ProductsListPage({
                         {row.product_type}
                       </Badge>
                     </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{row.hsn_sac ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{row.hsn_sac ?? "-"}</td>
                     <td className="px-4 py-2.5">{formatInrPrecise(row.unit_price)}</td>
                     <td className="px-4 py-2.5">
                       <FinanceStatusBadge status={row.status} />

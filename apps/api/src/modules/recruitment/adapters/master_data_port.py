@@ -1,4 +1,4 @@
-"""Master Data port — create employee only at onboarding complete."""
+"""Master Data port - create employee only at onboarding complete."""
 
 from datetime import date
 from uuid import UUID

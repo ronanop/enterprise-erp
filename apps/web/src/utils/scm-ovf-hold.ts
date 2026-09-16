@@ -53,7 +53,7 @@ export function scmHoldDayCountBetweenDisplay(
   until: string | null | undefined,
 ): string {
   const days = scmHoldDayCountBetween(since, until);
-  if (days === null) return "—";
+  if (days === null) return "-";
   if (days === 0) return "0 days";
   if (days === 1) return "1 day";
   return `${days} days`;
@@ -61,23 +61,23 @@ export function scmHoldDayCountBetweenDisplay(
 
 export function scmHoldDayCountDisplay(holdAt: string | null | undefined): string {
   const days = scmHoldDayCountFromIso(holdAt);
-  if (days === null) return "—";
+  if (days === null) return "-";
   if (days === 0) return "0 days";
   if (days === 1) return "1 day";
   return `${days} days`;
 }
 
 export function scmHoldDurationFromIso(holdAt: string | null | undefined): string {
-  if (!holdAt) return "—";
+  if (!holdAt) return "-";
   const start = new Date(holdAt);
-  if (Number.isNaN(start.getTime())) return "—";
+  if (Number.isNaN(start.getTime())) return "-";
   return formatScmHoldDurationMs(Date.now() - start.getTime());
 }
 
 export function scmHoldSinceDisplay(holdAt: string | null | undefined): string {
-  if (!holdAt) return "—";
+  if (!holdAt) return "-";
   const start = new Date(holdAt);
-  if (Number.isNaN(start.getTime())) return "—";
+  if (Number.isNaN(start.getTime())) return "-";
   return start.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "short",
@@ -89,7 +89,7 @@ export function scmHoldSummaryLine(holdAt: string | null | undefined): string | 
   if (!holdAt) return null;
   const daysLabel = scmHoldDayCountDisplay(holdAt);
   const since = scmHoldSinceDisplay(holdAt);
-  if (daysLabel === "—" || since === "—") return null;
+  if (daysLabel === "-" || since === "-") return null;
   return `On hold for ${daysLabel} (since ${since})`;
 }
 
@@ -97,10 +97,10 @@ export function scmHoldSummaryLine(holdAt: string | null | undefined): string | 
 export function scmHoldCreatePoNotice(holdAt: string | null | undefined): string {
   const daysLabel = scmHoldDayCountDisplay(holdAt);
   const since = scmHoldSinceDisplay(holdAt);
-  if (daysLabel !== "—" && since !== "—") {
+  if (daysLabel !== "-" && since !== "-") {
     return `This OVF has been on hold for ${daysLabel} (since ${since}). Creating a purchase order will unhold it.`;
   }
-  if (daysLabel !== "—") {
+  if (daysLabel !== "-") {
     return `This OVF has been on hold for ${daysLabel}. Creating a purchase order will unhold it.`;
   }
   return "This OVF is on hold. Creating a purchase order will unhold it.";

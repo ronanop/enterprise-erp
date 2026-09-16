@@ -315,7 +315,7 @@ export default function HomePage() {
             active
             time={
               today?.check_in_at
-                ? `${formatTime(today.check_in_at)} — now`
+                ? `${formatTime(today.check_in_at)} - now`
                 : "When you check in"
             }
             title={

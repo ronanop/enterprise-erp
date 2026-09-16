@@ -165,7 +165,7 @@ export default function UploadDocumentPage() {
           <p className="font-semibold text-[#0b1c30]">
             {file ? file.name : "Tap to choose file"}
           </p>
-          <p className="text-sm text-[#434655]">PDF, JPG, or PNG — max 10MB</p>
+          <p className="text-sm text-[#434655]">PDF, JPG, or PNG - max 10MB</p>
         </button>
 
         <button

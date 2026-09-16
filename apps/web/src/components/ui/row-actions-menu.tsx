@@ -25,7 +25,7 @@ type RowActionsMenuProps = {
 };
 
 /**
- * Three-dot row actions menu — portals to document.body with fixed
+ * Three-dot row actions menu - portals to document.body with fixed
  * positioning so overflow tables don't clip or misplace the popover.
  */
 export function RowActionsMenu({

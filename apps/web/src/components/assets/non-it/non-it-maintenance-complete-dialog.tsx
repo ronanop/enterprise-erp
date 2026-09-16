@@ -76,7 +76,7 @@ export function NonItMaintenanceCompleteDialog({
       >
         <div>
           <h2 className="text-base font-semibold tracking-tight">
-            Complete maintenance — {asset.asset_code}
+            Complete maintenance - {asset.asset_code}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Return the asset to stock or restore the previous holder.
@@ -130,7 +130,7 @@ export function NonItMaintenanceCompleteDialog({
                 ? ` (${asset.prior_holder_label})`
                 : canRestore
                   ? ""
-                  : " — none"}
+                  : " - none"}
             </label>
           </fieldset>
         </div>

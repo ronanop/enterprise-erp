@@ -215,8 +215,8 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
       {
         title: "Acceptance / Closure",
         subtitle: needsHwat
-          ? "Step 7 — HW-AT + Circle sign-off · Handover to Application Team"
-          : "Step 7 — Rack handover · Handover to Application Team",
+          ? "Step 7 - HW-AT + Circle sign-off · Handover to Application Team"
+          : "Step 7 - Rack handover · Handover to Application Team",
         icon: CloudUpload,
         fields,
       },
@@ -234,8 +234,8 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
       title="Acceptance / Closure"
       description={
         needsHwat
-          ? "Step 7 — Complete HW-AT, Circle sign-off, and Handover to Application Team."
-          : "Step 7 — Rack Installation only — complete Handover to Application Team to close."
+          ? "Step 7 - Complete HW-AT, Circle sign-off, and Handover to Application Team."
+          : "Step 7 - Rack Installation only - complete Handover to Application Team to close."
       }
       backHref={
         stageFormMeta.readOnly

@@ -1,13 +1,13 @@
-# ERP Core v1.0-alpha — Enterprise Baseline Report
+# ERP Core v1.0-alpha - Enterprise Baseline Report
 
 | Field | Value |
 |-------|--------|
 | **Document Type** | Release Baseline / Development Gate |
 | **Release Name** | ERP Core v1.0-alpha |
 | **Release Status** | Stable Development Baseline |
-| **Architecture Lock** | v1.1 — Maintained |
+| **Architecture Lock** | v1.1 - Maintained |
 | **Prepared As** | Chief Software Architect · Enterprise Solution Architect · Technical Program Manager · ERP Release Manager |
-| **Classification** | Internal — Confidential |
+| **Classification** | Internal - Confidential |
 | **Baseline Date** | 2026-07-13 |
 | **Alembic Head** | `0055_seed_sales_workflows` |
 | **Ready For** | Sprint 6 Development |
@@ -16,9 +16,9 @@
 
 ## 1. Executive Summary
 
-ERP Core **v1.0-alpha** establishes the first **stable development baseline** of the multi-tenant Enterprise ERP Platform after completion of the **Infrastructure Phase (Sprint 0)** and **Delivery Sprints 1–5 (Foundation through Sales)**.
+ERP Core **v1.0-alpha** establishes the first **stable development baseline** of the multi-tenant Enterprise ERP Platform after completion of the **Infrastructure Phase (Sprint 0)** and **Delivery Sprints 1-5 (Foundation through Sales)**.
 
-**Overall milestones completed: 6** (Sprint 0 + Sprints 1–5).
+**Overall milestones completed: 6** (Sprint 0 + Sprints 1-5).
 
 The platform implements a **Modular Monolith** with **Clean Architecture** and **DDD**, under **Architecture Lock v1.1** (ADR-001 Modular Monolith; ADR-002 Python/FastAPI stack). Documentation hierarchy BRD → FRD → SDD v1.1 → DBS v1.1 → ERD → code has been followed for all delivered modules.
 
@@ -32,7 +32,7 @@ The platform implements a **Modular Monolith** with **Clean Architecture** and *
 
 **Quality posture:** Alembic at head `0055_seed_sales_workflows`; full pytest suite green (**77 passed**); Ruff clean on `src`; production modules type-check under Mypy. Remaining Mypy findings are confined to **test stub typing** and do not affect production modules.
 
-This baseline is **not** a production GA release. It is the approved gate to start **Sprint 6 — Procurement** without architecture redesign.
+This baseline is **not** a production GA release. It is the approved gate to start **Sprint 6 - Procurement** without architecture redesign.
 
 ---
 
@@ -46,7 +46,7 @@ This baseline is **not** a production GA release. It is the approved gate to sta
 | **Domain-Driven Design (DDD)** | Locked | Domain enums/entities/VOs independent of ORM |
 | **Modular Monolith** | Locked (ADR-001) | Module boundaries by PostgreSQL schema + package |
 
-### 2.2 Technology Stack (Locked — Architecture Lock v1.1)
+### 2.2 Technology Stack (Locked - Architecture Lock v1.1)
 
 | Layer | Technology | Role in Baseline |
 |-------|------------|------------------|
@@ -88,7 +88,7 @@ This baseline is **not** a production GA release. It is the approved gate to sta
 | Attribute | Detail |
 |-----------|--------|
 | **Purpose** | Multi-tenant security platform: auth, RBAC, org scope, workflow, notifications, audit, settings |
-| **Status** | **Complete** — Stable |
+| **Status** | **Complete** - Stable |
 | **Schema(s)** | `foundation`, `audit`, `config` |
 | **Database tables** | `sec_tenant`, `sec_user`, `sec_role`, `sec_permission`, `sec_user_role`, `sec_role_permission`, `sec_session`, `sec_refresh_token`, `sec_user_org_scope`; `wf_definition`, `wf_step`, `wf_instance`, `wf_action`; `ntf_template`, `ntf_event`, `ntf_delivery`; `cfg_setting`; `audit_log`, `audit_event` |
 | **APIs** | `/auth`, `/tenants`, `/users`, `/roles`, `/permissions`, `/workflows`, `/notifications`, `/audit`, `/settings` |
@@ -99,7 +99,7 @@ This baseline is **not** a production GA release. It is the approved gate to sta
 | Attribute | Detail |
 |-----------|--------|
 | **Purpose** | Legal and operational hierarchy: company, branch, department, BU, location, cost/profit centers |
-| **Status** | **Complete** — Stable |
+| **Status** | **Complete** - Stable |
 | **Schema** | `organization` |
 | **Database tables** | `org_company`, `org_branch`, `org_department`, `org_business_unit`, `org_location`, `org_cost_center`, `org_profit_center` |
 | **APIs** | `/companies`, `/branches`, `/departments`, `/business-units`, `/locations`, `/cost-centers`, `/profit-centers`, `/organization` (tree), `/auth/context` |
@@ -110,7 +110,7 @@ This baseline is **not** a production GA release. It is the approved gate to sta
 | Attribute | Detail |
 |-----------|--------|
 | **Purpose** | Shared reference and party masters used across commercial and financial processes |
-| **Status** | **Complete** — Stable |
+| **Status** | **Complete** - Stable |
 | **Schema** | `master` |
 | **Database tables** | `master_uom`, `master_currency`, `master_tax`, `master_product_category`, `master_employee`, `master_customer`, `master_vendor`, `master_product`, `master_warehouse`, `master_asset` |
 | **APIs** | `/uoms`, `/currencies`, `/taxes`, `/product-categories`, `/employees`, `/customers`, `/vendors`, `/products`, `/warehouses`, `/assets` |
@@ -121,7 +121,7 @@ This baseline is **not** a production GA release. It is the approved gate to sta
 | Attribute | Detail |
 |-----------|--------|
 | **Purpose** | Core accounting: COA, fiscal periods, journals, GL posting, AR/AP subledgers, tax register, FX, asset accounting transactions |
-| **Status** | **Complete** — Stable (budgeting & bank reconciliation deferred) |
+| **Status** | **Complete** - Stable (budgeting & bank reconciliation deferred) |
 | **Schema** | `finance` |
 | **Database tables** | `fin_account_group`, `fin_chart_of_account`, `fin_fiscal_year`, `fin_period`, `fin_currency_rate`, `fin_journal_header`, `fin_journal_line`, `fin_gl_entry`, `fin_customer_ledger`, `fin_vendor_ledger`, `fin_tax_register`, `fin_cost_center_allocation`, `fin_asset_transaction` |
 | **APIs** | `/finance/account-groups`, `/finance/chart-of-accounts`, `/finance/fiscal-years`, `/finance/periods`, `/finance/journals`, `/finance/gl`, `/finance/ar`, `/finance/ap`, `/finance/tax-register`, `/finance/currency-rates`, `/finance/asset-transactions`, `/finance/reports` |
@@ -132,7 +132,7 @@ This baseline is **not** a production GA release. It is the approved gate to sta
 | Attribute | Detail |
 |-----------|--------|
 | **Purpose** | Order-to-Cash: price lists, discounts, customer credit, quotation → order → delivery → invoice → return |
-| **Status** | **Complete** — Stable (CRM / inventory stock movement deferred) |
+| **Status** | **Complete** - Stable (CRM / inventory stock movement deferred) |
 | **Schema** | `sales` |
 | **Database tables** | `sales_price_list`, `sales_price_list_item`, `sales_discount_rule`, `sales_customer_credit`, `sales_quotation_header/line`, `sales_order_header/line`, `sales_delivery_header/line`, `sales_invoice_header/line`, `sales_return_header/line` (**14 tables**) |
 | **APIs** | `/sales/price-lists`, `/sales/discount-rules`, `/sales/customer-credit`, `/sales/quotations`, `/sales/orders`, `/sales/deliveries`, `/sales/invoices`, `/sales/returns` |
@@ -247,12 +247,12 @@ Approved deferred / out-of-scope items relative to this alpha core (documented i
 
 | Deferred Capability | Reference / Rationale |
 |---------------------|------------------------|
-| **Budgeting** (`fin_budget_*`) | ERD_04 Finance — Phase 2 / separate ERD |
-| **Bank Reconciliation** (`fin_bank_*`) | ERD_04 Finance — out of Sprint 4 scope |
+| **Budgeting** (`fin_budget_*`) | ERD_04 Finance - Phase 2 / separate ERD |
+| **Bank Reconciliation** (`fin_bank_*`) | ERD_04 Finance - out of Sprint 4 scope |
 | **Inventory stock movement** | Sales uses warehouse UUID reference only; Inventory domain FRD-08 / Sprint 7 |
 | **CRM** (`crm_*` leads/opportunities) | ERD_05 / FRD-05; quotation holds optional `opportunity_reference` only |
-| **Manufacturing** | FRD-13 — later supply-chain track |
-| **Payroll** | FRD-10 — after HR |
+| **Manufacturing** | FRD-13 - later supply-chain track |
+| **Payroll** | FRD-10 - after HR |
 | Dedicated sales **contract management** tables | Modeled via contract price lists for now |
 | Full Celery job bodies for Sales | Stubs registered; operational hardening later |
 | Frontend Next.js application delivery | Locked stack; not part of this backend alpha baseline |
@@ -264,8 +264,8 @@ Approved deferred / out-of-scope items relative to this alpha core (documented i
 | Metric | Value |
 |--------|--------|
 | **Infrastructure Phase** | **Sprint 0** |
-| **Delivery Sprints** | **Sprint 1–5** (Foundation, Organization, Master Data, Finance, Sales) |
-| **Overall milestones completed** | **6** (Sprint 0 + Sprints 1–5) |
+| **Delivery Sprints** | **Sprint 1-5** (Foundation, Organization, Master Data, Finance, Sales) |
+| **Overall milestones completed** | **6** (Sprint 0 + Sprints 1-5) |
 | **Total implemented domain modules** | **5** (Foundation, Organization, Master Data, Finance, Sales) |
 | **Total database schemas** | **7** |
 | **Total documented ERDs** | **5** (`ERD_01` … `ERD_05`) |
@@ -310,7 +310,7 @@ Subsequent candidates (not sequenced in this alpha gate): Manufacturing, Quality
 - [x] Architecture Lock v1.1 not violated
 - [x] Router → Service → Repository → Database enforced in delivered modules
 - [x] DBS naming / Alembic governance followed
-- [x] ERDs 01–05 aligned with implemented schemas
+- [x] ERDs 01-05 aligned with implemented schemas
 - [x] Cross-module integrations limited to approved service boundaries
 - [x] Deferred features explicitly listed (no silent scope creep)
 - [ ] Formal EARB / Product sign-off (organizational process)

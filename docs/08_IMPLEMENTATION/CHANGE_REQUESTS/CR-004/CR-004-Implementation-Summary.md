@@ -1,42 +1,42 @@
-# CR-004 — Implementation Summary
+# CR-004 - Implementation Summary
 
 **Title:** IT Asset Operations & Inventory Management  
 
 | Milestone | Status | Date |
 |-----------|--------|------|
-| Phase 1 — Analysis | Complete | 2026-08-03 |
-| Phase 1.1 — Architecture Lock | **Complete** | 2026-08-03 |
-| Phase 2A — Data foundation | **Complete** | 2026-08-03 |
-| Phase 2B-1 — Business layer | **Complete** | 2026-08-03 |
-| Phase 2B-2 — Workflow integration | **Complete** | 2026-08-03 |
-| Phase 2C — Read API exposure | **Complete** | 2026-08-03 |
-| Phase 3.1 — UI design freeze | **Complete** | 2026-08-03 |
-| Phase 3.2 — Shared UI foundation | **Complete** | 2026-08-03 |
-| Phase 3.3A — Asset Operations layout | **Complete** | 2026-08-03 |
-| Phase 3.3B — Dashboard live data | **Complete** | 2026-08-03 |
-| Phase 3.4A — Inventory foundation | **Complete** | 2026-08-03 |
-| Phase 3.4B-1 — Inventory interaction layer | **Complete** | 2026-08-03 |
-| Phase 3.4B-2 — Inventory workflow integration | **Complete** | 2026-08-03 |
-| Phase 4.1 — Excel migration architecture (analysis) | **Complete** | 2026-08-03 |
-| Phase 5A-1 — Assignment data foundation | **Complete** | 2026-08-03 |
-| Phase 5A-2 — Assignment business layer | **Complete** | 2026-08-03 |
-| Phase 5B-1 — Assignment UI/UX design freeze | **Complete** | 2026-08-03 |
-| Phase 5B-2A — Assignment wizard foundation (UI) | **Complete** | 2026-08-03 |
-| Phase 5B-2B Task 1 — Assignment frontend service | **Complete** | 2026-08-05 |
-| Phase 5B-2B Task 2 — Assignment wizard container | **Complete** | 2026-08-05 |
-| Phase 5B-2B Task 3 — Return wizard container | **Complete** | 2026-08-05 |
-| Phase 5B-2B Task 4 — Inventory integration | **Complete** | 2026-08-05 |
-| Phase 5B-2B Task 5 — Query parameters & draft resume | **Complete** | 2026-08-05 |
-| Phase 4 Task 6 — Navigation & E2E integration | **Complete** | 2026-08-05 |
-| Phase 5 — Business validation & UAT (analysis) | **Complete** | 2026-08-05 |
-| Phase 5B-2B — Assignment workflow integration (frontend) | **Complete** | 2026-08-05 |
-| Phase 6 Sprint 1 — Register parity (UI) | **Complete** | 2026-08-05 |
-| Phase 7A — Excel export foundation | **Complete** | 2026-08-05 |
-| Phase 8A — Excel import foundation (preview) | **Complete** | 2026-08-05 |
-| Phase 8A.5 — Customer Excel template validation | **Complete** | 2026-08-05 |
-| Phase 8B — Excel import engine (commit) | **Complete** | 2026-08-05 |
-| Phase 8C — Migration validation & reconciliation | **Complete** | 2026-08-05 |
-| Phase 3.5+ — Sidebar & polish | Not started | — |
+| Phase 1 - Analysis | Complete | 2026-08-03 |
+| Phase 1.1 - Architecture Lock | **Complete** | 2026-08-03 |
+| Phase 2A - Data foundation | **Complete** | 2026-08-03 |
+| Phase 2B-1 - Business layer | **Complete** | 2026-08-03 |
+| Phase 2B-2 - Workflow integration | **Complete** | 2026-08-03 |
+| Phase 2C - Read API exposure | **Complete** | 2026-08-03 |
+| Phase 3.1 - UI design freeze | **Complete** | 2026-08-03 |
+| Phase 3.2 - Shared UI foundation | **Complete** | 2026-08-03 |
+| Phase 3.3A - Asset Operations layout | **Complete** | 2026-08-03 |
+| Phase 3.3B - Dashboard live data | **Complete** | 2026-08-03 |
+| Phase 3.4A - Inventory foundation | **Complete** | 2026-08-03 |
+| Phase 3.4B-1 - Inventory interaction layer | **Complete** | 2026-08-03 |
+| Phase 3.4B-2 - Inventory workflow integration | **Complete** | 2026-08-03 |
+| Phase 4.1 - Excel migration architecture (analysis) | **Complete** | 2026-08-03 |
+| Phase 5A-1 - Assignment data foundation | **Complete** | 2026-08-03 |
+| Phase 5A-2 - Assignment business layer | **Complete** | 2026-08-03 |
+| Phase 5B-1 - Assignment UI/UX design freeze | **Complete** | 2026-08-03 |
+| Phase 5B-2A - Assignment wizard foundation (UI) | **Complete** | 2026-08-03 |
+| Phase 5B-2B Task 1 - Assignment frontend service | **Complete** | 2026-08-05 |
+| Phase 5B-2B Task 2 - Assignment wizard container | **Complete** | 2026-08-05 |
+| Phase 5B-2B Task 3 - Return wizard container | **Complete** | 2026-08-05 |
+| Phase 5B-2B Task 4 - Inventory integration | **Complete** | 2026-08-05 |
+| Phase 5B-2B Task 5 - Query parameters & draft resume | **Complete** | 2026-08-05 |
+| Phase 4 Task 6 - Navigation & E2E integration | **Complete** | 2026-08-05 |
+| Phase 5 - Business validation & UAT (analysis) | **Complete** | 2026-08-05 |
+| Phase 5B-2B - Assignment workflow integration (frontend) | **Complete** | 2026-08-05 |
+| Phase 6 Sprint 1 - Register parity (UI) | **Complete** | 2026-08-05 |
+| Phase 7A - Excel export foundation | **Complete** | 2026-08-05 |
+| Phase 8A - Excel import foundation (preview) | **Complete** | 2026-08-05 |
+| Phase 8A.5 - Customer Excel template validation | **Complete** | 2026-08-05 |
+| Phase 8B - Excel import engine (commit) | **Complete** | 2026-08-05 |
+| Phase 8C - Migration validation & reconciliation | **Complete** | 2026-08-05 |
+| Phase 3.5+ - Sidebar & polish | Not started | - |
 
 ---
 
@@ -50,7 +50,7 @@
 | `CR-004-Transition-Matrix.md` | Ops transitions (implementation reference) |
 | `CR-004-Architecture-Recommendation.md` | Technical design + **§ Architecture Lock** |
 | `CR-004-Assignment-SSOT.md` | Field ownership |
-| `CR-004-Implementation-Roadmap.md` | Phases 2–7 + future |
+| `CR-004-Implementation-Roadmap.md` | Phases 2-7 + future |
 | `CR-004-Risks.md` | Risk register |
 
 ---
@@ -66,14 +66,14 @@
 
 ## Locked decisions (summary)
 
-1. **`operational_status`** column — separate from `ast_asset.status`.
+1. **`operational_status`** column - separate from `ast_asset.status`.
 2. Domain enum **`AssetOperationalStatus`**.
-3. **`AssetOperationalStatusEngine`** + **`AssetOperationalStatusService`** — sole transition authority.
+3. **`AssetOperationalStatusEngine`** + **`AssetOperationalStatusService`** - sole transition authority.
 4. **No direct PATCH** of operational status; transition commands only.
-5. **Current Holder** — derived from active assignment + `ASSIGNED`; never stored.
-6. **Sidebar** — filtered views; no new menu items.
-7. **Discovery** — read-only for ops; CR-003 unchanged.
-8. **Operational Timeline** — future enhancement post Phase 7.
+5. **Current Holder** - derived from active assignment + `ASSIGNED`; never stored.
+6. **Sidebar** - filtered views; no new menu items.
+7. **Discovery** - read-only for ops; CR-003 unchanged.
+8. **Operational Timeline** - future enhancement post Phase 7.
 
 ---
 
@@ -132,7 +132,7 @@
 | **`CR-004-Dashboard-Wireframe.md`** | Landing layout + responsive |
 | **`CR-004-Sidebar-Design.md`** | Locked navigation IA |
 | **`CR-004-Inventory-Views.md`** | Filtered register + column matrix |
-| **`CR-004-Frontend-Implementation-Plan.md`** | Phases 3.2–3.6 |
+| **`CR-004-Frontend-Implementation-Plan.md`** | Phases 3.2-3.6 |
 
 ---
 
@@ -161,7 +161,7 @@
 
 ## Next phase
 
-**Phase 3.4 — Sidebar** (locked IA, RBAC filter).
+**Phase 3.4 - Sidebar** (locked IA, RBAC filter).
 
 ---
 
@@ -218,7 +218,7 @@
 |---------------------|---------|
 | **`CR-004-Phase-5A-1-Assignment-Data-Foundation.md`** | Column names, migration, schema surface, scope boundary |
 | `0487_ast_assignment_data_foundation` | `delivery_reference_*`, `assignment_remarks`, `return_remarks` + CHECK |
-| ORM / schemas / repository nullable-clear | Data layer only — no service, workflow, validator, or router changes |
+| ORM / schemas / repository nullable-clear | Data layer only - no service, workflow, validator, or router changes |
 | `test_assignment_data_foundation.py` | 42 tests (migration, ORM, repository, schemas, OpenAPI) |
 
 **Field names (locked for Excel):** `delivery_reference_number`, `delivery_reference_status`, `assignment_remarks`, `return_remarks`.
@@ -245,7 +245,7 @@
 |----------|---------|
 | **`CR-004-Phase-5B1-Assignment-UI-Design.md`** | Executive summary, step specs, workflow mapping, analysis |
 | **`CR-004-Assignment-Wireframes.md`** | ASCII screen layouts (list, both wizards, inventory hook) |
-| **`CR-004-Assignment-User-Journey.md`** | J1–J6 flows, Excel mapping, edge cases |
+| **`CR-004-Assignment-User-Journey.md`** | J1-J6 flows, Excel mapping, edge cases |
 
 **Frozen UX:** 5-step **Issue asset** wizard (Employee → Asset → Issued items → Delivery → Review); 4-step **Return** wizard (Summary → Condition → Remarks → Review). No frontend code in 5B-1.
 
@@ -343,7 +343,7 @@
 | Document / artifact | Purpose |
 |---------------------|---------|
 | **`CR-004-Phase-5B-2B-Workflow-Integration.md`** | Full integration notes |
-| Tasks 1–5 + Phase 4 Task 6 | Service → containers → inventory → query → navigation E2E |
+| Tasks 1-5 + Phase 4 Task 6 | Service → containers → inventory → query → navigation E2E |
 
 ---
 
@@ -402,7 +402,7 @@
 
 ## Next phase
 
-**Phase 3.5** — Sidebar · Excel cutover hardening (M-1/M-2/M-9/M-10) · Measured recon after freeze kit.
+**Phase 3.5** - Sidebar · Excel cutover hardening (M-1/M-2/M-9/M-10) · Measured recon after freeze kit.
 
 ---
 ## Validation

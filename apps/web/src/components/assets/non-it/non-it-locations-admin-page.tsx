@@ -142,7 +142,7 @@ function kindMeta(kind: string | null | undefined): KindMeta {
 
 function locationPath(row: NonItLocation): string {
   const parts = [row.building, row.floor ? `Fl. ${row.floor}` : null].filter(Boolean);
-  return parts.length ? parts.join(" · ") : "—";
+  return parts.length ? parts.join(" · ") : "-";
 }
 
 export function NonItLocationsAdminPage() {
@@ -476,7 +476,7 @@ export function NonItLocationsAdminPage() {
                 </label>
                 <Input
                   id="loc-remarks"
-                  placeholder="Optional — wing, capacity, landmarks"
+                  placeholder="Optional - wing, capacity, landmarks"
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
                   className="h-10"

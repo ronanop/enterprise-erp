@@ -1,4 +1,4 @@
-# Asset file storage — deployment notes
+# Asset file storage - deployment notes
 
 Local disk (`ASSET_STORAGE_BACKEND=local`) is the only backend in this phase. DC challan documents are stored under opaque keys such as `dc-challan/{challan_id}/scm-issued/{uuid}.pdf`. The database stores that **key**, never an absolute filesystem path.
 

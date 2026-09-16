@@ -71,7 +71,7 @@ export function LeaveTypePolicyPanel({
               </div>
               <p className="mt-2 text-xs text-muted-foreground">{t.eligibility}</p>
               <p className="mt-2 text-xs">
-                Max {t.maxDays || "—"}/yr · {t.daysPerMonth || "—"}/mo · Allocated {allocated} · Used {used} · Remaining{" "}
+                Max {t.maxDays || "-"}/yr · {t.daysPerMonth || "-"}/mo · Allocated {allocated} · Used {used} · Remaining{" "}
                 {Math.max(0, allocated - used)}
               </p>
               <p className="mt-1 text-[10px] text-muted-foreground">
@@ -230,8 +230,8 @@ export function LeaveTypeEditDrawer({
           </SetupField>
           <SetupField label="Paid leave">
             <SetupSelect value={isPaid ? "yes" : "no"} onChange={(e) => setIsPaid(e.target.value === "yes")}>
-              <option value="yes">Yes — paid</option>
-              <option value="no">No — unpaid</option>
+              <option value="yes">Yes - paid</option>
+              <option value="no">No - unpaid</option>
             </SetupSelect>
           </SetupField>
           <SetupField label="Approval required">
@@ -394,11 +394,11 @@ export function LeaveApprovalDrawer({
             {request.fromDate} → {request.toDate}
           </dd>
           <dt className="text-muted-foreground">Dept</dt>
-          <dd>{request.departmentName || "—"}</dd>
+          <dd>{request.departmentName || "-"}</dd>
           <dt className="text-muted-foreground">Applied</dt>
           <dd>{request.appliedOn.slice(0, 10)}</dd>
           <dt className="text-muted-foreground">Approver</dt>
-          <dd>{request.approverName || "—"}</dd>
+          <dd>{request.approverName || "-"}</dd>
         </dl>
 
         <div className="rounded-md border border-border/60 bg-muted/40 px-2.5 py-2">

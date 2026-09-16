@@ -9,7 +9,7 @@ export type SalesStageContext = {
   opportunity?: Opportunity | null;
   quote?: Quote | null;
   ovf?: Ovf | null;
-  /** Opportunity detail — active quote + OVF for unified deal stage. */
+  /** Opportunity detail - active quote + OVF for unified deal stage. */
   quotes?: Quote[];
   ovfs?: Ovf[];
 };
@@ -31,7 +31,7 @@ function resolveQuoteStageLabel(quoteStage: string, locked?: boolean): string {
     case "lost":
       return "Lost Deal";
     default:
-      return quoteStage.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "—";
+      return quoteStage.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "-";
   }
 }
 
@@ -47,7 +47,7 @@ function resolveOvfStageLabel(blueprintState: string, ovf: Ovf): string {
     case "shared_scm":
       return "OVF Shared to SCM";
     default:
-      return blueprintState.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "—";
+      return blueprintState.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "-";
   }
 }
 
@@ -110,7 +110,7 @@ function resolveOpportunityBlueprintState(
     case "ovf_ready":
       return opp.customer_po_approved ? "OVF Ready" : "Customer PO Approved";
     default:
-      return state.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "—";
+      return state.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "-";
   }
 }
 
@@ -181,6 +181,6 @@ export function resolveSalesStageLabel(ctx: SalesStageContext): string {
       }
       return resolveUnifiedOpportunityStage(ctx);
     default:
-      return state.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "—";
+      return state.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "-";
   }
 }

@@ -222,7 +222,7 @@ class EmploymentService:
                 template_code="hr.employee_activated",
                 template_name="Employee Activated",
                 event_type="hr.employee_activated",
-                title="Welcome — your employment is active",
+                title="Welcome - your employment is active",
                 body="Your employee profile has been activated. You are payroll-eligible.",
                 kind="employment",
             )
@@ -358,7 +358,7 @@ class EmploymentService:
         try:
             self._master.update_employee_status(ctx, employee_id, status)
         except AttributeError:
-            # Adapter may not expose update yet — best-effort via ORM if present
+            # Adapter may not expose update yet - best-effort via ORM if present
             from modules.master_data.models.employee import MasterEmployee
 
             emp = self._db.get(MasterEmployee, employee_id)

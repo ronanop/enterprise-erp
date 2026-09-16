@@ -16,7 +16,7 @@ class DesignationRepository(HrScopedRepository):
 
     def get(self, ctx: TenantContext, row_id: UUID) -> HrDesignation | None:
         stmt = select(HrDesignation).where(HrDesignation.id == row_id, HrDesignation.is_deleted.is_(False))
-        # Designations are company masters (branch_id often null) — do not branch-scope.
+        # Designations are company masters (branch_id often null) - do not branch-scope.
         stmt = self.apply_hr_filter(stmt, HrDesignation, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 

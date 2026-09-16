@@ -47,7 +47,7 @@ import {
 } from "@/services/service-request-ticket-service";
 
 function DetailRow({ label, value }: { label: string; value?: string | null }) {
-  const display = value?.trim() ? formatServiceDisplayText(value) : "—";
+  const display = value?.trim() ? formatServiceDisplayText(value) : "-";
   const empty = !value?.trim();
   return (
     <div className="min-w-0 rounded-md border border-border/50 bg-background/80 px-3 py-2.5">
@@ -201,7 +201,7 @@ function FieldEngineerStatusCard({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium">{fe.engineer_name}</div>
-                <div className="truncate text-xs text-muted-foreground">{fe.engineer_email || "—"}</div>
+                <div className="truncate text-xs text-muted-foreground">{fe.engineer_email || "-"}</div>
               </div>
               <Badge
                 variant={fe.status === "solved" ? "secondary" : "outline"}
@@ -212,7 +212,7 @@ function FieldEngineerStatusCard({
             </div>
             {fe.status === "solved" ? (
               <div className="mt-3 space-y-2">
-                <ProseBlock>{fe.solution_summary || "—"}</ProseBlock>
+                <ProseBlock>{fe.solution_summary || "-"}</ProseBlock>
                 {fe.solved_at ? (
                   <p className="text-xs text-muted-foreground">
                     Submitted {fe.solved_at.slice(0, 16).replace("T", " ")}
@@ -238,7 +238,7 @@ function FieldEngineerStatusCard({
               </div>
             ) : (
               <p className="mt-2 text-xs text-muted-foreground">
-                {fe.work_brief ? "Brief sent — awaiting FE submission." : "Awaiting field engineer work."}
+                {fe.work_brief ? "Brief sent - awaiting FE submission." : "Awaiting field engineer work."}
               </p>
             )}
           </li>
@@ -307,7 +307,7 @@ function TicketAttachmentsCard({
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] tabular-nums text-muted-foreground">
-                    {a.file_size ? `${Math.round(a.file_size / 1024)} KB` : "—"}
+                    {a.file_size ? `${Math.round(a.file_size / 1024)} KB` : "-"}
                   </span>
                   {canUpload ? (
                     <Button type="button" variant="ghost" size="sm" onClick={() => onDelete(a.id)}>
@@ -405,7 +405,7 @@ function StakeholderStatusCard({ view }: { view: TicketStakeholderView }) {
                           <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
                             What they did
                           </p>
-                          <ProseBlock>{fe.solution_summary || "—"}</ProseBlock>
+                          <ProseBlock>{fe.solution_summary || "-"}</ProseBlock>
                           {fe.solved_at ? (
                             <p className="text-xs text-muted-foreground">
                               Submitted {fe.solved_at.slice(0, 16).replace("T", " ")}
@@ -608,7 +608,7 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
         tone: "warning",
         message: (
           <>
-            Asset details are taken from the email. Review them below — fill anything missing or change what is wrong, then{" "}
+            Asset details are taken from the email. Review them below - fill anything missing or change what is wrong, then{" "}
             <span className="font-medium">Confirm asset details</span> before continuing work.
           </>
         ),
@@ -905,7 +905,7 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
                 disabled={!solutionSummary.trim() || resolving}
                 onClick={() => void onResolve()}
               >
-                {resolving ? "Ending…" : "Confirm — End & Close Ticket"}
+                {resolving ? "Ending…" : "Confirm - End & Close Ticket"}
               </Button>
             </div>
           </div>
@@ -1005,7 +1005,7 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
           </SectionCard>
 
           <SectionCard title="Issue Description">
-            <ProseBlock>{ticket.issue_description || ticket.description || "—"}</ProseBlock>
+            <ProseBlock>{ticket.issue_description || ticket.description || "-"}</ProseBlock>
           </SectionCard>
 
           {(ticket.reference_sr_number ||
@@ -1073,7 +1073,7 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
                       <DetailInput
                         label="Asset Name"
                         value={ticket.asset_name}
-                        placeholder="From mail — model / asset name"
+                        placeholder="From mail - model / asset name"
                         onCommit={(value) =>
                           void updateServiceRequestTicket(ticketId, { asset_name: value })
                             .then(load)
@@ -1101,7 +1101,7 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
                       <DetailInput
                         label="Serial Number"
                         value={ticket.serial_number}
-                        placeholder="From mail — device serial"
+                        placeholder="From mail - device serial"
                         onCommit={(value) =>
                           void updateServiceRequestTicket(ticketId, { serial_number: value })
                             .then(load)
@@ -1207,7 +1207,7 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
                           </code>
                         </p>
                       ) : (
-                        <p className="mt-2 text-xs">No password returned — click Show login on the FE row.</p>
+                        <p className="mt-2 text-xs">No password returned - click Show login on the FE row.</p>
                       )}
                       <p className="mt-2 text-xs">
                         Sign in at http://localhost:3000/login → Service → Field Engineer
@@ -1421,7 +1421,7 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
                               <div className="min-w-0 flex-1">
                                 <div className="font-medium text-sm">{fe.engineer_name}</div>
                                 <div className="mt-0.5 text-xs text-muted-foreground">
-                                  {fe.engineer_contact || "—"} · {fe.engineer_email}
+                                  {fe.engineer_contact || "-"} · {fe.engineer_email}
                                 </div>
                                 <div className="mt-1 flex flex-wrap gap-1.5">
                                   <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
@@ -1567,7 +1567,7 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
                       className="min-w-0 rounded-md border border-border/50 bg-background px-3 py-2.5"
                     >
                       <p className="text-[11px] tabular-nums text-muted-foreground">
-                        {item.occurred_at?.slice(0, 16)?.replace("T", " ") || "—"}
+                        {item.occurred_at?.slice(0, 16)?.replace("T", " ") || "-"}
                       </p>
                       <p className="mt-0.5 break-words text-sm font-medium leading-snug [overflow-wrap:anywhere]">
                         {item.title}
@@ -1607,7 +1607,7 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
                 </div>
               ) : (
                 <p className="rounded-md border border-dashed border-border/60 px-3 py-4 text-center text-sm text-muted-foreground">
-                  Ticket ended — no solution summary recorded.
+                  Ticket ended - no solution summary recorded.
                 </p>
               )}
             </SectionCard>

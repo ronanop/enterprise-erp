@@ -1,6 +1,6 @@
 import type { AccountingPeriod } from "@/services/fiscal-service";
 
-/** Derive journal restrictions from backend period status — do not hardcode rules in UI. */
+/** Derive journal restrictions from backend period status - do not hardcode rules in UI. */
 export function getPeriodJournalRestrictions(period?: AccountingPeriod | null) {
   if (!period) {
     return {
@@ -53,6 +53,6 @@ export function isPeriodCurrent(period: AccountingPeriod, today = new Date()) {
 }
 
 export function quarterLabel(quarter?: number | null) {
-  if (!quarter) return "—";
+  if (!quarter) return "-";
   return `Q${quarter}`;
 }

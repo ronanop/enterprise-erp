@@ -1,4 +1,4 @@
-/** Enterprise Payroll Management — types */
+/** Enterprise Payroll Management - types */
 
 export type PayrollRunStatus =
   | "draft"

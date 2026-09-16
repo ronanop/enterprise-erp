@@ -144,12 +144,12 @@ describe("mapAssetToInventoryRow", () => {
     );
     expect(row.assetTag).toBe("AST-9");
     expect(row.manufacturer).toBe("Dell");
-    expect(row.serialNumber).toBe("—");
+    expect(row.serialNumber).toBe("-");
     expect(row.branch).toBe("Noida");
     expect(row.department).toBe("IT");
     expect(row.operationalStatus).toBe("ASSIGNED");
     expect(row.issueDate).toContain("2026");
-    expect(row.location).toBe("—");
+    expect(row.location).toBe("-");
     expect(row.employeeId).toBe("EMP-001");
     expect(row.currentHolder).toContain("Asha");
     expect(row.expandable.phoneNumber).toBe("9000000001");
@@ -193,26 +193,26 @@ describe("applyClientInventoryFilters", () => {
         id: "1",
         assetTag: "A",
         laptopName: "X",
-        serialNumber: "—",
-        manufacturer: "—",
-        model: "—",
-        configuration: "—",
-        currentHolder: "—",
-        employeeId: "—",
+        serialNumber: "-",
+        manufacturer: "-",
+        model: "-",
+        configuration: "-",
+        currentHolder: "-",
+        employeeId: "-",
         department: "IT",
-        branch: "—",
-        operationalStatus: "—",
-        lifecycleStatus: "—",
-        issueDate: "—",
-        location: "—",
+        branch: "-",
+        operationalStatus: "-",
+        lifecycleStatus: "-",
+        issueDate: "-",
+        location: "-",
         expandable: {
-          earlierUsedBy: "—",
-          deliveryChallan: "—",
-          deliveryReferenceStatus: "—",
-          phoneNumber: "—",
-          remarks: "—",
-          assignmentRemarks: "—",
-          returnRemarks: "—",
+          earlierUsedBy: "-",
+          deliveryChallan: "-",
+          deliveryReferenceStatus: "-",
+          phoneNumber: "-",
+          remarks: "-",
+          assignmentRemarks: "-",
+          returnRemarks: "-",
         },
         assignmentHistory: [],
       },

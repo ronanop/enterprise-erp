@@ -11,6 +11,14 @@ export function allErpModuleKeys(): string[] {
   return erpModules.map((m) => m.key);
 }
 
+/** True when every ERP module is assigned as module-admin (All modules entitlement). */
+export function hasAllModulesAdmin(adminModuleKeys: string[]): boolean {
+  const all = allErpModuleKeys();
+  if (all.length === 0) return false;
+  const set = new Set(adminModuleKeys);
+  return all.every((key) => set.has(key));
+}
+
 export function moduleKeyForHref(href: string): string | null {
   if (href === "/") return null;
   if (href === "/organization/users") return "organization";

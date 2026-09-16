@@ -1,5 +1,5 @@
 /**
- * Integration Hub workspace config — aligned with FRD-21 / ERD_21
+ * Integration Hub workspace config - aligned with FRD-21 / ERD_21
  * and apps/api integration routers (System → Sync).
  */
 

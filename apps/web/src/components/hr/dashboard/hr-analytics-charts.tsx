@@ -23,7 +23,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { LeaveTrendPoint, NamedCount, StackedAttendancePoint } from "@/types/hr-executive-dashboard";
 
-/** Premium chart palette — purple, teal, green, orange, blue, pink. */
+/** Premium chart palette - purple, teal, green, orange, blue, pink. */
 export const HR_CHART_COLORS = [
   "#9B5BB8",
   "#00BBAA",

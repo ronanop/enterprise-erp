@@ -41,8 +41,8 @@ export function AssignmentSection({ assignment, className }: AssignmentSectionPr
             label="Delivery Challan"
             value={
               assignment!.deliveryChallanSummary ??
-              `${assignment!.deliveryReferenceNumber ?? "—"} · ${
-                assignment!.deliveryReferenceStatus ?? "—"
+              `${assignment!.deliveryReferenceNumber ?? "-"} · ${
+                assignment!.deliveryReferenceStatus ?? "-"
               }`
             }
             testId="drawer-delivery-challan"
@@ -50,12 +50,12 @@ export function AssignmentSection({ assignment, className }: AssignmentSectionPr
           />
           <DrawerKvField
             label="Delivery reference"
-            value={assignment!.deliveryReferenceNumber ?? "—"}
+            value={assignment!.deliveryReferenceNumber ?? "-"}
             testId="drawer-delivery-reference"
           />
           <DrawerKvField
             label="Delivery status"
-            value={assignment!.deliveryReferenceStatus ?? "—"}
+            value={assignment!.deliveryReferenceStatus ?? "-"}
             testId="drawer-delivery-status"
           />
           <DrawerKvField
@@ -65,14 +65,14 @@ export function AssignmentSection({ assignment, className }: AssignmentSectionPr
           />
           <DrawerKvField
             label="Assignment remarks"
-            value={assignment!.assignmentRemarks ?? "—"}
+            value={assignment!.assignmentRemarks ?? "-"}
             testId="drawer-assignment-remarks"
             pre
             span
           />
           <DrawerKvField
             label="Return remarks"
-            value={assignment!.returnRemarks ?? "—"}
+            value={assignment!.returnRemarks ?? "-"}
             testId="drawer-return-remarks"
             pre
             span
@@ -85,13 +85,13 @@ export function AssignmentSection({ assignment, className }: AssignmentSectionPr
 
 function isAssignmentEmpty(a: AssetDetailDrawerAssignment): boolean {
   const coreEmpty =
-    (a.employee === "—" || !a.employee.trim()) &&
-    (a.issueDate === "—" || !a.issueDate.trim()) &&
-    (a.department === "—" || !a.department.trim());
+    (a.employee === "-" || !a.employee.trim()) &&
+    (a.issueDate === "-" || !a.issueDate.trim()) &&
+    (a.department === "-" || !a.department.trim());
   const enrichmentEmpty =
-    (!a.deliveryReferenceNumber || a.deliveryReferenceNumber === "—") &&
-    (!a.deliveryReferenceStatus || a.deliveryReferenceStatus === "—") &&
-    (!a.assignmentRemarks || a.assignmentRemarks === "—") &&
-    (!a.returnRemarks || a.returnRemarks === "—");
+    (!a.deliveryReferenceNumber || a.deliveryReferenceNumber === "-") &&
+    (!a.deliveryReferenceStatus || a.deliveryReferenceStatus === "-") &&
+    (!a.assignmentRemarks || a.assignmentRemarks === "-") &&
+    (!a.returnRemarks || a.returnRemarks === "-");
   return coreEmpty && enrichmentEmpty;
 }

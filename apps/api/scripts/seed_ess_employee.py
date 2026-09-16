@@ -61,7 +61,7 @@ def main() -> None:
     try:
         tenant = db.scalar(select(SecTenant).where(SecTenant.tenant_code == "BOOTSTRAP"))
         if tenant is None:
-            raise SystemExit("Bootstrap tenant missing — run seed_demo_data first")
+            raise SystemExit("Bootstrap tenant missing - run seed_demo_data first")
 
         company = db.scalar(
             select(OrgCompany).where(
@@ -78,7 +78,7 @@ def main() -> None:
             )
         )
         if company is None or branch is None:
-            raise SystemExit("Demo company/branch missing — run seed_demo_data first")
+            raise SystemExit("Demo company/branch missing - run seed_demo_data first")
 
         admin = db.scalar(
             select(SecUser).where(
@@ -109,7 +109,7 @@ def main() -> None:
                     break
         if employee is None:
             raise SystemExit(
-                "No HRMS employee found — run seed_hr_workforce first "
+                "No HRMS employee found - run seed_hr_workforce first "
                 f"(expected {ESS_EMPLOYEE_CODE})"
             )
 

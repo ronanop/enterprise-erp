@@ -477,12 +477,12 @@ export function AssetDocumentWorkspace() {
                   </div>
                   <div>
                     <dt className="text-muted-foreground">Storage URI</dt>
-                    <dd className="break-all">{selected.storage_uri || "—"}</dd>
+                    <dd className="break-all">{selected.storage_uri || "-"}</dd>
                   </div>
                   <div>
                     <dt className="text-muted-foreground">Content hash</dt>
                     <dd className="break-all font-mono text-xs">
-                      {selected.content_hash || "—"}
+                      {selected.content_hash || "-"}
                     </dd>
                   </div>
                 </dl>
@@ -607,7 +607,7 @@ export function AssetDocumentWorkspace() {
                   <SelectContent>
                     {assetOptions.map((asset) => (
                       <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                        {asset.asset_code} — {asset.asset_name}
+                        {asset.asset_code} - {asset.asset_name}
                       </SelectItem>
                     ))}
                   </SelectContent>

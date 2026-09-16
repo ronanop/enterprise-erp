@@ -1,1 +1,1 @@
-"""Document Management System module — Sprint 18."""
+"""Document Management System module - Sprint 18."""

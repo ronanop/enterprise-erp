@@ -13,7 +13,7 @@ import {
   YAxis,
 } from "recharts";
 
-/** Swiss/minimal chart palette — matches ERP MASTER (no purple). */
+/** Swiss/minimal chart palette - matches ERP MASTER (no purple). */
 export const CRM_CHART_COLORS = {
   sky: "#0369A1",
   skyDark: "#0C4A6E",

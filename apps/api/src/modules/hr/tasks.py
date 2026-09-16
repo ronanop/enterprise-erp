@@ -217,10 +217,10 @@ def attendance_auto_absent() -> dict:
 
 @celery_app.task(name="hr.leave_balance_accrual")
 def leave_balance_accrual(period_yyyymm: str | None = None) -> dict:
-    """Credit monthly leave accrual for the last completed calendar month (1–31).
+    """Credit monthly leave accrual for the last completed calendar month (1-31).
 
     When ``period_yyyymm`` is omitted, uses the month that fully ended before today
-    (e.g. run on 1 Mar 2026 → ``2026-02``). Independent of payroll 20–20 cycle.
+    (e.g. run on 1 Mar 2026 → ``2026-02``). Independent of payroll 20-20 cycle.
     """
     from database.session import SessionLocal
     from modules.hr.domain.leave_accrual_calendar import (

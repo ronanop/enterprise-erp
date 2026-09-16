@@ -1,4 +1,4 @@
-# FP-ASSET-011 — Maintenance Plan Deployment Guide
+# FP-ASSET-011 - Maintenance Plan Deployment Guide
 
 1. Apply migration `0476_ast_maint_plan_governance`.
 2. Verify `asset.maintenance_plan:*` permissions are granted to ASSET_* roles.

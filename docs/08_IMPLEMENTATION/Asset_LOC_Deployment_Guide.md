@@ -1,4 +1,4 @@
-# Asset Location — Deployment Guide (FP-ASSET-012)
+# Asset Location - Deployment Guide (FP-ASSET-012)
 
 ## Prerequisites
 

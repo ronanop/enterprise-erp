@@ -44,7 +44,7 @@ export function buildOvfFulfillmentRows(preview: ScmOvfPreview): OvfFulfillmentR
     const key = ovfProductKey(row.product_name);
     if (!key) continue;
     const serial = (row.serial_number || "").trim();
-    if (!serial || serial === "—" || serial === "-") continue;
+    if (!serial || serial === "-" || serial === "-") continue;
     const list = serialsByProduct.get(key) ?? [];
     if (!list.includes(serial)) list.push(serial);
     serialsByProduct.set(key, list);
@@ -240,7 +240,7 @@ export function ovfCreatePoSeedVendorLines(
   return ovfPoSeedVendorLines(all, options.distributorParam);
 }
 
-/** Item description per product — same source as OVF VendorPurchaseTable (`ScmVendorLine.description`). */
+/** Item description per product - same source as OVF VendorPurchaseTable (`ScmVendorLine.description`). */
 export function ovfVendorDescriptionByProduct(
   lines: ScmVendorLine[],
   fallbackLines?: ScmVendorLine[],
@@ -332,7 +332,7 @@ export function ovfInventoryShipItemPreviews(
     const serial = (row.serial_number || "").trim();
     const prev = byProduct.get(key);
     const serials = prev ? [...prev.serials] : [];
-    if (serial && serial !== "—" && serial !== "-" && !serials.includes(serial)) {
+    if (serial && serial !== "-" && serial !== "-" && !serials.includes(serial)) {
       serials.push(serial);
     }
     byProduct.set(key, {
@@ -434,7 +434,7 @@ export function grnPoInventoryShipItemPreviews(
     const serial = (row.serial_number || "").trim();
     const prev = byProduct.get(key);
     const serials = prev ? [...prev.serials] : [];
-    if (serial && serial !== "—" && serial !== "-" && !serials.includes(serial)) {
+    if (serial && serial !== "-" && serial !== "-" && !serials.includes(serial)) {
       serials.push(serial);
     }
     const grns = prev ? new Set(prev.grns) : new Set<string>();
@@ -504,7 +504,7 @@ export function buildGrnPoInventoryShipLines(
         [
           grn ? `GRN ${grn}` : null,
           po ? `PO ${po}` : null,
-          serial && serial !== "—" && serial !== "-"
+          serial && serial !== "-" && serial !== "-"
             ? `Serial: ${serial}`
             : null,
         ]
@@ -532,7 +532,7 @@ export function buildOvfBookedInventoryShipLines(
         source: "ovf_booking" as const,
         product_name: (row.product_name || "").trim(),
         max_qty: Number(row.quantity) || 0,
-        detail: serial && serial !== "—" && serial !== "-"
+        detail: serial && serial !== "-" && serial !== "-"
           ? `Serial: ${serial} · Booked on OVF`
           : "Booked from inventory on OVF",
         stock_unit_id: row.stock_unit_id,
@@ -590,7 +590,7 @@ export function takeOvfInventoryShipSelection(
   }
 }
 
-/** Matches CRM/API `_is_in_stock_distributor` — inventory path, not a vendor PO. */
+/** Matches CRM/API `_is_in_stock_distributor` - inventory path, not a vendor PO. */
 export const IN_STOCK_DISTRIBUTOR_LABEL = "IN STOCK";
 
 export function isInStockDistributor(value: string | null | undefined): boolean {
@@ -644,7 +644,7 @@ export function allocationSerialsForProduct(
   for (const row of allocations || []) {
     if (ovfProductKey(row.product_name) !== key) continue;
     const serial = (row.serial_number || "").trim();
-    if (!serial || serial === "—" || serial === "-") continue;
+    if (!serial || serial === "-" || serial === "-") continue;
     if (!serials.includes(serial)) serials.push(serial);
   }
   return serials;

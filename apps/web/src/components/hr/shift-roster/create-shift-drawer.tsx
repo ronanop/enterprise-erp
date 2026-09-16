@@ -165,7 +165,7 @@ export function CreateShiftDrawer({
       description={
         isEdit
           ? "Update shift master timing, grace, OT, color, and status."
-          : "Shift master — timing, grace, OT, color, weekly off rule."
+          : "Shift master - timing, grace, OT, color, weekly off rule."
       }
       wide
       onClose={onClose}
@@ -283,7 +283,7 @@ export function CreateShiftDrawer({
             Auto attendance
           </label>
         </div>
-        <SetupField label="Description" hint={`API times ${toApiTimeValue(startTime)} – ${toApiTimeValue(endTime)}`}>
+        <SetupField label="Description" hint={`API times ${toApiTimeValue(startTime)} - ${toApiTimeValue(endTime)}`}>
           <SetupTextarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}

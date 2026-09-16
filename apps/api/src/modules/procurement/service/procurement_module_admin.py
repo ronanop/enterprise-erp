@@ -1,4 +1,4 @@
-"""Procurement module admin — ERP admins or org-assigned procurement module admins."""
+"""Procurement module admin - ERP admins or org-assigned procurement module admins."""
 
 from __future__ import annotations
 

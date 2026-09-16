@@ -277,7 +277,7 @@ export function ReceiptSerialsTable({
                         "align-middle text-right tabular-nums text-muted-foreground",
                       )}
                     >
-                      {fractionalOnly ? "—" : index + 1}
+                      {fractionalOnly ? "-" : index + 1}
                     </td>
                     <td className={cn(procurementUi.td, "align-middle text-center")}>
                       {onUnitKindChange ? (
@@ -323,7 +323,7 @@ export function ReceiptSerialsTable({
                         className={cn(procurementUi.td, rowspanCell, "text-center")}
                       >
                         {fractionalOnly ? (
-                          <span className="text-xs text-muted-foreground">—</span>
+                          <span className="text-xs text-muted-foreground">-</span>
                         ) : (
                           <label
                             className={cn(

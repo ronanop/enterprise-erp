@@ -137,7 +137,7 @@ def parse_service_email_body(body: str, *, subject: str | None = None) -> dict[s
 
     noc_phone = _label_value(text, "NOC Contact Number", "NOC Number")
     if not noc_phone and noc_name and re.search(r"\d", noc_name):
-        # Sometimes name+number on one line mishandled — prefer dedicated number line
+        # Sometimes name+number on one line mishandled - prefer dedicated number line
         pass
     if noc_phone:
         fields["mobile"] = noc_phone[:50]
@@ -243,7 +243,7 @@ def parse_service_email_body(body: str, *, subject: str | None = None) -> dict[s
     if fields.get("reference_sr_number") and fields.get("ckt_id"):
         fields["subject"] = (
             f"SR {fields['reference_sr_number']} / CKT {fields['ckt_id']}"
-            + (f" — {fields['end_customer_name']}" if fields.get("end_customer_name") else "")
+            + (f" - {fields['end_customer_name']}" if fields.get("end_customer_name") else "")
         )[:255]
     elif problem:
         fields["subject"] = problem[:255]
@@ -263,7 +263,7 @@ def parse_service_email_body(body: str, *, subject: str | None = None) -> dict[s
             extras.append(stripped)
             continue
         if re.match(r"^\d+\.", stripped):
-            # numbered but not captured — keep
+            # numbered but not captured - keep
             if not any(
                 fields.get(k) and stripped[:40].lower() in str(fields.get(k)).lower()
                 for k in (

@@ -222,7 +222,7 @@ export function ProcurementTimelineListPage() {
     <ProcurementPage>
       <ProcurementPageHeader
         title="Timeline"
-        description="Procurement steps for each OVF — from SCM handoff through GRN, delivery challan, dispatch, and delivery completion."
+        description="Procurement steps for each OVF - from SCM handoff through GRN, delivery challan, dispatch, and delivery completion."
         actions={
           <Button
             type="button"
@@ -293,7 +293,7 @@ export function ProcurementTimelineListPage() {
                   className="cursor-pointer border-b border-border/70 transition-colors duration-150 hover:bg-muted/30"
                 >
                   <td className="px-3 py-2 font-medium tabular-nums">{row.ovf_no}</td>
-                  <td className="px-3 py-2">{row.customer_name || row.account_name || "—"}</td>
+                  <td className="px-3 py-2">{row.customer_name || row.account_name || "-"}</td>
                   <td className="max-w-[220px] px-3 py-2 text-muted-foreground">
                     {formatUniquePoList(row.company_po_numbers)}
                   </td>

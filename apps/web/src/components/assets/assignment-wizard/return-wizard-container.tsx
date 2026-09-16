@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * CR-004 Phase 5B-2B Task 3 — Return Wizard Container
+ * CR-004 Phase 5B-2B Task 3 - Return Wizard Container
  *
  * Loads an active assignment, populates the presentational ReturnWizard,
  * and submits returns via AssignmentFrontendService.
@@ -158,7 +158,7 @@ export function ReturnWizardContainer({
                 .filter(Boolean)
                 .join(" · ") ||
               line.component_id.slice(0, 8),
-            serialNumber: line.serial_number?.trim() || "—",
+            serialNumber: line.serial_number?.trim() || "-",
             issueStatus: "RETURNED" as const,
             returnRemarks: "",
           };

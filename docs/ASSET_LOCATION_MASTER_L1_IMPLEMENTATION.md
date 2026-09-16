@@ -1,8 +1,8 @@
-# Asset Location Master — L1 Implementation Report
+# Asset Location Master - L1 Implementation Report
 
-**Phase:** L1 — Location Master Foundation (Option A)  
+**Phase:** L1 - Location Master Foundation (Option A)  
 **Date:** 2026-08-12  
-**Status:** Complete — L2 not started
+**Status:** Complete - L2 not started
 
 ---
 
@@ -61,7 +61,7 @@ No automatic Head Office promotion. Branch `Head Office` / `branch_type` untouch
 | `GET` | `/locations` | Filters: `branch_id`, `company_id`, `city`, `status`, `is_head_office`. Response includes `city`, `is_head_office`, `version` |
 | `POST` | `/locations` | Optional `city`, `is_head_office`, `status`, address fields. Backward compatible |
 | `GET` | `/locations/{id}` | **New** |
-| `PATCH` | `/locations/{id}` | **New** — supports HO replace via `replace_existing_head_office` |
+| `PATCH` | `/locations/{id}` | **New** - supports HO replace via `replace_existing_head_office` |
 
 Permissions reused:
 - `organization.location:read`

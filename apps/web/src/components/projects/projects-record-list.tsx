@@ -23,7 +23,7 @@ import { ApiClientError } from "@/services/api-client";
 import { cn } from "@/lib/utils";
 
 export type RecordColumn<T> = {
-  /** Sort key — must be unique within the table. */
+  /** Sort key - must be unique within the table. */
   key: string;
   label: string;
   cell: (row: T) => ReactNode;

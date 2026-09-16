@@ -208,7 +208,7 @@ export function AssetCategoryWorkspace() {
     <AssetsPremiumPage>
       <PageHeader
         title="Asset Categories"
-        description="Company taxonomy for IT asset registration — create, edit, deactivate, and reactivate."
+        description="Company taxonomy for IT asset registration - create, edit, deactivate, and reactivate."
         actions={
           <Button
             type="button"
@@ -312,7 +312,7 @@ export function AssetCategoryWorkspace() {
                         <td className="px-3 py-2 font-mono text-xs">{row.category_code}</td>
                         <td className="px-3 py-2">{row.category_name}</td>
                         <td className="px-3 py-2 tabular-nums">
-                          {row.default_useful_life_months ?? "—"}
+                          {row.default_useful_life_months ?? "-"}
                         </td>
                         <td className="px-3 py-2">
                           <Badge
@@ -576,7 +576,7 @@ export function AssetCategoryWorkspace() {
                       </p>
                       <p className="text-xs text-amber-900">
                         {confirmAction === "deactivate"
-                          ? "Business delete only — the category stays in the database as inactive. Blocked if operational assets still reference it."
+                          ? "Business delete only - the category stays in the database as inactive. Blocked if operational assets still reference it."
                           : "Restores the category to active so it appears in registration dropdowns."}
                       </p>
                       <div className="flex gap-2">

@@ -1,4 +1,4 @@
-"""My Jobs — team-routed approval task service.
+"""My Jobs - team-routed approval task service.
 
 Raised by the sales blueprint whenever a record needs to be "sent for
 approval to {Team}" (product rule #8). Deciding a task (approve/reject)
@@ -76,7 +76,7 @@ class ApprovalTaskService:
             entity_id=entity_id,
         )
         # When viewing “Assigned to me”, also surface requests I sent so the
-        # requester can track open approvals — but not every Admin fan-out copy.
+        # requester can track open approvals - but not every Admin fan-out copy.
         if my_tasks_only and ctx.user_id is not None:
             sent = self._repo.list_tasks(
                 ctx,
@@ -221,7 +221,7 @@ class ApprovalTaskService:
     def _admin_recipient_ids(self, ctx: TenantContext) -> list[UUID]:
         """CRM module admins + ERP admins (by user_type) only.
 
-        Do not use TENANT_ADMIN / SUPER_ADMIN role codes here — those roles are
+        Do not use TENANT_ADMIN / SUPER_ADMIN role codes here - those roles are
         widely assigned and would fan out one task per employee.
         """
         from sqlalchemy import select
@@ -312,7 +312,7 @@ class ApprovalTaskService:
             self._db,
             tenant_id=ctx.tenant_id,
             recipient_user_id=task.requested_by,
-            title=f"Approval rejected — {task.title}",
+            title=f"Approval rejected - {task.title}",
             body=body,
             entity_type=task.entity_type,
             entity_id=task.entity_id,

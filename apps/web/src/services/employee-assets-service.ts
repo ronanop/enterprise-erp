@@ -101,7 +101,7 @@ export async function returnEmployeeAsset(assignmentId: string): Promise<Employe
 }
 
 export function formatAssetDate(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const datePart = value.slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return value;
   const [y, m, d] = datePart.split("-").map(Number);

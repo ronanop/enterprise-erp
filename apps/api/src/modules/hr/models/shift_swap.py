@@ -1,4 +1,4 @@
-"""Shift swap request ORM — Emp → Mgr → HR apply."""
+"""Shift swap request ORM - Emp → Mgr → HR apply."""
 
 from datetime import date, datetime
 from uuid import UUID, uuid4

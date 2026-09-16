@@ -150,7 +150,7 @@ export function EmailTemplatesPage() {
                 <td className="px-3 py-2.5 font-mono text-xs">{row.template_code}</td>
                 <td className="px-3 py-2.5">{row.template_name}</td>
                 <td className="max-w-[280px] truncate px-3 py-2.5 text-muted-foreground">
-                  {row.subject_template ?? "—"}
+                  {row.subject_template ?? "-"}
                 </td>
                 <td className="px-3 py-2.5">{row.is_active ? "Yes" : "No"}</td>
               </tr>

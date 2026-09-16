@@ -1,4 +1,4 @@
-# FP-ASSET-016 — Asset Document Management (Feature Package)
+# FP-ASSET-016 - Asset Document Management (Feature Package)
 
 **Status:** Implemented  
 **ADR:** ADR-ASSET-DOC-001
@@ -9,10 +9,10 @@ Asset document **metadata** register. Lifecycle: active → superseded → archi
 
 ## Lifecycle fidelity
 
-- **Create:** `POST /` — creates `active` row; client cannot override `status`.
-- **Update:** `PATCH /{id}` — active metadata only; requires `version`.
-- **Supersede:** `POST /{id}/supersede` — active only.
-- **Archive:** `POST /{id}/archive` — active or superseded.
+- **Create:** `POST /` - creates `active` row; client cannot override `status`.
+- **Update:** `PATCH /{id}` - active metadata only; requires `version`.
+- **Supersede:** `POST /{id}/supersede` - active only.
+- **Archive:** `POST /{id}/archive` - active or superseded.
 
 ## API (`/api/v1/assets/asset-documents`)
 

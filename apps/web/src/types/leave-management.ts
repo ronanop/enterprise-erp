@@ -1,4 +1,4 @@
-/** Enterprise Leave Management — view models */
+/** Enterprise Leave Management - view models */
 
 export type LeaveSession = "full_day" | "first_half" | "second_half";
 

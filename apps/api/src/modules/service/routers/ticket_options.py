@@ -17,7 +17,7 @@ from shared.schemas import APIResponse
 
 ticket_options_router = APIRouter(
     prefix="/ticket-options",
-    tags=["Service — Ticket Options"],
+    tags=["Service - Ticket Options"],
 )
 
 

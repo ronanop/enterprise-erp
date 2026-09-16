@@ -209,10 +209,10 @@ export function GlAccountLedgerPage({ accountId }: { accountId: string }) {
                     </td>
                     <td className="px-2 py-1.5 font-mono text-xs">
                       {line.journal_header_id ? (
-                        <Link href={`/finance/journals/${line.journal_header_id}`} className="cursor-pointer hover:underline">{line.journal_number ?? "—"}</Link>
-                      ) : (line.journal_number ?? "—")}
+                        <Link href={`/finance/journals/${line.journal_header_id}`} className="cursor-pointer hover:underline">{line.journal_number ?? "-"}</Link>
+                      ) : (line.journal_number ?? "-")}
                     </td>
-                    <td className="px-2 py-1.5 text-xs text-muted-foreground">{line.description ?? "—"}</td>
+                    <td className="px-2 py-1.5 text-xs text-muted-foreground">{line.description ?? "-"}</td>
                     <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(line.debit_amount)}</td>
                     <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(line.credit_amount)}</td>
                     <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(line.running_balance)}</td>

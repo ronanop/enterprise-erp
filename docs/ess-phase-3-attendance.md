@@ -1,14 +1,14 @@
-# ESS PWA — Phase 3 (Attendance trust + WFH)
+# ESS PWA - Phase 3 (Attendance trust + WFH)
 
 ## Delivered
 
 ### OT / late / calendar
 - `EssAttendanceResponse` includes `late_minutes`, `overtime_minutes`, `early_leave_minutes`.
-- `GET /ess/attendance/summary?month=YYYY-MM` — present, late, OT minutes, WFH days.
+- `GET /ess/attendance/summary?month=YYYY-MM` - present, late, OT minutes, WFH days.
 - PWA attendance month calendar uses `attendance_status` colors; OT/late cards use summary API.
 
 ### Selfie + face at punch
-- `GET /ess/attendance/punch-policy` — `selfie_required`, `face_at_punch_required`, `face_enrolled`, `geofence_required` (from `hr_attendance_rule.ess_*` flags).
+- `GET /ess/attendance/punch-policy` - `selfie_required`, `face_at_punch_required`, `face_enrolled`, `geofence_required` (from `hr_attendance_rule.ess_*` flags).
 - `POST /ess/attendance/punch` accepts optional `image_base64`; stores `check_in_selfie_hash` / `check_out_selfie_hash`.
 - Face match uses enrolled profile fingerprint when face is required.
 - PWA punch sheet with `FaceCapture` when policy requires camera.

@@ -68,7 +68,7 @@ class AssetCreate(BaseModel):
     asset_name: str
     asset_category_id: UUID
     asset_type_id: UUID
-    # Legacy enum — optional; server defaults to "fixed" when omitted.
+    # Legacy enum - optional; server defaults to "fixed" when omitted.
     asset_type: str | None = None
     asset_domain: str = "IT"
     purchase_date: date
@@ -1187,7 +1187,7 @@ class AssetDocumentListResult(BaseModel):
     page_size: int
 
 
-# Planning aliases (DOC naming) — prefer AssetDocument* in OpenAPI to avoid doc_* collision.
+# Planning aliases (DOC naming) - prefer AssetDocument* in OpenAPI to avoid doc_* collision.
 DocumentCreate = AssetDocumentCreate
 DocumentUpdate = AssetDocumentUpdate
 DocumentResponse = AssetDocumentResponse
@@ -1467,7 +1467,7 @@ class AssetExcelImportSummaryResponse(BaseModel):
     rows: list[AssetExcelImportRowResult] = []
 
 
-# --- Incoming Assets (IT receiving / Sub-phase 1–2 QC) ---
+# --- Incoming Assets (IT receiving / Sub-phase 1-2 QC) ---
 
 
 class IncomingAssetUnitResponse(OrmModel):

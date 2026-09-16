@@ -20,11 +20,11 @@ from modules.master_data.schemas import CustomerResponse, ProductResponse
 from modules.sales.schemas import InvoiceResponse, SalesOrderResponse
 from shared.schemas import APIResponse
 
-leads_router = APIRouter(prefix="/leads", tags=["Agent Read — Leads"])
-orders_router = APIRouter(prefix="/orders", tags=["Agent Read — Orders"])
-customers_router = APIRouter(prefix="/agent/customers", tags=["Agent Read — Customers"])
-invoices_router = APIRouter(prefix="/invoices", tags=["Agent Read — Invoices"])
-products_router = APIRouter(prefix="/agent/products", tags=["Agent Read — Products"])
+leads_router = APIRouter(prefix="/leads", tags=["Agent Read - Leads"])
+orders_router = APIRouter(prefix="/orders", tags=["Agent Read - Orders"])
+customers_router = APIRouter(prefix="/agent/customers", tags=["Agent Read - Customers"])
+invoices_router = APIRouter(prefix="/invoices", tags=["Agent Read - Invoices"])
+products_router = APIRouter(prefix="/agent/products", tags=["Agent Read - Products"])
 
 
 def _customer_from_row(row: MasterCustomer) -> CustomerResponse:

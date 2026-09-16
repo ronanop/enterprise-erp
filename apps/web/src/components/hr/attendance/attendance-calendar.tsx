@@ -80,7 +80,7 @@ export function AttendanceCalendar({
           if (day === null) return <div key={`e-${i}`} />;
           const key = dateKey(day);
           const dayRows = byDate.get(key) ?? [];
-          const code = dayRows[0] ? CALENDAR_CODES[dayRows[0].status] ?? "·" : "—";
+          const code = dayRows[0] ? CALENDAR_CODES[dayRows[0].status] ?? "·" : "-";
           const count = dayRows.length;
           return (
             <button
@@ -131,8 +131,8 @@ export function AttendanceDayDetailDrawer({
             <li key={r.id} className="rounded-lg border border-border/60 px-3 py-2">
               <p className="font-medium">{r.extension.employeeName}</p>
               <p className="text-muted-foreground">
-                {r.checkIn ? new Date(r.checkIn).toLocaleTimeString() : "—"} –{" "}
-                {r.checkOut ? new Date(r.checkOut).toLocaleTimeString() : "—"} · {r.workingHours}h · OT{" "}
+                {r.checkIn ? new Date(r.checkIn).toLocaleTimeString() : "-"} -{" "}
+                {r.checkOut ? new Date(r.checkOut).toLocaleTimeString() : "-"} · {r.workingHours}h · OT{" "}
                 {r.overtimeHours}h
               </p>
               <p className="capitalize text-muted-foreground">{r.status.replace(/_/g, " ")}</p>

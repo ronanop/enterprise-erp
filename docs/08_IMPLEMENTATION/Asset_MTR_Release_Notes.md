@@ -1,4 +1,4 @@
-# Asset Meter Reading — Release Notes (FP-ASSET-015)
+# Asset Meter Reading - Release Notes (FP-ASSET-015)
 
 **Release:** FP-ASSET-015  
 **Date:** 2026-07-30

@@ -1,4 +1,4 @@
-"""Inventory port — stock authority via services/events; UUID refs only."""
+"""Inventory port - stock authority via services/events; UUID refs only."""
 
 from uuid import UUID
 

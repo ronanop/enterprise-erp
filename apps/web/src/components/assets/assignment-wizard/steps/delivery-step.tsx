@@ -69,7 +69,7 @@ export function DeliveryStep({ state, onChange, unlinkedChallans = [] }: Deliver
       {employeeOnly ? (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            Most assets don&apos;t need a DC at handover — choose an option only if this one does.
+            Most assets don&apos;t need a DC at handover - choose an option only if this one does.
           </p>
           <div className="grid gap-1.5 sm:grid-cols-3">
             {MODES.map((modeOption) => {
@@ -119,7 +119,7 @@ export function DeliveryStep({ state, onChange, unlinkedChallans = [] }: Deliver
               {unlinkedChallans.map((row) => (
                 <SelectItem key={row.id} value={row.id} className="cursor-pointer">
                   {row.dcNumber}
-                  {row.employeeName ? ` — ${row.employeeName}` : ""}
+                  {row.employeeName ? ` - ${row.employeeName}` : ""}
                 </SelectItem>
               ))}
             </SelectContent>

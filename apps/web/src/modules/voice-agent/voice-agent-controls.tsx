@@ -69,7 +69,7 @@ export function VoiceAgentControls() {
           <p className="text-sm font-medium text-foreground">Voice session</p>
           <p className="text-xs text-muted-foreground capitalize">
             Status: {status}
-            {message ? ` — ${message}` : ""}
+            {message ? ` - ${message}` : ""}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -119,7 +119,7 @@ export function VoiceAgentControls() {
         )}
         <p>
           {isConnected
-            ? "Listening — ask about leads, orders, or say “open CRM”."
+            ? "Listening - ask about leads, orders, or say “open CRM”."
             : "Start a session after allowing microphone access. Signed URLs expire in about 15 minutes."}
         </p>
       </div>

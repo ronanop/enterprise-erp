@@ -186,7 +186,7 @@ from modules.asset.service.discovery_service import AssetDiscoveryService
 from modules.foundation.domain.value_objects import TenantContext
 from shared.schemas import APIResponse
 
-asset_categories_router = APIRouter(prefix="/asset-categories", tags=["Asset — AssetCategory"])
+asset_categories_router = APIRouter(prefix="/asset-categories", tags=["Asset - AssetCategory"])
 
 @asset_categories_router.get("", response_model=APIResponse[AssetCategoryListResult])
 def list_asset_categories(
@@ -269,7 +269,7 @@ def reactivate_asset_category(
         data=AssetCategoryService(db).reactivate(ctx, row_id),
     )
 
-assets_router = APIRouter(prefix="/assets", tags=["Asset — Asset"])
+assets_router = APIRouter(prefix="/assets", tags=["Asset - Asset"])
 
 
 def _asset_type_name_map(db: Session, ctx: TenantContext, items: list) -> dict:
@@ -392,7 +392,7 @@ def import_assets_from_excel(
 ):
     """Import preview-validated Excel rows via business services (CR-004 Phase 8B).
 
-    Not a new asset CRUD API — orchestration over AssetService / AssignmentService /
+    Not a new asset CRUD API - orchestration over AssetService / AssignmentService /
     AssetOperationalStatusService only.
     """
     from modules.asset.domain.excel_import import ExcelImportDefaults, ExcelImportRowInput
@@ -717,7 +717,7 @@ def reinstate_assets(
     )
 
 
-asset_components_router = APIRouter(prefix="/asset-components", tags=["Asset — AssetComponent"])
+asset_components_router = APIRouter(prefix="/asset-components", tags=["Asset - AssetComponent"])
 
 @asset_components_router.get("", response_model=APIResponse[AssetComponentListResult])
 def list_asset_components(
@@ -872,7 +872,7 @@ def dispose_asset_components(
         message="dispose", data=AssetComponentService(db).dispose(ctx, row_id)
     )
 
-asset_assignments_router = APIRouter(prefix="/asset-assignments", tags=["Asset — AssetAssignment"])
+asset_assignments_router = APIRouter(prefix="/asset-assignments", tags=["Asset - AssetAssignment"])
 
 @asset_assignments_router.get("", response_model=APIResponse[AssetAssignmentListResult])
 def list_asset_assignments(
@@ -1062,7 +1062,7 @@ def return_asset_assignments(
         ),
     )
 
-asset_transfers_router = APIRouter(prefix="/asset-transfers", tags=["Asset — AssetTransfer"])
+asset_transfers_router = APIRouter(prefix="/asset-transfers", tags=["Asset - AssetTransfer"])
 
 @asset_transfers_router.get("", response_model=APIResponse[AssetTransferListResult])
 def list_asset_transfers(
@@ -1193,7 +1193,7 @@ def resubmit_asset_transfers(
 ):
     return APIResponse(message="resubmit", data=TransferService(db).resubmit(ctx, row_id))
 
-asset_locations_router = APIRouter(prefix="/asset-locations", tags=["Asset — AssetLocation"])
+asset_locations_router = APIRouter(prefix="/asset-locations", tags=["Asset - AssetLocation"])
 
 @asset_locations_router.get("", response_model=APIResponse[AssetLocationListResult])
 def list_asset_locations(
@@ -1265,7 +1265,7 @@ def complete_asset_locations(
 ):
     return APIResponse(message="complete", data=LocationService(db).complete(ctx, row_id))
 
-asset_warranties_router = APIRouter(prefix="/asset-warranties", tags=["Asset — AssetWarranty"])
+asset_warranties_router = APIRouter(prefix="/asset-warranties", tags=["Asset - AssetWarranty"])
 
 @asset_warranties_router.get("", response_model=APIResponse[AssetWarrantyListResult])
 def list_asset_warranties(
@@ -1359,7 +1359,7 @@ def expire_asset_warranties(
 ):
     return APIResponse(message="expire", data=WarrantyService(db).expire(ctx, row_id))
 
-asset_insurances_router = APIRouter(prefix="/asset-insurances", tags=["Asset — AssetInsurance"])
+asset_insurances_router = APIRouter(prefix="/asset-insurances", tags=["Asset - AssetInsurance"])
 
 @asset_insurances_router.get("", response_model=APIResponse[AssetInsuranceListResult])
 def list_asset_insurances(
@@ -1459,7 +1459,7 @@ def close_asset_insurances(
 ):
     return APIResponse(message="close", data=InsuranceService(db).close(ctx, row_id))
 
-maintenance_plans_router = APIRouter(prefix="/maintenance-plans", tags=["Asset — MaintenancePlan"])
+maintenance_plans_router = APIRouter(prefix="/maintenance-plans", tags=["Asset - MaintenancePlan"])
 
 @maintenance_plans_router.get("", response_model=APIResponse[MaintenancePlanListResult])
 def list_maintenance_plans(
@@ -1557,7 +1557,7 @@ def close_maintenance_plans(
 ):
     return APIResponse(message="close", data=MaintenancePlanService(db).close(ctx, row_id))
 
-asset_maintenances_router = APIRouter(prefix="/asset-maintenances", tags=["Asset — AssetMaintenance"])
+asset_maintenances_router = APIRouter(prefix="/asset-maintenances", tags=["Asset - AssetMaintenance"])
 
 
 def _maintenance_response(
@@ -1827,7 +1827,7 @@ def start_maintenance_asset_maintenances(
         ),
     )
 
-service_histories_router = APIRouter(prefix="/service-histories", tags=["Asset — ServiceHistory"])
+service_histories_router = APIRouter(prefix="/service-histories", tags=["Asset - ServiceHistory"])
 
 @service_histories_router.get("", response_model=APIResponse[ServiceHistoryListResult])
 def list_service_histories(
@@ -1881,7 +1881,7 @@ def create_service_histories(
         data=ServiceHistoryService(db).create(ctx, **body.model_dump(exclude_none=True)),
     )
 
-asset_depreciations_router = APIRouter(prefix="/asset-depreciations", tags=["Asset — AssetDepreciation"])
+asset_depreciations_router = APIRouter(prefix="/asset-depreciations", tags=["Asset - AssetDepreciation"])
 
 @asset_depreciations_router.get("", response_model=APIResponse[AssetDepreciationListResult])
 def list_asset_depreciations(
@@ -2013,7 +2013,7 @@ def reverse_asset_depreciations(
     )
     return APIResponse(message="Reversed", data=data)
 
-asset_disposals_router = APIRouter(prefix="/asset-disposals", tags=["Asset — AssetDisposal"])
+asset_disposals_router = APIRouter(prefix="/asset-disposals", tags=["Asset - AssetDisposal"])
 
 @asset_disposals_router.get("", response_model=APIResponse[AssetDisposalListResult])
 def list_asset_disposals(
@@ -2149,7 +2149,7 @@ def post_asset_disposals(
     )
     return APIResponse(message="Posted", data=data)
 
-asset_revaluations_router = APIRouter(prefix="/asset-revaluations", tags=["Asset — AssetRevaluation"])
+asset_revaluations_router = APIRouter(prefix="/asset-revaluations", tags=["Asset - AssetRevaluation"])
 
 @asset_revaluations_router.get("", response_model=APIResponse[AssetRevaluationListResult])
 def list_asset_revaluations(
@@ -2283,7 +2283,7 @@ def post_asset_revaluations(
     )
     return APIResponse(message="Posted", data=data)
 
-asset_audits_router = APIRouter(prefix="/asset-audits", tags=["Asset — AssetAudit"])
+asset_audits_router = APIRouter(prefix="/asset-audits", tags=["Asset - AssetAudit"])
 
 @asset_audits_router.get("", response_model=APIResponse[AssetAuditListResult])
 def list_asset_audits(
@@ -2375,7 +2375,7 @@ def cancel_asset_audits(
 ):
     return APIResponse(message="cancel", data=AssetAuditService(db).cancel(ctx, row_id))
 
-asset_documents_router = APIRouter(prefix="/asset-documents", tags=["Asset — AssetDocument"])
+asset_documents_router = APIRouter(prefix="/asset-documents", tags=["Asset - AssetDocument"])
 
 @asset_documents_router.get("", response_model=APIResponse[AssetDocumentListResult])
 def list_asset_documents(
@@ -2455,7 +2455,7 @@ def archive_asset_documents(
 ):
     return APIResponse(message="archive", data=DocumentService(db).archive(ctx, row_id))
 
-asset_checklists_router = APIRouter(prefix="/asset-checklists", tags=["Asset — AssetChecklist"])
+asset_checklists_router = APIRouter(prefix="/asset-checklists", tags=["Asset - AssetChecklist"])
 
 @asset_checklists_router.get("", response_model=APIResponse[AssetChecklistListResult])
 def list_asset_checklists(
@@ -2537,7 +2537,7 @@ def cancel_asset_checklists(
 ):
     return APIResponse(message="cancel", data=ChecklistService(db).cancel(ctx, row_id))
 
-meter_readings_router = APIRouter(prefix="/meter-readings", tags=["Asset — MeterReading"])
+meter_readings_router = APIRouter(prefix="/meter-readings", tags=["Asset - MeterReading"])
 
 @meter_readings_router.get("", response_model=APIResponse[MeterReadingListResult])
 def list_meter_readings(
@@ -2601,7 +2601,7 @@ def void_meter_readings(
 ):
     return APIResponse(message="void", data=MeterReadingService(db).void(ctx, row_id))
 
-asset_notifications_router = APIRouter(prefix="/asset-notifications", tags=["Asset — AssetNotification"])
+asset_notifications_router = APIRouter(prefix="/asset-notifications", tags=["Asset - AssetNotification"])
 
 @asset_notifications_router.get("", response_model=APIResponse[AssetNotificationListResult])
 def list_asset_notifications(
@@ -2703,7 +2703,7 @@ def mark_failed_asset_notifications(
 ):
     return APIResponse(message="mark-failed", data=AssetNotificationService(db).mark_failed(ctx, row_id))
 
-reports_router = APIRouter(prefix="/reports", tags=["Asset — AssetReport"])
+reports_router = APIRouter(prefix="/reports", tags=["Asset - AssetReport"])
 
 @reports_router.get("/catalog", response_model=APIResponse[list[AssetReportCatalogItem]])
 def catalog_asset_reports(
@@ -2876,7 +2876,7 @@ def finalize_reports(
     return APIResponse(message="finalize", data=AssetReportService(db).finalize(ctx, row_id))
 
 
-incoming_assets_router = APIRouter(prefix="/incoming-assets", tags=["Asset — IncomingAssets"])
+incoming_assets_router = APIRouter(prefix="/incoming-assets", tags=["Asset - IncomingAssets"])
 
 
 @incoming_assets_router.get("/summary", response_model=APIResponse[IncomingAssetSummaryResponse])
@@ -3069,7 +3069,7 @@ def arrive_incoming_asset(
 
 
 registration_queue_router = APIRouter(
-    prefix="/registration-queue", tags=["Asset — RegistrationQueue"]
+    prefix="/registration-queue", tags=["Asset - RegistrationQueue"]
 )
 
 

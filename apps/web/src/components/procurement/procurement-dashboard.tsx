@@ -41,7 +41,7 @@ import {
   isScmOpenOvfRow,
 } from "@/utils/scm-queue-ovf-status";
 
-/** Same rule as GrnsListPage — issued POs only (not draft/submitted/cancelled). */
+/** Same rule as GrnsListPage - issued POs only (not draft/submitted/cancelled). */
 function isIssuedVendorPo(row: ProcurementRow): boolean {
   const status = asStatus(row.status);
   return status !== "draft" && status !== "submitted" && status !== "cancelled";

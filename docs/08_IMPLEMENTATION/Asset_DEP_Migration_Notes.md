@@ -1,4 +1,4 @@
-# FP-ASSET-006 — Migration Notes
+# FP-ASSET-006 - Migration Notes
 
 **Revision:** `0471_ast_depreciation_governance`  
 **down_revision:** `0470_ast_disposal_governance`

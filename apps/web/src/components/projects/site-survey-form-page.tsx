@@ -195,7 +195,7 @@ export function SiteSurveyFormPage({ projectId }: { projectId: string }) {
       stageOwnerBannerSection(),
       {
         title: "Survey",
-        subtitle: "Step 3 — Site readiness checks for your assigned survey work.",
+        subtitle: "Step 3 - Site readiness checks for your assigned survey work.",
         icon: MapPin,
         fields: [
           {

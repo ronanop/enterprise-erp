@@ -1,4 +1,4 @@
-"""Finance compliance signals — read-only checks on fin_* tables."""
+"""Finance compliance signals - read-only checks on fin_* tables."""
 
 from uuid import UUID
 

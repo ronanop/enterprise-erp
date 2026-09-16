@@ -458,13 +458,13 @@ export async function loadOnboardingDirectory(): Promise<OnboardingDirectory> {
           candidateName: cand ? candidateName(cand) : String(o.candidate_name ?? "Candidate"),
           candidateEmail: String(cand?.email ?? o.email ?? ""),
           candidatePhone: String(cand?.phone ?? cand?.mobile ?? o.phone ?? ""),
-          department: String(o.department_name ?? o.department_id ?? "—"),
-          designation: String(o.designation_name ?? o.designation_id ?? "—"),
+          department: String(o.department_name ?? o.department_id ?? "-"),
+          designation: String(o.designation_name ?? o.designation_id ?? "-"),
           ctc: o.ctc != null ? String(o.ctc) : undefined,
         };
       });
   } catch {
-    /* offline / unauthenticated — local cases still load */
+    /* offline / unauthenticated - local cases still load */
   }
 
   const localCases = loadCases();
@@ -478,7 +478,7 @@ export async function loadOnboardingDirectory(): Promise<OnboardingDirectory> {
   // Re-stamp stored signed PDFs without legacy "Digitally signed" label.
   await migrateSignedPolicyStampFormat(cases).catch(() => undefined);
   const departments = Array.from(
-    new Set(cases.map((c) => c.department).filter((d) => d && d !== "—")),
+    new Set(cases.map((c) => c.department).filter((d) => d && d !== "-")),
   ).sort();
 
   return { cases, acceptedOffers, departments, apiOnboardingCount };
@@ -703,7 +703,7 @@ export function buildInvitationEmailBody(caseRow: OnboardingCase): string {
     "",
     "If the link is missing or you are signed out, open the login page and sign in again with the same email and password.",
     "",
-    "— HR Team",
+    "- HR Team",
   ].join("\n");
 }
 
@@ -719,7 +719,7 @@ export function buildInvitationCredentialsText(caseRow: OnboardingCase): string 
 export function openInvitationMailto(caseRow: OnboardingCase): void {
   const to = invitationLoginEmail(caseRow);
   if (!to || typeof window === "undefined") return;
-  const subject = encodeURIComponent(`Your onboarding login — ${caseRow.caseCode}`);
+  const subject = encodeURIComponent(`Your onboarding login - ${caseRow.caseCode}`);
   const body = encodeURIComponent(buildInvitationEmailBody(caseRow));
   const href = `mailto:${to}?subject=${subject}&body=${body}`;
   const link = document.createElement("a");
@@ -811,7 +811,7 @@ export async function loginOnboardingPortal(
     if (e instanceof ApiClientError && e.status !== 0 && e.status < 500) {
       throw new Error(e.message || "Could not sign in. Please try again.");
     }
-    /* API down — try local cases so HR testing still works */
+    /* API down - try local cases so HR testing still works */
   }
 
   const matches = loadCases().filter((c) => {
@@ -1137,7 +1137,7 @@ export async function verifyDocument(
   return syncCaseToApi(next);
 }
 
-/** Prefer copy + invitation drawer — mailto opens Outlook and often fails mid-update. */
+/** Prefer copy + invitation drawer - mailto opens Outlook and often fails mid-update. */
 export function openDocumentReuploadMailto(_caseRow: OnboardingCase): void {
   // Intentionally no-op: reject flow copies the portal link and opens InvitationDrawer.
 }
@@ -1259,7 +1259,7 @@ export async function approveCandidateReview(caseId: string): Promise<Onboarding
   const rejected = c.portal.documents.filter((d) => d.verifyStatus === "rejected");
   if (rejected.length > 0) {
     throw new Error(
-      "Some documents were rejected — the candidate has been asked to re-upload. Wait for their re-submission.",
+      "Some documents were rejected - the candidate has been asked to re-upload. Wait for their re-submission.",
     );
   }
   if (!c.department?.trim() || !c.designation?.trim()) {
@@ -1499,7 +1499,7 @@ export async function completeOnboarding(
     action: activateNow ? "activate_employee" : "complete_onboarding",
     detail: activateNow
       ? `Local activate Emp ID ${local.employeeCode}`
-      : `Local profile ${local.employeeCode} — pending activation until ${c.joiningDate || "joining date"}`,
+      : `Local profile ${local.employeeCode} - pending activation until ${c.joiningDate || "joining date"}`,
     actor: actor(),
   });
   return next;

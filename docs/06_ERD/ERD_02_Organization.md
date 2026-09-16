@@ -1,11 +1,11 @@
-# ERD_02 — Organization Domain
+# ERD_02 - Organization Domain
 
-**Document:** Enterprise ERD — Organization Domain  
+**Document:** Enterprise ERD - Organization Domain  
 **Version:** 1.0  
 **Status:** Draft for Architecture Review  
 **Schema:** `organization`  
 **Aligned To:** BRD v1.0 · FRD-02 · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 
 ---
 
@@ -55,8 +55,8 @@ Location entities support geographic and physical site management.
 - Physical location management
 
 ### Out of Scope
-- Security and authentication (`sec_*`) — ERD_01
-- Business master data (`master_*`) — ERD_03
+- Security and authentication (`sec_*`) - ERD_01
+- Business master data (`master_*`) - ERD_03
 - Financial transactions (`trx_*`)
 - SQLAlchemy models, Alembic migrations, application code
 
@@ -66,7 +66,7 @@ Location entities support geographic and physical site management.
 - Cross-tenant joins strictly prohibited (DBS §Multi-Tenant)
 
 ### Dependencies
-- `sec_tenant` (ERD_01) — upstream
+- `sec_tenant` (ERD_01) - upstream
 
 ---
 
@@ -129,7 +129,7 @@ Department
 
 | # | Table | Schema | Classification | tenant_id | company_id | branch_id | Soft Delete |
 |---|-------|--------|----------------|-----------|------------|-----------|-------------|
-| 1 | `org_company` | organization | Master | ✅ | self | — | ✅ |
+| 1 | `org_company` | organization | Master | ✅ | self | - | ✅ |
 | 2 | `org_branch` | organization | Master | ✅ | ✅ | self | ✅ |
 | 3 | `org_department` | organization | Master | ✅ | ✅ | ✅ | ✅ |
 | 4 | `org_business_unit` | organization | Master | ✅ | ✅ | ✅ | ✅ |
@@ -165,24 +165,24 @@ Legal company entity under a tenant (FRD-02 §5). Each company maintains indepen
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | UUID | NO | app-generated | PK |
-| `tenant_id` | UUID | NO | — | FK → sec_tenant |
-| `company_code` | VARCHAR(50) | NO | — | UK per tenant |
-| `company_name` | VARCHAR(255) | NO | — | Display name |
-| `legal_name` | VARCHAR(255) | NO | — | Registered legal name |
-| `registration_number` | VARCHAR(100) | YES | — | Encrypted at rest |
-| `tax_number` | VARCHAR(100) | YES | — | Encrypted at rest |
-| `country_code` | VARCHAR(3) | NO | — | ISO 3166 |
-| `currency_code` | VARCHAR(3) | NO | — | Base currency ISO 4217 |
-| `fiscal_year_start_month` | SMALLINT | NO | `4` | 1–12 |
+| `tenant_id` | UUID | NO | - | FK → sec_tenant |
+| `company_code` | VARCHAR(50) | NO | - | UK per tenant |
+| `company_name` | VARCHAR(255) | NO | - | Display name |
+| `legal_name` | VARCHAR(255) | NO | - | Registered legal name |
+| `registration_number` | VARCHAR(100) | YES | - | Encrypted at rest |
+| `tax_number` | VARCHAR(100) | YES | - | Encrypted at rest |
+| `country_code` | VARCHAR(3) | NO | - | ISO 3166 |
+| `currency_code` | VARCHAR(3) | NO | - | Base currency ISO 4217 |
+| `fiscal_year_start_month` | SMALLINT | NO | `4` | 1-12 |
 | `status` | VARCHAR(30) | NO | `'active'` | draft, active, inactive |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | Immutable |
-| `created_by` | UUID | YES | — | — |
-| `updated_at` | TIMESTAMPTZ | NO | `now()` | — |
-| `updated_by` | UUID | YES | — | — |
+| `created_by` | UUID | YES | - | - |
+| `updated_at` | TIMESTAMPTZ | NO | `now()` | - |
+| `updated_by` | UUID | YES | - | - |
 | `version` | INTEGER | NO | `1` | Optimistic lock |
-| `is_deleted` | BOOLEAN | NO | `FALSE` | — |
-| `deleted_at` | TIMESTAMPTZ | YES | — | — |
-| `deleted_by` | UUID | YES | — | — |
+| `is_deleted` | BOOLEAN | NO | `FALSE` | - |
+| `deleted_at` | TIMESTAMPTZ | YES | - | - |
+| `deleted_by` | UUID | YES | - | - |
 
 #### 6.1.3 Primary Key
 `pk_org_company` → `id`
@@ -228,16 +228,16 @@ Operating branch or site under a company (FRD-02 §3 Level 3).
 | `tenant_id` | UUID | NO | FK → sec_tenant |
 | `company_id` | UUID | NO | FK → org_company |
 | `branch_code` | VARCHAR(50) | NO | UK per company |
-| `branch_name` | VARCHAR(255) | NO | — |
+| `branch_name` | VARCHAR(255) | NO | - |
 | `branch_type` | VARCHAR(30) | NO | head_office, regional, warehouse, retail |
-| `address_line1` | VARCHAR(255) | YES | — |
-| `address_line2` | VARCHAR(255) | YES | — |
-| `city` | VARCHAR(100) | YES | — |
-| `state_code` | VARCHAR(20) | YES | — |
-| `postal_code` | VARCHAR(20) | YES | — |
-| `country_code` | VARCHAR(3) | YES | — |
-| `phone` | VARCHAR(30) | YES | — |
-| `email` | VARCHAR(255) | YES | — |
+| `address_line1` | VARCHAR(255) | YES | - |
+| `address_line2` | VARCHAR(255) | YES | - |
+| `city` | VARCHAR(100) | YES | - |
+| `state_code` | VARCHAR(20) | YES | - |
+| `postal_code` | VARCHAR(20) | YES | - |
+| `country_code` | VARCHAR(3) | YES | - |
+| `phone` | VARCHAR(30) | YES | - |
+| `email` | VARCHAR(255) | YES | - |
 | `status` | VARCHAR(30) | NO | draft, active, inactive |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
@@ -287,7 +287,7 @@ Functional department within a branch (FRD-02 §3 Level 5).
 | `company_id` | UUID | NO | FK → org_company |
 | `branch_id` | UUID | NO | FK → org_branch |
 | `department_code` | VARCHAR(50) | NO | UK per branch |
-| `department_name` | VARCHAR(255) | NO | — |
+| `department_name` | VARCHAR(255) | NO | - |
 | `parent_department_id` | UUID | YES | Self-FK → org_department |
 | `head_employee_id` | UUID | YES | FK → master_employee (ERD_03) |
 | `status` | VARCHAR(30) | NO | draft, active, inactive |
@@ -338,7 +338,7 @@ Business division grouping within a branch (FRD-02 §3 Level 4).
 | `company_id` | UUID | NO | FK → org_company |
 | `branch_id` | UUID | NO | FK → org_branch |
 | `business_unit_code` | VARCHAR(50) | NO | UK per branch |
-| `business_unit_name` | VARCHAR(255) | NO | — |
+| `business_unit_name` | VARCHAR(255) | NO | - |
 | `manager_employee_id` | UUID | YES | FK → master_employee |
 | `status` | VARCHAR(30) | NO | draft, active, inactive |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
@@ -384,16 +384,16 @@ Physical or geographic location linked to a branch.
 | `company_id` | UUID | NO | FK → org_company |
 | `branch_id` | UUID | NO | FK → org_branch |
 | `location_code` | VARCHAR(50) | NO | UK per branch |
-| `location_name` | VARCHAR(255) | NO | — |
+| `location_name` | VARCHAR(255) | NO | - |
 | `location_type` | VARCHAR(30) | NO | office, warehouse, plant, store |
-| `latitude` | NUMERIC(10,7) | YES | — |
-| `longitude` | NUMERIC(10,7) | YES | — |
-| `address_line1` | VARCHAR(255) | YES | — |
-| `address_line2` | VARCHAR(255) | YES | — |
-| `city` | VARCHAR(100) | YES | — |
-| `state_code` | VARCHAR(20) | YES | — |
-| `postal_code` | VARCHAR(20) | YES | — |
-| `country_code` | VARCHAR(3) | YES | — |
+| `latitude` | NUMERIC(10,7) | YES | - |
+| `longitude` | NUMERIC(10,7) | YES | - |
+| `address_line1` | VARCHAR(255) | YES | - |
+| `address_line2` | VARCHAR(255) | YES | - |
+| `city` | VARCHAR(100) | YES | - |
+| `state_code` | VARCHAR(20) | YES | - |
+| `postal_code` | VARCHAR(20) | YES | - |
+| `country_code` | VARCHAR(3) | YES | - |
 | `status` | VARCHAR(30) | NO | draft, active, inactive |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
@@ -439,9 +439,9 @@ Cost allocation unit for expense tracking (FRD-02 §3 Level 6).
 | `branch_id` | UUID | YES | FK → org_branch (optional) |
 | `department_id` | UUID | YES | FK → org_department |
 | `cost_center_code` | VARCHAR(50) | NO | UK per company |
-| `cost_center_name` | VARCHAR(255) | NO | — |
-| `valid_from` | DATE | NO | — |
-| `valid_to` | DATE | YES | — |
+| `cost_center_name` | VARCHAR(255) | NO | - |
+| `valid_from` | DATE | NO | - |
+| `valid_to` | DATE | YES | - |
 | `status` | VARCHAR(30) | NO | draft, active, inactive |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
@@ -490,9 +490,9 @@ Profitability reporting unit (FRD-02 §3 Level 7).
 | `branch_id` | UUID | YES | FK → org_branch |
 | `department_id` | UUID | YES | FK → org_department |
 | `profit_center_code` | VARCHAR(50) | NO | UK per company |
-| `profit_center_name` | VARCHAR(255) | NO | — |
-| `valid_from` | DATE | NO | — |
-| `valid_to` | DATE | YES | — |
+| `profit_center_name` | VARCHAR(255) | NO | - |
+| `valid_from` | DATE | NO | - |
+| `valid_to` | DATE | YES | - |
 | `status` | VARCHAR(30) | NO | draft, active, inactive |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
@@ -671,4 +671,4 @@ Retained for life of tenant. Soft delete only. Permanent purge requires document
 
 ---
 
-*End of ERD_02 — Organization Domain*
+*End of ERD_02 - Organization Domain*

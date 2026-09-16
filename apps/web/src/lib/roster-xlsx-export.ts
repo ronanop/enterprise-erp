@@ -38,7 +38,7 @@ function textCell(value: string, style?: Record<string, unknown>): Cell {
   return { value, type: String, ...style };
 }
 
-/** Base day-cell style only — colors come from conditional formatting so edits update live. */
+/** Base day-cell style only - colors come from conditional formatting so edits update live. */
 function dayCellBaseStyle(): Record<string, unknown> {
   return {
     align: "center" as const,
@@ -166,7 +166,7 @@ function buildRosterSheet(
   const rows: Cell[][] = [
     [
       textCell(
-        `Roster month ${data.month} · ${data.manager.code} — pick shift code (A/B/C/D…) from dropdown`,
+        `Roster month ${data.month} · ${data.manager.code} - pick shift code (A/B/C/D…) from dropdown`,
         metaStyle,
       ),
     ],

@@ -1,9 +1,9 @@
-# Asset Workflow Governance — Remediation Report
+# Asset Workflow Governance - Remediation Report
 
 **Feature:** FP-ASSET-WF-GOV-001  
 **Date:** 2026-07-29  
-**Trigger:** Enterprise Code Review — **REQUIRES CHANGES**  
-**Outcome:** Mandatory findings addressed — ready for Enterprise Merge Review
+**Trigger:** Enterprise Code Review - **REQUIRES CHANGES**  
+**Outcome:** Mandatory findings addressed - ready for Enterprise Merge Review
 
 ---
 
@@ -58,7 +58,7 @@ Expected: **10 passed** (7 prior + 3 integration).
 
 | Risk (from review) | Mitigation |
 |--------------------|------------|
-| Breaking approve with default-on | Flag defaults **off** — opt-in rollout |
+| Breaking approve with default-on | Flag defaults **off** - opt-in rollout |
 | Undetected multi-step bugs | INT-WF-02 proves activation only on final step |
 | Reject mapping unclear | INT-WF-06 + ADR WF-02 |
 | Ops enablement without templates | Notification guide + checklist |
@@ -66,7 +66,7 @@ Expected: **10 passed** (7 prior + 3 integration).
 
 ---
 
-## Outstanding Technical Debt (accepted — out of remediation scope)
+## Outstanding Technical Debt (accepted - out of remediation scope)
 
 1. Foundation WF step-role enforcement (platform)  
 2. SoD unit tests not duplicated for all five entities  
@@ -82,7 +82,7 @@ Expected: **10 passed** (7 prior + 3 integration).
 With default **`false`**:
 
 - Submit/approve use **legacy** engine path (no WF instance required).  
-- Reject raises `InvalidAssetWorkflowState` (“Workflow governance is disabled”) — covered by security test.  
+- Reject raises `InvalidAssetWorkflowState` (“Workflow governance is disabled”) - covered by security test.  
 - Enabling flag requires explicit env `ASSET_WORKFLOW_GOVERNANCE_ENABLED=true`.
 
 ---

@@ -1,4 +1,4 @@
-"""Unit tests — Non-IT asset code formatting."""
+"""Unit tests - Non-IT asset code formatting."""
 
 from modules.asset.nonit.code_service import format_nonit_code
 

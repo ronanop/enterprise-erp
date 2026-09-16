@@ -147,7 +147,7 @@ export function ApVendorLedgerPage({ vendorId }: { vendorId: string }) {
                       </Link>
                     </td>
                     <td className="px-2 py-1.5 font-mono text-xs">{line.document_date}</td>
-                    <td className="px-2 py-1.5 font-mono text-xs">{line.due_date ?? "—"}</td>
+                    <td className="px-2 py-1.5 font-mono text-xs">{line.due_date ?? "-"}</td>
                     <td className="px-2 py-1.5 text-xs capitalize">{line.document_type}</td>
                     <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(line.debit_amount)}</td>
                     <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(line.credit_amount)}</td>

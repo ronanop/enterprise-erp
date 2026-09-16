@@ -1,4 +1,4 @@
-"""AssetNotificationService — asset alert metadata registry (FP-ASSET-017).
+"""AssetNotificationService - asset alert metadata registry (FP-ASSET-017).
 
 Metadata only. Foundation Notification owns delivery channels.
 """

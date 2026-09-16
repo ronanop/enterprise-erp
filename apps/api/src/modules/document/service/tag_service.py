@@ -1,4 +1,4 @@
-"""TagService — tags and tag-map operations."""
+"""TagService - tags and tag-map operations."""
 
 from uuid import UUID
 

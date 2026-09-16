@@ -135,7 +135,7 @@ export function QualityDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="Quality"
-        description="Quality workspace — inspection plans, IQC/IPQC/FQC, defects, NCRs, CAPA, supplier quality, complaints, and audits."
+        description="Quality workspace - inspection plans, IQC/IPQC/FQC, defects, NCRs, CAPA, supplier quality, complaints, and audits."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -182,28 +182,28 @@ export function QualityDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Open inspections"
-          value={loading ? "—" : String(kpis.openInspections)}
+          value={loading ? "-" : String(kpis.openInspections)}
           hint={`${allInspections.length} total · ${kpis.rejectedInspections} rejected/rework`}
           icon={ClipboardCheck}
           tone={kpis.openInspections > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Open NCRs"
-          value={loading ? "—" : String(kpis.openNcrs)}
+          value={loading ? "-" : String(kpis.openNcrs)}
           hint={`${data?.ncrs.length ?? 0} NCRs · ${countByStatus(data?.ncrs ?? [], ["submitted", "approved"])} in review`}
           icon={FileWarning}
           tone={kpis.openNcrs > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Open CAPAs"
-          value={loading ? "—" : String(kpis.openCapas)}
+          value={loading ? "-" : String(kpis.openCapas)}
           hint={`${data?.capas.length ?? 0} CAPAs · ${countByStatus(data?.capas ?? [], ["in_progress"])} in progress`}
           icon={ShieldAlert}
           tone={kpis.openCapas > 0 ? "default" : "success"}
         />
         <FinanceKpiCard
           label="Critical defects"
-          value={loading ? "—" : String(kpis.criticalDefects)}
+          value={loading ? "-" : String(kpis.criticalDefects)}
           hint={`${kpis.openDefects} open · ${data?.defects.length ?? 0} defect records`}
           icon={TriangleAlert}
           tone={kpis.criticalDefects > 0 ? "danger" : "success"}
@@ -326,7 +326,7 @@ export function QualityDashboard() {
                     >
                       <td className="max-w-[200px] truncate px-4 py-2.5">
                         <p className="font-medium text-foreground">
-                          {String(row.document_number ?? "—")}
+                          {String(row.document_number ?? "-")}
                         </p>
                       </td>
                       <td className="px-4 py-2.5">
@@ -373,7 +373,7 @@ export function QualityDashboard() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-medium">
-                      {String(row.document_number ?? "—")}
+                      {String(row.document_number ?? "-")}
                     </p>
                     <FinanceStatusBadge status={String(row.status ?? "draft")} />
                   </div>

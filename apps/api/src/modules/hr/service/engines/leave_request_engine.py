@@ -1,4 +1,4 @@
-"""LeaveRequest lifecycle engine — Employee → Manager → HR."""
+"""LeaveRequest lifecycle engine - Employee → Manager → HR."""
 
 from modules.hr.domain.enums import LeaveRequestStatus
 from modules.hr.domain.exceptions import InvalidLeaveRequestState

@@ -114,7 +114,7 @@ export function ShiftRosterManagementPage() {
   const empManagerById = useMemo(() => {
     const map = new Map<string, string>();
     for (const e of dir?.options.employees ?? []) {
-      map.set(e.id, e.managerName || e.managerCode || "—");
+      map.set(e.id, e.managerName || e.managerCode || "-");
     }
     return map;
   }, [dir]);
@@ -268,8 +268,8 @@ export function ShiftRosterManagementPage() {
                         </span>
                       </td>
                       <td className="px-2 py-2 text-left text-xs capitalize">{s.shiftType}</td>
-                      <td className="px-2 py-2 text-left text-xs">{s.startTime} – {s.endTime}</td>
-                      <td className="px-2 py-2 text-left text-xs">{s.isOvernight ? "Yes" : "—"}</td>
+                      <td className="px-2 py-2 text-left text-xs">{s.startTime} - {s.endTime}</td>
+                      <td className="px-2 py-2 text-left text-xs">{s.isOvernight ? "Yes" : "-"}</td>
                       <td className="px-2 py-2 text-left"><HrStatusBadge status={s.status} /></td>
                       <td className="px-2 py-2 text-right">
                         <Button
@@ -360,7 +360,7 @@ export function ShiftRosterManagementPage() {
                       </td>
                       <td className="px-2 py-2 text-xs font-medium">{a.employeeName}</td>
                       <td className="px-2 py-2 text-xs text-muted-foreground">
-                        {empManagerById.get(a.employeeId) || "—"}
+                        {empManagerById.get(a.employeeId) || "-"}
                       </td>
                       <td className="px-2 py-2 text-xs">{a.departmentName}</td>
                       <td className="px-2 py-2 text-xs">
@@ -370,7 +370,7 @@ export function ShiftRosterManagementPage() {
                         </span>
                       </td>
                       <td className="px-2 py-2 text-xs">{a.effectiveFrom}</td>
-                      <td className="px-2 py-2 text-xs">{a.effectiveTo || "—"}</td>
+                      <td className="px-2 py-2 text-xs">{a.effectiveTo || "-"}</td>
                       <td className="px-2 py-2 text-xs capitalize">{a.assignmentType}</td>
                       <td className="px-2 py-2"><HrStatusBadge status={a.status} /></td>
                     </tr>
@@ -481,7 +481,7 @@ export function ShiftRosterManagementPage() {
                       const ab = r.absent_created ?? 0;
                       toast(`Backfill done: ${wo} week off, ${ab} absent`, "success");
                     })
-                    .catch(() => toast("Backfill failed — check permissions / API", "error"))
+                    .catch(() => toast("Backfill failed - check permissions / API", "error"))
                     .finally(() => setJobBusy(false));
                 }}
               >
@@ -494,7 +494,7 @@ export function ShiftRosterManagementPage() {
             </p>
             <ul className="max-h-32 overflow-y-auto text-xs text-muted-foreground">
               {dir.holidays.slice(0, 12).map((h) => (
-                <li key={h.date + h.name}>{h.date} — {h.name}</li>
+                <li key={h.date + h.name}>{h.date} - {h.name}</li>
               ))}
             </ul>
           </div>

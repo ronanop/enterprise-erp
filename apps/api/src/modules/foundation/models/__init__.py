@@ -1,4 +1,4 @@
-"""Foundation ORM models — import all for Alembic metadata discovery."""
+"""Foundation ORM models - import all for Alembic metadata discovery."""
 
 from modules.foundation.models.audit import AuditEvent, AuditLog
 from modules.foundation.models.config import CfgSetting

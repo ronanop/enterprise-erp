@@ -1,4 +1,4 @@
-# CR-004 Phase 2C — Read API Exposure
+# CR-004 Phase 2C - Read API Exposure
 
 **Date:** 2026-08-03  
 **Scope:** Read-only APIs for `operational_status` filtering and dashboard counts. No transitions, no workflow changes.
@@ -14,7 +14,7 @@
 
 ### List filter
 
-`operational_status` — one of `READY_TO_MOVE`, `ASSIGNED`, `RETIRED`, `PENDING_DISPOSAL`, `DISPOSED` (case-insensitive). Invalid values → `422`.
+`operational_status` - one of `READY_TO_MOVE`, `ASSIGNED`, `RETIRED`, `PENDING_DISPOSAL`, `DISPOSED` (case-insensitive). Invalid values → `422`.
 
 ### Dashboard summary
 
@@ -26,7 +26,7 @@ Query: optional `company_id`, `branch_id` (tenant + scope validators unchanged).
 
 ## Schema
 
-`AssetResponse.operational_status` — read-only (ORM mapped).
+`AssetResponse.operational_status` - read-only (ORM mapped).
 
 ---
 

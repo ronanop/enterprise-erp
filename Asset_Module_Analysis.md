@@ -1,4 +1,4 @@
-# Asset Management Module — Complete Codebase Analysis
+# Asset Management Module - Complete Codebase Analysis
 
 **Scope:** Asset Management only (`apps/api/src/modules/asset/**`, `apps/web` Assets UI).  
 **Method:** Source-code inspection only (no design-doc assumptions).  
@@ -66,7 +66,7 @@ The Asset module is a **substantially implemented** modular-monolith slice (Spri
 - No Next.js route middleware; FE RBAC mostly inventory-only
 - Orphan `asset-registration-workspace.tsx` (not routed)
 - Inventory-import page not in locked sidebar nav
-- Check-in/check-out as separate visitor-style flow — **not present** (assignment/return covers custody)
+- Check-in/check-out as separate visitor-style flow - **not present** (assignment/return covers custody)
 
 ### Production readiness
 
@@ -82,7 +82,7 @@ The Asset module is a **substantially implemented** modular-monolith slice (Spri
 
 **Schema:** `asset`  
 **Prefix:** `ast_`  
-**Migrations:** `0245` (schema) → `0246`–`0264` (tables) → `0265` (permissions) → `0266` (workflow seeds)  
+**Migrations:** `0245` (schema) → `0246`-`0264` (tables) → `0265` (permissions) → `0266` (workflow seeds)  
 Paths: `apps/api/alembic/versions/0245_create_asset_schema.py` … `0266_seed_asset_workflows.py`
 
 #### Tables (20 business models)
@@ -168,8 +168,8 @@ Common indexes on FKs, `status`, document numbers, unique `(company_id, asset_co
 ```text
 apps/api/src/modules/asset/
 ├── router.py                 # Aggregates sub-routers → prefix /assets
-├── routers/__init__.py       # ~2512 lines — all HTTP handlers
-├── schemas.py                # ~1257 lines — Pydantic DTOs
+├── routers/__init__.py       # ~2512 lines - all HTTP handlers
+├── schemas.py                # ~1257 lines - Pydantic DTOs
 ├── permissions.py            # 85 permission codes + role bundles
 ├── dependencies.py           # Pagination, require_permission re-exports
 ├── tasks.py                  # Celery tasks
@@ -215,7 +215,7 @@ Full paths: `/api/v1/assets/...`
 | `/asset-insurances` | CRUD | activate/renew/expire/close | ✅ |
 | `/maintenance-plans` | CRUD | activate/pause/resume/close | ✅ |
 | `/asset-maintenances` | CRUD | submit/approve/…/schedule/start/complete | ✅ |
-| `/service-histories` | GET/POST | — | ✅ |
+| `/service-histories` | GET/POST | - | ✅ |
 | `/asset-depreciations` | GET/POST/PATCH | generate-run, calculate, post, reverse | ✅ |
 | `/asset-disposals` | CRUD | submit…/post | ✅ |
 | `/asset-revaluations` | CRUD | submit…/post | ✅ |
@@ -230,12 +230,12 @@ Full paths: `/api/v1/assets/...`
 
 #### Representative request/response
 
-**Create asset** — `POST /assets/assets`  
+**Create asset** - `POST /assets/assets`  
 Permission: `asset.asset:create`  
 Body (`AssetCreate` in `schemas.py`): required `branch_id`, `asset_name`, `asset_category_id`, `asset_type`, `purchase_date`, `purchase_cost`; optional serial/barcode/QR/RFId, valuation, links to product/vendor/dept/custodian/PO/GRN/etc.  
 Response: `AssetResponse` (codes, status, workflow fields, version, …).
 
-**Finance post** — e.g. `POST /assets/asset-depreciations/{id}/post`  
+**Finance post** - e.g. `POST /assets/asset-depreciations/{id}/post`  
 Body `FinancePostRequest`: `debit_account_id`, `credit_account_id`, optional `fiscal_year_id`.
 
 **Validation:** Pydantic schemas + engine state checks (`Invalid*State` → conflict) + DB check constraints.  
@@ -273,12 +273,12 @@ Body `FinancePostRequest`: `debit_account_id`, `credit_account_id`, optional `fi
 
 | Task | Behavior |
 |------|----------|
-| `maintenance_due_alerts` | Counts active plans — **no notify** |
-| `warranty_expiry_alerts` | Counts — **no notify** |
-| `insurance_expiry_alerts` | Counts — **no notify** |
+| `maintenance_due_alerts` | Counts active plans - **no notify** |
+| `warranty_expiry_alerts` | Counts - **no notify** |
+| `insurance_expiry_alerts` | Counts - **no notify** |
 | `depreciation_scheduler` | **Creates draft rows** via `generate_period_run` when tenant/company/user UUIDs passed; does not calculate/post |
 | `asset_audit_reminders` | Lists planned audits |
-| `retry_finance_posting` | Lists failed depreciations — **no auto-post** |
+| `retry_finance_posting` | Lists failed depreciations - **no auto-post** |
 
 ---
 
@@ -328,7 +328,7 @@ Body `FinancePostRequest`: `debit_account_id`, `credit_account_id`, optional `fi
 - **Auth UX:** `isAuthenticated()` skips fetches; 401 messaging; **no hard route guard**
 - **Permissions:** Inventory uses `useUserPermissions().can` mapped in `navigation/inventory-permissions.ts`; empty permission set → `can()` returns **true** (demo-friendly)
 - **Loading / errors:** Per-workspace loading flags and `ApiClientError` handling
-- **Pagination / sorting:** Mixed — some server list params; many client filters/search on loaded sets
+- **Pagination / sorting:** Mixed - some server list params; many client filters/search on loaded sets
 - **Dialogs:** Card overlays / workspace panels more than Radix dialogs in several flows
 
 ### 3.4 Screens that do **not** exist as separate products
@@ -336,14 +336,14 @@ Body `FinancePostRequest`: `debit_account_id`, `credit_account_id`, optional `fi
 | Expected screen | Reality |
 |-----------------|---------|
 | Dedicated “Asset Edit” page | Edit via wizard/detail/workspace forms, not a separate `/edit` route |
-| Check-in / Check-out (visitor-style) | **Missing** — assignment return covers custody return |
+| Check-in / Check-out (visitor-style) | **Missing** - assignment return covers custody return |
 | Backend-driven QR generation page | Client QR only |
 | Settings / Asset Types backends | UI shells only |
 
 ### 3.5 Orphan / legacy UI
 
-- `asset-registration-workspace.tsx` — create/update/action capable but **not mounted** by any `page.tsx` (inventory + add wizard replaced it)
-- `assets-dashboard.tsx` / `assets-workspace-nav.tsx` — older patterns; current home is `AssetOperationsContainer` + sidebar from `config/assets.ts`
+- `asset-registration-workspace.tsx` - create/update/action capable but **not mounted** by any `page.tsx` (inventory + add wizard replaced it)
+- `assets-dashboard.tsx` / `assets-workspace-nav.tsx` - older patterns; current home is `AssetOperationsContainer` + sidebar from `config/assets.ts`
 
 ---
 
@@ -378,7 +378,7 @@ Programmatic nav: `components/assets/navigation/asset-navigation.ts`.
 | Layer | Behavior |
 |-------|----------|
 | Backend | Hard permission checks on every handler |
-| Frontend `(app)/layout.tsx` | Shell only — **no auth redirect** |
+| Frontend `(app)/layout.tsx` | Shell only - **no auth redirect** |
 | Next middleware | **No `middleware.ts` asset guard found** |
 | Inventory FE | Optional `can(permission)` for menu/actions |
 | Other workspaces | Rely on API 403 |
@@ -441,7 +441,7 @@ submit → approve → `post` → Finance + asset disposed + master disposed + o
 
 - Audit logs via Foundation audit on key operations  
 - Reports run/export via `/reports/*`  
-- `ast_asset_notification` CRUD + mark-sent/failed — **scheduled Celery alerts do not write notifications**
+- `ast_asset_notification` CRUD + mark-sent/failed - **scheduled Celery alerts do not write notifications**
 
 ### 5.8 Import / QR
 
@@ -454,24 +454,24 @@ submit → approve → `post` → Finance + asset disposed + master disposed + o
 
 | Feature | Backend | Frontend | API | UI | Fully Working | Missing |
 | ------- | ------- | -------- | --- | -- | ------------- | ------- |
-| Categories | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Categories | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | Asset list / inventory | ✅ | ✅ | ✅ | ✅ | ✅ | Server-side advanced sort varies |
-| Asset create wizard | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| Asset detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Asset create wizard | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| Asset detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | Asset edit | ✅ | ✅ | ✅ | ✅ | 🟡 | No dedicated `/edit` route |
 | Soft / hard delete | 🟡 columns | ❌ | ❌ | ❌ | ❌ | DELETE/soft-delete API + UI |
-| Submit / approve / reject | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Submit / approve / reject | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | Workflow governance | ✅ gated | 🟡 settings shell | ✅ | 🟡 | 🟡 | Settings not configurable in UI |
-| Assignment issue/return | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| Transfer + location history | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Assignment issue/return | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| Transfer + location history | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | Check-in / check-out | ❌ | ❌ | ❌ | ❌ | ❌ | Not in product |
-| Maintenance plans / WOs | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Maintenance plans / WOs | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | Depreciation calc/post | ✅ | ✅ | ✅ | ✅ | ✅ | Auto-post Celery |
-| Disposal / revaluation | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| Audits / checklists / meters | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Disposal / revaluation | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| Audits / checklists / meters | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | Documents metadata | ✅ | ✅ | ✅ | ✅ | 🟡 | File binary upload |
 | Excel import | ✅ | ✅ | ✅ | ✅ | ✅ | Not in locked sidebar |
-| Reports / export | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| Reports / export | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | QR / barcode | 🟡 fields | ✅ client QR | ❌ gen API | ✅ | 🟡 | Server-side QR API |
 | Asset types catalog | ❌ | 🟡 shell | ❌ | 🟡 | ❌ | Static PRD types only |
 | Settings | 🟡 flags in code | 🟡 shell | ❌ | 🟡 | ❌ | Admin UI |
@@ -528,10 +528,10 @@ Legend: ✅ Complete · 🟡 Partial · ❌ Missing
 | Folder structure | Clear Clean Architecture layering; large single `routers/__init__.py` (~2.5k lines) is a maintainability smell |
 | Naming | Consistent `ast_` / `Asset*Service` / workspace naming |
 | Reusability | Shared `resourceService`, engines, adapters; FE services layer strong |
-| Separation of concerns | Engines for rules; adapters for cross-module — good |
-| Performance | Some list endpoints may still load then paginate; inventory export re-lists — watch large tenants |
-| Error handling | Domain exceptions + API client errors — solid |
-| Security | Backend RBAC strong; FE soft — gap |
+| Separation of concerns | Engines for rules; adapters for cross-module - good |
+| Performance | Some list endpoints may still load then paginate; inventory export re-lists - watch large tenants |
+| Error handling | Domain exceptions + API client errors - solid |
+| Security | Backend RBAC strong; FE soft - gap |
 | Scalability | Schema isolation good; Celery present but underused for alerts |
 | Maintainability | Schemas/services grew productively; split routers by resource recommended |
 | Tests | FE has inventory/operations/wizard/import tests; backend test coverage not exhaustively audited here |
@@ -571,7 +571,7 @@ User
   → UI state refresh (list reload / selected doc panel)
 ```
 
-**Example — approve asset**
+**Example - approve asset**
 
 1. User clicks Approve in wizard/workspace  
 2. `POST /api/v1/assets/assets/{id}/approve`  
@@ -589,9 +589,9 @@ User
 | **Master Data** | `master_asset` create/link/dispose; employees, products, vendors |
 | **Finance** | Journals via `PostingService.post_system_journal` for depreciation/disposal/revaluation; GL account UUIDs on category |
 | **Payroll** | Optional labor cost hint adapter (read-only) |
-| **Procurement / Inventory** | UUID refs (`purchase_order_id`, `grn_id`, receipt/issue); GRN prefill helper — **no FKs / no peer ORM writes** |
+| **Procurement / Inventory** | UUID refs (`purchase_order_id`, `grn_id`, receipt/issue); GRN prefill helper - **no FKs / no peer ORM writes** |
 | **Project / MFG / Quality** | Optional UUID refs only |
-| **Notifications** | Local `ast_asset_notification` + governance notifications when workflow enabled — Celery alerts not wired |
+| **Notifications** | Local `ast_asset_notification` + governance notifications when workflow enabled - Celery alerts not wired |
 | **Reports / BI** | Asset report catalog/run/export endpoints + FE reports workspace |
 | **Users** | `TenantContext.user_id` for audit; recipient_user_id on notifications |
 | **Tickets / Helpdesk** | **No direct Asset→Helpdesk integration found** in this module |
@@ -679,16 +679,16 @@ User
 
 ### Recommended next milestones
 
-1. **Security hardening** — FE middleware + real permission enforcement  
-2. **Document binaries** — upload pipeline  
-3. **Alerting** — Celery → notifications  
-4. **Admin settings** — governance toggles UI  
-5. **Cleanup** — router split, remove orphans, nav for import  
-6. **Delete/archive policy** — implement soft-delete API consistently  
+1. **Security hardening** - FE middleware + real permission enforcement  
+2. **Document binaries** - upload pipeline  
+3. **Alerting** - Celery → notifications  
+4. **Admin settings** - governance toggles UI  
+5. **Cleanup** - router split, remove orphans, nav for import  
+6. **Delete/archive policy** - implement soft-delete API consistently  
 
 ---
 
-## Appendix A — Key file paths
+## Appendix A - Key file paths
 
 | Area | Path |
 |------|------|
@@ -711,4 +711,4 @@ User
 
 ---
 
-*Analysis reflects the repository state at generation time. Prefer this document over earlier Asset analyses that described stub Create DTOs and read-only FE — those gaps have largely been closed in the current code.*
+*Analysis reflects the repository state at generation time. Prefer this document over earlier Asset analyses that described stub Create DTOs and read-only FE - those gaps have largely been closed in the current code.*

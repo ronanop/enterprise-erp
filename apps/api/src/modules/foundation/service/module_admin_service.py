@@ -1,4 +1,4 @@
-"""Module admin membership — assign Entra users to a single ERP module."""
+"""Module admin membership - assign Entra users to a single ERP module."""
 
 from __future__ import annotations
 

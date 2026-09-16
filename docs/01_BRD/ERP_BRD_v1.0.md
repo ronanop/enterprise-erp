@@ -1811,7 +1811,7 @@ The ERP solution shall be accepted when:
 
 # 46. IMPLEMENTATION ROADMAP
 
-## Stage 1 – Foundation Platform
+## Stage 1 - Foundation Platform
 
 * Authentication
 * RBAC
@@ -1820,7 +1820,7 @@ The ERP solution shall be accepted when:
 
 ---
 
-## Stage 2 – Master Data
+## Stage 2 - Master Data
 
 * Employees
 * Customers
@@ -1829,7 +1829,7 @@ The ERP solution shall be accepted when:
 
 ---
 
-## Stage 3 – Core Business
+## Stage 3 - Core Business
 
 * Finance
 * CRM
@@ -1839,7 +1839,7 @@ The ERP solution shall be accepted when:
 
 ---
 
-## Stage 4 – Operations
+## Stage 4 - Operations
 
 * HR
 * Payroll
@@ -1848,7 +1848,7 @@ The ERP solution shall be accepted when:
 
 ---
 
-## Stage 5 – Advanced Modules
+## Stage 5 - Advanced Modules
 
 * Manufacturing
 * Quality
@@ -1857,7 +1857,7 @@ The ERP solution shall be accepted when:
 
 ---
 
-## Stage 6 – Analytics & Integrations
+## Stage 6 - Analytics & Integrations
 
 * BI
 * Reporting
@@ -1963,7 +1963,7 @@ The ERP solution shall be accepted when:
 
 # 50. APPENDICES
 
-## Appendix A – Module Dependency Matrix
+## Appendix A - Module Dependency Matrix
 
 ```
 Foundation
@@ -1979,7 +1979,7 @@ Reporting & Analytics
 
 ---
 
-## Appendix B – High-Level Entity Structure
+## Appendix B - High-Level Entity Structure
 
 ```
 Company
@@ -2005,7 +2005,7 @@ Product
 
 ---
 
-## Appendix C – Enterprise Architecture Principles
+## Appendix C - Enterprise Architecture Principles
 
 * Single Source of Truth
 * API First Design

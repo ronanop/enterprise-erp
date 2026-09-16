@@ -134,7 +134,7 @@ export const erpModules: ErpModule[] = [
   {
     key: "voice-agent",
     title: "Voice assistant",
-    description: "ElevenLabs conversational AI — voice and chat with ERP client tools.",
+    description: "ElevenLabs conversational AI - voice and chat with ERP client tools.",
     href: "/voice-agent",
     group: "foundation",
     icon: "voice",
@@ -419,7 +419,7 @@ export const erpModules: ErpModule[] = [
       {
         key: "orders",
         title: "Purchase Orders",
-        description: "All vendor POs — draft, issued, and GRN status",
+        description: "All vendor POs - draft, issued, and GRN status",
         apiPath: "/procurement/orders",
       },
       {
@@ -554,7 +554,7 @@ export const erpModules: ErpModule[] = [
     key: "manufacturing",
     title: "Manufacturing",
     description:
-      "Production lifecycle — BOMs, routings, work orders, material issues, FG receipts, WIP, scrap, and variances.",
+      "Production lifecycle - BOMs, routings, work orders, material issues, FG receipts, WIP, scrap, and variances.",
     href: "/manufacturing",
     group: "operations",
     icon: "factory",
@@ -631,7 +631,7 @@ export const erpModules: ErpModule[] = [
     key: "quality",
     title: "Quality",
     description:
-      "Quality lifecycle — inspection plans, IQC/IPQC/FQC, defects, NCRs, CAPA, supplier scores, complaints, and audits.",
+      "Quality lifecycle - inspection plans, IQC/IPQC/FQC, defects, NCRs, CAPA, supplier scores, complaints, and audits.",
     href: "/quality",
     group: "operations",
     icon: "quality",
@@ -726,7 +726,7 @@ export const erpModules: ErpModule[] = [
     key: "crm",
     title: "CRM",
     description:
-      "Lead-to-deal workspace — leads, opportunities, campaigns, tasks, meetings, and customer feedback.",
+      "Lead-to-deal workspace - leads, opportunities, campaigns, tasks, meetings, and customer feedback.",
     href: "/crm",
     group: "operations",
     icon: "crm",
@@ -734,19 +734,19 @@ export const erpModules: ErpModule[] = [
       {
         key: "my-jobs",
         title: "My Jobs",
-        description: "Team approval inbox — approve or reject with remarks",
+        description: "Team approval inbox - approve or reject with remarks",
         apiPath: "/crm/my-jobs",
       },
       {
         key: "companies",
         title: "Company",
-        description: "Sales accounts — the only entry point for creating leads",
+        description: "Sales accounts - the only entry point for creating leads",
         apiPath: "/crm/companies",
       },
       {
         key: "opportunities",
         title: "Opportunities",
-        description: "Deals converted from leads — BOQ to Won/Lost blueprint",
+        description: "Deals converted from leads - BOQ to Won/Lost blueprint",
         apiPath: "/crm/opportunities",
       },
       {
@@ -758,7 +758,7 @@ export const erpModules: ErpModule[] = [
       {
         key: "ovf",
         title: "OVF",
-        description: "Order Value Forms — approval, SCM share, and deal-won",
+        description: "Order Value Forms - approval, SCM share, and deal-won",
         apiPath: "/crm/ovf",
       },
       {
@@ -881,7 +881,7 @@ export const erpModules: ErpModule[] = [
     key: "hr",
     title: "HRMS",
     description:
-      "Workforce lifecycle — profiles, employment, attendance, leave, performance, training, and separation.",
+      "Workforce lifecycle - profiles, employment, attendance, leave, performance, training, and separation.",
     href: "/hr",
     group: "operations",
     icon: "hr",
@@ -988,7 +988,7 @@ export const erpModules: ErpModule[] = [
     key: "payroll",
     title: "Payroll",
     description:
-      "Compensation lifecycle — periods, salary structures, payroll runs, payslips, bonuses, loans, and statutory.",
+      "Compensation lifecycle - periods, salary structures, payroll runs, payslips, bonuses, loans, and statutory.",
     href: "/payroll",
     group: "operations",
     icon: "payroll",
@@ -1089,7 +1089,7 @@ export const erpModules: ErpModule[] = [
     key: "recruitment",
     title: "Recruitment",
     description:
-      "Hire-to-onboard ATS — requisitions, postings, candidates, applications, interviews, offers, BGV, and onboarding.",
+      "Hire-to-onboard ATS - requisitions, postings, candidates, applications, interviews, offers, BGV, and onboarding.",
     href: "/recruitment",
     group: "operations",
     icon: "recruit",
@@ -1184,7 +1184,7 @@ export const erpModules: ErpModule[] = [
     key: "projects",
     title: "Projects",
     description:
-      "PMO delivery — portfolio, WBS, tasks, timesheets, resources, budgets, costs, issues, risks, and change control.",
+      "PMO delivery - portfolio, WBS, tasks, timesheets, resources, budgets, costs, issues, risks, and change control.",
     href: "/projects",
     group: "operations",
     icon: "project",
@@ -1279,7 +1279,7 @@ export const erpModules: ErpModule[] = [
     key: "assets",
     title: "Asset Management",
     description:
-      "Physical asset lifecycle — registration, tracking, assignment, maintenance, QR, and reporting.",
+      "Physical asset lifecycle - registration, tracking, assignment, maintenance, QR, and reporting.",
     href: "/assets",
     group: "operations",
     icon: "asset",
@@ -1477,7 +1477,7 @@ export const erpModules: ErpModule[] = [
     key: "service",
     title: "Service",
     description:
-      "Service request tickets — Service Head assigns engineers; engineers work assigned tickets, SLAs, and mailbox.",
+      "Service request tickets - Service Head assigns engineers; engineers work assigned tickets, SLAs, and mailbox.",
     href: "/service",
     group: "operations",
     icon: "service",
@@ -1578,7 +1578,7 @@ export const erpModules: ErpModule[] = [
     key: "helpdesk",
     title: "Helpdesk",
     description:
-      "Customer support — tickets, assignments, SLA, escalations, knowledge base, resolutions, and feedback.",
+      "Customer support - tickets, assignments, SLA, escalations, knowledge base, resolutions, and feedback.",
     href: "/helpdesk",
     group: "operations",
     icon: "helpdesk",
@@ -1673,7 +1673,7 @@ export const erpModules: ErpModule[] = [
     key: "documents",
     title: "Documents",
     description:
-      "DMS — folders, library, versions, tags, permissions, shares, approvals, workflows, templates, retention, and archives.",
+      "DMS - folders, library, versions, tags, permissions, shares, approvals, workflows, templates, retention, and archives.",
     href: "/documents",
     group: "operations",
     icon: "document",
@@ -1750,7 +1750,7 @@ export const erpModules: ErpModule[] = [
     key: "marketing",
     title: "Marketing & Social",
     description:
-      "Marketing operations — campaigns, tasks, AI studio, Microsoft 365, workload analytics, and publishing.",
+      "Marketing operations - campaigns, tasks, AI studio, Microsoft 365, workload analytics, and publishing.",
     href: "/marketing",
     group: "operations",
     icon: "marketing",
@@ -1839,7 +1839,7 @@ export const erpModules: ErpModule[] = [
     key: "grc",
     title: "GRC",
     description:
-      "Governance, risk & compliance — policies, controls, risk register, assessments, frameworks, audits, CAPA, exceptions, and incidents.",
+      "Governance, risk & compliance - policies, controls, risk register, assessments, frameworks, audits, CAPA, exceptions, and incidents.",
     href: "/grc",
     group: "operations",
     icon: "grc",
@@ -1958,7 +1958,7 @@ export const erpModules: ErpModule[] = [
     key: "analytics",
     title: "Analytics",
     description:
-      "BI — dashboards, widgets, reports, schedules, datasets, metrics, KPIs, dimensions, alerts, subscriptions, exports, and imports.",
+      "BI - dashboards, widgets, reports, schedules, datasets, metrics, KPIs, dimensions, alerts, subscriptions, exports, and imports.",
     href: "/analytics",
     group: "operations",
     icon: "analytics",
@@ -2041,7 +2041,7 @@ export const erpModules: ErpModule[] = [
     key: "integration",
     title: "Integration",
     description:
-      "Integration hub — external systems, connectors, credentials, OAuth, webhooks, events, queues, sync, mappings, and rate limits.",
+      "Integration hub - external systems, connectors, credentials, OAuth, webhooks, events, queues, sync, mappings, and rate limits.",
     href: "/integration",
     group: "operations",
     icon: "integration",
@@ -2130,7 +2130,7 @@ export const erpModules: ErpModule[] = [
     key: "ecommerce",
     title: "Ecommerce",
     description:
-      "Omnichannel commerce — stores, channels, listings, carts, orders, payments, shipments, returns, coupons, promotions, and marketplace connectors.",
+      "Omnichannel commerce - stores, channels, listings, carts, orders, payments, shipments, returns, coupons, promotions, and marketplace connectors.",
     href: "/ecommerce",
     group: "operations",
     icon: "ecommerce",
@@ -2207,7 +2207,7 @@ export const erpModules: ErpModule[] = [
     key: "portal",
     title: "Portal",
     description:
-      "Customer self-service portal — accounts, sessions, projected order/invoice views, tickets, and preferences (ERD_23).",
+      "Customer self-service portal - accounts, sessions, projected order/invoice views, tickets, and preferences (ERD_23).",
     href: "/portal",
     group: "operations",
     icon: "portal",

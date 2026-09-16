@@ -1,12 +1,12 @@
-# ERD_04 — Finance & Accounting Domain
+# ERD_04 - Finance & Accounting Domain
 
-**Document:** Enterprise ERD — Finance & Accounting Domain  
+**Document:** Enterprise ERD - Finance & Accounting Domain  
 **Version:** 1.0  
 **Status:** Draft for Architecture Review  
 **Schema:** `finance`  
 **Table Prefix:** `fin_`  
 **Aligned To:** BRD v1.0 · FRD-04 · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 
 ---
 
@@ -62,16 +62,16 @@ Sales · Procurement · Payroll · Assets · Projects · BI
 - Full audit trail on all financial changes
 
 ### Out of Scope (Phase 2 / Separate ERD)
-- Budget tables (`fin_budget_*`) — FRD-04 §11, deferred to Sprint 5+
-- Bank accounts and bank reconciliation (`fin_bank_*`) — FRD-04 §13
+- Budget tables (`fin_budget_*`) - FRD-04 §11, deferred to Sprint 5+
+- Bank accounts and bank reconciliation (`fin_bank_*`) - FRD-04 §13
 - Sales/Purchase invoices (`trx_*` in sales/procurement schemas)
 - SQLAlchemy models, Alembic migrations, application code
-- History tables (`hist_*`) — SCD Type 2 for COA changes
+- History tables (`hist_*`) - SCD Type 2 for COA changes
 - Materialized reporting cubes / data warehouse tables
 
 ### Assumptions
 - Every financial transaction creates balanced double-entry postings
-- GL is never updated directly — all entries originate from journals or approved sub-ledger postings
+- GL is never updated directly - all entries originate from journals or approved sub-ledger postings
 - `company_id` is the books boundary; each company maintains independent COA and fiscal calendar
 - `branch_id` is mandatory on all transactional finance tables per DBS multi-tenancy
 - Physical DELETE prohibited on all finance business tables
@@ -171,21 +171,21 @@ org_company
 
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
-| 1 | `fin_account_group` | Finance Master | ✅ | ✅ | — | ✅ | ✅ | — |
-| 2 | `fin_chart_of_account` | Finance Master | ✅ | ✅ | — | ✅ | ✅ | — |
-| 3 | `fin_fiscal_year` | Finance Master | ✅ | ✅ | — | ✅ | ✅ | — |
-| 4 | `fin_period` | Finance Master | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 1 | `fin_account_group` | Finance Master | ✅ | ✅ | - | ✅ | ✅ | - |
+| 2 | `fin_chart_of_account` | Finance Master | ✅ | ✅ | - | ✅ | ✅ | - |
+| 3 | `fin_fiscal_year` | Finance Master | ✅ | ✅ | - | ✅ | ✅ | - |
+| 4 | `fin_period` | Finance Master | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 5 | `fin_journal_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 6 | `fin_journal_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 7 | `fin_gl_entry` | Posted Ledger | ✅ | ✅ | ✅ | ❌ | ✅ | — |
+| 6 | `fin_journal_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 7 | `fin_gl_entry` | Posted Ledger | ✅ | ✅ | ✅ | ❌ | ✅ | - |
 | 8 | `fin_customer_ledger` | Sub-Ledger | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 9 | `fin_vendor_ledger` | Sub-Ledger | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 10 | `fin_tax_register` | Register | ✅ | ✅ | ✅ | ❌ | ✅ | — |
-| 11 | `fin_cost_center_allocation` | Allocation | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 10 | `fin_tax_register` | Register | ✅ | ✅ | ✅ | ❌ | ✅ | - |
+| 11 | `fin_cost_center_allocation` | Allocation | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 12 | `fin_asset_transaction` | Integration Txn | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 13 | `fin_currency_rate` | Finance Master | ✅ | ✅ | — | ✅ | ✅ | — |
+| 13 | `fin_currency_rate` | Finance Master | ✅ | ✅ | - | ✅ | ✅ | - |
 
-> **Note:** `fin_gl_entry` and posted `fin_tax_register` rows are **append-only** — no soft delete; corrections via reversal journals.
+> **Note:** `fin_gl_entry` and posted `fin_tax_register` rows are **append-only** - no soft delete; corrections via reversal journals.
 
 ---
 
@@ -232,7 +232,7 @@ Per DBS §29 Transaction Table Standards:
 | Period | `period_id UUID NOT NULL` (locked at post time) |
 | Tenant Scope | `tenant_id`, `company_id`, `branch_id` |
 | Audit | `posted_at`, `posted_by`, `created_at`, `created_by`, `version` |
-| Soft Delete | **Prohibited** — reversal only |
+| Soft Delete | **Prohibited** - reversal only |
 
 ---
 
@@ -250,12 +250,12 @@ Hierarchical grouping of GL accounts (Assets, Liabilities, Equity, Revenue, Expe
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | UUID | NO | app-generated | PK |
-| `tenant_id` | UUID | NO | — | FK → `foundation.sec_tenant` |
-| `company_id` | UUID | NO | — | FK → `organization.org_company` |
-| `group_code` | VARCHAR(20) | NO | — | UK per company (e.g., `1000`, `2000`) |
-| `group_name` | VARCHAR(255) | NO | — | e.g., Assets, Liabilities |
-| `account_type` | VARCHAR(30) | NO | — | asset, liability, equity, revenue, expense |
-| `parent_group_id` | UUID | YES | — | Self-FK → `fin_account_group` |
+| `tenant_id` | UUID | NO | - | FK → `foundation.sec_tenant` |
+| `company_id` | UUID | NO | - | FK → `organization.org_company` |
+| `group_code` | VARCHAR(20) | NO | - | UK per company (e.g., `1000`, `2000`) |
+| `group_name` | VARCHAR(255) | NO | - | e.g., Assets, Liabilities |
+| `account_type` | VARCHAR(30) | NO | - | asset, liability, equity, revenue, expense |
+| `parent_group_id` | UUID | YES | - | Self-FK → `fin_account_group` |
 | `display_order` | SMALLINT | NO | `1` | Report sort order |
 | `status` | VARCHAR(30) | NO | `'active'` | active, inactive |
 | AUDIT_STD + SOFT_DELETE_OPT | | | | |
@@ -295,7 +295,7 @@ Soft delete only; inactive groups with active accounts blocked at service layer
 ### 7.2 `fin_chart_of_account`
 
 #### 7.2.1 Purpose
-Central account structure (COA) — the authoritative GL account registry per company (FRD-04 §4).
+Central account structure (COA) - the authoritative GL account registry per company (FRD-04 §4).
 
 #### 7.2.2 Columns
 
@@ -306,10 +306,10 @@ Central account structure (COA) — the authoritative GL account registry per co
 | `company_id` | UUID | NO | FK → `org_company` |
 | `account_group_id` | UUID | NO | FK → `fin_account_group` |
 | `account_code` | VARCHAR(50) | NO | UK per company (e.g., `1100-001`) |
-| `account_name` | VARCHAR(255) | NO | — |
+| `account_name` | VARCHAR(255) | NO | - |
 | `account_type` | VARCHAR(30) | NO | asset, liability, equity, revenue, expense |
 | `parent_account_id` | UUID | YES | Self-FK for hierarchy |
-| `is_posting_account` | BOOLEAN | NO | DEFAULT TRUE — leaf accounts only |
+| `is_posting_account` | BOOLEAN | NO | DEFAULT TRUE - leaf accounts only |
 | `is_cost_center_enabled` | BOOLEAN | NO | DEFAULT FALSE |
 | `is_profit_center_enabled` | BOOLEAN | NO | DEFAULT FALSE |
 | `normal_balance` | VARCHAR(10) | NO | debit, credit |
@@ -330,7 +330,7 @@ Central account structure (COA) — the authoritative GL account registry per co
 - `uk_fin_coa_company_code` UNIQUE (`company_id`, `account_code`)
 - `ck_fin_coa_type` CHECK on `account_type`
 - `ck_fin_coa_normal_balance` CHECK (`normal_balance` IN ('debit','credit'))
-- `ck_fin_coa_posting_leaf` CHECK (`is_posting_account` = TRUE OR `parent_account_id` IS NOT NULL) — enforced at service layer for hierarchy
+- `ck_fin_coa_posting_leaf` CHECK (`is_posting_account` = TRUE OR `parent_account_id` IS NOT NULL) - enforced at service layer for hierarchy
 
 #### 7.2.6 Index Strategy
 - `pk_fin_chart_of_account` (id)
@@ -344,7 +344,7 @@ Central account structure (COA) — the authoritative GL account registry per co
 Full audit standard
 
 #### 7.2.8 Soft Delete Rules
-Soft delete only; accounts with GL postings cannot be deleted — set `inactive`
+Soft delete only; accounts with GL postings cannot be deleted - set `inactive`
 
 #### 7.2.9 Business Rules
 - Only `is_posting_account = true` accounts accept journal/GL postings
@@ -366,9 +366,9 @@ Fiscal year definition per company (FRD-04 §14). Aligns with `org_company.fisca
 | `tenant_id` | UUID | NO | FK → `sec_tenant` |
 | `company_id` | UUID | NO | FK → `org_company` |
 | `fiscal_year_code` | VARCHAR(20) | NO | UK per company (e.g., `FY2025-26`) |
-| `fiscal_year_name` | VARCHAR(100) | NO | — |
-| `start_date` | DATE | NO | — |
-| `end_date` | DATE | NO | — |
+| `fiscal_year_name` | VARCHAR(100) | NO | - |
+| `start_date` | DATE | NO | - |
+| `end_date` | DATE | NO | - |
 | `status` | VARCHAR(30) | NO | open, closed, archived |
 | `closed_at` | TIMESTAMPTZ | YES | Year-end close timestamp |
 | `closed_by` | UUID | YES | FK → `sec_user` |
@@ -385,7 +385,7 @@ Fiscal year definition per company (FRD-04 §14). Aligns with `org_company.fisca
 - `uk_fin_fiscal_year_company_code` UNIQUE (`company_id`, `fiscal_year_code`)
 - `ck_fin_fiscal_year_dates` CHECK (`end_date` > `start_date`)
 - `ck_fin_fiscal_year_status` CHECK (`status` IN ('open','closed','archived'))
-- Exactly one `status = 'open'` fiscal year per company — service layer
+- Exactly one `status = 'open'` fiscal year per company - service layer
 
 #### 7.3.6 Index Strategy
 - `pk_fin_fiscal_year` (id)
@@ -418,19 +418,19 @@ Accounting periods within a fiscal year. Enforces period locking (FRD-04 §15).
 | `tenant_id` | UUID | NO | FK → `sec_tenant` |
 | `company_id` | UUID | NO | FK → `org_company` |
 | `fiscal_year_id` | UUID | NO | FK → `fin_fiscal_year` |
-| `branch_id` | UUID | YES | FK → `org_branch` — NULL = company-wide period |
-| `period_number` | SMALLINT | NO | 1–13 |
+| `branch_id` | UUID | YES | FK → `org_branch` - NULL = company-wide period |
+| `period_number` | SMALLINT | NO | 1-13 |
 | `period_name` | VARCHAR(50) | NO | e.g., `Apr-2025` |
-| `start_date` | DATE | NO | — |
-| `end_date` | DATE | NO | — |
+| `start_date` | DATE | NO | - |
+| `end_date` | DATE | NO | - |
 | `status` | VARCHAR(30) | NO | open, soft_closed, hard_closed |
 | `ar_closed` | BOOLEAN | NO | DEFAULT FALSE |
 | `ap_closed` | BOOLEAN | NO | DEFAULT FALSE |
 | `inventory_closed` | BOOLEAN | NO | DEFAULT FALSE |
 | `payroll_closed` | BOOLEAN | NO | DEFAULT FALSE |
 | `gl_closed` | BOOLEAN | NO | DEFAULT FALSE |
-| `closed_at` | TIMESTAMPTZ | YES | — |
-| `closed_by` | UUID | YES | — |
+| `closed_at` | TIMESTAMPTZ | YES | - |
+| `closed_by` | UUID | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 #### 7.4.3 Primary Key
@@ -461,7 +461,7 @@ Full audit standard
 Prohibited when journal/GL entries exist
 
 #### 7.4.9 Business Rules
-- **Closed period cannot be edited** (FRD-04 §15) — `hard_closed` blocks all postings
+- **Closed period cannot be edited** (FRD-04 §15) - `hard_closed` blocks all postings
 - `soft_closed` allows adjustment journals with elevated permission (`finance.journal:adjust`)
 - Monthly closing checklist: AR, AP, Inventory, Payroll, GL flags (FRD-04 §15)
 
@@ -470,7 +470,7 @@ Prohibited when journal/GL entries exist
 ### 7.5 `fin_journal_header`
 
 #### 7.5.1 Purpose
-Journal entry header — container for double-entry lines. Supports manual, system-generated, adjustment, and reversal entries (FRD-04 §6).
+Journal entry header - container for double-entry lines. Supports manual, system-generated, adjustment, and reversal entries (FRD-04 §6).
 
 #### 7.5.2 Columns
 
@@ -483,19 +483,19 @@ Journal entry header — container for double-entry lines. Supports manual, syst
 | `journal_number` | VARCHAR(50) | NO | UK per company |
 | `journal_date` | DATE | NO | Posting date |
 | `journal_type` | VARCHAR(30) | NO | manual, system, adjustment, reversal |
-| `description` | VARCHAR(500) | NO | — |
+| `description` | VARCHAR(500) | NO | - |
 | `fiscal_year_id` | UUID | NO | FK → `fin_fiscal_year` |
 | `period_id` | UUID | NO | FK → `fin_period` |
 | `currency_code` | VARCHAR(3) | NO | Transaction currency (ISO 4217) |
 | `exchange_rate` | NUMERIC(18,8) | NO | Rate to company base currency |
-| `total_debit` | NUMERIC(18,4) | NO | DEFAULT 0 — denormalized |
-| `total_credit` | NUMERIC(18,4) | NO | DEFAULT 0 — denormalized |
+| `total_debit` | NUMERIC(18,4) | NO | DEFAULT 0 - denormalized |
+| `total_credit` | NUMERIC(18,4) | NO | DEFAULT 0 - denormalized |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, posted, reversed, cancelled |
 | `workflow_status` | VARCHAR(30) | NO | pending, in_progress, approved, rejected |
 | `workflow_instance_id` | UUID | YES | FK → `foundation.wf_instance` |
-| `posted_at` | TIMESTAMPTZ | YES | — |
+| `posted_at` | TIMESTAMPTZ | YES | - |
 | `posted_by` | UUID | YES | FK → `sec_user` |
-| `reversal_of_id` | UUID | YES | Self-FK — original journal |
+| `reversal_of_id` | UUID | YES | Self-FK - original journal |
 | `source_module` | VARCHAR(50) | YES | sales, procurement, payroll, assets, finance |
 | `source_document_type` | VARCHAR(50) | YES | invoice, payment, depreciation |
 | `source_document_id` | UUID | YES | Polymorphic source reference |
@@ -533,7 +533,7 @@ Journal entry header — container for double-entry lines. Supports manual, syst
 Full audit standard; `approve`, `post`, `reverse` operations logged to `audit.audit_log`
 
 #### 7.5.8 Soft Delete Rules
-Soft delete allowed only in `draft` status; posted journals cannot be deleted — reversal only
+Soft delete allowed only in `draft` status; posted journals cannot be deleted - reversal only
 
 #### 7.5.9 Business Rules
 - **Total Debit must equal Total Credit** before submit (FRD-04 §6)
@@ -547,7 +547,7 @@ Soft delete allowed only in `draft` status; posted journals cannot be deleted �
 ### 7.6 `fin_journal_line`
 
 #### 7.6.1 Purpose
-Journal entry line items — individual debit/credit postings to GL accounts.
+Journal entry line items - individual debit/credit postings to GL accounts.
 
 #### 7.6.2 Columns
 
@@ -566,11 +566,11 @@ Journal entry line items — individual debit/credit postings to GL accounts.
 | `base_debit_amount` | NUMERIC(18,4) | NO | Base currency debit |
 | `base_credit_amount` | NUMERIC(18,4) | NO | Base currency credit |
 | `currency_code` | VARCHAR(3) | NO | Line currency |
-| `exchange_rate` | NUMERIC(18,8) | NO | — |
+| `exchange_rate` | NUMERIC(18,8) | NO | - |
 | `cost_center_id` | UUID | YES | FK → `org_cost_center` |
 | `profit_center_id` | UUID | YES | FK → `org_profit_center` |
-| `customer_id` | UUID | YES | FK → `master_customer` — AR clearing lines |
-| `vendor_id` | UUID | YES | FK → `master_vendor` — AP clearing lines |
+| `customer_id` | UUID | YES | FK → `master_customer` - AR clearing lines |
+| `vendor_id` | UUID | YES | FK → `master_vendor` - AP clearing lines |
 | `tax_id` | UUID | YES | FK → `master_tax` |
 | `reference_number` | VARCHAR(100) | YES | External ref |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
@@ -619,7 +619,7 @@ Lines deletable only when header is `draft`; cascade soft-delete with header
 ### 7.7 `fin_gl_entry`
 
 #### 7.7.1 Purpose
-Posted General Ledger entries — the immutable accounting book (FRD-04 §5). **No transaction directly modifies GL.**
+Posted General Ledger entries - the immutable accounting book (FRD-04 §5). **No transaction directly modifies GL.**
 
 #### 7.7.2 Columns
 
@@ -641,16 +641,16 @@ Posted General Ledger entries — the immutable accounting book (FRD-04 §5). **
 | `credit_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `base_debit_amount` | NUMERIC(18,4) | NO | Company base currency |
 | `base_credit_amount` | NUMERIC(18,4) | NO | Company base currency |
-| `currency_code` | VARCHAR(3) | NO | — |
-| `exchange_rate` | NUMERIC(18,8) | NO | — |
-| `description` | VARCHAR(500) | YES | — |
+| `currency_code` | VARCHAR(3) | NO | - |
+| `exchange_rate` | NUMERIC(18,8) | NO | - |
+| `description` | VARCHAR(500) | YES | - |
 | `cost_center_id` | UUID | YES | FK → `org_cost_center` |
 | `profit_center_id` | UUID | YES | FK → `org_profit_center` |
 | `is_reversal` | BOOLEAN | NO | DEFAULT FALSE |
 | `posted_at` | TIMESTAMPTZ | NO | Immutable post timestamp |
 | `posted_by` | UUID | NO | FK → `sec_user` |
-| `created_at` | TIMESTAMPTZ | NO | — |
-| `created_by` | UUID | YES | — |
+| `created_at` | TIMESTAMPTZ | NO | - |
+| `created_by` | UUID | YES | - |
 | `version` | INTEGER | NO | DEFAULT 1 |
 
 #### 7.7.3 Primary Key
@@ -661,21 +661,21 @@ All FKs ON DELETE RESTRICT
 
 #### 7.7.5 Constraints
 - `uk_fin_gl_entry_company_number` UNIQUE (`company_id`, `entry_number`)
-- `ck_fin_gl_entry_dc` CHECK (same as journal line — exclusive debit/credit)
-- **No soft delete columns** — append-only
+- `ck_fin_gl_entry_dc` CHECK (same as journal line - exclusive debit/credit)
+- **No soft delete columns** - append-only
 
 #### 7.7.6 Index Strategy
 - `pk_fin_gl_entry` (id)
 - `ux_fin_gl_entry_company_number` (company_id, entry_number)
-- `ix_fin_gl_entry_account_id` (account_id) — **critical for trial balance**
+- `ix_fin_gl_entry_account_id` (account_id) - **critical for trial balance**
 - `ix_fin_gl_entry_period_id` (period_id)
 - `ix_fin_gl_entry_entry_date` (entry_date)
 - `ix_fin_gl_entry_journal_header_id` (journal_header_id)
-- `ix_comp_fin_gl_account_period` (company_id, account_id, period_id) — composite for BS/P&L
+- `ix_comp_fin_gl_account_period` (company_id, account_id, period_id) - composite for BS/P&L
 - `ix_comp_fin_gl_company_date` (company_id, entry_date, account_id)
 
 #### 7.7.7 Audit Columns
-`created_at`, `created_by`, `posted_at`, `posted_by`, `version` — **no `updated_at`** (immutable)
+`created_at`, `created_by`, `posted_at`, `posted_by`, `version` - **no `updated_at`** (immutable)
 
 #### 7.7.8 Soft Delete Rules
 **Prohibited.** Corrections via reversal journal only.
@@ -690,28 +690,28 @@ All FKs ON DELETE RESTRICT
 ### 7.8 `fin_customer_ledger`
 
 #### 7.8.1 Purpose
-Accounts Receivable sub-ledger — tracks customer dues, invoices, payments, credit notes (FRD-04 §7).
+Accounts Receivable sub-ledger - tracks customer dues, invoices, payments, credit notes (FRD-04 §7).
 
 #### 7.8.2 Columns
 
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | NO | — |
-| `company_id` | UUID | NO | — |
-| `branch_id` | UUID | NO | — |
+| `tenant_id` | UUID | NO | - |
+| `company_id` | UUID | NO | - |
+| `branch_id` | UUID | NO | - |
 | `customer_id` | UUID | NO | FK → `master_customer` |
 | `document_number` | VARCHAR(50) | NO | UK per company |
-| `document_date` | DATE | NO | — |
+| `document_date` | DATE | NO | - |
 | `due_date` | DATE | NO | Aging basis |
 | `document_type` | VARCHAR(30) | NO | invoice, debit_note, credit_note, payment, adjustment |
-| `debit_amount` | NUMERIC(18,4) | NO | DEFAULT 0 — increases AR |
-| `credit_amount` | NUMERIC(18,4) | NO | DEFAULT 0 — decreases AR |
+| `debit_amount` | NUMERIC(18,4) | NO | DEFAULT 0 - increases AR |
+| `credit_amount` | NUMERIC(18,4) | NO | DEFAULT 0 - decreases AR |
 | `balance_amount` | NUMERIC(18,4) | NO | Running balance |
-| `currency_code` | VARCHAR(3) | NO | — |
-| `exchange_rate` | NUMERIC(18,8) | NO | — |
+| `currency_code` | VARCHAR(3) | NO | - |
+| `exchange_rate` | NUMERIC(18,8) | NO | - |
 | `status` | VARCHAR(30) | NO | open, partial, paid, written_off, cancelled |
-| `workflow_status` | VARCHAR(30) | YES | — |
+| `workflow_status` | VARCHAR(30) | YES | - |
 | `journal_header_id` | UUID | YES | FK → posted GL journal |
 | `source_module` | VARCHAR(50) | YES | sales, finance |
 | `source_document_id` | UUID | YES | Polymorphic |
@@ -755,28 +755,28 @@ Soft delete only before GL posting; posted entries reversed via credit note
 ### 7.9 `fin_vendor_ledger`
 
 #### 7.9.1 Purpose
-Accounts Payable sub-ledger — tracks vendor liabilities (FRD-04 §8).
+Accounts Payable sub-ledger - tracks vendor liabilities (FRD-04 §8).
 
 #### 7.9.2 Columns
 
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | NO | — |
-| `company_id` | UUID | NO | — |
-| `branch_id` | UUID | NO | — |
+| `tenant_id` | UUID | NO | - |
+| `company_id` | UUID | NO | - |
+| `branch_id` | UUID | NO | - |
 | `vendor_id` | UUID | NO | FK → `master_vendor` |
 | `document_number` | VARCHAR(50) | NO | UK per company |
-| `document_date` | DATE | NO | — |
+| `document_date` | DATE | NO | - |
 | `due_date` | DATE | NO | Aging basis |
 | `document_type` | VARCHAR(30) | NO | invoice, credit_note, debit_note, payment, adjustment |
-| `credit_amount` | NUMERIC(18,4) | NO | DEFAULT 0 — increases AP liability |
-| `debit_amount` | NUMERIC(18,4) | NO | DEFAULT 0 — decreases AP (payments) |
+| `credit_amount` | NUMERIC(18,4) | NO | DEFAULT 0 - increases AP liability |
+| `debit_amount` | NUMERIC(18,4) | NO | DEFAULT 0 - decreases AP (payments) |
 | `balance_amount` | NUMERIC(18,4) | NO | Running balance |
-| `currency_code` | VARCHAR(3) | NO | — |
-| `exchange_rate` | NUMERIC(18,8) | NO | — |
+| `currency_code` | VARCHAR(3) | NO | - |
+| `exchange_rate` | NUMERIC(18,8) | NO | - |
 | `status` | VARCHAR(30) | NO | open, partial, paid, written_off, cancelled |
-| `workflow_status` | VARCHAR(30) | YES | — |
+| `workflow_status` | VARCHAR(30) | YES | - |
 | `journal_header_id` | UUID | YES | FK → posted GL journal |
 | `source_module` | VARCHAR(50) | YES | procurement, finance |
 | `source_document_id` | UUID | YES | Polymorphic |
@@ -826,27 +826,27 @@ Tax accounting register for GST/VAT/TDS compliance reporting (FRD-04 §12). Reco
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | NO | — |
-| `company_id` | UUID | NO | — |
-| `branch_id` | UUID | NO | — |
+| `tenant_id` | UUID | NO | - |
+| `company_id` | UUID | NO | - |
+| `branch_id` | UUID | NO | - |
 | `register_number` | VARCHAR(50) | NO | UK per company |
-| `register_date` | DATE | NO | — |
+| `register_date` | DATE | NO | - |
 | `tax_id` | UUID | NO | FK → `master_tax` |
 | `tax_type` | VARCHAR(30) | NO | gst, vat, sales_tax, withholding |
 | `transaction_type` | VARCHAR(30) | NO | output, input, withheld, adjustment |
-| `taxable_amount` | NUMERIC(18,4) | NO | — |
-| `tax_amount` | NUMERIC(18,4) | NO | — |
-| `currency_code` | VARCHAR(3) | NO | — |
+| `taxable_amount` | NUMERIC(18,4) | NO | - |
+| `tax_amount` | NUMERIC(18,4) | NO | - |
+| `currency_code` | VARCHAR(3) | NO | - |
 | `journal_header_id` | UUID | YES | FK → `fin_journal_header` |
 | `journal_line_id` | UUID | YES | FK → `fin_journal_line` |
 | `customer_id` | UUID | YES | FK → `master_customer` |
 | `vendor_id` | UUID | YES | FK → `master_vendor` |
 | `source_module` | VARCHAR(50) | NO | sales, procurement, finance, payroll |
-| `source_document_id` | UUID | YES | — |
+| `source_document_id` | UUID | YES | - |
 | `period_id` | UUID | NO | FK → `fin_period` |
 | `status` | VARCHAR(30) | NO | active, reversed |
-| `created_at` | TIMESTAMPTZ | NO | — |
-| `created_by` | UUID | YES | — |
+| `created_at` | TIMESTAMPTZ | NO | - |
+| `created_by` | UUID | YES | - |
 | `version` | INTEGER | NO | DEFAULT 1 |
 
 #### 7.10.3 Primary Key
@@ -874,7 +874,7 @@ Tax accounting register for GST/VAT/TDS compliance reporting (FRD-04 §12). Reco
 - `ix_fin_tax_register_transaction_type` (transaction_type)
 
 #### 7.10.7 Audit Columns
-`created_at`, `created_by`, `version` — append-only after post
+`created_at`, `created_by`, `version` - append-only after post
 
 #### 7.10.8 Soft Delete Rules
 Prohibited after filing period lock
@@ -895,16 +895,16 @@ Distributes journal/GL line amounts across cost centers for departmental cost ac
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | NO | — |
-| `company_id` | UUID | NO | — |
-| `branch_id` | UUID | NO | — |
+| `tenant_id` | UUID | NO | - |
+| `company_id` | UUID | NO | - |
+| `branch_id` | UUID | NO | - |
 | `journal_line_id` | UUID | NO | FK → `fin_journal_line` |
 | `gl_entry_id` | UUID | YES | FK → `fin_gl_entry` (populated on post) |
 | `cost_center_id` | UUID | NO | FK → `org_cost_center` |
 | `allocation_sequence` | SMALLINT | NO | 1, 2, 3… |
 | `allocation_percent` | NUMERIC(8,4) | YES | % split |
 | `allocated_amount` | NUMERIC(18,4) | NO | Amount in base currency |
-| `description` | VARCHAR(255) | YES | — |
+| `description` | VARCHAR(255) | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 #### 7.11.3 Primary Key
@@ -920,7 +920,7 @@ Distributes journal/GL line amounts across cost centers for departmental cost ac
 
 #### 7.11.5 Constraints
 - `uk_fin_cost_center_allocation_line_seq` UNIQUE (`journal_line_id`, `allocation_sequence`)
-- SUM(`allocation_percent`) = 100 OR SUM(`allocated_amount`) = parent line amount — service layer
+- SUM(`allocation_percent`) = 100 OR SUM(`allocated_amount`) = parent line amount - service layer
 
 #### 7.11.6 Index Strategy
 - `pk_fin_cost_center_allocation` (id)
@@ -943,27 +943,27 @@ Deletable only when parent journal is `draft`
 ### 7.12 `fin_asset_transaction`
 
 #### 7.12.1 Purpose
-Asset accounting integration — capitalisation, depreciation, disposal postings linked to `master_asset` (FRD-04 + FRD-12).
+Asset accounting integration - capitalisation, depreciation, disposal postings linked to `master_asset` (FRD-04 + FRD-12).
 
 #### 7.12.2 Columns
 
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | NO | — |
-| `company_id` | UUID | NO | — |
-| `branch_id` | UUID | NO | — |
+| `tenant_id` | UUID | NO | - |
+| `company_id` | UUID | NO | - |
+| `branch_id` | UUID | NO | - |
 | `transaction_number` | VARCHAR(50) | NO | UK per company |
-| `transaction_date` | DATE | NO | — |
+| `transaction_date` | DATE | NO | - |
 | `asset_id` | UUID | NO | FK → `master_asset` |
 | `transaction_type` | VARCHAR(30) | NO | acquisition, depreciation, revaluation, disposal, write_off |
-| `amount` | NUMERIC(18,2) | NO | — |
-| `currency_code` | VARCHAR(3) | NO | — |
+| `amount` | NUMERIC(18,2) | NO | - |
+| `currency_code` | VARCHAR(3) | NO | - |
 | `journal_header_id` | UUID | YES | FK → posted journal |
 | `period_id` | UUID | NO | FK → `fin_period` |
 | `status` | VARCHAR(30) | NO | draft, approved, posted, reversed |
-| `workflow_status` | VARCHAR(30) | YES | — |
-| `description` | VARCHAR(500) | YES | — |
+| `workflow_status` | VARCHAR(30) | YES | - |
+| `description` | VARCHAR(500) | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 #### 7.12.3 Primary Key
@@ -1010,14 +1010,14 @@ Company-level exchange rate table for multi-currency journal and GL conversion (
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | NO | — |
-| `company_id` | UUID | NO | — |
+| `tenant_id` | UUID | NO | - |
+| `company_id` | UUID | NO | - |
 | `currency_id` | UUID | NO | FK → `master_currency` |
 | `currency_code` | VARCHAR(3) | NO | Denormalized ISO code |
 | `base_currency_code` | VARCHAR(3) | NO | Company base from `org_company.currency_code` |
 | `exchange_rate` | NUMERIC(18,8) | NO | Rate: 1 foreign = X base |
 | `rate_type` | VARCHAR(30) | NO | daily, monthly, manual |
-| `effective_from` | DATE | NO | — |
+| `effective_from` | DATE | NO | - |
 | `effective_to` | DATE | YES | NULL = open-ended |
 | `status` | VARCHAR(30) | NO | active, inactive |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
@@ -1098,7 +1098,7 @@ Soft delete only; historical rates retained for audit
 | Organization | FRD-02 | company, branch, cost/profit centers |
 | Foundation | FRD-01 | tenant, user, workflow, audit, RBAC |
 
-**Rule (C-01):** Finance consumes masters via service APIs — no duplicate party/account master tables.
+**Rule (C-01):** Finance consumes masters via service APIs - no duplicate party/account master tables.
 
 ---
 
@@ -1121,7 +1121,7 @@ Currency Setup: master_currency → fin_currency_rate
     ↓
 fin_journal_line (balanced debit/credit)
     ↓
-Workflow Approval (wf_instance) — FRD-04 §17
+Workflow Approval (wf_instance) - FRD-04 §17
     ↓
 Post Journal → fin_gl_entry (immutable)
               → fin_tax_register (if taxable)
@@ -1138,7 +1138,7 @@ Fiscal Year Close (fin_fiscal_year.status → closed)
 
 ## 11. Accounting Rules
 
-### 11.1 Double-Entry Accounting (Golden Rule — FRD-04 §3)
+### 11.1 Double-Entry Accounting (Golden Rule - FRD-04 §3)
 
 | Rule | Enforcement |
 |------|-------------|
@@ -1166,7 +1166,7 @@ SUM(fin_journal_line.debit_amount) = SUM(fin_journal_line.credit_amount)
 SUM(fin_journal_line.base_debit_amount) = SUM(fin_journal_line.base_credit_amount)
 ```
 
-Tolerance: **0.00** — no rounding tolerance at journal level; line-level rounding to `decimal_places` per currency.
+Tolerance: **0.00** - no rounding tolerance at journal level; line-level rounding to `decimal_places` per currency.
 
 ### 11.4 Fiscal Period Locking
 
@@ -1205,7 +1205,7 @@ Sub-module close flags (`ar_closed`, `ap_closed`, etc.) must be TRUE before `gl_
 
 - All create/update/post/reverse/period-close → `audit.audit_log`
 - Financial data retention: **7 years minimum** (FRD-04 §19); GL **10+ years** per DBS
-- Posted GL is append-only — tamper-evident
+- Posted GL is append-only - tamper-evident
 - `document_number` and `entry_number` immutable after post
 
 ---
@@ -1216,7 +1216,7 @@ Sub-module close flags (`ar_closed`, `ap_closed`, etc.) must be TRUE before `gl_
 
 | Table | Strategy | Key |
 |-------|----------|-----|
-| `fin_gl_entry` | **Range partition by `entry_date`** (yearly) | High volume — 500M+ records target |
+| `fin_gl_entry` | **Range partition by `entry_date`** (yearly) | High volume - 500M+ records target |
 | `fin_journal_header` | Range partition by `journal_date` (yearly) | Optional at 10M+ rows |
 | `fin_customer_ledger` | Range partition by `document_date` (yearly) | AR aging at scale |
 | `fin_vendor_ledger` | Range partition by `document_date` (yearly) | AP aging at scale |
@@ -1229,7 +1229,7 @@ Sub-module close flags (`ar_closed`, `ap_closed`, etc.) must be TRUE before `gl_
 |----------|--------|
 | Closed fiscal year (> 7 years) | Move `fin_gl_entry` partitions to `finance_archive` schema |
 | Cancelled draft journals | Soft delete after 90 days (configurable) |
-| Posted journals | Never archived — retained per compliance |
+| Posted journals | Never archived - retained per compliance |
 | Tax register | Retained 7+ years; no purge without GRC approval |
 
 ### 12.3 Index Strategy (Summary)
@@ -1248,7 +1248,7 @@ Sub-module close flags (`ar_closed`, `ap_closed`, etc.) must be TRUE before `gl_
 
 - **Read replicas** for reporting queries (SDD §22)
 - **Denormalized** `account_code` on `fin_gl_entry` avoids COA join on every report
-- **No `SELECT *`** — explicit column lists in repositories
+- **No `SELECT *`** - explicit column lists in repositories
 - **Pagination** mandatory on list APIs (default 25, max 200)
 - **Materialized views** (Phase 2): `mv_trial_balance`, `mv_account_balance` refreshed on period close
 - OLTP posting target: **< 200ms** per journal post (including GL insert batch)
@@ -1267,12 +1267,12 @@ Sub-module close flags (`ar_closed`, `ap_closed`, etc.) must be TRUE before `gl_
 | `fin_customer_ledger` | **Confidential** | Customer financial data |
 | `fin_vendor_ledger` | **Confidential** | Vendor payment data |
 | `fin_tax_register` | **Confidential** | Tax compliance |
-| `fin_currency_rate` | Internal | — |
-| `fin_cost_center_allocation` | Internal | — |
-| `fin_asset_transaction` | Internal | — |
+| `fin_currency_rate` | Internal | - |
+| `fin_cost_center_allocation` | Internal | - |
+| `fin_asset_transaction` | Internal | - |
 | `fin_fiscal_year`, `fin_period` | Internal | Period control |
 
-### 13.2 Finance RBAC Permissions (Planned — Sprint 4)
+### 13.2 Finance RBAC Permissions (Planned - Sprint 4)
 
 | Resource | Permissions |
 |----------|-------------|
@@ -1306,7 +1306,7 @@ Sub-module close flags (`ar_closed`, `ap_closed`, etc.) must be TRUE before `gl_
 | Journals | 10+ years | FRD-04 §19 |
 | Tax register | 7+ years | Statutory |
 | AR/AP sub-ledgers | 7+ years | FRD-04 §19 |
-| Audit logs | 10+ years | DBS — append-only |
+| Audit logs | 10+ years | DBS - append-only |
 | Permanent purge | EARB + Legal approval required | DBS soft delete §35 |
 
 ---
@@ -1402,8 +1402,8 @@ Sub-module close flags (`ar_closed`, `ap_closed`, etc.) must be TRUE before `gl_
 
 | Term | Definition |
 |------|------------|
-| COA | Chart of Accounts — company GL account structure |
-| GL | General Ledger — posted, immutable accounting book |
+| COA | Chart of Accounts - company GL account structure |
+| GL | General Ledger - posted, immutable accounting book |
 | Sub-Ledger | AR/AP detail that rolls up to GL control accounts |
 | Posting | Atomic creation of `fin_gl_entry` from approved journal |
 | Period Lock | `hard_closed` period blocks all financial writes |
@@ -1413,7 +1413,7 @@ Sub-module close flags (`ar_closed`, `ap_closed`, etc.) must be TRUE before `gl_
 
 ---
 
-## ERD Phase Gate — Finance Summary
+## ERD Phase Gate - Finance Summary
 
 | Metric | Value |
 |--------|-------|
@@ -1427,4 +1427,4 @@ Sub-module close flags (`ar_closed`, `ap_closed`, etc.) must be TRUE before `gl_
 
 ---
 
-*End of ERD_04 — Finance & Accounting Domain*
+*End of ERD_04 - Finance & Accounting Domain*

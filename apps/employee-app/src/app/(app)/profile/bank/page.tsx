@@ -11,7 +11,7 @@ import type { EssBank } from "@/types/api";
 import * as ui from "@/theme/classes";
 
 function maskAccount(value: string | null | undefined, show: boolean) {
-  if (!value) return "—";
+  if (!value) return "-";
   if (show) return value.replace(/(\d{4})(?=\d)/g, "$1 ").trim();
   if (value.length <= 4) return "****";
   return `**** **** ${value.slice(-4)}`;
@@ -63,7 +63,7 @@ export default function BankDetailsPage() {
                 Account Holder
               </p>
               <p className="mt-1 text-xl font-bold text-[#0b1c30]">
-                {bank.bank_account_holder || "—"}
+                {bank.bank_account_holder || "-"}
               </p>
             </div>
             <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[10px] font-bold text-emerald-800">
@@ -74,7 +74,7 @@ export default function BankDetailsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-[#434655]">Bank Name</p>
-              <p className="font-semibold text-[#0b1c30]">{bank.bank_name || "—"}</p>
+              <p className="font-semibold text-[#0b1c30]">{bank.bank_name || "-"}</p>
             </div>
             <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#dbe1ff] text-[#004ac6]">
               <IconWallet size={20} />
@@ -98,7 +98,7 @@ export default function BankDetailsPage() {
             </div>
             <div>
               <p className="text-sm text-[#434655]">IFSC Code</p>
-              <p className="mt-1 font-semibold text-[#0b1c30]">{bank.bank_ifsc || "—"}</p>
+              <p className="mt-1 font-semibold text-[#0b1c30]">{bank.bank_ifsc || "-"}</p>
             </div>
           </div>
 

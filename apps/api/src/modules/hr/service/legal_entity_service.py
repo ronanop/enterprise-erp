@@ -1,4 +1,4 @@
-"""HR Setup → Legal Entities — tenant-wide org_company master (same rows as Assign HR)."""
+"""HR Setup → Legal Entities - tenant-wide org_company master (same rows as Assign HR)."""
 
 from uuid import UUID
 
@@ -14,7 +14,7 @@ from modules.organization.service.company_service import CompanyService
 
 
 class HrLegalEntityService:
-    """Tenant-level company list — not filtered to the signed-in session company."""
+    """Tenant-level company list - not filtered to the signed-in session company."""
 
     def __init__(self, db: Session) -> None:
         self._db = db

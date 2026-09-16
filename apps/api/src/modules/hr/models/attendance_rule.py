@@ -1,4 +1,4 @@
-"""HR attendance rule ORM — half-day hours, geo, early-leave, arrival window, punch mode."""
+"""HR attendance rule ORM - half-day hours, geo, early-leave, arrival window, punch mode."""
 
 from datetime import time
 from decimal import Decimal
@@ -63,7 +63,7 @@ class HrAttendanceRule(Base, *HrMasterMixin):
         Numeric(5, 2), nullable=False, default=Decimal("8.00")
     )
     compoff_auto_credit: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    # Policy maker — biometric + arrival window
+    # Policy maker - biometric + arrival window
     punch_mode: Mapped[str] = mapped_column(String(40), nullable=False, default="first_in_last_out")
     arrival_policy_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     applies_to_all_shifts: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

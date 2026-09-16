@@ -1,4 +1,4 @@
-# CR-004 — Phase 5B-2B Task 4 — Inventory Integration
+# CR-004 - Phase 5B-2B Task 4 - Inventory Integration
 
 **Status:** Complete  
 **Date:** 2026-08-05  
@@ -37,13 +37,13 @@ Operational status remains backend-driven (list reload picks up new values).
 | Drawer | Closed before workflow nav; closed again on stale refresh |
 | Selected row / ops status | Updated via list reload from backend after return/issue |
 
-### Dashboard KPI refresh — **Deferred**
+### Dashboard KPI refresh - **Deferred**
 
 No shared dashboard cache/store exists (`AssetOperationsContainer` loads on its own mount). KPI refresh after Issue/Return is deferred until a cache/event bus is introduced.
 
 ### Query note
 
-Containers remain query-agnostic (Tasks 2–3). Existing navigation hrefs already carry `assetId`; **page hosts** map them to props. No new query-parameter module; no navigation refactor.
+Containers remain query-agnostic (Tasks 2-3). Existing navigation hrefs already carry `assetId`; **page hosts** map them to props. No new query-parameter module; no navigation refactor.
 
 ---
 

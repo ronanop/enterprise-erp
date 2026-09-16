@@ -56,7 +56,7 @@ export default function CinematicSplashPage() {
         aria-hidden
       />
 
-      {/* Spacer — matches top breathing room without logo card */}
+      {/* Spacer - matches top breathing room without logo card */}
       <div className="h-6 shrink-0 sm:h-8" aria-hidden />
 
       {/* Hero scaled to fit above title + loading pill (one screen) */}

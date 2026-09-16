@@ -152,7 +152,7 @@ export function ItAdminStocksPage() {
                   className="cursor-pointer"
                   onClick={() => adjust(r.id, -1)}
                 >
-                  −
+                  -
                 </Button>
                 <span
                   className={cn(

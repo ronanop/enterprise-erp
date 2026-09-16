@@ -211,7 +211,7 @@ function buildPastAttendance(): EssAttendance[] {
 }
 
 /**
- * Today starts checked-in at 10:00 AM local — easy demo:
+ * Today starts checked-in at 10:00 AM local - easy demo:
  * if now is 3:00 PM, total time shows 5:00 hours.
  */
 function buildTodayAttendance(): EssAttendance {

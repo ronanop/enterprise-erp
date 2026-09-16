@@ -146,7 +146,7 @@ function entityLabelForCompany(companyName: string, companyCode: string): string
   const blob = `${companyName} ${companyCode}`.toLowerCase();
   if (blob.includes("digitech")) return "Cache Digitech";
   if (blob.includes("technolog")) return "Cache Technologies";
-  return companyName || companyCode || "—";
+  return companyName || companyCode || "-";
 }
 
 function appendActivity(event: Omit<ActivityEvent, "id" | "at">): void {
@@ -355,10 +355,10 @@ function mergeRow(
       ? "Cache Digitech"
       : companyInfo
         ? entityLabelForCompany(companyInfo.name, companyInfo.code)
-        : extEntity || "—";
+        : extEntity || "-";
   const companyName = /technolog/i.test(extEntity)
     ? "Cache Technologies & Infotech"
-    : companyInfo?.name || "—";
+    : companyInfo?.name || "-";
 
   const managerId = String(
     master.reporting_manager_id ?? hydrated.employment.reportingManagerId ?? "",
@@ -367,8 +367,8 @@ function mergeRow(
   const managerFromExt = (hydrated.employment.reportingManagerName || "").trim();
   const reportingManagerName =
     managerFromMap ||
-    (managerFromExt && managerFromExt !== "—" ? managerFromExt : "") ||
-    "—";
+    (managerFromExt && managerFromExt !== "-" ? managerFromExt : "") ||
+    "-";
 
   const nextExt: EmployeeExtension = {
     ...hydrated,
@@ -380,7 +380,7 @@ function mergeRow(
       locationId: locationId || hydrated.employment.locationId,
       reportingManagerId: managerId || hydrated.employment.reportingManagerId,
       reportingManagerName:
-        reportingManagerName !== "—"
+        reportingManagerName !== "-"
           ? reportingManagerName
           : hydrated.employment.reportingManagerName,
       designationName:
@@ -405,20 +405,20 @@ function mergeRow(
       hydrated.employment.departmentName ||
       deptMap.get(departmentId) ||
       String(master.designation ?? "").split("·")[0] ||
-      "—",
+      "-",
     designationName:
       nextExt.employment.designationName ||
-      String(master.designation ?? profile?.designation ?? "—"),
+      String(master.designation ?? profile?.designation ?? "-"),
     branchId,
-    branchName: hydrated.employment.branchName || branchMap.get(branchId) || "—",
+    branchName: hydrated.employment.branchName || branchMap.get(branchId) || "-",
     companyId,
     companyName,
     locationId,
-    locationName: locationName || "—",
+    locationName: locationName || "-",
     reportingManagerId: managerId,
     reportingManagerName,
     employmentType: String(
-      employment?.employment_type ?? hydrated.employment.employmentType ?? "—",
+      employment?.employment_type ?? hydrated.employment.employmentType ?? "-",
     ),
     joiningDate: String(
       employment?.date_of_joining ??
@@ -444,9 +444,9 @@ export type EmployeeDirectoryOptions = {
   departments: { id: string; label: string; branchId: string; headEmployeeId: string }[];
   locations: { id: string; label: string; branchId: string; code: string }[];
   designations: { id: string; label: string }[];
-  /** Reporting managers only — for assignment picklists */
+  /** Reporting managers only - for assignment picklists */
   managers: { id: string; label: string }[];
-  /** All active employees — for name lookup (branch/dept heads, etc.) */
+  /** All active employees - for name lookup (branch/dept heads, etc.) */
   employees: { id: string; label: string }[];
   managementGroups: { id: string; label: string; employmentType: string; shiftId: string }[];
   shifts: { id: string; label: string }[];
@@ -463,7 +463,7 @@ const DIRECTORY_CACHE_TTL_MS = 20_000;
 let directoryCache: { at: number; value: EmployeeDirectoryResult } | null = null;
 let directoryInflight: Promise<EmployeeDirectoryResult> | null = null;
 
-/** API pagination max is `le=200` — larger page_size returns 422. */
+/** API pagination max is `le=200` - larger page_size returns 422. */
 const API_PAGE_SIZE = 200;
 const API_MAX_PAGES = 25;
 
@@ -663,11 +663,11 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
     const mgrName =
       (ext.employment.reportingManagerName || "").trim() ||
       (loc.reportingManagerName || "").trim() ||
-      "—";
+      "-";
     records.push({
       ...loc,
       companyId: loc.companyId || loc.extension?.employment?.entityId || "",
-      companyName: loc.companyName || loc.extension?.employment?.entityName || "—",
+      companyName: loc.companyName || loc.extension?.employment?.entityName || "-",
       reportingManagerId: ext.employment.reportingManagerId || loc.reportingManagerId || "",
       reportingManagerName: mgrName,
       departmentName: ext.employment.departmentName || loc.departmentName,
@@ -727,7 +727,7 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
       reportingManagerName:
         (mergedExt.employment.reportingManagerName || "").trim() ||
         (row.reportingManagerName || "").trim() ||
-        "—",
+        "-",
       profilePhotoDataUrl: profilePhotoFromExtension(mergedExt) || row.profilePhotoDataUrl,
       extension: mergedExt,
     };
@@ -784,7 +784,7 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
     const dobFromPortal = toDateInput(portalPersonal?.dob);
 
     const needsManager =
-      !(row.reportingManagerName || "").trim() || row.reportingManagerName === "—";
+      !(row.reportingManagerName || "").trim() || row.reportingManagerName === "-";
     const needsPhoto = !row.profilePhotoDataUrl;
     const needsPhone = !pickStr(row.mobile, row.extension.personal.mobile);
     const needsOfficialEmail = !pickStr(
@@ -881,7 +881,7 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
           ? officialEmailFromPortal
           : row.officialEmail,
       gender: needsGender && genderFromPortal ? genderFromPortal : row.gender,
-      reportingManagerName: needsManager && mgr ? mgr : row.reportingManagerName || "—",
+      reportingManagerName: needsManager && mgr ? mgr : row.reportingManagerName || "-",
       profilePhotoDataUrl:
         row.profilePhotoDataUrl || profilePhotoFromExtension(nextExt) || photoUrl,
       extension: nextExt,
@@ -942,7 +942,7 @@ export function filterEmployees(
     }
     if (filters.location) {
       const locName = (r.locationName || "").trim();
-      if (!locName || locName === "—") return false;
+      if (!locName || locName === "-") return false;
       if (locName.toLowerCase() !== filters.location.toLowerCase()) return false;
     }
     if (filters.gender && r.gender !== filters.gender) return false;
@@ -1071,16 +1071,16 @@ export async function createExistingEmployee(input: {
     officialEmail: input.email,
     mobile: input.mobile,
     departmentId: input.departmentId,
-    departmentName: "—",
+    departmentName: "-",
     designationName: input.designationName,
     branchId: input.branchId,
-    branchName: "—",
+    branchName: "-",
     companyId: "",
-    companyName: "—",
+    companyName: "-",
     locationId: "",
-    locationName: "—",
+    locationName: "-",
     reportingManagerId: input.reportingManagerId || "",
-    reportingManagerName: "—",
+    reportingManagerName: "-",
     employmentType: input.employmentType || "permanent",
     joiningDate: input.joiningDate,
     lifecycleStatus: "active",
@@ -1155,7 +1155,7 @@ export async function applyOnboardingPortalToEmployee(
         reportingManagerName:
           (draft.employment.reportingManagerName || "").trim() ||
           prev.reportingManagerName ||
-          "—",
+          "-",
         employmentType: draft.employment.employmentType || prev.employmentType,
         joiningDate: draft.employment.joiningDate || prev.joiningDate,
         lifecycleStatus: draft.employment.lifecycleStatus || prev.lifecycleStatus,
@@ -1389,7 +1389,7 @@ export async function createEmployeeFromWizard(
   appendActivity({
     employeeId,
     type: "created",
-    title: "Employee added (HR direct hire — no invitation)",
+    title: "Employee added (HR direct hire - no invitation)",
     actor: actorLabel(),
   });
 
@@ -1407,16 +1407,16 @@ export async function createEmployeeFromWizard(
     officialEmail: email,
     mobile,
     departmentId,
-    departmentName: draft.employment.departmentName || "—",
+    departmentName: draft.employment.departmentName || "-",
     designationName,
     branchId,
-    branchName: draft.employment.branchName || "—",
+    branchName: draft.employment.branchName || "-",
     companyId: "",
-    companyName: "—",
+    companyName: "-",
     locationId: draft.employment.locationId || "",
-    locationName: draft.employment.location || "—",
+    locationName: draft.employment.location || "-",
     reportingManagerId: reportingManagerId || "",
-    reportingManagerName: draft.employment.reportingManagerName || "—",
+    reportingManagerName: draft.employment.reportingManagerName || "-",
     employmentType,
     joiningDate,
     lifecycleStatus: draft.employment.lifecycleStatus || "active",
@@ -1631,12 +1631,12 @@ export function exportEmployeesCsv(records: EmployeeRecord[]): string {
       r.displayName,
       excelEntityCell(r),
       excelOrganisationCell(r),
-      r.locationName && r.locationName !== "—"
+      r.locationName && r.locationName !== "-"
         ? r.locationName
         : r.extension.employment.location || "",
       r.designationName || r.extension.employment.designationName || "",
       r.departmentName || r.extension.employment.departmentName || "",
-      r.reportingManagerName && r.reportingManagerName !== "—"
+      r.reportingManagerName && r.reportingManagerName !== "-"
         ? r.reportingManagerName
         : r.extension.employment.reportingManagerName || "",
       r.joiningDate || r.extension.employment.joiningDate || "",

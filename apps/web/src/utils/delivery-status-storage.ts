@@ -462,7 +462,7 @@ export function validateDeliveryStatusForm(
   value: Omit<DeliveryStatusRecord, "challanId" | "updatedAt">,
 ): DeliveryStatusFormErrors {
   const errors: DeliveryStatusFormErrors = {};
-  // Cache invoice is optional at delivery — bill DC material later after payment.
+  // Cache invoice is optional at delivery - bill DC material later after payment.
   if (value.deliveryMode !== "hand" && value.deliveryMode !== "courier") {
     errors.deliveryMode = "Select By hand or Courier.";
   }

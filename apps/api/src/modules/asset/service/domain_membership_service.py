@@ -1,4 +1,4 @@
-"""Domain membership service — assign users to IT / Non-IT asset teams."""
+"""Domain membership service - assign users to IT / Non-IT asset teams."""
 
 from __future__ import annotations
 

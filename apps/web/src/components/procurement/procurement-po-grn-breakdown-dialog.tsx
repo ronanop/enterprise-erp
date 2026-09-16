@@ -53,7 +53,7 @@ type ProcurementPoGrnBreakdownDialogProps = {
 };
 
 function formatReceiptAt(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value.slice(0, 10);
   return d.toLocaleString(undefined, {
@@ -66,7 +66,7 @@ function formatReceiptAt(value: string | null | undefined): string {
 }
 
 function formatSerials(serials: string[] | null | undefined): string {
-  if (!serials?.length) return "—";
+  if (!serials?.length) return "-";
   return serials.join(", ");
 }
 
@@ -74,7 +74,7 @@ function batchUnitsReceived(batch: ScmReceiptBatch): number {
   return (batch.lines || []).reduce((sum, ln) => sum + (Number(ln.quantity) || 0), 0);
 }
 
-/** Flat donut — correctly draws 0% and 100% (exploded 3D pie breaks on full arcs). */
+/** Flat donut - correctly draws 0% and 100% (exploded 3D pie breaks on full arcs). */
 function PoCompletionDonut({
   row,
 }: {
@@ -401,7 +401,7 @@ function PoGrnDetailPanel({
                                 {ln.line_number}
                               </td>
                               <td className="px-2.5 py-2 text-foreground">
-                                {ln.product_name || "—"}
+                                {ln.product_name || "-"}
                               </td>
                               <td className="px-2.5 py-2 font-mono tabular-nums text-foreground">
                                 {ln.quantity}

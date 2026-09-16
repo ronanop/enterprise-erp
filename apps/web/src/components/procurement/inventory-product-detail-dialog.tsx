@@ -19,7 +19,7 @@ import {
 
 function displaySerial(value: string | null | undefined): string {
   const text = (value ?? "").trim();
-  if (!text || text.toUpperCase() === "NA" || text === "—" || text === "-") return "—";
+  if (!text || text.toUpperCase() === "NA" || text === "-" || text === "-") return "-";
   return text;
 }
 
@@ -157,10 +157,10 @@ export function InventoryProductDetailDialog({
                         </span>
                       </td>
                       <td className={cn(procurementUi.td, "px-3 font-mono text-xs tabular-nums")}>
-                        {row.company_po_number?.trim() || "—"}
+                        {row.company_po_number?.trim() || "-"}
                       </td>
                       <td className={cn(procurementUi.td, "px-3 font-mono text-xs tabular-nums")}>
-                        {row.grn_number?.trim() || "—"}
+                        {row.grn_number?.trim() || "-"}
                         {row.source === "grn_reversal" ? (
                           <span className="ml-1.5 text-[10px] font-medium uppercase text-destructive">
                             Rev

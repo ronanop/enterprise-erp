@@ -64,7 +64,7 @@ export function showBrowserNotification(n: Pick<EssNotification, "title" | "body
       tag: "ess-hr",
     });
   } catch {
-    // ignore — some embedded webviews block Notification
+    // ignore - some embedded webviews block Notification
   }
 }
 

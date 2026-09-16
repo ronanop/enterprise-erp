@@ -33,12 +33,12 @@ function batchKey(batch: ScmReceiptBatch): string {
 }
 
 function formatInvoiceDate(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return value.slice(0, 10);
 }
 
 function formatSerials(serials: string[] | null | undefined): string {
-  if (!serials?.length) return "—";
+  if (!serials?.length) return "-";
   return serials.join(", ");
 }
 
@@ -353,7 +353,7 @@ export function GrnPdfPickDialog({
                                       {ln.line_number}
                                     </td>
                                     <td className="max-w-[160px] truncate px-2 py-1.5 text-foreground">
-                                      {ln.product_name || "—"}
+                                      {ln.product_name || "-"}
                                     </td>
                                     <td className="px-2 py-1.5 tabular-nums text-foreground">
                                       {ln.quantity}
@@ -399,7 +399,7 @@ export function GrnPdfPickDialog({
                           <div>
                             <dt className="text-muted-foreground">Invoice no.</dt>
                             <dd className="tabular-nums text-foreground">
-                              {batch.vendor_invoice_number?.trim() || "—"}
+                              {batch.vendor_invoice_number?.trim() || "-"}
                             </dd>
                           </div>
                           <div>
@@ -413,7 +413,7 @@ export function GrnPdfPickDialog({
                             <dd className="tabular-nums text-foreground">
                               {batch.vendor_invoice_quantity != null
                                 ? batch.vendor_invoice_quantity
-                                : "—"}
+                                : "-"}
                             </dd>
                           </div>
                           <div>
@@ -421,7 +421,7 @@ export function GrnPdfPickDialog({
                             <dd className="tabular-nums text-foreground">
                               {batch.vendor_invoice_subtotal != null
                                 ? batch.vendor_invoice_subtotal
-                                : "—"}
+                                : "-"}
                             </dd>
                           </div>
                         </dl>

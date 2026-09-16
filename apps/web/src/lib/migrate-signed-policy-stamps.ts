@@ -21,7 +21,7 @@ let migratePromise: Promise<void> | null = null;
 
 /**
  * Re-generate signed policy PDFs for every case that has a signature image,
- * using the current stamp rules (signature image only — no label text).
+ * using the current stamp rules (signature image only - no label text).
  */
 export async function migrateSignedPolicyStampFormat(
   cases: OnboardingCase[],

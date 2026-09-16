@@ -191,7 +191,7 @@ export const authService = {
         await apiClient<null>("/auth/logout", { method: "POST" });
       }
     } catch {
-      // Offline / expired token — still sign out locally.
+      // Offline / expired token - still sign out locally.
     } finally {
       clearTokens();
       clearFaceVerified();

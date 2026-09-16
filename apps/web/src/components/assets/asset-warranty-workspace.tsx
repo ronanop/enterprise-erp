@@ -300,7 +300,7 @@ export function AssetWarrantyWorkspace() {
     <div className="space-y-6">
       <PageHeader
         title="Asset warranties"
-        description="Warranty coverage lifecycle — draft, activate, extend, expire. No approval workflow."
+        description="Warranty coverage lifecycle - draft, activate, extend, expire. No approval workflow."
       />
 
       {error ? (
@@ -494,7 +494,7 @@ export function AssetWarrantyWorkspace() {
                   <SelectContent>
                     {assetOptions.map((asset) => (
                       <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                        {asset.asset_code} — {asset.asset_name}
+                        {asset.asset_code} - {asset.asset_name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -584,7 +584,7 @@ export function AssetWarrantyWorkspace() {
                       {selected.start_date} → {selected.end_date}
                     </div>
                     <div className="text-muted-foreground">
-                      {selected.coverage_notes ?? "—"}
+                      {selected.coverage_notes ?? "-"}
                     </div>
                   </div>
 

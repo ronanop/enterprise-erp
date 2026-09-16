@@ -1,4 +1,4 @@
-# ADR-ASSET-REPORT-001 — Asset Reports (Hybrid Live + Snapshot)
+# ADR-ASSET-REPORT-001 - Asset Reports (Hybrid Live + Snapshot)
 
 **Status:** Accepted  
 **Date:** 2026-07-30  

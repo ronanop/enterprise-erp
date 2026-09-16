@@ -192,7 +192,7 @@ export function ServiceSlaPage() {
                           </Link>
                         </td>
                         <td className="max-w-[180px] truncate px-3 py-2">{row.subject}</td>
-                        <td className="px-3 py-2">{row.owner_name ?? "—"}</td>
+                        <td className="px-3 py-2">{row.owner_name ?? "-"}</td>
                         <td className="px-3 py-2">
                           <FinanceStatusBadge status={row.priority} />
                         </td>
@@ -203,7 +203,7 @@ export function ServiceSlaPage() {
                           {row.sla_started_at?.slice(0, 16).replace("T", " ")}
                         </td>
                         <td className="px-3 py-2 text-xs text-muted-foreground">
-                          {row.due_at?.slice(0, 16).replace("T", " ") ?? "—"}
+                          {row.due_at?.slice(0, 16).replace("T", " ") ?? "-"}
                         </td>
                         <td className="px-3 py-2 text-xs">{formatDurationMinutes(row.elapsed_minutes)}</td>
                         <td className="px-3 py-2 text-xs">
@@ -213,7 +213,7 @@ export function ServiceSlaPage() {
                               {formatDurationMinutes(row.remaining_minutes)}
                             </span>
                           ) : (
-                            "—"
+                            "-"
                           )}
                         </td>
                         <td className="px-3 py-2">

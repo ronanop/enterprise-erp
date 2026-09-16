@@ -1,4 +1,4 @@
-"""HR KPI definition ORM — department KPI library (PMS)."""
+"""HR KPI definition ORM - department KPI library (PMS)."""
 
 from decimal import Decimal
 from uuid import UUID, uuid4

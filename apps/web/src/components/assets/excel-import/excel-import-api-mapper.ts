@@ -1,5 +1,5 @@
 /**
- * CR-004 Phase 8B — map preview rows → POST /assets/assets/import payload.
+ * CR-004 Phase 8B - map preview rows → POST /assets/assets/import payload.
  */
 
 import {

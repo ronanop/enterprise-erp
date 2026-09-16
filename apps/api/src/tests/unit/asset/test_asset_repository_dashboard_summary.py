@@ -1,4 +1,4 @@
-"""Repository dashboard aggregation tests (CR-004 Phase 2C) — mocked SQL layer."""
+"""Repository dashboard aggregation tests (CR-004 Phase 2C) - mocked SQL layer."""
 
 from unittest.mock import MagicMock, patch
 from uuid import uuid4

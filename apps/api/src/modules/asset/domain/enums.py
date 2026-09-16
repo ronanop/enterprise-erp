@@ -157,7 +157,7 @@ ASSIGNMENT_COMPONENT_ISSUE_STATUS_VALUES: frozenset[str] = frozenset(
     s.value for s in AssignmentComponentIssueStatus
 )
 
-# Terminal custody states — component must not become available again automatically.
+# Terminal custody states - component must not become available again automatically.
 ASSIGNMENT_COMPONENT_UNAVAILABLE_STATUSES: frozenset[str] = frozenset(
     {
         AssignmentComponentIssueStatus.ISSUED.value,

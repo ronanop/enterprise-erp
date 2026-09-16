@@ -1,4 +1,4 @@
-"""Master Data port — Payroll never ORM-writes master_* tables."""
+"""Master Data port - Payroll never ORM-writes master_* tables."""
 
 from uuid import UUID
 

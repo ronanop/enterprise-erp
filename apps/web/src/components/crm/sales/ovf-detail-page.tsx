@@ -64,9 +64,9 @@ import {
 } from "@/services/sales-crm-service";
 
 function textOrDash(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "-";
   const text = String(value).trim();
-  return text || "—";
+  return text || "-";
 }
 
 function resolveEmployeeLabel(userId: string | null | undefined, employees: Option[]): string | null {
@@ -343,14 +343,13 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
 
       {ovf.deal_won ? (
         <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-950">
-          <Trophy className="size-4" /> Deal Won at {formatInr(ovf.deal_won_amount ?? 0)} — the opportunity is now
+          <Trophy className="size-4" /> Deal Won at {formatInr(ovf.deal_won_amount ?? 0)} - the opportunity is now
           closed-won.
         </div>
       ) : null}
 
       <PageHeader
         title={formatCrmCode(ovf.ovf_no)}
-        description={quote ? `From Quote ${formatCrmCode(quote.quote_no)}` : "Order Value Form"}
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             <CrmDetailEditLink href={`/crm/ovf/${ovf.id}/edit`} />
@@ -416,7 +415,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
           <CrmDetailItem label="OVF Module Owner">{ownerName}</CrmDetailItem>
           <CrmDetailItem label="PO Number">{textOrDash(ovf.po_number)}</CrmDetailItem>
           <CrmDetailItem label="Customer PO received date">
-            {ovf.po_date ? String(ovf.po_date).slice(0, 10) : "—"}
+            {ovf.po_date ? String(ovf.po_date).slice(0, 10) : "-"}
           </CrmDetailItem>
           <CrmDetailItem label="Delivery Period">{textOrDash(ovf.delivery_period)}</CrmDetailItem>
           <CrmDetailItem label="OVF No.">{formatCrmCode(ovf.ovf_no)}</CrmDetailItem>
@@ -431,7 +430,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
                 {opportunity.opportunity_name}
               </Link>
             ) : (
-              "—"
+              "-"
             )}
           </CrmDetailItem>
           <CrmDetailItem label="Billing Address">
@@ -474,7 +473,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
           <CrmDetailItem label="Additional Charges (₹)">{formatInr(ovf.additional_charges)}</CrmDetailItem>
           <CrmDetailItem label="Deal Won">{ovf.deal_won ? "Yes" : "No"}</CrmDetailItem>
           <CrmDetailItem label="Deal Won Amount">
-            {ovf.deal_won_amount != null ? formatInr(ovf.deal_won_amount) : "—"}
+            {ovf.deal_won_amount != null ? formatInr(ovf.deal_won_amount) : "-"}
           </CrmDetailItem>
           <CrmDetailItem label="Version">{ovf.version}</CrmDetailItem>
         </CrmDetailGrid>

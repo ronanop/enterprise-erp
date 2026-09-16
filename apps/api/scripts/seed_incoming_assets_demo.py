@@ -1,12 +1,12 @@
 """Seed 5 Procurement GRN lines so Incoming Assets / QC / Registration can be walked.
 
 Creates a real PO + received GRNs with lines. Incoming Assets syncs those GRN lines
-on GET /assets/incoming-assets — this script does not insert fake UI rows.
+on GET /assets/incoming-assets - this script does not insert fake UI rows.
 
 Walkthrough after seed:
-  1. Incoming Assets  — receive qty / units  (EXPECTED → ARRIVED)
-  2. Incoming QC      — accept / reject arrived units  (does not create ast_asset)
-  3. Pending Registration — register QC-accepted units into inventory
+  1. Incoming Assets  - receive qty / units  (EXPECTED → ARRIVED)
+  2. Incoming QC      - accept / reject arrived units  (does not create ast_asset)
+  3. Pending Registration - register QC-accepted units into inventory
 
 Usage (from apps/api):
   .venv/bin/python -m scripts.seed_incoming_assets_demo

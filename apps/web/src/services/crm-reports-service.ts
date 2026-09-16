@@ -221,7 +221,7 @@ export async function exportCrmReportXlsx(opts: {
     padRow([]),
     padRow([`Record Count : ${run.record_count}`]),
     padRow([]),
-    padRow(headerRow.length > 0 ? headerRow : ["—"]),
+    padRow(headerRow.length > 0 ? headerRow : ["-"]),
     ...dataRows.map((row) => padRow(row)),
   ];
 

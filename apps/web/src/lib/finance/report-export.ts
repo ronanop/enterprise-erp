@@ -103,7 +103,7 @@ export function exportAmount(value: unknown): string {
     const n = Number(value);
     if (Number.isFinite(n)) return formatInrPrecise(n);
   }
-  return "—";
+  return "-";
 }
 
 export function exportRawAmount(value: unknown): number {

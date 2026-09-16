@@ -1,4 +1,4 @@
-"""ESS REST routes — employee-scoped self-service (auth only, no admin RBAC)."""
+"""ESS REST routes - employee-scoped self-service (auth only, no admin RBAC)."""
 
 from datetime import date
 from io import BytesIO

@@ -1,13 +1,13 @@
-# ERD_06 — Procurement Domain
+# ERD_06 - Procurement Domain
 
-**Document:** Enterprise ERD — Procurement Domain  
+**Document:** Enterprise ERD - Procurement Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 6 Implementation Planning  
+**Status:** Locked - Ready for Sprint 6 Implementation Planning  
 **Schema:** `procurement`  
 **Table Prefix:** `proc_`  
 **Aligned To:** BRD v1.0 · FRD-07 · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-07 Procurement Domain](../02_FRD/FRD-07-Procurement-Domain.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 
 ---
 
@@ -57,7 +57,7 @@ Inventory (FRD-08 / Sprint 7) · Quality (FRD-14) · BI
 - RFQ management with invited vendors (FRD-07 §5)
 - Vendor quotation capture and line-level pricing (FRD-07 §6)
 - Vendor comparison snapshot for recommendation audit (FRD-07 §7)
-- Purchase order lifecycle and line fulfillment tracking (FRD-07 §8–9)
+- Purchase order lifecycle and line fulfillment tracking (FRD-07 §8-9)
 - Goods receipt notes linked to POs (FRD-07 §10)
 - Vendor contracts with optional line pricing (FRD-07 §11)
 - Purchase invoice with Finance AP posting hooks (FRD-07 §12)
@@ -68,26 +68,26 @@ Inventory (FRD-08 / Sprint 7) · Quality (FRD-14) · BI
 - Multi-currency support via `master_currency` and Finance exchange rates
 
 ### Out of Scope (Phase 2 / Separate ERD)
-- **Inventory stock tables** (`inv_*`) — FRD-08 / Sprint 7; GRN uses `warehouse_reference` UUID and Inventory Service events only
-- **Quality inspection tables** (`qm_*`) — FRD-14; optional `quality_status` / `quality_reference` on GRN line only
-- **Bank payment / payment run tables** — Finance / future banking; invoice posts AP only
-- **DMS attachment blobs** — FRD-19; optional `attachment_reference` UUID/URI only
-- **Budget reservation tables** — Finance budgeting deferred
+- **Inventory stock tables** (`inv_*`) - FRD-08 / Sprint 7; GRN uses `warehouse_reference` UUID and Inventory Service events only
+- **Quality inspection tables** (`qm_*`) - FRD-14; optional `quality_status` / `quality_reference` on GRN line only
+- **Bank payment / payment run tables** - Finance / future banking; invoice posts AP only
+- **DMS attachment blobs** - FRD-19; optional `attachment_reference` UUID/URI only
+- **Budget reservation tables** - Finance budgeting deferred
 - **Sales / CRM / Manufacturing** schemas and tables
 - SQLAlchemy models, Alembic migrations, application code
-- History tables (`hist_*`) — SCD Type 2
+- History tables (`hist_*`) - SCD Type 2
 - Procurement analytics cubes / materialized reporting views
 
 ### Future Integration Notes (Not Aligned FRD Tables)
-- **Inventory (FRD-08):** GRN confirmation triggers stock receipt via Inventory Service; return posting triggers stock adjustment — no `inv_*` FK in Sprint 6
+- **Inventory (FRD-08):** GRN confirmation triggers stock receipt via Inventory Service; return posting triggers stock adjustment - no `inv_*` FK in Sprint 6
 - **Quality (FRD-14):** Incoming QC may reference GRN lines via UUID
 - **Sales (FRD-06):** Optional future drop-ship via `source_module` / `source_document_id` only
 
 ### Assumptions
 - Every procurement document is company-scoped; `branch_id` mandatory on all transactional headers/lines per DBS multi-tenancy
-- `master_vendor`, `master_product`, `master_uom`, `master_tax`, `master_currency`, `master_warehouse`, `master_employee` are authoritative — no duplicate masters (C-01)
+- `master_vendor`, `master_product`, `master_uom`, `master_tax`, `master_currency`, `master_warehouse`, `master_employee` are authoritative - no duplicate masters (C-01)
 - Physical DELETE prohibited on all procurement business tables
-- Posted invoices are immutable — corrections via purchase return documents
+- Posted invoices are immutable - corrections via purchase return documents
 - Document numbers auto-generated per company; immutable after submit
 - Approved PO required before GRN; cancelled PO cannot receive goods
 - Purchase Return included for Finance AP credit-note symmetry (extension beyond FRD-07 §18 informal table list)
@@ -108,26 +108,26 @@ Inventory (FRD-08 / Sprint 7) · Quality (FRD-14) · BI
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
 | 1 | `proc_requisition_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 2 | `proc_requisition_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 2 | `proc_requisition_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 3 | `proc_rfq_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 4 | `proc_rfq_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 5 | `proc_rfq_vendor` | Link | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 6 | `proc_vendor_quotation_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 7 | `proc_vendor_quotation_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 8 | `proc_vendor_comparison` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 4 | `proc_rfq_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 5 | `proc_rfq_vendor` | Link | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 6 | `proc_vendor_quotation_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 7 | `proc_vendor_quotation_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 8 | `proc_vendor_comparison` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 9 | `proc_order_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 10 | `proc_order_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 10 | `proc_order_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 11 | `proc_grn_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 12 | `proc_grn_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 12 | `proc_grn_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 13 | `proc_vendor_contract` | Master / Agreement | ✅ | ✅ | optional | ✅ | ✅ | ✅ |
-| 14 | `proc_vendor_contract_line` | Detail | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 14 | `proc_vendor_contract_line` | Detail | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 15 | `proc_invoice_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 16 | `proc_invoice_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 16 | `proc_invoice_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 17 | `proc_return_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 18 | `proc_return_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 19 | `proc_vendor_performance` | Analytical Snapshot | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 18 | `proc_return_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 19 | `proc_vendor_performance` | Analytical Snapshot | ✅ | ✅ | optional | ✅ | ✅ | - |
 
-> **Note:** Posted `proc_invoice_header` rows (`status = 'posted'`) are **immutable** — corrections via `proc_return_header` only.
+> **Note:** Posted `proc_invoice_header` rows (`status = 'posted'`) are **immutable** - corrections via `proc_return_header` only.
 
 **Business Tables: 19**  
 **Schema: `procurement`**
@@ -268,22 +268,22 @@ Internal purchase request (FRD-07 §4).
 | `tenant_id` | UUID | NO | FK → `sec_tenant` |
 | `company_id` | UUID | NO | FK → `org_company` |
 | `branch_id` | UUID | NO | FK → `org_branch` |
-| `document_number` | VARCHAR(50) | NO | UK — `PR-YYYY-NNNNNN` |
-| `document_date` | DATE | NO | — |
+| `document_number` | VARCHAR(50) | NO | UK - `PR-YYYY-NNNNNN` |
+| `document_date` | DATE | NO | - |
 | `requester_id` | UUID | NO | FK → `master_employee` |
 | `department_id` | UUID | NO | FK → `org_department` |
 | `cost_center_id` | UUID | NO | FK → `org_cost_center` |
-| `required_date` | DATE | NO | — |
+| `required_date` | DATE | NO | - |
 | `priority` | VARCHAR(20) | NO | low, medium, high, critical |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, rejected, converted_to_rfq, cancelled |
-| `workflow_status` | VARCHAR(30) | YES | — |
+| `workflow_status` | VARCHAR(30) | YES | - |
 | `workflow_instance_id` | UUID | YES | FK → `wf_instance` |
-| `currency_code` | VARCHAR(3) | NO | — |
+| `currency_code` | VARCHAR(3) | NO | - |
 | `exchange_rate` | NUMERIC(18,8) | NO | DEFAULT 1 |
 | `subtotal_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `tax_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `total_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
-| `notes` | TEXT | YES | — |
+| `notes` | TEXT | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 #### 6.1.3 Business Rules
@@ -304,7 +304,7 @@ Internal purchase request (FRD-07 §4).
 | `product_code` / `product_name` | VARCHAR | YES | Snapshot |
 | `quantity` | NUMERIC(18,4) | NO | Must be > 0 |
 | `uom_id` | UUID | NO | FK → `master_uom` |
-| `estimated_unit_cost` | NUMERIC(18,4) | YES | — |
+| `estimated_unit_cost` | NUMERIC(18,4) | YES | - |
 | `tax_id` | UUID | YES | FK → `master_tax` |
 | `tax_amount` / `line_total` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `required_date` | DATE | YES | Line override |
@@ -319,16 +319,16 @@ Internal purchase request (FRD-07 §4).
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
 | `tenant_id` / `company_id` / `branch_id` | UUID | NO | Scope |
-| `document_number` | VARCHAR(50) | NO | UK — `RFQ-YYYY-NNNNNN` |
+| `document_number` | VARCHAR(50) | NO | UK - `RFQ-YYYY-NNNNNN` |
 | `document_date` | DATE | NO | RFQ date |
 | `requisition_header_id` | UUID | YES | FK → `proc_requisition_header` |
 | `closing_date` | DATE | NO | Quote deadline |
 | `status` | VARCHAR(30) | NO | draft, published, quotes_received, closed, cancelled |
-| `workflow_status` | VARCHAR(30) | YES | — |
+| `workflow_status` | VARCHAR(30) | YES | - |
 | `workflow_instance_id` | UUID | YES | FK → `wf_instance` |
-| `currency_code` | VARCHAR(3) | NO | — |
+| `currency_code` | VARCHAR(3) | NO | - |
 | `exchange_rate` | NUMERIC(18,8) | NO | DEFAULT 1 |
-| `notes` | TEXT | YES | — |
+| `notes` | TEXT | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 ---
@@ -341,7 +341,7 @@ Internal purchase request (FRD-07 §4).
 | Scope columns | UUID | NO | tenant/company/branch |
 | `rfq_header_id` | UUID | NO | FK → `proc_rfq_header` |
 | `requisition_line_id` | UUID | YES | FK → `proc_requisition_line` |
-| `line_number` | SMALLINT | NO | — |
+| `line_number` | SMALLINT | NO | - |
 | `product_id` | UUID | NO | FK → `master_product` |
 | `quantity` | NUMERIC(18,4) | NO | > 0 |
 | `uom_id` | UUID | NO | FK → `master_uom` |
@@ -356,12 +356,12 @@ Internal purchase request (FRD-07 §4).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope columns | UUID | NO | — |
+| Scope columns | UUID | NO | - |
 | `rfq_header_id` | UUID | NO | FK → `proc_rfq_header` |
 | `vendor_id` | UUID | NO | FK → `master_vendor` |
 | `invite_status` | VARCHAR(30) | NO | invited, notified, declined |
-| `sent_at` | TIMESTAMPTZ | YES | — |
-| `responded_at` | TIMESTAMPTZ | YES | — |
+| `sent_at` | TIMESTAMPTZ | YES | - |
+| `responded_at` | TIMESTAMPTZ | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 **UK:** `(rfq_header_id, vendor_id)` where not deleted.
@@ -373,18 +373,18 @@ Internal purchase request (FRD-07 §4).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope columns | UUID | NO | — |
-| `document_number` | VARCHAR(50) | NO | UK — `VQ-YYYY-NNNNNN` |
+| Scope columns | UUID | NO | - |
+| `document_number` | VARCHAR(50) | NO | UK - `VQ-YYYY-NNNNNN` |
 | `document_date` | DATE | NO | Quote date |
 | `rfq_header_id` | UUID | NO | FK → `proc_rfq_header` |
 | `vendor_id` | UUID | NO | FK → `master_vendor` |
 | `vendor_quote_reference` | VARCHAR(100) | YES | Vendor’s own quote number |
-| `valid_until` | DATE | NO | — |
-| `payment_terms` | VARCHAR(100) | YES | — |
-| `delivery_days` | INTEGER | YES | — |
-| `currency_code` | VARCHAR(3) | NO | — |
+| `valid_until` | DATE | NO | - |
+| `payment_terms` | VARCHAR(100) | YES | - |
+| `delivery_days` | INTEGER | YES | - |
+| `currency_code` | VARCHAR(3) | NO | - |
 | `exchange_rate` | NUMERIC(18,8) | NO | DEFAULT 1 |
-| `subtotal_amount` / `tax_amount` / `total_amount` | NUMERIC(18,4) | NO | — |
+| `subtotal_amount` / `tax_amount` / `total_amount` | NUMERIC(18,4) | NO | - |
 | `status` | VARCHAR(30) | NO | draft, submitted, under_review, selected, rejected, expired |
 | `attachment_reference` | UUID | YES | DMS ref (no blob storage) |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
@@ -396,16 +396,16 @@ Internal purchase request (FRD-07 §4).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope columns | UUID | NO | — |
+| Scope columns | UUID | NO | - |
 | `vendor_quotation_header_id` | UUID | NO | FK → header |
 | `rfq_line_id` | UUID | YES | FK → `proc_rfq_line` |
-| `line_number` | SMALLINT | NO | — |
+| `line_number` | SMALLINT | NO | - |
 | `product_id` | UUID | NO | FK → `master_product` |
-| `quantity` | NUMERIC(18,4) | NO | — |
-| `uom_id` | UUID | NO | — |
+| `quantity` | NUMERIC(18,4) | NO | - |
+| `uom_id` | UUID | NO | - |
 | `unit_cost` | NUMERIC(18,4) | NO | > 0 |
-| `lead_time_days` | INTEGER | YES | — |
-| `tax_id` / `tax_amount` / `line_total` | mixed | — | — |
+| `lead_time_days` | INTEGER | YES | - |
+| `tax_id` / `tax_amount` / `line_total` | mixed | - | - |
 | `is_alternate_product` | BOOLEAN | NO | DEFAULT false |
 | `status` | VARCHAR(30) | NO | active, rejected |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
@@ -420,16 +420,16 @@ Persisted recommendation snapshot for RFQ vendor selection audit (FRD-07 §7).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope columns | UUID | NO | — |
+| Scope columns | UUID | NO | - |
 | `document_number` | VARCHAR(50) | YES | Optional `VCMP-YYYY-NNNNNN` |
-| `rfq_header_id` | UUID | NO | UK — one active comparison per RFQ |
+| `rfq_header_id` | UUID | NO | UK - one active comparison per RFQ |
 | `best_price_quotation_id` | UUID | YES | FK → `proc_vendor_quotation_header` |
 | `best_delivery_quotation_id` | UUID | YES | FK → quotation |
 | `best_overall_quotation_id` | UUID | YES | FK → quotation |
 | `selected_quotation_id` | UUID | YES | FK → quotation |
 | `score_breakdown` | JSONB | YES | Engine scores for audit |
 | `status` | VARCHAR(30) | NO | draft, completed |
-| `compared_at` | TIMESTAMPTZ | YES | — |
+| `compared_at` | TIMESTAMPTZ | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 ---
@@ -439,21 +439,21 @@ Persisted recommendation snapshot for RFQ vendor selection audit (FRD-07 §7).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope columns | UUID | NO | — |
-| `document_number` | VARCHAR(50) | NO | UK — `PO-YYYY-NNNNNN` |
-| `document_date` | DATE | NO | — |
+| Scope columns | UUID | NO | - |
+| `document_number` | VARCHAR(50) | NO | UK - `PO-YYYY-NNNNNN` |
+| `document_date` | DATE | NO | - |
 | `vendor_id` | UUID | NO | FK → `master_vendor` |
 | `requisition_header_id` | UUID | YES | FK → PR |
 | `rfq_header_id` | UUID | YES | FK → RFQ |
 | `vendor_quotation_header_id` | UUID | YES | FK → selected quote |
 | `contract_id` | UUID | YES | FK → `proc_vendor_contract` |
-| `payment_terms` | VARCHAR(100) | YES | — |
-| `expected_delivery_date` | DATE | YES | — |
-| `currency_code` / `exchange_rate` | mixed | NO | — |
-| Amount totals | NUMERIC(18,4) | NO | — |
+| `payment_terms` | VARCHAR(100) | YES | - |
+| `expected_delivery_date` | DATE | YES | - |
+| `currency_code` / `exchange_rate` | mixed | NO | - |
+| Amount totals | NUMERIC(18,4) | NO | - |
 | `received_amount` / `invoiced_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, sent, partially_received, received, closed, cancelled |
-| `workflow_status` / `workflow_instance_id` | mixed | YES | — |
+| `workflow_status` / `workflow_instance_id` | mixed | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 #### Business Rules
@@ -468,14 +468,14 @@ Persisted recommendation snapshot for RFQ vendor selection audit (FRD-07 §7).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope columns | UUID | NO | — |
+| Scope columns | UUID | NO | - |
 | `order_header_id` | UUID | NO | FK → `proc_order_header` |
-| `line_number` | SMALLINT | NO | — |
+| `line_number` | SMALLINT | NO | - |
 | `product_id` | UUID | NO | FK → `master_product` |
 | `quantity` | NUMERIC(18,4) | NO | > 0 |
-| `uom_id` | UUID | NO | — |
+| `uom_id` | UUID | NO | - |
 | `unit_cost` | NUMERIC(18,4) | NO | > 0 |
-| Tax / totals | NUMERIC | NO | — |
+| Tax / totals | NUMERIC | NO | - |
 | `quantity_received` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `quantity_invoiced` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `quantity_returned` | NUMERIC(18,4) | NO | DEFAULT 0 |
@@ -494,16 +494,16 @@ Record goods receipt against an approved purchase order (FRD-07 §10).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope columns | UUID | NO | — |
-| `document_number` | VARCHAR(50) | NO | UK — `GRN-YYYY-NNNNNN` |
+| Scope columns | UUID | NO | - |
+| `document_number` | VARCHAR(50) | NO | UK - `GRN-YYYY-NNNNNN` |
 | `document_date` | DATE | NO | Receipt date |
 | `order_header_id` | UUID | NO | FK → `proc_order_header` |
 | `vendor_id` | UUID | NO | FK → `master_vendor` |
-| `warehouse_reference` | UUID | NO | Logical ref to `master_warehouse` — **no inventory FK** |
+| `warehouse_reference` | UUID | NO | Logical ref to `master_warehouse` - **no inventory FK** |
 | `status` | VARCHAR(30) | NO | draft, pending, partially_received, received, rejected, cancelled |
-| `workflow_status` / `workflow_instance_id` | mixed | YES | — |
+| `workflow_status` / `workflow_instance_id` | mixed | YES | - |
 | `subtotal_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
-| `notes` | TEXT | YES | — |
+| `notes` | TEXT | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 #### 6.11.3 Inventory Integration Rules
@@ -522,14 +522,14 @@ Record goods receipt against an approved purchase order (FRD-07 §10).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope columns | UUID | NO | — |
+| Scope columns | UUID | NO | - |
 | `grn_header_id` | UUID | NO | FK → `proc_grn_header` |
 | `order_line_id` | UUID | NO | FK → `proc_order_line` |
-| `line_number` | SMALLINT | NO | — |
-| `product_id` | UUID | NO | — |
+| `line_number` | SMALLINT | NO | - |
+| `product_id` | UUID | NO | - |
 | `quantity` | NUMERIC(18,4) | NO | Received qty (> 0, ≤ remaining) |
 | `quantity_rejected` | NUMERIC(18,4) | NO | DEFAULT 0 |
-| `uom_id` | UUID | NO | — |
+| `uom_id` | UUID | NO | - |
 | `quality_status` | VARCHAR(30) | YES | pending, accepted, rejected |
 | `quality_reference` | UUID | YES | Future QM ref |
 | `status` | VARCHAR(30) | NO | pending, received, rejected |
@@ -542,16 +542,16 @@ Record goods receipt against an approved purchase order (FRD-07 §10).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` / `company_id` | UUID | NO | — |
+| `tenant_id` / `company_id` | UUID | NO | - |
 | `branch_id` | UUID | YES | Optional |
-| `document_number` | VARCHAR(50) | NO | UK — `PCT-YYYY-NNNNNN` |
+| `document_number` | VARCHAR(50) | NO | UK - `PCT-YYYY-NNNNNN` |
 | `vendor_id` | UUID | NO | FK → `master_vendor` |
-| `contract_name` | VARCHAR(255) | NO | — |
+| `contract_name` | VARCHAR(255) | NO | - |
 | `start_date` / `end_date` | DATE | NO | end ≥ start |
-| `contract_value` | NUMERIC(18,4) | YES | — |
-| `currency_code` | VARCHAR(3) | NO | — |
+| `contract_value` | NUMERIC(18,4) | YES | - |
+| `currency_code` | VARCHAR(3) | NO | - |
 | `status` | VARCHAR(30) | NO | draft, active, expired, terminated |
-| `workflow_status` / `workflow_instance_id` | mixed | YES | — |
+| `workflow_status` / `workflow_instance_id` | mixed | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 ---
@@ -561,13 +561,13 @@ Record goods receipt against an approved purchase order (FRD-07 §10).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope + optional branch | UUID | — | — |
+| Scope + optional branch | UUID | - | - |
 | `contract_id` | UUID | NO | FK → `proc_vendor_contract` |
-| `line_number` | SMALLINT | NO | — |
+| `line_number` | SMALLINT | NO | - |
 | `product_id` | UUID | YES | FK → `master_product` |
-| `min_quantity` / `max_quantity` | NUMERIC(18,4) | YES | — |
+| `min_quantity` / `max_quantity` | NUMERIC(18,4) | YES | - |
 | `unit_cost` | NUMERIC(18,4) | NO | Contracted price |
-| `effective_from` / `effective_to` | DATE | YES | — |
+| `effective_from` / `effective_to` | DATE | YES | - |
 | `status` | VARCHAR(30) | NO | active, inactive |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
@@ -578,20 +578,20 @@ Record goods receipt against an approved purchase order (FRD-07 §10).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope columns | UUID | NO | — |
-| `document_number` | VARCHAR(50) | NO | UK — `PINV-YYYY-NNNNNN` |
-| `document_date` | DATE | NO | — |
-| `due_date` | DATE | NO | — |
+| Scope columns | UUID | NO | - |
+| `document_number` | VARCHAR(50) | NO | UK - `PINV-YYYY-NNNNNN` |
+| `document_date` | DATE | NO | - |
+| `due_date` | DATE | NO | - |
 | `vendor_id` | UUID | NO | FK → `master_vendor` |
 | `vendor_invoice_number` | VARCHAR(100) | NO | Vendor bill number |
 | `order_header_id` | UUID | YES | FK → PO |
 | `grn_header_id` | UUID | YES | FK → GRN |
 | `fiscal_year_id` / `period_id` | UUID | YES | FK → finance |
-| `currency_code` / `exchange_rate` | mixed | NO | — |
-| Amount totals / `amount_paid` / `balance_due` | NUMERIC(18,4) | NO | — |
+| `currency_code` / `exchange_rate` | mixed | NO | - |
+| Amount totals / `amount_paid` / `balance_due` | NUMERIC(18,4) | NO | - |
 | `match_status` | VARCHAR(30) | NO | unmatched, partial, matched, exception |
 | `status` | VARCHAR(30) | NO | draft, submitted, posted, partially_paid, paid, cancelled |
-| `workflow_status` / `workflow_instance_id` | mixed | YES | — |
+| `workflow_status` / `workflow_instance_id` | mixed | YES | - |
 | `finance_ledger_id` | UUID | YES | FK → `fin_vendor_ledger` |
 | `finance_journal_id` | UUID | YES | FK → `fin_journal_header` |
 | `posting_status` | VARCHAR(30) | YES | pending, posted, failed (retry) |
@@ -609,13 +609,13 @@ On post: Expense / Inventory Dr · Accounts Payable Cr via Finance services (sys
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope columns | UUID | NO | — |
+| Scope columns | UUID | NO | - |
 | `invoice_header_id` | UUID | NO | FK → header |
 | `order_line_id` | UUID | YES | FK → `proc_order_line` |
 | `grn_line_id` | UUID | YES | FK → `proc_grn_line` |
-| `line_number` | SMALLINT | NO | — |
-| `product_id` | UUID | NO | — |
-| `quantity` / `unit_cost` / tax / `line_total` | NUMERIC | NO | — |
+| `line_number` | SMALLINT | NO | - |
+| `product_id` | UUID | NO | - |
+| `quantity` / `unit_cost` / tax / `line_total` | NUMERIC | NO | - |
 | `expense_account_id` | UUID | YES | FK → `fin_chart_of_account` |
 | `status` | VARCHAR(30) | NO | open, posted, cancelled |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
@@ -627,24 +627,24 @@ On post: Expense / Inventory Dr · Accounts Payable Cr via Finance services (sys
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope columns | UUID | NO | — |
-| `document_number` | VARCHAR(50) | NO | UK — `PRET-YYYY-NNNNNN` |
-| `document_date` | DATE | NO | — |
+| Scope columns | UUID | NO | - |
+| `document_number` | VARCHAR(50) | NO | UK - `PRET-YYYY-NNNNNN` |
+| `document_date` | DATE | NO | - |
 | `vendor_id` | UUID | NO | FK → `master_vendor` |
 | `invoice_header_id` | UUID | NO | FK → `proc_invoice_header` |
 | `order_header_id` | UUID | YES | FK → PO |
 | `grn_header_id` | UUID | YES | FK → GRN |
-| `reason_code` | VARCHAR(50) | YES | — |
-| Fiscal / currency / totals | mixed | — | — |
+| `reason_code` | VARCHAR(50) | YES | - |
+| Fiscal / currency / totals | mixed | - | - |
 | `status` | VARCHAR(30) | NO | draft, requested, approved, received, posted, closed, cancelled |
-| `workflow_status` / `workflow_instance_id` | mixed | YES | — |
+| `workflow_status` / `workflow_instance_id` | mixed | YES | - |
 | `finance_ledger_id` / `finance_journal_id` | UUID | YES | AP credit posting |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 #### Business Rules
 - Requires `PROC_RETURN_APPROVAL` before post
 - Return qty ≤ invoiced / received quantities
-- Inventory adjustment (if any) only via Inventory Service — never direct table updates
+- Inventory adjustment (if any) only via Inventory Service - never direct table updates
 
 ---
 
@@ -653,15 +653,15 @@ On post: Expense / Inventory Dr · Accounts Payable Cr via Finance services (sys
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope columns | UUID | NO | — |
+| Scope columns | UUID | NO | - |
 | `return_header_id` | UUID | NO | FK → header |
 | `invoice_line_id` | UUID | YES | FK → `proc_invoice_line` |
 | `order_line_id` | UUID | YES | FK → `proc_order_line` |
 | `grn_line_id` | UUID | YES | FK → `proc_grn_line` |
-| `line_number` | SMALLINT | NO | — |
-| `product_id` | UUID | NO | — |
-| `quantity` | NUMERIC(18,4) | NO | — |
-| Cost / tax / `line_total` | NUMERIC | NO | — |
+| `line_number` | SMALLINT | NO | - |
+| `product_id` | UUID | NO | - |
+| `quantity` | NUMERIC(18,4) | NO | - |
+| Cost / tax / `line_total` | NUMERIC | NO | - |
 | `status` | VARCHAR(30) | NO | requested, received, posted |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
@@ -679,16 +679,16 @@ Not part of transactional workflow.
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` / `company_id` | UUID | NO | — |
+| `tenant_id` / `company_id` | UUID | NO | - |
 | `branch_id` | UUID | YES | Optional |
 | `vendor_id` | UUID | NO | FK → `master_vendor` |
 | `period_code` | VARCHAR(20) | NO | e.g. `2026-Q1`, `2026-07` |
-| `on_time_delivery_pct` | NUMERIC(8,4) | YES | — |
-| `quality_rating` | NUMERIC(8,4) | YES | — |
-| `cost_competitiveness_score` | NUMERIC(8,4) | YES | — |
-| `contract_compliance_score` | NUMERIC(8,4) | YES | — |
-| `issue_resolution_days` | NUMERIC(8,4) | YES | — |
-| `overall_score` | NUMERIC(8,4) | NO | 0–100 |
+| `on_time_delivery_pct` | NUMERIC(8,4) | YES | - |
+| `quality_rating` | NUMERIC(8,4) | YES | - |
+| `cost_competitiveness_score` | NUMERIC(8,4) | YES | - |
+| `contract_compliance_score` | NUMERIC(8,4) | YES | - |
+| `issue_resolution_days` | NUMERIC(8,4) | YES | - |
+| `overall_score` | NUMERIC(8,4) | NO | 0-100 |
 | `calculated_at` | TIMESTAMPTZ | NO | Job timestamp |
 | `status` | VARCHAR(30) | NO | current, superseded |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
@@ -864,7 +864,7 @@ PR priority: `low | medium | high | critical`.
 | Layer | Mechanism |
 |-------|-----------|
 | Row audit | `created_at/by`, `updated_at/by`, `version` on all tables |
-| Soft delete | `is_deleted`, `deleted_at`, `deleted_by` — no physical DELETE |
+| Soft delete | `is_deleted`, `deleted_at`, `deleted_by` - no physical DELETE |
 | Business audit | `AuditService` on create/update/submit/approve/post |
 | Immutable posted | Invoice/return posted rows; corrections via compensating documents |
 | Decision audit | `proc_vendor_comparison` + quotation selection events |
@@ -946,7 +946,7 @@ Prior Alembic head: `0055_seed_sales_workflows`.
 |--------|-----|----------|---------------------|
 | Foundation | FRD-01 | tenant, user, workflow, audit, RBAC, settings | Direct FK |
 | Organization | FRD-02 | company, branch, department, cost centers | Direct FK |
-| Master Data | FRD-03 | vendor, product, uom, currency, tax, warehouse, employee | Direct FK — C-01 |
+| Master Data | FRD-03 | vendor, product, uom, currency, tax, warehouse, employee | Direct FK - C-01 |
 | Finance | FRD-04 | fiscal year, period, COA, AP ledger | FK on invoice/return; posting API |
 
 ### 16.2 Downstream (Procurement Provides)
@@ -962,10 +962,10 @@ Prior Alembic head: `0055_seed_sales_workflows`.
 | Module | FRD | Notes |
 |--------|-----|-------|
 | Quality | FRD-14 | GRN line `quality_reference` UUID |
-| Sales | FRD-06 | Drop-ship via `source_*` only — no cross-FK |
-| Banking | — | Payment runs not in Procurement schema |
+| Sales | FRD-06 | Drop-ship via `source_*` only - no cross-FK |
+| Banking | - | Payment runs not in Procurement schema |
 
-**Rule (C-01):** Procurement consumes vendor/product masters via FK/service — no duplicate master tables in `procurement` schema.
+**Rule (C-01):** Procurement consumes vendor/product masters via FK/service - no duplicate master tables in `procurement` schema.
 
 ---
 
@@ -981,19 +981,19 @@ Prior Alembic head: `0055_seed_sales_workflows`.
 | 6 | GRN inventory rule: Inventory Service only; no direct inventory updates | ✅ |
 | 7 | Vendor performance documented as derived analytical snapshot | ✅ |
 | 8 | Workflow codes defined for approval documents | ✅ |
-| 9 | Migration order `0056`–`0077` with revision IDs ≤ 32 chars | ✅ |
+| 9 | Migration order `0056`-`0077` with revision IDs ≤ 32 chars | ✅ |
 | 10 | Inventory, quality, banking, CRM excluded from schema | ✅ |
 | 11 | Cross-module dependencies documented | ✅ |
 | 12 | RBAC permissions and audit strategy defined | ✅ |
 
-### ERD Phase Gate — Procurement Summary
+### ERD Phase Gate - Procurement Summary
 
 | Metric | Value |
 |--------|-------|
 | Business Tables | **19** |
 | Schema | **`procurement`** |
 | Prefix | `proc_` |
-| Migration range | `0056` – `0077` |
+| Migration range | `0056` - `0077` |
 | Prior head | `0055_seed_sales_workflows` |
 
 ---

@@ -144,7 +144,7 @@ export function AssetDomainUsersPage() {
     [options, assignedIds, scopedDomain],
   );
 
-  /** Admin role only for global asset.module:admin — domain admins see Member only. */
+  /** Admin role only for global asset.module:admin - domain admins see Member only. */
   const roleChoices: DomainMembershipRole[] = isModuleAdmin
     ? ["member", "admin"]
     : ["member"];
@@ -344,7 +344,7 @@ export function AssetDomainUsersPage() {
                           {initials(row.display_name ?? row.email ?? "?")}
                         </span>
                         <div className="min-w-0">
-                          <p className="truncate font-medium">{row.display_name ?? "—"}</p>
+                          <p className="truncate font-medium">{row.display_name ?? "-"}</p>
                           <p className="truncate text-[11px] text-muted-foreground">{row.email}</p>
                         </div>
                       </div>

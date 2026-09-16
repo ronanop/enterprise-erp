@@ -199,7 +199,7 @@ function sortVendorsForDistributor(
 /** Distributor for the PO being created (URL param or seeded vendor lines). */
 function textOrDash(value: string | null | undefined): string {
   const text = (value || "").trim();
-  return text || "—";
+  return text || "-";
 }
 
 function resolvePoDistributorName(
@@ -275,7 +275,7 @@ const COMPANY_LOCATIONS = [
   },
 ] as const;
 
-/** Shipping address presets — body only; entity name is prepended from Entity dropdown. */
+/** Shipping address presets - body only; entity name is prepended from Entity dropdown. */
 const SHIPPING_ADDRESS_OPTIONS = [
   {
     id: "kailash-colony",
@@ -460,11 +460,11 @@ type PoFormState = {
   taxPercentage: string;
   financeAmount: string;
   distiAmount: string;
-  /** Apply Disti % as +/− on each line unit rate (Rate column). */
+  /** Apply Disti % as +/- on each line unit rate (Rate column). */
   distiSign: "plus" | "minus";
   foreignAmount: string;
   freightTaxable: boolean;
-  /** INR per 1 USD — used when switching line rates between INR and USD. */
+  /** INR per 1 USD - used when switching line rates between INR and USD. */
   usdInrRate: string;
 };
 
@@ -1841,11 +1841,11 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
         .map((row) => {
           const usd = isUsdLine(row);
           return {
-            partNo: (row.partNumber || row.itemDetails || "").trim() || "—",
+            partNo: (row.partNumber || row.itemDetails || "").trim() || "-",
             description:
               resolveVendorItemDescription(row.itemDetails) ||
               (row.itemDetails || row.partNumber || "").trim() ||
-              "—",
+              "-",
             hsnCode: row.hsnCode?.trim() || undefined,
             qty: toNumber(row.qty),
             unitPriceInr: usd
@@ -1896,8 +1896,8 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
         supplier: {
           name:
             (form.vendorName || selectedVendor?.label || activeDistributorName || "").trim() ||
-            "—",
-          address: (form.vendorAddress || "").trim() || "—",
+            "-",
+          address: (form.vendorAddress || "").trim() || "-",
         },
         customerGstin: form.vendorGstNumber?.trim() || undefined,
         orderRef: form.orderRefCache?.trim() || undefined,
@@ -2039,7 +2039,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                 Taken from inventory
               </h2>
               <p className="text-xs text-muted-foreground">
-                Already allocated to this OVF — not included in the PO qty below.
+                Already allocated to this OVF - not included in the PO qty below.
               </p>
             </div>
           </div>
@@ -2159,7 +2159,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                             {(() => {
                               const lines = vendorAddressPreviewLines(selectedVendorAddressEntry);
                               if (lines.length === 0) {
-                                return <span className="font-medium text-foreground">—</span>;
+                                return <span className="font-medium text-foreground">-</span>;
                               }
                               return (
                                 <span className="space-y-0.5 font-medium text-foreground">
@@ -2244,7 +2244,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                   </PoField>
                   <PoField label="Source of supply *">
                     <Input
-                      value={form.sourceOfSupply || "—"}
+                      value={form.sourceOfSupply || "-"}
                       readOnly
                       className="h-8 cursor-default bg-muted/30 font-medium text-foreground"
                       aria-label="Source of supply"
@@ -2252,7 +2252,7 @@ export function ScmCreatePoPage({ ovfId }: { ovfId: string }) {
                   </PoField>
                   <PoField label="Destination of supply *">
                     <Input
-                      value={form.destinationOfSupply || "—"}
+                      value={form.destinationOfSupply || "-"}
                       readOnly
                       className="h-8 cursor-default bg-muted/30 font-medium text-foreground"
                       aria-label="Destination of supply"

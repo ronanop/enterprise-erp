@@ -129,7 +129,7 @@ export function PayrollDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="Payroll"
-        description="Compensation workspace — periods, salary structures, payroll runs, payslips, bonuses, loans, and statutory."
+        description="Compensation workspace - periods, salary structures, payroll runs, payslips, bonuses, loans, and statutory."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -176,28 +176,28 @@ export function PayrollDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Open periods"
-          value={loading ? "—" : String(kpis.openPeriods)}
+          value={loading ? "-" : String(kpis.openPeriods)}
           hint={`${data?.periods.length ?? 0} periods · ${countByStatus(data?.periods ?? [], ["processing"])} processing`}
           icon={CalendarRange}
           tone={kpis.openPeriods > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Open payroll runs"
-          value={loading ? "—" : String(kpis.openRuns)}
+          value={loading ? "-" : String(kpis.openRuns)}
           hint={`${formatInr(kpis.runNet)} net · ${data?.runs.length ?? 0} runs`}
           icon={Landmark}
           tone={kpis.openRuns > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Unpaid payslips"
-          value={loading ? "—" : String(kpis.unpaidPayslips)}
+          value={loading ? "-" : String(kpis.unpaidPayslips)}
           hint={`${formatInr(kpis.netPayTotal)} net salary · ${data?.payslips.length ?? 0} slips`}
           icon={Receipt}
           tone={kpis.unpaidPayslips > 0 ? "danger" : "success"}
         />
         <FinanceKpiCard
           label="Active loans"
-          value={loading ? "—" : String(kpis.activeLoans)}
+          value={loading ? "-" : String(kpis.activeLoans)}
           hint={`${data?.loans.length ?? 0} loans · ${countByStatus(data?.bonuses ?? [], ["submitted", "approved"])} bonuses pending`}
           icon={Wallet}
           tone={kpis.activeLoans > 0 ? "default" : "success"}
@@ -321,7 +321,7 @@ export function PayrollDashboard() {
                     >
                       <td className="max-w-[180px] truncate px-4 py-2.5">
                         <p className="font-medium text-foreground">
-                          {String(row.document_number ?? "—")}
+                          {String(row.document_number ?? "-")}
                         </p>
                         <p className="truncate text-[11px] text-muted-foreground">
                           {String(row.run_date ?? "")}
@@ -374,7 +374,7 @@ export function PayrollDashboard() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-medium">
-                      {String(row.employee_name ?? row.document_number ?? "—")}
+                      {String(row.employee_name ?? row.document_number ?? "-")}
                     </p>
                     <FinanceStatusBadge
                       status={String(row.payment_status ?? row.status ?? "generated")}

@@ -106,15 +106,15 @@ function vendorLinesInCrmOrder(
 }
 
 function textOrDash(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "-";
   const text = String(value).trim();
-  return text || "—";
+  return text || "-";
 }
 
 function formatPoDate(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const raw = String(value).trim();
-  if (!raw) return "—";
+  if (!raw) return "-";
   const d = new Date(/^\d{4}-\d{2}-\d{2}/.test(raw) ? `${raw.slice(0, 10)}T00:00:00` : raw);
   if (Number.isNaN(d.getTime())) return raw.slice(0, 10);
   return d.toLocaleDateString("en-IN", {
@@ -741,9 +741,9 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
   }
 
   const vendorLabel = useMemo(() => {
-    if (!preview) return "—";
-    // Only CRM lead distributor / vendor field — never matched master vendor or PO vendor.
-    return preview.distributor_name?.trim() || "—";
+    if (!preview) return "-";
+    // Only CRM lead distributor / vendor field - never matched master vendor or PO vendor.
+    return preview.distributor_name?.trim() || "-";
   }, [preview]);
 
   const marginSummary = useMemo(() => {
@@ -1060,7 +1060,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
 
       {stockAllocatedBanner ? (
         <div className="rounded-md border border-emerald-300/60 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-          Stock allocated only — no delivery challan was created. Use Create delivery challan when
+          Stock allocated only - no delivery challan was created. Use Create delivery challan when
           you are ready to ship.
           <button
             type="button"
@@ -1089,13 +1089,13 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                 <DetailItem label="Customer pay terms">
                   {preview.customer_payment_days
                     ? `Net ${preview.customer_payment_days} days`
-                    : "—"}
+                    : "-"}
                 </DetailItem>
                 <DetailItem label="Vendor name">{vendorLabel}</DetailItem>
                 <DetailItem label="Vendor pay terms">
                   {preview.vendor_payment_days
                     ? `Net ${preview.vendor_payment_days} days`
-                    : "—"}
+                    : "-"}
                 </DetailItem>
               </dl>
               <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1122,7 +1122,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
               )}
             >
               <DetailItem label="OVF status">
-                {queueStatus ? <ScmOvfStatusBadge status={queueStatus} /> : "—"}
+                {queueStatus ? <ScmOvfStatusBadge status={queueStatus} /> : "-"}
               </DetailItem>
               {showActiveHold ? (
                 <>
@@ -1174,7 +1174,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                           </td>
                           <td className="px-3 py-2 max-w-[220px] text-muted-foreground">
                             <span className="line-clamp-2" title={entry.remark ?? ""}>
-                              {entry.remark?.trim() || "—"}
+                              {entry.remark?.trim() || "-"}
                             </span>
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">
@@ -1363,7 +1363,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                             {formatItemPlanQty(line.qty)}
                           </td>
                           <td className="px-3 py-2">
-                            {line.source === "inventory" ? "Inventory" : vendorName || "—"}
+                            {line.source === "inventory" ? "Inventory" : vendorName || "-"}
                           </td>
                           <td className="px-3 py-2">
                             {line.source === "inventory" ? (
@@ -1393,12 +1393,12 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                                 Create PO
                               </button>
                             ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
+                              <span className="text-xs text-muted-foreground">-</span>
                             )}
                           </td>
                           <td className="px-3 py-2">
                             {line.source === "inventory" ? (
-                              <span className="text-xs text-muted-foreground">—</span>
+                              <span className="text-xs text-muted-foreground">-</span>
                             ) : linkedPo && grnEnabled ? (
                               <Link
                                 href={`/procurement/orders/${linkedPo.id}?tab=grn`}
@@ -1423,7 +1423,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
                                 GRN
                               </Button>
                             ) : (
-                              <span className="text-xs text-muted-foreground">—</span>
+                              <span className="text-xs text-muted-foreground">-</span>
                             )}
                           </td>
                         </tr>
@@ -1440,7 +1440,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
             branchId={preview.branch_id}
             companyId={preview.company_id}
             title="OVF documents"
-            description="Sales attachments on this OVF — included when the PO is sent for approval."
+            description="Sales attachments on this OVF - included when the PO is sent for approval."
             allowUpload={false}
             compact
           />
@@ -1465,7 +1465,7 @@ export function ScmOvfViewPage({ ovfId }: { ovfId: string }) {
               {
                 value: "billing" as const,
                 title: "Billing",
-                detail: "Invoice number and date — same path as GRN billing.",
+                detail: "Invoice number and date - same path as GRN billing.",
               },
               {
                 value: "delivery_challan" as const,

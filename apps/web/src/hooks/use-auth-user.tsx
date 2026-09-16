@@ -62,7 +62,7 @@ async function fetchAuthMeWithRetry(): Promise<ReturnType<typeof parseAuthMe>> {
       return parseAuthMe(res.data);
     } catch (err) {
       lastError = err;
-      // Auth failure — do not retry; token is invalid.
+      // Auth failure - do not retry; token is invalid.
       if (err instanceof ApiClientError && err.status === 401) {
         throw err;
       }
@@ -156,7 +156,7 @@ export function AuthSessionProvider({ children }: { children: ReactNode }) {
             ? err.message
             : "Failed to load session";
 
-      // Keep prior modules if we already had a good session — avoid false "no modules".
+      // Keep prior modules if we already had a good session - avoid false "no modules".
       setState((prev) => {
         if (prev.status === "authenticated" && prev.user) {
           return {

@@ -1,4 +1,4 @@
-"""LocationService — asset location management (FP-ASSET-012)."""
+"""LocationService - asset location management (FP-ASSET-012)."""
 
 from uuid import UUID
 

@@ -26,7 +26,7 @@
 
 - Lucide icons only (`Mail`, `Send`, `Server`, `RefreshCw`)
 - `cursor-pointer` on all buttons and nav links
-- 150–200ms hover / focus transitions
+- 150-200ms hover / focus transitions
 - Focus rings visible on inputs and selects
 
 ### Content

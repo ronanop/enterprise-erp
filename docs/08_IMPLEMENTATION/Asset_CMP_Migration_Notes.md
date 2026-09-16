@@ -1,4 +1,4 @@
-# Asset CMP — Migration Notes
+# Asset CMP - Migration Notes
 
 ## Revision
 
@@ -18,4 +18,4 @@
 
 ## Data notes
 
-Existing rows with duplicate `(asset_id, component_code)` where more than one is `active` will block index creation — resolve before upgrade. Historical replaced/disposed duplicates of an active code are expected and allowed.
+Existing rows with duplicate `(asset_id, component_code)` where more than one is `active` will block index creation - resolve before upgrade. Historical replaced/disposed duplicates of an active code are expected and allowed.

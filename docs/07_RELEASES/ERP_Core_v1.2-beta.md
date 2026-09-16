@@ -1,21 +1,21 @@
-# ERP Core v1.2-beta — Release Notes
+# ERP Core v1.2-beta - Release Notes
 
 | Field | Value |
 |-------|--------|
 | **Document Type** | Enterprise Release Notes |
 | **Release Name** | ERP Core v1.2-beta |
 | **Release Status** | Beta Development Release |
-| **Architecture Lock** | v1.1 — Maintained |
+| **Architecture Lock** | v1.1 - Maintained |
 | **Prepared As** | Enterprise Solution Architect · ERP Product Architect · Technical Documentation Lead · Release Manager · Principal Software Engineer |
-| **Classification** | Internal — Confidential |
+| **Classification** | Internal - Confidential |
 | **Predecessor** | [ERP Core v1.1-beta](./ERP_Core_v1.1-beta.md) |
-| **Ready For** | Sprint 8 — Manufacturing / Production |
+| **Ready For** | Sprint 8 - Manufacturing / Production |
 
 ---
 
 ## 1. Executive Summary
 
-ERP Core **v1.2-beta** advances the multi-tenant Enterprise ERP Platform from the **v1.1-beta** baseline by delivering **Sprint 7 — Inventory & Warehouse**.
+ERP Core **v1.2-beta** advances the multi-tenant Enterprise ERP Platform from the **v1.1-beta** baseline by delivering **Sprint 7 - Inventory & Warehouse**.
 
 The platform remains a **Modular Monolith** with **Clean Architecture** and **DDD**, governed by **Architecture Lock v1.1**. Documentation hierarchy BRD → FRD → SDD v1.1 → DBS v1.1 → ERD → code continues to be followed.
 
@@ -36,13 +36,13 @@ The platform remains a **Modular Monolith** with **Clean Architecture** and **DD
 - Reservation, receipt, issue, transfer, adjustment, cycle count, and FIFO valuation engines
 - Real Inventory Service adapters replacing Procurement/Sales no-op inventory stubs
 - Finance system-journal posting for inventory adjustments via `PostingService.post_system_journal`
-- Migrations `0078`–`0094`; Alembic head `0094_seed_inv_workflows`
+- Migrations `0078`-`0094`; Alembic head `0094_seed_inv_workflows`
 - Test suite expanded to **113 passed**
 - FastAPI **326** routes · OpenAPI **218** paths · Inventory **31** API paths
 
 **What remains from v1.1-beta:** Foundation through Procurement capabilities are retained without architecture redesign. Warehouse identity continues to use authoritative `master_warehouse` (C-01).
 
-This release is **not** production GA. It is the approved gate to start **Sprint 8 — Manufacturing / Production**.
+This release is **not** production GA. It is the approved gate to start **Sprint 8 - Manufacturing / Production**.
 
 ---
 
@@ -52,7 +52,7 @@ Sprint 7 delivered the **Inventory & Warehouse** domain as the sole writer of st
 
 | Capability | Delivery |
 |------------|----------|
-| **Inventory Module** | `apps/api/src/modules/inventory/` — Clean Architecture package (domain, models, repositories, engines, services, routers, adapters, tasks) |
+| **Inventory Module** | `apps/api/src/modules/inventory/` - Clean Architecture package (domain, models, repositories, engines, services, routers, adapters, tasks) |
 | **Warehouse Management** | Bin hierarchy under `master_warehouse`; bin types (storage, quarantine, staging, in_transit) |
 | **Stock Engine** | On-hand / reserved / available ATP math; hard block on negative available |
 | **Reservation Engine** | Reserve / partial issue / fulfill / release for sales and extensible sources |
@@ -78,7 +78,7 @@ Inventory is the **only** module allowed to mutate `inv_*` tables. Sales and Pro
 | **Sales** | Order confirm → **Sales Reservation**; order cancel → release; delivery ship → **Delivery Shipment / Issue**; sales return receive → **Sales Return Receipt** |
 | **Finance** | `InventoryPostingService` → **`PostingService.post_system_journal`** for valued adjustments; respects period / inventory-closed guards |
 | **Foundation** | **Workflow** (`INV_TRANSFER_APPROVAL`, `INV_ADJUSTMENT_APPROVAL`, `INV_CYCLE_COUNT_APPROVAL`); **Audit** on stock/document events; **RBAC** (`inventory.*` permissions, warehouse roles) |
-| **Master Data** | Product, UOM, and **`master_warehouse`** FKs only — no duplicate warehouse master |
+| **Master Data** | Product, UOM, and **`master_warehouse`** FKs only - no duplicate warehouse master |
 
 Sprint 6 `NoOpInventoryAdapter` is replaced by real `ProcurementInventoryAdapter` / `SalesInventoryAdapter` implementations.
 
@@ -129,7 +129,7 @@ Validation confirmed head `0094_seed_inv_workflows`, successful application star
 | **Sprint 6** | Procurement | PR → RFQ → quote → comparison → PO → GRN → invoice → return | Complete |
 | **Sprint 7** | Inventory | Stock, warehouse bins, reservation, transfer, adjustment, FIFO, cycle count | Complete |
 
-**Overall milestones completed: 8** (Infrastructure Phase Sprint 0 + Delivery Sprints 1–7).
+**Overall milestones completed: 8** (Infrastructure Phase Sprint 0 + Delivery Sprints 1-7).
 
 ---
 
@@ -164,7 +164,7 @@ Validation confirmed head `0094_seed_inv_workflows`, successful application star
 | **Alembic Head** | `0094_seed_inv_workflows` |
 | **Routes** | **326** FastAPI · **218** OpenAPI · **31** Inventory |
 | **Tests** | **113 passed** |
-| **Quality Status** | Alembic · Startup · Swagger · OpenAPI · Ruff · MyPy · Pytest — **ALL PASS** |
+| **Quality Status** | Alembic · Startup · Swagger · OpenAPI · Ruff · MyPy · Pytest - **ALL PASS** |
 
 ---
 
@@ -174,7 +174,7 @@ Planned future work only (no defects claimed in this section):
 
 | Deferred Capability | Notes |
 |---------------------|--------|
-| **Manufacturing** | FRD-13 — Sprint 8 |
+| **Manufacturing** | FRD-13 - Sprint 8 |
 | **Quality** | FRD-14 |
 | **HR** | FRD-09 |
 | **CRM** | FRD-05 |
@@ -191,7 +191,7 @@ Also deferred by prior ERDs (unchanged intent): budgeting, bank reconciliation, 
 | Attribute | Value |
 |-----------|--------|
 | **Next Release** | ERP Core **v1.3-beta** |
-| **Sprint** | **Sprint 8 — Manufacturing / Production** |
+| **Sprint** | **Sprint 8 - Manufacturing / Production** |
 | **Primary FRD** | FRD-13 Manufacturing Domain |
 
 **Expected integrations:**
@@ -219,9 +219,9 @@ Also deferred by prior ERDs (unchanged intent): budgeting, bank reconciliation, 
 
 | Version | Date | Scope | Alembic Head | Tests |
 |---------|------|--------|--------------|-------|
-| **v1.0-alpha** | 2026-07-13 | Sprints 0–5 (Foundation → Sales) | `0055_seed_sales_workflows` | 77 passed |
-| **v1.1-beta** | 2026-07-13 | Sprints 0–6 (+ Procurement P2P) | `0077_seed_proc_workflows` | 99 passed |
-| **v1.2-beta** | 2026-07-13 | Sprints 0–7 (+ Inventory & Warehouse) | `0094_seed_inv_workflows` | 113 passed |
+| **v1.0-alpha** | 2026-07-13 | Sprints 0-5 (Foundation → Sales) | `0055_seed_sales_workflows` | 77 passed |
+| **v1.1-beta** | 2026-07-13 | Sprints 0-6 (+ Procurement P2P) | `0077_seed_proc_workflows` | 99 passed |
+| **v1.2-beta** | 2026-07-13 | Sprints 0-7 (+ Inventory & Warehouse) | `0094_seed_inv_workflows` | 113 passed |
 
 ```text
 v1.0-alpha ──(+ Sprint 6 Procurement)──► v1.1-beta ──(+ Sprint 7 Inventory)──► v1.2-beta ──► Sprint 8 Manufacturing (planned)
@@ -243,7 +243,7 @@ v1.0-alpha ──(+ Sprint 6 Procurement)──► v1.1-beta ──(+ Sprint 7 I
 | Status | Beta Development Release |
 | Modules | Foundation · Organization · Master Data · Finance · Sales · Procurement · **Inventory** |
 | Alembic head | **`0094_seed_inv_workflows`** |
-| Quality | Alembic · Startup · Swagger · OpenAPI · Ruff · MyPy · Pytest **113** — PASS |
-| Next | **Sprint 8 — Manufacturing / Production** → **v1.3-beta** |
+| Quality | Alembic · Startup · Swagger · OpenAPI · Ruff · MyPy · Pytest **113** - PASS |
+| Next | **Sprint 8 - Manufacturing / Production** → **v1.3-beta** |
 
 **ERP Core v1.2-beta release documentation completed and ready for release approval.**

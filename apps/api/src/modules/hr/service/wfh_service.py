@@ -1,4 +1,4 @@
-"""Work From Home request service — employee submit → manager approve → WFH attendance."""
+"""Work From Home request service - employee submit → manager approve → WFH attendance."""
 
 from __future__ import annotations
 

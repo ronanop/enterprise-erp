@@ -97,7 +97,7 @@ function validateStep(
       if (!email) return "Email id is required.";
       if (!portal.personal.phone.trim()) return "Phone number is required.";
       if (!isValidPhone10(portal.personal.phone)) {
-        return "Wrong format — phone must be exactly 10 digits.";
+        return "Wrong format - phone must be exactly 10 digits.";
       }
       if (!portal.personal.address.trim()) return "Current address is required.";
       const permanent = portal.personal.sameAsCurrentAddress
@@ -127,7 +127,7 @@ function validateStep(
       }
       if (!pan) return "PAN is required.";
       if (!isValidPan(pan)) {
-        return "Wrong format — PAN must be 10 characters like ABCDE1234F.";
+        return "Wrong format - PAN must be 10 characters like ABCDE1234F.";
       }
       return null;
     }
@@ -138,10 +138,10 @@ function validateStep(
         return "Bank name and account holder are required.";
       }
       if (account.length < ACCOUNT_MIN || account.length > ACCOUNT_MAX) {
-        return `Account number must be ${ACCOUNT_MIN}–${ACCOUNT_MAX} digits.`;
+        return `Account number must be ${ACCOUNT_MIN}-${ACCOUNT_MAX} digits.`;
       }
       if (!IFSC_RE.test(ifsc)) {
-        return "Wrong format — IFSC must be 11 characters (e.g. HDFC0001234).";
+        return "Wrong format - IFSC must be 11 characters (e.g. HDFC0001234).";
       }
       if (!portal.bank.branch.trim()) {
         return "Bank branch is required.";
@@ -152,7 +152,7 @@ function validateStep(
       if (!portal.emergency.name.trim()) return "Emergency contact name is required.";
       if (!portal.emergency.phone.trim()) return "Emergency contact phone number is required.";
       if (!isValidPhone10(portal.emergency.phone)) {
-        return "Wrong format — phone must be exactly 10 digits.";
+        return "Wrong format - phone must be exactly 10 digits.";
       }
       return null;
     }
@@ -235,7 +235,7 @@ const DOC_SECTION_META: {
   {
     id: "other",
     title: "Certificates",
-    hint: "Optional — upload any additional certificates (multiple files allowed)",
+    hint: "Optional - upload any additional certificates (multiple files allowed)",
   },
 ];
 
@@ -912,7 +912,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
           Welcome, {caseRow.candidateName}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Complete your profile before joining on {caseRow.joiningDate || "—"}.
+          Complete your profile before joining on {caseRow.joiningDate || "-"}.
           {caseRow.entityName ? (
             <>
               {" "}
@@ -1161,7 +1161,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 hint={
                   photoUploading
                     ? "Uploading photo…"
-                    : "Upload passport size photo — max 300 KB, JPG or PNG only"
+                    : "Upload passport size photo - max 300 KB, JPG or PNG only"
                 }
                 disabled={photoUploading}
                 onFile={async (file) => {
@@ -1265,7 +1265,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
         {step.id === "bank" ? (
           <div className="space-y-4">
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-xs leading-relaxed text-amber-950">
-              <p className="font-semibold text-amber-950">Salary Account — Important Information</p>
+              <p className="font-semibold text-amber-950">Salary Account - Important Information</p>
               <ul className="mt-2 list-disc space-y-1 pl-4">
                 <li>
                   Salary will be credited to an <strong>ICICI Bank salary account</strong>. Existing
@@ -1299,7 +1299,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
             <SetupField
               label="Account number"
               required
-              hint={`${ACCOUNT_MIN}–${ACCOUNT_MAX} digits`}
+              hint={`${ACCOUNT_MIN}-${ACCOUNT_MAX} digits`}
             >
               <SetupInput
                 inputMode="numeric"
@@ -1467,7 +1467,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                                   }))}
                                   hint={
                                     sectionRejected
-                                      ? "Rejected — choose a new file to replace"
+                                      ? "Rejected - choose a new file to replace"
                                       : t.maxSizeMb
                                         ? `${maxHint} · max ${t.maxSizeMb} MB each`
                                         : maxHint
@@ -1500,7 +1500,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                                 verifyStatus={doc?.verifyStatus}
                                 hint={
                                   rejected
-                                    ? "Rejected by HR — upload a new file"
+                                    ? "Rejected by HR - upload a new file"
                                     : t.maxSizeMb
                                       ? `Upload from this device · max ${t.maxSizeMb} MB`
                                       : "Upload from this device"
@@ -1573,7 +1573,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
             <SetupField
               label="Digital signature"
               required
-              hint="PNG or JPG image · max 100 KB — stamped on all policies at submit"
+              hint="PNG or JPG image · max 100 KB - stamped on all policies at submit"
             >
               <div className="space-y-2">
                 <input
@@ -1638,19 +1638,19 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
             />
             <ReviewRow
               label="Personal Email"
-              value={maskEmail(portal.personal.personalEmail || portal.personal.email) || "—"}
+              value={maskEmail(portal.personal.personalEmail || portal.personal.email) || "-"}
             />
-            <ReviewRow label="Phone" value={maskPhone(portal.personal.phone) || "—"} />
-            <ReviewRow label="Aadhaar" value={maskAadhaar(portal.governmentIds.aadhaar) || "—"} />
-            <ReviewRow label="PAN" value={maskPan(portal.governmentIds.pan) || "—"} />
-            <ReviewRow label="Bank" value={portal.bank.bankName || "—"} />
-            <ReviewRow label="Account" value={maskAccount(portal.bank.accountNumber) || "—"} />
+            <ReviewRow label="Phone" value={maskPhone(portal.personal.phone) || "-"} />
+            <ReviewRow label="Aadhaar" value={maskAadhaar(portal.governmentIds.aadhaar) || "-"} />
+            <ReviewRow label="PAN" value={maskPan(portal.governmentIds.pan) || "-"} />
+            <ReviewRow label="Bank" value={portal.bank.bankName || "-"} />
+            <ReviewRow label="Account" value={maskAccount(portal.bank.accountNumber) || "-"} />
             <ReviewRow
               label="Emergency"
               value={
                 portal.emergency.name
-                  ? `${portal.emergency.name} · ${maskPhone(portal.emergency.phone) || "—"}`
-                  : "—"
+                  ? `${portal.emergency.name} · ${maskPhone(portal.emergency.phone) || "-"}`
+                  : "-"
               }
             />
             <ReviewRow
@@ -1666,7 +1666,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                       d.typeCode === "DOC-PGDIP",
                   )
                   .map((d) => d.fileName)
-                  .join(", ") || "—"
+                  .join(", ") || "-"
               }
             />
             <ReviewRow
@@ -1675,7 +1675,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 portal.documents
                   .filter((d) => d.typeCode === "DOC-CERT" || d.typeCode?.startsWith("DOC-CERT-"))
                   .map((d) => d.fileName)
-                  .join(", ") || "—"
+                  .join(", ") || "-"
               }
             />
             <ReviewRow
@@ -1683,7 +1683,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               value={
                 portal.documents.find(
                   (d) => d.typeCode === "DOC-CHEQUE" || d.kind === "cancelled_cheque",
-                )?.fileName || "—"
+                )?.fileName || "-"
               }
             />
             <ReviewRow
@@ -1696,7 +1696,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                       (!d.typeCode && d.kind === "relieving_letter"),
                   )
                   .map((d) => d.fileName)
-                  .join(", ") || "—"
+                  .join(", ") || "-"
               }
             />
             <ReviewRow
@@ -1705,7 +1705,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 portal.documents
                   .filter((d) => matchesDocTypeCode(d.typeCode, "DOC-RLV"))
                   .map((d) => d.fileName)
-                  .join(", ") || "—"
+                  .join(", ") || "-"
               }
             />
             <ReviewRow
@@ -1719,7 +1719,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                       d.typeCode?.startsWith("DOC-SLIPS-"),
                   )
                   .map((d) => d.fileName)
-                  .join(", ") || "—"
+                  .join(", ") || "-"
               }
             />
             <ReviewRow label="Documents" value={String(portal.documents.length)} />

@@ -37,5 +37,5 @@ class AstNonitAssetType(Base, *AstMasterMixin):
         String(40), nullable=False, default="OTHER", server_default="OTHER"
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Column name "metadata" — avoid clashing with SQLAlchemy Base.metadata
+    # Column name "metadata" - avoid clashing with SQLAlchemy Base.metadata
     metadata_json: Mapped[dict | None] = mapped_column("metadata", JSONB, nullable=True)

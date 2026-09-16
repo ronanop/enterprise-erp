@@ -344,7 +344,7 @@ class HrSuperadminService:
         if user is None or user.is_deleted:
             email = (emp.email or "").strip().lower()
             if not email:
-                raise AppException("Employee has no email — cannot create HR module login")
+                raise AppException("Employee has no email - cannot create HR module login")
             existing = self._db.scalar(
                 select(SecUser).where(
                     SecUser.tenant_id == ctx.tenant_id,
@@ -376,7 +376,7 @@ class HrSuperadminService:
 
         if self._is_org_hr_module_admin(ctx.tenant_id, user.id):
             raise AppException(
-                "This user is an HR module admin from Organization Users — manage them there"
+                "This user is an HR module admin from Organization Users - manage them there"
             )
 
         existing = self._modules.get_assignment(ctx.tenant_id, user.id, HR_MODULE_KEY)

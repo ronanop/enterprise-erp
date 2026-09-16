@@ -30,7 +30,7 @@ function getIsoWeek(d: Date): number {
   return Math.ceil(((t.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
 }
 
-/** JS Sunday=0 … Saturday=6; backend custom uses 0=Mon … 6=Sun — only used when custom rule set. */
+/** JS Sunday=0 … Saturday=6; backend custom uses 0=Mon … 6=Sun - only used when custom rule set. */
 export function isWeeklyOffDay(
   dateIso: string,
   rules: WeeklyOffRuleCode[] | null | undefined,

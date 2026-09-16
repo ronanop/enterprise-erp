@@ -1,4 +1,4 @@
-# FP-ASSET-015 — Asset Meter Reading (Feature Package)
+# FP-ASSET-015 - Asset Meter Reading (Feature Package)
 
 **Status:** Implemented  
 **ADR:** ADR-ASSET-MTR-001
@@ -9,8 +9,8 @@ Append-only usage meter readings per asset. Lifecycle: recorded → void. No app
 
 ## Lifecycle fidelity
 
-- **Record:** `POST /` — creates `recorded` row; client cannot override `status`.
-- **Void:** `POST /{id}/void` — recorded only; immutable business fields.
+- **Record:** `POST /` - creates `recorded` row; client cannot override `status`.
+- **Void:** `POST /{id}/void` - recorded only; immutable business fields.
 - No PATCH endpoint.
 
 ## API (`/api/v1/assets/meter-readings`)

@@ -5,9 +5,9 @@ import type { ReturnSummaryView } from "@/components/assets/assignment-wizard/as
 import { MOCK_RETURN_SUMMARY } from "@/components/assets/assignment-wizard/wizard-mock-data";
 
 const CONDITION_LABELS: Record<ReturnWizardState["returnCondition"], string> = {
-  good: "Good — return to stock",
-  outdated: "Outdated — retire",
-  dead: "Not working — pending disposal",
+  good: "Good - return to stock",
+  outdated: "Outdated - retire",
+  dead: "Not working - pending disposal",
 };
 
 export type ReturnReviewStepProps = {
@@ -35,22 +35,22 @@ export function ReturnReviewStep({ state, summary = MOCK_RETURN_SUMMARY }: Retur
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Return remarks</dt>
-          <dd>{state.returnRemarks || "—"}</dd>
+          <dd>{state.returnRemarks || "-"}</dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Reason</dt>
-          <dd>{state.reason || "—"}</dd>
+          <dd>{state.reason || "-"}</dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Components</dt>
           <dd>
             {!(state.componentReturns ?? []).length ? (
-              "—"
+              "-"
             ) : (
               <ul className="mt-1 list-none space-y-1 p-0">
                 {(state.componentReturns ?? []).map((line) => (
                   <li key={line.componentId} className="text-xs">
-                    {line.label} ({line.serialNumber}) — {line.issueStatus}
+                    {line.label} ({line.serialNumber}) - {line.issueStatus}
                   </li>
                 ))}
               </ul>

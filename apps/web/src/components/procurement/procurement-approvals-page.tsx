@@ -244,8 +244,8 @@ export function ProcurementApprovalsPage() {
       decide(row.id, "accepted");
       setSuccess(
         row.kind === "create_po_in_stock"
-          ? "Create PO approved. Requester can create the PO in SCM — nothing is sent to Projects."
-          : "PO issued. It stays in Procurement (GRN / delivery). It is not sent to Projects — share only from Installation.",
+          ? "Create PO approved. Requester can create the PO in SCM - nothing is sent to Projects."
+          : "PO issued. It stays in Procurement (GRN / delivery). It is not sent to Projects - share only from Installation.",
       );
     } catch (err) {
       setError(
@@ -281,7 +281,7 @@ export function ProcurementApprovalsPage() {
         title="Approval"
         description={
           isAdmin
-            ? "Approve Create PO for IN STOCK OVFs, or accept finalize to issue a draft PO. Accepting does not send the PO to Projects — that happens only from Installation → Share to Project."
+            ? "Approve Create PO for IN STOCK OVFs, or accept finalize to issue a draft PO. Accepting does not send the PO to Projects - that happens only from Installation → Share to Project."
             : "Track Create PO (IN STOCK) and finalize requests you sent. You get a notification when an admin decides."
         }
         actions={
@@ -407,10 +407,10 @@ export function ProcurementApprovalsPage() {
                       {approvalKindLabel(row)}
                     </td>
                     <td className="px-3 py-2.5 text-sm text-foreground">
-                      {row.customerName || "—"}
+                      {row.customerName || "-"}
                     </td>
                     <td className="px-3 py-2.5 text-sm text-foreground">
-                      {row.vendorName || "—"}
+                      {row.vendorName || "-"}
                     </td>
                     <td className="px-3 py-2.5 text-sm text-muted-foreground">
                       {formatWhen(row.createdAt)}

@@ -1,5 +1,5 @@
 /**
- * Documents (DMS) workspace config — aligned with FRD-19 / ERD_18
+ * Documents (DMS) workspace config - aligned with FRD-19 / ERD_18
  * and apps/api document routers (Document → Archive).
  */
 

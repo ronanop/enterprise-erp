@@ -124,7 +124,7 @@ export function previousAssignableStage(stage: string): AssignableStage | null {
 
 /**
  * Whether Project Tracking may show an assignee picker for this stage.
- * Standalone — any open step can be assigned without waiting on prior steps.
+ * Standalone - any open step can be assigned without waiting on prior steps.
  */
 export function canAssignStageFromTracking(
   stage: string,
@@ -217,7 +217,7 @@ export function assigneePayloadFromValues(
   return out;
 }
 
-/** Editable assignment section — Survey owner only (later owners from Project Tracking). */
+/** Editable assignment section - Survey owner only (later owners from Project Tracking). */
 export function stageAssignmentSection(deliveryType?: string): FormSection {
   void deliveryType;
   const survey = STAGE_ASSIGNEE_FIELDS[0];

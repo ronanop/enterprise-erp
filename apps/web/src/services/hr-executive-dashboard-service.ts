@@ -1,5 +1,5 @@
 /**
- * HRMS executive dashboard — real API data only (no mock / localStorage metrics).
+ * HRMS executive dashboard - real API data only (no mock / localStorage metrics).
  * Joins the live Employee directory with HR attendance, leave, and recruitment APIs.
  * Payroll is intentionally excluded from this surface.
  */
@@ -243,7 +243,7 @@ type DashboardPerson = {
   status: string;
 };
 
-/** Same employee universe as the Employees module — no demo/local seed rows. */
+/** Same employee universe as the Employees module - no demo/local seed rows. */
 function peopleFromDirectory(records: EmployeeRecord[]): {
   people: DashboardPerson[];
   empById: Map<string, MasterEmployee>;
@@ -493,10 +493,10 @@ function buildCharts(
   }));
 
   const ageBuckets = [
-    { label: "18–24", min: 18, max: 24 },
-    { label: "25–34", min: 25, max: 34 },
-    { label: "35–44", min: 35, max: 44 },
-    { label: "45–54", min: 45, max: 54 },
+    { label: "18-24", min: 18, max: 24 },
+    { label: "25-34", min: 25, max: 34 },
+    { label: "35-44", min: 35, max: 44 },
+    { label: "45-54", min: 45, max: 54 },
     { label: "55+", min: 55, max: 200 },
   ];
   const ageDistribution = ageBuckets.map((b) => ({
@@ -733,7 +733,7 @@ function buildCalendar(
     const emp = empById.get(String(row.employee_id));
     events.push({
       id: `leave-${String(row.id)}`,
-      title: `Leave — ${employeeNameFromMaster(emp, row)}`,
+      title: `Leave - ${employeeNameFromMaster(emp, row)}`,
       type: "leave",
       at: start.toISOString(),
       meta: `${asNumber(row.days_count) || 1} day(s) · ${String(row.status)}`,
@@ -770,7 +770,7 @@ function buildCalendar(
     if (!when) continue;
     events.push({
       id: `int-${String(interview.id)}`,
-      title: `Interview — ${String(interview.interview_type ?? "Panel")}`,
+      title: `Interview - ${String(interview.interview_type ?? "Panel")}`,
       type: "interview",
       at: when.toISOString(),
       meta: String(interview.status ?? ""),
@@ -922,7 +922,7 @@ function buildActivities(
     items.push({
       id: `act-prf-${String(row.id)}`,
       action: "Performance Review",
-      detail: `${employeeNameFromMaster(emp, row)} · rating ${asNumber(row.overall_rating) || "—"} · ${String(row.status)}`,
+      detail: `${employeeNameFromMaster(emp, row)} · rating ${asNumber(row.overall_rating) || "-"} · ${String(row.status)}`,
       actor: "Reporting manager",
       at: String(row.updated_at ?? row.created_at ?? new Date().toISOString()),
     });

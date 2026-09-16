@@ -38,7 +38,7 @@ export function GlTrialBalancePreviewPanel({ preview, loading }: Props) {
       <div className="flex items-start justify-between gap-2">
         <div>
           <h3 className="text-base font-extrabold tracking-tight">Trial Balance Preview</h3>
-          <p className="mt-1 text-xs text-muted-foreground">Opening · Debit · Credit · Closing — ledger summary only</p>
+          <p className="mt-1 text-xs text-muted-foreground">Opening · Debit · Credit · Closing - ledger summary only</p>
         </div>
         <span className={`rounded-md px-2 py-1 text-[11px] font-medium ${Math.abs(preview.difference) < 0.01 ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-900"}`}>
           Diff {formatInrPrecise(preview.difference)}

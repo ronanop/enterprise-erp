@@ -12,7 +12,7 @@ import {
 } from "@/utils/po-fulfillment-metrics";
 
 type PoFulfillmentChartsProps = {
-  /** Company PO / document number — scopes the panel to the open order only. */
+  /** Company PO / document number - scopes the panel to the open order only. */
   poLabel: string;
   lines: PoFulfillmentLineInput[];
   batches?: PoFulfillmentBatchInput[];
@@ -159,10 +159,10 @@ export function PoFulfillmentCharts({
                 <tr key={row.lineId} className="border-b border-border/50 last:border-0">
                   <td className="px-3 py-2.5 font-medium text-foreground">{row.productName}</td>
                   <td className="px-3 py-2.5 text-muted-foreground">
-                    {row.description || "—"}
+                    {row.description || "-"}
                   </td>
                   <td className="px-3 py-2.5 tabular-nums text-muted-foreground">
-                    {row.hsnSac || "—"}
+                    {row.hsnSac || "-"}
                   </td>
                   <td className="px-3 py-2.5 text-right tabular-nums">
                     {formatPoQty(row.orderedQty)}

@@ -17,6 +17,7 @@ from modules.crm.repository.opportunity_repository import OpportunityRepository
 from modules.crm.repository.ovf_repository import OvfRepository
 from modules.crm.repository.quote_repository import QuoteRepository
 from modules.crm.repository.state_history_repository import StateHistoryRepository
+from modules.crm.service.crm_record_visibility import CrmRecordVisibility
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.repository.user_repository import UserRepository
 
@@ -174,11 +175,13 @@ class OpportunityTimelineService:
         self._ovfs = OvfRepository(db)
         self._history = StateHistoryRepository(db)
         self._users = UserRepository(db)
+        self._visibility = CrmRecordVisibility(db)
 
     def timeline(self, ctx: TenantContext, opportunity_id: UUID) -> dict:
         opp = self._opportunities.get(ctx, opportunity_id)
         if opp is None:
             raise NotFoundException("Opportunity not found")
+        self._visibility.ensure_opportunity_access(ctx, opp)
 
         lead = self._leads.get(ctx, opp.lead_id) if opp.lead_id else None
         quotes = self._quotes.list_quotes(ctx, opp.company_id, opportunity_id=opportunity_id)

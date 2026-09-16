@@ -82,10 +82,16 @@ def module_key_for_permission_code(permission_code: str) -> str | None:
 
 
 def has_platform_module_access(user_type: str, role_codes: list[str] | None = None) -> bool:
-    if user_type in ADMIN_USER_TYPES:
-        return True
-    codes = {c.upper() for c in (role_codes or [])}
-    return bool(ADMIN_ROLE_CODES & codes)
+    """ERP-wide access is driven by resolved user_type only (not SUPER_ADMIN role alone)."""
+    _ = role_codes
+    return user_type in ADMIN_USER_TYPES
+
+
+def has_all_modules_admin(admin_assigned: list[str] | None) -> bool:
+    """True when every ERP module is assigned as module-admin (All modules entitlement)."""
+    if not admin_assigned:
+        return False
+    return ERP_MODULE_KEY_SET.issubset({k for k in admin_assigned if k})
 
 
 def resolve_session_user_type(
@@ -95,16 +101,17 @@ def resolve_session_user_type(
     *,
     platform_admin_emails: set[str] | None = None,
 ) -> str:
-    """Entra sync often assigns TENANT_ADMIN while leaving user_type as employee."""
-    if platform_admin_emails and email.lower() in platform_admin_emails:
+    """Only allowlisted platform emails are ERP admins (super_admin).
+
+    SUPER_ADMIN / TENANT_ADMIN roles and stored admin user_types do not elevate
+    non-allowlisted users - those accounts use per-module (or All modules) grants.
+    """
+    _ = role_codes
+    email_l = (email or "").strip().lower()
+    if platform_admin_emails and email_l in platform_admin_emails:
         return "super_admin"
     if stored_user_type in ADMIN_USER_TYPES:
-        return stored_user_type
-    codes = {c.upper() for c in (role_codes or [])}
-    if "SUPER_ADMIN" in codes:
-        return "super_admin"
-    if "TENANT_ADMIN" in codes:
-        return "tenant_admin"
+        return "employee"
     return stored_user_type
 
 

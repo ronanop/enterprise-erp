@@ -160,7 +160,7 @@ export function JournalHeaderEditor({
         </FinanceField>
         <FinanceField label="Period">
           <FinanceSelect disabled={!editable} {...register("period_id")}>
-            <option value="">—</option>
+            <option value="">-</option>
             {periods.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label}

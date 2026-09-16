@@ -97,7 +97,7 @@ export function mapOffboardingRow(
 ): OffboardingCase {
   const { checklist, exitInterview, documents, approvals, fnfMeta } = parseClearance(row.clearance_json);
   const employeeId = String(row.employee_id ?? "");
-  const fallbackCode = employeeId ? employeeId.slice(0, 8) : "—";
+  const fallbackCode = employeeId ? employeeId.slice(0, 8) : "-";
   return {
     id: String(row.id),
     documentNumber: String(row.document_number ?? row.id),

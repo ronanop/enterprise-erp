@@ -2,10 +2,10 @@
 ## Multi-Industry Enterprise ERP Platform
 
 **Version:** 1.1
-**Status:** Architecture Baseline Approved (Technology Alignment — SDD v1.1 ADR-002)
+**Status:** Architecture Baseline Approved (Technology Alignment - SDD v1.1 ADR-002)
 **Document Type:** Database Governance Standard
 **Owner:** Enterprise Architecture Team
-**Classification:** Internal – Confidential
+**Classification:** Internal - Confidential
 
 ---
 
@@ -21,7 +21,7 @@
 | Owner            | Enterprise Architecture Team                 |
 | Reviewed By      | Solution Architect                           |
 | Approved By      | Chief Technology Officer (CTO)               |
-| Classification   | Internal – Confidential                      |
+| Classification   | Internal - Confidential                      |
 | Applicable To    | All ERP Modules                              |
 | Effective Date   | TBD                                          |
 | Review Cycle     | Quarterly                                    |
@@ -40,7 +40,7 @@
 
 ## Table of Contents
 
-- [PART 1 — DATABASE GOVERNANCE](#part-1--database-governance)
+- [PART 1 - DATABASE GOVERNANCE](#part-1--database-governance)
   - [3. Purpose](#3-purpose)
   - [4. Scope](#4-scope)
   - [5. Database Vision](#5-database-vision)
@@ -52,7 +52,7 @@
   - [11. Compliance Statement](#11-compliance-statement)
   - [12. Architecture Approval](#12-architecture-approval)
 
-- [PART 2 — DATABASE STANDARDS](#part-2--database-standards)
+- [PART 2 - DATABASE STANDARDS](#part-2--database-standards)
   - [13. Database Naming Standards](#13-database-naming-standards)
   - [14. Schema Naming Standards](#14-schema-naming-standards)
   - [15. Table Naming Standards](#15-table-naming-standards)
@@ -68,7 +68,7 @@
   - [25. UUID Standards](#25-uuid-standards)
   - [26. SQLAlchemy 2.0 ORM Standards](#26-sqlalchemy-20-orm-standards)
 
-- [PART 3 — TABLE STANDARDS](#part-3--table-standards)
+- [PART 3 - TABLE STANDARDS](#part-3--table-standards)
   - [27. Table Classification Framework](#27-table-classification-framework)
   - [28. Master Table Standards](#28-master-table-standards)
   - [29. Transaction Table Standards](#29-transaction-table-standards)
@@ -86,7 +86,7 @@
   - [41. Common Mandatory Columns Matrix](#41-common-mandatory-columns-matrix)
   - [42. Table Design Checklist](#42-table-design-checklist)
 
-- [PART 4 — ENTERPRISE DATABASE RULES](#part-4--enterprise-database-rules)
+- [PART 4 - ENTERPRISE DATABASE RULES](#part-4--enterprise-database-rules)
   - [43. Audit Standards](#43-audit-standards)
   - [44. Standard Audit Columns](#44-standard-audit-columns)
   - [45. Soft Delete Standards](#45-soft-delete-standards)
@@ -105,7 +105,7 @@
   - [58. Data Quality Standards](#58-data-quality-standards)
   - [59. Database Governance Checklist](#59-database-governance-checklist)
 
-- [PART 5 — PERFORMANCE, SCALABILITY & OPERATIONS](#part-5--performance-scalability--operations)
+- [PART 5 - PERFORMANCE, SCALABILITY & OPERATIONS](#part-5--performance-scalability--operations)
   - [60. Database Performance Principles](#60-database-performance-principles)
   - [61. Index Strategy](#61-index-strategy)
   - [62. Composite Index Strategy](#62-composite-index-strategy)
@@ -125,7 +125,7 @@
   - [76. Capacity Targets](#76-capacity-targets)
   - [77. Operational Review Checklist](#77-operational-review-checklist)
 
-- [PART 6 — DEVELOPMENT GOVERNANCE & DATABASE APPROVAL](#part-6--development-governance--database-approval)
+- [PART 6 - DEVELOPMENT GOVERNANCE & DATABASE APPROVAL](#part-6--development-governance--database-approval)
   - [78. SQLAlchemy 2.0 ORM Standards](#78-sqlalchemy-20-orm-standards)
   - [79. Migration Standards](#79-migration-standards)
   - [80. Seed Data Standards](#80-seed-data-standards)
@@ -147,7 +147,7 @@
 
 ---
 
-# PART 1 — DATABASE GOVERNANCE
+# PART 1 - DATABASE GOVERNANCE
 
 ---
 
@@ -166,7 +166,7 @@ This document defines:
 - Security Standards
 - Governance Rules
 
-Every database object in the ERP system—including tables, views, indexes, constraints, functions, triggers, stored procedures (if used), materialized views, and migrations—must comply with this document.
+Every database object in the ERP system-including tables, views, indexes, constraints, functions, triggers, stored procedures (if used), materialized views, and migrations-must comply with this document.
 
 ---
 
@@ -488,7 +488,7 @@ Any deviation from these standards must be documented through an Architecture De
 
 ---
 
-# PART 2 — DATABASE STANDARDS
+# PART 2 - DATABASE STANDARDS
 
 ---
 
@@ -1099,7 +1099,7 @@ At this point, the ERP has a fully standardized database naming and design conve
 
 ---
 
-# PART 3 — TABLE STANDARDS
+# PART 3 - TABLE STANDARDS
 
 ---
 
@@ -1714,7 +1714,7 @@ At this stage, the following database foundations are locked:
 
 ---
 
-# PART 4 — ENTERPRISE DATABASE RULES
+# PART 4 - ENTERPRISE DATABASE RULES
 
 ---
 
@@ -2240,7 +2240,7 @@ The following governance capabilities are now locked:
 
 ---
 
-# PART 5 — PERFORMANCE, SCALABILITY & OPERATIONS
+# PART 5 - PERFORMANCE, SCALABILITY & OPERATIONS
 
 ---
 
@@ -2779,7 +2779,7 @@ The following operational standards are now locked:
 
 ---
 
-# PART 6 — DEVELOPMENT GOVERNANCE & DATABASE APPROVAL
+# PART 6 - DEVELOPMENT GOVERNANCE & DATABASE APPROVAL
 
 ---
 
@@ -3132,7 +3132,7 @@ Capacity Review Completed
 | Appendix I | Standard Index Naming Examples          |
 | Appendix J | Common Database Design Patterns         |
 
-### Appendix G — Standard SQLAlchemy Model Template
+### Appendix G - Standard SQLAlchemy Model Template
 
 Every SQLAlchemy Declarative Model must follow this structural template:
 
@@ -3173,7 +3173,7 @@ Rules:
 - Models are defined in the infrastructure layer (`models.py` per domain module per SDD v1.1).
 - API request/response schemas use Pydantic v2 and remain separate from ORM models.
 
-### Appendix J — Common Database Design Patterns
+### Appendix J - Common Database Design Patterns
 
 - Header-Detail Pattern
 - Junction Table Pattern
@@ -3209,12 +3209,12 @@ No deviation is permitted without formal architecture approval.
 
 | Part                              | Status |
 | --------------------------------- | ------ |
-| PART 1 – Database Governance      | ✅     |
-| PART 2 – Database Standards       | ✅     |
-| PART 3 – Table Standards          | ✅     |
-| PART 4 – Enterprise Rules         | ✅     |
-| PART 5 – Performance & Operations | ✅     |
-| PART 6 – Development Governance   | ✅     |
+| PART 1 - Database Governance      | ✅     |
+| PART 2 - Database Standards       | ✅     |
+| PART 3 - Table Standards          | ✅     |
+| PART 4 - Enterprise Rules         | ✅     |
+| PART 5 - Performance & Operations | ✅     |
+| PART 6 - Development Governance   | ✅     |
 
 **FINAL ARCHITECT REVIEW**
 
@@ -3224,7 +3224,7 @@ The ERP documentation stack is now:
 | --------------------------------- | ----------- |
 | BRD (Business Requirements)       | ✅ Complete |
 | FRD (Functional Requirements)     | ✅ Complete |
-| SDD (System Design)               | ✅ Complete (v1.1 — ADR-002) |
+| SDD (System Design)               | ✅ Complete (v1.1 - ADR-002) |
 | DBS (Database Standards)          | ✅ Complete (v1.1) |
 
 **ENTERPRISE READINESS STATUS**
@@ -3238,7 +3238,7 @@ The ERP documentation stack is now:
 | Infrastructure Architecture | ✅  |
 | Database Governance      | ✅     |
 
-Estimated Documentation Readiness: ~92–95%
+Estimated Documentation Readiness: ~92-95%
 
 The remaining work is implementation-oriented rather than planning-oriented.
 
@@ -3443,7 +3443,7 @@ This section provides a consolidated summary of all approved enterprise database
 
 ## Migration Standards Summary
 
-- All schema changes are managed through Alembic Migrations — no manual production schema changes.
+- All schema changes are managed through Alembic Migrations - no manual production schema changes.
 - Every migration requires: architecture review, ERD update, rollback strategy, backward compatibility validation, and staging test.
 - Migration lifecycle: Development → Alembic Migration Generated → Code Review → QA Validation → UAT → Production Deployment.
 - Every production migration must include a rollback script, data recovery plan, and validation checklist.
@@ -3470,10 +3470,10 @@ This section provides a consolidated summary of all approved enterprise database
 
 | Document                                    | Status      |
 | ------------------------------------------- | ----------- |
-| BRD — Business Requirements Document        | ✓ Complete  |
-| FRD — Functional Requirements Document      | ✓ Complete  |
-| SDD — System Design Document (All Volumes)  | ✓ Complete (v1.1 — ADR-002) |
-| DBS — Enterprise Database Standards         | ✓ Complete (v1.1) |
+| BRD - Business Requirements Document        | ✓ Complete  |
+| FRD - Functional Requirements Document      | ✓ Complete  |
+| SDD - System Design Document (All Volumes)  | ✓ Complete (v1.1 - ADR-002) |
+| DBS - Enterprise Database Standards         | ✓ Complete (v1.1) |
 
 ---
 
@@ -3511,4 +3511,4 @@ Development
 
 ---
 
-*End of Enterprise Database Standards (DBS) — Multi-Industry Enterprise ERP Platform — Version 1.1*
+*End of Enterprise Database Standards (DBS) - Multi-Industry Enterprise ERP Platform - Version 1.1*

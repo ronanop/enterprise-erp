@@ -1,4 +1,4 @@
-/** Permission flags for inventory row actions (UI only — no routing in 3.4B-1). */
+/** Permission flags for inventory row actions (UI only - no routing in 3.4B-1). */
 
 export type InventoryMenuActionId =
   | "viewDetails"

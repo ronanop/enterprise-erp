@@ -106,7 +106,7 @@ from modules.grc.service import (
 )
 from shared.schemas import APIResponse
 
-overview_router = APIRouter(prefix="/overview", tags=["GRC — Overview"])
+overview_router = APIRouter(prefix="/overview", tags=["GRC - Overview"])
 
 
 @overview_router.get("", response_model=APIResponse[GrcOverviewResponse])
@@ -119,7 +119,7 @@ def get_grc_overview(
     return APIResponse(message="OK", data=data)
 
 
-compliance_monitor_router = APIRouter(prefix="/compliance-monitor", tags=["GRC — Compliance Monitor"])
+compliance_monitor_router = APIRouter(prefix="/compliance-monitor", tags=["GRC - Compliance Monitor"])
 
 
 @compliance_monitor_router.post("/refresh", response_model=APIResponse[ComplianceMonitorRefreshResponse])
@@ -136,7 +136,7 @@ def refresh_compliance_monitor(
     db.commit()
     return APIResponse(message="Refreshed", data=result)
 
-policies_router = APIRouter(prefix="/policies", tags=["GRC — Policy"])
+policies_router = APIRouter(prefix="/policies", tags=["GRC - Policy"])
 
 @policies_router.get("", response_model=APIResponse[list[PolicyResponse]])
 def list_policies(
@@ -197,7 +197,7 @@ def publish_policies(
 ):
     return APIResponse(message="publish", data=PolicyService(db).publish(ctx, row_id))
 
-policy_versions_router = APIRouter(prefix="/policy-versions", tags=["GRC — PolicyVersion"])
+policy_versions_router = APIRouter(prefix="/policy-versions", tags=["GRC - PolicyVersion"])
 
 @policy_versions_router.get("", response_model=APIResponse[list[PolicyVersionResponse]])
 def list_policy_versions(
@@ -234,7 +234,7 @@ def update_policy_versions(
 ):
     return APIResponse(message="Updated", data=PolicyVersionService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-policy_acknowledgements_router = APIRouter(prefix="/policy-acknowledgements", tags=["GRC — PolicyAcknowledgement"])
+policy_acknowledgements_router = APIRouter(prefix="/policy-acknowledgements", tags=["GRC - PolicyAcknowledgement"])
 
 @policy_acknowledgements_router.get("", response_model=APIResponse[list[PolicyAcknowledgementResponse]])
 def list_policy_acknowledgements(
@@ -271,7 +271,7 @@ def update_policy_acknowledgements(
 ):
     return APIResponse(message="Updated", data=PolicyAcknowledgementService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-controls_router = APIRouter(prefix="/controls", tags=["GRC — Control"])
+controls_router = APIRouter(prefix="/controls", tags=["GRC - Control"])
 
 @controls_router.get("", response_model=APIResponse[list[ControlResponse]])
 def list_controls(
@@ -313,7 +313,7 @@ def update_controls(
 ):
     return APIResponse(message="Updated", data=ControlService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-control_tests_router = APIRouter(prefix="/control-tests", tags=["GRC — ControlTest"])
+control_tests_router = APIRouter(prefix="/control-tests", tags=["GRC - ControlTest"])
 
 @control_tests_router.get("", response_model=APIResponse[list[ControlTestResponse]])
 def list_control_tests(
@@ -350,7 +350,7 @@ def update_control_tests(
 ):
     return APIResponse(message="Updated", data=ControlTestService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-risk_categories_router = APIRouter(prefix="/risk-categories", tags=["GRC — RiskCategory"])
+risk_categories_router = APIRouter(prefix="/risk-categories", tags=["GRC - RiskCategory"])
 
 @risk_categories_router.get("", response_model=APIResponse[list[RiskCategoryResponse]])
 def list_risk_categories(
@@ -387,7 +387,7 @@ def update_risk_categories(
 ):
     return APIResponse(message="Updated", data=RiskCategoryService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-risk_registers_router = APIRouter(prefix="/risk-registers", tags=["GRC — RiskRegister"])
+risk_registers_router = APIRouter(prefix="/risk-registers", tags=["GRC - RiskRegister"])
 
 @risk_registers_router.get("", response_model=APIResponse[list[RiskRegisterResponse]])
 def list_risk_registers(
@@ -440,7 +440,7 @@ def approve_risk_registers(
 ):
     return APIResponse(message="approve", data=RiskRegisterService(db).approve(ctx, row_id))
 
-risk_assessments_router = APIRouter(prefix="/risk-assessments", tags=["GRC — RiskAssessment"])
+risk_assessments_router = APIRouter(prefix="/risk-assessments", tags=["GRC - RiskAssessment"])
 
 @risk_assessments_router.get("", response_model=APIResponse[list[RiskAssessmentResponse]])
 def list_risk_assessments(
@@ -477,7 +477,7 @@ def update_risk_assessments(
 ):
     return APIResponse(message="Updated", data=RiskAssessmentService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-risk_treatments_router = APIRouter(prefix="/risk-treatments", tags=["GRC — RiskTreatment"])
+risk_treatments_router = APIRouter(prefix="/risk-treatments", tags=["GRC - RiskTreatment"])
 
 @risk_treatments_router.get("", response_model=APIResponse[list[RiskTreatmentResponse]])
 def list_risk_treatments(
@@ -514,7 +514,7 @@ def update_risk_treatments(
 ):
     return APIResponse(message="Updated", data=RiskTreatmentService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-compliance_frameworks_router = APIRouter(prefix="/compliance-frameworks", tags=["GRC — ComplianceFramework"])
+compliance_frameworks_router = APIRouter(prefix="/compliance-frameworks", tags=["GRC - ComplianceFramework"])
 
 @compliance_frameworks_router.get("", response_model=APIResponse[list[ComplianceFrameworkResponse]])
 def list_compliance_frameworks(
@@ -551,7 +551,7 @@ def update_compliance_frameworks(
 ):
     return APIResponse(message="Updated", data=ComplianceFrameworkService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-compliance_requirements_router = APIRouter(prefix="/compliance-requirements", tags=["GRC — ComplianceRequirement"])
+compliance_requirements_router = APIRouter(prefix="/compliance-requirements", tags=["GRC - ComplianceRequirement"])
 
 @compliance_requirements_router.get("", response_model=APIResponse[list[ComplianceRequirementResponse]])
 def list_compliance_requirements(
@@ -588,7 +588,7 @@ def update_compliance_requirements(
 ):
     return APIResponse(message="Updated", data=ComplianceRequirementService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-compliance_assessments_router = APIRouter(prefix="/compliance-assessments", tags=["GRC — ComplianceAssessment"])
+compliance_assessments_router = APIRouter(prefix="/compliance-assessments", tags=["GRC - ComplianceAssessment"])
 
 @compliance_assessments_router.get("", response_model=APIResponse[list[ComplianceAssessmentResponse]])
 def list_compliance_assessments(
@@ -625,7 +625,7 @@ def update_compliance_assessments(
 ):
     return APIResponse(message="Updated", data=ComplianceAssessmentService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-audit_plans_router = APIRouter(prefix="/audit-plans", tags=["GRC — AuditPlan"])
+audit_plans_router = APIRouter(prefix="/audit-plans", tags=["GRC - AuditPlan"])
 
 @audit_plans_router.get("", response_model=APIResponse[list[AuditPlanResponse]])
 def list_audit_plans(
@@ -662,7 +662,7 @@ def update_audit_plans(
 ):
     return APIResponse(message="Updated", data=AuditPlanService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-audits_router = APIRouter(prefix="/audits", tags=["GRC — Audit"])
+audits_router = APIRouter(prefix="/audits", tags=["GRC - Audit"])
 
 @audits_router.get("", response_model=APIResponse[list[AuditResponse]])
 def list_audits(
@@ -715,7 +715,7 @@ def approve_audits(
 ):
     return APIResponse(message="approve", data=GrcAuditService(db).approve(ctx, row_id))
 
-audit_findings_router = APIRouter(prefix="/audit-findings", tags=["GRC — AuditFinding"])
+audit_findings_router = APIRouter(prefix="/audit-findings", tags=["GRC - AuditFinding"])
 
 @audit_findings_router.get("", response_model=APIResponse[list[AuditFindingResponse]])
 def list_audit_findings(
@@ -752,7 +752,7 @@ def update_audit_findings(
 ):
     return APIResponse(message="Updated", data=AuditFindingService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-corrective_actions_router = APIRouter(prefix="/corrective-actions", tags=["GRC — CorrectiveAction"])
+corrective_actions_router = APIRouter(prefix="/corrective-actions", tags=["GRC - CorrectiveAction"])
 
 @corrective_actions_router.get("", response_model=APIResponse[list[CorrectiveActionResponse]])
 def list_corrective_actions(
@@ -813,7 +813,7 @@ def complete_corrective_actions(
 ):
     return APIResponse(message="complete", data=CorrectiveActionService(db).complete(ctx, row_id))
 
-exceptions_router = APIRouter(prefix="/exceptions", tags=["GRC — Exception"])
+exceptions_router = APIRouter(prefix="/exceptions", tags=["GRC - Exception"])
 
 @exceptions_router.get("", response_model=APIResponse[list[ExceptionResponse]])
 def list_exceptions(
@@ -858,7 +858,7 @@ def approve_exceptions(
 ):
     return APIResponse(message="approve", data=ExceptionService(db).approve(ctx, row_id))
 
-incidents_router = APIRouter(prefix="/incidents", tags=["GRC — Incident"])
+incidents_router = APIRouter(prefix="/incidents", tags=["GRC - Incident"])
 
 @incidents_router.get("", response_model=APIResponse[list[IncidentResponse]])
 def list_incidents(
@@ -919,7 +919,7 @@ def close_incidents(
 ):
     return APIResponse(message="close", data=IncidentService(db).close(ctx, row_id))
 
-notifications_router = APIRouter(prefix="/notifications", tags=["GRC — Notification"])
+notifications_router = APIRouter(prefix="/notifications", tags=["GRC - Notification"])
 
 @notifications_router.get("", response_model=APIResponse[list[NotificationResponse]])
 def list_notifications(
@@ -956,7 +956,7 @@ def update_notifications(
 ):
     return APIResponse(message="Updated", data=NotificationService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-reports_router = APIRouter(prefix="/reports", tags=["GRC — Report"])
+reports_router = APIRouter(prefix="/reports", tags=["GRC - Report"])
 
 @reports_router.get("", response_model=APIResponse[list[ReportResponse]])
 def list_reports(

@@ -180,7 +180,7 @@ export function NewResignationDrawer({
           hint={
             serveNotice
               ? "Employee will be On Notice until the expected exit date."
-              : "Direct exit — notice period is not required."
+              : "Direct exit - notice period is not required."
           }
         >
           <label className="flex items-center gap-2 text-sm">
@@ -429,7 +429,7 @@ export function ExitDocumentDrawer({
             <option value="other">Other</option>
           </SetupSelect>
         </SetupField>
-        <SetupField label="File reference" hint="Optional — attach filename for tracking">
+        <SetupField label="File reference" hint="Optional - attach filename for tracking">
           <SetupInput
             type="file"
             onChange={(e) => {

@@ -69,7 +69,7 @@ export type AssetOperationsDashboardProps = {
 };
 
 function formatKpiValue(value: number | undefined): string {
-  if (value === undefined) return "—";
+  if (value === undefined) return "-";
   return String(value);
 }
 
@@ -77,7 +77,7 @@ function resolveBranchLabel(
   branchId: string | null,
   lookup: Record<string, string>,
 ): string {
-  if (!branchId) return "—";
+  if (!branchId) return "-";
   return lookup[branchId] ?? branchId.slice(0, 8);
 }
 
@@ -257,10 +257,10 @@ function TransferListSection({
                         {resolveBranchLabel(row.toBranchId, branchLookup)}
                       </td>
                       <td className="px-3 py-2 font-mono text-[12px] tabular-nums text-muted-foreground">
-                        {row.effectiveDate ?? "—"}
+                        {row.effectiveDate ?? "-"}
                       </td>
                       <td className="max-w-[180px] truncate px-3 py-2 text-[13px] text-muted-foreground">
-                        {row.reason ?? "—"}
+                        {row.reason ?? "-"}
                       </td>
                       <td className="px-3 py-2">
                         <StatusBadge kind="lifecycle" status={row.status} />
@@ -315,7 +315,7 @@ export function AssetOperationsDashboard({
     >
       <PageHeader
         title="IT Asset Operations"
-        description="Operational status, location mix, and transfer activity — click a KPI to open All Assets filtered."
+        description="Operational status, location mix, and transfer activity - click a KPI to open All Assets filtered."
         actions={
           <div className="flex flex-col items-stretch gap-2.5 sm:items-end">
             <div className="flex flex-wrap items-center justify-end gap-2">

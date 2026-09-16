@@ -1,4 +1,4 @@
-"""Non-IT asset API — types, locations, inventory, assign, Excel import."""
+"""Non-IT asset API - types, locations, inventory, assign, Excel import."""
 
 from typing import Annotated
 from uuid import UUID
@@ -36,7 +36,7 @@ from modules.asset.nonit.type_service import NonItAssetTypeService
 from modules.foundation.domain.value_objects import TenantContext
 from shared.schemas import APIResponse
 
-nonit_router = APIRouter(prefix="/non-it", tags=["Asset — Non-IT"])
+nonit_router = APIRouter(prefix="/non-it", tags=["Asset - Non-IT"])
 
 
 # --- Asset types ---

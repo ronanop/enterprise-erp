@@ -1,4 +1,4 @@
-"""Purchase order queue — finalized SCM POs for project creation."""
+"""Purchase order queue - finalized SCM POs for project creation."""
 
 from typing import Annotated
 from uuid import UUID
@@ -20,7 +20,7 @@ from shared.schemas import APIResponse
 
 purchase_orders_router = APIRouter(
     prefix="/purchase-orders",
-    tags=["Project — Purchase Orders"],
+    tags=["Project - Purchase Orders"],
 )
 
 

@@ -39,7 +39,7 @@ export function CrmPipelineFunnel({ counts, loading }: CrmPipelineFunnelProps) {
                   {String(index + 1).padStart(2, "0")} · {stage.title}
                 </p>
                 <p className="mt-1 font-mono text-lg font-medium tabular-nums text-foreground">
-                  {loading ? "—" : stage.count}
+                  {loading ? "-" : stage.count}
                 </p>
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
                   <div

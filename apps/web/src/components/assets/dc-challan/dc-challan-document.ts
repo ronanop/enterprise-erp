@@ -41,14 +41,14 @@ export function validateDcChallanFile(file: File, limits?: DcChallanUploadLimits
 }
 
 export function formatFileSize(bytes?: number | null): string {
-  if (bytes == null || Number.isNaN(bytes)) return "—";
+  if (bytes == null || Number.isNaN(bytes)) return "-";
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function formatUploadedAt(value?: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return value.replace("T", " ").slice(0, 16);
 }
 
@@ -64,7 +64,7 @@ export function uploadedByLabel(doc: DcChallanDocument): string {
   if (doc.source === "SCM_CALLBACK") return `Uploaded by SCM platform · ${when}`;
   if (doc.source === "MANUAL_UPLOAD") return `Uploaded by Manual upload · ${when}`;
   if (doc.is_legacy) return `Uploaded by Legacy URL · ${when}`;
-  return when === "—" ? "—" : `Uploaded · ${when}`;
+  return when === "-" ? "-" : `Uploaded · ${when}`;
 }
 
 export function previewKindFromDocument(doc: DcChallanDocument | null | undefined): "pdf" | "image" | "other" {

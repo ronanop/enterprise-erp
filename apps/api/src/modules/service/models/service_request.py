@@ -113,7 +113,7 @@ class SvcServiceRequest(Base, *SvcTransactionMixin):
         nullable=True,
     )
 
-    # SOP — Basic Information
+    # SOP - Basic Information
     mode_of_action: Mapped[str | None] = mapped_column(String(40), nullable=True)
     contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -133,17 +133,17 @@ class SvcServiceRequest(Base, *SvcTransactionMixin):
     )
     contact_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True, index=True)
 
-    # SOP — Ticket Information
+    # SOP - Ticket Information
     ticket_category: Mapped[str | None] = mapped_column(String(50), nullable=True)
     software_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     issue_description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # SOP — Reference
+    # SOP - Reference
     reference_sr_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     customer_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
     lsi: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
-    # SOP — End Customer
+    # SOP - End Customer
     end_customer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     end_customer_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     coordinator_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -156,7 +156,7 @@ class SvcServiceRequest(Base, *SvcTransactionMixin):
     end_customer_gst: Mapped[str | None] = mapped_column(String(50), nullable=True)
     end_customer_postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
-    # SOP — Additional
+    # SOP - Additional
     start_work_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     classification: Mapped[str | None] = mapped_column(String(50), nullable=True)
     escalation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -164,7 +164,7 @@ class SvcServiceRequest(Base, *SvcTransactionMixin):
     additional_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     oem_support_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    # SOP — Asset snapshot
+    # SOP - Asset snapshot
     asset_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     serial_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     warranty_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -174,7 +174,7 @@ class SvcServiceRequest(Base, *SvcTransactionMixin):
     amc_mail_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     asset_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Ownership workflow — solution & lifecycle
+    # Ownership workflow - solution & lifecycle
     solution_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     solution_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -1,5 +1,5 @@
 /**
- * CRM workspace config — aligned with FRD-05 screen inventory
+ * CRM workspace config - aligned with FRD-05 screen inventory
  * and apps/api CRM routers (Lead → Opportunity → Activities).
  */
 

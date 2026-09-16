@@ -66,8 +66,8 @@ export async function sendDeliveryReminderMail(
     throw new Error("Brevo SMTP is not configured.");
   }
 
-  const po = input.purchaseOrderNumber.trim() || "—";
-  const subject = `Delivery tomorrow — ${input.challanNumber} (${po})`;
+  const po = input.purchaseOrderNumber.trim() || "-";
+  const subject = `Delivery tomorrow - ${input.challanNumber} (${po})`;
   const text = [
     "Hello,",
     "",
@@ -77,7 +77,7 @@ export async function sendDeliveryReminderMail(
     `PO: ${po}`,
     `Expected delivery date: ${input.expectedDeliveryDate}`,
     "",
-    "— Enterprise ERP Procurement",
+    "- Enterprise ERP Procurement",
   ].join("\n");
 
   const html = `
@@ -133,8 +133,8 @@ function buildItemsTableHtml(lines: DeliveryDispatchLineItem[]): string {
     <tr>
       <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${index + 1}</td>
       <td style="padding:8px;border:1px solid #e2e8f0">${escapeHtml(line.itemName)}</td>
-      <td style="padding:8px;border:1px solid #e2e8f0;text-align:right">${escapeHtml(line.quantitySent.trim() || "—")}</td>
-      <td style="padding:8px;border:1px solid #e2e8f0">${escapeHtml((line.hsnSac ?? "").trim() || "—")}</td>
+      <td style="padding:8px;border:1px solid #e2e8f0;text-align:right">${escapeHtml(line.quantitySent.trim() || "-")}</td>
+      <td style="padding:8px;border:1px solid #e2e8f0">${escapeHtml((line.hsnSac ?? "").trim() || "-")}</td>
     </tr>`,
     )
     .join("");
@@ -158,7 +158,7 @@ function buildItemsTableText(lines: DeliveryDispatchLineItem[]): string {
   const linesText = rows
     .map(
       (line, index) =>
-        `  ${index + 1}. ${line.itemName} — Qty ${line.quantitySent.trim() || "—"}${line.hsnSac?.trim() ? ` (HSN ${line.hsnSac.trim()})` : ""}`,
+        `  ${index + 1}. ${line.itemName} - Qty ${line.quantitySent.trim() || "-"}${line.hsnSac?.trim() ? ` (HSN ${line.hsnSac.trim()})` : ""}`,
     )
     .join("\n");
   return `Items:\n${linesText}\n`;
@@ -170,19 +170,19 @@ export async function sendDeliveryDispatchMail(input: DeliveryDispatchMailInput)
     throw new Error("Brevo SMTP is not configured.");
   }
 
-  const po = input.purchaseOrderNumber.trim() || "—";
-  const grn = input.grnSummary.trim() || "—";
-  const subject = `Your order has been dispatched — ${input.challanNumber} (${po})`;
+  const po = input.purchaseOrderNumber.trim() || "-";
+  const grn = input.grnSummary.trim() || "-";
+  const subject = `Your order has been dispatched - ${input.challanNumber} (${po})`;
 
   const metaLines = [
     `Challan: ${input.challanNumber}`,
     `PO: ${po}`,
     `GRN: ${grn}`,
-    `Customer: ${input.customerName.trim() || "—"}`,
-    `Vendor: ${input.vendorName.trim() || "—"}`,
+    `Customer: ${input.customerName.trim() || "-"}`,
+    `Vendor: ${input.vendorName.trim() || "-"}`,
     `Shipment status: ${input.shipmentStatus}`,
-    `Dispatch date: ${input.dispatchDate || "—"}`,
-    `Expected delivery: ${input.expectedDeliveryDate || "—"}`,
+    `Dispatch date: ${input.dispatchDate || "-"}`,
+    `Expected delivery: ${input.expectedDeliveryDate || "-"}`,
   ];
   if (input.trackingNumber?.trim()) {
     metaLines.push(`Tracking: ${input.trackingNumber.trim()}`);
@@ -199,7 +199,7 @@ export async function sendDeliveryDispatchMail(input: DeliveryDispatchMailInput)
     ...metaLines,
     "",
     buildItemsTableText(input.lines),
-    "— Enterprise ERP Procurement",
+    "- Enterprise ERP Procurement",
   ].join("\n");
 
   const html = `
@@ -210,11 +210,11 @@ export async function sendDeliveryDispatchMail(input: DeliveryDispatchMailInput)
         <tr><td style="padding:4px 12px 4px 0;color:#64748b">Challan</td><td><strong>${escapeHtml(input.challanNumber)}</strong></td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b">PO</td><td>${escapeHtml(po)}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b">GRN</td><td>${escapeHtml(grn)}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Customer</td><td>${escapeHtml(input.customerName.trim() || "—")}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Vendor</td><td>${escapeHtml(input.vendorName.trim() || "—")}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Customer</td><td>${escapeHtml(input.customerName.trim() || "-")}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Vendor</td><td>${escapeHtml(input.vendorName.trim() || "-")}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#64748b">Status</td><td>${escapeHtml(input.shipmentStatus)}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Dispatch date</td><td>${escapeHtml(input.dispatchDate || "—")}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Expected delivery</td><td>${escapeHtml(input.expectedDeliveryDate || "—")}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Dispatch date</td><td>${escapeHtml(input.dispatchDate || "-")}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#64748b">Expected delivery</td><td>${escapeHtml(input.expectedDeliveryDate || "-")}</td></tr>
         ${input.trackingNumber?.trim() ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b">Tracking</td><td>${escapeHtml(input.trackingNumber.trim())}</td></tr>` : ""}
       </table>
       <p style="margin:16px 0 8px;font-weight:600">Items</p>

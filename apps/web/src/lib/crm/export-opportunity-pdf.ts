@@ -1,5 +1,5 @@
 /**
- * Opportunity PDF — table sections matching the detail page LeadDetailsCard.
+ * Opportunity PDF - table sections matching the detail page LeadDetailsCard.
  */
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";

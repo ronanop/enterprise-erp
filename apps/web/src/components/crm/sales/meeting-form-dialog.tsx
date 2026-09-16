@@ -404,7 +404,7 @@ export function MeetingFormDialog({
 
           <FieldRow label="Host">
             <Input
-              value={hostLabel || "—"}
+              value={hostLabel || "-"}
               disabled
               aria-readonly="true"
               title="Set from your logged-in user account"

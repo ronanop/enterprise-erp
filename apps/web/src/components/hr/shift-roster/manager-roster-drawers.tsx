@@ -164,7 +164,7 @@ export function DownloadManagerRosterDrawer({
                 .map((s) => (
                   <li key={s.id}>
                     <span className="font-semibold text-foreground">{s.shiftCode}</span>
-                    {" — "}
+                    {" - "}
                     {s.shiftName}
                   </li>
                 ))}
@@ -264,7 +264,7 @@ export function UploadManagerRosterDrawer({
     const result = validateManagerRosterCsv(directory, raw, { managerId, month });
     setValidation(result);
     if (result.errors.length && result.ok === 0) {
-      toast("Validation failed — see errors", "error");
+      toast("Validation failed - see errors", "error");
     } else if (result.errors.length) {
       toast(`Validated with ${result.errors.length} warning(s)`, "info");
     } else {
@@ -391,7 +391,7 @@ export function UploadManagerRosterDrawer({
               {validation.managerName}
             </p>
             <p>
-              <span className="font-medium">Month:</span> {validation.month || "—"}
+              <span className="font-medium">Month:</span> {validation.month || "-"}
             </p>
             <p>
               <span className="font-medium text-emerald-700">{validation.ok}</span> cells to write ·{" "}

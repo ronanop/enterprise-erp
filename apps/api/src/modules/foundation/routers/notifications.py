@@ -1,4 +1,4 @@
-"""Notification router — Foundation Notification Engine APIs."""
+"""Notification router - Foundation Notification Engine APIs."""
 
 from typing import Annotated
 from uuid import UUID

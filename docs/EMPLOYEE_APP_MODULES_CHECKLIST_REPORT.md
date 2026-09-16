@@ -1,9 +1,9 @@
-# Employee App (ESS PWA) — Inventory & Completion Checklist
+# Employee App (ESS PWA) - Inventory & Completion Checklist
 
 **Project:** `cache_erp_hrms_payroll`  
 **Scope:** `apps/employee-app` (Next.js PWA, port **3001**)  
 **Backend:** `apps/api` → `modules/ess` + `POST /auth/ess/login`  
-**Excluded:** HRMS admin (`apps/web` under `/hr`) — see `docs/HRMS_MODULES_CHECKLIST_REPORT.md`  
+**Excluded:** HRMS admin (`apps/web` under `/hr`) - see `docs/HRMS_MODULES_CHECKLIST_REPORT.md`  
 **Report date:** 2026-08-06  
 **Sources:** `apps/employee-app/src` routes, `ess-service.ts`, `docs/ess-phase-1-foundation.md` through `ess-phase-7-login-admin.md`.
 
@@ -13,13 +13,13 @@
 
 | Symbol | Meaning |
 |--------|---------|
-| ✅ | Done — screen + `essService` → live API when `NEXT_PUBLIC_USE_MOCK=false` |
-| 🟠 | Partial — UI gaps, mock fallback, or thin/read-only experience |
+| ✅ | Done - screen + `essService` → live API when `NEXT_PUBLIC_USE_MOCK=false` |
+| 🟠 | Partial - UI gaps, mock fallback, or thin/read-only experience |
 | ❌ | Not started / placeholder only |
 
 **Module %** = weighted score: ✅ = 100%, 🟠 = 50%, ❌ = 0% of checklist rows for that module.
 
-**Default runtime:** `NEXT_PUBLIC_USE_MOCK` defaults to **`false`** (`apps/employee-app/src/utils/env.ts`) — production path uses `/api/v1/ess/*`.
+**Default runtime:** `NEXT_PUBLIC_USE_MOCK` defaults to **`false`** (`apps/employee-app/src/utils/env.ts`) - production path uses `/api/v1/ess/*`.
 
 ---
 
@@ -31,7 +31,7 @@
 | **Screens (`page.tsx`)** | 50 |
 | **ESS service methods** | 50+ (single `ess-service.ts` facade) |
 | **Weighted average completion** | **~81%** |
-| **ESS implementation phases (1–7)** | Phases 1–7 delivered in API + PWA |
+| **ESS implementation phases (1-7)** | Phases 1-7 delivered in API + PWA |
 | **Stack** | Next.js 16, React 19, Tailwind 4, `@ducanh2912/next-pwa` |
 
 ```text
@@ -44,9 +44,9 @@ Overall Employee App  [████████████████░░░
 
 | # | Module | Primary routes | ESS / auth API | % | Status |
 |---|--------|----------------|----------------|---:|:------:|
-| 1 | **Platform & PWA shell** | `layout`, `manifest`, `/offline` | — | 78% | 🟠 |
+| 1 | **Platform & PWA shell** | `layout`, `manifest`, `/offline` | - | 78% | 🟠 |
 | 2 | **Authentication & session** | `/login`, `api-client` auth | `/auth/ess/login`, captcha | 86% | ✅ |
-| 3 | **First-run onboarding (UX)** | `/onboarding` | — (local only) | 72% | 🟠 |
+| 3 | **First-run onboarding (UX)** | `/onboarding` | - (local only) | 72% | 🟠 |
 | 4 | **Home dashboard** | `/home` | `/ess/me`, attendance, balances | 84% | ✅ |
 | 5 | **Leave (employee)** | `/leave`, `/leave/[id]`, `/leave/history` | leave-types, requests, cancel | 88% | ✅ |
 | 6 | **Leave (manager)** | `/leave/team` | `/ess/team-leave`, manager actions | 85% | ✅ |
@@ -144,7 +144,7 @@ All calls go through `apps/employee-app/src/services/ess-service.ts` (and `api-c
 
 ## Detailed checklists by module
 
-### 1. Platform & PWA shell — 78%
+### 1. Platform & PWA shell - 78%
 
 - [x] Mobile-first layout + safe-area bottom nav (100%)
 - [x] PWA package (`@ducanh2912/next-pwa`) (100%)
@@ -153,7 +153,7 @@ All calls go through `apps/employee-app/src/services/ess-service.ts` (and `api-c
 - [~] Service worker / true background sync (40%)
 - [~] Native install polish on all platforms (50%)
 
-### 2. Authentication & session — 86%
+### 2. Authentication & session - 86%
 
 - [x] Email login via shared auth client (100%)
 - [x] Employee code + company code login (Phase 7) (100%)
@@ -162,14 +162,14 @@ All calls go through `apps/employee-app/src/services/ess-service.ts` (and `api-c
 - [x] Demo mode via `NEXT_PUBLIC_USE_MOCK=true` (100%)
 - [~] SSO / OAuth (0%)
 
-### 3. First-run onboarding (UX) — 72%
+### 3. First-run onboarding (UX) - 72%
 
 - [x] Marketing carousel `/onboarding` (100%)
 - [x] Local completion flag (`lib/onboarding`) (100%)
 - [~] Tied to HR onboarding case status (30%)
 - [~] Skip for returning users only (60%)
 
-### 4. Home dashboard — 84%
+### 4. Home dashboard - 84%
 
 - [x] Greeting, today attendance, work timer (100%)
 - [x] Leave balance summary (100%)
@@ -177,7 +177,7 @@ All calls go through `apps/employee-app/src/services/ess-service.ts` (and `api-c
 - [x] Manager pending approvals card when `is_manager` (100%)
 - [~] Department/manager from API on home cards (50%)
 
-### 5. Leave (employee) — 88%
+### 5. Leave (employee) - 88%
 
 - [x] Apply leave with types & balances (100%)
 - [x] Request list + detail (100%)
@@ -186,14 +186,14 @@ All calls go through `apps/employee-app/src/services/ess-service.ts` (and `api-c
 - [x] Holiday calendar page (100%)
 - [~] Half-day / sandwich UX hints (60%)
 
-### 6. Leave (manager) — 85%
+### 6. Leave (manager) - 85%
 
 - [x] `/leave/team` with approve/reject (100%)
 - [x] `ManagerRouteGuard` hides route for non-managers (100%)
 - [x] Wired to `/ess/team-leave/*` (100%)
 - [~] Bulk actions / filters (40%)
 
-### 7. Attendance punch & month view — 87%
+### 7. Attendance punch & month view - 87%
 
 - [x] Check-in/out with geolocation (100%)
 - [x] Punch policy (geofence, selfie, face) (100%)
@@ -201,7 +201,7 @@ All calls go through `apps/employee-app/src/services/ess-service.ts` (and `api-c
 - [x] Month calendar + summary API (OT, late, WFH days) (100%)
 - [~] Offline punch queue (20%)
 
-### 8. Attendance requests — 83%
+### 8. Attendance requests - 83%
 
 - [x] Miss-punch correction submit (100%)
 - [x] On-duty apply (100%)
@@ -210,14 +210,14 @@ All calls go through `apps/employee-app/src/services/ess-service.ts` (and `api-c
 - [x] Attendance history list (100%)
 - [~] Status tracking UX for all request types (60%)
 
-### 9. Payslips & salary — 76%
+### 9. Payslips & salary - 76%
 
 - [x] Payslip list + detail from API (100%)
 - [x] Extra screens: tax, breakdown, history (80%)
 - [~] Download PDF / share (40%)
 - [~] Tax screens fed from real breakdown fields (55%)
 
-### 10. Profile hub — 70%
+### 10. Profile hub - 70%
 
 - [x] Avatar, name, code, email, phone from `/ess/me` (100%)
 - [~] Department / manager cards **hardcoded** in UI (20%)
@@ -225,7 +225,7 @@ All calls go through `apps/employee-app/src/services/ess-service.ts` (and `api-c
 - [x] Admin banner when `admin_use_web_portal` (100%)
 - [x] Logout (100%)
 
-### 11. Profile details — 82%
+### 11. Profile details - 82%
 
 - [x] Bank PATCH (100%)
 - [x] Emergency PATCH (100%)
@@ -233,13 +233,13 @@ All calls go through `apps/employee-app/src/services/ess-service.ts` (and `api-c
 - [~] Personal page: DOB/gender/address **static placeholders** (40%)
 - [~] `PATCH /ess/me` for mobile fields (50%)
 
-### 12. Documents — 78%
+### 12. Documents - 78%
 
 - [x] List from `/ess/documents` (100%)
 - [x] Document detail route (90%)
 - [~] Upload flow vs API upload endpoint (50%)
 
-### 13. Notifications — 77%
+### 13. Notifications - 77%
 
 - [x] Notifications page (100%)
 - [x] Bell + unread count + poll (100%)
@@ -248,39 +248,39 @@ All calls go through `apps/employee-app/src/services/ess-service.ts` (and `api-c
 - [~] True FCM / background web push (45%)
 - [~] Deep links for all event kinds (60%)
 
-### 14. Manager approvals hub — 86%
+### 14. Manager approvals hub - 86%
 
 - [x] Unified `/approvals` from `/ess/approvals` (100%)
 - [x] Approve/reject leave, compoff, on-duty, WFH, corrections (100%)
 - [x] Home pending count from `/ess/me` (100%)
 - [~] HR-stage items (not manager scope) (40%)
 
-### 15. Training — 74%
+### 15. Training - 74%
 
 - [x] List page wired to `/ess/training` (100%)
 - [~] Enroll / feedback / certificates (40%)
 - [~] Rich session detail (50%)
 
-### 16. Performance — 74%
+### 16. Performance - 74%
 
 - [x] List from `/ess/performance` (100%)
 - [~] Goals/reviews interaction in PWA (40%)
 - [~] KPI/OKR detail views (50%)
 
-### 17. Separation — 80%
+### 17. Separation - 80%
 
 - [x] View separation status (100%)
 - [x] Submit resignation POST (100%)
 - [~] Exit checklist / FNF visibility for employee (50%)
 
-### 18. Compliance & policies — 88%
+### 18. Compliance & policies - 88%
 
 - [x] `ComplianceGuard` blocks app until password + policies (100%)
 - [x] Policy list + step walkthrough + acknowledge (100%)
 - [x] Forced change password page (100%)
 - [~] Rich media in policy steps (60%)
 
-### 19. Security — 84%
+### 19. Security - 84%
 
 - [x] Change password API (100%)
 - [x] Face enroll / verify / enable toggles (100%)
@@ -288,14 +288,14 @@ All calls go through `apps/employee-app/src/services/ess-service.ts` (and `api-c
 - [x] Security settings hub (100%)
 - [~] Biometric device binding (50%)
 
-### 20. Meeting rooms — 81%
+### 20. Meeting rooms - 81%
 
 - [x] Room list + availability by date (100%)
 - [x] Create booking (100%)
 - [~] Cancel / modify booking (40%)
 - [~] Requires HR-seeded training rooms (70%)
 
-### 21. Assets & helpdesk — 79%
+### 21. Assets & helpdesk - 79%
 
 - [x] Asset list (100%)
 - [x] QR scan + lookup (100%)
@@ -303,7 +303,7 @@ All calls go through `apps/employee-app/src/services/ess-service.ts` (and `api-c
 - [x] IT / grievance tickets + comments (100%)
 - [~] Asset custody actions in PWA (40%)
 
-### 22. Announcements — 62%
+### 22. Announcements - 62%
 
 - [x] Page + API list (100%)
 - [~] Content source mostly derived (holidays) not CMS (30%)
@@ -337,12 +337,12 @@ All calls go through `apps/employee-app/src/services/ess-service.ts` (and `api-c
 
 ## Gaps & suggested next work
 
-1. **Profile personal** — bind DOB, gender, address from `/ess/me` or PATCH; remove hardcoded department/manager on `/profile`.
-2. **Payslips** — PDF download and tax/breakdown from payslip `breakdown_json`.
-3. **Push** — Firebase web messaging + service worker for background delivery (today: poll + optional browser Notification).
-4. **Documents** — wire upload to document API if not already end-to-end.
-5. **Training / performance** — detail screens and employee actions (not just lists).
-6. **Announcements** — dedicated HR broadcast API instead of holiday-derived feed.
+1. **Profile personal** - bind DOB, gender, address from `/ess/me` or PATCH; remove hardcoded department/manager on `/profile`.
+2. **Payslips** - PDF download and tax/breakdown from payslip `breakdown_json`.
+3. **Push** - Firebase web messaging + service worker for background delivery (today: poll + optional browser Notification).
+4. **Documents** - wire upload to document API if not already end-to-end.
+5. **Training / performance** - detail screens and employee actions (not just lists).
+6. **Announcements** - dedicated HR broadcast API instead of holiday-derived feed.
 
 ---
 

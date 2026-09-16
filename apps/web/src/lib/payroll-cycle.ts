@@ -1,7 +1,7 @@
-/** Pay cycle helpers — e.g. 20th of month through 19th of next month. */
+/** Pay cycle helpers - e.g. 20th of month through 19th of next month. */
 
 export type PayrollCycle = {
-  anchorMonth: string; // YYYY-MM — cycle starts on cutover day of this month
+  anchorMonth: string; // YYYY-MM - cycle starts on cutover day of this month
   cutoverDay: number;
   start: string; // YYYY-MM-DD inclusive
   end: string; // YYYY-MM-DD inclusive
@@ -42,7 +42,7 @@ function formatShort(iso: string): string {
   return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-/** Count Monday–Friday days in an inclusive date range. */
+/** Count Monday-Friday days in an inclusive date range. */
 export function countWeekdaysInRange(start: string, end: string): number {
   let cur = parseIso(start);
   const last = parseIso(end);
@@ -57,7 +57,7 @@ export function countWeekdaysInRange(start: string, end: string): number {
 
 /**
  * Cycle from cutover day of anchor month through day before cutover of next month.
- * Example: anchor 2026-08, cutover 20 → 20 Aug 2026 – 19 Sep 2026.
+ * Example: anchor 2026-08, cutover 20 → 20 Aug 2026 - 19 Sep 2026.
  */
 export function buildPayrollCycle(anchorMonth: string, cutoverDay = 20): PayrollCycle {
   const day = Math.min(28, Math.max(1, Math.floor(cutoverDay)));
@@ -74,7 +74,7 @@ export function buildPayrollCycle(anchorMonth: string, cutoverDay = 20): Payroll
     cutoverDay: day,
     start,
     end,
-    label: `${formatShort(start)} – ${formatShort(end)}`,
+    label: `${formatShort(start)} - ${formatShort(end)}`,
     workingDays: countWeekdaysInRange(start, end),
   };
 }

@@ -162,11 +162,11 @@ export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> 
       employeeId: String(row.employee_id),
       employeeName: emp?.displayName ?? String(row.employee_id).slice(0, 8),
       employeeCode: emp?.employeeCode ?? "",
-      departmentName: emp?.departmentName ?? "—",
+      departmentName: emp?.departmentName ?? "-",
       branchId: String(row.branch_id ?? ""),
-      branchName: branchMap.get(String(row.branch_id ?? "")) ?? "—",
+      branchName: branchMap.get(String(row.branch_id ?? "")) ?? "-",
       shiftId: String(row.shift_id),
-      shiftName: sh?.shiftName ?? "—",
+      shiftName: sh?.shiftName ?? "-",
       shiftColor: sh?.extension.color ?? "#64748b",
       effectiveFrom: String(row.effective_from ?? ""),
       effectiveTo: ax?.effectiveTo ?? String(row.effective_to ?? ""),
@@ -809,12 +809,12 @@ export function exportManagerRosterCsv(
 
   const legend = [
     `# Roster ${month} · manager ${data.manager.code} ${data.manager.label} · ${data.days.length} days`,
-    `# Fill cells with shift CODE only (e.g. A / B / C / D) — not Morning/Evening names`,
+    `# Fill cells with shift CODE only (e.g. A / B / C / D) - not Morning/Evening names`,
     `# Special: WO = weekly off · HO = holiday · blank = clear day override`,
     `# Allowed shifts: ${
       data.activeShifts.length
         ? data.activeShifts.map((s) => `${s.shiftCode}=${s.shiftName}`).join(" | ")
-        : "(none configured — add shifts in Shift master)"
+        : "(none configured - add shifts in Shift master)"
     }`,
   ];
 

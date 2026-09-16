@@ -1,7 +1,7 @@
 # Optional ngrok agent config. Copy to a local path and pass to tunnel-mcp.ps1:
 #   .\mcp-server\scripts\tunnel-mcp.ps1 -NgrokConfig C:\path\to\ngrok.yml
 #
-# Authtoken: run once — ngrok config add-authtoken <token>
+# Authtoken: run once - ngrok config add-authtoken <token>
 # Or set NGROK_AUTHTOKEN in the environment (ngrok v3).
 
 version: "3"

@@ -170,7 +170,7 @@ CRM_SALES_MANAGER_PERMISSIONS = list(
 )
 
 # Team roles that only need to see + decide their own "My Jobs" queue and
-# read the sales blueprint state — they do not manage leads/quotes directly.
+# read the sales blueprint state - they do not manage leads/quotes directly.
 CRM_APPROVAL_TEAM_PERMISSIONS = [
     "crm.my_jobs:read",
     "crm.my_jobs:decide",

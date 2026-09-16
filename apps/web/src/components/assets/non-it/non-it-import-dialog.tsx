@@ -51,7 +51,7 @@ function downloadNonItImportTemplate(types: NonItAssetType[]): void {
           prefix: t.prefix,
           assignment_mode: t.assignment_mode,
         }))
-      : [{ asset_type: "(no active types — create types first)", prefix: "", assignment_mode: "" }];
+      : [{ asset_type: "(no active types - create types first)", prefix: "", assignment_mode: "" }];
 
   const typesSheet = XLSX.utils.json_to_sheet(typeRows);
   typesSheet["!cols"] = [{ wch: 28 }, { wch: 12 }, { wch: 16 }];

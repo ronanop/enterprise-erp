@@ -260,10 +260,10 @@ Compliance-driven storage.
 
 Examples:
 
-- HR Records — 7 Years
-- Financial Records — 10 Years
-- Audit Records — 10 Years
-- Contracts — Contract End + 7 Years
+- HR Records - 7 Years
+- Financial Records - 10 Years
+- Audit Records - 10 Years
+- Contracts - Contract End + 7 Years
 
 ### Actions After Expiry
 

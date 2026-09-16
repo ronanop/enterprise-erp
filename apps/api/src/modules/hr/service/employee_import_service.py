@@ -1,4 +1,4 @@
-"""Bulk employee Excel/CSV import — upsert by employee code (no duplicates)."""
+"""Bulk employee Excel/CSV import - upsert by employee code (no duplicates)."""
 
 from __future__ import annotations
 
@@ -355,7 +355,7 @@ class EmployeeImportService:
                         "designation": designation_name,
                     }
                 )
-            except Exception as exc:  # noqa: BLE001 — collect row errors
+            except Exception as exc:  # noqa: BLE001 - collect row errors
                 skipped += 1
                 errors.append(f"Row {idx}: {exc}")
 
@@ -363,7 +363,7 @@ class EmployeeImportService:
             mgr_id = self._resolve_manager(manager_raw, code_to_id)
             if not mgr_id:
                 warnings.append(
-                    f"{emp_code}: reporting manager '{manager_raw}' not found — left blank"
+                    f"{emp_code}: reporting manager '{manager_raw}' not found - left blank"
                 )
                 continue
             if mgr_id == emp_id:
@@ -376,7 +376,7 @@ class EmployeeImportService:
                     reporting_manager_id=mgr_id,
                 )
             except Exception as exc:  # noqa: BLE001
-                warnings.append(f"{emp_code}: manager link failed — {exc}")
+                warnings.append(f"{emp_code}: manager link failed - {exc}")
 
         self._db.flush()
         return {
@@ -531,7 +531,7 @@ class EmployeeImportService:
         if entity_raw or org_raw:
             warnings.append(
                 f"Row {idx}: entity/organisation "
-                f"'{entity_raw or org_raw}' not matched — using {default_company.company_name}"
+                f"'{entity_raw or org_raw}' not matched - using {default_company.company_name}"
             )
         return default_company
 

@@ -1,4 +1,4 @@
-"""KPI + OKR / overday allotment migration — PMS definitions."""
+"""KPI + OKR / overday allotment migration - PMS definitions."""
 
 from collections.abc import Sequence
 

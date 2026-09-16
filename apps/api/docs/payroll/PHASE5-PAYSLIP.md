@@ -1,4 +1,4 @@
-# Payroll Phase 5 — Payslips & export
+# Payroll Phase 5 - Payslips & export
 
 ## Generate payslips from a payroll run
 
@@ -19,7 +19,7 @@ POST /payroll/payroll-runs/{run_id}/generate-payslips
 GET /payroll/payslips/{id}/export-text
 ```
 
-Returns `{ "text": "..." }` — same layout stored in `payslip_json.export_text`.
+Returns `{ "text": "..." }` - same layout stored in `payslip_json.export_text`.
 
 ## Web HR payroll UI
 
@@ -29,7 +29,7 @@ Returns `{ "text": "..." }` — same layout stored in `payslip_json.export_text`
 
 | Section | Content |
 |---------|---------|
-| `period` | 20–20 dates, code, name |
+| `period` | 20-20 dates, code, name |
 | `attendance` | N, paid days, LOP, leave, paid/unpaid leave |
 | `earnings` | Basic, HRA, Special, OT, bonus |
 | `deductions` | EE/ER PF, adjustments |

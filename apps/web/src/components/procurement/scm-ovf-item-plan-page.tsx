@@ -212,7 +212,7 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
 
   /**
    * All products on this OVF that share the same selected distributor and still need a PO.
-   * Create PO opens one combined draft for the whole group — not a single line.
+   * Create PO opens one combined draft for the whole group - not a single line.
    */
   function productsNeedingPoForDistributor(distributorName: string): string[] {
     const needle = ovfDistributorKey(distributorName);
@@ -455,7 +455,7 @@ export function ScmOvfItemPlanPage({ ovfId }: { ovfId: string }) {
                                 <span className="text-xs text-muted-foreground">
                                   {line.action === "no_vendor" && !selectedVendorForPo
                                     ? "Select vendor"
-                                    : "—"}
+                                    : "-"}
                                 </span>
                               ) : null}
                             </div>

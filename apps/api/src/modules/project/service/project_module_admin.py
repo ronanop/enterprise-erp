@@ -1,4 +1,4 @@
-"""Project Management module admin — ERP admins, platform emails, or assigned module admins."""
+"""Project Management module admin - ERP admins, platform emails, or assigned module admins."""
 
 from __future__ import annotations
 

@@ -18,7 +18,7 @@ import { formatInr, listOpportunities, type Opportunity } from "@/services/sales
 type SortKey = "opportunity_name" | "current_stage" | "expected_revenue" | "created_at" | "status";
 
 function formatCreatedDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -91,7 +91,6 @@ export function OpportunityListPage({
       {!embedded ? (
         <PageHeader
           title="Opportunities"
-          description="Deals converted from a Lead — BOQ to Won/Lost sales blueprint."
         />
       ) : null}
 

@@ -53,7 +53,7 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   assetTypes: ItAssetType[];
   siteLocations: SiteLocation[];
-  /** Used only for API payload when session branch is unset — not shown in UI. */
+  /** Used only for API payload when session branch is unset - not shown in UI. */
   fallbackBranchId?: string;
   currencyCode?: string;
   onImported: () => void;
@@ -280,7 +280,7 @@ export function downloadItAssetImportTemplate(types: ItAssetType[]): void {
     ["Pending Disposal"],
     [],
     ["Notes"],
-    ["Asset codes (AST-2026-000001) are auto-generated — do not add an Asset Code column."],
+    ["Asset codes (AST-2026-000001) are auto-generated - do not add an Asset Code column."],
     ["Location must match IT Locations master (e.g. Mumbai, New Delhi)."],
     ["Assignee = employee name; Employee ID = code (e.g. EMP-001). Both required when Assigned."],
     ["Asset Type must match Configuration → Asset Types (see Available types sheet)."],
@@ -539,13 +539,13 @@ export function ItAssetImportDialog({
                     <tr key={row.row_number} className="border-t border-border/60">
                       <td className="px-2 py-1.5 text-muted-foreground">{row.row_number}</td>
                       <td className="px-2 py-1.5 font-medium">{row.asset_name}</td>
-                      <td className="px-2 py-1.5 text-xs">{row.asset_type || "—"}</td>
+                      <td className="px-2 py-1.5 text-xs">{row.asset_type || "-"}</td>
                       <td className="px-2 py-1.5 text-xs">{row.operational_status}</td>
-                      <td className="px-2 py-1.5 text-xs">{row.assignee_name ?? "—"}</td>
+                      <td className="px-2 py-1.5 text-xs">{row.assignee_name ?? "-"}</td>
                       <td className="px-2 py-1.5 font-mono text-xs">
-                        {row.employee_code ?? "—"}
+                        {row.employee_code ?? "-"}
                       </td>
-                      <td className="px-2 py-1.5 text-xs">{row.location ?? "—"}</td>
+                      <td className="px-2 py-1.5 text-xs">{row.location ?? "-"}</td>
                       <td className="px-2 py-1.5">
                         {row.errors.length === 0 ? (
                           <span className="text-emerald-700">OK</span>

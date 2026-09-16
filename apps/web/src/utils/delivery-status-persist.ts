@@ -63,7 +63,7 @@ export async function persistDeliveryStatusFromForm(
     courierTransportDetails:
       form.courierProvider?.trim() || form.courierTransportDetails?.trim() || "",
     courierProvider: form.courierProvider?.trim() || "",
-    // Preserve billing recorded later — delivery save must not wipe it.
+    // Preserve billing recorded later - delivery save must not wipe it.
     billStatus: existing?.billStatus ?? form.billStatus ?? "unbilled",
     billedQuantity: existing?.billedQuantity ?? form.billedQuantity ?? "",
     billInvoiceNumber: existing?.billInvoiceNumber ?? form.billInvoiceNumber ?? "",

@@ -1,1 +1,1 @@
-"""Governance, Risk & Compliance module — Sprint 19."""
+"""Governance, Risk & Compliance module - Sprint 19."""

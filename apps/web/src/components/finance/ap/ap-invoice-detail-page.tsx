@@ -282,7 +282,7 @@ export function ApInvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
           <div><dt className="text-[11px] text-muted-foreground uppercase">Currency</dt><dd className="font-mono uppercase">{entry.currency_code}</dd></div>
           <div><dt className="text-[11px] text-muted-foreground uppercase">Invoice date</dt><dd className="font-mono">{entry.document_date}</dd></div>
           <div><dt className="text-[11px] text-muted-foreground uppercase">Due date</dt><dd className="font-mono">{entry.due_date}</dd></div>
-          <div><dt className="text-[11px] text-muted-foreground uppercase">Workflow</dt><dd className="capitalize">{entry.workflow_status ?? "—"}</dd></div>
+          <div><dt className="text-[11px] text-muted-foreground uppercase">Workflow</dt><dd className="capitalize">{entry.workflow_status ?? "-"}</dd></div>
           <div><dt className="text-[11px] text-muted-foreground uppercase">Created by</dt><dd>{resolve(entry.created_by)}</dd></div>
         </dl>
       </div>
@@ -362,7 +362,7 @@ export function ApInvoiceDetailPage({ invoiceId }: { invoiceId: string }) {
               )}
             </dd>
           </div>
-          <div><dt className="text-[11px] text-muted-foreground uppercase">Aging bucket</dt><dd>{entry.aging_bucket ?? "—"}</dd></div>
+          <div><dt className="text-[11px] text-muted-foreground uppercase">Aging bucket</dt><dd>{entry.aging_bucket ?? "-"}</dd></div>
         </dl>
       </div>
 

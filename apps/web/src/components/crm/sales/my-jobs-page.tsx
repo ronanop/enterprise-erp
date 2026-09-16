@@ -79,7 +79,7 @@ export function MyJobsPage({
       tasks.map(async (task) => {
         try {
           if (task.entity_type === "opportunity") {
-            names[task.id] = (await opportunityName(task.entity_id)) ?? "—";
+            names[task.id] = (await opportunityName(task.entity_id)) ?? "-";
           } else if (task.entity_type === "quote") {
             const quote = await getQuote(task.entity_id);
             names[task.id] =
@@ -89,10 +89,10 @@ export function MyJobsPage({
             names[task.id] =
               (ovf.opportunity_id ? await opportunityName(ovf.opportunity_id) : null) ?? ovf.ovf_no;
           } else {
-            names[task.id] = "—";
+            names[task.id] = "-";
           }
         } catch {
-          names[task.id] = "—";
+          names[task.id] = "-";
         }
       }),
     );
@@ -185,7 +185,6 @@ export function MyJobsPage({
       {!embedded ? (
         <PageHeader
           title="My Jobs"
-          description="Team approval inbox — approve or reject requests routed from the sales blueprint, with remarks."
         />
       ) : null}
 
@@ -275,7 +274,7 @@ export function MyJobsPage({
                         {task.title}
                       </Link>
                     </td>
-                    <td className="px-4 py-2.5 text-foreground">{recordNames[task.id] ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-foreground">{recordNames[task.id] ?? "-"}</td>
                     <td className="px-4 py-2.5 capitalize text-muted-foreground">{task.team_role}</td>
                     <td className="px-4 py-2.5">
                       <FinanceStatusBadge status={task.status} />
@@ -302,7 +301,7 @@ export function MyJobsPage({
                           </Button>
                         </div>
                       ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
+                        <span className="text-xs text-muted-foreground">-</span>
                       )}
                     </td>
                   </tr>

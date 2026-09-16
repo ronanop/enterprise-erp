@@ -1,4 +1,4 @@
-"""Analytics integration — read-only peers; no PostingService / no fin_* writes."""
+"""Analytics integration - read-only peers; no PostingService / no fin_* writes."""
 
 from uuid import UUID
 

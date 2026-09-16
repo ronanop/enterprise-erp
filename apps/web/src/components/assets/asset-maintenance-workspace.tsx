@@ -52,14 +52,14 @@ function formatMaintenanceType(value: string): string {
 }
 
 function assetMakeModel(row: MaintenanceRow): string {
-  return [row.make, row.model].filter(Boolean).join(" · ") || "—";
+  return [row.make, row.model].filter(Boolean).join(" · ") || "-";
 }
 
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex justify-between gap-4 border-b border-border/40 py-2 text-sm last:border-0">
       <span className="shrink-0 text-muted-foreground">{label}</span>
-      <span className="text-right font-medium">{value ?? "—"}</span>
+      <span className="text-right font-medium">{value ?? "-"}</span>
     </div>
   );
 }
@@ -410,21 +410,21 @@ export function AssetMaintenanceWorkspace() {
                     rows.map((row) => (
                         <tr key={row.id} className="border-t border-border/60">
                           <td className="px-3 py-2 font-mono text-xs">
-                            {row.asset_code ?? "—"}
+                            {row.asset_code ?? "-"}
                           </td>
                           <td className="px-3 py-2 font-medium">
                             {row.asset_name ?? row.asset_id.slice(0, 8)}
                           </td>
                           <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                            {row.serial_number ?? "—"}
+                            {row.serial_number ?? "-"}
                           </td>
                           <td className="max-w-[12rem] truncate px-3 py-2 text-muted-foreground">
-                            {row.reason ?? "—"}
+                            {row.reason ?? "-"}
                           </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">
                             {row.expected_duration_days != null
                               ? `${row.expected_duration_days}d`
-                              : "—"}
+                              : "-"}
                           </td>
                           <td className="px-3 py-2">
                             <Badge variant={statusVariant(row.status)} className="font-mono text-xs">
@@ -433,7 +433,7 @@ export function AssetMaintenanceWorkspace() {
                             </Badge>
                           </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">
-                            {row.expected_return_date ?? "—"}
+                            {row.expected_return_date ?? "-"}
                           </td>
                           <td className="px-3 py-2 text-right">
                             <Button
@@ -515,20 +515,20 @@ export function AssetMaintenanceWorkspace() {
                     </>
                   }
                 />
-                <DetailRow label="Start date" value={selected.scheduled_date ?? "—"} />
+                <DetailRow label="Start date" value={selected.scheduled_date ?? "-"} />
                 <DetailRow
                   label="Duration"
                   value={
                     selected.expected_duration_days != null
                       ? `${selected.expected_duration_days} days`
-                      : "—"
+                      : "-"
                   }
                 />
-                <DetailRow label="Expected return" value={selected.expected_return_date ?? "—"} />
-                <DetailRow label="Reason" value={selected.reason ?? "—"} />
+                <DetailRow label="Expected return" value={selected.expected_return_date ?? "-"} />
+                <DetailRow label="Reason" value={selected.reason ?? "-"} />
                 <DetailRow
                   label="Cost"
-                  value={selected.cost_amount != null ? String(selected.cost_amount) : "—"}
+                  value={selected.cost_amount != null ? String(selected.cost_amount) : "-"}
                 />
                 <DetailRow
                   label="Technician"
@@ -536,7 +536,7 @@ export function AssetMaintenanceWorkspace() {
                     selected.technician_employee_id
                       ? (employeeMap.get(selected.technician_employee_id) ??
                         selected.technician_employee_id.slice(0, 8))
-                      : "—"
+                      : "-"
                   }
                 />
                 <DetailRow
@@ -544,7 +544,7 @@ export function AssetMaintenanceWorkspace() {
                   value={
                     selected.vendor_id
                       ? (vendorMap.get(selected.vendor_id) ?? selected.vendor_id.slice(0, 8))
-                      : "—"
+                      : "-"
                   }
                 />
               </section>
@@ -554,8 +554,8 @@ export function AssetMaintenanceWorkspace() {
                   Asset
                 </h3>
                 <DetailRow label="Name" value={selected.asset_name ?? selected.asset_id} />
-                <DetailRow label="Asset code" value={selected.asset_code ?? "—"} />
-                <DetailRow label="Serial" value={selected.serial_number ?? "—"} />
+                <DetailRow label="Asset code" value={selected.asset_code ?? "-"} />
+                <DetailRow label="Serial" value={selected.serial_number ?? "-"} />
                 <DetailRow label="Make / model" value={assetMakeModel(selected)} />
                 <DetailRow
                   label="Branch"
@@ -614,7 +614,7 @@ export function AssetMaintenanceWorkspace() {
                         <p className="text-muted-foreground">
                           {ev.occurred_at
                             ? new Date(ev.occurred_at).toLocaleString()
-                            : "—"}
+                            : "-"}
                         </p>
                         {ev.detail ? (
                           <p className="mt-0.5 text-muted-foreground">{ev.detail}</p>

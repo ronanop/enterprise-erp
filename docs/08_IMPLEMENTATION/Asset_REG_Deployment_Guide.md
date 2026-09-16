@@ -1,4 +1,4 @@
-# Asset Registration — Deployment Guide
+# Asset Registration - Deployment Guide
 
 1. Apply migration **`0465_ast_document_sequence`** (backfills sequences from existing `AST-YYYY-*` codes).
 2. Keep **`ASSET_WORKFLOW_GOVERNANCE_ENABLED=false`** until WF-GOV production checklist is complete.

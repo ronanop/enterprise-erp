@@ -10,7 +10,7 @@ const RIBBON_STYLES: Record<LeaveStatusDisplay, string> = {
   Cancelled: "border-l-border bg-muted text-muted-foreground",
 };
 
-/** Distinct leave ribbon badge — Pending / Approved / Rejected / Cancelled. */
+/** Distinct leave ribbon badge - Pending / Approved / Rejected / Cancelled. */
 export function LeaveStatusBadge({ status }: { status: string }) {
   const label = leaveStatusDisplay(status);
   return (

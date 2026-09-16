@@ -1,4 +1,4 @@
-"""FCM legacy HTTP push client — active only when FCM_SERVER_KEY is set."""
+"""FCM legacy HTTP push client - active only when FCM_SERVER_KEY is set."""
 
 from __future__ import annotations
 

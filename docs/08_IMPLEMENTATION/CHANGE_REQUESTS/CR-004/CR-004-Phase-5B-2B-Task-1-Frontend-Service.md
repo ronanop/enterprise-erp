@@ -1,4 +1,4 @@
-# CR-004 — Phase 5B-2B Task 1 — Assignment Frontend Service
+# CR-004 - Phase 5B-2B Task 1 - Assignment Frontend Service
 
 **Status:** Complete  
 **Date:** 2026-08-05  
@@ -33,7 +33,7 @@ Rules enforced:
 | `AssignmentDraft` | `AssetAssignmentCreate` / `Update` | Create/update payload |
 | `AssignmentResponse` | `AssetAssignmentResponse` | Assignment row |
 | `AssignmentReturnRequest` | `AssetAssignmentReturnRequest` | Return action body |
-| `AssignmentError` | — | Normalized failure (`status`, `errors`) |
+| `AssignmentError` | - | Normalized failure (`status`, `errors`) |
 
 ---
 
@@ -61,7 +61,7 @@ Wizard integration, containers, routing, inventory, React hooks, loading UI, bac
 
 ## Tests
 
-`apps/web/src/services/assignment-frontend-service.test.ts` — **20+** cases:
+`apps/web/src/services/assignment-frontend-service.test.ts` - **20+** cases:
 
 - Success paths for all seven methods
 - API failures (400/403/404/409/422)

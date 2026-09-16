@@ -1,6 +1,6 @@
 """Add asset_domain + ast_domain_membership + asset.module:admin permission.
 
-Additive only — no destructive changes to existing columns/data.
+Additive only - no destructive changes to existing columns/data.
 """
 
 import sys

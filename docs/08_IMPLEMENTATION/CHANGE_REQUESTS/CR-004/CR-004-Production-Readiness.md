@@ -1,4 +1,4 @@
-# CR-004 — Production Readiness
+# CR-004 - Production Readiness
 
 **Date:** 2026-08-05  
 **Companion:** `CR-004-Business-Validation-Report.md`, `CR-004-UAT-Checklist.md`  
@@ -55,7 +55,7 @@ Safe to enable **for assets already in ERP**, with trained IT Admin:
 | 1 | Migrations applied (ops status + assignment enrichment) | Eng | `[ ]` |
 | 2 | Permissions: assign / return / dispose / inventory | Admin | `[ ]` |
 | 3 | Seed Ready assets + employees for pilot branch | Admin | `[ ]` |
-| 4 | UAT checklist B–I executed | IT Admin | `[ ]` |
+| 4 | UAT checklist B-I executed | IT Admin | `[ ]` |
 | 5 | Disable/communicate: do not use legacy assignment return for Excel outcomes | IT Lead | `[ ]` |
 | 6 | Parallel Excel kept for history only | Business | `[ ]` |
 | 7 | Rollback plan (feature flag / route hide wizards) | Eng | `[ ]` |
@@ -75,11 +75,11 @@ Safe to enable **for assets already in ERP**, with trained IT Admin:
 
 ---
 
-## 6. Definition of Done — Excel retirement
+## 6. Definition of Done - Excel retirement
 
 Excel may be declared **retired** when all are true:
 
-1. [ ] UAT J1–J5 passed  
+1. [ ] UAT J1-J5 passed  
 2. [ ] Critical C-1 (import) and C-2 (export) closed  
 3. [ ] High H-1 / H-2 closed (Earlier Used By + challan/remarks on register)  
 4. [ ] Two-week parallel run with zero Excel writes for in-scope assets  
@@ -93,11 +93,11 @@ Until then: **ERP = system of record for new ops; Excel = historical archive onl
 ## 7. Recommended go-live stages
 
 ```text
-Stage 0 — Internal dogfood (eng + one IT user)
-Stage 1 — Single branch pilot (new assets only)     ← CONDITIONAL GO now
-Stage 2 — Register parity sprint (H-1, H-2, export)
-Stage 3 — Import historical Excel (C-1)
-Stage 4 — Org-wide Excel stop                       ← after DoD above
+Stage 0 - Internal dogfood (eng + one IT user)
+Stage 1 - Single branch pilot (new assets only)     ← CONDITIONAL GO now
+Stage 2 - Register parity sprint (H-1, H-2, export)
+Stage 3 - Import historical Excel (C-1)
+Stage 4 - Org-wide Excel stop                       ← after DoD above
 ```
 
 ---
@@ -106,7 +106,7 @@ Stage 4 — Org-wide Excel stop                       ← after DoD above
 
 | Scope | Recommendation | Conditions |
 |-------|----------------|------------|
-| Stage 1 pilot | **GO** | UAT B–I pass; training; Excel read-only for pilot assets |
+| Stage 1 pilot | **GO** | UAT B-I pass; training; Excel read-only for pilot assets |
 | Org production ops (keep Excel) | **GO** | Same + support coverage |
 | Org Excel stop | **NO-GO** | Complete Critical + High register gaps + import/export |
 
@@ -118,7 +118,7 @@ Stage 4 — Org-wide Excel stop                       ← after DoD above
 2. **Production Readiness %:** 70% (pilot) / ~45% (Excel cutover)  
 3. **Excel Replacement Readiness %:** 55%  
 4. **Critical blockers:** Excel import; IT register export; (practically also Earlier Used By + drawer challan/remarks for parity)  
-5. **Sprint plan:** See Business Validation Report § Recommended Sprint Plan (S1–S5)  
+5. **Sprint plan:** See Business Validation Report § Recommended Sprint Plan (S1-S5)  
 6. **Go / No-Go:** **NO-GO** for Excel stop · **CONDITIONAL GO** for pilot  
 
 ---
@@ -129,4 +129,4 @@ Stage 4 — Org-wide Excel stop                       ← after DoD above
 |-----|------|
 | `CR-004-Business-Validation-Report.md` | Full PASS/FAIL analysis |
 | `CR-004-UAT-Checklist.md` | Executable acceptance tests |
-| `CR-004-Production-Readiness.md` | This file — release gates |
+| `CR-004-Production-Readiness.md` | This file - release gates |

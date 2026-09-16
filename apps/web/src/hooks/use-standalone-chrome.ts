@@ -34,7 +34,7 @@ export function isModuleStandalonePath(pathname: string) {
   return STANDALONE_MODULE_ROOTS.some((root) => matchesRoot(pathname, root));
 }
 
-/** @deprecated Use isModuleStandalonePath — kept for existing imports. */
+/** @deprecated Use isModuleStandalonePath - kept for existing imports. */
 export function isCrmStandalonePath(pathname: string) {
   return isModuleStandalonePath(pathname);
 }

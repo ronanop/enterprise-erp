@@ -1,4 +1,4 @@
-# FP-ASSET-005 — Implementation Report
+# FP-ASSET-005 - Implementation Report
 
 **Feature:** Asset Disposal (Retirement & Disposal Governance)  
 **ADR:** ADR-ASSET-DSP-001  

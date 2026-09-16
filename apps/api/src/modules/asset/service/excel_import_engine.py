@@ -1,4 +1,4 @@
-"""Excel import engine — one validated row → existing business services (CR-004 Phase 8B).
+"""Excel import engine - one validated row → existing business services (CR-004 Phase 8B).
 
 Never writes via repository/ORM directly. Reuses AssetService, AssignmentService,
 and AssetOperationalStatusService workflows (including audit embedded in those services).
@@ -139,7 +139,7 @@ class AssetExcelImportEngine:
                 reason=str(exc),
                 warning=preview == "warning",
             )
-        except Exception as exc:  # noqa: BLE001 — row isolation; continue import
+        except Exception as exc:  # noqa: BLE001 - row isolation; continue import
             return ExcelImportRowResult(
                 row_number=row.row_number,
                 outcome=ExcelImportRowOutcome.FAILED.value,

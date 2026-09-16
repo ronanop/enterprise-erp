@@ -156,11 +156,11 @@ export function ApAgingPanel({ report, loading }: Props) {
                   </td>
                   <td className="px-2 py-1.5 text-xs">
                     <Link href={`/finance/accounts-payable/vendors/${row.vendor_id}`} className="cursor-pointer hover:underline">
-                      {row.vendor_name ?? row.vendor_code ?? "—"}
+                      {row.vendor_name ?? row.vendor_code ?? "-"}
                     </Link>
                   </td>
                   <td className="px-2 py-1.5 font-mono text-xs">{row.due_date}</td>
-                  <td className="px-2 py-1.5 text-xs">{row.aging_bucket ?? "—"}</td>
+                  <td className="px-2 py-1.5 text-xs">{row.aging_bucket ?? "-"}</td>
                   <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(row.balance_amount)}</td>
                   <td className="px-2 py-1.5"><FinanceStatusBadge status={row.status} /></td>
                 </tr>

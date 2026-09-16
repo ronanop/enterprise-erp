@@ -41,7 +41,7 @@ export function ProcurementInventoryStockCard({
           Total inventory available
         </p>
         <p className="font-mono text-xl font-semibold tracking-tight text-foreground tabular-nums">
-          {loading ? "—" : String(totalUnits)}
+          {loading ? "-" : String(totalUnits)}
         </p>
       </div>
       {loading ? (

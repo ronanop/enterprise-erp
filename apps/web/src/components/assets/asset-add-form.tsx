@@ -382,7 +382,7 @@ export function AssetAddForm({
         setError(
           err instanceof ApiClientError
             ? err.message
-            : "Activation failed. The asset may already exist — retry without creating again.",
+            : "Activation failed. The asset may already exist - retry without creating again.",
         );
       } else {
         setError(err instanceof ApiClientError ? err.message : "Failed to create asset");
@@ -476,7 +476,7 @@ export function AssetAddForm({
             </div>
             <div>
               <div className="text-xs text-muted-foreground">PO</div>
-              <div className="font-medium">{incomingPrefill.po_document_number ?? "—"}</div>
+              <div className="font-medium">{incomingPrefill.po_document_number ?? "-"}</div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">QC</div>

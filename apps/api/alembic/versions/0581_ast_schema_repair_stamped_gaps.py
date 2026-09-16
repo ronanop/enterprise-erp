@@ -107,7 +107,7 @@ def _has_index(name: str) -> bool:
 
 
 def upgrade() -> None:
-    # 0570_ast_assignment_manual_employee — assignment columns
+    # 0570_ast_assignment_manual_employee - assignment columns
     assignment_columns: list[tuple[str, sa.Column]] = [
         ("employee_source", sa.Column("employee_source", sa.String(length=20), nullable=True)),
         ("manual_employee_name", sa.Column("manual_employee_name", sa.String(length=255), nullable=True)),
@@ -157,7 +157,7 @@ def upgrade() -> None:
         schema=SCHEMA,
     )
 
-    # 0578_ast_component_asset_link — component_asset_id + indexes
+    # 0578_ast_component_asset_link - component_asset_id + indexes
     if not _has_column("ast_asset_component", "component_asset_id"):
         op.add_column(
             "ast_asset_component",

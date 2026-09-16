@@ -17,14 +17,14 @@
 
 ### Spacing Overrides
 
-- **Content Density:** Very high (9/10) — KPI `p-3`, table rows ~36px, funnel stage gaps `8px`
+- **Content Density:** Very high (9/10) - KPI `p-3`, table rows ~36px, funnel stage gaps `8px`
 - Compact toolbars; no oversized card padding
 
 ### Typography Overrides
 
-- Page title: medium weight ~1.5–1.65rem
+- Page title: medium weight ~1.5-1.65rem
 - KPI values: tabular numerals ~1.5rem
-- Funnel stage labels: 11–12px uppercase tracking
+- Funnel stage labels: 11-12px uppercase tracking
 
 ### Color Overrides
 

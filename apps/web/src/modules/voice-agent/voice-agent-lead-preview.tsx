@@ -28,7 +28,7 @@ export function VoiceAgentLeadPreview() {
             {leadDisplayName(leadPreview)}
           </h2>
           <p className="text-sm text-muted-foreground">
-            {leadPreview.company_name ?? leadPreview.entity_name ?? "—"}
+            {leadPreview.company_name ?? leadPreview.entity_name ?? "-"}
           </p>
           <p className="text-xs text-muted-foreground">{leadPreview.lead_code}</p>
         </div>
@@ -50,11 +50,11 @@ export function VoiceAgentLeadPreview() {
         </div>
         <div>
           <dt className="text-muted-foreground">Email</dt>
-          <dd className="font-medium">{leadPreview.email ?? "—"}</dd>
+          <dd className="font-medium">{leadPreview.email ?? "-"}</dd>
         </div>
         <div>
           <dt className="text-muted-foreground">Mobile</dt>
-          <dd className="font-medium">{leadPreview.mobile ?? "—"}</dd>
+          <dd className="font-medium">{leadPreview.mobile ?? "-"}</dd>
         </div>
       </dl>
     </div>

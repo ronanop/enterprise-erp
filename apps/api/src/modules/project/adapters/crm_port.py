@@ -1,4 +1,4 @@
-"""CRM port — OVF / opportunity / company account context for PO → project intake."""
+"""CRM port - OVF / opportunity / company account context for PO → project intake."""
 
 from typing import Any
 from uuid import UUID

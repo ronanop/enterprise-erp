@@ -47,7 +47,7 @@ type MarketingNavGroup = {
   items: readonly MarketingNavItem[];
 };
 
-/** Marketing & Social workspace panes — CRM-style left nav. */
+/** Marketing & Social workspace panes - CRM-style left nav. */
 export const MARKETING_NAV_GROUPS: readonly MarketingNavGroup[] = [
   {
     label: "Workspace",
@@ -135,7 +135,7 @@ export function MarketingWorkspaceNav() {
   );
 }
 
-/** Left sidebar chrome for standalone Marketing (replaces AppSidebar) — CRM pattern. */
+/** Left sidebar chrome for standalone Marketing (replaces AppSidebar) - CRM pattern. */
 export function MarketingSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);

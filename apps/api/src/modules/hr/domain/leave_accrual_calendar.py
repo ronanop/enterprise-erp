@@ -1,4 +1,4 @@
-"""Leave balance credit uses completed calendar months (1–31), not payroll 20–20."""
+"""Leave balance credit uses completed calendar months (1-31), not payroll 20-20."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Procurement stock on hand — one row per unit added from GRN receipt (not billed portion)."""
+"""Procurement stock on hand - one row per unit added from GRN receipt (not billed portion)."""
 
 from datetime import datetime
 from uuid import UUID, uuid4

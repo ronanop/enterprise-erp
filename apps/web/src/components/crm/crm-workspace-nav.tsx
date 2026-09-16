@@ -88,12 +88,12 @@ function focusForHref(href: string): CrmSidebarFocus | null {
 function isCrmNavActive(pathname: string, href: string): boolean {
   const focus = getCrmSidebarFocus();
 
-  // Dashboard is exact-match only — `/crm` must not light up for every CRM child route.
+  // Dashboard is exact-match only - `/crm` must not light up for every CRM child route.
   if (href === "/crm") {
     return pathname === "/crm";
   }
 
-  // Company list / overview only — not company section routes (quotes, PO, …).
+  // Company list / overview only - not company section routes (quotes, PO, …).
   if (href === "/crm/companies") {
     if (focus === "opportunities" && isCompanyDealWorkspacePath(pathname)) {
       return false;

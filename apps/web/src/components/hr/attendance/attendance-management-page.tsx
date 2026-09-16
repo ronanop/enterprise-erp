@@ -165,7 +165,7 @@ export function AttendanceManagementPage() {
   }
 
   function formatTime(iso: string) {
-    if (!iso) return "—";
+    if (!iso) return "-";
     try {
       return new Date(iso).toLocaleTimeString([], {
         hour: "numeric",
@@ -514,7 +514,7 @@ export function AttendanceManagementPage() {
                               <td className="px-2 py-2">
                                 <HrStatusBadge status={row.status.replace(/_/g, " ")} />
                               </td>
-                              <td className="px-2 py-2 text-xs">{row.location || "—"}</td>
+                              <td className="px-2 py-2 text-xs">{row.location || "-"}</td>
                               <td className="px-2 py-2 text-xs capitalize">{row.device.replace(/_/g, " ")}</td>
                               <td className="px-2 py-2 text-[10px] capitalize">{row.approvalStatus.replace(/_/g, " ")}</td>
                               <td className="px-2 py-2">

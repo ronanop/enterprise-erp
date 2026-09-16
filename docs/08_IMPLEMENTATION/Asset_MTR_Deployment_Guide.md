@@ -1,4 +1,4 @@
-# Asset Meter Reading — Deployment Guide (FP-ASSET-015)
+# Asset Meter Reading - Deployment Guide (FP-ASSET-015)
 
 ## Prerequisites
 

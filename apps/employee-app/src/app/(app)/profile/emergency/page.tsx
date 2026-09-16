@@ -88,7 +88,7 @@ export default function EmergencyContactsPage() {
                 {initials(contact?.name || "?")}
               </span>
               <div className="min-w-0 flex-1">
-                <p className="font-bold text-[#0b1c30]">{contact?.name || "—"}</p>
+                <p className="font-bold text-[#0b1c30]">{contact?.name || "-"}</p>
                 <p className="text-sm font-medium text-[#004ac6]">
                   {contact?.relationship || "Emergency contact"}
                 </p>
@@ -109,7 +109,7 @@ export default function EmergencyContactsPage() {
       )}
 
       <div className="rounded-2xl bg-[#0b1c30] p-4 text-sm text-white/90">
-        Emergency contacts come from your HR employee profile — not demo data.
+        Emergency contacts come from your HR employee profile - not demo data.
       </div>
 
       <ViewportFab aria-label="SOS" className="bg-[#2563eb]" href="/notifications">

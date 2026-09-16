@@ -19,11 +19,11 @@
 
 ### Spacing Overrides
 
-- No overrides — use Master spacing
+- No overrides - use Master spacing
 
 ### Typography Overrides
 
-- No overrides — use Master typography
+- No overrides - use Master typography
 
 ### Color Overrides
 
@@ -31,7 +31,7 @@
 
 ### Component Overrides
 
-- No overrides — use Master component specs
+- No overrides - use Master component specs
 
 ---
 

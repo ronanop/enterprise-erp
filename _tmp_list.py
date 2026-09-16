@@ -3,13 +3,13 @@ p = Path("apps/web/src/components/projects/site-installation-list-page.tsx")
 t = p.read_text(encoding="utf-8")
 old = '''  scm: {
     title: "SCM / Logistics",
-    description: "Material movement — MO request, IM material, and WH / on-site delivery dates.",
+    description: "Material movement - MO request, IM material, and WH / on-site delivery dates.",
     empty: "No sites in SCM / Logistics.",
   },
   installation: {'''
 new = '''  scm: {
     title: "SCM / Logistics",
-    description: "Material movement — quantities and warehouse delivery dates.",
+    description: "Material movement - quantities and warehouse delivery dates.",
     empty: "No sites in SCM / Logistics.",
   },
   onsite_delivery: {

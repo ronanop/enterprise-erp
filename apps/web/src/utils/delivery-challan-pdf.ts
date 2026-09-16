@@ -60,8 +60,8 @@ const CHALLAN_TERMS_LINE =
 
 function resolveChallanSignatoryName(preparedBy: string): string {
   const value = (preparedBy || "").trim();
-  if (value && dash(value) !== "—") return value;
-  return "—";
+  if (value && dash(value) !== "-") return value;
+  return "-";
 }
 
 function challanAmountInWords(amount: number): string {
@@ -224,7 +224,7 @@ function drawDigitalSignatoryBlock(
   signerName: string,
   signDate: string,
 ) {
-  const name = signerName.trim() || "—";
+  const name = signerName.trim() || "-";
   const entityShort = entityLabel.trim() || "Cache Technologies";
   const dateLine = formatDigitalSignDate(signDate);
   const centerX = x + w / 2;
@@ -322,7 +322,7 @@ function textBlockHeight(doc: jsPDF, text: string, maxWidth: number, fontSize: n
 function formatCustomerDetailsBlock(input: DeliveryChallanPdfInput): string {
   const lines: string[] = [];
   const name = dash(input.customerName);
-  if (name !== "—") lines.push(name);
+  if (name !== "-") lines.push(name);
 
   const billTo = (input.customerBillTo || "").trim();
   if (billTo) lines.push(`Bill To: ${billTo}`);
@@ -337,7 +337,7 @@ function formatCustomerDetailsBlock(input: DeliveryChallanPdfInput): string {
   const attn = (input.kindAttn || "").trim();
   if (attn) lines.push(`Kind Attn: ${attn}`);
 
-  return lines.length > 0 ? lines.join("\n") : "—";
+  return lines.length > 0 ? lines.join("\n") : "-";
 }
 
 type HeaderGridRow =
@@ -483,7 +483,7 @@ export async function openDeliveryChallanPdfPreview(
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-/** Diagonal DRAFT mark — used for unsaved challan previews. */
+/** Diagonal DRAFT mark - used for unsaved challan previews. */
 function applyDraftWatermark(doc: jsPDF) {
   const pageCount = doc.getNumberOfPages();
   const pageW = doc.internal.pageSize.getWidth();
@@ -632,8 +632,8 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
     const rate = Number(ln.rate) || 0;
     const value = qty * rate;
 
-    const productLines = wrap(doc, (ln.product || "").trim() || "—", itemCols.product - 2);
-    const descParts = [(ln.itemName || "").trim() || "—"];
+    const productLines = wrap(doc, (ln.product || "").trim() || "-", itemCols.product - 2);
+    const descParts = [(ln.itemName || "").trim() || "-"];
     if (ln.shipTo.trim()) {
       descParts.push(`Ship To: ${ln.shipTo.trim()}`);
     }
@@ -665,9 +665,9 @@ async function renderDeliveryChallanPdf(input: DeliveryChallanPdfInput): Promise
       dy += 3.2;
     });
     cx += itemCols.desc;
-    doc.text(ln.hsnSac || "—", cx + itemCols.hsn / 2, textY, { align: "center" });
+    doc.text(ln.hsnSac || "-", cx + itemCols.hsn / 2, textY, { align: "center" });
     cx += itemCols.hsn;
-    doc.text(ln.assetNo || "—", cx + itemCols.asset / 2, textY, { align: "center" });
+    doc.text(ln.assetNo || "-", cx + itemCols.asset / 2, textY, { align: "center" });
     cx += itemCols.asset;
     doc.text(String(qty), cx + itemCols.qty / 2, textY, { align: "center" });
     cx += itemCols.qty;

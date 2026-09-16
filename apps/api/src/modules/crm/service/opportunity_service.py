@@ -14,6 +14,7 @@ from modules.crm.repository.opportunity_stage_repository import OpportunityStage
 from modules.crm.repository.pipeline_repository import PipelineRepository
 from modules.crm.service.cloud_flow import compute_profitability_percent
 from modules.crm.service.crm_module_admin import CrmModuleAdminService
+from modules.crm.service.crm_record_visibility import CrmRecordVisibility
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import OpportunityEngine, OpportunityStageEngine, PipelineEngine
@@ -66,17 +67,19 @@ class OpportunityService:
         self._integration = CRMIntegrationService(db)
         self._audit = AuditService(db)
         self._crm_admin = CrmModuleAdminService(db)
+        self._visibility = CrmRecordVisibility(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_opportunities(ctx, cid)
+        allowed_ids = self._visibility.filter_opportunity_ids_for_user(ctx, cid)
+        return self._repo.list_opportunities(ctx, cid, opportunity_ids=allowed_ids)
 
     def get(self, ctx: TenantContext, opportunity_id: UUID) -> CrmOpportunity:
         row = self._repo.get(ctx, opportunity_id)
         if row is None:
             raise NotFoundException("Opportunity not found")
+        self._visibility.ensure_opportunity_access(ctx, row)
         return row
-
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
@@ -171,7 +174,7 @@ class OpportunityService:
         if opp.blueprint_state and opp.blueprint_state not in {"won", "lost"}:
             raise ConflictException(
                 "This opportunity is on the sales blueprint. Mark Deal Won from the "
-                "OVF after Share to SCM — do not use legacy close-won."
+                "OVF after Share to SCM - do not use legacy close-won."
             )
         self._engine.apply_win(opp)
         now = datetime.now(timezone.utc)

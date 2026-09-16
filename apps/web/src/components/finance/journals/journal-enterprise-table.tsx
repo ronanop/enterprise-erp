@@ -86,18 +86,18 @@ type JournalEnterpriseTableProps = {
 };
 
 function shortId(value?: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return value.slice(0, 8);
 }
 
 function formatDate(value?: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
   return value;
 }
 
 function formatDateTime(value?: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return String(value).slice(0, 19).replace("T", " ");
   return d.toLocaleString("en-IN");
@@ -133,7 +133,7 @@ export function JournalEnterpriseTable({
   total,
   onPageChange,
   onPageSizeChange,
-  resolveUser = (id) => (id ? id.slice(0, 8) : "—"),
+  resolveUser = (id) => (id ? id.slice(0, 8) : "-"),
 }: JournalEnterpriseTableProps) {
   const { prefs, setPrefs } = useJournalTablePrefs();
   const [showCols, setShowCols] = useState(false);
@@ -427,7 +427,7 @@ export function JournalEnterpriseTable({
                         <td className="px-3 py-2 text-xs text-muted-foreground">
                           {row.period_id
                             ? periodLabels[row.period_id] ?? shortId(row.period_id)
-                            : "—"}
+                            : "-"}
                         </td>
                       ) : null}
                       {isVisible("status") ? (

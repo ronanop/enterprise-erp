@@ -109,7 +109,7 @@ async function queueDeliveryReminderEmail(
     }
     if (Notification.permission === "granted") {
       new Notification("Delivery reminder sent", {
-        body: `${notice.challanNumber} — email sent to ${notice.email}`,
+        body: `${notice.challanNumber} - email sent to ${notice.email}`,
       });
     }
   }

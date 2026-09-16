@@ -1,4 +1,4 @@
-"""SCM handoff service — Finance-approved OVF queue → vendor PO → GRN tracking."""
+"""SCM handoff service - Finance-approved OVF queue → vendor PO → GRN tracking."""
 
 from collections import defaultdict
 from datetime import date, timedelta, timezone
@@ -334,7 +334,7 @@ class ScmHandoffService:
         has_po = False
         vendor_keys: set[str] = set()
         for ln in vendor_lines or []:
-            name = (ln.get("product_name") or "").strip() or "—"
+            name = (ln.get("product_name") or "").strip() or "-"
             qty = float(ln.get("qty") or 0)
             dist = (ln.get("distributor_name") or "").strip() or None
             avail = avail_by.get(cls._product_key(name)) or {}
@@ -374,18 +374,18 @@ class ScmHandoffService:
         if has_stock and has_po:
             delivery = "separate"
             if len(vendor_keys) > 1:
-                note = "Separate — stock and vendors"
+                note = "Separate - stock and vendors"
             else:
-                note = "Separate — stock and vendor"
+                note = "Separate - stock and vendor"
         elif has_po and len(vendor_keys) > 1:
             delivery = "separate"
-            note = "Separate — by vendor"
+            note = "Separate - by vendor"
         elif has_stock and not has_po:
             delivery = "together"
-            note = "Together — from stock"
+            note = "Together - from stock"
         elif has_po:
             delivery = "together"
-            note = "Together — vendor PO"
+            note = "Together - vendor PO"
         else:
             delivery = "together"
             note = ""
@@ -570,13 +570,13 @@ class ScmHandoffService:
             bucket = grouped[key]
             bucket["quantity"] += qty
             bucket["rate_total"] += rate * qty
-            if serial and serial not in ("—", "-") and serial not in bucket["serials"]:
+            if serial and serial not in ("-", "-") and serial not in bucket["serials"]:
                 bucket["serials"].append(serial)
         lines = []
         for bucket in grouped.values():
             qty = float(bucket["quantity"])
             serials: list[str] = bucket["serials"]
-            joined = ", ".join(serials) if serials else "—"
+            joined = ", ".join(serials) if serials else "-"
             lines.append(
                 {
                     "product_name": bucket["product_name"],
@@ -605,7 +605,7 @@ class ScmHandoffService:
     def list_scm_queue(self, ctx: TenantContext, company_id: UUID | None = None) -> list[dict]:
         cid = self._scope.resolve_company_id(ctx, company_id)
         ovfs = self._crm.list_shared_ovfs(ctx, cid)
-        # One vendor load for the whole queue — used for OEM suggestions when no PO yet.
+        # One vendor load for the whole queue - used for OEM suggestions when no PO yet.
         vendor_pool = self._master.list_vendors(ctx, company_id=cid, branch_scoped=False)
         if not vendor_pool:
             vendor_pool = self._master.list_vendors(ctx, company_id=None, branch_scoped=False)
@@ -996,7 +996,7 @@ class ScmHandoffService:
                 stock_unit_id=unit.id,
                 product_name=demand_name,
                 quantity=float(getattr(unit, "quantity", None) or 1),
-                serial_number=unit.serial_number or "—",
+                serial_number=unit.serial_number or "-",
                 tenant_id=ctx.tenant_id,
                 company_id=company_id,
                 branch_id=unit.branch_id,
@@ -1340,7 +1340,7 @@ class ScmHandoffService:
                 raise ConflictException(
                     f"Vendor PO already exists for this distributor ({existing.document_number})"
                 )
-            # Re-edit draft (e.g. after approval reject) — reassign company PO when entity changes.
+            # Re-edit draft (e.g. after approval reject) - reassign company PO when entity changes.
             code = normalize_entity_code(entity_code)
             self._master.get_vendor(ctx, vendor_id)
             company_id = handoff["company_id"]
@@ -1513,7 +1513,7 @@ class ScmHandoffService:
         order_id: UUID,
         order: ProcOrderHeader | None = None,
     ) -> ProcOrderHeader:
-        """Issue vendor PO after OVF commercial lock — draft → sent (CRM-sourced only)."""
+        """Issue vendor PO after OVF commercial lock - draft → sent (CRM-sourced only)."""
         if order is None or order.id != order_id:
             order = self._order_service.get_order(ctx, order_id)
         if order.source_module != self.SOURCE_MODULE or order.source_document_type != self.SOURCE_DOC_TYPE:
@@ -1531,7 +1531,7 @@ class ScmHandoffService:
                 company_id=order.company_id,
                 entity_code=order.entity_code,
             )
-        # In-place status flip — avoid a second locked reload of the same draft.
+        # In-place status flip - avoid a second locked reload of the same draft.
         order.status = OrderStatus.SENT.value
         order.updated_at = utcnow()
         order.updated_by = ctx.user_id
@@ -1925,7 +1925,7 @@ class ScmHandoffService:
             batch_line.updated_at = receipt_at
 
         if self._inventory_stock_table_exists():
-            # Stock units FK receipt_batch_id — persist batch header/line before insert.
+            # Stock units FK receipt_batch_id - persist batch header/line before insert.
             self._db.flush()
 
         self._append_stock_units_for_receipt(
@@ -1968,7 +1968,7 @@ class ScmHandoffService:
         from sqlalchemy import or_, select
 
         preview = self.get_ovf_preview(ctx, ovf_id)
-        # Access already gated by OVF preview — include OVF + related sales
+        # Access already gated by OVF preview - include OVF + related sales
         # quote / opportunity files (sales attachments) for SCM + approval.
         entity_filters = [
             (CrmAttachment.entity_type == self.OVF_ATTACHMENT_ENTITY)
@@ -2105,7 +2105,7 @@ class ScmHandoffService:
         from modules.crm.models import CrmAttachment
         from sqlalchemy import select
 
-        # Load by tenant only — then authorize via OVF/PO ownership checks.
+        # Load by tenant only - then authorize via OVF/PO ownership checks.
         row = self._db.scalar(
             select(CrmAttachment).where(
                 CrmAttachment.id == attachment_id,
@@ -2120,7 +2120,7 @@ class ScmHandoffService:
         elif row.entity_type == self.PO_ATTACHMENT_ENTITY:
             self._order_service.get_order(ctx, row.entity_id)
         elif row.entity_type in {"quote", "opportunity"}:
-            # Sales pack files — authorize via any OVF handoff that references them.
+            # Sales pack files - authorize via any OVF handoff that references them.
             from modules.crm.models.ovf import CrmOvf
             from sqlalchemy import select as sa_select
 
@@ -2792,7 +2792,7 @@ class ScmHandoffService:
         for i in range(whole):
             global_index = start + i
             unit_index = global_index + 1
-            serial = serials[global_index] if global_index < len(serials) else "—"
+            serial = serials[global_index] if global_index < len(serials) else "-"
             lots.append((unit_index, serial, 1.0))
         if frac > 1e-9:
             lots.append((start + whole + 1, "NA", frac))
@@ -2827,7 +2827,7 @@ class ScmHandoffService:
             return
 
         serials = [str(s).strip() for s in (serial_numbers or []) if str(s).strip()]
-        grn_label = (grn_number or "").strip() or "—"
+        grn_label = (grn_number or "").strip() or "-"
         product = (line.product_name or "").strip() or "Unnamed product"
         start_serial = int(_bill) + int(_dc)
         qty_rec = float(line.quantity_received or 0)
@@ -2835,7 +2835,7 @@ class ScmHandoffService:
 
         for i in range(whole):
             serial_idx = start_serial + i
-            serial = serials[serial_idx] if serial_idx < len(serials) else "—"
+            serial = serials[serial_idx] if serial_idx < len(serials) else "-"
             unit_index = max(1, int(qty_rec) - row_count + i + 1)
             unit = ProcInventoryStockUnit(
                 order_header_id=order.id,
@@ -2940,7 +2940,7 @@ class ScmHandoffService:
             serials = [str(s).strip() for s in (batch_line.serial_numbers or [])]
             idx = max(0, int(unit.unit_index) - 1)
             while len(serials) <= idx:
-                serials.append("—")
+                serials.append("-")
             serials[idx] = serial
             batch_line.serial_numbers = serials
             batch_line.updated_by = ctx.user_id
@@ -2952,7 +2952,7 @@ class ScmHandoffService:
                 last_serials = [str(s).strip() for s in (line.last_receipt_serial_numbers or [])]
                 idx = max(0, int(unit.unit_index) - 1)
                 while len(last_serials) <= idx:
-                    last_serials.append("—")
+                    last_serials.append("-")
                 last_serials[idx] = serial
                 line.last_receipt_serial_numbers = last_serials
                 line.updated_by = ctx.user_id
@@ -3092,7 +3092,7 @@ class ScmHandoffService:
                 if order is None:
                     continue
                 ol = line_by_id.get(stock.order_line_id)
-                po_number = (order.company_po_number or order.document_number or "").strip() or "—"
+                po_number = (order.company_po_number or order.document_number or "").strip() or "-"
                 unit_cost = float(getattr(ol, "unit_cost", 0) or 0) if ol else 0.0
                 line_number = int(ol.line_number) if ol else 0
                 product_code = (getattr(ol, "product_code", None) or "").strip() if ol else ""
@@ -3178,8 +3178,8 @@ class ScmHandoffService:
                 order = order_cache.get(order_id)
                 if order is None:
                     continue
-                po_number = (order.company_po_number or order.document_number or "").strip() or "—"
-                grn_label = (batch.grn_number or "").strip() or "—"
+                po_number = (order.company_po_number or order.document_number or "").strip() or "-"
+                grn_label = (batch.grn_number or "").strip() or "-"
 
                 for bl in lines_by_batch.get(batch.id, []):
                     qty = float(bl.quantity or 0)
@@ -3241,7 +3241,7 @@ class ScmHandoffService:
                 if order is None:
                     continue
                 ol = adj_lines.get(adj.order_line_id)
-                po_number = (order.company_po_number or order.document_number or "").strip() or "—"
+                po_number = (order.company_po_number or order.document_number or "").strip() or "-"
                 unit_cost = float(getattr(ol, "unit_cost", 0) or 0) if ol else 0.0
                 line_number = int(ol.line_number) if ol else 0
                 product_code = (getattr(ol, "product_code", None) or "").strip() if ol else ""

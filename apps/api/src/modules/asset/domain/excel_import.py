@@ -1,4 +1,4 @@
-"""Excel import domain types (CR-004 Phase 8B). Pure data — no ORM."""
+"""Excel import domain types (CR-004 Phase 8B). Pure data - no ORM."""
 
 from __future__ import annotations
 

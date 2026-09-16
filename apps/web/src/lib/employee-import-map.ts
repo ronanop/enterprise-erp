@@ -30,7 +30,7 @@ export type NormalizedEmployeeImportRow = {
 export type ImportFieldKey = keyof NormalizedEmployeeImportRow | "";
 
 export const IMPORT_FIELD_OPTIONS: { value: ImportFieldKey; label: string }[] = [
-  { value: "", label: "— Skip —" },
+  { value: "", label: "- Skip -" },
   { value: "employee_code", label: "EMPLOYEE ID / Emp Code" },
   { value: "name", label: "NAME" },
   { value: "entity", label: "Entity" },
@@ -234,7 +234,7 @@ export function parseEmployeeImportWithMapping(
     }
     if (!out.email && !out.personal_email) {
       warnings.push(
-        `Row ${rowNum} (${out.employee_code}): no cache/personal email — placeholder will be used`,
+        `Row ${rowNum} (${out.employee_code}): no cache/personal email - placeholder will be used`,
       );
     }
     rows.push(out);

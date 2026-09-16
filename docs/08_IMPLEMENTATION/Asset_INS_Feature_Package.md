@@ -1,4 +1,4 @@
-# FP-ASSET-010 — Asset Insurance (Feature Package)
+# FP-ASSET-010 - Asset Insurance (Feature Package)
 
 **Status:** Implemented  
 **ADR:** ADR-ASSET-INS-001

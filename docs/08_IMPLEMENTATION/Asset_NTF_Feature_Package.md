@@ -25,12 +25,12 @@ Router → AssetNotificationService → NotificationValidator → AssetNotificat
 
 ## Frontend
 
-`AssetNotificationWorkspace` at `/assets/asset-notifications` — search, filters, pagination, badges, detail/metadata viewer, archive, mark read. No composer.
+`AssetNotificationWorkspace` at `/assets/asset-notifications` - search, filters, pagination, badges, detail/metadata viewer, archive, mark read. No composer.
 
 ## Migration
 
-`0482_ast_notification_governance` — indexes + RBAC seeds.
+`0482_ast_notification_governance` - indexes + RBAC seeds.
 
 ## Tests
 
-Unit (validator, engine, service, concurrency) + integration (routes, workflow/regression). Target 25–30+.
+Unit (validator, engine, service, concurrency) + integration (routes, workflow/regression). Target 25-30+.

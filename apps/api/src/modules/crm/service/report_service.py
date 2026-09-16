@@ -1,4 +1,4 @@
-"""CRM report service — summary + custom saved reports."""
+"""CRM report service - summary + custom saved reports."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ from core.exceptions import ConflictException, ForbiddenException, NotFoundExcep
 from modules.crm.models.saved_report import CrmSavedReport
 from modules.crm.repository.base import utcnow
 from modules.crm.repository.lead_repository import LeadRepository
-from modules.crm.repository.opportunity_repository import OpportunityRepository
 from modules.crm.service.activity_service import FollowupService, MeetingService
 from modules.crm.service.attachment_service import AttachmentService
 from modules.crm.service.company_service import CompanyService
@@ -25,6 +24,7 @@ from modules.crm.service.kyc_record_service import KycRecordService
 from modules.crm.service.lead_service import LeadService
 from modules.crm.service.oem_service import OemService
 from modules.crm.service.opportunity_service import OpportunityService
+from modules.crm.service.crm_record_visibility import CrmRecordVisibility
 from modules.crm.service.ovf_service import OvfService
 from modules.crm.service.product_service import ProductService
 from modules.crm.service.quote_service import QuoteService
@@ -75,15 +75,16 @@ class CRMReportService:
     def __init__(self, db: Session) -> None:
         self._db = db
         self._leads = LeadService(db)
-        self._opps = OpportunityRepository(db)
+        self._opportunities = OpportunityService(db)
         self._scope = CrmScopeValidator(db)
         self._crm_admin = CrmModuleAdminService(db)
+        self._visibility = CrmRecordVisibility(db)
         self._employees = EmployeeRepository(db)
 
     def summary(self, ctx: TenantContext, company_id: UUID | None = None) -> dict:
         cid = self._scope.resolve_company_id(ctx, company_id)
         leads = self._leads.list(ctx, cid)
-        opps = self._opps.list_opportunities(ctx, cid)
+        opps = self._opportunities.list(ctx, cid)
         return {
             "lead_count": len(leads),
             "converted_leads": sum(1 for lead in leads if lead.status == "converted"),
@@ -295,27 +296,24 @@ class CRMReportService:
         return emp.id if emp is not None else None
 
     def _apply_non_admin_scope(self, ctx: TenantContext, rows: list) -> list:
-        if self._crm_admin.is_admin(ctx):
+        """Defense-in-depth: keep only creator-owned rows for non-admins.
+
+        Primary module loaders already apply creator scope; this catches
+        modules that still list shared masters (products, OEMs, etc.).
+        """
+        if self._visibility.is_admin(ctx):
             return rows
-        employee_id = self._current_employee_id(ctx)
+        if ctx.user_id is None:
+            return []
         filtered: list = []
         for row in rows:
             created_by = getattr(row, "created_by", None)
             if created_by is not None and created_by == ctx.user_id:
                 filtered.append(row)
                 continue
-            owner_emp = getattr(row, "owner_employee_id", None)
-            if employee_id is not None and owner_emp is not None and owner_emp == employee_id:
-                filtered.append(row)
-                continue
-            owner_id = getattr(row, "owner_id", None)
-            if owner_id is not None and (
-                owner_id == ctx.user_id or (employee_id is not None and owner_id == employee_id)
-            ):
-                filtered.append(row)
-                continue
-            uploaded_by = getattr(row, "uploaded_by", None)
-            if uploaded_by is not None and uploaded_by == ctx.user_id:
+            # Derived report rows (distributors / end customers) have no creator -
+            # they already came from creator-scoped leads.
+            if created_by is None and not hasattr(row, "owner_employee_id"):
                 filtered.append(row)
                 continue
         return filtered
@@ -386,7 +384,7 @@ class CRMReportService:
         include lead-creation fields shown on the opportunity detail page.
 
         Converted leads are excluded from LeadService.list (Leads module UX), so
-        we load linked leads by id — including converted — for report joins.
+        we load linked leads by id - including converted - for report joins.
         """
         opps = OpportunityService(self._db).list(ctx, company_id)
         lead_ids = [opp.lead_id for opp in opps if getattr(opp, "lead_id", None)]

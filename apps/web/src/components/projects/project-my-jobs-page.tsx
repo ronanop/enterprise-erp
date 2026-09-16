@@ -49,7 +49,7 @@ export function ProjectMyJobsPage() {
         key: "site_name",
         label: "Site",
         sort: (r) => r.site_name ?? "",
-        cell: (r) => r.site_name || "—",
+        cell: (r) => r.site_name || "-",
       },
       {
         key: "delivery_type",

@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { formatServiceDisplayText } from "@/lib/service-display-text";
 
 function formatWhen(value?: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value;
   return d.toLocaleString(undefined, {
@@ -429,7 +429,7 @@ export function ServiceMailboxPage() {
       ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-        {/* Toolbar — inbox meta */}
+        {/* Toolbar - inbox meta */}
         <div className="shrink-0 border-b border-border/60 bg-muted/25 px-4 py-3 sm:px-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2.5">
@@ -439,7 +439,7 @@ export function ServiceMailboxPage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold">Inbox</span>
-                  <span className="truncate text-sm text-muted-foreground">{mailbox || "—"}</span>
+                  <span className="truncate text-sm text-muted-foreground">{mailbox || "-"}</span>
                 </div>
               </div>
             </div>
@@ -453,9 +453,9 @@ export function ServiceMailboxPage() {
           </div>
         </div>
 
-        {/* Split pane — fixed height, internal scroll */}
+        {/* Split pane - fixed height, internal scroll */}
         <div className="flex min-h-0 flex-1 flex-col lg:h-[calc(100dvh-15.5rem)] lg:max-h-[720px] lg:flex-row">
-          {/* Message list — left */}
+          {/* Message list - left */}
           <aside className="flex min-h-0 w-full shrink-0 flex-col border-border/60 lg:w-[min(100%,340px)] lg:border-r xl:w-[360px]">
             <div className="shrink-0 border-b border-border/60 bg-background/80 px-3 py-3">
               <div className="relative">
@@ -490,7 +490,7 @@ export function ServiceMailboxPage() {
             </div>
           </aside>
 
-          {/* Reading pane — right */}
+          {/* Reading pane - right */}
           <section className="min-h-[320px] min-w-0 flex-1 border-t border-border/60 bg-background lg:min-h-0 lg:border-t-0">
             <MailReadingPane row={selectedRow} detail={detail} loading={detailLoading} />
           </section>

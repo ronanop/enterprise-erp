@@ -321,14 +321,14 @@ class ChartOfAccountService:
                     status=data.get("status") or "draft",
                 )
                 created += 1
-            except Exception as exc:  # noqa: BLE001 — collect row errors for import summary
+            except Exception as exc:  # noqa: BLE001 - collect row errors for import summary
                 errors.append(f"Row {idx}: {exc}")
         return ChartOfAccountImportResult(created=created, failed=len(errors), errors=errors)
 
     def merge_accounts(
         self, ctx: TenantContext, source_account_id: UUID, target_account_id: UUID, comments: str | None = None
     ):
-        """API-ready stub — ledger remapping not implemented in Phase 2."""
+        """API-ready stub - ledger remapping not implemented in Phase 2."""
         if source_account_id == target_account_id:
             raise AppException("Source and target must differ")
         self.get_account_entity(ctx, source_account_id)

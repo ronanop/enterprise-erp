@@ -1,4 +1,4 @@
-"""HRMS module admin — ERP admins, org-assigned module admins, or HR_ADMIN role."""
+"""HRMS module admin - ERP admins, org-assigned module admins, or HR_ADMIN role."""
 
 from __future__ import annotations
 

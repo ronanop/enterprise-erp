@@ -17,7 +17,7 @@ export type ProcurementPipelineMetrics = {
   posComplete: number;
   qtyOrdered: number;
   qtyReceived: number;
-  /** 0–100 share of ordered qty received across issued POs. */
+  /** 0-100 share of ordered qty received across issued POs. */
   receiptPct: number;
   /** Average GRN docs per PO that has receipts. */
   avgGrnsPerPo: number;
@@ -37,7 +37,7 @@ function lineQty(line: { quantity?: number; quantity_received?: number }) {
   };
 }
 
-/** Count GRN documents on a PO — prefers grn_sequence, falls back to 1 if any qty received. */
+/** Count GRN documents on a PO - prefers grn_sequence, falls back to 1 if any qty received. */
 export function countGrnDocumentsForPo(po: {
   grn_sequence?: number | null;
   current_grn_number?: string | null;
@@ -156,7 +156,7 @@ export function buildProcurementPipelineMetrics(input: {
   };
 }
 
-/** Stage counts only — for funnel bar widths. */
+/** Stage counts only - for funnel bar widths. */
 export function pipelineStageCountsFromMetrics(
   metrics: ProcurementPipelineMetrics,
 ): Record<string, number> {

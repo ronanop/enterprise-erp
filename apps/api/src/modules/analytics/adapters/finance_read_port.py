@@ -1,4 +1,4 @@
-"""Finance read port — analytical consumption ONLY.
+"""Finance read port - analytical consumption ONLY.
 
 NEVER uses PostingService. NEVER writes fin_* tables.
 UUID / context resolution stubs only.

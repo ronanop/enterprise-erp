@@ -13,7 +13,7 @@ from modules.asset.service.site_access import require_site_admin, require_site_r
 from modules.foundation.domain.value_objects import TenantContext
 from shared.schemas import APIResponse
 
-asset_types_router = APIRouter(prefix="/asset-types", tags=["Asset — AssetType"])
+asset_types_router = APIRouter(prefix="/asset-types", tags=["Asset - AssetType"])
 
 
 class AssetTypeCreate(BaseModel):

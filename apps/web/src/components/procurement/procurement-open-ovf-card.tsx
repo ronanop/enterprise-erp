@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { formatInr, type ScmQueueItem } from "@/services/procurement-service";
 import { isScmOpenOvfRow } from "@/utils/scm-queue-ovf-status";
 
-/** Keep the KPI card compact — top amount OVFs only. */
+/** Keep the KPI card compact - top amount OVFs only. */
 const PREVIEW_ROWS = 4;
 
 function customerWithGst(row: ScmQueueItem): number {
@@ -80,7 +80,7 @@ export function ProcurementOpenOvfCard({
           onClick={() => setDialogOpen(true)}
           className="mt-2 block w-full cursor-pointer text-left font-mono text-xl font-semibold tracking-tight text-foreground tabular-nums outline-none transition-opacity duration-200 hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         >
-          {loading ? "—" : String(count)}
+          {loading ? "-" : String(count)}
         </button>
 
         {loading ? (
@@ -103,7 +103,7 @@ export function ProcurementOpenOvfCard({
                   className="grid grid-cols-3 gap-x-4 items-center text-xs"
                 >
                   <span className="min-w-0 truncate font-normal text-foreground">
-                    {row.customer_name?.trim() || row.ovf_no || "—"}
+                    {row.customer_name?.trim() || row.ovf_no || "-"}
                   </span>
                   <span className="min-w-0 text-center font-mono font-normal tabular-nums text-foreground">
                     {formatInr(customerWithGst(row))}

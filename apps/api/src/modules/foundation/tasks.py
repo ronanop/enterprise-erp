@@ -101,5 +101,5 @@ def send_notification_task(
 
 @celery_app.task(name="foundation.workflow_escalation")
 def workflow_escalation_stub() -> dict:
-    """Stub for SLA-based workflow escalation — full logic in Sprint 2+."""
+    """Stub for SLA-based workflow escalation - full logic in Sprint 2+."""
     return {"status": "stub", "escalated": 0}

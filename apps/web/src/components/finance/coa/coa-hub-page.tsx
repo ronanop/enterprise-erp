@@ -154,7 +154,7 @@ export function CoaHubPage() {
     <div className="space-y-4">
       <PageHeader
         title="Chart of Accounts"
-        description="Enterprise COA — hierarchy, balances, and account lifecycle."
+        description="Enterprise COA - hierarchy, balances, and account lifecycle."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -286,27 +286,27 @@ export function CoaHubPage() {
       {tab === "dashboard" ? (
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-4">
-            <FinanceKpiCard label="Total Accounts" value={String(summary?.total_accounts ?? "—")} icon={Landmark} />
+            <FinanceKpiCard label="Total Accounts" value={String(summary?.total_accounts ?? "-")} icon={Landmark} />
             <FinanceKpiCard
               label="Active"
-              value={String(summary?.active_accounts ?? "—")}
+              value={String(summary?.active_accounts ?? "-")}
               icon={Wallet}
               tone="success"
             />
             <FinanceKpiCard
               label="Inactive"
-              value={String(summary?.inactive_accounts ?? "—")}
+              value={String(summary?.inactive_accounts ?? "-")}
               icon={CircleOff}
               tone="warning"
             />
-            <FinanceKpiCard label="Draft" value={String(summary?.draft_accounts ?? "—")} icon={Scale} />
-            <FinanceKpiCard label="Assets" value={String(summary?.assets ?? "—")} icon={Building2} tone="success" />
-            <FinanceKpiCard label="Liabilities" value={String(summary?.liabilities ?? "—")} icon={Scale} tone="warning" />
-            <FinanceKpiCard label="Income" value={String(summary?.income ?? "—")} icon={TrendingUp} />
-            <FinanceKpiCard label="Expense" value={String(summary?.expense ?? "—")} icon={TrendingDown} tone="danger" />
+            <FinanceKpiCard label="Draft" value={String(summary?.draft_accounts ?? "-")} icon={Scale} />
+            <FinanceKpiCard label="Assets" value={String(summary?.assets ?? "-")} icon={Building2} tone="success" />
+            <FinanceKpiCard label="Liabilities" value={String(summary?.liabilities ?? "-")} icon={Scale} tone="warning" />
+            <FinanceKpiCard label="Income" value={String(summary?.income ?? "-")} icon={TrendingUp} />
+            <FinanceKpiCard label="Expense" value={String(summary?.expense ?? "-")} icon={TrendingDown} tone="danger" />
             <FinanceKpiCard
               label="Equity"
-              value={String(summary?.equity ?? "—")}
+              value={String(summary?.equity ?? "-")}
               icon={PiggyBank}
               hint="From live COA summary API"
             />

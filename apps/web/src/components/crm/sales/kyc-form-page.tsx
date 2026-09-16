@@ -431,7 +431,6 @@ export function KycFormPage({ companyAccountId, kycId }: KycFormPageProps) {
 
       <PageHeader
         title={isEdit ? "Edit KYC" : "Create KYC"}
-        description="Capture company KYC profile, contacts, infrastructure, and security footprint."
         actions={
           <>
             <Button

@@ -1,4 +1,4 @@
-# Asset Assignment — Release Notes (FP-ASSET-003)
+# Asset Assignment - Release Notes (FP-ASSET-003)
 
 ## Added
 

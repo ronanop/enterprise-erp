@@ -1,4 +1,4 @@
-# FP-ASSET-007 — Asset Revaluation (Feature Package)
+# FP-ASSET-007 - Asset Revaluation (Feature Package)
 
 **Status:** Implemented  
 **ADR:** ADR-ASSET-REV-001

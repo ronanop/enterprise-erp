@@ -37,7 +37,7 @@ export type ServiceNavItem = {
   fieldEngineerOnly?: boolean;
 };
 
-/** SOP service request ticket workflow — CRM-style workspace panes. */
+/** SOP service request ticket workflow - CRM-style workspace panes. */
 export const SERVICE_NAV: readonly ServiceNavItem[] = [
   { title: "Dashboard", href: "/service", icon: LayoutDashboard },
   { title: "Request Tickets", href: "/service/service-request-tickets", icon: Ticket },
@@ -154,7 +154,7 @@ export function ServiceWorkspaceNav() {
   );
 }
 
-/** Left sidebar chrome for standalone Service tabs (replaces AppSidebar) — CRM pattern. */
+/** Left sidebar chrome for standalone Service tabs (replaces AppSidebar) - CRM pattern. */
 export function ServiceSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);

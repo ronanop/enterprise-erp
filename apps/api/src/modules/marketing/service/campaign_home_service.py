@@ -1,4 +1,4 @@
-"""Campaign home — one payload for the marketing head."""
+"""Campaign home - one payload for the marketing head."""
 
 from __future__ import annotations
 

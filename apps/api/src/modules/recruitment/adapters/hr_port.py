@@ -1,4 +1,4 @@
-"""HR port — employment request via EmploymentService; no hr_* ORM writes."""
+"""HR port - employment request via EmploymentService; no hr_* ORM writes."""
 
 from datetime import date
 from uuid import UUID
@@ -26,7 +26,7 @@ class RecruitmentHrAdapter:
         date_of_joining: date | None = None,
         **fields,
     ):
-        """Request HR employment via service only — never write hr_* ORM from recruitment."""
+        """Request HR employment via service only - never write hr_* ORM from recruitment."""
         payload = dict(fields)
         payload.setdefault("employment_type", employment_type)
         if date_of_joining is not None:

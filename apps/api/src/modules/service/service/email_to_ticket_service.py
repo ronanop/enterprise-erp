@@ -68,7 +68,7 @@ class EmailToTicketService:
         if skip_reason:
             return EmailToTicketResult(
                 status="skipped",
-                message="Automated sender — no ticket created",
+                message="Automated sender - no ticket created",
             )
 
         body = (payload.body_text or "").strip()
@@ -168,9 +168,9 @@ class EmailToTicketService:
                     ctx,
                     row,
                     "email_ticket_created",
-                    f"New email ticket {ticket.document_number} from {from_email} — assign an engineer",
+                    f"New email ticket {ticket.document_number} from {from_email} - assign an engineer",
                 )
-            # Confirmation mail is optional — never block ticket creation.
+            # Confirmation mail is optional - never block ticket creation.
             self._send_confirmation(from_email, contact_name, ticket.document_number, subject)
             self._db.flush()
             return EmailToTicketResult(
@@ -258,7 +258,7 @@ class EmailToTicketService:
         if host in {"", "localhost", "127.0.0.1"}:
             return
         if not settings.smtp_user and not settings.smtp_password:
-            # Host set for UI status only — skip real send until credentials are provided.
+            # Host set for UI status only - skip real send until credentials are provided.
             return
         body = (
             f"Hello {contact_name},\n\n"
@@ -266,7 +266,7 @@ class EmailToTicketService:
             f"Ticket Number: {document_number}\n"
             f"Subject: {subject}\n\n"
             f"Our team will review your request and respond shortly.\n\n"
-            f"— Support Team"
+            f"- Support Team"
         )
         try:
             send_smtp_email(

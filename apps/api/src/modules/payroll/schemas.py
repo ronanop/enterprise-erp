@@ -611,7 +611,7 @@ class PayrollPolicyCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID | None = None
     policy_code: str = "DEFAULT"
-    policy_name: str = "Standard monthly payroll (20th–20th)"
+    policy_name: str = "Standard monthly payroll (20th-20th)"
     effective_from: date
     effective_to: date | None = None
     status: str = "draft"

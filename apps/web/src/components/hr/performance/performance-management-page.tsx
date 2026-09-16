@@ -247,7 +247,7 @@ export function PerformanceManagementPage() {
         <div className="grid gap-3 lg:grid-cols-2">
           <div className="rounded-xl border border-border/70 bg-card p-4">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Performance distribution (1–5)
+              Performance distribution (1-5)
             </p>
             <div className="flex h-36 items-end gap-2">
               {distribution.map((d) => (
@@ -322,7 +322,7 @@ export function PerformanceManagementPage() {
                 <span>{g.currentProgress}/{g.targetValue}</span>
               </div>,
               <HrStatusBadge key="s" status={GOAL_STATUS_LABELS[g.status]} />,
-              g.dueDate || "—",
+              g.dueDate || "-",
               <Button
                 key="u"
                 type="button"
@@ -424,7 +424,7 @@ export function PerformanceManagementPage() {
               c.reviewType,
               `${c.startDate} → ${c.endDate}`,
               c.departments,
-              c.manager || "—",
+              c.manager || "-",
               c.employeeCount,
               <HrStatusBadge key="s" status={c.status} />,
             ])}
@@ -447,7 +447,7 @@ export function PerformanceManagementPage() {
               r.reviewCode,
               r.employeeName,
               r.managerName,
-              r.overallRating || "—",
+              r.overallRating || "-",
               r.recommendation,
               <HrStatusBadge key="s" status={REVIEW_STATUS_LABELS[r.status]} />,
               <Button
@@ -507,8 +507,8 @@ export function PerformanceManagementPage() {
               m.employeeName,
               m.managerName,
               m.meetingDate,
-              m.agenda || "—",
-              m.followUpDate || "—",
+              m.agenda || "-",
+              m.followUpDate || "-",
             ])}
             page={1}
             total={dir?.meetings.length ?? 0}
@@ -590,7 +590,7 @@ export function PerformanceManagementPage() {
               a.appraisalCode,
               a.employeeName,
               a.cycleName,
-              a.overallRating || "—",
+              a.overallRating || "-",
               <span key="w" className="capitalize">
                 Reporting manager → HR → Director → {a.workflowStage}
               </span>,

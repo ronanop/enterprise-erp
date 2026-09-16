@@ -110,7 +110,7 @@ DEFAULT_GROUP_SPECS: tuple[dict[str, Any], ...] = (
     {
         "group_code": "MG-STAFF",
         "group_name": "Staff Group (Non-Technical)",
-        "description": "General staff — standard shifts, leave, and payroll.",
+        "description": "General staff - standard shifts, leave, and payroll.",
         "employment_type": "permanent",
     },
     {

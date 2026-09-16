@@ -1,4 +1,4 @@
-# ADR-ASSET-NTF-001 — Asset Notification Metadata Registry
+# ADR-ASSET-NTF-001 - Asset Notification Metadata Registry
 
 **Status:** Accepted  
 **Date:** 2026-07-30  
@@ -27,10 +27,10 @@ Asset notifications existed as a thin CRUD scaffold bound to `asset.asset:*`, wi
 | NTF-10 | RBAC: `asset.notification:read\|create\|update` (replace `asset.asset:*`) |
 | NTF-11 | Rename service to `AssetNotificationService` (alias `NotificationService`) |
 | NTF-12 | Migration `0482` indexes + permission seeds |
-| NTF-13 | Dedicated `AssetNotificationWorkspace` — no composer/preview/template editor |
+| NTF-13 | Dedicated `AssetNotificationWorkspace` - no composer/preview/template editor |
 | NTF-14 | Disposed/written-off assets blocked except `other` + `disposal` subtype |
 | NTF-15 | Payload max 32 KB, depth ≤ 4; reject secret-like keys |
-| NTF-16 | Dispatch to Foundation is optional/deferred — Phase 1 is metadata + delivery status recording |
+| NTF-16 | Dispatch to Foundation is optional/deferred - Phase 1 is metadata + delivery status recording |
 
 ## Foundation boundary
 

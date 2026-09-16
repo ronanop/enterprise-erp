@@ -119,7 +119,7 @@ export default function AttendanceHistoryScreen() {
                       {formatDisplayDateDDMMYYYY(row.attendance_date)}
                     </Text>
                     <Text style={styles.meta}>
-                      {formatTime(row.check_in_at)} –{" "}
+                      {formatTime(row.check_in_at)} -{" "}
                       {formatTime(row.check_out_at)}
                     </Text>
                   </View>

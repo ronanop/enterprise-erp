@@ -1,4 +1,4 @@
-"""Pricing repository — price lists, items, discount rules."""
+"""Pricing repository - price lists, items, discount rules."""
 
 from datetime import date
 from uuid import UUID, uuid4

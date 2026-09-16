@@ -1,4 +1,4 @@
-# FP-ASSET-011 — Maintenance Plan Release Notes
+# FP-ASSET-011 - Maintenance Plan Release Notes
 
 ## Added
 

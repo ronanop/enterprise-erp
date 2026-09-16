@@ -109,7 +109,7 @@ function strokeRect(doc: jsPDF, x: number, y: number, w: number, h: number) {
   doc.rect(x, y, w, h);
 }
 
-/** Diagonal DRAFT PO mark — only for unfinalized PDF previews. */
+/** Diagonal DRAFT PO mark - only for unfinalized PDF previews. */
 function applyPreviewWatermark(doc: jsPDF) {
   const pageCount = doc.getNumberOfPages();
   const pageW = doc.internal.pageSize.getWidth();
@@ -231,14 +231,14 @@ export function resolvePoPdfLineLabels(
 
   if (codeIsPlaceholder) {
     return {
-      partNo: name || "—",
-      description: name || "—",
+      partNo: name || "-",
+      description: name || "-",
     };
   }
 
   return {
     partNo: code,
-    description: name || code || "—",
+    description: name || code || "-",
   };
 }
 
@@ -294,8 +294,8 @@ export function purchaseOrderPdfInputFromOrder(
       serviceTaxNo: DEFAULT_CACHE_COMPANY.serviceTaxNo,
     },
     supplier: {
-      name: (vendor.name || "").trim() || "—",
-      address: (vendor.address || "").trim() || "—",
+      name: (vendor.name || "").trim() || "-",
+      address: (vendor.address || "").trim() || "-",
     },
     orderRef: (order.order_ref_cache || "").trim() || undefined,
     poNumber: companyPo || order.document_number || "PO",
@@ -335,7 +335,7 @@ export async function previewPurchaseOrderPdf(
 }
 
 /**
- * CACHE Purchase Order — drawn to match the official bordered PO template.
+ * CACHE Purchase Order - drawn to match the official bordered PO template.
  * Page 1 = PO form with logo; Page 2 = Terms & Conditions.
  */
 export async function downloadPurchaseOrderPdf(
@@ -416,7 +416,7 @@ export async function downloadPurchaseOrderPdf(
         drawH,
       );
     } catch {
-      // Logo file missing or corrupt — leave header cell blank.
+      // Logo file missing or corrupt - leave header cell blank.
     }
   }
 
@@ -479,7 +479,7 @@ export async function downloadPurchaseOrderPdf(
   const metaLabelGap = 2.2;
   let my = y + 5;
   for (const [label, value] of meta) {
-    const valueText = value === "—" && label.startsWith("Order Ref") ? "" : value;
+    const valueText = value === "-" && label.startsWith("Order Ref") ? "" : value;
     const line = valueText ? `${label} ${valueText}` : label;
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
@@ -581,10 +581,10 @@ export async function downloadPurchaseOrderPdf(
   doc.setFontSize(8);
 
   for (const row of lineRows) {
-    const partLines = wrap(doc, row.partNo || "—", col.part - 3);
+    const partLines = wrap(doc, row.partNo || "-", col.part - 3);
     const descLines = wrap(
       doc,
-      row.hsnCode ? `${row.description}\nHSN: ${row.hsnCode}` : row.description || "—",
+      row.hsnCode ? `${row.description}\nHSN: ${row.hsnCode}` : row.description || "-",
       col.desc - 3,
     );
     const h = Math.max(8, Math.max(partLines.length, descLines.length) * 3.5 + 3);
@@ -624,11 +624,11 @@ export async function downloadPurchaseOrderPdf(
 
   if (lineRows.length === 0) {
     strokeRect(doc, L, y, W, 8);
-    doc.text("—", pageW / 2, y + 5.2, { align: "center" });
+    doc.text("-", pageW / 2, y + 5.2, { align: "center" });
     y += 8;
   }
 
-  // ========== 7. Amount in Words (left) | Totals (right) — matches CACHE sample ==========
+  // ========== 7. Amount in Words (left) | Totals (right) - matches CACHE sample ==========
   const money = allUsd ? formatUsdPdf : formatInrPdf;
   const totalRows: Array<[string, string, boolean]> = [
     [allUsd ? "Total USD" : "Total INR", money(subtotal), true],
@@ -754,7 +754,7 @@ export async function downloadPurchaseOrderPdf(
     const url = doc.output("bloburl");
     const opened = window.open(url, "_blank", "noopener,noreferrer");
     if (!opened) {
-      // Popup blocked — fall back to download so the user still gets the PDF.
+      // Popup blocked - fall back to download so the user still gets the PDF.
       doc.save(fileName || `PO-${payload.poNumber || "draft"}-preview.pdf`);
     }
     return;

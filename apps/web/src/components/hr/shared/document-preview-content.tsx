@@ -119,7 +119,7 @@ function PdfFrame({
   viewOnly?: boolean;
 }) {
   const [src, setSrc] = useState<string>("");
-  // Personal / policy docs are confidential — always hide browser PDF ribbon.
+  // Personal / policy docs are confidential - always hide browser PDF ribbon.
   const confidential = true;
 
   useEffect(() => {
@@ -186,7 +186,7 @@ function PdfFrame({
       </div>
       {viewOnly || confidential ? (
         <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
-          Confidential — view only (download and print are disabled)
+          Confidential - view only (download and print are disabled)
         </p>
       ) : null}
     </div>

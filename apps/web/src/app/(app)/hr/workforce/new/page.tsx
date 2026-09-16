@@ -5,7 +5,7 @@ import { Suspense } from "react";
 import { EmployeeWizardPage } from "@/components/hr/workforce/employee-wizard-page";
 
 /**
- * Add employee — full onboarding-style details filled by HR.
+ * Add employee - full onboarding-style details filled by HR.
  * No invitation link; education & previous employment are optional.
  */
 export default function NewEmployeePage() {

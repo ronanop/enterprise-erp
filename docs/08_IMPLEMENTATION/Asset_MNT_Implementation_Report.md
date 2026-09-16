@@ -1,4 +1,4 @@
-# FP-ASSET-004 — Implementation Report
+# FP-ASSET-004 - Implementation Report
 
 **Feature:** Asset Maintenance (Work Order Governance)  
 **Date:** 2026-07-29  
@@ -6,7 +6,7 @@
 
 ## 1. Executive Summary
 
-Productized maintenance work orders on the existing scaffold: domain validator, open-WO exclusivity, asset `in_maintenance`/`active` transitions, schedule/start/complete APIs, cancel/reopen/resubmit, service-history on complete, seeded `asset.maintenance:update`, additive migration `0469`, and a dedicated Maintenance workspace. ADR MNT-01–MNT-12 followed without architecture redesign.
+Productized maintenance work orders on the existing scaffold: domain validator, open-WO exclusivity, asset `in_maintenance`/`active` transitions, schedule/start/complete APIs, cancel/reopen/resubmit, service-history on complete, seeded `asset.maintenance:update`, additive migration `0469`, and a dedicated Maintenance workspace. ADR MNT-01-MNT-12 followed without architecture redesign.
 
 ## 2. Files Modified
 

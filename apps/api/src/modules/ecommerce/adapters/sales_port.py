@@ -1,4 +1,4 @@
-"""Sales port — order-of-record via service; UUID refs only."""
+"""Sales port - order-of-record via service; UUID refs only."""
 
 from uuid import UUID
 

@@ -133,7 +133,7 @@ export function LeaveCalendarView({
             >
               <span className="font-medium">{day}</span>
               <span className="text-[9px] text-muted-foreground">
-                {isHol ? "HOL" : rows.length ? `${rows.length}` : isWe ? "WO" : "—"}
+                {isHol ? "HOL" : rows.length ? `${rows.length}` : isWe ? "WO" : "-"}
               </span>
             </button>
           );
@@ -162,7 +162,7 @@ export function LeaveCalendarView({
                 >
                   <p className="font-medium">{r.employeeName}</p>
                   <p className="text-muted-foreground">
-                    {r.leaveTypeName} · {r.fromDate}–{r.toDate} · {r.totalDays}d
+                    {r.leaveTypeName} · {r.fromDate}-{r.toDate} · {r.totalDays}d
                   </p>
                   <p className="text-muted-foreground">
                     {leaveStatusDisplay(r.extension.approvalStage || r.status)}

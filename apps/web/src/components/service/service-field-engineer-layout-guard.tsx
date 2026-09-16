@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { isServiceFieldEngineerOnly } from "@/lib/service-field-engineer-access";
 
-/** Field-engineer logins only use their dashboard — redirect away from other service pages. */
+/** Field-engineer logins only use their dashboard - redirect away from other service pages. */
 export function ServiceFieldEngineerLayoutGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();

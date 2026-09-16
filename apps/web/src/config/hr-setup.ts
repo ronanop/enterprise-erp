@@ -1,5 +1,5 @@
 /**
- * HR Setup configuration center — section + tab registry (Darwinbox-style).
+ * HR Setup configuration center - section + tab registry (Darwinbox-style).
  */
 
 import type { LucideIcon } from "lucide-react";
@@ -131,7 +131,7 @@ export const hrSetupSections: HrSetupSection[] = [
       {
         id: "entities",
         title: "Legal Entities",
-        description: "Company / legal entities — saved to the database and used in Assign HR",
+        description: "Company / legal entities - saved to the database and used in Assign HR",
         source: "api",
         apiPath: "/hr/legal-entities",
         codePrefix: "ENT",
@@ -147,7 +147,7 @@ export const hrSetupSections: HrSetupSection[] = [
       {
         id: "employment-types",
         title: "Employment Group",
-        description: "Management groups — shifts, calendars, feature toggles",
+        description: "Management groups - shifts, calendars, feature toggles",
         source: "api",
         apiPath: "/hr/management-groups",
         codePrefix: "MG",
@@ -155,7 +155,7 @@ export const hrSetupSections: HrSetupSection[] = [
       {
         id: "employment-type",
         title: "Employment Type",
-        description: "Permanent, contract, trainee — used in profiles and onboarding",
+        description: "Permanent, contract, trainee - used in profiles and onboarding",
         source: "local",
         codePrefix: "ET",
       },
@@ -174,7 +174,7 @@ export const hrSetupSections: HrSetupSection[] = [
     description: "Policies, types, and holidays",
     icon: CalendarDays,
     tabs: [
-      // Leave Policies — hidden for now (managed elsewhere / future release)
+      // Leave Policies - hidden for now (managed elsewhere / future release)
       // {
       //   id: "leave-policies",
       //   title: "Leave Policies",
@@ -210,7 +210,7 @@ export const hrSetupSections: HrSetupSection[] = [
   },
 ];
 
-/** Standalone Meeting Room module (sidebar) — not an Org Setup tab. */
+/** Standalone Meeting Room module (sidebar) - not an Org Setup tab. */
 export const meetingRoomTab: HrSetupTab = {
   id: "rooms",
   title: "Meeting Room",

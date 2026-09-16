@@ -108,7 +108,7 @@ export function RosterCalendarView({
         date,
         employeeId,
         shiftId: assign.shiftId,
-        shiftName: sh ? `${sh.shiftCode}` : assign.shiftName || "—",
+        shiftName: sh ? `${sh.shiftCode}` : assign.shiftName || "-",
         color: sh?.extension.color ?? "#64748b",
         isWeeklyOff: false,
         isHoliday: false,
@@ -150,7 +150,7 @@ export function RosterCalendarView({
           date,
           employeeId,
           shiftId: sh?.id ?? "",
-          shiftName: (sh?.shiftCode ?? token) || "—",
+          shiftName: (sh?.shiftCode ?? token) || "-",
           color: sh?.extension.color ?? "#64748b",
           isWeeklyOff: false,
           isHoliday: false,
@@ -340,7 +340,7 @@ export function RosterCalendarView({
                           style={cell ? { backgroundColor: cell.color } : undefined}
                           onClick={() => setDetail({ date, employeeId: emp.id })}
                         >
-                          {cell?.shiftName.slice(0, 3) ?? "—"}
+                          {cell?.shiftName.slice(0, 3) ?? "-"}
                         </button>
                       </td>
                     );

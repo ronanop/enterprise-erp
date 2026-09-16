@@ -5,7 +5,7 @@ import { Eye } from "lucide-react";
 
 /**
  * Shared IT Admin register field groups for inventory detail drawer.
- * Presentational only — values come from InventoryRowViewModel / register-parity.
+ * Presentational only - values come from InventoryRowViewModel / register-parity.
  */
 
 import type { InventoryAccessoryLine, InventoryRowViewModel } from "@/components/assets/inventory.mapper";
@@ -69,7 +69,7 @@ export function inventoryRowToRegisterGroups(row: InventoryRowViewModel): Invent
 }
 
 function ConfigurationValue({ text }: { text: string }) {
-  if (!text || text === "—") return <>{text || "—"}</>;
+  if (!text || text === "-") return <>{text || "-"}</>;
   const parts = text
     .split(";")
     .map((part) => part.trim())
@@ -248,7 +248,7 @@ export function InventoryRegisterGroups({
 }
 
 function formatDcWhen(value?: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return value.replace("T", " ").slice(0, 16);
 }
 

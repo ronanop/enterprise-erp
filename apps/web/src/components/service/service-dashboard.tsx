@@ -154,8 +154,8 @@ export function ServiceDashboard() {
         title={scopedToMine ? "My Service Dashboard" : "Service Dashboard"}
         description={
           scopedToMine
-            ? "Tickets assigned to you — status, SLA, and support mode."
-            : "Service Head overview — assign engineers from Users, then work the ticket queue."
+            ? "Tickets assigned to you - status, SLA, and support mode."
+            : "Service Head overview - assign engineers from Users, then work the ticket queue."
         }
         actions={
           <button

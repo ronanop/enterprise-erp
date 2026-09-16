@@ -41,7 +41,7 @@ def clear_all_employees(
     ctx: Annotated[TenantContext, Depends(require_permission(HR_SUPERADMIN_PERMISSION))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Soft-delete all employees in scope. Superadmin only — HR Admin cannot clear the directory."""
+    """Soft-delete all employees in scope. Superadmin only - HR Admin cannot clear the directory."""
     data = EmployeeImportService(db).clear_all_employees(ctx)
     db.commit()
     return APIResponse(

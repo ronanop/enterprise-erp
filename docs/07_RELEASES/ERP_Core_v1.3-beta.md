@@ -1,21 +1,21 @@
-# ERP Core v1.3-beta — Release Notes
+# ERP Core v1.3-beta - Release Notes
 
 | Field | Value |
 |-------|--------|
 | **Document Type** | Enterprise Release Notes |
 | **Release Name** | ERP Core v1.3-beta |
 | **Release Status** | Beta Development Release |
-| **Architecture Lock** | v1.1 — Maintained |
+| **Architecture Lock** | v1.1 - Maintained |
 | **Prepared As** | Enterprise Solution Architect · ERP Product Architect · Technical Documentation Lead · Release Manager · Principal Software Engineer |
-| **Classification** | Internal — Confidential |
+| **Classification** | Internal - Confidential |
 | **Predecessor** | [ERP Core v1.2-beta](./ERP_Core_v1.2-beta.md) |
-| **Ready For** | Sprint 9 — Quality Management (FRD-14) |
+| **Ready For** | Sprint 9 - Quality Management (FRD-14) |
 
 ---
 
 ## 1. Executive Summary
 
-ERP Core **v1.3-beta** advances the multi-tenant Enterprise ERP Platform from the **v1.2-beta** baseline by delivering **Sprint 8 — Manufacturing & Production**.
+ERP Core **v1.3-beta** advances the multi-tenant Enterprise ERP Platform from the **v1.2-beta** baseline by delivering **Sprint 8 - Manufacturing & Production**.
 
 The platform remains a **Modular Monolith** with **Clean Architecture** and **DDD**, governed by **Architecture Lock v1.1**. Documentation hierarchy BRD → FRD → SDD v1.1 → DBS v1.1 → ERD → code continues to be followed.
 
@@ -36,15 +36,15 @@ The platform remains a **Modular Monolith** with **Clean Architecture** and **DD
 - BOM, routing, work centers, machines, production orders, shop-floor operations
 - Material issue / return, production receipt, WIP, scrap, and production variance
 - Nine manufacturing engines (BOM · Routing · Production · Material Issue · Material Return · Production Receipt · WIP · Scrap · Variance)
-- Inventory integration only via Inventory Service (`source_module = manufacturing`) — no direct `inv_*` writes
-- Finance system journals via `ManufacturingPostingService` → `PostingService.post_system_journal` — no direct finance table writes
-- Migrations `0095`–`0114`; Alembic head `0114_seed_mfg_workflows`
+- Inventory integration only via Inventory Service (`source_module = manufacturing`) - no direct `inv_*` writes
+- Finance system journals via `ManufacturingPostingService` → `PostingService.post_system_journal` - no direct finance table writes
+- Migrations `0095`-`0114`; Alembic head `0114_seed_mfg_workflows`
 - Test suite at **127 passed**
 - FastAPI **374** routes · OpenAPI **255** paths · Manufacturing **37** API paths
 
 **What remains from v1.2-beta:** Foundation through Inventory capabilities are retained without architecture redesign. Warehouse, product, UOM, and employee masters remain authoritative under Master Data (C-01).
 
-This release is **not** production GA. It is the approved gate to start **Sprint 9 — Quality Management (FRD-14)**.
+This release is **not** production GA. It is the approved gate to start **Sprint 9 - Quality Management (FRD-14)**.
 
 ---
 
@@ -54,7 +54,7 @@ Sprint 8 delivered the **Manufacturing & Production** domain as the converter of
 
 | Capability | Delivery |
 |------------|----------|
-| **Manufacturing Module** | `apps/api/src/modules/manufacturing/` — Clean Architecture package (domain, models, repositories, engines, services, routers, adapters, tasks) |
+| **Manufacturing Module** | `apps/api/src/modules/manufacturing/` - Clean Architecture package (domain, models, repositories, engines, services, routers, adapters, tasks) |
 | **BOM Engine** | Revision-controlled BOM; one active BOM per product; component explosion with scrap % |
 | **Routing Engine** | Routing + operations with work center, setup/run time; activate lifecycle |
 | **Work Center / Machine** | Resource masters; machine shop-floor status (idle / running / maintenance / breakdown) |
@@ -82,7 +82,7 @@ Sprint 8 delivered the **Manufacturing & Production** domain as the converter of
 
 **Tables:** `mfg_bom`, `mfg_bom_line`, `mfg_routing`, `mfg_routing_operation`, `mfg_work_center`, `mfg_machine`, `mfg_production_order`, `mfg_production_operation`, `mfg_material_issue`, `mfg_material_issue_line`, `mfg_material_return`, `mfg_material_return_line`, `mfg_production_receipt`, `mfg_production_receipt_line`, `mfg_wip`, `mfg_scrap`, `mfg_variance`.
 
-**API mount:** `/manufacturing` — BOM, routing, work centers, machines, production orders (+ operations), material issues/returns, production receipts, scrap, WIP, variances, reports.
+**API mount:** `/manufacturing` - BOM, routing, work centers, machines, production orders (+ operations), material issues/returns, production receipts, scrap, WIP, variances, reports.
 
 ---
 
@@ -136,7 +136,7 @@ Architecture pillars unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreS
 
 | Gate | Status |
 |------|--------|
-| **Alembic Upgrade** | PASS — head `0114_seed_mfg_workflows` |
+| **Alembic Upgrade** | PASS - head `0114_seed_mfg_workflows` |
 | **FastAPI Startup** | PASS |
 | **Swagger** | PASS (`/docs` 200) |
 | **OpenAPI** | PASS (`/openapi.json` 200) |
@@ -162,7 +162,7 @@ Validation confirmed head `0114_seed_mfg_workflows`, successful application star
 | **Sprint 7** | Inventory | Stock, warehouse bins, reservation, transfer, adjustment, FIFO, cycle count | Complete |
 | **Sprint 8** | Manufacturing | BOM, routing, WO, issue/return/receipt, WIP, scrap, variance | Complete |
 
-**Overall milestones completed: 9** (Infrastructure Phase Sprint 0 + Delivery Sprints 1–8).
+**Overall milestones completed: 9** (Infrastructure Phase Sprint 0 + Delivery Sprints 1-8).
 
 ---
 
@@ -179,7 +179,7 @@ Validation confirmed head `0114_seed_mfg_workflows`, successful application star
 | **Finance** | COA, fiscal calendar, journals, GL, AR/AP, system journal posting |
 | **Sales** | Order-to-Cash with inventory reservation and issue hooks |
 | **Procurement** | Procure-to-Pay with inventory receipt and return issue hooks |
-| **Inventory** | Sole stock writer — balances, ledger, bins, batches, serials, FIFO |
+| **Inventory** | Sole stock writer - balances, ledger, bins, batches, serials, FIFO |
 | **Manufacturing** | BOM · routing · WO · material issue/return · FG receipt · WIP · scrap · variance |
 | **Shop Floor** | Work centers, machines, production operations progress |
 
@@ -195,7 +195,7 @@ Validation confirmed head `0114_seed_mfg_workflows`, successful application star
 | **Alembic Head** | `0114_seed_mfg_workflows` |
 | **Routes** | **374** FastAPI · **255** OpenAPI · **37** Manufacturing |
 | **Tests** | **127 passed** |
-| **Quality Status** | Alembic · Startup · Swagger · OpenAPI · Ruff · MyPy · Pytest — **ALL PASS** |
+| **Quality Status** | Alembic · Startup · Swagger · OpenAPI · Ruff · MyPy · Pytest - **ALL PASS** |
 
 ---
 
@@ -205,10 +205,10 @@ Planned future work only (no defects claimed in this section):
 
 | Deferred Capability | Notes |
 |---------------------|--------|
-| **Quality Management** | FRD-14 — Sprint 9 |
+| **Quality Management** | FRD-14 - Sprint 9 |
 | **MRP / Production Plan tables** | FRD-13 Phase 2 (shortage → PR via service only in Sprint 8) |
 | **Rework orders** | FRD-13 Phase 2 |
-| **Advanced APS** | Finite capacity optimizer — utilization alerts only in Sprint 8 |
+| **Advanced APS** | Finite capacity optimizer - utilization alerts only in Sprint 8 |
 | **HR** | FRD-09 |
 | **CRM** | FRD-05 |
 | **Projects** | Later domain |
@@ -223,7 +223,7 @@ Also deferred by prior ERDs (unchanged intent): budgeting, bank reconciliation, 
 | Attribute | Value |
 |-----------|--------|
 | **Next Release** | ERP Core **v1.4-beta** |
-| **Sprint** | **Sprint 9 — Quality Management** |
+| **Sprint** | **Sprint 9 - Quality Management** |
 | **Primary FRD** | FRD-14 Quality Management Domain |
 
 **Expected integrations:**
@@ -252,10 +252,10 @@ Also deferred by prior ERDs (unchanged intent): budgeting, bank reconciliation, 
 
 | Version | Date | Scope | Alembic Head | Tests |
 |---------|------|--------|--------------|-------|
-| **v1.0-alpha** | 2026-07-13 | Sprints 0–5 (Foundation → Sales) | `0055_seed_sales_workflows` | 77 passed |
-| **v1.1-beta** | 2026-07-13 | Sprints 0–6 (+ Procurement P2P) | `0077_seed_proc_workflows` | 99 passed |
-| **v1.2-beta** | 2026-07-13 | Sprints 0–7 (+ Inventory & Warehouse) | `0094_seed_inv_workflows` | 113 passed |
-| **v1.3-beta** | 2026-07-14 | Sprints 0–8 (+ Manufacturing & Production) | `0114_seed_mfg_workflows` | 127 passed |
+| **v1.0-alpha** | 2026-07-13 | Sprints 0-5 (Foundation → Sales) | `0055_seed_sales_workflows` | 77 passed |
+| **v1.1-beta** | 2026-07-13 | Sprints 0-6 (+ Procurement P2P) | `0077_seed_proc_workflows` | 99 passed |
+| **v1.2-beta** | 2026-07-13 | Sprints 0-7 (+ Inventory & Warehouse) | `0094_seed_inv_workflows` | 113 passed |
+| **v1.3-beta** | 2026-07-14 | Sprints 0-8 (+ Manufacturing & Production) | `0114_seed_mfg_workflows` | 127 passed |
 
 ```text
 v1.0-alpha ──(+ Sprint 6)──► v1.1-beta ──(+ Sprint 7)──► v1.2-beta ──(+ Sprint 8 Manufacturing)──► v1.3-beta ──► Sprint 9 Quality (planned)
@@ -277,7 +277,7 @@ v1.0-alpha ──(+ Sprint 6)──► v1.1-beta ──(+ Sprint 7)──► v1.
 | Status | Beta Development Release |
 | Modules | Foundation · Organization · Master Data · Finance · Sales · Procurement · Inventory · **Manufacturing** |
 | Alembic head | **`0114_seed_mfg_workflows`** |
-| Quality | Alembic · Startup · Swagger · OpenAPI · Ruff · MyPy · Pytest **127** — PASS |
-| Next | **Sprint 9 — Quality Management (FRD-14)** → **v1.4-beta** |
+| Quality | Alembic · Startup · Swagger · OpenAPI · Ruff · MyPy · Pytest **127** - PASS |
+| Next | **Sprint 9 - Quality Management (FRD-14)** → **v1.4-beta** |
 
 **ERP Core v1.3-beta release documentation completed and ready for release approval.**

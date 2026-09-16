@@ -67,7 +67,7 @@ export function PeriodCalendarView({ periods, loading, onPeriodAction }: Props) 
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-medium">{p.period_name}</p>
-                      <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{p.start_date} – {p.end_date}</p>
+                      <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">{p.start_date} - {p.end_date}</p>
                     </div>
                     {current ? <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">Current</span> : null}
                   </div>

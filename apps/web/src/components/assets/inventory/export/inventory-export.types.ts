@@ -1,5 +1,5 @@
 /**
- * CR-004 Phase 7A — Inventory register export types.
+ * CR-004 Phase 7A - Inventory register export types.
  */
 
 export type InventoryExportFormat = "xlsx" | "csv";

@@ -183,7 +183,7 @@ function employmentDraftFromRecord(record: EmployeeRecord): EmploymentInfo {
   const e = record.extension.employment;
   const clean = (value: string, fallback = "") => {
     const v = (value || "").trim();
-    return !v || v === "—" ? fallback : v;
+    return !v || v === "-" ? fallback : v;
   };
   return {
     ...e,
@@ -321,8 +321,8 @@ function bankFilled(b?: BankDetails | null) {
 }
 
 function maskAccount(account?: string) {
-  if (!account) return "—";
-  return maskAccountNumber(account) || "—";
+  if (!account) return "-";
+  return maskAccountNumber(account) || "-";
 }
 
 function formatAttendanceMonthLabel(ym: string): string {
@@ -332,7 +332,7 @@ function formatAttendanceMonthLabel(ym: string): string {
 }
 
 function formatAttendanceTime(value: unknown): string {
-  if (value == null || value === "") return "—";
+  if (value == null || value === "") return "-";
   const s = String(value);
   if (s.length >= 16 && s.includes("T")) return s.slice(11, 16);
   if (/^\d{2}:\d{2}/.test(s)) return s.slice(0, 5);
@@ -559,17 +559,17 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
           <Info label="Employee ID" value={record.employeeCode} />
           <Info
             label="Legal entity"
-            value={record.extension.employment.entityName || "—"}
+            value={record.extension.employment.entityName || "-"}
           />
           <Info label="Department" value={record.departmentName} />
           <Info label="Designation" value={record.designationName} />
           <Info label="Reporting manager" value={record.reportingManagerName} />
           <Info label="Branch" value={record.branchName} />
-          <Info label="Joined" value={record.joiningDate || "—"} />
+          <Info label="Joined" value={record.joiningDate || "-"} />
           <Info label="Employment type" value={formatEmploymentTypeLabel(record.employmentType)} />
           <Info label="Status" value={<HrStatusBadge status={record.lifecycleStatus} />} />
           <Info label="cache email id" value={record.officialEmail} />
-          <Info label="Emp. Contact No." value={maskPhone(record.mobile) || "—"} />
+          <Info label="Emp. Contact No." value={maskPhone(record.mobile) || "-"} />
         </div>
       </div>
 
@@ -584,49 +584,49 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
           <EmsFormGrid>
             <Info
               label="Legal entity"
-              value={record.extension.employment.entityName || "—"}
+              value={record.extension.employment.entityName || "-"}
             />
-            <Info label="Grade" value={record.extension.employment.grade || "—"} />
-            <Info label="Job level" value={record.extension.employment.jobLevel || "—"} />
-            <Info label="Shift" value={record.extension.employment.shiftName || "—"} />
-            <Info label="Location" value={record.locationName || record.extension.employment.location || "—"} />
+            <Info label="Grade" value={record.extension.employment.grade || "-"} />
+            <Info label="Job level" value={record.extension.employment.jobLevel || "-"} />
+            <Info label="Shift" value={record.extension.employment.shiftName || "-"} />
+            <Info label="Location" value={record.locationName || record.extension.employment.location || "-"} />
             {employmentDurationKind(record.employmentType) === "probation" ? (
               <Info
                 label="Probation days"
-                value={record.extension.employment.probationPeriodDays || "—"}
+                value={record.extension.employment.probationPeriodDays || "-"}
               />
             ) : null}
             {employmentDurationKind(record.employmentType) === "training" ? (
               <Info
                 label="Training duration (days)"
-                value={record.extension.employment.trainingDurationDays || "—"}
+                value={record.extension.employment.trainingDurationDays || "-"}
               />
             ) : null}
             <Info
               label="Confirmation"
-              value={record.extension.employment.confirmationDate || "—"}
+              value={record.extension.employment.confirmationDate || "-"}
             />
             <Info label="Department" value={record.departmentName} />
             <Info label="Designation" value={record.designationName} />
             <Info label="Reporting manager" value={record.reportingManagerName} />
             <Info label="Type" value={formatEmploymentTypeLabel(record.employmentType)} />
-            <Info label="Joined" value={record.joiningDate || "—"} />
+            <Info label="Joined" value={record.joiningDate || "-"} />
             <Info label="Status" value={record.lifecycleStatus} />
           </EmsFormGrid>
         ) : null}
 
         {tab === "gov" ? (
           <EmsFormGrid>
-            <Info label="Aadhaar" value={maskAadhaar(record.extension.governmentIds.aadhaar) || "—"} />
-            <Info label="PAN" value={maskPan(record.extension.governmentIds.pan) || "—"} />
+            <Info label="Aadhaar" value={maskAadhaar(record.extension.governmentIds.aadhaar) || "-"} />
+            <Info label="PAN" value={maskPan(record.extension.governmentIds.pan) || "-"} />
             <Info
               label="Passport"
-              value={maskKeepLast(record.extension.governmentIds.passport) || "—"}
+              value={maskKeepLast(record.extension.governmentIds.passport) || "-"}
             />
-            <Info label="UAN" value={maskKeepLast(record.extension.governmentIds.uan) || "—"} />
+            <Info label="UAN" value={maskKeepLast(record.extension.governmentIds.uan) || "-"} />
             <Info
               label="DL"
-              value={maskKeepLast(record.extension.governmentIds.drivingLicense) || "—"}
+              value={maskKeepLast(record.extension.governmentIds.drivingLicense) || "-"}
             />
           </EmsFormGrid>
         ) : null}
@@ -638,11 +638,11 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
             </p>
             {bankFilled(record.extension.bank) ? (
               <EmsFormGrid>
-                <Info label="Bank" value={record.extension.bank.bankName || "—"} />
-                <Info label="Holder" value={record.extension.bank.accountHolderName || "—"} />
-                <Info label="IFSC" value={record.extension.bank.ifsc || "—"} />
+                <Info label="Bank" value={record.extension.bank.bankName || "-"} />
+                <Info label="Holder" value={record.extension.bank.accountHolderName || "-"} />
+                <Info label="IFSC" value={record.extension.bank.ifsc || "-"} />
                 <Info label="Account" value={maskAccount(record.extension.bank.accountNumber)} />
-                <Info label="Branch" value={record.extension.bank.branchName || "—"} />
+                <Info label="Branch" value={record.extension.bank.branchName || "-"} />
               </EmsFormGrid>
             ) : (
               <p className="text-xs text-muted-foreground">No verified bank details on file.</p>
@@ -710,11 +710,11 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
               empty="No attendance records match these filters."
               columns={["Date", "Status", "Check-in", "Check-out", "Source"]}
               rows={filteredAttendance.map((r) => [
-                String(r.attendance_date ?? "—"),
-                String(r.attendance_status ?? r.status ?? "—"),
+                String(r.attendance_date ?? "-"),
+                String(r.attendance_status ?? r.status ?? "-"),
                 formatAttendanceTime(r.check_in_at),
                 formatAttendanceTime(r.check_out_at),
-                String(r.source ?? "—"),
+                String(r.source ?? "-"),
               ])}
             />
           </Section>
@@ -728,11 +728,11 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
                 empty="No leave balances."
                 columns={["Type", "Opening", "Used", "Balance", "Year"]}
                 rows={(linked?.leaveBalances ?? []).map((r) => [
-                  String(r.leave_type_name ?? r.leave_type_id ?? "—"),
-                  String(r.opening_balance ?? r.entitled ?? "—"),
-                  String(r.used ?? r.availed ?? "—"),
-                  String(r.balance ?? r.closing_balance ?? "—"),
-                  String(r.year ?? r.leave_year ?? "—"),
+                  String(r.leave_type_name ?? r.leave_type_id ?? "-"),
+                  String(r.opening_balance ?? r.entitled ?? "-"),
+                  String(r.used ?? r.availed ?? "-"),
+                  String(r.balance ?? r.closing_balance ?? "-"),
+                  String(r.year ?? r.leave_year ?? "-"),
                 ])}
               />
             </Section>
@@ -742,11 +742,11 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
                 empty="No leave requests."
                 columns={["From", "To", "Days", "Status", "Reason"]}
                 rows={(linked?.leaveRequests ?? []).map((r) => [
-                  String(r.from_date ?? r.start_date ?? "—"),
-                  String(r.to_date ?? r.end_date ?? "—"),
-                  String(r.days ?? r.total_days ?? "—"),
-                  String(r.status ?? "—"),
-                  String(r.reason ?? r.remarks ?? "—").slice(0, 60),
+                  String(r.from_date ?? r.start_date ?? "-"),
+                  String(r.to_date ?? r.end_date ?? "-"),
+                  String(r.days ?? r.total_days ?? "-"),
+                  String(r.status ?? "-"),
+                  String(r.reason ?? r.remarks ?? "-").slice(0, 60),
                 ])}
               />
             </Section>
@@ -757,11 +757,11 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
           <div className="space-y-4">
             <Section title="Salary Structure">
               <EmsFormGrid>
-                <Info label="CTC" value={record.extension.salary.ctc || "—"} />
-                <Info label="Basic" value={record.extension.salary.basicSalary || "—"} />
-                <Info label="Structure" value={record.extension.salary.salaryStructure || "—"} />
-                <Info label="Payroll group" value={record.extension.salary.payrollGroup || "—"} />
-                <Info label="Tax regime" value={record.extension.salary.incomeTaxRegime || "—"} />
+                <Info label="CTC" value={record.extension.salary.ctc || "-"} />
+                <Info label="Basic" value={record.extension.salary.basicSalary || "-"} />
+                <Info label="Structure" value={record.extension.salary.salaryStructure || "-"} />
+                <Info label="Payroll group" value={record.extension.salary.payrollGroup || "-"} />
+                <Info label="Tax regime" value={record.extension.salary.incomeTaxRegime || "-"} />
               </EmsFormGrid>
               {(linked?.salaries.length ?? 0) > 0 ? (
                 <div className="mt-3">
@@ -770,10 +770,10 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
                     empty=""
                     columns={["Structure", "Effective", "CTC", "Status"]}
                     rows={(linked?.salaries ?? []).map((r) => [
-                      String(r.structure_name ?? r.salary_structure_id ?? "—"),
-                      String(r.effective_from ?? "—"),
-                      String(r.ctc ?? r.gross ?? "—"),
-                      String(r.status ?? "—"),
+                      String(r.structure_name ?? r.salary_structure_id ?? "-"),
+                      String(r.effective_from ?? "-"),
+                      String(r.ctc ?? r.gross ?? "-"),
+                      String(r.status ?? "-"),
                     ])}
                   />
                 </div>
@@ -785,10 +785,10 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
                 empty="No payslips for this employee."
                 columns={["Document", "Period", "Net", "Status"]}
                 rows={(linked?.payslips ?? []).map((r) => [
-                  String(r.document_number ?? r.payslip_code ?? r.id ?? "—"),
-                  String(r.period_label ?? r.payroll_period_id ?? r.month ?? "—"),
-                  String(r.net_pay ?? r.net_amount ?? "—"),
-                  String(r.status ?? "—"),
+                  String(r.document_number ?? r.payslip_code ?? r.id ?? "-"),
+                  String(r.period_label ?? r.payroll_period_id ?? r.month ?? "-"),
+                  String(r.net_pay ?? r.net_amount ?? "-"),
+                  String(r.status ?? "-"),
                 ])}
               />
             </Section>
@@ -801,10 +801,10 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
             empty="No offboarding cases for this employee."
             columns={["Type", "Last day", "Status", "Reason"]}
             rows={(linked?.separation ?? []).map((r) => [
-              String(r.separation_type ?? r.type ?? "—"),
-              String(r.last_working_date ?? r.exit_date ?? "—"),
-              String(r.status ?? "—"),
-              String(r.reason ?? r.remarks ?? "—").slice(0, 80),
+              String(r.separation_type ?? r.type ?? "-"),
+              String(r.last_working_date ?? r.exit_date ?? "-"),
+              String(r.status ?? "-"),
+              String(r.reason ?? r.remarks ?? "-").slice(0, 80),
             ])}
           />
         ) : null}
@@ -951,7 +951,7 @@ function EmployeeEditForm({
               }}
             />
             <p className="text-[11px] text-muted-foreground">
-              {p.profilePhotoDataUrl ? "Photo on file — choose a file to replace" : "No file chosen"}
+              {p.profilePhotoDataUrl ? "Photo on file - choose a file to replace" : "No file chosen"}
             </p>
           </div>
         </SetupField>
@@ -1203,8 +1203,8 @@ function EmploymentForm({
             {options?.shifts.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
           </SetupSelect>
         </SetupField>
-        <SetupField label="Branch head"><SetupInput readOnly value={e.branchHeadName || "—"} /></SetupField>
-        <SetupField label="Department head"><SetupInput readOnly value={e.departmentHeadName || "—"} /></SetupField>
+        <SetupField label="Branch head"><SetupInput readOnly value={e.branchHeadName || "-"} /></SetupField>
+        <SetupField label="Department head"><SetupInput readOnly value={e.departmentHeadName || "-"} /></SetupField>
         <Field label="Grade" value={e.grade} onChange={(grade) => update({ grade })} />
         <Field label="Job level" value={e.jobLevel} onChange={(jobLevel) => update({ jobLevel })} />
         <SetupField label="Employment type" required>
@@ -1395,7 +1395,7 @@ function SalaryForm({ draft, update }: EditFormProps) {
   const set = (salary: Partial<typeof s>) => update({ salary: { ...s, ...salary } });
   return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">Optional — same as hire wizard salary step.</p>
+      <p className="text-xs text-muted-foreground">Optional - same as hire wizard salary step.</p>
       <EmsFormGrid>
         <Field label="CTC" value={s.ctc} onChange={(ctc) => set({ ctc })} />
         <Field label="Basic salary" value={s.basicSalary} onChange={(basicSalary) => set({ basicSalary })} />
@@ -1439,7 +1439,7 @@ function EducationForm({ draft, update }: EditFormProps) {
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Optional overall — if you add a qualification, degree and institution are required.
+        Optional overall - if you add a qualification, degree and institution are required.
       </p>
       <Button
         type="button"
@@ -1517,7 +1517,7 @@ function EmploymentHistoryForm({ draft, update }: EditFormProps) {
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Optional overall — if you add an employer, company and designation are required.
+        Optional overall - if you add an employer, company and designation are required.
       </p>
       <Button
         type="button"
@@ -1766,7 +1766,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 }
 
 function formatGenderLabel(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const hit = GENDER_OPTIONS.find((o) => o.value === value.toLowerCase());
   if (hit) return hit.label;
   return value.charAt(0).toUpperCase() + value.slice(1);
@@ -1774,14 +1774,14 @@ function formatGenderLabel(value: string | null | undefined): string {
 
 function formatAddressLine(parts: (string | undefined | null)[]): string {
   const cleaned = parts.map((p) => (p || "").trim()).filter(Boolean);
-  return cleaned.length ? cleaned.join(", ") : "—";
+  return cleaned.length ? cleaned.join(", ") : "-";
 }
 
 function isEmptyValue(value: ReactNode): boolean {
   if (value == null) return true;
   if (typeof value === "string") {
     const t = value.trim();
-    return !t || t === "—";
+    return !t || t === "-";
   }
   return false;
 }
@@ -1813,7 +1813,7 @@ function OverviewField({
     <div className={cn("min-w-0", className)}>
       <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
       <p className="mt-0.5 break-words text-sm font-medium text-foreground">
-        {isEmptyValue(value) ? "—" : value}
+        {isEmptyValue(value) ? "-" : value}
       </p>
     </div>
   );
@@ -1933,7 +1933,7 @@ function Info({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
       <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-0.5 text-sm text-foreground">{empty ? "—" : value}</p>
+      <p className="mt-0.5 text-sm text-foreground">{empty ? "-" : value}</p>
     </div>
   );
 }
@@ -1981,7 +1981,7 @@ function DataTableTab({
             <tr key={i} className="border-b border-border/40">
               {row.map((cell, j) => (
                 <td key={j} className="py-2 pr-3 align-top text-foreground">
-                  {cell || "—"}
+                  {cell || "-"}
                 </td>
               ))}
             </tr>
@@ -2022,7 +2022,7 @@ function DocumentsTab({
                   <p className="font-medium">{d.documentType}</p>
                   <p className="text-muted-foreground">
                     {d.fileName} · {d.uploadedBy} ·{" "}
-                    {d.uploadedAt ? new Date(d.uploadedAt).toLocaleDateString() : "—"}
+                    {d.uploadedAt ? new Date(d.uploadedAt).toLocaleDateString() : "-"}
                   </p>
                   {d.expiryDate ? <p className="text-amber-700">Expires {d.expiryDate}</p> : null}
                 </div>
@@ -2076,7 +2076,7 @@ function DocumentsTab({
                 className="rounded-lg border border-border/60 px-3 py-2"
               >
                 <p className="font-medium">
-                  {String(d.document_type ?? "Document")}: {String(d.document_name ?? "—")}
+                  {String(d.document_type ?? "Document")}: {String(d.document_name ?? "-")}
                 </p>
                 <p className="text-muted-foreground">
                   {String(d.document_number ?? "")} · {String(d.verification_status ?? d.status ?? "")}

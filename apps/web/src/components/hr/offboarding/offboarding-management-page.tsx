@@ -136,7 +136,7 @@ function WorkflowActionPanel({
         <p className="text-sm font-semibold text-foreground">{title}</p>
         <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>
       </div>
-      <SetupField label="Remarks" hint="Optional — visible on this approval step">
+      <SetupField label="Remarks" hint="Optional - visible on this approval step">
         <SetupTextarea
           rows={2}
           className="min-h-[56px]"
@@ -145,7 +145,7 @@ function WorkflowActionPanel({
           onChange={(e) => setRemarks(e.target.value)}
         />
       </SetupField>
-      <SetupField label="Attachment" hint="Optional — PDF, image, or office file (max 2 MB)">
+      <SetupField label="Attachment" hint="Optional - PDF, image, or office file (max 2 MB)">
         <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground hover:bg-muted/40">
           <Upload className="size-3.5 shrink-0" />
           <span className="truncate font-medium text-foreground">{fileName || "Choose file"}</span>
@@ -302,7 +302,7 @@ function OffboardingCaseHeader({ c }: { c: OffboardingCase }) {
           <span className="mx-1.5 text-border">|</span>
           {SEPARATION_TYPE_LABELS[c.separationType] ?? c.separationType}
           <span className="mx-1.5 text-border">|</span>
-          LWD {c.approvedLwd || c.expectedExitDate || c.requestedLwd || "—"}
+          LWD {c.approvedLwd || c.expectedExitDate || c.requestedLwd || "-"}
         </p>
       </div>
       <div className="flex shrink-0 flex-wrap gap-1.5">
@@ -334,7 +334,7 @@ function OffboardingCasePicker({
         <option value="">Select offboarding case…</option>
         {cases.map((c) => (
           <option key={c.id} value={c.id}>
-            {c.employeeName} ({c.employeeCode}) — {c.documentNumber}
+            {c.employeeName} ({c.employeeCode}) - {c.documentNumber}
           </option>
         ))}
       </SetupSelect>
@@ -577,7 +577,7 @@ export function OffboardingManagementPage() {
             <div className="overflow-x-auto rounded-xl border border-border/70 bg-card shadow-sm">
               <p className="border-b border-border/60 px-3 py-2 text-[11px] text-muted-foreground">
                 {kpiFilter === "direct_exit"
-                  ? "Direct exits — notice was skipped. Click the Direct exits card again to show all."
+                  ? "Direct exits - notice was skipped. Click the Direct exits card again to show all."
                   : kpiFilter === "fnf_pending"
                     ? "Cases where FNF is still pending after exit. Click the FNF pending card again to show all."
                     : "On Notice is a live employment state, not just an open case. Direct exits skip notice. Click a summary card to filter."}
@@ -625,7 +625,7 @@ export function OffboardingManagementPage() {
                         <HrStatusBadge status={NOTICE_STATUS_LABELS[c.noticeStatus] ?? c.noticeStatus} />
                       </td>
                       <td className="px-3 py-2 text-xs tabular-nums">
-                        {c.expectedExitDate || c.approvedLwd || c.requestedLwd || "—"}
+                        {c.expectedExitDate || c.approvedLwd || c.requestedLwd || "-"}
                       </td>
                       <td className="px-3 py-2">
                         <button
@@ -712,12 +712,12 @@ export function OffboardingManagementPage() {
                       <td className="px-3 py-2 text-xs">
                         {SEPARATION_TYPE_LABELS[c.separationType] ?? c.separationType}
                       </td>
-                      <td className="px-3 py-2 text-xs tabular-nums">{c.noticeStartDate || "—"}</td>
+                      <td className="px-3 py-2 text-xs tabular-nums">{c.noticeStartDate || "-"}</td>
                       <td className="px-3 py-2 text-xs tabular-nums">
-                        {c.noticePeriodDays != null ? `${c.noticePeriodDays} days` : "—"}
+                        {c.noticePeriodDays != null ? `${c.noticePeriodDays} days` : "-"}
                       </td>
                       <td className="px-3 py-2 text-xs tabular-nums">
-                        {c.expectedExitDate || c.requestedLwd || "—"}
+                        {c.expectedExitDate || c.requestedLwd || "-"}
                       </td>
                       <td className="px-3 py-2 text-xs">{noticeServedLabel(c)}</td>
                       <td className="px-3 py-2">
@@ -794,7 +794,7 @@ export function OffboardingManagementPage() {
                   size="sm"
                   className="cursor-pointer"
                   disabled={acting}
-                  onClick={() => void act("confirm-lwd", {}, "Notice served — last working day confirmed")}
+                  onClick={() => void act("confirm-lwd", {}, "Notice served - last working day confirmed")}
                 >
                   Confirm last working day (notice served)
                 </Button>
@@ -1138,7 +1138,7 @@ export function OffboardingManagementPage() {
             </div>
             <div className="rounded-lg border border-border/60 px-3 py-2">
               <dt className="text-[10px] uppercase text-muted-foreground">Payroll run</dt>
-              <dd className="mt-1 font-mono text-xs">{selected.fnfPayrollRunId ?? "—"}</dd>
+              <dd className="mt-1 font-mono text-xs">{selected.fnfPayrollRunId ?? "-"}</dd>
             </div>
           </dl>
           <div className="flex flex-wrap gap-2">

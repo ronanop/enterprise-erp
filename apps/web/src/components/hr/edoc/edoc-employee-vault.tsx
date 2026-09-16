@@ -249,7 +249,7 @@ function dataUrlBytes(url?: string) {
 }
 
 function formatBytes(n: number) {
-  if (!n) return "—";
+  if (!n) return "-";
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${Math.max(1, Math.round(n / 1024))} KB`;
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
@@ -438,7 +438,7 @@ export function EdocEmployeeVault({
                       <Avatar src={photo} name={b.name} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{b.name}</p>
-                        <p className="truncate text-[11px] text-muted-foreground">{b.email || "—"}</p>
+                        <p className="truncate text-[11px] text-muted-foreground">{b.email || "-"}</p>
                         <p className="truncate font-mono text-[10px] text-muted-foreground">{b.code}</p>
                       </div>
                       <div className="flex shrink-0 flex-col items-center gap-0.5">
@@ -662,7 +662,7 @@ export function EdocEmployeeVault({
               <div className="min-w-0">
                 <p className="truncate text-sm font-semibold">{previewDoc.fileName}</p>
                 <p className="text-[11px] text-muted-foreground">
-                  {formatUploaded(previewDoc.uploadedAt) || "—"}
+                  {formatUploaded(previewDoc.uploadedAt) || "-"}
                   {" · "}
                   {formatBytes(previewBytes)}
                   {" · "}

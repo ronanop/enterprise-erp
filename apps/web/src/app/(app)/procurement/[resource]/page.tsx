@@ -24,7 +24,7 @@ interface PageProps {
 export default async function ProcurementResourcePage({ params }: PageProps) {
   const { resource: resourceKey } = await params;
   if (resourceKey === "scm") return <ScmQueuePage />;
-  // Legacy "Vendors & PO" route — same unified Purchase Orders list.
+  // Legacy "Vendors & PO" route - same unified Purchase Orders list.
   if (resourceKey === "vendor-po" || resourceKey === "orders") return <OrdersListPage />;
   if (resourceKey === "grns") return <GrnsListPage />;
   if (resourceKey === "delivery-challan") return <DeliveryChallanListPage />;

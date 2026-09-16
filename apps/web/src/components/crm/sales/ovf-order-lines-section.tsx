@@ -169,7 +169,7 @@ export function mergeVendorRowsWithQuoteAttachments(
 
 export function formatChargeRowFileNames(files: ChargeRowFile[] | undefined): string {
   const names = (files ?? []).map((file) => file.fileName.trim()).filter(Boolean);
-  return names.length ? names.join(", ") : "—";
+  return names.length ? names.join(", ") : "-";
 }
 
 function newKey() {
@@ -652,7 +652,7 @@ function ChargesMultiFileUpload({
   }
 
   if (disabled && !hasFiles) {
-    return <span className="text-[12px] text-muted-foreground">—</span>;
+    return <span className="text-[12px] text-muted-foreground">-</span>;
   }
 
   return (
@@ -712,7 +712,7 @@ type OvfOrderLinesSectionProps = {
   vendorRows: VendorChargeRow[];
   onCustomerRowsChange?: (rows: CustomerChargeRow[]) => void;
   onVendorRowsChange?: (rows: VendorChargeRow[]) => void;
-  /** Distributor names selected on the lead — options for Distributor Name. */
+  /** Distributor names selected on the lead - options for Distributor Name. */
   vendorNameOptions?: readonly string[];
   disabled?: boolean;
 };

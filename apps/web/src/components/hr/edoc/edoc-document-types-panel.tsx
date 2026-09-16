@@ -18,7 +18,7 @@ const STATUS_FIELD: FieldDef = {
 const documentTypesTab: HrSetupTab = {
   id: "document-types",
   title: "Document Types",
-  description: "KYC catalog — drives onboarding uploads",
+  description: "KYC catalog - drives onboarding uploads",
   source: "local",
   codePrefix: "DOC",
 };
@@ -76,7 +76,7 @@ const fields: FieldDef[] = [
   STATUS_FIELD,
 ];
 
-/** Document type catalog — edit / view / delete from EDoc. */
+/** Document type catalog - edit / view / delete from EDoc. */
 export function EdocDocumentTypesPanel() {
   return (
     <SetupEntityPanel

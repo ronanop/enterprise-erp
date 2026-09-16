@@ -4,7 +4,7 @@ import type { DeliveryChallanRecord } from "@/utils/delivery-challan-storage";
 /** True when value is a real generated GRN (e.g. PO/CDT/017/001), not a placeholder. */
 export function isGeneratedGrnNumber(value: string | null | undefined): boolean {
   const v = String(value ?? "").trim();
-  if (!v || v === "—" || v === "-" || v === "Full PO") return false;
+  if (!v || v === "-" || v === "-" || v === "Full PO") return false;
   if (v.startsWith("ovf-") || v.startsWith("saved:")) return false;
   if (v === "GRN warehouse stock" || v === "OVF inventory") return false;
   return true;
@@ -40,7 +40,7 @@ export function uniqueGeneratedGrnNumbers(
 
 export function formatGeneratedGrnNumbers(numbers: string[]): string {
   const unique = uniqueGeneratedGrnNumbers(numbers);
-  return unique.length > 0 ? unique.join(", ") : "—";
+  return unique.length > 0 ? unique.join(", ") : "-";
 }
 
 /** GRN numbers recorded on warehouse inventory for a purchase order. */
@@ -58,7 +58,7 @@ export function grnNumbersFromInventoryForOrder(
 }
 
 /**
- * Resolve display GRN number(s) the same way GrnPdfPickDialog shows them —
+ * Resolve display GRN number(s) the same way GrnPdfPickDialog shows them -
  * prefer stored values, then inventory GRNs for the linked PO.
  */
 export function resolveDisplayGrnNumbers(input: {

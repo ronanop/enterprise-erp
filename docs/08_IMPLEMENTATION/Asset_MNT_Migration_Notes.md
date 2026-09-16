@@ -1,4 +1,4 @@
-# Asset Maintenance — Migration Notes (FP-ASSET-004)
+# Asset Maintenance - Migration Notes (FP-ASSET-004)
 
 ## Revision
 

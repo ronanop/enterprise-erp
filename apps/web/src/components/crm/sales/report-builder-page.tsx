@@ -256,7 +256,7 @@ export function ReportBuilderPage({
             {reportName.trim() || "Untitled Report"}
           </h1>
           <p className="text-xs text-muted-foreground">
-            {moduleLabel || primaryModule || "—"}
+            {moduleLabel || primaryModule || "-"}
             {mode === "edit" ? (
               <button
                 type="button"

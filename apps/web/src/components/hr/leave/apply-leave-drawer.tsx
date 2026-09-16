@@ -96,7 +96,7 @@ export function ApplyLeaveDrawer({
     <SetupDrawer
       open={open}
       title="Apply Leave"
-      description="Leave cycle is calendar 1–last day (not payroll 20–20). Monthly credit posts after month end — then past dates in that month can be covered."
+      description="Leave cycle is calendar 1-last day (not payroll 20-20). Monthly credit posts after month end - then past dates in that month can be covered."
       wide
       onClose={onClose}
       footer={

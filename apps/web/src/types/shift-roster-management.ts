@@ -1,4 +1,4 @@
-/** Enterprise Shift & Roster — view models */
+/** Enterprise Shift & Roster - view models */
 
 export type ShiftTypeCode =
   | "general"

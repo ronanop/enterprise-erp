@@ -120,7 +120,7 @@ const STAGE_FORM_LINKS: Partial<
   },
 };
 
-/** Show person name only — drop trailing employee code like " (EMP-000057)". */
+/** Show person name only - drop trailing employee code like " (EMP-000057)". */
 function employeeNameOnly(label: string): string {
   const stripped = label.replace(/\s*\([^)]*\)\s*$/, "").trim();
   return stripped || label;
@@ -252,7 +252,7 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
     progressStatus?: string | null,
   ) => {
     const progress = stageProgressLabel(progressStatus);
-    if (progress !== "—") return progress;
+    if (progress !== "-") return progress;
     if (workStatus === "done") return "Done";
     if (workStatus === "in_progress") return "In progress";
     if (workStatus === "skipped") return "Skipped";
@@ -260,12 +260,12 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
   };
 
   const displayDate = (value: string | null | undefined) => {
-    if (!value) return "—";
+    if (!value) return "-";
     return String(value).slice(0, 10);
   };
 
   const displayDateTime = (value: string | null | undefined) => {
-    if (!value) return "—";
+    if (!value) return "-";
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return String(value).slice(0, 16).replace("T", " ");
     return d.toLocaleString(undefined, {
@@ -310,7 +310,7 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
       return employeeName(site.installation_assignee_employee_id);
     }
     if (step === "Acceptance") return employeeName(site.acceptance_assignee_employee_id);
-    return "—";
+    return "-";
   };
 
   const stageDates: Array<{
@@ -711,7 +711,7 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
                               <span className="text-amber-700 dark:text-amber-500">Awaiting reply</span>
                             )
                           ) : (
-                            "—"
+                            "-"
                           )}
                         </td>
                         <td className="max-w-52 px-3 py-2 text-muted-foreground">
@@ -723,7 +723,7 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
                               {stageFollowUp.latest_reply}
                             </span>
                           ) : (
-                            "—"
+                            "-"
                           )}
                         </td>
                         <td className="px-3 py-2">
@@ -777,7 +777,7 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
                         {displayDateTime(fu.created_at)}
                       </td>
                       <td className="px-3 py-2 font-medium text-foreground">
-                        {fu.stage_label || fu.stage || "—"}
+                        {fu.stage_label || fu.stage || "-"}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground">
                         {employeeName(fu.recipient_employee_id)}
@@ -786,7 +786,7 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
                         {fu.note?.trim() ? (
                           <span className="line-clamp-3 whitespace-pre-wrap">{fu.note}</span>
                         ) : (
-                          "—"
+                          "-"
                         )}
                       </td>
                       <td className="max-w-56 px-3 py-2 text-muted-foreground">
@@ -799,7 +799,7 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
                         )}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground capitalize">
-                        {fu.has_reply ? "Replied" : fu.delivery_status || fu.status || "—"}
+                        {fu.has_reply ? "Replied" : fu.delivery_status || fu.status || "-"}
                       </td>
                     </tr>
                   ))
@@ -932,7 +932,7 @@ export function SiteInstallationTrackingSummary({ projectId }: { projectId: stri
   );
 }
 
-/** Overview only — stage details are filled on dedicated form pages. */
+/** Overview only - stage details are filled on dedicated form pages. */
 export function SiteInstallationWorkflow({ projectId }: { projectId: string }) {
   const { projectModuleAdmin } = useAuthUser();
   const [row, setRow] = useState<SiteInstallation | null>(null);
@@ -1060,7 +1060,7 @@ export function SiteInstallationWorkflow({ projectId }: { projectId: string }) {
         ) : null}
         {locked ? (
           <p className="text-xs text-muted-foreground">
-            Workflow completed — open any completed step above in read-only mode.
+            Workflow completed - open any completed step above in read-only mode.
           </p>
         ) : null}
       </div>

@@ -27,6 +27,7 @@ from modules.crm.repository.ovf_repository import OvfLineRepository, OvfReposito
 from modules.crm.repository.quote_repository import QuoteLineRepository, QuoteRepository
 from modules.crm.service.blueprint_service import log_state_history
 from modules.crm.service.crm_module_admin import CrmModuleAdminService
+from modules.crm.service.crm_record_visibility import CrmRecordVisibility
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import margin_engine, sales_blueprint_engine
@@ -129,6 +130,7 @@ class OvfService:
         self._numbers = DocumentNumberService(db)
         self._attachments = AttachmentRepository(db)
         self._crm_admin = CrmModuleAdminService(db)
+        self._visibility = CrmRecordVisibility(db)
         self._audit = AuditService(db)
 
     def resolve_customer_po_display_date(self, ctx: TenantContext, ovf: CrmOvf) -> date | None:
@@ -155,7 +157,31 @@ class OvfService:
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None, opportunity_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_ovfs(ctx, cid, opportunity_id=opportunity_id)
+        if opportunity_id is not None:
+            opp = self._opportunities.get(ctx, opportunity_id)
+            if opp is None:
+                raise NotFoundException("Opportunity not found")
+            self._visibility.ensure_opportunity_access(ctx, opp)
+            return self._repo.list_ovfs(ctx, cid, opportunity_id=opportunity_id)
+
+        opp_ids, created_by, approval_ids = self._visibility.filter_ovf_scope(ctx, cid)
+        if opp_ids is None:
+            return self._repo.list_ovfs(ctx, cid)
+
+        by_id: dict = {}
+        if opp_ids:
+            for row in self._repo.list_ovfs(ctx, cid, opportunity_ids=opp_ids):
+                by_id[row.id] = row
+        if created_by is not None:
+            for row in self._repo.list_ovfs(ctx, cid, created_by=created_by):
+                by_id[row.id] = row
+        for oid in approval_ids:
+            if oid in by_id:
+                continue
+            row = self._repo.get(ctx, oid)
+            if row is not None and row.company_id == cid:
+                by_id[row.id] = row
+        return sorted(by_id.values(), key=lambda r: r.created_at or r.id, reverse=True)
 
     def list_shared_for_scm(self, ctx: TenantContext, company_id: UUID | None = None):
         """OVFs shared to SCM after Finance/management commercial lock."""
@@ -181,6 +207,10 @@ class OvfService:
         row = self._repo.get(ctx, ovf_id)
         if row is None:
             raise NotFoundException("OVF not found")
+        # Procurement/SCM module-wide access still uses list_shared_for_scm;
+        # CRM users are creator-scoped unless admin or approval assignee.
+        if not self._visibility.is_admin(ctx):
+            self._visibility.ensure_ovf_access(ctx, row)
         self._ensure_display_snapshot(ctx, row)
         return row
 
@@ -204,7 +234,7 @@ class OvfService:
         )
 
     def get_scm_handoff(self, ctx: TenantContext, ovf_id: UUID) -> dict[str, Any]:
-        """Full CRM OVF DTO for SCM — queue preview, Create PO, and View OVF."""
+        """Full CRM OVF DTO for SCM - queue preview, Create PO, and View OVF."""
         ovf = self.get(ctx, ovf_id)
         if not ovf.shared_to_scm:
             raise ConflictException("OVF has not been shared to SCM")
@@ -284,7 +314,7 @@ class OvfService:
         customer_rank = {
             (c.get("product_name") or "").strip().lower(): i
             for i, c in enumerate(customer_dtos)
-            if (c.get("product_name") or "").strip() and c["product_name"] != "—"
+            if (c.get("product_name") or "").strip() and c["product_name"] != "-"
         }
         vendor_dtos.sort(key=lambda d: _crm_line_sort_key(d, follow=customer_rank))
 
@@ -1030,7 +1060,7 @@ class OvfService:
         line_index: int,
         distributor_name: str,
     ) -> CrmOvfLine:
-        """SCM item-plan vendor selection — updates CRM vendor line distributor_name.
+        """SCM item-plan vendor selection - updates CRM vendor line distributor_name.
 
         Allowed after share-to-SCM even when the OVF blueprint is locked.
         """

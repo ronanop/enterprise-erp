@@ -1,4 +1,4 @@
-# Asset Checklist — Release Notes (FP-ASSET-014)
+# Asset Checklist - Release Notes (FP-ASSET-014)
 
 **Release:** FP-ASSET-014  
 **Date:** 2026-07-30

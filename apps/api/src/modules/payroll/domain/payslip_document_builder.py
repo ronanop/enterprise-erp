@@ -126,7 +126,7 @@ def format_payslip_text(doc: dict[str, Any]) -> str:
         "=" * 42,
         f"Period:   {period.get('name') or period.get('code')}",
         f"Dates:    {period.get('start')} to {period.get('end')}",
-        f"Employee: {emp.get('name') or '—'} ({emp.get('code') or emp.get('id')})",
+        f"Employee: {emp.get('name') or '-'} ({emp.get('code') or emp.get('id')})",
         "-" * 42,
         "ATTENDANCE (payroll cycle)",
         f"  Scheduled / N     {att.get('period_days', 0)}",

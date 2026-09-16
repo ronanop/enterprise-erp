@@ -8,7 +8,7 @@ export type PayrollAttendanceEmployeeRef = {
   employeeName: string;
   employeeCode: string;
   department: string;
-  /** HR UUID when known — used to match attendance rows */
+  /** HR UUID when known - used to match attendance rows */
   hrEmployeeId?: string;
 };
 

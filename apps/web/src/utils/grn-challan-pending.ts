@@ -23,9 +23,9 @@ export type PendingGrnChallan = {
   createdAt: string;
   /** Set after the challan/billing form is saved. */
   status?: GrnChallanStatus;
-  /** Challan number (DC) or invoice number (billing) — filled on save. */
+  /** Challan number (DC) or invoice number (billing) - filled on save. */
   docNumber?: string;
-  /** Challan date (DC) or invoice date (billing) — filled on save. */
+  /** Challan date (DC) or invoice date (billing) - filled on save. */
   docDate?: string;
   /** localStorage record ID of the saved challan, for linking back. */
   savedRecordId?: string;

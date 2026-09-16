@@ -1,4 +1,4 @@
-"""Quality finance posting — PostingService.post_system_journal only."""
+"""Quality finance posting - PostingService.post_system_journal only."""
 
 from decimal import Decimal
 from uuid import UUID

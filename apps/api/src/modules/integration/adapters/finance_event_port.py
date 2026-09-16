@@ -1,4 +1,4 @@
-"""Finance event-ref port — Integration Hub NEVER posts.
+"""Finance event-ref port - Integration Hub NEVER posts.
 
 NEVER uses PostingService. NEVER writes fin_* tables.
 UUID / event-ref passthrough stubs only (Finance may publish events into Hub).

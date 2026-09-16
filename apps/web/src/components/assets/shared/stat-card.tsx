@@ -54,7 +54,7 @@ export function StatCard({
   trend,
   loading,
   empty,
-  emptyLabel = "—",
+  emptyLabel = "-",
   className,
   onClick,
   "aria-label": ariaLabel,

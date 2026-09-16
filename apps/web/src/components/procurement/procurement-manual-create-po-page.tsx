@@ -70,7 +70,7 @@ function productLabel(row: ProcurementInventoryRow): string {
 
 function poGrnLabel(value: string | null | undefined): string {
   const text = (value || "").trim();
-  return text || "—";
+  return text || "-";
 }
 
 function keysForPoGrnGroup(
@@ -582,7 +582,7 @@ export function ProcurementManualCreatePoPage() {
       const description = (line.description || "").trim();
       const hsn = (line.hsnSac || "").trim();
       let productName = description
-        ? `${product} — ${description}`.slice(0, 255)
+        ? `${product} - ${description}`.slice(0, 255)
         : product;
       if (hsn) {
         productName = `${productName} | HSN ${hsn}`.slice(0, 255);
@@ -704,7 +704,7 @@ export function ProcurementManualCreatePoPage() {
             <Input
               readOnly
               className="h-8 font-mono text-sm font-medium tabular-nums"
-              value={peekBusy ? "Loading…" : nextPo || "—"}
+              value={peekBusy ? "Loading…" : nextPo || "-"}
             />
           </FinanceField>
 
@@ -775,7 +775,7 @@ export function ProcurementManualCreatePoPage() {
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <FinanceField label="GST number">
                   <Input
-                    value={vendorGstNumber || "—"}
+                    value={vendorGstNumber || "-"}
                     readOnly
                     className="h-8 cursor-default bg-muted/30 font-medium text-foreground"
                     aria-label="Vendor GST number"
@@ -783,7 +783,7 @@ export function ProcurementManualCreatePoPage() {
                 </FinanceField>
                 <FinanceField label="Source of supply">
                   <Input
-                    value={vendorSourceOfSupply || "—"}
+                    value={vendorSourceOfSupply || "-"}
                     readOnly
                     className="h-8 cursor-default bg-muted/30 font-medium text-foreground"
                     aria-label="Source of supply"
@@ -791,7 +791,7 @@ export function ProcurementManualCreatePoPage() {
                 </FinanceField>
                 <FinanceField label="Destination of supply">
                   <Input
-                    value={vendorDestinationOfSupply || "—"}
+                    value={vendorDestinationOfSupply || "-"}
                     readOnly
                     className="h-8 cursor-default bg-muted/30 font-medium text-foreground"
                     aria-label="Destination of supply"

@@ -1,4 +1,4 @@
-# Asset Workflow Governance — Production Deployment Checklist
+# Asset Workflow Governance - Production Deployment Checklist
 
 **Feature:** FP-ASSET-WF-GOV-001  
 **Date:** 2026-07-29

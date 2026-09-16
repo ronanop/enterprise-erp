@@ -243,7 +243,7 @@ export function ProcurementReportsPage() {
     {
       id: "orders-all",
       title: "Purchase orders",
-      description: "Full commercial PO workbook — vendor, customer, margin, status.",
+      description: "Full commercial PO workbook - vendor, customer, margin, status.",
       icon: ShoppingCart,
       tint: "sky",
       href: "/procurement/orders",
@@ -292,7 +292,7 @@ export function ProcurementReportsPage() {
     {
       id: "inventory",
       title: "Inventory",
-      description: "Non-billed GRN stock units — product, serial, PO, GRN, unit cost.",
+      description: "Non-billed GRN stock units - product, serial, PO, GRN, unit cost.",
       icon: Boxes,
       tint: "teal",
       href: "/procurement/inventory",
@@ -335,7 +335,7 @@ export function ProcurementReportsPage() {
       id: "complete",
       title: "Complete report",
       description:
-        "All five reports in one workbook — POs, open/partial, closed, inventory, GRN.",
+        "All five reports in one workbook - POs, open/partial, closed, inventory, GRN.",
       icon: FileSpreadsheet,
       tint: "slate",
       countLabel: loading ? "…" : "All reports",
@@ -497,7 +497,7 @@ export function ProcurementReportsPage() {
                       </td>
                       <td className={cn(procurementUi.td, "px-3")}>
                         {row.grnNumbers.length === 0 ? (
-                          <span className="font-mono text-xs text-muted-foreground">—</span>
+                          <span className="font-mono text-xs text-muted-foreground">-</span>
                         ) : (
                           <ul className="space-y-0.5">
                             {row.grnNumbers.map((grn) => (
@@ -737,7 +737,7 @@ export function ProcurementAnalyticsPage() {
       if (status === "draft" || status === "cancelled") continue;
       const label = data.vendors[order.vendor_id]?.label || order.vendor_id;
       const amount = Number(order.vendor_total) || Number(order.total_amount) || 0;
-      const companyPo = (order.company_po_number || order.document_number || "—").trim();
+      const companyPo = (order.company_po_number || order.document_number || "-").trim();
       const fulfillment = poOverviewBucketForOrder(order, deriveGrnStatus(order)) ?? "open";
       const entry = map.get(order.vendor_id) ?? {
         vendorId: order.vendor_id,
@@ -808,25 +808,25 @@ export function ProcurementAnalyticsPage() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <AnalyticsStat
           label="Open OVF"
-          value={loading ? "—" : openOvf.toLocaleString("en-IN")}
+          value={loading ? "-" : openOvf.toLocaleString("en-IN")}
           tint="sky"
           icon={ClipboardList}
         />
         <AnalyticsStat
           label="Open PO"
-          value={loading ? "—" : buckets.open.toLocaleString("en-IN")}
+          value={loading ? "-" : buckets.open.toLocaleString("en-IN")}
           tint="amber"
           icon={ShoppingCart}
         />
         <AnalyticsStat
           label="GRN documents"
-          value={loading ? "—" : pipelineMetrics.grns.toLocaleString("en-IN")}
+          value={loading ? "-" : pipelineMetrics.grns.toLocaleString("en-IN")}
           tint="orange"
           icon={PackageCheck}
         />
         <AnalyticsStat
           label="Stock value"
-          value={loading || !stockSummary ? "—" : formatInr(stockSummary.totalStockValue)}
+          value={loading || !stockSummary ? "-" : formatInr(stockSummary.totalStockValue)}
           tint="emerald"
           icon={IndianRupee}
         />
@@ -989,7 +989,7 @@ export function ProcurementAnalyticsPage() {
             </h2>
           </div>
           <p className="shrink-0 font-mono text-xs tabular-nums text-sky-800/80">
-            {loading ? "—" : `${vendorSpend.length.toLocaleString("en-IN")} vendors`}
+            {loading ? "-" : `${vendorSpend.length.toLocaleString("en-IN")} vendors`}
           </p>
         </div>
         {loading ? (

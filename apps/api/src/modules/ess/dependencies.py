@@ -12,7 +12,7 @@ __all__ = ["get_db", "get_tenant_context", "TenantContext"]
 
 
 def get_db() -> Generator[Session]:
-    """ESS request-scoped unit of work — commit on success, roll back on failure."""
+    """ESS request-scoped unit of work - commit on success, roll back on failure."""
     db = SessionLocal()
     try:
         yield db

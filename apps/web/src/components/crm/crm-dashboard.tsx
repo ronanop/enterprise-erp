@@ -178,7 +178,6 @@ export function CrmDashboard() {
     <CrmPage>
       <PageHeader
         title="Sales CRM Dashboard"
-        description="Pipeline health, deal mix, and revenue outlook across leads and opportunities."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Link
@@ -296,7 +295,7 @@ export function CrmDashboard() {
                     {s.label}
                   </span>
                   <span className="font-medium tabular-nums text-foreground">
-                    {loading ? "—" : count}
+                    {loading ? "-" : count}
                   </span>
                 </li>
               );
@@ -377,7 +376,7 @@ export function CrmDashboard() {
                         </p>
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">
-                        {String(row.mobile ?? row.email ?? "—")}
+                        {String(row.mobile ?? row.email ?? "-")}
                       </td>
                       <td className="px-4 py-2.5">
                         <FinanceStatusBadge
@@ -432,7 +431,7 @@ export function CrmDashboard() {
                         !row.id && "pointer-events-none",
                       )}
                     >
-                      {String(row.opportunity_name ?? row.opportunity_code ?? "—")}
+                      {String(row.opportunity_name ?? row.opportunity_code ?? "-")}
                     </Link>
                     <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">
                       {formatInr(asNumber(row.expected_revenue))}
@@ -456,21 +455,21 @@ export function CrmDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-3">
         <CrmActivityTile
           label="Meetings"
-          value={loading ? "—" : String(data?.meetings.length ?? 0)}
+          value={loading ? "-" : String(data?.meetings.length ?? 0)}
           icon={CalendarDays}
           tint="bg-sky-50 text-sky-800"
           href="/crm/meetings"
         />
         <CrmActivityTile
           label="Follow-ups"
-          value={loading ? "—" : String(data?.followups.length ?? 0)}
+          value={loading ? "-" : String(data?.followups.length ?? 0)}
           icon={ClipboardList}
           tint="bg-amber-50 text-amber-900"
           href="/crm/customer-followups"
         />
         <CrmActivityTile
           label="Campaigns active"
-          value={loading ? "—" : String(countByStatus(data?.campaigns ?? [], ["active"]))}
+          value={loading ? "-" : String(countByStatus(data?.campaigns ?? [], ["active"]))}
           icon={LayoutGrid}
           tint="bg-emerald-50 text-emerald-800"
           href="/crm/campaigns"

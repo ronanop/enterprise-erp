@@ -19,7 +19,7 @@ export type PoGrnBillingRow = {
   grnNumbers: string[];
   qtyOrdered: number;
   qtyReceived: number;
-  /** Still to receive (ordered − received). */
+  /** Still to receive (ordered - received). */
   qtyRemaining: number;
   qtyBilled: number;
   qtyUnbilled: number;
@@ -35,7 +35,7 @@ function roundQty(value: number): number {
 
 function formatPoStatus(status: string): string {
   const value = (status || "").trim().toLowerCase();
-  if (!value) return "—";
+  if (!value) return "-";
   if (value === "partially_received") return "Partially received";
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -141,10 +141,10 @@ export function buildPoGrnBillingRows(
 
     rows.push({
       orderId: po.id,
-      companyPo: (po.company_po_number || po.document_number || "—").trim(),
+      companyPo: (po.company_po_number || po.document_number || "-").trim(),
       vendor: vendors[po.vendor_id]?.label || po.vendor_id,
       poStatus: formatPoStatus(po.status),
-      grnStatus: formatGrnStatusBadgeLabel(po.grn_status) || "—",
+      grnStatus: formatGrnStatusBadgeLabel(po.grn_status) || "-",
       grnStatusKey: (po.grn_status || "pending").toLowerCase(),
       grnDocuments,
       grnNumbers,

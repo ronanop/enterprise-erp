@@ -24,6 +24,7 @@ from modules.crm.service.cloud_flow import (
     is_cloud_opportunity,
     uses_cloud_consumption_flow,
 )
+from modules.crm.service.crm_record_visibility import CrmRecordVisibility
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.engines import sales_blueprint_engine
 from modules.foundation.domain.value_objects import TenantContext
@@ -85,10 +86,10 @@ def log_state_history(
     )
 
 
-# Opportunity actions that are UI affordances only — driven by Quote/OVF services.
+# Opportunity actions that are UI affordances only - driven by Quote/OVF services.
 _GATED_OPPORTUNITY_ACTIONS = {"create_quote", "quote_accepted", "create_ovf", "deal_won"}
 
-# Actions that resume a previously "sent for approval" (locked) opportunity —
+# Actions that resume a previously "sent for approval" (locked) opportunity -
 # these must be allowed to run *while* the record is locked, since they are
 # exactly what releases the lock (approve) or sends it back for rework
 # (reject). Only invoked by ApprovalTaskService._resume() from a My Jobs
@@ -111,11 +112,13 @@ class OpportunityBlueprintService:
         self._repo = OpportunityRepository(db)
         self._attachments = AttachmentService(db)
         self._scope = CrmScopeValidator(db)
+        self._visibility = CrmRecordVisibility(db)
 
     def get(self, ctx: TenantContext, opportunity_id: UUID) -> CrmOpportunity:
         row = self._repo.get(ctx, opportunity_id)
         if row is None:
             raise NotFoundException("Opportunity not found")
+        self._visibility.ensure_opportunity_access(ctx, row)
         return row
 
     def _require_blueprint(self, opp: CrmOpportunity) -> str:
@@ -295,7 +298,7 @@ class OpportunityBlueprintService:
                 opp,
                 action="approve_cloud_discount",
                 team_role=payload.get("team_role", "management"),
-                title=f"Approve Cloud Discount — {opp.opportunity_name}",
+                title=f"Approve Cloud Discount - {opp.opportunity_name}",
                 remarks=payload.get("remarks") or summary,
                 assigned_user_ids=_require_assigned_users(payload),
             )
@@ -327,7 +330,7 @@ class OpportunityBlueprintService:
                 opp,
                 action="approve_boq",
                 team_role=payload.get("team_role", "presales"),
-                title=f"Approve BOQ — {opp.opportunity_name}",
+                title=f"Approve BOQ - {opp.opportunity_name}",
                 remarks=payload.get("remarks"),
                 assigned_user_ids=_require_assigned_users(payload),
             )
@@ -342,7 +345,7 @@ class OpportunityBlueprintService:
                 opp,
                 action="approve_sow",
                 team_role=payload.get("team_role", "presales"),
-                title=f"Approve SOW — {opp.opportunity_name}",
+                title=f"Approve SOW - {opp.opportunity_name}",
                 remarks=payload.get("remarks"),
                 assigned_user_ids=_require_assigned_users(payload),
             )
@@ -411,7 +414,7 @@ class OpportunityBlueprintService:
                 opp,
                 action="approve_po",
                 team_role=payload.get("team_role", "management"),
-                title=f"Approve Customer PO — {opp.opportunity_name}",
+                title=f"Approve Customer PO - {opp.opportunity_name}",
                 remarks=payload.get("remarks"),
                 assigned_user_ids=_require_assigned_users(payload),
             )
@@ -428,7 +431,7 @@ class OpportunityBlueprintService:
             # These transitions are driven exclusively by QuoteService /
             # OvfService as a side effect of their own lifecycle (create a
             # quote, accept a quote, create an OVF, mark deal won). They are
-            # only listed in allowed_actions for UI affordance — invoking them
+            # only listed in allowed_actions for UI affordance - invoking them
             # directly is rejected.
             raise ConflictException(
                 f"Action '{action}' must be performed via its dedicated endpoint "

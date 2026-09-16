@@ -5,7 +5,7 @@ The ElevenLabs **Convai widget** (all logged-in pages) and **Voice assistant** (
 - Navigate any module screen listed in `config/modules.ts`
 - Call the same REST APIs as the UI (`erpApiGet` uses the logged-in user JWT and RBAC)
 
-## ElevenLabs dashboard — client tools
+## ElevenLabs dashboard - client tools
 
 Create client tools on your agent with **exact** names (case-sensitive):
 
@@ -24,7 +24,7 @@ Create client tools on your agent with **exact** names (case-sensitive):
 
 Prompt hint for the agent:
 
-> The user is already logged into the ERP in the browser. For CRM leads, always use client tools **`listCrmLeads`** / **`getCrmLead`** (or **`erpApiGet`** with `/leads`) — do **not** ask for a token. Use MCP `list_leads` only when client tools are unavailable. For navigation, use `navigateToPath` or `navigateToModuleResource`.
+> The user is already logged into the ERP in the browser. For CRM leads, always use client tools **`listCrmLeads`** / **`getCrmLead`** (or **`erpApiGet`** with `/leads`) - do **not** ask for a token. Use MCP `list_leads` only when client tools are unavailable. For navigation, use `navigateToPath` or `navigateToModuleResource`.
 
 ## MCP server (cloud tools)
 
@@ -32,8 +32,8 @@ MCP tools such as `list_leads` require the **user JWT** on every MCP request. Wi
 
 ### Wire the JWT (one-time in ElevenLabs)
 
-1. **Agent → Personalization → Dynamic variables** — add a **secret** variable named `secret__erp_access_token` (value can be a placeholder; the widget overwrites it at runtime).
-2. **Integrations → your MCP server → HTTP headers** — add:
+1. **Agent → Personalization → Dynamic variables** - add a **secret** variable named `secret__erp_access_token` (value can be a placeholder; the widget overwrites it at runtime).
+2. **Integrations → your MCP server → HTTP headers** - add:
    - `X-ERP-Access-Token` = `Bearer {{secret__erp_access_token}}`
 3. Keep `Authorization` = `Bearer <MCP_AUTH_TOKEN>` (from `apps/api/.env`).
 
@@ -44,9 +44,9 @@ The embedded widget sets `secret__erp_access_token` on the element **and** refre
 | User asks | Use (embedded ERP) | Use (MCP only) |
 |-----------|-------------------|----------------|
 | List CRM leads | `listCrmLeads` | `list_leads` + JWT header |
-| Open CRM | `navigateToCRM` | — |
+| Open CRM | `navigateToCRM` | - |
 
-Expand read tools by editing the allowlist and restarting the API. Browser `erpApiGet` / `listCrmLeads` use the session automatically — no MCP header setup required.
+Expand read tools by editing the allowlist and restarting the API. Browser `erpApiGet` / `listCrmLeads` use the session automatically - no MCP header setup required.
 
 ## Troubleshooting
 
@@ -58,11 +58,11 @@ The Convai widget did not register tools before the call started. Hard-refresh a
 
 Usually a **tool or MCP call failed** and ElevenLabs could not recover. Check in order:
 
-1. **ElevenLabs → Conversations** — open the conversation id shown in the widget and read the failed tool step.
-2. **MCP** — ngrok + API running; MCP URL ends with `/mcp/`; `Authorization: Bearer MCP_AUTH_TOKEN`; header `X-ERP-Access-Token: Bearer {{secret__erp_access_token}}` on the MCP integration.
-3. **Isolate client vs MCP** — temporarily disable MCP on the agent and test only `navigateToCRM` / `navigateToPath`. Navigation should work without MCP.
-4. **Oversized tool output** — use `listAppScreens` with `moduleKey` (e.g. `crm`), not the full catalog in one call.
-5. **Agent LLM** — in agent settings, switch to a default ElevenLabs model (custom LLM endpoints often cause cascade failures).
+1. **ElevenLabs → Conversations** - open the conversation id shown in the widget and read the failed tool step.
+2. **MCP** - ngrok + API running; MCP URL ends with `/mcp/`; `Authorization: Bearer MCP_AUTH_TOKEN`; header `X-ERP-Access-Token: Bearer {{secret__erp_access_token}}` on the MCP integration.
+3. **Isolate client vs MCP** - temporarily disable MCP on the agent and test only `navigateToCRM` / `navigateToPath`. Navigation should work without MCP.
+4. **Oversized tool output** - use `listAppScreens` with `moduleKey` (e.g. `crm`), not the full catalog in one call.
+5. **Agent LLM** - in agent settings, switch to a default ElevenLabs model (custom LLM endpoints often cause cascade failures).
 
 Client tools always return a string (errors are returned as `Tool error (…)` instead of throwing) so a single failed navigation should not crash the session after the latest app build.
 

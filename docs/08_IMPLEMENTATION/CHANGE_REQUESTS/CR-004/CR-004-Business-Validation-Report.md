@@ -1,7 +1,7 @@
-# CR-004 — Business Validation Report
+# CR-004 - Business Validation Report
 
 **Date:** 2026-08-05  
-**Mode:** Analysis only — no code changes  
+**Mode:** Analysis only - no code changes  
 **Scope:** Full CR-004 implementation vs customer Excel, architecture lock, and production use  
 **Primary question:** *Can the customer stop using Excel today?*
 
@@ -11,7 +11,7 @@
 
 | Question | Answer |
 |----------|--------|
-| Can IT run **day-to-day** Ready / Assign / Return / Retire / Dispose **inside the ERP** for assets already on the platform? | **Mostly yes** — core workflows are implemented end-to-end |
+| Can IT run **day-to-day** Ready / Assign / Return / Retire / Dispose **inside the ERP** for assets already on the platform? | **Mostly yes** - core workflows are implemented end-to-end |
 | Can the customer **fully stop using Excel today** (including historical register, one-time cutover, and full column parity)? | **No** |
 
 **Go / No-Go for Excel retirement:** **NO-GO** until Critical blockers below are cleared.  
@@ -19,7 +19,7 @@
 
 ---
 
-## 1. Asset Registration — **PASS** (with notes)
+## 1. Asset Registration - **PASS** (with notes)
 
 | Check | Result | Evidence |
 |-------|--------|----------|
@@ -33,7 +33,7 @@
 
 ---
 
-## 2. Inventory — **PASS** (partial Excel parity)
+## 2. Inventory - **PASS** (partial Excel parity)
 
 | Check | Result | Evidence |
 |-------|--------|----------|
@@ -44,13 +44,13 @@
 | Drawer | PASS | Detail drawer + sections |
 | Action menu | PASS | Assign / Return / Portal / etc. via AssetNavigation |
 | Current Holder | PASS | Derived from active assignment (`inventory.mapper`) |
-| Earlier Used By | **FAIL** | UI shows placeholder `"—"`; not derived from assignment history |
+| Earlier Used By | **FAIL** | UI shows placeholder `"-"`; not derived from assignment history |
 
 **Verdict:** Inventory **replaces Excel bucket tabs** for daily browsing. **Does not** yet replace the full Employee Asset Register row (earlier holder, live challan/remarks in drawer).
 
 ---
 
-## 3. Assignment — **PASS**
+## 3. Assignment - **PASS**
 
 | Check | Result | Evidence |
 |-------|--------|----------|
@@ -63,13 +63,13 @@
 
 **Notes / residual risk:**
 
-- Legacy `asset-assignment-workspace` modal still coexists with wizards (Medium — confusion risk).
-- Multi-step workflow may leave status `submitted` if auto-approve fails (Medium — documented).
+- Legacy `asset-assignment-workspace` modal still coexists with wizards (Medium - confusion risk).
+- Multi-step workflow may leave status `submitted` if auto-approve fails (Medium - documented).
 - Inventory soft-refresh after issue/return implemented; dashboard KPI auto-refresh deferred (Medium).
 
 ---
 
-## 4. Return Workflow — **PASS**
+## 4. Return Workflow - **PASS**
 
 | Excel outcome | System mapping | Result |
 |---------------|----------------|--------|
@@ -81,7 +81,7 @@
 
 ---
 
-## 5. Disposal — **PASS**
+## 5. Disposal - **PASS**
 
 | Check | Result | Evidence |
 |-------|--------|----------|
@@ -92,7 +92,7 @@
 
 ---
 
-## 6. Dashboard — **PASS** (with deferred refresh)
+## 6. Dashboard - **PASS** (with deferred refresh)
 
 | Check | Result | Evidence |
 |-------|--------|----------|
@@ -104,7 +104,7 @@
 
 ---
 
-## 7. Navigation — **PASS**
+## 7. Navigation - **PASS**
 
 | Check | Result | Evidence |
 |-------|--------|----------|
@@ -116,7 +116,7 @@
 
 ---
 
-## 8. Operational Status — **PASS**
+## 8. Operational Status - **PASS**
 
 | Transition | Result |
 |------------|--------|
@@ -131,7 +131,7 @@
 
 ---
 
-## 9. Excel Parity — **FAIL** (for full replacement)
+## 9. Excel Parity - **FAIL** (for full replacement)
 
 | Excel concept | Status |
 |---------------|--------|
@@ -140,15 +140,15 @@
 | Retired / Not Given To Anyone | **PASS** (`RETIRED`) |
 | Pending Disposal / Not Working | **PASS** |
 | Disposed | **PASS** (disposal + ops) |
-| Employee Asset Register (full grid) | **PARTIAL** — missing Earlier Used By, live challan/remarks in register/drawer, Excel export |
+| Employee Asset Register (full grid) | **PARTIAL** - missing Earlier Used By, live challan/remarks in register/drawer, Excel export |
 | Branch Inventory | **PASS** (filters + dashboard) |
-| Excel one-time import | **FAIL** — Phase 7 not started |
-| Sidebar Excel-like filters | **FAIL** — Phase 3.5 not started (mitigated by inventory presets) |
-| IT register report / export | **FAIL** — Phase 7 |
+| Excel one-time import | **FAIL** - Phase 7 not started |
+| Sidebar Excel-like filters | **FAIL** - Phase 3.5 not started (mitigated by inventory presets) |
+| IT register report / export | **FAIL** - Phase 7 |
 
 ---
 
-## 10. Data Ownership — **PASS** (with gaps)
+## 10. Data Ownership - **PASS** (with gaps)
 
 | Concept | Ownership | Result |
 |---------|-----------|--------|
@@ -160,8 +160,8 @@
 | Assignment | `ast_asset_assignment` SSOT | PASS |
 | History | Assignment rows | PASS (backend); UI history panel incomplete |
 | Earlier Used By | Should be derived history | **FAIL** (placeholder) |
-| Delivery Reference | Assignment enrichment | PASS (backend/wizard); **inventory drawer still `"—"`** |
-| Remarks | Assignment enrichment | PASS (backend/wizard); **inventory drawer still `"—"`** |
+| Delivery Reference | Assignment enrichment | PASS (backend/wizard); **inventory drawer still `"-"`** |
+| Remarks | Assignment enrichment | PASS (backend/wizard); **inventory drawer still `"-"`** |
 
 ---
 
@@ -178,7 +178,7 @@
 
 | ID | Issue | Impact |
 |----|-------|--------|
-| H-1 | **Earlier Used By always `"—"`** | Excel column not usable in ERP |
+| H-1 | **Earlier Used By always `"-"`** | Excel column not usable in ERP |
 | H-2 | **Inventory drawer challan/remarks not wired to live assignment** | Excel register fields invisible in daily register |
 | H-3 | **Historical Excel data still authoritative until import** | Dual-source risk |
 
@@ -206,7 +206,7 @@
 
 | Metric | Estimate | Rationale |
 |--------|----------|-----------|
-| **1. Overall Completion %** | **82%** | Phases 1–3 + assignment FE E2E done; import/export/sidebar/history gaps |
+| **1. Overall Completion %** | **82%** | Phases 1-3 + assignment FE E2E done; import/export/sidebar/history gaps |
 | **2. Production Readiness %** | **70%** | Pilot-ready for new ERP assets; not org-wide Excel cutover |
 | **3. Excel Replacement Readiness %** | **55%** | Daily tabs/workflows ~yes; register parity + migration ~no |
 

@@ -49,7 +49,7 @@ export function ProjectCompletedJobsPage() {
         key: "site_name",
         label: "Site",
         sort: (r) => r.site_name ?? "",
-        cell: (r) => r.site_name || "—",
+        cell: (r) => r.site_name || "-",
       },
       {
         key: "delivery_type",
@@ -87,7 +87,7 @@ export function ProjectCompletedJobsPage() {
   return (
     <ProjectsRecordList
       title="Completed Jobs"
-      description="Steps you finished on assigned projects — including after the full site workflow is completed. Open any row to review your submitted work in read-only mode."
+      description="Steps you finished on assigned projects - including after the full site workflow is completed. Open any row to review your submitted work in read-only mode."
       panelTitle="Completed steps"
       panelSubtitle="Finished steps stay listed here even when the project workflow is completed"
       icon={CheckCircle2}

@@ -1,7 +1,7 @@
-# CR-004 Phase 6 Sprint 1 — Register Parity Completion
+# CR-004 Phase 6 Sprint 1 - Register Parity Completion
 
 **Date:** 2026-08-05  
-**Scope:** Frontend UI exposure only — no backend / API / schema / reports / import  
+**Scope:** Frontend UI exposure only - no backend / API / schema / reports / import  
 **Closes:** Business Validation High gaps H-1 (Earlier Used By), H-2 (challan/remarks in inventory drawer)
 
 ---
@@ -29,7 +29,7 @@ Surface existing assignment enrichment and history on the Inventory Register, In
 | Assignment Remarks | `assignment_remarks` (issued-items prefix stripped) | Expand, drawer, detail | No |
 | Return Remarks | Latest returned `return_remarks` | Expand, drawer, history, detail | No |
 | Ops bucket | `operational_status` | Inventory presets / badges | No |
-| Phone Number | Employee master (not on assignment list) | Shown as `—` until master phone join | Yes (placeholder) |
+| Phone Number | Employee master (not on assignment list) | Shown as `-` until master phone join | Yes (placeholder) |
 
 SSOT helpers: `apps/web/src/components/assets/inventory/register-parity.ts` (`REGISTER_PARITY_FIELDS`).
 
@@ -50,11 +50,11 @@ SSOT helpers: `apps/web/src/components/assets/inventory/register-parity.ts` (`RE
 | Surface | Change |
 |---------|--------|
 | Inventory expandable row | Earlier Used By, Delivery Reference/Status, Assignment Remarks, Return Remarks |
-| Inventory Drawer — Assignment | Delivery reference/status, assignment + return remarks |
-| Inventory Drawer — Register fields | Earlier Used By + delivery + remarks (renamed from “Additional”) |
-| Inventory Drawer — Assignment history | New section; return remarks per historical row |
-| Asset Detail — Overview | Register parity card |
-| Asset Detail — Assignment history tab | Rich table with delivery + remarks |
+| Inventory Drawer - Assignment | Delivery reference/status, assignment + return remarks |
+| Inventory Drawer - Register fields | Earlier Used By + delivery + remarks (renamed from “Additional”) |
+| Inventory Drawer - Assignment history | New section; return remarks per historical row |
+| Asset Detail - Overview | Register parity card |
+| Asset Detail - Assignment history tab | Rich table with delivery + remarks |
 
 ---
 
@@ -82,7 +82,7 @@ Regression: inventory mapper, interaction, workspace, container, integration moc
 |------|------------|
 | Assignment list page_size 500 may miss old history for large branches | Accept for Sprint 1; Phase 7 may add asset-scoped history fetch |
 | Employee labels truncated to first 200 employees | Same as wizard; IDs still shown as fallback |
-| Phone still `—` | Documented; needs employee master field in a later sprint |
+| Phone still `-` | Documented; needs employee master field in a later sprint |
 | Dual display of remarks (Assignment + Register fields) | Intentional Excel parity; read-only |
 
 ---

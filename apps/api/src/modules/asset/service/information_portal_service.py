@@ -75,7 +75,7 @@ class AssetInformationPortalService:
     def get_self_service(
         self, ctx: TenantContext, asset_id: UUID
     ) -> AssetInformationPortalResponse:
-        """Alias for portal profile — reserved for future signed-token entry."""
+        """Alias for portal profile - reserved for future signed-token entry."""
         return self.get_portal(ctx, asset_id)
 
     def _safe_vendor_name(self, ctx: TenantContext, vendor_id: UUID | None) -> str | None:
@@ -116,7 +116,7 @@ class AssetInformationPortalService:
         if row.employee_id is not None:
             try:
                 emp = self._master.get_employee(ctx, row.employee_id)
-                label = f"{emp.employee_code} — {emp.first_name} {emp.last_name}".strip()
+                label = f"{emp.employee_code} - {emp.first_name} {emp.last_name}".strip()
             except NotFoundException:
                 label = None
         if label is None:

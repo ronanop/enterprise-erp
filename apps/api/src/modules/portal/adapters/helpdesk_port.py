@@ -1,4 +1,4 @@
-"""Helpdesk port — UUID-only stubs; no hd_* FK / ORM writes."""
+"""Helpdesk port - UUID-only stubs; no hd_* FK / ORM writes."""
 
 from uuid import UUID
 

@@ -125,13 +125,13 @@ export function MarketingCampaignHome({ campaignId }: { campaignId: string }) {
           <div>
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Dates</p>
             <p className="mt-1 text-sm text-foreground">
-              {campaign.start_date ?? "Open"} — {campaign.end_date ?? "Open"}
+              {campaign.start_date ?? "Open"} - {campaign.end_date ?? "Open"}
             </p>
           </div>
           <div>
             <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Budget</p>
             <p className="mt-1 text-sm text-foreground">
-              {campaign.budget_amount ?? "—"} {campaign.currency_code ?? ""}
+              {campaign.budget_amount ?? "-"} {campaign.currency_code ?? ""}
             </p>
           </div>
           <div>
@@ -312,7 +312,7 @@ export function MarketingCampaignHome({ campaignId }: { campaignId: string }) {
               {data?.approvals.map((row) => (
                 <li key={row.id}>
                   <span className="font-medium">{row.action}</span>
-                  {row.comment ? ` — ${row.comment}` : ""}
+                  {row.comment ? ` - ${row.comment}` : ""}
                 </li>
               ))}
             </ul>

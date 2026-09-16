@@ -95,7 +95,7 @@ function statusFromSearch(raw: string | null): string {
 
 function AssignmentCell({ row }: { row: NonItAsset }) {
   if (!row.assignment_display) {
-    return <span className="text-muted-foreground">—</span>;
+    return <span className="text-muted-foreground">-</span>;
   }
   const isLocation = Boolean(row.current_location_id);
   const Icon = isLocation ? MapPin : User;
@@ -575,7 +575,7 @@ export function NonItAssetsWorkspace() {
                       <td className="px-4 py-3">
                         <div className="min-w-0">
                           <p className="truncate font-medium text-foreground">
-                            {row.asset_type_name ?? "—"}
+                            {row.asset_type_name ?? "-"}
                           </p>
                           {row.asset_type_prefix ? (
                             <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">

@@ -1,4 +1,4 @@
-# Requires Administrator — allow LAN access to local ERP Postgres (Docker :5433)
+# Requires Administrator - allow LAN access to local ERP Postgres (Docker :5433)
 $ErrorActionPreference = "Stop"
 $name = "ERP Postgres 5433"
 $existing = Get-NetFirewallRule -DisplayName $name -ErrorAction SilentlyContinue

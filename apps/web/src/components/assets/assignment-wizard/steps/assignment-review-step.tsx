@@ -16,7 +16,7 @@ export type AssignmentReviewStepProps = {
 };
 
 function labelFor(id: string, options: WizardSelectOption[]) {
-  return options.find((o) => o.id === id)?.label ?? "—";
+  return options.find((o) => o.id === id)?.label ?? "-";
 }
 
 function employeeSummary(state: AssignmentWizardState, employees: WizardSelectOption[]) {
@@ -24,7 +24,7 @@ function employeeSummary(state: AssignmentWizardState, employees: WizardSelectOp
     return state.allocationType;
   }
   if (state.employeeSource === "MANUAL_ENTRY") {
-    const name = state.manualEmployeeName.trim() || "—";
+    const name = state.manualEmployeeName.trim() || "-";
     const deployed = state.manualEmployeeDeployedTo.trim();
     return deployed ? `${name} (deployed to ${deployed})` : `${name} (manual entry)`;
   }
@@ -58,7 +58,7 @@ export function AssignmentReviewStep({
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Issued items</dt>
-          <dd>{issuedLabels.length ? issuedLabels.join(", ") : "—"}</dd>
+          <dd>{issuedLabels.length ? issuedLabels.join(", ") : "-"}</dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">DC paperwork</dt>
@@ -70,7 +70,7 @@ export function AssignmentReviewStep({
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">DC Number</dt>
-          <dd>{state.deliveryReferenceNumber || "—"}</dd>
+          <dd>{state.deliveryReferenceNumber || "-"}</dd>
         </div>
         <div>
           <dt className="text-xs text-muted-foreground">Signature</dt>
@@ -80,11 +80,11 @@ export function AssignmentReviewStep({
         </div>
         <div className="sm:col-span-2">
           <dt className="text-xs text-muted-foreground">Remarks</dt>
-          <dd>{state.assignmentRemarks || "—"}</dd>
+          <dd>{state.assignmentRemarks || "-"}</dd>
         </div>
       </dl>
       <p className="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-        Submit issues the assignment. Save draft at any time — completeness is not required to save.
+        Submit issues the assignment. Save draft at any time - completeness is not required to save.
       </p>
     </div>
   );

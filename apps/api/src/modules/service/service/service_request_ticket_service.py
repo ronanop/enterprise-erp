@@ -1,4 +1,4 @@
-"""Service Request Ticket Management — orchestration service per SOP."""
+"""Service Request Ticket Management - orchestration service per SOP."""
 
 import base64
 import logging
@@ -165,7 +165,7 @@ class ServiceRequestTicketService:
     def list_sla_tracker(
         self, ctx: TenantContext, *, company_id: UUID | None = None, mine: bool = False
     ) -> list[ServiceRequestSlaTrackerItem]:
-        """Active ticket SLAs — tickets with SLA clock running and not yet resolved/closed."""
+        """Active ticket SLAs - tickets with SLA clock running and not yet resolved/closed."""
         cid = self._scope.resolve_company_id(ctx, company_id)
         stmt = select(SvcServiceRequest).where(
             SvcServiceRequest.company_id == cid,
@@ -497,12 +497,12 @@ class ServiceRequestTicketService:
             "opened_at": now,
             "opened_by": ctx.user_id,
         }
-        # SLA already started on create/email — do not reset calendar clock
+        # SLA already started on create/email - do not reset calendar clock
         if not row.sla_started_at:
             updates["sla_started_at"] = now
             updates["due_at"] = now + timedelta(minutes=self._resolution_minutes_for(row))
             updates["sla_status"] = "within_sla"
-            sla_msg = "Ticket opened — SLA clock started"
+            sla_msg = "Ticket opened - SLA clock started"
         else:
             sla_msg = "Ticket opened by engineer (SLA already running)"
         self._repo.update(ctx, row_id, **updates)
@@ -607,7 +607,7 @@ class ServiceRequestTicketService:
         if oem_data and fields.get("oem_support_enabled"):
             self._upsert_oem_support(ctx, row, oem_data)
 
-        # Start SLA when ticket is created / email received (calendar time — weekends included)
+        # Start SLA when ticket is created / email received (calendar time - weekends included)
         if row.status != "draft" and not row.sla_started_at:
             now = datetime.now(timezone.utc)
             due = row.due_at or (now + timedelta(minutes=self._resolution_minutes_for(row)))
@@ -621,7 +621,7 @@ class ServiceRequestTicketService:
             )
             row = self._repo.get(ctx, row.id) or row
 
-        self._record_status(ctx, row, None, row.status, "Ticket created — SLA started")
+        self._record_status(ctx, row, None, row.status, "Ticket created - SLA started")
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="svc_service_request",
@@ -837,7 +837,7 @@ class ServiceRequestTicketService:
             if fe_row.engineer_email.strip().lower() != user.email.strip().lower():
                 raise AppException("You can only upload files for your own field engineer assignment")
             if fe_row.status == "solved":
-                raise AppException("Cannot upload after marking solved — contact the service engineer")
+                raise AppException("Cannot upload after marking solved - contact the service engineer")
         elif not access.can_work:
             from core.exceptions import ForbiddenException
             raise ForbiddenException("You do not have permission to upload attachments")
@@ -968,7 +968,7 @@ class ServiceRequestTicketService:
         raise NotFoundException("Attachment content missing in database")
 
     def resolve_attachment_path(self, ctx: TenantContext, row_id: UUID, attachment_id: UUID) -> tuple[Path, str, str | None]:
-        """Deprecated disk helper — prefer resolve_attachment_content."""
+        """Deprecated disk helper - prefer resolve_attachment_content."""
         data, file_name, content_type = self.resolve_attachment_content(ctx, row_id, attachment_id)
         UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
         tmp = UPLOAD_ROOT / f"_dl_{uuid.uuid4()}_{Path(file_name).name}"
@@ -1025,7 +1025,7 @@ class ServiceRequestTicketService:
             if fe.solved_at:
                 items.append({
                     "event_type": "field_engineer_solved",
-                    "title": f"Field Engineer Solved — {fe.engineer_name}",
+                    "title": f"Field Engineer Solved - {fe.engineer_name}",
                     "description": fe.solution_summary,
                     "actor_id": None,
                     "occurred_at": fe.solved_at,
@@ -1038,7 +1038,7 @@ class ServiceRequestTicketService:
         for h in history:
             items.append({
                 "event_type": "status_change",
-                "title": f"Status: {h.from_status or '—'} → {h.to_status}",
+                "title": f"Status: {h.from_status or '-'} → {h.to_status}",
                 "description": h.reason,
                 "actor_id": h.changed_by,
                 "occurred_at": h.changed_at,
@@ -1206,10 +1206,10 @@ class ServiceRequestTicketService:
             resolved_at=now,
             sla_status=sla_status,
         )
-        self._record_status(ctx, row, old, "resolved", reason or "Ticket resolved — SLA ended")
+        self._record_status(ctx, row, old, "resolved", reason or "Ticket resolved - SLA ended")
         self._notify(ctx, row, "ticket_resolved", f"Ticket resolved: {solution_type}")
         self._notify_service_heads(
-            ctx, row, "ticket_resolved", f"Ticket {row.document_number} resolved ({solution_type}) — SLA ended"
+            ctx, row, "ticket_resolved", f"Ticket {row.document_number} resolved ({solution_type}) - SLA ended"
         )
 
         # Engineer end also closes the ticket (status Closed), locking ownership
@@ -1228,7 +1228,7 @@ class ServiceRequestTicketService:
         return self.get_ticket(ctx, row_id)
 
     def resume_ticket(self, ctx: TenantContext, row_id: UUID, *, reason: str | None = None):
-        """Resume from Awaiting Assignment / pending — continue work without resetting SLA."""
+        """Resume from Awaiting Assignment / pending - continue work without resetting SLA."""
         row = self._repo.get(ctx, row_id)
         if row is None:
             raise NotFoundException("Service request ticket not found")
@@ -1920,7 +1920,7 @@ class ServiceRequestTicketService:
                 f"Sign in at: {login_url}\n"
                 f"Then open Service → Field Engineer to view your tickets and mark work solved.\n\n"
                 f"Please change your password after first login if possible.\n\n"
-                f"— Service Team"
+                f"- Service Team"
             )
             note = (
                 "New login created. Credentials were emailed to the field engineer "
@@ -1934,9 +1934,9 @@ class ServiceRequestTicketService:
                 f"Login ID (email): {engineer_email}\n"
                 f"Use your existing ERP password to sign in at: {login_url}\n"
                 f"Then open Service → Field Engineer.\n\n"
-                f"— Service Team"
+                f"- Service Team"
             )
-            note = "Existing ERP login found — password was not changed. Assignment notice emailed if SMTP is configured."
+            note = "Existing ERP login found - password was not changed. Assignment notice emailed if SMTP is configured."
 
         email_sent = False
         try:
@@ -1974,7 +1974,7 @@ class ServiceRequestTicketService:
 
         if not email_sent and account_created:
             note = (
-                "New login created. SMTP is not configured — share the temporary password "
+                "New login created. SMTP is not configured - share the temporary password "
                 "with the field engineer manually (shown below)."
             )
 
@@ -2087,7 +2087,7 @@ class ServiceRequestTicketService:
             f"Password: {temporary_password}\n\n"
             f"Sign in at: {login_url}\n"
             f"Then open Service → Field Engineer.\n\n"
-            f"— Service Team"
+            f"- Service Team"
         )
         email_sent = False
         try:
@@ -2103,7 +2103,7 @@ class ServiceRequestTicketService:
 
         note = (
             "Login ready. Share these credentials with the field engineer "
-            + ("(also emailed)." if email_sent else "(SMTP off — copy from screen).")
+            + ("(also emailed)." if email_sent else "(SMTP off - copy from screen).")
         )
         data = TicketFieldEngineerResponse.model_validate(fe)
         data.login_email = email
@@ -2282,7 +2282,7 @@ class ServiceRequestTicketService:
 
         files_note = f" Files: {', '.join(uploaded_names)}." if uploaded_names else ""
         reason = (
-            f"Field engineer {fe.engineer_name} marked solved — "
+            f"Field engineer {fe.engineer_name} marked solved - "
             f"{solution_summary.strip()[:300]}{files_note}"
         )
         self._record_status(ctx, row, row.status, row.status, reason)

@@ -24,7 +24,7 @@ export type InventorySearchTypeaheadProps = {
   onSubmit: () => void;
   onSelectSuggestion: (suggestion: InventorySearchSuggestion) => void;
   branchId?: string;
-  /** IT site location id — scopes search to assets at that location. */
+  /** IT site location id - scopes search to assets at that location. */
   locationId?: string;
   className?: string;
   /** When set, run one GET /assets per status and merge (API accepts a single status). */
@@ -42,9 +42,9 @@ function rowToSuggestion(row: AssetsRow): InventorySearchSuggestion | null {
   if (!id) return null;
   return {
     id,
-    assetCode: String(row.asset_code ?? row.document_number ?? "—"),
-    assetName: String(row.asset_name ?? "—"),
-    serialNumber: typeof row.serial_number === "string" && row.serial_number.trim() ? row.serial_number : "—",
+    assetCode: String(row.asset_code ?? row.document_number ?? "-"),
+    assetName: String(row.asset_name ?? "-"),
+    serialNumber: typeof row.serial_number === "string" && row.serial_number.trim() ? row.serial_number : "-",
     make: typeof row.make === "string" ? row.make : "",
     model: typeof row.model === "string" ? row.model : "",
     operationalStatus: String(row.operational_status ?? ""),
@@ -244,7 +244,7 @@ export function InventorySearchTypeahead({
                   </span>
                   <span className="truncate text-sm font-medium text-foreground">{item.assetName}</span>
                   <span className="truncate text-xs text-muted-foreground">
-                    {[item.serialNumber !== "—" ? `S/N ${item.serialNumber}` : null, item.make, item.model]
+                    {[item.serialNumber !== "-" ? `S/N ${item.serialNumber}` : null, item.make, item.model]
                       .filter(Boolean)
                       .join(" · ")}
                   </span>

@@ -146,7 +146,7 @@ function formatMoney(value: number): string {
 }
 
 function formatCell(key: string, value: unknown): string {
-  if (value == null || value === "") return "—";
+  if (value == null || value === "") return "-";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number") {
     const k = key.toLowerCase();
@@ -164,14 +164,14 @@ function formatCell(key: string, value: unknown): string {
     if (k.includes("qty") || k.includes("quantity") || k.includes("rate")) {
       return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(value);
     }
-    return Number.isFinite(value) ? String(value) : "—";
+    return Number.isFinite(value) ? String(value) : "-";
   }
   if (typeof value === "object") {
     if (Array.isArray(value)) return `${value.length} items`;
-    return "—";
+    return "-";
   }
   const s = String(value);
-  if (UUID_RE.test(s)) return "—";
+  if (UUID_RE.test(s)) return "-";
   if (/^\d{4}-\d{2}-\d{2}T/.test(s)) {
     const d = new Date(s);
     if (!Number.isNaN(d.getTime())) return d.toLocaleString("en-IN");

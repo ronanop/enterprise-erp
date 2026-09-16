@@ -1,4 +1,4 @@
-"""Analytics port — read-only UUID refs."""
+"""Analytics port - read-only UUID refs."""
 
 from uuid import UUID
 

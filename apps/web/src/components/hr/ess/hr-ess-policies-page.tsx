@@ -83,7 +83,7 @@ export function HrEssPoliciesPage() {
   async function publish(id: string) {
     try {
       await hrEssPoliciesService.publish(id);
-      toast("Published — employees must re-ack if version bumped", "success");
+      toast("Published - employees must re-ack if version bumped", "success");
       await load();
     } catch (err) {
       toast(err instanceof ApiClientError ? err.message : "Publish failed", "error");
@@ -130,7 +130,7 @@ export function HrEssPoliciesPage() {
         </div>
         <textarea
           className="min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-sm"
-          placeholder="Markdown content — use ## Step title for walkthrough steps"
+          placeholder="Markdown content - use ## Step title for walkthrough steps"
           value={form.content_markdown}
           onChange={(e) => setForm((f) => ({ ...f, content_markdown: e.target.value }))}
         />

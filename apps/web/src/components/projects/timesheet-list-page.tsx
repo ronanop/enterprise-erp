@@ -63,7 +63,7 @@ export function TimesheetListPage() {
               {labels.projectName(r.project_id)}
             </Link>
           ) : (
-            "—"
+            "-"
           ),
       },
       {
@@ -84,7 +84,7 @@ export function TimesheetListPage() {
         align: "right",
         sort: (r) => Number(r.total_hours ?? 0),
         className: "text-right tabular-nums text-foreground",
-        cell: (r) => (r.total_hours == null ? "—" : formatHours(r.total_hours)),
+        cell: (r) => (r.total_hours == null ? "-" : formatHours(r.total_hours)),
       },
       {
         key: "created_at",

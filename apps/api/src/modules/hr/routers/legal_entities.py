@@ -1,4 +1,4 @@
-"""HR Setup Legal Entities — CRUD over organization.org_company."""
+"""HR Setup Legal Entities - CRUD over organization.org_company."""
 
 from typing import Annotated
 from uuid import UUID

@@ -215,7 +215,7 @@ export const mockTeam: TeamMember[] = [
   },
 ];
 
-/** —— Part 3: documents & assets —— */
+/** -- Part 3: documents & assets -- */
 
 export type PortalDocument = {
   id: string;

@@ -1,4 +1,4 @@
-# Payroll Phase 2 — Shift-based period days (N)
+# Payroll Phase 2 - Shift-based period days (N)
 
 ## Denominator N
 
@@ -19,7 +19,7 @@ Configured on company payroll policy (`period_day_denominator`):
 ## Payable days
 
 ```text
-paid_days = N − LOP
+paid_days = N - LOP
 LOP       = sum from attendance in period (absent / half_day per policy rules)
 prorate   = paid_days / N
 ```

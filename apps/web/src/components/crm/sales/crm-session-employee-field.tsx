@@ -19,7 +19,7 @@ export function CrmSessionEmployeeField({
   return (
     <FinanceField label={required ? `${label} *` : label}>
       <Input
-        value={value || "—"}
+        value={value || "-"}
         disabled
         aria-readonly="true"
         title={title}

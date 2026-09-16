@@ -1,4 +1,4 @@
-# FP-ASSET-010 — Release Notes
+# FP-ASSET-010 - Release Notes
 
 ## Asset Insurance Management
 
@@ -12,7 +12,7 @@ Productizes insurance policies for registered assets.
 - RBAC actions: activate, renew, expire, close
 - Optimistic locking on lifecycle actions
 - One open policy per asset (active or renewed)
-- Coverage duration changes require Renew — PATCH cannot lengthen an active policy
+- Coverage duration changes require Renew - PATCH cannot lengthen an active policy
 
 ### Not included
 

@@ -1,4 +1,4 @@
-"""HR employee lifecycle event ORM — timeline / history / logs."""
+"""HR employee lifecycle event ORM - timeline / history / logs."""
 
 from datetime import datetime
 from uuid import UUID, uuid4

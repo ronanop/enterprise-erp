@@ -1,4 +1,4 @@
-# Asset Registration — Release Notes (FP-ASSET-REG-001)
+# Asset Registration - Release Notes (FP-ASSET-REG-001)
 
 ## Added
 

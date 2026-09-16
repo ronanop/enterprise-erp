@@ -102,7 +102,7 @@ export function ProjectPhaseListPage() {
   return (
     <ProjectsRecordList
       title="WBS Phases"
-      description="Work breakdown structure — phases group milestones and tasks inside a project (Project → Phase → Milestone → Task)."
+      description="Work breakdown structure - phases group milestones and tasks inside a project (Project → Phase → Milestone → Task)."
       panelTitle="Phases"
       panelSubtitle="Work breakdown structure"
       icon={GitBranch}

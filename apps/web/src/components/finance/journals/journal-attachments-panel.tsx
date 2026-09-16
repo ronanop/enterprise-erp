@@ -26,7 +26,7 @@ type Props = {
   readOnly?: boolean;
   /**
    * Optional live uploader. When provided, called for each file.
-   * Document module attachments require a document_id — wire when Finance↔DMS link exists.
+   * Document module attachments require a document_id - wire when Finance↔DMS link exists.
    */
   onUpload?: (file: File, onProgress: (pct: number) => void) => Promise<{
     id: string;
@@ -39,7 +39,7 @@ type Props = {
 };
 
 /**
- * Attachments panel — production UI with drag/drop + progress.
+ * Attachments panel - production UI with drag/drop + progress.
  * Uses injectable upload/delete hooks (no mock storage).
  */
 export function JournalAttachmentsPanel({

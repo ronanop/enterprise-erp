@@ -17,11 +17,11 @@
 
 ### Spacing Overrides
 
-- **Content Density:** Very high (9/10) — KPI `p-3`, table rows ~36px
+- **Content Density:** Very high (9/10) - KPI `p-3`, table rows ~36px
 
 ### Typography Overrides
 
-- Page title: medium weight ~1.5–1.65rem
+- Page title: medium weight ~1.5-1.65rem
 - KPI / qty values: tabular numerals ~1.5rem
 - No oversized display type
 
@@ -37,7 +37,7 @@
 
 - KPI strip: on-hand qty, available qty, reserved qty, open transfers
 - Secondary nav: Overview · Stock · Bins · Batches · Transfers · Adjustments · Valuation · Reports
-- Stock composition bars (on hand / reserved / available) — not a sales funnel
+- Stock composition bars (on hand / reserved / available) - not a sales funnel
 - Reports: tabbed Stock Summary / Batch Expiry
 - Prefer Lucide; sticky headers; `overflow-x-auto` on wide tables
 

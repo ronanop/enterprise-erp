@@ -1,4 +1,4 @@
-# Asset Service History — Migration Notes (FP-ASSET-013)
+# Asset Service History - Migration Notes (FP-ASSET-013)
 
 ## Revision
 

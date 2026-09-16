@@ -1,4 +1,4 @@
-# CR-001 — Asset Category Management Enhancement
+# CR-001 - Asset Category Management Enhancement
 
 **Status:** Implemented  
 **Module:** Asset Management  
@@ -60,14 +60,14 @@ Business delete = `status = inactive`. No soft-delete and no SQL DELETE.
 
 ## Backend Changes
 
-- `schemas.py` — complete category DTOs
-- `category_validator.py` — create/update/deactivate rules
-- `asset_category_service.py` — create/update/deactivate/reactivate + audit
-- `asset_category_engine.py` — reactivate only from inactive
-- `asset_category_repository.py` — get_by_code, search filters, optimistic version
-- `asset_repository.py` — `count_operational_by_category`
-- `routers/__init__.py` — list `status`/`q`; POST deactivate/reactivate
-- `domain/exceptions.py` — `CategoryValidationError`
+- `schemas.py` - complete category DTOs
+- `category_validator.py` - create/update/deactivate rules
+- `asset_category_service.py` - create/update/deactivate/reactivate + audit
+- `asset_category_engine.py` - reactivate only from inactive
+- `asset_category_repository.py` - get_by_code, search filters, optimistic version
+- `asset_repository.py` - `count_operational_by_category`
+- `routers/__init__.py` - list `status`/`q`; POST deactivate/reactivate
+- `domain/exceptions.py` - `CategoryValidationError`
 
 Permissions reused: `asset.category:read|create|update`.
 
@@ -75,10 +75,10 @@ Permissions reused: `asset.category:read|create|update`.
 
 ## Frontend Changes
 
-- `asset-category-workspace.tsx` — search, pagination, table, create, edit, confirm deactivate/reactivate
-- `[resource]/page.tsx` — route `asset-categories` → dedicated workspace
-- `assets-service.ts` — `assetCategoryService` + `filterActiveCategories`
-- `asset-registration-workspace.tsx` — active-only category dropdown
+- `asset-category-workspace.tsx` - search, pagination, table, create, edit, confirm deactivate/reactivate
+- `[resource]/page.tsx` - route `asset-categories` → dedicated workspace
+- `assets-service.ts` - `assetCategoryService` + `filterActiveCategories`
+- `asset-registration-workspace.tsx` - active-only category dropdown
 
 ---
 

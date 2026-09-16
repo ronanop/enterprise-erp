@@ -256,7 +256,6 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
 
       <PageHeader
         title={isEdit ? `Edit ${company?.customer_name ?? "Company"}` : "Create Company"}
-        description="Sales accounts are the entry point for the sales blueprint — leads can only be created from a company."
         actions={
           <>
             <Button

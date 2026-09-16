@@ -1,4 +1,4 @@
-"""Payroll posting — Finance via PostingService only."""
+"""Payroll posting - Finance via PostingService only."""
 
 from decimal import Decimal
 from uuid import UUID

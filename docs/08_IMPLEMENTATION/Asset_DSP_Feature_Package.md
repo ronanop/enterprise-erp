@@ -1,4 +1,4 @@
-# FP-ASSET-005 — Asset Disposal (Retirement & Disposal Governance)
+# FP-ASSET-005 - Asset Disposal (Retirement & Disposal Governance)
 
 **Status:** Implemented  
 **ADR:** ADR-ASSET-DSP-001
@@ -45,7 +45,7 @@ Post body: `debit_account_id`, `credit_account_id`, optional `fiscal_year_id`.
 
 ## Migrations
 
-- `0470_ast_disposal_governance` — update permission, open disposal index, ADISP sequence backfill
+- `0470_ast_disposal_governance` - update permission, open disposal index, ADISP sequence backfill
 
 ## Out of Scope
 

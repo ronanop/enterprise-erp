@@ -1,5 +1,5 @@
 /**
- * Finance workspace config — aligned with FRD-04 screen inventory
+ * Finance workspace config - aligned with FRD-04 screen inventory
  * and apps/api finance routers.
  */
 

@@ -211,7 +211,7 @@ export function PlatformModuleHealthDonut({
   }
   if (!total) {
     return compact ? (
-      <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">—</div>
+      <div className="flex h-full items-center justify-center text-[10px] text-muted-foreground">-</div>
     ) : (
       <ChartEmpty message="No module health data" />
     );

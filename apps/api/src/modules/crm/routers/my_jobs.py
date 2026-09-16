@@ -1,4 +1,4 @@
-"""My Jobs — team-routed approval task REST endpoints."""
+"""My Jobs - team-routed approval task REST endpoints."""
 
 from typing import Annotated
 from uuid import UUID

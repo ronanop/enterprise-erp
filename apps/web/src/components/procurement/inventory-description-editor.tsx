@@ -65,7 +65,7 @@ export function InventoryDescriptionEditor({
   if (!canEdit) {
     return (
       <span className="line-clamp-2" title={row.description ?? ""}>
-        {row.description?.trim() || "—"}
+        {row.description?.trim() || "-"}
       </span>
     );
   }
@@ -99,7 +99,7 @@ export function InventoryDescriptionEditor({
   return (
     <div className="flex min-w-0 items-start gap-1.5">
       <span className="line-clamp-2 min-w-0 flex-1" title={row.description ?? ""}>
-        {row.description?.trim() || "—"}
+        {row.description?.trim() || "-"}
       </span>
       <button
         type="button"

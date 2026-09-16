@@ -17,7 +17,7 @@ export type InventoryExportToolbarProps = {
 };
 
 /**
- * Presentational export control — no fetch / file logic.
+ * Presentational export control - no fetch / file logic.
  */
 export function InventoryExportToolbar({
   exporting,

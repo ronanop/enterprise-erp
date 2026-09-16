@@ -26,7 +26,7 @@ function isDeliverable(task: MarketingTask): boolean {
 }
 
 function dueLabel(dueAt?: string | null): string {
-  if (!dueAt) return "—";
+  if (!dueAt) return "-";
   return dueAt.slice(0, 10);
 }
 
@@ -344,7 +344,7 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
                                 : "Open link"}
                             </button>
                           ) : (
-                            "—"
+                            "-"
                           )}
                         </td>
                         <td className="px-4 py-2.5 text-right">
@@ -394,15 +394,15 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
                             <div className="mb-3 grid gap-2 text-[12px] text-muted-foreground md:grid-cols-3">
                               <p>
                                 <span className="font-medium text-foreground">Content: </span>
-                                {meta?.content_provider_name ?? "—"}
+                                {meta?.content_provider_name ?? "-"}
                               </p>
                               <p>
                                 <span className="font-medium text-foreground">Approval: </span>
-                                {meta?.approval_head_name ?? "—"}
+                                {meta?.approval_head_name ?? "-"}
                               </p>
                               <p>
                                 <span className="font-medium text-foreground">Editor: </span>
-                                {meta?.editor_name ?? "—"}
+                                {meta?.editor_name ?? "-"}
                               </p>
                             </div>
                             {canSubmit ? (
@@ -468,7 +468,7 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
                                         {selectedFile ? selectedFile.name : "Choose file…"}
                                       </Button>
                                       <p className="text-[11px] text-muted-foreground">
-                                        PDF, Office, image, or zip — max 25 MB
+                                        PDF, Office, image, or zip - max 25 MB
                                       </p>
                                     </div>
                                   )}

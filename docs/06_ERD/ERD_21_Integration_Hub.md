@@ -1,26 +1,26 @@
-# ERD_21 — Enterprise Integration Hub
+# ERD_21 - Enterprise Integration Hub
 
-**Document:** Enterprise ERD — Enterprise Integration Hub Domain  
+**Document:** Enterprise ERD - Enterprise Integration Hub Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 21 Implementation Planning  
+**Status:** Locked - Ready for Sprint 21 Implementation Planning  
 **Schema:** `integration`  
 **Table Prefix:** `int_`  
 **Aligned To:** BRD v1.0 · FRD-21 Integration Hub & Enterprise Platform Services · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-21 Integration Hub & Enterprise Platform Services](../02_FRD/FRD-21-Integration-Hub-Enterprise-Platform-Services.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.15-beta](../07_RELEASES/ERP_Core_v1.15-beta.md)  
 
-> **C-01 note:** Party / item identity remains **`master.master_employee`**, **`master.master_customer`**, **`master.master_vendor`**, and **`master.master_product`**. Integration Hub **never** invents parallel masters. **No operational business data** lives in `integration`. Peers communicate via **events · webhooks · REST · UUID refs** — **never** via peer ORM writes.
+> **C-01 note:** Party / item identity remains **`master.master_employee`**, **`master.master_customer`**, **`master.master_vendor`**, and **`master.master_product`**. Integration Hub **never** invents parallel masters. **No operational business data** lives in `integration`. Peers communicate via **events · webhooks · REST · UUID refs** - **never** via peer ORM writes.
 
 ---
 
 ## 1. Functional Overview (Purpose)
 
-The Enterprise Integration Hub provides the **centralized integration platform** for REST connectivity, webhooks, event publish/subscribe, message queues, retry / dead-letter processing, API credentials and OAuth clients, external systems and connectors, scheduled sync, mapping / transformation, sync logs, API usage metering, rate limiting, integration notifications, monitoring, and reporting (FRD-21 §5–§7 · §18–§19).
+The Enterprise Integration Hub provides the **centralized integration platform** for REST connectivity, webhooks, event publish/subscribe, message queues, retry / dead-letter processing, API credentials and OAuth clients, external systems and connectors, scheduled sync, mapping / transformation, sync logs, API usage metering, rate limiting, integration notifications, monitoring, and reporting (FRD-21 §5-§7 · §18-§19).
 
 This module **does not provide business functionality**. It is the **enterprise connectivity layer**. Operational records remain in Sales · Procurement · Inventory · … · Analytics. Integration Hub **orchestrates** exchange only.
 
-Integration Hub **depends on** Foundation, Organization, and Master Data. It **consumes existing masters only (C-01)** — **`master_employee`**, **`master_customer`**, **`master_vendor`**, **`master_product`**, and **`org_department`**.
+Integration Hub **depends on** Foundation, Organization, and Master Data. It **consumes existing masters only (C-01)** - **`master_employee`**, **`master_customer`**, **`master_vendor`**, **`master_product`**, and **`org_department`**.
 
 **Finance remains the only accounting system.** Integration Hub **never** ORM-writes `fin_*` and **does not** call `PostingService`. Finance **may publish events only**.
 
@@ -58,40 +58,40 @@ External Systems · Banks · Tax · E-Commerce (FRD-22) · Third parties
 
 ### API Mount (planned)
 
-**`/api/v1/integration`** — routers for all aggregates (external-systems, connectors, api-credentials, oauth-clients, webhooks, event-definitions, event-subscriptions, message-queues, messages, retry-queues, dead-letters, data-mappings, data-transformations, sync-jobs, sync-logs, api-usages, rate-limits, notifications, monitors, reports).
+**`/api/v1/integration`** - routers for all aggregates (external-systems, connectors, api-credentials, oauth-clients, webhooks, event-definitions, event-subscriptions, message-queues, messages, retry-queues, dead-letters, data-mappings, data-transformations, sync-jobs, sync-logs, api-usages, rate-limits, notifications, monitors, reports).
 
 ---
 
 ## 2. Scope & Business Rules
 
 ### In Scope
-- **External systems** and **connectors** (REST / webhook / queue adapters) — FRD-21 §5
+- **External systems** and **connectors** (REST / webhook / queue adapters) - FRD-21 §5
 - **API credentials** and **OAuth clients**
-- **Webhooks** inbound / outbound — FRD-21 §7
-- **Event definitions** and **subscriptions** — FRD-21 §6
+- **Webhooks** inbound / outbound - FRD-21 §7
+- **Event definitions** and **subscriptions** - FRD-21 §6
 - **Message queues**, **messages**, **retry**, **dead-letter**
 - **Mappings**, **transformations**, **sync jobs**, **sync logs**
 - **API usage**, **rate limits**, **notifications**, **monitors**, **reports**
 - Workflow, RBAC, Celery stubs (planning)
 
 ### Out of Scope (Phase 2 / Separate)
-- Replacing Foundation **Workflow Engine / IAM / SSO / Notification Engine** ownership — Hub **uses** Foundation; does not duplicate `wf_*` / `sec_*` masters
-- Full **API Gateway product** (Kong / Envoy) — Phase 1: rate limit + usage metadata
-- Full **payment / banking / GST vendor SDKs** — Phase 1: connector + credential shells (FRD-21 §13–§15 deferred product embeds)
-- Duplicate `int_employee` / `int_customer` / `int_vendor` / `int_product` / `int_department` — **forbidden (C-01)**
+- Replacing Foundation **Workflow Engine / IAM / SSO / Notification Engine** ownership - Hub **uses** Foundation; does not duplicate `wf_*` / `sec_*` masters
+- Full **API Gateway product** (Kong / Envoy) - Phase 1: rate limit + usage metadata
+- Full **payment / banking / GST vendor SDKs** - Phase 1: connector + credential shells (FRD-21 §13-§15 deferred product embeds)
+- Duplicate `int_employee` / `int_customer` / `int_vendor` / `int_product` / `int_department` - **forbidden (C-01)**
 - Direct ORM writes to any peer business schema
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
-- E-Commerce channel domain (FRD-22) — consumes Hub later
+- E-Commerce channel domain (FRD-22) - consumes Hub later
 
 ### Business Rules
-1. **No operational business data** in `integration` — payloads are opaque JSON/event envelopes only
+1. **No operational business data** in `integration` - payloads are opaque JSON/event envelopes only
 2. **C-01:** owners / contacts resolve via Master Data only
 3. Soft delete + version on mutable `int_*` tables
 4. Numbers company-scoped (`SYS-` / `CON-` / `WHK-` / `EVT-` / `MSG-` / `SYN-` / `DLQ-`)
-5. Credentials store **secret ref / vault key** — never plaintext secrets in DB
+5. Credentials store **secret ref / vault key** - never plaintext secrets in DB
 6. Retry: max attempts + backoff; exhaust → `int_dead_letter`
-7. Sync jobs may **push/pull** via connector only — never update peer tables via Hub ORM
-8. Finance: events in / events out — **no PostingService**
+7. Sync jobs may **push/pull** via connector only - never update peer tables via Hub ORM
+8. Finance: events in / events out - **no PostingService**
 9. Hub consumes peer events by **subscription**; peers write Hub only through published event APIs / enqueue services (not Hub writing peer DBs)
 
 ### Dependencies
@@ -101,7 +101,7 @@ External Systems · Banks · Tax · E-Commerce (FRD-22) · Third parties
 | ERD_01 Foundation | `sec_tenant`, `sec_user`, `wf_definition`, `wf_instance`, platform audit / notification |
 | ERD_02 Organization | `org_company`, `org_branch`, `org_department` |
 | ERD_03 Master Data | **`master_employee`**, **`master_customer`**, **`master_vendor`**, **`master_product`** |
-| ERD_04–ERD_20 peers | Event publishers / webhook callers — **no peer FKs / no peer writes from Hub** |
+| ERD_04-ERD_20 peers | Event publishers / webhook callers - **no peer FKs / no peer writes from Hub** |
 
 ---
 
@@ -109,26 +109,26 @@ External Systems · Banks · Tax · E-Commerce (FRD-22) · Third parties
 
 | # | Table | Classification | tenant_id | company_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-------------|---------|----------|
-| 1 | `int_external_system` | Catalog | ✅ | ✅ | ✅ | ✅ | — |
+| 1 | `int_external_system` | Catalog | ✅ | ✅ | ✅ | ✅ | - |
 | 2 | `int_connector` | Catalog / Transaction | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 3 | `int_api_credential` | Secret Config | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 4 | `int_oauth_client` | Secret Config | ✅ | ✅ | ✅ | ✅ | — |
+| 4 | `int_oauth_client` | Secret Config | ✅ | ✅ | ✅ | ✅ | - |
 | 5 | `int_webhook` | Config | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 6 | `int_event_definition` | Catalog | ✅ | ✅ | ✅ | ✅ | — |
-| 7 | `int_event_subscription` | Config | ✅ | ✅ | ✅ | ✅ | — |
-| 8 | `int_message_queue` | Catalog | ✅ | ✅ | ✅ | ✅ | — |
-| 9 | `int_message` | Message | ✅ | ✅ | ✅ | ✅ | — |
+| 6 | `int_event_definition` | Catalog | ✅ | ✅ | ✅ | ✅ | - |
+| 7 | `int_event_subscription` | Config | ✅ | ✅ | ✅ | ✅ | - |
+| 8 | `int_message_queue` | Catalog | ✅ | ✅ | ✅ | ✅ | - |
+| 9 | `int_message` | Message | ✅ | ✅ | ✅ | ✅ | - |
 | 10 | `int_retry_queue` | Job | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 11 | `int_dead_letter` | Archive | ✅ | ✅ | ✅ | ✅ | — |
-| 12 | `int_data_mapping` | Config | ✅ | ✅ | ✅ | ✅ | — |
-| 13 | `int_data_transformation` | Config | ✅ | ✅ | ✅ | ✅ | — |
+| 11 | `int_dead_letter` | Archive | ✅ | ✅ | ✅ | ✅ | - |
+| 12 | `int_data_mapping` | Config | ✅ | ✅ | ✅ | ✅ | - |
+| 13 | `int_data_transformation` | Config | ✅ | ✅ | ✅ | ✅ | - |
 | 14 | `int_sync_job` | Job | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 15 | `int_sync_log` | Log | ✅ | ✅ | ✅ | ✅ | — |
-| 16 | `int_api_usage` | Meter | ✅ | ✅ | ✅ | ✅ | — |
-| 17 | `int_rate_limit` | Config | ✅ | ✅ | ✅ | ✅ | — |
-| 18 | `int_notification` | Notification | ✅ | ✅ | ✅ | ✅ | — |
-| 19 | `int_monitor` | Health | ✅ | ✅ | ✅ | ✅ | — |
-| 20 | `int_report` | Snapshot | ✅ | ✅ | ✅ | ✅ | — |
+| 15 | `int_sync_log` | Log | ✅ | ✅ | ✅ | ✅ | - |
+| 16 | `int_api_usage` | Meter | ✅ | ✅ | ✅ | ✅ | - |
+| 17 | `int_rate_limit` | Config | ✅ | ✅ | ✅ | ✅ | - |
+| 18 | `int_notification` | Notification | ✅ | ✅ | ✅ | ✅ | - |
+| 19 | `int_monitor` | Health | ✅ | ✅ | ✅ | ✅ | - |
+| 20 | `int_report` | Snapshot | ✅ | ✅ | ✅ | ✅ | - |
 
 **Business Tables: 20** · **Schema: `integration`**
 
@@ -201,7 +201,7 @@ Optional UUID-only (no FK): source_module_ref_id, entity_ref_id, sales_*, procur
 |--------|-------|
 | `system_number` | `SYS-YYYY-NNNNNN` |
 | `system_code` / `system_name` | UK `(company_id, system_code)` |
-| `system_type` | bank, payment_gateway, tax, ecommerce, crm_external, custom — FRD-21 §5 |
+| `system_type` | bank, payment_gateway, tax, ecommerce, crm_external, custom - FRD-21 §5 |
 | `base_url` | VARCHAR |
 | `environment` | sandbox, production |
 | `owner_employee_id` | FK → `master_employee` |
@@ -217,12 +217,12 @@ Optional UUID-only (no FK): source_module_ref_id, entity_ref_id, sales_*, procur
 | Column | Notes |
 |--------|-------|
 | `connector_number` | `CON-YYYY-NNNNNN` |
-| `connector_code` / `connector_name` | — |
+| `connector_code` / `connector_name` | - |
 | `external_system_id` | FK → `int_external_system` |
 | `connector_protocol` | rest, webhook, queue, sftp, soap |
 | `direction` | inbound, outbound, bidirectional |
 | `owner_employee_id` | FK → `master_employee` |
-| `config_json` | JSONB (endpoints, headers templates — no secrets) |
+| `config_json` | JSONB (endpoints, headers templates - no secrets) |
 | `credential_id` / `oauth_client_id` | FK optional |
 | `status` | draft, submitted, approved, active, inactive, failed, retired |
 | `workflow_*` | Connector approval |
@@ -237,7 +237,7 @@ Optional UUID-only (no FK): source_module_ref_id, entity_ref_id, sales_*, procur
 | `credential_number` | `CRD-YYYY-NNNNNN` |
 | `external_system_id` | FK |
 | `credential_type` | api_key, basic, bearer, custom_header |
-| `secret_vault_ref` | VARCHAR — vault/path only |
+| `secret_vault_ref` | VARCHAR - vault/path only |
 | `key_hint` | VARCHAR masked hint |
 | `expires_at` | TIMESTAMPTZ |
 | `rotated_at` | TIMESTAMPTZ |
@@ -256,7 +256,7 @@ Optional UUID-only (no FK): source_module_ref_id, entity_ref_id, sales_*, procur
 | `external_system_id` | FK |
 | `client_id_public` | VARCHAR |
 | `client_secret_vault_ref` | VARCHAR |
-| `token_url` / `authorize_url` / `scopes` | — |
+| `token_url` / `authorize_url` / `scopes` | - |
 | `grant_type` | client_credentials, authorization_code, refresh_token |
 | `token_expires_at` | TIMESTAMPTZ |
 | `status` | draft, active, revoked |
@@ -329,9 +329,9 @@ Optional UUID-only (no FK): source_module_ref_id, entity_ref_id, sales_*, procur
 | `message_queue_id` | FK |
 | `event_definition_id` | FK optional |
 | `correlation_id` | UUID / VARCHAR |
-| `payload_json` | JSONB — opaque envelope |
+| `payload_json` | JSONB - opaque envelope |
 | `source_module` | VARCHAR |
-| `entity_ref_id` | UUID optional — **no peer FK** |
+| `entity_ref_id` | UUID optional - **no peer FK** |
 | `priority` | INT |
 | `available_at` | TIMESTAMPTZ |
 | `status` | queued, processing, succeeded, failed, dead_lettered, cancelled |
@@ -386,7 +386,7 @@ Optional UUID-only (no FK): source_module_ref_id, entity_ref_id, sales_*, procur
 
 | Column | Notes |
 |--------|-------|
-| `transformation_code` / `transformation_name` | — |
+| `transformation_code` / `transformation_name` | - |
 | `mapping_id` | FK → `int_data_mapping` |
 | `transform_type` | jolt, template, script_ref, expression |
 | `definition_json` | JSONB |
@@ -407,16 +407,16 @@ Optional UUID-only (no FK): source_module_ref_id, entity_ref_id, sales_*, procur
 | `mapping_id` | UUID | YES | FK → `int_data_mapping` |
 | `sync_mode` | VARCHAR(30) | NO | full, incremental, realtime |
 | `direction` | VARCHAR(20) | NO | pull, push, bidirectional |
-| `schedule_cron` | VARCHAR | YES | — |
+| `schedule_cron` | VARCHAR | YES | - |
 | `requested_by_employee_id` | UUID | NO | FK → `master_employee` |
-| `started_at` / `completed_at` | TIMESTAMPTZ | YES | — |
-| `rows_processed` | INT | YES | — |
+| `started_at` / `completed_at` | TIMESTAMPTZ | YES | - |
+| `rows_processed` | INT | YES | - |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, queued, running, succeeded, failed, cancelled |
 | `workflow_*` | | | Sync approval |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
 
 **UK:** `(company_id, sync_number)`.  
-**Rule:** Sync executes via connector adapters only — **never** ORM-writes peer schemas.
+**Rule:** Sync executes via connector adapters only - **never** ORM-writes peer schemas.
 
 ---
 
@@ -428,7 +428,7 @@ Optional UUID-only (no FK): source_module_ref_id, entity_ref_id, sales_*, procur
 | `logged_at` | TIMESTAMPTZ |
 | `level` | info, warn, error |
 | `message` | TEXT |
-| `entity_ref_id` | UUID optional — **no peer FK** |
+| `entity_ref_id` | UUID optional - **no peer FK** |
 | `payload_json` | JSONB optional |
 | `status` | recorded |
 
@@ -485,7 +485,7 @@ Optional UUID-only (no FK): source_module_ref_id, entity_ref_id, sales_*, procur
 | `external_system_id` / `connector_id` | FK optional |
 | `check_type` | heartbeat, latency, error_rate, queue_depth |
 | `threshold_json` | JSONB |
-| `last_checked_at` / `last_status` | — |
+| `last_checked_at` / `last_status` | - |
 | `status` | healthy, degraded, down, unknown, inactive |
 
 ---
@@ -597,7 +597,7 @@ Seed only; instances on Foundation `wf_instance`. `is_parallel` on **`wf_step`**
 
 Prior Alembic head: **`0376_seed_analytics_workflows`**.
 
-Revision budget **`0377`–`0398` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`int_retry_queue` and `int_dead_letter` share one migration**.
+Revision budget **`0377`-`0398` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`int_retry_queue` and `int_dead_letter` share one migration**.
 
 | Order | Revision ID (≤32 chars) | Tables / Actions |
 |-------|-------------------------|------------------|
@@ -648,14 +648,14 @@ Revision budget **`0377`–`0398` (22 revisions)**. Schema + 20 tables + permiss
 | Foundation | tenant, user, workflow, audit, notification services |
 | Organization | company, branch, **department** FK |
 | Master Data | **employee · customer · vendor · product** (C-01) |
-| All ERP domains (incl. Finance) | **Event publish / REST call / webhook register** — Hub stores UUID / payload only |
+| All ERP domains (incl. Finance) | **Event publish / REST call / webhook register** - Hub stores UUID / payload only |
 
 ### Downstream
 
 | Consumer | Pattern |
 |----------|---------|
 | External systems | Connectors / webhooks / OAuth |
-| FRD-22 E-Commerce (future) | Uses Hub connectors — no Hub redesign of channels |
+| FRD-22 E-Commerce (future) | Uses Hub connectors - no Hub redesign of channels |
 | ERP modules | May receive inbound webhooks → their own APIs (not Hub writing their tables) |
 
 ### Hard Rules
@@ -681,12 +681,12 @@ Revision budget **`0377`–`0398` (22 revisions)**. Schema + 20 tables + permiss
 | 4 | Consumes masters only (C-01) | ✅ |
 | 5 | No PostingService; no fin_* writes; Finance events only | ✅ |
 | 6 | All ERP peers via events/webhooks/REST/UUID; no peer writes | ✅ |
-| 7 | Migration order `0377`–`0398`, revision IDs ≤ 32 chars | ✅ |
+| 7 | Migration order `0377`-`0398`, revision IDs ≤ 32 chars | ✅ |
 | 8 | Workflows + RBAC (`integration.*`) + API mount + Celery stubs documented | ✅ |
 | 9 | Gateway / payment / GST product embeds deferred without blocking Sprint 21 | ✅ |
 | 10 | Architecture Lock v1.1 preserved; no prior module redesign | ✅ |
 
-### ERD Phase Gate — Integration Hub Summary
+### ERD Phase Gate - Integration Hub Summary
 
 | Metric | Value |
 |--------|-------|
@@ -694,10 +694,10 @@ Revision budget **`0377`–`0398` (22 revisions)**. Schema + 20 tables + permiss
 | Schema | **`integration`** |
 | Prefix | `int_` |
 | API mount | `/api/v1/integration` |
-| Migration range | `0377` – `0398` |
+| Migration range | `0377` - `0398` |
 | Prior head | `0376_seed_analytics_workflows` |
 | Planned head | `0398_seed_integration_workflows` |
-| Document Status | **Locked — Ready for Sprint 21 Implementation Planning** |
+| Document Status | **Locked - Ready for Sprint 21 Implementation Planning** |
 
 ---
 

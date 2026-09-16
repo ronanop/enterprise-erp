@@ -1,4 +1,4 @@
-# ADR-ASSET-WF-GOV-001 — Asset Workflow Governance (C-AST-01)
+# ADR-ASSET-WF-GOV-001 - Asset Workflow Governance (C-AST-01)
 
 **Status:** Accepted (remediation complete)  
 **Date:** 2026-07-29  
@@ -9,7 +9,7 @@
 
 ## Problem
 
-Asset Management approvals (asset, assignment, maintenance, disposal, revaluation) advanced document `status` via in-process domain engines and RBAC alone. Columns `workflow_instance_id` / `workflow_status` existed and workflow definitions were seeded (`0266`), but Foundation `WorkflowService` was never invoked — violating Architecture Lock **C-04** (all business approvals through the Workflow Engine).
+Asset Management approvals (asset, assignment, maintenance, disposal, revaluation) advanced document `status` via in-process domain engines and RBAC alone. Columns `workflow_instance_id` / `workflow_status` existed and workflow definitions were seeded (`0266`), but Foundation `WorkflowService` was never invoked - violating Architecture Lock **C-04** (all business approvals through the Workflow Engine).
 
 ## Decision
 
@@ -45,7 +45,7 @@ Asset Management approvals (asset, assignment, maintenance, disposal, revaluatio
 ## Rollback
 
 1. Set `ASSET_WORKFLOW_GOVERNANCE_ENABLED=false` and redeploy.
-2. Legacy single-step approve path resumes (non–C-04; support-only).
+2. Legacy single-step approve path resumes (non-C-04; support-only).
 3. In-flight `wf_instance` rows may be cancelled via Foundation workflow APIs if needed.
 
 ## References

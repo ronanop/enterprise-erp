@@ -159,7 +159,7 @@ export function ProcurementPoSummaryDialog({
               Total POs
             </p>
             <p className="mt-1 font-mono text-xl font-medium tabular-nums">
-              {loading ? "—" : totalCount}
+              {loading ? "-" : totalCount}
             </p>
           </div>
         </div>
@@ -182,10 +182,10 @@ export function ProcurementPoSummaryDialog({
                   </div>
                   <div className="shrink-0 text-right">
                     <p className="font-mono text-lg font-medium tabular-nums">
-                      {loading ? "—" : count}
+                      {loading ? "-" : count}
                     </p>
                     <p className="text-[10px] tabular-nums text-muted-foreground">
-                      {loading ? "—" : formatInr(value)}
+                      {loading ? "-" : formatInr(value)}
                     </p>
                   </div>
                 </div>

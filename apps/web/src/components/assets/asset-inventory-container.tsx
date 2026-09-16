@@ -142,7 +142,7 @@ export async function fetchInventoryPage(input: {
 
   const branch_id = query.branch_id;
 
-  // Assignments API caps page_size at 200 — paginate instead of requesting 500 (422).
+  // Assignments API caps page_size at 200 - paginate instead of requesting 500 (422).
   const [assetList, assignmentItems] = await Promise.all([
     listAssets(query),
     fetchAllAssignmentPages(listAssignments, branch_id),
@@ -174,7 +174,7 @@ export async function fetchInventoryPage(input: {
           typeLabel: row.linked_asset_code
             ? `${componentTypeLabel(row.component_type)} · ${row.linked_asset_code}`
             : componentTypeLabel(row.component_type),
-          serialDisplay: row.serial_number?.trim() || "—",
+          serialDisplay: row.serial_number?.trim() || "-",
           componentName:
             row.linked_asset_name?.trim() ||
             row.linked_asset_code?.trim() ||
@@ -185,7 +185,7 @@ export async function fetchInventoryPage(input: {
         accessoriesByAssetId.set(assetId, list);
       }
     } catch {
-      // Accessories are optional enrichment — inventory still loads.
+      // Accessories are optional enrichment - inventory still loads.
     }
   }
 

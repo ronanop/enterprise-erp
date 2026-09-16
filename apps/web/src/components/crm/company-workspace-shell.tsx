@@ -145,11 +145,6 @@ export function CompanyWorkspaceShell({
             <div className="mt-3">
               <PageHeader
                 title={hideWorkspaceNav ? "Create Lead" : company.customer_name}
-                description={
-                  hideWorkspaceNav
-                    ? "The only supported entry point for a sales-process lead is from its parent company."
-                    : `Account ${company.account_number} · ${company.industry}`
-                }
                 actions={
                   hideWorkspaceNav ? undefined : (
                     <div className="flex flex-wrap items-center gap-2">

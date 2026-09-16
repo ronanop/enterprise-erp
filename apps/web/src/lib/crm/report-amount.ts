@@ -18,7 +18,7 @@ export function isReportAmountColumn(key: string): boolean {
  * Examples: ₹999.50 · ₹1.50K · ₹2.25L · ₹1.00C
  */
 export function formatReportAmountInr(value: number): string {
-  if (!Number.isFinite(value)) return "—";
+  if (!Number.isFinite(value)) return "-";
   const sign = value < 0 ? "-" : "";
   const abs = Math.abs(value);
 
@@ -36,7 +36,7 @@ export function formatReportAmountInr(value: number): string {
 
 /** Full INR with 2 decimals (for tooltips / accessibility). */
 export function formatReportAmountInrFull(value: number): string {
-  if (!Number.isFinite(value)) return "—";
+  if (!Number.isFinite(value)) return "-";
   return new Intl.NumberFormat("en-IN", {
     style: "currency",
     currency: "INR",
@@ -46,7 +46,7 @@ export function formatReportAmountInrFull(value: number): string {
 }
 
 export function formatReportCellValue(columnKey: string, value: unknown): string {
-  if (value == null) return "—";
+  if (value == null) return "-";
   if (typeof value === "boolean") return value ? "Yes" : "No";
 
   if (isReportAmountColumn(columnKey)) {
@@ -60,7 +60,7 @@ export function formatReportCellValue(columnKey: string, value: unknown): string
   }
 
   if (typeof value === "number") return String(value);
-  if (typeof value === "string") return value || "—";
+  if (typeof value === "string") return value || "-";
   try {
     return JSON.stringify(value);
   } catch {

@@ -66,13 +66,13 @@ export function ProjectListPage() {
         key: "current_stage",
         label: "Current Step",
         sort: (r) => r.current_stage_label || r.current_stage || "",
-        cell: (r) => r.current_stage_label || r.current_stage || "—",
+        cell: (r) => r.current_stage_label || r.current_stage || "-",
       },
       {
         key: "current_stage_owner_name",
         label: "Step Owner",
         sort: (r) => r.current_stage_owner_name || "",
-        cell: (r) => r.current_stage_owner_name || "—",
+        cell: (r) => r.current_stage_owner_name || "-",
       },
       {
         key: "created_at",
@@ -113,7 +113,7 @@ export function ProjectListPage() {
       title="Projects"
       description={
         projectModuleAdmin
-          ? "Delivery portfolio — every project from request through approval, execution, and closure. Open a project to manage its WBS, resources, budget, and risks."
+          ? "Delivery portfolio - every project from request through approval, execution, and closure. Open a project to manage its WBS, resources, budget, and risks."
           : "Projects you are assigned to. Open My Jobs to complete your delivery steps."
       }
       panelTitle="Portfolio"

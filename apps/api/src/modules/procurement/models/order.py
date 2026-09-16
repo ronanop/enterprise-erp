@@ -58,7 +58,7 @@ class ProcOrderHeader(Base, *ProcTransactionMixin):
         ForeignKey("procurement.proc_vendor_quotation_header.id", ondelete="RESTRICT"),
         nullable=True,
     )
-    # Logical FK to proc_vendor_contract — DB constraint added in migration 0069
+    # Logical FK to proc_vendor_contract - DB constraint added in migration 0069
     # (contracts are created after orders per ERD migration order).
     contract_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),

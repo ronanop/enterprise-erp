@@ -1,5 +1,5 @@
 /**
- * HRMS sidebar navigation — flat list under /hr (no section headers).
+ * HRMS sidebar navigation - flat list under /hr (no section headers).
  */
 
 import type { LucideIcon } from "lucide-react";
@@ -35,7 +35,7 @@ export type HrNavItem = {
   description?: string;
   /** Nested links (e.g. Org Setup sections) */
   children?: HrNavItem[];
-  /** Superadmin Panel — hidden from HR Admins */
+  /** Superadmin Panel - hidden from HR Admins */
   superAdminOnly?: boolean;
 };
 
@@ -59,7 +59,7 @@ export const hrNavGroups: HrNavGroup[] = [
         title: "Recruitment",
         href: "/hr/recruitment",
         icon: Briefcase,
-        description: "ATS — jobs, pipeline & offers",
+        description: "ATS - jobs, pipeline & offers",
       },
       {
         title: "Onboarding",
@@ -79,7 +79,7 @@ export const hrNavGroups: HrNavGroup[] = [
         icon: ClipboardCheck,
         description: "Attendance register & calendar",
       },
-      // Hidden for now — restore to show Leave in the sidebar
+      // Hidden for now - restore to show Leave in the sidebar
       // {
       //   title: "Leave",
       //   href: "/hr/leave",
@@ -196,7 +196,7 @@ export const hrNavGroups: HrNavGroup[] = [
         title: "Superadmin Panel",
         href: "/hr/superadmin",
         icon: Shield,
-        description: "Assign HR module users — visible only to HR module admins",
+        description: "Assign HR module users - visible only to HR module admins",
         superAdminOnly: true,
       },
     ],

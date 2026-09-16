@@ -1,4 +1,4 @@
-# ESS Phase 5 — Workplace services
+# ESS Phase 5 - Workplace services
 
 Phase 5 adds meeting room booking, asset QR lookup, asset-linked helpdesk tickets, and employee IT/grievance tickets in the PWA.
 
@@ -55,4 +55,4 @@ Agents continue to work tickets in HRMS **Helpdesk** (`/helpdesk/tickets`).
 
 ## Next
 
-Phase 6 — policy walkthroughs, RBAC admin polish, password hardening (`docs` roadmap).
+Phase 6 - policy walkthroughs, RBAC admin polish, password hardening (`docs` roadmap).

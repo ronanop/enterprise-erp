@@ -96,7 +96,7 @@ export default function AttendanceCorrectionPage() {
   }, [selectedDate, target]);
 
   const issueHint = useMemo(() => {
-    if (!target) return "No punch record for this day — choose what to add.";
+    if (!target) return "No punch record for this day - choose what to add.";
     if (target.check_in_at && !target.check_out_at) {
       return "Missing check-out on this day.";
     }

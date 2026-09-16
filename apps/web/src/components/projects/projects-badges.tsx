@@ -10,7 +10,7 @@ const SCALE_VARIANT: Record<string, "outline" | "success" | "warning" | "destruc
 
 function ScaleBadge({ value }: { value: string | null | undefined }) {
   const key = (value ?? "").toLowerCase();
-  if (!key) return <span className="text-muted-foreground">—</span>;
+  if (!key) return <span className="text-muted-foreground">-</span>;
   return (
     <Badge variant={SCALE_VARIANT[key] ?? "outline"} className="font-medium capitalize">
       {key}
@@ -38,7 +38,7 @@ const HEALTH_TINT: Record<string, string> = {
 };
 
 export function HealthDot({ health }: { health: string | null | undefined }) {
-  if (!health) return <span className="text-muted-foreground">—</span>;
+  if (!health) return <span className="text-muted-foreground">-</span>;
   return (
     <span className="inline-flex items-center gap-1.5 capitalize">
       <span

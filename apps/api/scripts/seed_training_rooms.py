@@ -68,7 +68,7 @@ def main() -> None:
             else None
         )
         if not tenant or not company or not admin:
-            raise SystemExit("DEMOCO / admin missing — run seed_demo_data first")
+            raise SystemExit("DEMOCO / admin missing - run seed_demo_data first")
 
         branches = {
             b.branch_code: b

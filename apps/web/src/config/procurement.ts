@@ -1,5 +1,5 @@
 /**
- * Procurement workspace config — SCM OVF → PO → GRN → Invoice flow.
+ * Procurement workspace config - SCM OVF → PO → GRN → Invoice flow.
  */
 
 import type { LucideIcon } from "lucide-react";

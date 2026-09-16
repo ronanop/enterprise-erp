@@ -118,7 +118,6 @@ export function MeetingsListPage({
       {!embedded ? (
         <PageHeader
           title="Meetings"
-          description="Schedule and track client meetings linked to company accounts."
           actions={actions}
         />
       ) : null}

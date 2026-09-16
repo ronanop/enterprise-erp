@@ -75,7 +75,7 @@ class BranchService:
             raise NotFoundException("Company not found")
         self._scope.validate_company_access(ctx, company_id)
 
-        # Include soft-deleted codes — unique constraint still applies to them
+        # Include soft-deleted codes - unique constraint still applies to them
         self._repo.liberate_deleted_branch_codes(ctx, company_id=company_id)
         existing_codes = self._repo.list_branch_codes(
             ctx, company_id=company_id, include_deleted=True
@@ -97,7 +97,7 @@ class BranchService:
             )
         except IntegrityError as exc:
             self._repo.db.rollback()
-            # Race: another request took the code — allocate again once
+            # Race: another request took the code - allocate again once
             existing_codes = self._repo.list_branch_codes(
                 ctx, company_id=company_id, include_deleted=True
             )

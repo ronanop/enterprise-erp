@@ -372,7 +372,7 @@ export function ManagementGroupPanel({ tab }: { tab: HrSetupTab }) {
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Attendance configuration
             </h3>
-            <SetupField label="Default attendance shift group" required hint="Required — auto-assigned to employees">
+            <SetupField label="Default attendance shift group" required hint="Required - auto-assigned to employees">
               <SetupSelect value={defaultShiftId} onChange={(e) => setDefaultShiftId(e.target.value)}>
                 <option value="">Select shift…</option>
                 {shifts.map((s) => (

@@ -107,7 +107,7 @@ export default function PayslipBreakdownScreen() {
           <View style={styles.donutInner}>
             <Text style={styles.donutCaption}>Earnings</Text>
             <Text style={styles.donutValue}>
-              {gross ? `${Math.round((net / gross) * 100)}%` : "—"}
+              {gross ? `${Math.round((net / gross) * 100)}%` : "-"}
             </Text>
           </View>
         </View>

@@ -13,7 +13,7 @@ export type TypeQtyLineDraft = {
   /** Custom name when type is Others. */
   otherLabel: string;
   quantity: string;
-  /** SCM delivery — "true" | "false" | "" (Yes shows date). */
+  /** SCM delivery - "true" | "false" | "" (Yes shows date). */
   delivered: string;
   date: string;
 };
@@ -149,7 +149,7 @@ export function TypeQtyLinesEditor({
   addLabel?: string;
   /** When false, hide per-line date (Survey type/qty only). Default true for SCM delivery. */
   showDate?: boolean;
-  /** SCM mode — type/qty locked from Survey; only delivery date is editable. */
+  /** SCM mode - type/qty locked from Survey; only delivery date is editable. */
   datesOnly?: boolean;
 }) {
   const parsed = parseTypeQtyLines(value);

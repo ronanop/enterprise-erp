@@ -143,7 +143,7 @@ export function stageProgressLabel(status: string | null | undefined): string {
     case "in_progress":
       return "In progress";
     default:
-      return "—";
+      return "-";
   }
 }
 

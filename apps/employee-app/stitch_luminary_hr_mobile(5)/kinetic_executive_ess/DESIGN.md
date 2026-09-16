@@ -114,7 +114,7 @@ spacing:
 
 ## Brand & Style
 
-The design system is engineered for a high-performance HR environment, blending the precision of **Linear** with the accessibility of **Revolut**. The brand personality is "Intelligent Orchestration"—it feels authoritative yet effortless. The target audience consists of modern professionals who expect their enterprise tools to match the quality of their premium consumer apps.
+The design system is engineered for a high-performance HR environment, blending the precision of **Linear** with the accessibility of **Revolut**. The brand personality is "Intelligent Orchestration"-it feels authoritative yet effortless. The target audience consists of modern professionals who expect their enterprise tools to match the quality of their premium consumer apps.
 
 The aesthetic follows a **Corporate / Modern** style with heavy influences from **Glassmorphism** and **Minimalism**. The UI relies on expansive whitespace, refined typography, and subtle depth to organize complex HR data into digestible, actionable flows. Every interaction is designed to feel fluid and instantaneous, moving away from the "form-heavy" legacy of ERPs toward a "stream-based" mobile experience.
 

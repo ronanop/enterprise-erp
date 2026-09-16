@@ -1,1 +1,1 @@
-"""Foundation domain module — Sprint 1+."""
+"""Foundation domain module - Sprint 1+."""

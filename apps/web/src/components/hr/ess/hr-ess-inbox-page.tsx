@@ -83,7 +83,7 @@ function parseEmployee(item: HrEssInboxItem): { name: string; code: string } {
   const raw = item.employee_name || "";
   const match = raw.match(/^(.*)\s+\(([^)]+)\)\s*$/);
   if (match) return { name: match[1].trim(), code: match[2].trim() };
-  return { name: raw || "—", code: "—" };
+  return { name: raw || "-", code: "-" };
 }
 
 export function HrEssInboxPage() {
@@ -200,7 +200,7 @@ export function HrEssInboxPage() {
     setActingId(item.id);
     try {
       await runInboxAction(item, action);
-      toast(`${actionLabel(action)} — ${item.title}`, "success");
+      toast(`${actionLabel(action)} - ${item.title}`, "success");
       setSelected(null);
       await load();
     } catch (err) {
@@ -466,7 +466,7 @@ function InboxRequestDrawer({
           <dt className="text-muted-foreground">Request</dt>
           <dd className="font-medium">{item.title}</dd>
           <dt className="text-muted-foreground">Detail</dt>
-          <dd>{item.detail || "—"}</dd>
+          <dd>{item.detail || "-"}</dd>
           <dt className="text-muted-foreground">Applied</dt>
           <dd>{new Date(item.occurred_at).toLocaleString("en-IN")}</dd>
         </dl>

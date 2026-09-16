@@ -125,7 +125,7 @@ export function ServiceRequestTicketListPage() {
         description={
           engineerScoped
             ? "Tickets assigned to you as Service Engineer."
-            : "Service Head queue — assign owners from ticket detail; manage engineers under Users."
+            : "Service Head queue - assign owners from ticket detail; manage engineers under Users."
         }
         actions={
           <div className="flex flex-wrap gap-2">
@@ -251,12 +251,12 @@ export function ServiceRequestTicketListPage() {
                       </Link>
                     </td>
                     <td className="max-w-[200px] truncate px-4 py-2.5">{row.subject}</td>
-                    <td className="px-4 py-2.5">{row.contact_name ?? "—"}</td>
+                    <td className="px-4 py-2.5">{row.contact_name ?? "-"}</td>
                     <td className="px-4 py-2.5"><FinanceStatusBadge status={row.priority} /></td>
                     <td className="px-4 py-2.5"><FinanceStatusBadge status={row.status} /></td>
-                    <td className="px-4 py-2.5">{row.mode_of_action ? formatStatus(row.mode_of_action) : "—"}</td>
+                    <td className="px-4 py-2.5">{row.mode_of_action ? formatStatus(row.mode_of_action) : "-"}</td>
                     <td className="px-4 py-2.5 text-xs text-muted-foreground">{row.created_at?.slice(0, 10)}</td>
-                    <td className="px-4 py-2.5 text-xs text-muted-foreground">{row.due_at?.slice(0, 10) ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-xs text-muted-foreground">{row.due_at?.slice(0, 10) ?? "-"}</td>
                   </tr>
                 ))
               )}

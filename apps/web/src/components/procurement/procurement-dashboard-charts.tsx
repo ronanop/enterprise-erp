@@ -14,7 +14,7 @@ import {
   type PoOverviewBucket,
 } from "@/utils/procurement-po-buckets";
 
-/** ERP palette — navy/sky/teal/amber (no purple). */
+/** ERP palette - navy/sky/teal/amber (no purple). */
 const PROC_CHART_COLORS = {
   sky: "#0369A1",
   teal: "#0F766E",
@@ -80,7 +80,7 @@ function ProcurementChartSection({
     <section
       role={onClick ? "link" : undefined}
       tabIndex={onClick ? 0 : undefined}
-      aria-label={onClick ? `${title} — open all purchase orders` : undefined}
+      aria-label={onClick ? `${title} - open all purchase orders` : undefined}
       onClick={onClick}
       onKeyDown={
         onClick
@@ -146,7 +146,7 @@ function PoLifecycleDonut({
   loading?: boolean;
   compact?: boolean;
 }) {
-  // Lifecycle stages only — draft is not part of the open→partial→close mix.
+  // Lifecycle stages only - draft is not part of the open→partial→close mix.
   const lifecycleBuckets: PoOverviewBucket[] = ["open", "partial", "close"];
   const slices: Exploded3dPieSlice[] = lifecycleBuckets
     .map((key) => ({

@@ -144,14 +144,14 @@ class Settings(BaseSettings):
     # Push notifications (legacy FCM). Leave empty to keep stub deliveries.
     fcm_server_key: str | None = Field(default=None, alias="FCM_SERVER_KEY")
 
-    # Microsoft Graph email (Notification Engine — email channel)
+    # Microsoft Graph email (Notification Engine - email channel)
     azure_tenant_id: str = Field(default="", alias="AZURE_TENANT_ID")
     azure_client_id: str = Field(default="", alias="AZURE_CLIENT_ID")
     azure_client_secret: str = Field(default="", alias="AZURE_CLIENT_SECRET")
     azure_from_email: str = Field(default="", alias="AZURE_FROM_EMAIL")
     # sync = deliver in-request (local/dev); async = Celery only
     email_delivery_mode: str = Field(default="sync", alias="EMAIL_DELIVERY_MODE")
-    # Project stage-save emails — keep false until Graph Mail.Send is granted
+    # Project stage-save emails - keep false until Graph Mail.Send is granted
     project_stage_email_notifications_enabled: bool = Field(
         default=False,
         alias="PROJECT_STAGE_EMAIL_NOTIFICATIONS_ENABLED",
@@ -188,7 +188,7 @@ class Settings(BaseSettings):
     imap_poll_interval_seconds: int = Field(default=120, alias="IMAP_POLL_INTERVAL_SECONDS")
     service_followup_hours: int = Field(default=24, alias="SERVICE_FOLLOWUP_HOURS")
 
-    # ElevenLabs Conversational AI (voice agent — server-side only)
+    # ElevenLabs Conversational AI (voice agent - server-side only)
     xi_api_key: str = Field(
         default="",
         validation_alias=AliasChoices("XI_API_KEY", "ELEVENLABS_API_KEY"),
@@ -229,7 +229,7 @@ class Settings(BaseSettings):
         alias="MICROSOFT_USER_EMAIL_DOMAIN",
     )
     microsoft_platform_admin_emails: str = Field(
-        default="techbank@cachedigitech.com",
+        default="techbank@cachedigitech.com,connectplus@cachedigitech.com",
         alias="MICROSOFT_PLATFORM_ADMIN_EMAILS",
     )
 

@@ -26,6 +26,7 @@ from modules.crm.repository.opportunity_repository import OpportunityRepository
 from modules.crm.repository.quote_repository import QuoteLineRepository, QuoteRepository
 from modules.crm.service.blueprint_service import log_state_history
 from modules.crm.service.crm_module_admin import CrmModuleAdminService
+from modules.crm.service.crm_record_visibility import CrmRecordVisibility
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import margin_engine, sales_blueprint_engine
@@ -57,20 +58,45 @@ class QuoteService:
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
         self._crm_admin = CrmModuleAdminService(db)
+        self._visibility = CrmRecordVisibility(db)
         self._audit = AuditService(db)
 
     # -- reads -----------------------------------------------------------
     def list(self, ctx: TenantContext, company_id: UUID | None = None, opportunity_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_quotes(ctx, cid, opportunity_id=opportunity_id)
+        if opportunity_id is not None:
+            opp = self._opportunities.get(ctx, opportunity_id)
+            if opp is None:
+                raise NotFoundException("Opportunity not found")
+            self._visibility.ensure_opportunity_access(ctx, opp)
+            return self._repo.list_quotes(ctx, cid, opportunity_id=opportunity_id)
+
+        opp_ids, created_by, approval_ids = self._visibility.filter_quote_scope(ctx, cid)
+        if opp_ids is None:
+            return self._repo.list_quotes(ctx, cid)
+
+        by_id: dict = {}
+        if opp_ids:
+            for row in self._repo.list_quotes(ctx, cid, opportunity_ids=opp_ids):
+                by_id[row.id] = row
+        if created_by is not None:
+            for row in self._repo.list_quotes(ctx, cid, created_by=created_by):
+                by_id[row.id] = row
+        for qid in approval_ids:
+            if qid in by_id:
+                continue
+            row = self._repo.get(ctx, qid)
+            if row is not None and row.company_id == cid:
+                by_id[row.id] = row
+        return sorted(by_id.values(), key=lambda r: r.created_at or r.id, reverse=True)
 
     def get(self, ctx: TenantContext, quote_id: UUID) -> CrmQuote:
         row = self._repo.get(ctx, quote_id)
         if row is None:
             raise NotFoundException("Quote not found")
+        self._visibility.ensure_quote_access(ctx, row)
         self._ensure_display_snapshot(ctx, row)
         return row
-
     def list_lines(self, ctx: TenantContext, quote_id: UUID):
         self.get(ctx, quote_id)
         return self._lines.list_for_quote(ctx, quote_id)
@@ -472,7 +498,7 @@ class QuoteService:
             ctx,
             assigned_user_id=assigned_user_id,
             assigned_user_ids=assigned_user_ids,
-            title=f"Approve Quote {quote.quote_no} — margin review",
+            title=f"Approve Quote {quote.quote_no} - margin review",
             entity_type="quote",
             entity_id=quote.id,
             team_role=team_role,
@@ -495,7 +521,7 @@ class QuoteService:
             if summary["requires_management_approval"]:
                 raise ConflictException(
                     f"Margin {summary['avg_margin_pct']}% is at/below the required "
-                    f"{summary['required_threshold_pct']}% threshold — send for Management "
+                    f"{summary['required_threshold_pct']}% threshold - send for Management "
                     "approval instead of approving directly."
                 )
         next_state = sales_blueprint_engine.transition("quote", quote.quote_stage, "approve_internally")

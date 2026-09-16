@@ -1,4 +1,4 @@
-"""ESS Phase 5 — meeting rooms, assets (QR), helpdesk tickets."""
+"""ESS Phase 5 - meeting rooms, assets (QR), helpdesk tickets."""
 
 from __future__ import annotations
 

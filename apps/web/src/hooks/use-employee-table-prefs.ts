@@ -53,7 +53,7 @@ export const DEFAULT_EMPLOYEE_TABLE_COLUMNS: EmployeeTableColumnKey[] = [
   "status",
 ];
 
-/** Always visible — cannot be hidden. */
+/** Always visible - cannot be hidden. */
 export const REQUIRED_EMPLOYEE_TABLE_COLUMNS: EmployeeTableColumnKey[] = [
   "employeeCode",
   "name",

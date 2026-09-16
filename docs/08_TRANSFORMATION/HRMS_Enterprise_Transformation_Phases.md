@@ -8,7 +8,7 @@
 ### Implementation batch notes (2026-07-29)
 
 Shipped in this pass:
-- Migration `0447_hr_enterprise_lifecycle_kyc` — lifecycle history, KYC columns, leave dual-approve, leave policy columns, attendance status/geo fields, job level/grade tables, geofence radius
+- Migration `0447_hr_enterprise_lifecycle_kyc` - lifecycle history, KYC columns, leave dual-approve, leave policy columns, attendance status/geo fields, job level/grade tables, geofence radius
 - Employment lifecycle APIs: start-onboarding, start-probation, activate, confirm, extend-probation, start-notice, separate, ex-employee, end, lifecycle timeline
 - Leave: `manager-approve` + `reject` + `manager_approved` status
 - Payroll: real gross→Basic/HRA/Special/PF/ESI/PT calculate into run lines
@@ -21,7 +21,7 @@ Shipped in this pass:
 ### Implementation batch notes (2026-07-30)
 
 Shipped:
-- Migration `0448_hr_roster_and_ess` — `hr_roster_entry` table
+- Migration `0448_hr_roster_and_ess` - `hr_roster_entry` table
 - Roster CRUD `/hr/roster-entries`; calendar UI posts to API when UUIDs present
 - ESS: bank GET/PATCH, KYC, documents, holidays, notifications; geo punch with haversine
 - Employee app bank/docs/holidays/notifications use API when mock off
@@ -32,7 +32,7 @@ Shipped:
 ### Implementation batch notes (2026-07-30 #2)
 
 Shipped:
-- Migration `0449_hr_leave_adjustment` — `hr_leave_adjustment` + `sandwich_rule_enabled` on leave type
+- Migration `0449_hr_leave_adjustment` - `hr_leave_adjustment` + `sandwich_rule_enabled` on leave type
 - Leave sandwich day calc + leave adjustment create/submit/approve/reject (no future-month)
 - SeparationHub row actions: Submit / Manager Approve / HR Approve / Complete
 - ATS `scheduleInterview` / `generateOffer` / `updateOfferStatus` → Recruitment APIs (context + UUID gated)
@@ -44,7 +44,7 @@ Shipped:
 ### Implementation batch notes (2026-07-30 #3)
 
 Shipped:
-- Migration `0450_hr_fnf_and_kyc_docs` — `fnf_status` / `fnf_payroll_run_id` on separation; `target_employee_id` on payroll run; candidate doc types `photo` + `cancelled_cheque`
+- Migration `0450_hr_fnf_and_kyc_docs` - `fnf_status` / `fnf_payroll_run_id` on separation; `target_employee_id` on payroll run; candidate doc types `photo` + `cancelled_cheque`
 - FNF: `POST /hr/separation/{id}/fnf/prepare` + `/fnf/settle`; SeparationHub FNF actions; complete gated on FNF
 - Block direct hire: `EmployeeService` requires onboarding hire source; workforce `/new` → onboarding
 - Onboarding complete mandatory docs: identity + education + photo + cancelled_cheque
@@ -62,7 +62,7 @@ Still open (next batches): cleanup localStorage (later batches covered applicati
 
 Shipped:
 - Applications: expanded `ApplicationCreate` + `POST .../advance|reject`; ATS `applyCandidateToJob` / `moveApplicationStage` API-first
-- Migration `0451_hr_att_correction_early` — `early_leave_minutes` + `hr_attendance_correction`
+- Migration `0451_hr_att_correction_early` - `early_leave_minutes` + `hr_attendance_correction`
 - Attendance corrections CRUD + submit/approve/reject; approve patches attendance; UI submitCorrection API-first
 - ESS checkout early leave (grace) → `early_leave_minutes`; ≥120 min → `half_day`
 - Celery `hr.attendance_auto_absent` + auto-lock now locks rows
@@ -157,7 +157,7 @@ Shipped:
 Still open (next batches): push channel; device biometric sync; deeper localStorage (KPI/OKR); carry-forward year-end.
 
 
-### Implementation batch notes (2026-07-30 #15) — Epic 1 Onboarding
+### Implementation batch notes (2026-07-30 #15) - Epic 1 Onboarding
 
 Shipped:
 - Nav: Workforce → **Employees**; Setup Work Locations → **Base Location**
@@ -170,7 +170,7 @@ Shipped:
 
 Still open (next batches): Epic 2 light Add Employee; Epic 8 On Duty apply; Epic 9 Comp Off hour engine; Epic 11 Overday; push/biometric.
 
-### Implementation batch notes (2026-07-30 #16) — Epic 2 + On Duty + Comp Off hours + OT
+### Implementation batch notes (2026-07-30 #16) - Epic 2 + On Duty + Comp Off hours + OT
 
 Shipped:
 - **Epic 2:** Lightweight Add Employee at `/hr/workforce/new` (`bypass_onboarding` + active employment `payroll_eligible=true`); directory CTA restored
@@ -181,7 +181,7 @@ Shipped:
 
 Still open (next batches): push channel; device biometric sync; deeper Comp Off Emp→Mgr→HR apply stages; KPI/OKR localStorage.
 
-### Implementation batch notes (2026-07-30 #17) — Leave Emp→Mgr→HR + Carry Forward
+### Implementation batch notes (2026-07-30 #17) - Leave Emp→Mgr→HR + Carry Forward
 
 Shipped:
 - Leave hub Approve/Reject calls API `manager-approve` / `approve` / `reject` (Emp→Mgr→HR for CO and all types)
@@ -192,7 +192,7 @@ Shipped:
 
 Still open (next batches): push channel; device biometric sync; KPI/OKR API tables.
 
-### Implementation batch notes (2026-07-30 #18) — KPI / OKR API
+### Implementation batch notes (2026-07-30 #18) - KPI / OKR API
 
 Shipped:
 - Migration `0458_hr_kpi_okr`: `hr_kpi`, `hr_okr`, `hr_okr_key_result`
@@ -201,7 +201,7 @@ Shipped:
 
 Still open (next batches): push channel; device biometric sync.
 
-### Implementation batch notes (2026-07-30 #19) — V2 finish: Comp Off workflow, push, biometric, miss-punch max 3, probation Day 85/170
+### Implementation batch notes (2026-07-30 #19) - V2 finish: Comp Off workflow, push, biometric, miss-punch max 3, probation Day 85/170
 
 Shipped:
 - **Comp Off Emp→Mgr→HR:** `hr_compoff_request` + `/hr/compoff-requests` (submit / manager-approve / approve→`credit_compoff` / reject); ESS `POST/GET /ess/compoff-requests`; employee-app `/attendance/compoff`; admin queue on `/hr/time/ot-allotment`
@@ -213,7 +213,7 @@ Shipped:
 
 Still open (next batches): real FCM/APNs provider; vendor biometric protocol polish; remaining localStorage purge (Epic 15).
 
-### Implementation batch notes (2026-07-30 #20) — P15 closeout: FCM, biometric polish, shift swap/rotation API, prefer-API
+### Implementation batch notes (2026-07-30 #20) - P15 closeout: FCM, biometric polish, shift swap/rotation API, prefer-API
 
 Shipped:
 - **FCM push:** `FCM_SERVER_KEY` env + `fcm_client.send_fcm_push`; Celery task uses FCM when configured, else stub
@@ -228,9 +228,9 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 
 | Mark | Meaning |
 |------|---------|
-| ✅ | **Done** — implemented end-to-end (UI + API + DB + logic), usable in production sense for that item |
-| 🟠 | **Partial** — screen, API, model, or stub exists, but not complete / not wired / localStorage / mock |
-| ❌ | **Left** — not found in codebase, or only placeholder with no real behaviour |
+| ✅ | **Done** - implemented end-to-end (UI + API + DB + logic), usable in production sense for that item |
+| 🟠 | **Partial** - screen, API, model, or stub exists, but not complete / not wired / localStorage / mock |
+| ❌ | **Left** - not found in codebase, or only placeholder with no real behaviour |
 
 ## Overall progress (by phase)
 
@@ -253,7 +253,7 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 
 ---
 
-## Phase 1 — Core HR Workflow (Highest Priority)
+## Phase 1 - Core HR Workflow (Highest Priority)
 
 ### 1.1 Recruitment → Onboarding → Employee Workflow
 
@@ -276,7 +276,7 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 | 1.1.15 | **Acceptance:** Status changes automatically | ✅ | Employment engine + onboarding→probation auto transition; master status sync |
 | 1.1.16 | **Acceptance:** Workflow state tracked | ✅ | `hr_lifecycle_event` + `GET /hr/employment/lifecycle/{employee_id}` |
 
-**Phase 1.1 verdict:** 🟠 Partial — backend hire chain exists; admin UI largely disconnected (localStorage ATS).
+**Phase 1.1 verdict:** 🟠 Partial - backend hire chain exists; admin UI largely disconnected (localStorage ATS).
 
 ---
 
@@ -296,7 +296,7 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 | 1.2.10 | Lifecycle History | ✅ | Table `hr.hr_lifecycle_event` + list API |
 | 1.2.11 | Lifecycle Logs | ✅ | Events written on each employment transition + audit |
 
-**Phase 1.2 verdict:** 🟠 Partial — statuses fragmented across master / employment / localStorage.
+**Phase 1.2 verdict:** 🟠 Partial - statuses fragmented across master / employment / localStorage.
 
 ---
 
@@ -317,11 +317,11 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 | 1.3.11 | Recipients: Manager | ✅ | Reporting manager user/email |
 | 1.3.12 | Recipients: HR | ✅ | Probation task notifies users with `hr.employment:confirm` (fallback designation `%HR%`) |
 
-**Phase 1.3 verdict:** 🟠 Partial — confirm/extend + reminders sending; HR recipient list pending.
+**Phase 1.3 verdict:** 🟠 Partial - confirm/extend + reminders sending; HR recipient list pending.
 
 ---
 
-## Phase 2 — Employee Master
+## Phase 2 - Employee Master
 
 ### 2.1 Employee Information (Mandatory)
 
@@ -369,19 +369,19 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 | 2.4.7 | Auto-calc Professional Tax | ✅ | ₹200 if gross≥15000 |
 | 2.4.8 | Other components engine | 🟠 | Generic components CRUD; run uses formula engine above |
 
-**Phase 2 verdict:** 🟠 Partial — core identity strong; KYC + salary math weak.
+**Phase 2 verdict:** 🟠 Partial - core identity strong; KYC + salary math weak.
 
 ---
 
-## Phase 3 — HR Masters (API-driven, no localStorage)
+## Phase 3 - HR Masters (API-driven, no localStorage)
 
 | # | Master | Status | Evidence / gap |
 |---|--------|:------:|----------------|
 | 3.1 | Company | ✅ | `/companies` API + org model |
-| 3.2 | Branch | ✅ | `/branches` — HR Setup `source: api` |
-| 3.3 | Location | ✅ | `/locations` — HR Setup `source: api` |
-| 3.4 | Department | ✅ | `/departments` — API |
-| 3.5 | Designation | ✅ | `/hr/designations` — API |
+| 3.2 | Branch | ✅ | `/branches` - HR Setup `source: api` |
+| 3.3 | Location | ✅ | `/locations` - HR Setup `source: api` |
+| 3.4 | Department | ✅ | `/departments` - API |
+| 3.5 | Designation | ✅ | `/hr/designations` - API |
 | 3.6 | Job Levels | ✅ | `/hr/job-levels` API + `hr_job_level`; Setup `source: api` |
 | 3.7 | Grades | ✅ | `/hr/grades` API + `hr_grade`; Setup `source: api` |
 | 3.8 | Cost Center | ✅ | Org cost-centers API/models |
@@ -404,11 +404,11 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 | Leave Policies, Shift Rotation, Attendance Rules, Bank Master | 🟠 local |
 | Approval Flows / Email / Notifications (setup) | 🟠 mixed / local |
 
-**Phase 3 verdict:** 🟠 Partial — core org masters done; grades/job levels/policies still browser.
+**Phase 3 verdict:** 🟠 Partial - core org masters done; grades/job levels/policies still browser.
 
 ---
 
-## Phase 4 — Attendance
+## Phase 4 - Attendance
 
 ### 4.1 Attendance Status
 
@@ -430,7 +430,7 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 |---|------|:------:|----------------|
 | 4.2.1 | Grace Time | ✅ | ESS punch uses `hr_shift.grace_minutes` before marking late |
 | 4.2.2 | Late Coming | ✅ | Check-in after start+grace → `attendance_status=late` + `late_minutes` |
-| 4.2.3 | Early Leaving | ✅ | ESS checkout: `early_leave_minutes` vs shift end−grace; ≥120 → `half_day` |
+| 4.2.3 | Early Leaving | ✅ | ESS checkout: `early_leave_minutes` vs shift end-grace; ≥120 → `half_day` |
 | 4.2.4 | Overtime | 🟠 | Checkout sets `overtime_minutes` vs shift end; payroll OT pending |
 | 4.2.5 | Shift Timing | 🟠 | Punch resolves roster/assignment shift window for late/OT |
 | 4.2.6 | Weekly Off | ✅ | `/hr/weekly-off-policies` + engine; leave sandwich + auto-absent |
@@ -471,11 +471,11 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 | 4.6.2 | GPS Validation | ✅ | Punch requires lat/lng when geofence or rule.geofence_required |
 | 4.6.3 | Mobile Check-in | ✅ | ESS punch with geolocation from employee-app |
 
-**Phase 4 verdict:** 🟠 Partial — biometric registry + device-sync shipped; vendor protocol polish left.
+**Phase 4 verdict:** 🟠 Partial - biometric registry + device-sync shipped; vendor protocol polish left.
 
 ---
 
-## Phase 5 — Shift & Roster
+## Phase 5 - Shift & Roster
 
 | # | Checklist item | Status | Evidence / gap |
 |---|----------------|:------:|----------------|
@@ -489,11 +489,11 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 | 5.8 | Night Shift | ✅ | Shift type `night` + overnight flag on model |
 | 5.9 | Workflow: HR→Manager→Assign→Attendance | 🟠 | Roster + assignment APIs consumed by punch; rotation/swap still local |
 
-**Phase 5 verdict:** 🟠 Partial — shift master + roster + punch consumption; rotation/swap browser-only.
+**Phase 5 verdict:** 🟠 Partial - shift master + roster + punch consumption; rotation/swap browser-only.
 
 ---
 
-## Phase 6 — Leave Management
+## Phase 6 - Leave Management
 
 ### 6.1 Leave Types
 
@@ -532,11 +532,11 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 | 6.3.8 | Leave Cycle 1st→31st | 🟠 | `leave_cycle_start_day` column (default 1); enforcement pending |
 | 6.3.9 | Adjustment must not use future month | ✅ | `/hr/leave-adjustments` blocks future month on create/approve |
 
-**Phase 6 verdict:** 🟠 Partial — CL/SL/EL dual-approve + sandwich/adjustment; maternity/paternity/LOP still left.
+**Phase 6 verdict:** 🟠 Partial - CL/SL/EL dual-approve + sandwich/adjustment; maternity/paternity/LOP still left.
 
 ---
 
-## Phase 7 — Payroll
+## Phase 7 - Payroll
 
 | # | Checklist item | Status | Evidence / gap |
 |---|----------------|:------:|----------------|
@@ -554,11 +554,11 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 | 7.12 | Deductions | ✅ | PF/ESI/PT deducted in run |
 | 7.13 | Full & Final Settlement | ✅ | FNF run + leave encashment + gratuity (≥5 yrs, 15/26×basic×years) patched into settlement line |
 
-**Phase 7 verdict:** 🟠 Partial — payroll schema rich; calculation engine empty.
+**Phase 7 verdict:** 🟠 Partial - payroll schema rich; calculation engine empty.
 
 ---
 
-## Phase 8 — Separation
+## Phase 8 - Separation
 
 | # | Checklist item | Status | Evidence / gap |
 |---|----------------|:------:|----------------|
@@ -577,11 +577,11 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 | 8.13 | Final Settlement | ✅ | Encashment + gratuity in `clearance_json.fnf` and payroll line breakdown |
 | 8.14 | Separation Admin UI actions | ✅ | SeparationHub Submit / Approve / Prepare FNF / Settle FNF / Complete |
 
-**Phase 8 verdict:** 🟠 Partial — dual-stage + FNF + checklist/exit interview stubs; resignation reminders still left.
+**Phase 8 verdict:** 🟠 Partial - dual-stage + FNF + checklist/exit interview stubs; resignation reminders still left.
 
 ---
 
-## Phase 9 — Notifications
+## Phase 9 - Notifications
 
 | # | Event | Status | Evidence / gap |
 |---|-------|:------:|----------------|
@@ -601,11 +601,11 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 | 9.14 | Channel: Email | 🟠 | Foundation/templates capability; delivery still task-based |
 | 9.15 | Channel: Push | 🟠 | Device tokens + FCM when `FCM_SERVER_KEY` set; else stub |
 
-**Phase 9 verdict:** 🟠 Partial — push fan-out stub live; FCM/APNs provider still left.
+**Phase 9 verdict:** 🟠 Partial - push fan-out stub live; FCM/APNs provider still left.
 
 ---
 
-## Phase 10 — Employee Self Service
+## Phase 10 - Employee Self Service
 
 | # | Feature | Status | Evidence / gap |
 |---|---------|:------:|----------------|
@@ -631,11 +631,11 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 
 **ESS API today (`/api/v1/ess`):** me, leave, attendance/punch, bank, KYC, emergency, documents, holidays, notifications, payslips, team-leave, announcements, assets, training, performance, separation.
 
-**Phase 10 verdict:** 🟠 Partial — core ESS domains API-backed; education/skills still empty; correction UI without ESS API.
+**Phase 10 verdict:** 🟠 Partial - core ESS domains API-backed; education/skills still empty; correction UI without ESS API.
 
 ---
 
-## Phase 11 — Reports
+## Phase 11 - Reports
 
 | # | Report | Status | Evidence / gap |
 |----|--------|:------:|----------------|
@@ -653,11 +653,11 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 | 11.12 | PDF export | ✅ | Minimal stdlib PDF via `fmt=pdf` |
 | 11.13 | Filters | 🟠 | List filters on some screens only; export company_id only |
 
-**Phase 11 verdict:** 🟠 Partial — HR operational exports live; payroll report + rich filters still weak.
+**Phase 11 verdict:** 🟠 Partial - HR operational exports live; payroll report + rich filters still weak.
 
 ---
 
-## Phase 12 — Backend Cleanup
+## Phase 12 - Backend Cleanup
 
 | # | Checklist item | Status | Evidence / gap |
 |---|----------------|:------:|----------------|
@@ -668,11 +668,11 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 | 12.5 | Everything persists through APIs | 🟠 | Lists stronger (ATS/payroll/ESS); payroll/ATS write paths still cache |
 | 12.6 | Dead service methods exposed | ✅ | Employment confirm/activate/end + leave reject routes present |
 
-**Phase 12 verdict:** 🟠 Partial — ESS/setup cleanup started; ATS/payroll/PMS localStorage program remains.
+**Phase 12 verdict:** 🟠 Partial - ESS/setup cleanup started; ATS/payroll/PMS localStorage program remains.
 
 ---
 
-## Phase 13 — Audit & Security
+## Phase 13 - Audit & Security
 
 ### 13.1 Audit logs
 
@@ -695,7 +695,7 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 | 13.2.4 | Manager | ✅ | Role pack `HR_MANAGER` display “Manager” |
 | 13.2.5 | Employee | ✅ | Role pack `HR_EMPLOYEE` display “Employee” (+ ESS auth) |
 
-**Phase 13 verdict:** 🟠 Partial — Super Admin + HR named role packs done; full audit trails incomplete.
+**Phase 13 verdict:** 🟠 Partial - Super Admin + HR named role packs done; full audit trails incomplete.
 
 ---
 
@@ -730,7 +730,7 @@ Still open (next batches): full onboarding case SoR migration; PMS cycles/feedba
 12. **P8 (done):** Holiday → Comp Off; leave encashment API; payroll consume shift OT
 13. **P9 (done):** Bonus + arrears/incentives in payroll calc; attendance CSV marked done
 14. **P10 (done):** Weekly-off + attendance-rules APIs; half-day-from-hours; hardened auto-absent; ESS miss-punch; geo config  
-15. **P11 (done):** Epic 1 — activation Emp ID, payroll eligible, onboarding docs/signature, Employees rename  
+15. **P11 (done):** Epic 1 - activation Emp ID, payroll eligible, onboarding docs/signature, Employees rename  
 16. **P12 (done):** Leave Emp→Mgr→HR API wire-up; carry-forward year-end  
 17. **P13 (done):** KPI/OKR API tables + PMS prefer-API  
 18. **P14 (done):** Push device tokens + stub fan-out; biometric registry + device-sync; Comp Off Emp→Mgr→HR; miss-punch max 3; probation Day 85/170  

@@ -286,7 +286,7 @@ export function IncomingAssetsQcWorkspace() {
   return (
     <div className="space-y-5">
       <PageHeader
-        title="Incoming Assets — QC"
+        title="Incoming Assets - QC"
         description="Inspect arrived units. Accept makes them eligible for Add Asset; Reject does not create an asset."
         actions={
           <div className="flex flex-wrap gap-2">
@@ -456,13 +456,13 @@ export function IncomingAssetsQcWorkspace() {
                         <td className="px-3 py-2">
                           <div className="font-medium">{row.grn_document_number}</div>
                           <div className="text-xs text-muted-foreground">
-                            {row.po_document_number ?? "—"} · {branchLabel(row.branch_id)}
+                            {row.po_document_number ?? "-"} · {branchLabel(row.branch_id)}
                           </div>
                         </td>
                         <td className="px-3 py-2">
                           <div className="font-medium">{row.product_name ?? "Product"}</div>
                           <div className="text-xs text-muted-foreground">
-                            {row.product_code ?? "—"}
+                            {row.product_code ?? "-"}
                           </div>
                         </td>
                         <td className="px-3 py-2 text-right tabular-nums">
@@ -708,7 +708,7 @@ export function IncomingAssetsQcWorkspace() {
                                         </Button>
                                       </div>
                                     ) : (
-                                      <span className="text-xs text-muted-foreground">—</span>
+                                      <span className="text-xs text-muted-foreground">-</span>
                                     )}
                                   </td>
                                 </tr>

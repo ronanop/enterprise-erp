@@ -1,5 +1,5 @@
 /**
- * Enterprise Payroll Management service — local rich store + payroll API merge.
+ * Enterprise Payroll Management service - local rich store + payroll API merge.
  */
 
 import { formatInr, loadPayrollOverview } from "@/services/payroll-service";
@@ -379,7 +379,7 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
             bankAccount: String(e.bank_account ?? "XXXX1234"),
             taxRegime: String(e.tax_regime ?? "new").includes("old") ? ("old" as const) : ("new" as const),
             salaryStatus: "active" as const,
-            department: String(e.department_name ?? "—"),
+            department: String(e.department_name ?? "-"),
           };
         }),
       );
@@ -425,7 +425,7 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
             ? {
                 start,
                 end,
-                label: `${start} – ${end}`,
+                label: `${start} - ${end}`,
                 cutoverDay: readPayrollCutoverDay(),
               }
             : buildPayrollCycle(ym, readPayrollCutoverDay());
@@ -499,7 +499,7 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
         employeeName: String(p.employee_name ?? "Employee"),
         month: String(p.month ?? "2026-07").slice(0, 7),
         monthLabel: monthLabel(String(p.month ?? "2026-07").slice(0, 7)),
-        department: "—",
+        department: "-",
         bankAccount: "XXXX",
         presentDays: 22,
         leaveDays: 0,
@@ -829,7 +829,7 @@ export async function runPayroll(month: string, cutoverDay?: number): Promise<Pa
             await resourceService.action("/payroll/payroll-runs", runId, "approve", {});
             row.status = "approved";
           } catch {
-            /* submit/approve may fail — keep processing */
+            /* submit/approve may fail - keep processing */
           }
         }
       }
@@ -1201,8 +1201,8 @@ function mapApiPayslipToRecord(p: Record<string, unknown>, run: PayrollRun): Pay
     employeeName: String(p.employee_name ?? emp.name ?? p.employee_id ?? ""),
     month: run.month,
     monthLabel: run.monthLabel,
-    department: "—",
-    bankAccount: "—",
+    department: "-",
+    bankAccount: "-",
     presentDays: Number(att.paid_days ?? 0),
     leaveDays: Number(att.leave_days ?? 0),
     earnings: earningsRaw.map((e) => ({
@@ -1301,8 +1301,8 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
             employeeName: String(created.data?.employee_name ?? employeeId),
             month: run.month,
             monthLabel: run.monthLabel,
-            department: "—",
-            bankAccount: "—",
+            department: "-",
+            bankAccount: "-",
             presentDays: Number(line.paid_days ?? 0),
             leaveDays: Number(line.leave_days ?? 0),
             earnings: [{ label: "Gross", amount: gross }],

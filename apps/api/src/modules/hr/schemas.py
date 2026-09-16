@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class OrmModel(BaseModel):
-    """ORM-backed response base — includes standard audit columns everywhere."""
+    """ORM-backed response base - includes standard audit columns everywhere."""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -1382,7 +1382,7 @@ class BiometricPunchIn(BaseModel):
     branch_id: UUID | None = None
     check_in_at: datetime | None = None
     check_out_at: datetime | None = None
-    # Raw punch stream — aggregated by attendance-rule punch_mode
+    # Raw punch stream - aggregated by attendance-rule punch_mode
     punch_events: list[datetime] | None = None
     attendance_status: str | None = None
     notes: str | None = None

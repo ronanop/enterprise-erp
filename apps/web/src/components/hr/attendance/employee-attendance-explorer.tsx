@@ -36,7 +36,7 @@ function monthLabel(ym: string): string {
 }
 
 function formatTime12(iso: string): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try {
     return new Date(iso).toLocaleTimeString([], {
       hour: "numeric",
@@ -325,12 +325,12 @@ export function EmployeeAttendanceExplorer({
                     </td>
                     <td className="px-3 py-2 text-xs whitespace-nowrap">{formatTime12(row.checkIn)}</td>
                     <td className="px-3 py-2 text-xs whitespace-nowrap">{formatTime12(row.checkOut)}</td>
-                    <td className="px-3 py-2 text-xs tabular-nums">{row.workingHours || "—"}</td>
-                    <td className="px-3 py-2 text-xs tabular-nums">{row.overtimeHours || "—"}</td>
+                    <td className="px-3 py-2 text-xs tabular-nums">{row.workingHours || "-"}</td>
+                    <td className="px-3 py-2 text-xs tabular-nums">{row.overtimeHours || "-"}</td>
                     <td className="px-3 py-2 text-xs capitalize">{row.device.replace(/_/g, " ")}</td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">{row.location || "—"}</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground">{row.location || "-"}</td>
                     <td className="max-w-[200px] truncate px-3 py-2 text-xs text-muted-foreground" title={row.notes}>
-                      {row.notes || "—"}
+                      {row.notes || "-"}
                     </td>
                     <td className="px-3 py-2">
                       <Button

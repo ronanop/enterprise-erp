@@ -120,5 +120,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Data migration — no automatic rollback.
+    # Data migration - no automatic rollback.
     pass

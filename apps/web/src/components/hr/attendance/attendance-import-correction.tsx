@@ -168,8 +168,8 @@ export function AttendanceCorrectionDrawer({
 
   const punchSummary = useMemo(() => {
     if (!record) return "";
-    const inn = formatPunchTimeForDisplay(record.checkIn) || "—";
-    const out = formatPunchTimeForDisplay(record.checkOut) || "—";
+    const inn = formatPunchTimeForDisplay(record.checkIn) || "-";
+    const out = formatPunchTimeForDisplay(record.checkOut) || "-";
     return `In ${inn} · Out ${out}`;
   }, [record]);
 

@@ -1,4 +1,4 @@
-"""MaintenanceService — work-order governance (FP-ASSET-004)."""
+"""MaintenanceService - work-order governance (FP-ASSET-004)."""
 
 from __future__ import annotations
 

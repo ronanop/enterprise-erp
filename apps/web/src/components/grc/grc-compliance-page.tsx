@@ -178,21 +178,21 @@ export function GrcCompliancePage() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Frameworks"
-          value={loading ? "—" : String(overview?.kpis.total_frameworks ?? frameworks.length)}
+          value={loading ? "-" : String(overview?.kpis.total_frameworks ?? frameworks.length)}
           hint="Regulatory & standards catalog"
           icon={ShieldCheck}
           tone="default"
         />
         <FinanceKpiCard
           label="Requirements"
-          value={loading ? "—" : String(overview?.kpis.total_requirements ?? requirements.length)}
+          value={loading ? "-" : String(overview?.kpis.total_requirements ?? requirements.length)}
           hint={`${overview?.automated_signal_codes.length ?? 0} automated signals`}
           icon={ShieldCheck}
           tone="default"
         />
         <FinanceKpiCard
           label="Assessments"
-          value={loading ? "—" : String(overview?.kpis.total_assessments ?? assessments.length)}
+          value={loading ? "-" : String(overview?.kpis.total_assessments ?? assessments.length)}
           hint="Evidence & status evaluations"
           icon={ShieldCheck}
           tone="default"
@@ -201,7 +201,7 @@ export function GrcCompliancePage() {
           label="Non-compliant"
           value={
             loading
-              ? "—"
+              ? "-"
               : String(overview?.compliance_status_mix.non_compliant ?? 0)
           }
           hint="Requires remediation"
@@ -269,7 +269,7 @@ export function GrcCompliancePage() {
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">
-                      {String(row.framework_name ?? row.framework_code ?? "—")}
+                      {String(row.framework_name ?? row.framework_code ?? "-")}
                     </p>
                     <p className="truncate text-[11px] text-muted-foreground">
                       {String(row.jurisdiction ?? "")} · {String(row.framework_type ?? "")}
@@ -327,7 +327,7 @@ export function GrcCompliancePage() {
                     className="border-b border-border/50 last:border-0 hover:bg-accent/30"
                   >
                     <td className="px-4 py-2.5 font-medium">
-                      {String(row.assessment_number ?? "—")}
+                      {String(row.assessment_number ?? "-")}
                     </td>
                     <td className="px-4 py-2.5">
                       <FinanceStatusBadge
@@ -335,10 +335,10 @@ export function GrcCompliancePage() {
                       />
                     </td>
                     <td className="px-4 py-2.5 capitalize">
-                      {String(row.compliance_status ?? "—").replaceAll("_", " ")}
+                      {String(row.compliance_status ?? "-").replaceAll("_", " ")}
                     </td>
                     <td className="max-w-[280px] truncate px-4 py-2.5 text-xs text-muted-foreground">
-                      {String(row.evidence_summary ?? "—")}
+                      {String(row.evidence_summary ?? "-")}
                     </td>
                   </tr>
                 ))

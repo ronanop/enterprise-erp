@@ -1,4 +1,4 @@
-"""CRM team members — users with CRM module access, mapped to master employees."""
+"""CRM team members - users with CRM module access, mapped to master employees."""
 
 from sqlalchemy.orm import Session
 

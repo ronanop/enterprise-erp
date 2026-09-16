@@ -18,7 +18,7 @@ class ApprovalTaskRepository(CrmScopedRepository):
         stmt = select(CrmApprovalTask).where(
             CrmApprovalTask.id == row_id, CrmApprovalTask.is_deleted.is_(False)
         )
-        # Approval inbox is company-scoped — do not hide tasks from other branches.
+        # Approval inbox is company-scoped - do not hide tasks from other branches.
         stmt = self.apply_crm_filter(stmt, CrmApprovalTask, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 

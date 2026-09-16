@@ -1,4 +1,4 @@
-/** Shared HR master dropdown options — single source of truth for labels and values. */
+/** Shared HR master dropdown options - single source of truth for labels and values. */
 
 export type MasterOption = { value: string; label: string };
 
@@ -71,17 +71,17 @@ const RELATIONSHIP_LABELS: Record<string, string> = {
 };
 
 export function formatEmploymentTypeLabel(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return EMPLOYMENT_TYPE_LABELS[value.toLowerCase()] ?? value.replace(/_/g, " ");
 }
 
 export function formatMaritalStatusLabel(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return MARITAL_STATUS_LABELS[value.toLowerCase()] ?? value;
 }
 
 export function formatRelationshipLabel(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const key = value.toLowerCase();
   return RELATIONSHIP_LABELS[key] ?? value;
 }

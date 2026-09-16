@@ -142,7 +142,7 @@ def main() -> None:
     try:
         tenant = db.scalar(select(SecTenant).where(SecTenant.tenant_code == "BOOTSTRAP"))
         if not tenant:
-            raise SystemExit("BOOTSTRAP tenant not found — run seed_demo_data first")
+            raise SystemExit("BOOTSTRAP tenant not found - run seed_demo_data first")
 
         super_admin_role = _ensure_role(db, tenant.id, "SUPER_ADMIN", "Super Admin")
         _ensure_role(db, tenant.id, "TENANT_ADMIN", "Tenant Admin")
@@ -151,7 +151,7 @@ def main() -> None:
         user_employee = UserEmployeeLinkService(db)
         primary_company, primary_branch = org_context.get_tenant_primary_org(tenant.id)
         if primary_company is None:
-            print("Warning: no organization company found — run seed_demo_data for DEMOCO")
+            print("Warning: no organization company found - run seed_demo_data for DEMOCO")
 
         synced_emails: set[str] = set()
         created = 0

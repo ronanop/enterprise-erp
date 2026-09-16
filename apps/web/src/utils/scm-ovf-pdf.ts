@@ -44,9 +44,9 @@ function wrap(doc: jsPDF, text: string, maxWidth: number): string[] {
 }
 
 function formatPoDatePdf(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const raw = String(value).trim();
-  if (!raw) return "—";
+  if (!raw) return "-";
   const d = new Date(/^\d{4}-\d{2}-\d{2}/.test(raw) ? `${raw.slice(0, 10)}T00:00:00` : raw);
   if (Number.isNaN(d.getTime())) return raw.slice(0, 10);
   return d.toLocaleDateString("en-IN", {
@@ -61,7 +61,7 @@ function pct(value: number): string {
 }
 
 function vendorLabelFromPreview(preview: ScmOvfPreview): string {
-  return preview.distributor_name?.trim() || "—";
+  return preview.distributor_name?.trim() || "-";
 }
 
 function computeMarginSummary(preview: ScmOvfPreview) {
@@ -330,12 +330,12 @@ export async function downloadScmOvfPdf(
       label: "Customer pay",
       value: preview.customer_payment_days
         ? `Net ${preview.customer_payment_days} days`
-        : "—",
+        : "-",
     },
     { label: "Vendor name", value: vendorLabel },
     {
       label: "Vendor pay",
-      value: preview.vendor_payment_days ? `Net ${preview.vendor_payment_days} days` : "—",
+      value: preview.vendor_payment_days ? `Net ${preview.vendor_payment_days} days` : "-",
     },
     { label: "Approved by", value: dash(preview.ovf_approver) },
     { label: "Approval", value: dash(preview.approval_status) },

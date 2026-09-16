@@ -1,4 +1,4 @@
-/** Enterprise Employee Management System — unified view model */
+/** Enterprise Employee Management System - unified view model */
 
 export type EmployeeLifecycleStatus =
   | "active"
@@ -82,7 +82,7 @@ export type EmployeeDocumentItem = {
   fileDataUrl?: string;
   uploadedBy: string;
   uploadedAt: string;
-  /** Where the file came from — onboarding portal vs HR/manual. */
+  /** Where the file came from - onboarding portal vs HR/manual. */
   source?: "onboarding" | "hr" | "manual";
 };
 
@@ -122,7 +122,7 @@ export type PersonalInfo = {
   alternateMobile: string;
   officialEmail: string;
   personalEmail: string;
-  /** Optional — often collected on Excel import sheets. */
+  /** Optional - often collected on Excel import sheets. */
   fatherName?: string;
   currentAddress: AddressBlock;
   permanentAddress: AddressBlock;

@@ -817,7 +817,7 @@ const styles = StyleSheet.create({
 
 const HOLIDAYS = [
   {
-    name: "Diwali — Festival of Lights",
+    name: "Diwali - Festival of Lights",
     date: "Oct 31, Thursday",
     tag: "Mandatory",
     color: "#f59e0b",

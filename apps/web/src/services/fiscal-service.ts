@@ -296,5 +296,5 @@ export function periodStatusLabel(status?: string | null) {
   const s = (status ?? "").toLowerCase();
   if (s === "soft_closed") return "Closed";
   if (s === "hard_closed") return "Locked";
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : "—";
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : "-";
 }

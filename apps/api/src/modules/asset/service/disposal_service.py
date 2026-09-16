@@ -1,4 +1,4 @@
-"""DisposalService — retirement governance (FP-ASSET-005)."""
+"""DisposalService - retirement governance (FP-ASSET-005)."""
 
 from decimal import Decimal
 from uuid import UUID

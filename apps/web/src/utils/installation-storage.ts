@@ -1,5 +1,5 @@
 /**
- * Procurement Installation queue — delivered DCs marked requiresInstallation,
+ * Procurement Installation queue - delivered DCs marked requiresInstallation,
  * with manual site fields and share-to-project state (localStorage).
  */
 

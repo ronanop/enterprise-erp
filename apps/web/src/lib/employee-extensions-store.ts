@@ -61,7 +61,7 @@ export function ensureEmployeeExtensionsLoaded(): Promise<Record<string, Employe
   return loadPromise;
 }
 
-/** Sync read — uses cache when loaded, otherwise legacy localStorage. */
+/** Sync read - uses cache when loaded, otherwise legacy localStorage. */
 export function getEmployeeExtensionsSync(): Record<string, EmployeeExtension> {
   return cache ?? readLocalStorageFallback();
 }

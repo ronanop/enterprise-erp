@@ -93,7 +93,7 @@ export default function PayslipsPage() {
             />
             <Mini
               label="Status"
-              value={latest.payment_status?.slice(0, 8) ?? "—"}
+              value={latest.payment_status?.slice(0, 8) ?? "-"}
             />
           </div>
         </section>

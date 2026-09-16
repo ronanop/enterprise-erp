@@ -183,13 +183,13 @@ export function ApAllocateDialog({ open, payment, onClose, onSaved }: Props) {
                   </FinanceSelect>
                 </FinanceField>
                 <FinanceField label="Invoice balance">
-                  <Input className="h-8 font-mono text-xs" readOnly value={inv ? formatInrPrecise(invBalance) : "—"} />
+                  <Input className="h-8 font-mono text-xs" readOnly value={inv ? formatInrPrecise(invBalance) : "-"} />
                 </FinanceField>
                 <FinanceField label="Allocation">
                   <Input type="number" min={0} step="0.01" className="h-8 font-mono" value={row.amount} onChange={(e) => updateRow(index, { amount: e.target.value })} />
                 </FinanceField>
                 <FinanceField label="Remaining">
-                  <Input className="h-8 font-mono text-xs" readOnly value={row.invoice_id ? formatInrPrecise(lineRemaining) : "—"} />
+                  <Input className="h-8 font-mono text-xs" readOnly value={row.invoice_id ? formatInrPrecise(lineRemaining) : "-"} />
                 </FinanceField>
                 <div className="flex items-end pb-0.5">
                   <Button type="button" variant="ghost" size="sm" className="h-8 cursor-pointer text-xs" onClick={() => removeRow(index)} disabled={rows.length <= 1}>Remove</Button>

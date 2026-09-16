@@ -5,7 +5,7 @@ import { useAuthUser } from "@/hooks/use-auth-user";
 import { cn } from "@/lib/utils";
 
 type SignedInUserIdentityProps = {
-  /** Sidebar collapsed — avatar only with tooltip via title. */
+  /** Sidebar collapsed - avatar only with tooltip via title. */
   collapsed?: boolean;
   /** Top bar: single-line name + email beside avatar. */
   variant?: "sidebar" | "topbar";

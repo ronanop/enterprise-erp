@@ -42,7 +42,7 @@ import { loadSalesOverview } from "@/services/sales-service";
 import { loadServiceOverview } from "@/services/service-mgmt-service";
 import { buildProcurementPipelineMetrics } from "@/utils/procurement-pipeline-metrics";
 
-/** RBAC denials / missing resources — expected for non-admin module scopes, not outages. */
+/** RBAC denials / missing resources - expected for non-admin module scopes, not outages. */
 function isAccessDeniedStatus(status: number): boolean {
   return status === 403 || status === 404;
 }
@@ -154,7 +154,7 @@ function classifyModuleHealth(
     if (message && isDeniedMessage(message)) {
       continue;
     }
-    // Pool pressure / brief DB unavailability — treat as partial when some data loaded,
+    // Pool pressure / brief DB unavailability - treat as partial when some data loaded,
     // otherwise surface once without marking the whole module permanently offline.
     if (code === 503 || (message && isTransientMessage(message))) {
       if (recordCount > 0) {

@@ -102,7 +102,7 @@ from modules.helpdesk.service import (
 from shared.schemas import APIResponse
 
 ticket_categories_router = APIRouter(
-    prefix="/ticket-categories", tags=["Helpdesk — TicketCategory"]
+    prefix="/ticket-categories", tags=["Helpdesk - TicketCategory"]
 )
 
 
@@ -152,7 +152,7 @@ def update_ticket_categories(
 
 
 ticket_priorities_router = APIRouter(
-    prefix="/ticket-priorities", tags=["Helpdesk — TicketPriority"]
+    prefix="/ticket-priorities", tags=["Helpdesk - TicketPriority"]
 )
 
 
@@ -201,7 +201,7 @@ def update_ticket_priorities(
     )
 
 
-tickets_router = APIRouter(prefix="/tickets", tags=["Helpdesk — Ticket"])
+tickets_router = APIRouter(prefix="/tickets", tags=["Helpdesk - Ticket"])
 
 
 @tickets_router.get("", response_model=APIResponse[list[TicketResponse]])
@@ -271,7 +271,7 @@ def approve_tickets(
 
 
 ticket_assignments_router = APIRouter(
-    prefix="/ticket-assignments", tags=["Helpdesk — TicketAssignment"]
+    prefix="/ticket-assignments", tags=["Helpdesk - TicketAssignment"]
 )
 
 
@@ -358,7 +358,7 @@ def complete_ticket_assignments(
 
 
 ticket_status_history_router = APIRouter(
-    prefix="/ticket-status-history", tags=["Helpdesk — TicketStatusHistory"]
+    prefix="/ticket-status-history", tags=["Helpdesk - TicketStatusHistory"]
 )
 
 
@@ -411,7 +411,7 @@ def update_ticket_status_history(
     )
 
 
-ticket_comments_router = APIRouter(prefix="/ticket-comments", tags=["Helpdesk — TicketComment"])
+ticket_comments_router = APIRouter(prefix="/ticket-comments", tags=["Helpdesk - TicketComment"])
 
 
 @ticket_comments_router.get("", response_model=APIResponse[list[TicketCommentResponse]])
@@ -460,7 +460,7 @@ def update_ticket_comments(
 
 
 ticket_attachments_router = APIRouter(
-    prefix="/ticket-attachments", tags=["Helpdesk — TicketAttachment"]
+    prefix="/ticket-attachments", tags=["Helpdesk - TicketAttachment"]
 )
 
 
@@ -510,7 +510,7 @@ def update_ticket_attachments(
 
 
 ticket_activities_router = APIRouter(
-    prefix="/ticket-activities", tags=["Helpdesk — TicketActivity"]
+    prefix="/ticket-activities", tags=["Helpdesk - TicketActivity"]
 )
 
 
@@ -559,7 +559,7 @@ def update_ticket_activities(
     )
 
 
-ticket_slas_router = APIRouter(prefix="/ticket-slas", tags=["Helpdesk — TicketSla"])
+ticket_slas_router = APIRouter(prefix="/ticket-slas", tags=["Helpdesk - TicketSla"])
 
 
 @ticket_slas_router.get("", response_model=APIResponse[list[TicketSlaResponse]])
@@ -608,7 +608,7 @@ def update_ticket_slas(
 
 
 ticket_escalations_router = APIRouter(
-    prefix="/ticket-escalations", tags=["Helpdesk — TicketEscalation"]
+    prefix="/ticket-escalations", tags=["Helpdesk - TicketEscalation"]
 )
 
 
@@ -672,7 +672,7 @@ def escalate_ticket_escalations(
     return APIResponse(message="escalate", data=TicketEscalationService(db).escalate(ctx, row_id))
 
 
-knowledge_bases_router = APIRouter(prefix="/knowledge-bases", tags=["Helpdesk — KnowledgeBase"])
+knowledge_bases_router = APIRouter(prefix="/knowledge-bases", tags=["Helpdesk - KnowledgeBase"])
 
 
 @knowledge_bases_router.get("", response_model=APIResponse[list[KnowledgeBaseResponse]])
@@ -721,7 +721,7 @@ def update_knowledge_bases(
 
 
 knowledge_articles_router = APIRouter(
-    prefix="/knowledge-articles", tags=["Helpdesk — KnowledgeArticle"]
+    prefix="/knowledge-articles", tags=["Helpdesk - KnowledgeArticle"]
 )
 
 
@@ -803,7 +803,7 @@ def publish_knowledge_articles(
     return APIResponse(message="publish", data=KnowledgeArticleService(db).publish(ctx, row_id))
 
 
-resolutions_router = APIRouter(prefix="/resolutions", tags=["Helpdesk — Resolution"])
+resolutions_router = APIRouter(prefix="/resolutions", tags=["Helpdesk - Resolution"])
 
 
 @resolutions_router.get("", response_model=APIResponse[list[ResolutionResponse]])
@@ -874,7 +874,7 @@ def complete_resolutions(
 
 
 customer_feedback_router = APIRouter(
-    prefix="/customer-feedback", tags=["Helpdesk — CustomerFeedback"]
+    prefix="/customer-feedback", tags=["Helpdesk - CustomerFeedback"]
 )
 
 
@@ -923,7 +923,7 @@ def update_customer_feedback(
     )
 
 
-support_teams_router = APIRouter(prefix="/support-teams", tags=["Helpdesk — SupportTeam"])
+support_teams_router = APIRouter(prefix="/support-teams", tags=["Helpdesk - SupportTeam"])
 
 
 @support_teams_router.get("", response_model=APIResponse[list[SupportTeamResponse]])
@@ -971,7 +971,7 @@ def update_support_teams(
     )
 
 
-support_shifts_router = APIRouter(prefix="/support-shifts", tags=["Helpdesk — SupportShift"])
+support_shifts_router = APIRouter(prefix="/support-shifts", tags=["Helpdesk - SupportShift"])
 
 
 @support_shifts_router.get("", response_model=APIResponse[list[SupportShiftResponse]])
@@ -1020,7 +1020,7 @@ def update_support_shifts(
 
 
 support_schedules_router = APIRouter(
-    prefix="/support-schedules", tags=["Helpdesk — SupportSchedule"]
+    prefix="/support-schedules", tags=["Helpdesk - SupportSchedule"]
 )
 
 
@@ -1074,7 +1074,7 @@ def update_support_schedules(
 
 
 ticket_notifications_router = APIRouter(
-    prefix="/ticket-notifications", tags=["Helpdesk — TicketNotification"]
+    prefix="/ticket-notifications", tags=["Helpdesk - TicketNotification"]
 )
 
 
@@ -1127,7 +1127,7 @@ def update_ticket_notifications(
     )
 
 
-ticket_reports_router = APIRouter(prefix="/ticket-reports", tags=["Helpdesk — TicketReport"])
+ticket_reports_router = APIRouter(prefix="/ticket-reports", tags=["Helpdesk - TicketReport"])
 
 
 @ticket_reports_router.get("", response_model=APIResponse[list[TicketReportResponse]])
@@ -1176,7 +1176,7 @@ def update_ticket_reports(
 
 
 ticket_dashboards_router = APIRouter(
-    prefix="/ticket-dashboards", tags=["Helpdesk — TicketDashboard"]
+    prefix="/ticket-dashboards", tags=["Helpdesk - TicketDashboard"]
 )
 
 

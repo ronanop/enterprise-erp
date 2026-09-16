@@ -53,7 +53,7 @@ export function ProjectPoQueuePage() {
         label: "Customer PO",
         sort: (r) => r.customer_po_number || "",
         className: "font-mono text-xs font-medium tabular-nums text-foreground",
-        cell: (r) => r.customer_po_number || "—",
+        cell: (r) => r.customer_po_number || "-",
       },
       {
         key: "document_date",
@@ -66,7 +66,7 @@ export function ProjectPoQueuePage() {
         label: "Customer",
         sort: (r) => r.customer_name || "",
         className: "max-w-[220px] truncate",
-        cell: (r) => r.customer_name || "—",
+        cell: (r) => r.customer_name || "-",
       },
       {
         key: "shared_at",

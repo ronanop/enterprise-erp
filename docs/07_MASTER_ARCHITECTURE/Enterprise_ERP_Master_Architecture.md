@@ -1,9 +1,9 @@
-# Enterprise ERP Platform — Master Architecture Document
+# Enterprise ERP Platform - Master Architecture Document
 
 **Document type:** Solution Architecture & Shipping Master  
 **Product:** Enterprise ERP Platform (ConnectPlus-aligned portfolio)  
 **Baseline:** Architecture Lock v1.1 · ADR-001 · ADR-002  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Audience:** Engineering, Architecture, DevOps, Product  
 
 This is the **master architecture document** for the full ERP portfolio. It consolidates system design, current locked technology stack, module features and flows, Mermaid architecture diagrams, and shipping strategies for **on-premise** and **AWS**. Calendar timelines and month-based phase dates are intentionally omitted.
@@ -24,7 +24,7 @@ This is the **master architecture document** for the full ERP portfolio. It cons
 | 8 | [Data and Storage Architecture](#8-data-and-storage-architecture) |
 | 9 | [Platform Engines](#9-platform-engines) |
 | 10 | [Cross-Domain Business Flows](#10-cross-domain-business-flows) |
-| 11 | [Module Catalog — Full Portfolio](#11-module-catalog--full-portfolio) |
+| 11 | [Module Catalog - Full Portfolio](#11-module-catalog--full-portfolio) |
 | 12 | [Roadmap Platform Extensions](#12-roadmap-platform-extensions) |
 | 13 | [Integration Strategy](#13-integration-strategy) |
 | 14 | [On-Premise Deployment Plan](#14-on-premise-deployment-plan) |
@@ -38,7 +38,7 @@ This is the **master architecture document** for the full ERP portfolio. It cons
 
 ## 1. Executive Summary
 
-The Enterprise ERP Platform is a **modular monolith** ERP ecosystem covering foundation platform services and twenty-plus business domains — Finance, CRM, Sales, Procurement, Inventory, Manufacturing, Quality, HR, Payroll, Projects, Assets, Service, Helpdesk, Documents, GRC, Analytics, Integration, Ecommerce, Portal, Marketing, and employee self-service — with roadmap extensions for AI Assistant / Virtual E.A., Licensing, and Backup & DR.
+The Enterprise ERP Platform is a **modular monolith** ERP ecosystem covering foundation platform services and twenty-plus business domains - Finance, CRM, Sales, Procurement, Inventory, Manufacturing, Quality, HR, Payroll, Projects, Assets, Service, Helpdesk, Documents, GRC, Analytics, Integration, Ecommerce, Portal, Marketing, and employee self-service - with roadmap extensions for AI Assistant / Virtual E.A., Licensing, and Backup & DR.
 
 Every module shares:
 
@@ -147,8 +147,8 @@ flowchart TB
 
 Every module must satisfy:
 
-1. **Licensing contract** — entitlement service (roadmap) disables unlicensed APIs, UI, and jobs (not merely hides menus).  
-2. **Degradation contract** — defined behavior when a sibling module is absent (e.g. Sales exports invoices when Finance is not licensed).  
+1. **Licensing contract** - entitlement service (roadmap) disables unlicensed APIs, UI, and jobs (not merely hides menus).  
+2. **Degradation contract** - defined behavior when a sibling module is absent (e.g. Sales exports invoices when Finance is not licensed).  
 
 ---
 
@@ -162,7 +162,7 @@ Every module must satisfy:
 | API-first | Versioned REST/OpenAPI before UI |
 | Multi-tenant by construction | `tenant_id` (and company/branch) on transactional data |
 | Soft delete + audit | No physical DELETE on business tables; audit columns mandatory |
-| Config over customization | Workflows, settings, custom fields — not forks |
+| Config over customization | Workflows, settings, custom fields - not forks |
 | One artifact, many destinations | Same images for AWS, private cloud, and on-prem |
 | Engines mandatory | Workflow, Notification, Audit, Integration must not be bypassed |
 
@@ -324,7 +324,7 @@ flowchart LR
 | Isolation | `tenant_id` on transactional tables; company/branch scoping where applicable |
 | Auth | JWT access + refresh; MFA; Microsoft OAuth supported |
 | AuthZ | RBAC: role → permissions; module membership; org scope |
-| Secrets | Env / secret store — never commit production secrets |
+| Secrets | Env / secret store - never commit production secrets |
 | Data | Soft delete; audit columns `created_at/by`, `updated_at/by`, `version` |
 | Transport | TLS everywhere in deployed environments |
 
@@ -351,7 +351,7 @@ Edge WAF/DDoS · short-lived tokens · input validation · OWASP-aligned enginee
 - UUID primary keys  
 - Table/prefix standards per domain  
 - Alembic-only schema changes  
-- Soft delete — no physical DELETE on business tables  
+- Soft delete - no physical DELETE on business tables  
 - No cross-module foreign-key coupling across bounded contexts  
 
 ```mermaid
@@ -520,7 +520,7 @@ flowchart LR
 
 ---
 
-## 11. Module Catalog — Full Portfolio
+## 11. Module Catalog - Full Portfolio
 
 Maturity legend: **Implemented** · **Partial** · **Scaffold** · **Roadmap**.
 
@@ -904,7 +904,7 @@ Maturity legend: **Implemented** · **Partial** · **Scaffold** · **Roadmap**.
 | **API** | `/marketing/*` (scaffolding) + CRM campaigns |
 | **Maturity** | Partial / in progress |
 
-**Features:** CRM campaigns; marketing FRD scope — platforms/accounts, content requests, AI/Celery generation pipeline, versions/scores, brand voice, research/trends, competitors, calendar, publish jobs (stub), analytics summary; ecommerce promos/coupons adjacent.
+**Features:** CRM campaigns; marketing FRD scope - platforms/accounts, content requests, AI/Celery generation pipeline, versions/scores, brand voice, research/trends, competitors, calendar, publish jobs (stub), analytics summary; ecommerce promos/coupons adjacent.
 
 **Key flows:** Campaign → content request → generate → score → calendar → publish/approve.
 
@@ -935,7 +935,7 @@ flowchart LR
 
 ### 12.3 Licensing & Server-side Activation
 
-**Target features:** Module entitlements, seats, license keys, online/offline activation, metering, renewal/expiry, grace periods, license audit — required for sell-alone and on-prem.
+**Target features:** Module entitlements, seats, license keys, online/offline activation, metering, renewal/expiry, grace periods, license audit - required for sell-alone and on-prem.
 
 ```mermaid
 flowchart LR
@@ -949,7 +949,7 @@ flowchart LR
 
 **Target features:** Scheduled full/incremental/WAL backups; encryption; restore verification; per-tenant PITR tooling; DR runbooks; RPO/RTO targets; alignment with GRC BCM.
 
-Ops today: PostgreSQL external hosting, manual dumps under `backups/`, SDD/DBS standards — product module still roadmap.
+Ops today: PostgreSQL external hosting, manual dumps under `backups/`, SDD/DBS standards - product module still roadmap.
 
 ---
 
@@ -994,7 +994,7 @@ flowchart TB
 | Profile | Target | Shape |
 |---------|--------|-------|
 | **Compact** | ≤ ~100 users | One VM/host: API, worker, beat, web, Postgres, Redis, RabbitMQ, MinIO; optional warm standby |
-| **Standard** | ~100–1,000 users | K3s cluster; HA Postgres (Patroni or managed); replicated Redis/RabbitMQ; MinIO erasure coding |
+| **Standard** | ~100-1,000 users | K3s cluster; HA Postgres (Patroni or managed); replicated Redis/RabbitMQ; MinIO erasure coding |
 | **Enterprise** | 1,000+ / regulated | Customer Kubernetes; customer-managed DB; AD/LDAP federation; air-gap capable; customer DR |
 
 ### 14.2 Compact reference topology
@@ -1019,10 +1019,10 @@ flowchart TB
 | Item | Guidance |
 |------|----------|
 | Installer | CLI (`cpctl` or equivalent) validates OS, disk, ports; applies Compose/Helm; runs Alembic; health checks |
-| Config | `.env` / sealed secrets — DB URL, JWT, Graph/SSO optional, storage endpoints |
+| Config | `.env` / sealed secrets - DB URL, JWT, Graph/SSO optional, storage endpoints |
 | Licensing | Offline signed license files (roadmap entitlement service) |
 | Updates | Online registry pull or offline signed bundle; pre-upgrade backup mandatory |
-| AI | Customer LLM keys, vendor gateway, or local GPU inference — config only, no code fork |
+| AI | Customer LLM keys, vendor gateway, or local GPU inference - config only, no code fork |
 | Existing artifacts | `apps/api/Dockerfile` (roles: `api` / `worker` / `beat` / `migrate`), `apps/web/Dockerfile`, `apps/employee-app/Dockerfile`, root `docker-compose.yml` (infra services) |
 
 ### 14.4 On-prem backup & DR
@@ -1157,7 +1157,7 @@ flowchart LR
 | CI | Build API/web images; unit/integration tests; architecture/guardrail checks |
 | CD | GitOps (Argo CD) or pipeline deploy to EKS/ECS |
 | Migrations | Forward-only Alembic; expand/contract; run as release Job |
-| Secrets | Secrets Manager / sealed secrets — not git |
+| Secrets | Secrets Manager / sealed secrets - not git |
 
 ### 16.2 Current repo reality
 
@@ -1223,7 +1223,7 @@ No deviation from Architecture Lock v1.1 without EARB approval and an updated AD
 
 ---
 
-## Appendix A — Connect ownership (implementation focus)
+## Appendix A - Connect ownership (implementation focus)
 
 Primary engineer ownership for delivery prioritization:
 
@@ -1240,7 +1240,7 @@ Primary engineer ownership for delivery prioritization:
 
 ---
 
-## Appendix B — Related source anchors
+## Appendix B - Related source anchors
 
 | Concern | Location |
 |---------|----------|

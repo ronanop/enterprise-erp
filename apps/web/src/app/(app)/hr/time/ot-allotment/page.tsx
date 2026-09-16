@@ -127,7 +127,7 @@ export default function OtAllotmentPage() {
     setOpen(true);
     if (!employees.length || !branches.length) {
       void loadLookups().catch(() => {
-        toast("Could not load employees or branches — refresh the page or sign in again", "error");
+        toast("Could not load employees or branches - refresh the page or sign in again", "error");
       });
     }
   }

@@ -121,7 +121,7 @@ function parseListItems<T>(data: unknown): T[] {
 }
 
 function optionLabel(map: Map<string, OrgOption>, id?: string | null): string {
-  if (!id) return "—";
+  if (!id) return "-";
   return map.get(id)?.label ?? `${id.slice(0, 8)}…`;
 }
 
@@ -784,7 +784,7 @@ export function AssetAssignmentWorkspace() {
                   </div>
                   <div>
                     <dt className="text-xs text-muted-foreground">Allocated</dt>
-                    <dd>{modalRow.allocated_at?.slice(0, 10) ?? "—"}</dd>
+                    <dd>{modalRow.allocated_at?.slice(0, 10) ?? "-"}</dd>
                   </div>
                 </dl>
                 <div
@@ -795,12 +795,12 @@ export function AssetAssignmentWorkspace() {
                   <dl className="grid gap-2 text-sm sm:grid-cols-3">
                     <div>
                       <dt className="text-xs text-muted-foreground">DC Number</dt>
-                      <dd>{modalRow.delivery_reference_number?.trim() || "—"}</dd>
+                      <dd>{modalRow.delivery_reference_number?.trim() || "-"}</dd>
                     </div>
                     <div>
                       <dt className="text-xs text-muted-foreground">Status</dt>
                       <dd className="capitalize">
-                        {(modalRow.delivery_reference_status || "—").replaceAll("_", " ")}
+                        {(modalRow.delivery_reference_status || "-").replaceAll("_", " ")}
                       </dd>
                     </div>
                     <div>
@@ -1002,7 +1002,7 @@ function AssignmentFormFields({
               </SelectItem>
               {assetOptions.map((asset) => (
                 <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                  {asset.asset_code} — {asset.asset_name}
+                  {asset.asset_code} - {asset.asset_name}
                 </SelectItem>
               ))}
             </SelectContent>

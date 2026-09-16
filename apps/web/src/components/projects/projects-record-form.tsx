@@ -91,9 +91,9 @@ export type FieldSpec = {
   createNewLabel?: string;
   /** Label for the Add row button on type_qty_lines fields. */
   addLabel?: string;
-  /** For type_qty_lines — show per-line delivery date (default true). */
+  /** For type_qty_lines - show per-line delivery date (default true). */
   showDate?: boolean;
-  /** For type_qty_lines — lock type/qty; only dates editable (SCM). */
+  /** For type_qty_lines - lock type/qty; only dates editable (SCM). */
   datesOnly?: boolean;
   /** Hide field unless predicate returns true. */
   visibleWhen?: (values: FormValues) => boolean;

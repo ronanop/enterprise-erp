@@ -1,4 +1,4 @@
-/** Enterprise Performance Management System — types */
+/** Enterprise Performance Management System - types */
 
 export type GoalType = "individual" | "team" | "company" | "department";
 export type GoalCategory = "kpi" | "okr" | "learning" | "compliance";

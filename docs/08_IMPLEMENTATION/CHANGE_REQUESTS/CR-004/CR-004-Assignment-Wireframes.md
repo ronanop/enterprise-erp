@@ -1,7 +1,7 @@
-# CR-004 — Assignment & Return Wireframes
+# CR-004 - Assignment & Return Wireframes
 
-**Phase:** 5B-1 — UI/UX design freeze  
-**Style:** Data-dense ERP (MASTER tokens); Lucide icons in implementation — not shown in ASCII.
+**Phase:** 5B-1 - UI/UX design freeze  
+**Style:** Data-dense ERP (MASTER tokens); Lucide icons in implementation - not shown in ASCII.
 
 ---
 
@@ -20,7 +20,7 @@
 │ │ Document │ Asset       │ Assignee │ Status   │ Del.ref │ Actions        │ │
 │ ├──────────┼─────────────┼──────────┼──────────┼─────────┼────────────────┤ │
 │ │ AASN-…   │ LT-001      │ Priya S  │ active   │ DC-42   │ View · Return  │ │
-│ │ AASN-…   │ LT-014      │ —        │ draft    │ —       │ Continue issue │ │
+│ │ AASN-…   │ LT-014      │ -        │ draft    │ -       │ Continue issue │ │
 │ └──────────┴─────────────┴──────────┴──────────┴─────────┴────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -29,13 +29,13 @@
 
 ---
 
-## 2. Assignment wizard — desktop shell
+## 2. Assignment wizard - desktop shell
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ Issue asset                                              Branch: HQ ▾  [×]  │
 ├──────────────────┬──────────────────────────────────────────────────────────┤
-│ ① Employee    ●  │  Step 1 — Employee                                         │
+│ ① Employee    ●  │  Step 1 - Employee                                         │
 │ ② Asset          │  ┌────────────────────────────────────────────────────┐  │
 │ ③ Issued items   │  │ Allocation type  ( Employee ▼ )  [Other allocation] │  │
 │ ④ Delivery       │  │ Employee *       [ Search or select employee…    ▼] │  │
@@ -47,11 +47,11 @@
 
 ---
 
-## 3. Step 2 — Asset
+## 3. Step 2 - Asset
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ Step 2 — Asset                                                              │
+│ Step 2 - Asset                                                              │
 │  [ Search by code, name, serial… ]                    Filter: Ready To Move   │
 │  ┌─────────────────────────────────────────────────────────────────────────┐│
 │  │ ○ LT-2024-001  Dell Latitude 5540    SN: …    Branch: HQ   [Ready]     ││
@@ -66,11 +66,11 @@
 
 ---
 
-## 4. Step 3 — Issued items
+## 4. Step 3 - Issued items
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ Step 3 — Issued items                                                       │
+│ Step 3 - Issued items                                                       │
 │  Accessories registered on this asset. Select what you are issuing.         │
 │  ┌─────────────────────────────────────────────────────────────────────────┐│
 │  │ [✓] COMP-CHG-01   USB-C Charger 65W        status: installed           ││
@@ -84,11 +84,11 @@
 
 ---
 
-## 5. Step 4 — Delivery
+## 5. Step 4 - Delivery
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ Step 4 — Delivery                                                           │
+│ Step 4 - Delivery                                                           │
 │  Delivery reference status *   ( Pending ▼ | Issued | Received )            │
 │  Delivery reference number     [ DC-2026-0042        ]  required if Issued  │
 │  Assignment remarks            ┌──────────────────────────────────────────┐ │
@@ -101,18 +101,18 @@
 
 ---
 
-## 6. Step 5 — Review
+## 6. Step 5 - Review
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ Step 5 — Review                                                             │
+│ Step 5 - Review                                                             │
 │  ┌──────────────────────┬────────────────────────────────────────────────┐│
 │  │ Employee             │ Priya Sharma                                   ││
 │  │ Asset                │ LT-2024-014 · Latitude 7440                    ││
 │  │ Issued items         │ Charger, Laptop bag                            ││
 │  │ Delivery             │ Pending · (no number)                          ││
 │  │ Remarks              │ Laptop bag + charger included.                 ││
-│  │ Expected return      │ —                                              ││
+│  │ Expected return      │ -                                              ││
 │  └──────────────────────┴────────────────────────────────────────────────┘│
 │  Creates a draft assignment. Submit for approval from the assignment list.  │
 │                              [← Back]              [Create draft]           │
@@ -121,20 +121,20 @@
 
 ---
 
-## 7. Return wizard — Step 2 (condition)
+## 7. Return wizard - Step 2 (condition)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ Return asset — Step 2 of 4                                                  │
+│ Return asset - Step 2 of 4                                                  │
 │  How is the asset being returned?                                           │
 │  ┌─────────────────────────────────────────────────────────────────────────┐│
-│  │ (●) Good — return to stock                                              ││
+│  │ (●) Good - return to stock                                              ││
 │  │     Asset goes to Ready To Move (can be re-issued).                     ││
 │  ├─────────────────────────────────────────────────────────────────────────┤│
-│  │ ( ) Outdated — retire                                                   ││
+│  │ ( ) Outdated - retire                                                   ││
 │  │     Asset marked Retired (not given to anyone).                         ││
 │  ├─────────────────────────────────────────────────────────────────────────┤│
-│  │ ( ) Not working — pending disposal                                      ││
+│  │ ( ) Not working - pending disposal                                      ││
 │  │     Asset marked Pending disposal.                                      ││
 │  └─────────────────────────────────────────────────────────────────────────┘│
 │                              [← Back]  [Next →]                             │
@@ -143,13 +143,13 @@
 
 ---
 
-## 8. Return wizard — Step 4 (confirm)
+## 8. Return wizard - Step 4 (confirm)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ Return asset — Review                                                       │
+│ Return asset - Review                                                       │
 │  Asset LT-2024-014 · Assignment AASN-2026-000088                            │
-│  Condition: Good — return to stock                                          │
+│  Condition: Good - return to stock                                          │
 │  Remarks: Minor scuffs on lid.                                            │
 │  ⚠ This updates operational status and clears custodian when applicable.    │
 │                              [← Back]  [Confirm return]                     │
@@ -200,4 +200,4 @@ Stepper horizontal dots; full viewport height; swipe-back optional (5B-2 nice-to
 | Status chips | `StatusBadge` + ops labels |
 | Branch context | `BranchSelector` read-only chip |
 
-No new visual language — navy primary, slate muted, accent CTA per MASTER.
+No new visual language - navy primary, slate muted, accent CTA per MASTER.

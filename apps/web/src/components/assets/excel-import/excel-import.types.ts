@@ -1,5 +1,5 @@
 /**
- * CR-004 Phase 8A — Excel import foundation types (preview & validation only).
+ * CR-004 Phase 8A - Excel import foundation types (preview & validation only).
  * No database writes.
  */
 
@@ -322,7 +322,7 @@ export class ExcelImportError extends Error {
   }
 }
 
-/** Soft limit for preview phase — warn above this. */
+/** Soft limit for preview phase - warn above this. */
 export const EXCEL_IMPORT_LARGE_FILE_ROW_THRESHOLD = 2000;
 
 export const EXCEL_IMPORT_HARD_MAX_ROWS = 10000;

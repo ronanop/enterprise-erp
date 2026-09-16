@@ -147,7 +147,7 @@ export function readDismissedCrmApprovalIds(): Set<string> {
 /** Repair legacy UTF-8 text decoded with a Windows code page. */
 export function normalizeNotificationText(value: string): string {
   return value
-    .replaceAll("ΓÇö", "—")
-    .replaceAll("â€”", "—")
+    .replaceAll("ΓÇö", "-")
+    .replaceAll("â€”", "-")
     .replaceAll("Â", "");
 }

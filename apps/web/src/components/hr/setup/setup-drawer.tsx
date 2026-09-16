@@ -121,7 +121,7 @@ export function toApiTimeValue(value: string | null | undefined): string {
   return v ? `${v}:00` : "";
 }
 
-/** Time picker with clock icon — 24h HH:MM picker. */
+/** Time picker with clock icon - 24h HH:MM picker. */
 export function SetupTimeInput({
   value,
   onChange,

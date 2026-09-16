@@ -119,7 +119,7 @@ export function ProcurementInventoryCreatePoDialog({
     setNextPo("");
     setPeekError(null);
     setPeekBusy(true);
-    // Use session company scope (same as inventory list) — do not pass a random vendor company_id.
+    // Use session company scope (same as inventory list) - do not pass a random vendor company_id.
     void peekNextCompanyPoNumber(entityCode)
       .then((row) => {
         if (!cancelled) {
@@ -262,7 +262,7 @@ export function ProcurementInventoryCreatePoDialog({
                   value={
                     peekBusy
                       ? "Loading next PO number…"
-                      : nextPo || (peekError ? "—" : "Loading next PO number…")
+                      : nextPo || (peekError ? "-" : "Loading next PO number…")
                   }
                 />
               </FinanceField>
@@ -346,7 +346,7 @@ export function ProcurementInventoryCreatePoDialog({
                                 />
                               </td>
                               <td className={cn(procurementUi.td, "font-medium text-foreground")}>
-                                {row.product_name ?? "—"}
+                                {row.product_name ?? "-"}
                               </td>
                               <td className={cn(procurementUi.td, "tabular-nums")}>
                                 {row.company_po_number}
@@ -358,7 +358,7 @@ export function ProcurementInventoryCreatePoDialog({
                                 {row.serial_number}
                               </td>
                               <td className={cn(procurementUi.tdNumeric, "text-right tabular-nums")}>
-                                {row.unit_cost && row.unit_cost > 0 ? row.unit_cost : "—"}
+                                {row.unit_cost && row.unit_cost > 0 ? row.unit_cost : "-"}
                               </td>
                             </tr>
                           );

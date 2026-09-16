@@ -372,7 +372,7 @@ function toSheetData(rows: ProjectExportCheckpoint[]): SpreadsheetCellValue[][] 
       colored(r.checkpoint, r.answer),
       colored(r.answer === "yes" ? "Yes" : "No", r.answer),
       r.completedBy,
-      r.dateCompleted || "—",
+      r.dateCompleted || "-",
       colored(r.value || (r.answer === "yes" ? "Yes" : "No"), r.answer),
     ]),
   ];

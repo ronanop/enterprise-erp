@@ -1,4 +1,4 @@
-# HR Payroll — Page Override
+# HR Payroll - Page Override
 
 > Follow MASTER tokens for the payroll hub.
 

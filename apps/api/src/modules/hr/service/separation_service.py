@@ -1,4 +1,4 @@
-"""Separation service — completes via Master Data identity sync; FNF via payroll."""
+"""Separation service - completes via Master Data identity sync; FNF via payroll."""
 
 import copy
 from datetime import date, datetime, timedelta, timezone
@@ -290,7 +290,7 @@ class SeparationService:
                     template_code="hr.separation_pending_it",
                     template_name="Exit Pending IT",
                     event_type="hr.separation_pending_it",
-                    title="Exit approved by manager — IT action needed",
+                    title="Exit approved by manager - IT action needed",
                     body=f"Offboarding {doc} was approved by the reporting manager. Please complete IT approval.",
                     kind="separation",
                     extra={"separation_id": str(row.id), "document_number": doc},
@@ -304,7 +304,7 @@ class SeparationService:
                     template_code="hr.separation_pending_accounts",
                     template_name="Exit Pending Accounts",
                     event_type="hr.separation_pending_accounts",
-                    title="Exit IT approved — Accounts action needed",
+                    title="Exit IT approved - Accounts action needed",
                     body=f"Offboarding {doc} was approved by IT. Please complete Accounts approval.",
                     kind="separation",
                     extra={"separation_id": str(row.id), "document_number": doc},
@@ -318,7 +318,7 @@ class SeparationService:
                     template_code="hr.separation_pending_hr",
                     template_name="Exit Pending HR",
                     event_type="hr.separation_pending_hr",
-                    title="Exit Accounts approved — HR action needed",
+                    title="Exit Accounts approved - HR action needed",
                     body=f"Offboarding {doc} was approved by Accounts. Please complete HR approval.",
                     kind="separation",
                     extra={"separation_id": str(row.id), "document_number": doc},
@@ -421,7 +421,7 @@ class SeparationService:
                 template_code="hr.exit_on_notice_hr",
                 template_name="Employee On Notice",
                 event_type="hr.exit_on_notice",
-                title=f"On Notice — {doc}",
+                title=f"On Notice - {doc}",
                 body=f"Employee is On Notice until {lwd}. Complete remaining exit approvals.",
                 kind="separation",
                 extra={"separation_id": str(row.id), "document_number": doc, "href": "/hr/separation"},
@@ -601,7 +601,7 @@ class SeparationService:
                     template_code="hr.fnf_scheduled_hr",
                     template_name="FNF After Notice",
                     event_type="hr.fnf_scheduled",
-                    title=f"FNF scheduled — {row.document_number}",
+                    title=f"FNF scheduled - {row.document_number}",
                     body=f"Employee is On Notice. Prepare FNF after {lwd_s}.",
                     kind="separation",
                     extra={"separation_id": str(row.id), "href": "/hr/separation"},
@@ -639,7 +639,7 @@ class SeparationService:
                 template_code="hr.fnf_pending_hr",
                 template_name="FNF Pending",
                 event_type="hr.fnf_pending",
-                title=f"FNF pending — {doc}",
+                title=f"FNF pending - {doc}",
                 body="Employee has exited. Prepare and settle full & final.",
                 kind="separation",
                 extra={"separation_id": str(row.id), "document_number": doc, "href": "/hr/separation"},

@@ -1,4 +1,4 @@
-# FP-ASSET-005 — Release Notes
+# FP-ASSET-005 - Release Notes
 
 ## Summary
 

@@ -5,9 +5,9 @@ import type { ReactNode } from "react";
 import { FinanceField } from "@/components/finance/journals/finance-form-field";
 
 export function textOrDash(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "-";
   const text = String(value).trim();
-  return text || "—";
+  return text || "-";
 }
 
 export function ReadOnlyValue({ value }: { value: string }) {

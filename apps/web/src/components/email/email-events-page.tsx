@@ -76,9 +76,9 @@ export function EmailEventsPage() {
                   <Badge variant="outline">{row.status}</Badge>
                 </td>
                 <td className="px-3 py-2.5">{row.event_type}</td>
-                <td className="px-3 py-2.5 font-mono text-xs">{row.recipient_address ?? "—"}</td>
+                <td className="px-3 py-2.5 font-mono text-xs">{row.recipient_address ?? "-"}</td>
                 <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
-                  {row.created_at ?? "—"}
+                  {row.created_at ?? "-"}
                 </td>
                 <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground">{row.id}</td>
               </tr>

@@ -52,7 +52,7 @@ function parseListItems<T>(data: unknown): T[] {
 }
 
 function formatDateTime(value?: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return value.slice(0, 16).replace("T", " ");
 }
 
@@ -265,7 +265,7 @@ export function AssetLocationWorkspace() {
     <div className="space-y-6">
       <PageHeader
         title="Asset locations"
-        description="Physical location history per asset — create, update metadata, complete. No approval workflow."
+        description="Physical location history per asset - create, update metadata, complete. No approval workflow."
       />
 
       {error ? (
@@ -465,7 +465,7 @@ export function AssetLocationWorkspace() {
                   <SelectContent>
                     {assetOptions.map((asset) => (
                       <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                        {asset.asset_code} — {asset.asset_name}
+                        {asset.asset_code} - {asset.asset_name}
                       </SelectItem>
                     ))}
                   </SelectContent>

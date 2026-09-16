@@ -170,7 +170,7 @@ export function LeaveBalancePanel({
                           {bal.available}
                         </span>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </td>
                   );
@@ -255,7 +255,7 @@ function EmployeeLeaveBalanceDrawer({
       open={open}
       onClose={onClose}
       wide
-      title={employee ? `Leave balances — ${employee.name}` : "Leave balances"}
+      title={employee ? `Leave balances - ${employee.name}` : "Leave balances"}
       description="Adjust days by month, assign a new leave type, or remove an unused assignment."
       footer={
         <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose}>
@@ -326,7 +326,7 @@ function EmployeeLeaveBalanceDrawer({
               <SetupField label="Month" required>
                 <SetupInput type="month" value={adjustMonth} onChange={(e) => setAdjustMonth(e.target.value)} />
               </SetupField>
-              <SetupField label="Days (+ / −)" required>
+              <SetupField label="Days (+ / -)" required>
                 <SetupInput
                   inputMode="decimal"
                   placeholder="e.g. 1.5 or -0.5"

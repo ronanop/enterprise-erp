@@ -8,7 +8,7 @@ export function escapeHtml(value: unknown): string {
     .replace(/'/g, "&#39;");
 }
 
-/** Same-origin app paths only — blocks javascript: and protocol-relative hrefs. */
+/** Same-origin app paths only - blocks javascript: and protocol-relative hrefs. */
 export function safeAppHref(href: string): string {
   const trimmed = href.trim();
   if (!trimmed.startsWith("/") || trimmed.startsWith("//") || trimmed.includes("\\")) {

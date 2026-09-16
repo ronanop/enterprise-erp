@@ -1,28 +1,28 @@
-# ERD_19 — Governance, Risk & Compliance (GRC) Domain
+# ERD_19 - Governance, Risk & Compliance (GRC) Domain
 
-**Document:** Enterprise ERD — Governance, Risk & Compliance Domain  
+**Document:** Enterprise ERD - Governance, Risk & Compliance Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 19 Implementation Planning  
+**Status:** Locked - Ready for Sprint 19 Implementation Planning  
 **Schema:** `grc`  
 **Table Prefix:** `grc_`  
 **Aligned To:** BRD v1.0 · FRD-20 Compliance, Risk Management & Governance · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-20 Compliance, Risk Management & Governance Domain](../02_FRD/FRD-20-Compliance-Risk-Governance-Domain.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.13-beta](../07_RELEASES/ERP_Core_v1.13-beta.md)  
 
-> **C-01 note:** Employee and customer identity remain **`master.master_employee`** and **`master.master_customer`**. GRC **never** invents parallel masters. Document / Helpdesk / Service / Project / Quality / Asset / CRM / Inventory / Manufacturing context uses **UUID-only** refs — **no FK to `doc_*` / `hd_*` / `svc_*` / `prj_*` / `qm_*` / `ast_*` / `crm_*` / `inv_*` / `mfg_*`**.
+> **C-01 note:** Employee and customer identity remain **`master.master_employee`** and **`master.master_customer`**. GRC **never** invents parallel masters. Document / Helpdesk / Service / Project / Quality / Asset / CRM / Inventory / Manufacturing context uses **UUID-only** refs - **no FK to `doc_*` / `hd_*` / `svc_*` / `prj_*` / `qm_*` / `ast_*` / `crm_*` / `inv_*` / `mfg_*`**.
 
 ---
 
 ## 1. Module Overview (Purpose)
 
-The Governance, Risk & Compliance Domain provides a **centralized enterprise GRC platform**: policies and versions, acknowledgements, internal controls and control tests, risk categories / register / assessment / treatment, compliance frameworks / requirements / assessments, audit plans / audits / findings, corrective actions (CAPA), exceptions, incidents, notifications, and reporting — spanning identify → assess → control → comply → audit → remediate → monitor (FRD-20 §3).
+The Governance, Risk & Compliance Domain provides a **centralized enterprise GRC platform**: policies and versions, acknowledgements, internal controls and control tests, risk categories / register / assessment / treatment, compliance frameworks / requirements / assessments, audit plans / audits / findings, corrective actions (CAPA), exceptions, incidents, notifications, and reporting - spanning identify → assess → control → comply → audit → remediate → monitor (FRD-20 §3).
 
-GRC **depends on** Foundation, Organization, and Master Data. It **consumes existing masters only (C-01)** — **`master_employee`**, **`master_customer`**, and **`org_department`**. It **must never duplicate** employee, customer, department, or company masters.
+GRC **depends on** Foundation, Organization, and Master Data. It **consumes existing masters only (C-01)** - **`master_employee`**, **`master_customer`**, and **`org_department`**. It **must never duplicate** employee, customer, department, or company masters.
 
 **Finance remains the only accounting system.** GRC never ORM-writes `fin_*` tables. Any penalty / remediation / recoverable cost posting uses **`finance_journal_id`**; GL posting occurs **only** through `PostingService.post_system_journal()`.
 
-Document, Helpdesk, Service, Project, Quality, Asset, CRM, Inventory, Manufacturing, HR, Payroll, and Recruitment remain **isolated** except authorized UUID / employee refs — **no peer FKs / no peer ORM writes** (HR / Payroll / Recruitment **read-only**).
+Document, Helpdesk, Service, Project, Quality, Asset, CRM, Inventory, Manufacturing, HR, Payroll, and Recruitment remain **isolated** except authorized UUID / employee refs - **no peer FKs / no peer ORM writes** (HR / Payroll / Recruitment **read-only**).
 
 **Business Tables: 20**  
 **Schema: `grc`**
@@ -60,26 +60,26 @@ Leadership · External auditors · BI (future)
 
 ### API Mount (planned)
 
-**`/api/v1/grc`** — routers for all aggregates (policies, policy-versions, policy-acknowledgements, controls, control-tests, risk-categories, risk-registers, risk-assessments, risk-treatments, compliance-frameworks, compliance-requirements, compliance-assessments, audit-plans, audits, audit-findings, corrective-actions, exceptions, incidents, notifications, reports).
+**`/api/v1/grc`** - routers for all aggregates (policies, policy-versions, policy-acknowledgements, controls, control-tests, risk-categories, risk-registers, risk-assessments, risk-treatments, compliance-frameworks, compliance-requirements, compliance-assessments, audit-plans, audits, audit-findings, corrective-actions, exceptions, incidents, notifications, reports).
 
 ---
 
 ## 2. Scope
 
 ### In Scope
-- **Policy** lifecycle with **versions** and **acknowledgements** — FRD-20 §10
-- **Internal controls** and **control tests** — FRD-20 §7
-- **Risk categories**, **register**, **assessment**, **treatment** — FRD-20 §4–§6
-- **Compliance frameworks**, **requirements**, **assessments** — FRD-20 §8–§9
-- **Audit plans**, **audits**, **findings** — FRD-20 §11–§12
-- **Corrective actions** (CAPA), **exceptions**, **incidents** — FRD-20 §12–§13
+- **Policy** lifecycle with **versions** and **acknowledgements** - FRD-20 §10
+- **Internal controls** and **control tests** - FRD-20 §7
+- **Risk categories**, **register**, **assessment**, **treatment** - FRD-20 §4-§6
+- **Compliance frameworks**, **requirements**, **assessments** - FRD-20 §8-§9
+- **Audit plans**, **audits**, **findings** - FRD-20 §11-§12
+- **Corrective actions** (CAPA), **exceptions**, **incidents** - FRD-20 §12-§13
 - **Notifications** and **reports**
 - Workflow, audit, RBAC, Celery stubs (planning)
 
 ### Out of Scope (Phase 2 / Separate)
-- Full **BCM / disaster-recovery runbook product** (RTO/RPO modeling) — Phase 1: optional incident flags only
-- Full **regulatory rule engine / law feed** — Phase 1: framework + requirement catalog
-- Duplicate `grc_employee` / `grc_customer` / `grc_department` masters — **forbidden (C-01)**
+- Full **BCM / disaster-recovery runbook product** (RTO/RPO modeling) - Phase 1: optional incident flags only
+- Full **regulatory rule engine / law feed** - Phase 1: framework + requirement catalog
+- Duplicate `grc_employee` / `grc_customer` / `grc_department` masters - **forbidden (C-01)**
 - Direct writes to `fin_*`, `doc_*`, `hd_*`, `svc_*`, `prj_*`, `qm_*`, `ast_*`, `crm_*`, `inv_*`, `mfg_*`, `hr_*`, `pay_*`, `rec_*`
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 - Analytics cubes / `ana_fact_grc`
@@ -88,9 +88,9 @@ Leadership · External auditors · BI (future)
 - **Identity:** owners / assessors / auditors always resolve through Master Data (C-01)
 - Soft delete + version on mutable `grc_*` tables
 - Document numbers company-scoped (`POL-` / `RSK-` / `CTL-` / `AUD-` / `CAPA-` / `EXC-` / `INC-` / `CMP-`)
-- Risk score = **Impact × Probability** (1–5 scales) — FRD-20 §5
-- Treatment strategies: accept · avoid · reduce · transfer — FRD-20 §6
-- Policy content / evidence may reference DMS via **`document_id` UUID only** — no `doc_*` FK
+- Risk score = **Impact × Probability** (1-5 scales) - FRD-20 §5
+- Treatment strategies: accept · avoid · reduce · transfer - FRD-20 §6
+- Policy content / evidence may reference DMS via **`document_id` UUID only** - no `doc_*` FK
 - Optional remediation / penalty cost: GRC row → `PostingService.post_system_journal()` → store `finance_journal_id`
 
 ### Dependencies
@@ -101,18 +101,18 @@ Leadership · External auditors · BI (future)
 | ERD_02 Organization | `org_company`, `org_branch`, `org_department` |
 | ERD_03 Master Data | **`master_employee`**, **`master_customer`** |
 | ERD_04 Finance | **`PostingService.post_system_journal()`**; `finance_journal_id` UUID storage |
-| ERD_18 Document | Optional `document_id` UUID — **no FK** |
-| ERD_17 Helpdesk | Optional `helpdesk_ticket_id` UUID — **no FK** |
-| ERD_16 Service | Optional `service_request_id` UUID — **no FK** |
-| ERD_14 Project | Optional `project_id` UUID — **no FK** |
-| ERD_09 Quality | Optional `quality_nonconformance_id` UUID — **no FK** |
-| ERD_15 Asset | Optional `asset_id` UUID — **no FK** |
-| ERD_05 CRM | Optional `crm_opportunity_id` UUID — **no FK** |
-| ERD_07 Inventory | Optional inventory UUID — **no FK** |
-| ERD_08 Manufacturing | Optional production UUID — **no FK** |
-| ERD_11 HR | Employee via master — **read / no `hr_*` writes** |
-| ERD_12 Payroll | Optional labor **read** — **no `pay_*` writes** |
-| ERD_13 Recruitment | Optional hiring compliance context — **read only / no writes** |
+| ERD_18 Document | Optional `document_id` UUID - **no FK** |
+| ERD_17 Helpdesk | Optional `helpdesk_ticket_id` UUID - **no FK** |
+| ERD_16 Service | Optional `service_request_id` UUID - **no FK** |
+| ERD_14 Project | Optional `project_id` UUID - **no FK** |
+| ERD_09 Quality | Optional `quality_nonconformance_id` UUID - **no FK** |
+| ERD_15 Asset | Optional `asset_id` UUID - **no FK** |
+| ERD_05 CRM | Optional `crm_opportunity_id` UUID - **no FK** |
+| ERD_07 Inventory | Optional inventory UUID - **no FK** |
+| ERD_08 Manufacturing | Optional production UUID - **no FK** |
+| ERD_11 HR | Employee via master - **read / no `hr_*` writes** |
+| ERD_12 Payroll | Optional labor **read** - **no `pay_*` writes** |
+| ERD_13 Recruitment | Optional hiring compliance context - **read only / no writes** |
 
 ---
 
@@ -121,25 +121,25 @@ Leadership · External auditors · BI (future)
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
 | 1 | `grc_policy` | Transaction / Catalog | ✅ | ✅ | optional | ✅ | ✅ | ✅ |
-| 2 | `grc_policy_version` | Version | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 3 | `grc_policy_acknowledgement` | Detail | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 4 | `grc_control` | Catalog / Transaction | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 5 | `grc_control_test` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 6 | `grc_risk_category` | Catalog | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 2 | `grc_policy_version` | Version | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 3 | `grc_policy_acknowledgement` | Detail | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 4 | `grc_control` | Catalog / Transaction | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 5 | `grc_control_test` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 6 | `grc_risk_category` | Catalog | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 7 | `grc_risk_register` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 8 | `grc_risk_assessment` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 9 | `grc_risk_treatment` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 10 | `grc_compliance_framework` | Catalog | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 11 | `grc_compliance_requirement` | Catalog / Detail | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 12 | `grc_compliance_assessment` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 13 | `grc_audit_plan` | Plan | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 8 | `grc_risk_assessment` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 9 | `grc_risk_treatment` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 10 | `grc_compliance_framework` | Catalog | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 11 | `grc_compliance_requirement` | Catalog / Detail | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 12 | `grc_compliance_assessment` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 13 | `grc_audit_plan` | Plan | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 14 | `grc_audit` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 15 | `grc_audit_finding` | Detail / Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 15 | `grc_audit_finding` | Detail / Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 16 | `grc_corrective_action` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 17 | `grc_exception` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 17 | `grc_exception` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 18 | `grc_incident` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 19 | `grc_notification` | Notification | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 20 | `grc_report` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 19 | `grc_notification` | Notification | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 20 | `grc_report` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | - |
 
 **Business Tables: 20**  
 **Schema: `grc`**
@@ -252,13 +252,13 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 | `tenant_id` / `company_id` / `branch_id` | UUID | NO / NO / YES | Scope |
 | `policy_number` | VARCHAR(50) | NO | `POL-YYYY-NNNNNN` |
 | `policy_code` / `policy_name` | VARCHAR | NO | UK code optional with number |
-| `policy_type` | VARCHAR(40) | NO | hr, finance, it, security, procurement, compliance, other — FRD-20 §10 |
+| `policy_type` | VARCHAR(40) | NO | hr, finance, it, security, procurement, compliance, other - FRD-20 §10 |
 | `owner_employee_id` | UUID | NO | FK → `master_employee` |
 | `department_id` | UUID | YES | FK → `org_department` |
 | `current_version_no` | INT | NO | default 1 |
-| `effective_from` / `effective_to` | DATE | YES | — |
-| `review_due_at` | DATE | YES | — |
-| `document_id` | UUID | YES | **UUID only — DMS evidence — no FK** |
+| `effective_from` / `effective_to` | DATE | YES | - |
+| `review_due_at` | DATE | YES | - |
+| `document_id` | UUID | YES | **UUID only - DMS evidence - no FK** |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, published, superseded, retired, cancelled |
 | `workflow_*` | | | Policy approval |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
@@ -275,7 +275,7 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 | `version_no` | INT |
 | `title` / `summary` | VARCHAR / TEXT |
 | `change_summary` | TEXT |
-| `document_id` | UUID optional — **no FK to `doc_*`** |
+| `document_id` | UUID optional - **no FK to `doc_*`** |
 | `published_at` | TIMESTAMPTZ |
 | `created_by_employee_id` | FK → `master_employee` |
 | `is_current` | BOOLEAN |
@@ -304,14 +304,14 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 |--------|-------|
 | `control_number` | `CTL-YYYY-NNNNNN` |
 | `control_code` / `control_name` | UK `(company_id, control_code)` |
-| `control_type` | preventive, detective, corrective, compensating — FRD-20 §7 |
+| `control_type` | preventive, detective, corrective, compensating - FRD-20 §7 |
 | `description` | TEXT |
 | `owner_employee_id` | FK → `master_employee` |
 | `department_id` | FK optional → `org_department` |
 | `policy_id` | FK optional → `grc_policy` |
 | `risk_id` | FK optional → `grc_risk_register` |
 | `frequency` | continuous, daily, weekly, monthly, quarterly, annual, ad_hoc |
-| `document_id` | UUID optional — control evidence — **no FK** |
+| `document_id` | UUID optional - control evidence - **no FK** |
 | `status` | draft, active, inactive, retired |
 | **UK:** `(company_id, control_number)` |
 
@@ -328,7 +328,7 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 | `test_result` | effective, partially_effective, ineffective, not_tested |
 | `sample_size` | INT optional |
 | `findings_summary` | TEXT |
-| `document_id` | UUID optional — **no FK** |
+| `document_id` | UUID optional - **no FK** |
 | `status` | draft, completed, archived |
 | **UK:** `(company_id, test_number)` |
 
@@ -342,7 +342,7 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 | `parent_category_id` | Self-FK optional |
 | `description` | TEXT |
 | `status` | active, inactive |
-| Categories (seed examples): strategic, operational, financial, compliance, cyber, vendor, project, reputation — FRD-20 §4 |
+| Categories (seed examples): strategic, operational, financial, compliance, cyber, vendor, project, reputation - FRD-20 §4 |
 
 ---
 
@@ -352,20 +352,20 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
 | `tenant_id` / `company_id` / `branch_id` | UUID | NO | Scope |
-| `risk_number` | VARCHAR(50) | NO | `RSK-YYYY-NNNNNN` — FRD-20 §4 |
-| `risk_title` | VARCHAR(255) | NO | — |
+| `risk_number` | VARCHAR(50) | NO | `RSK-YYYY-NNNNNN` - FRD-20 §4 |
+| `risk_title` | VARCHAR(255) | NO | - |
 | `risk_category_id` | UUID | NO | FK → `grc_risk_category` |
 | `owner_employee_id` | UUID | NO | FK → `master_employee` |
 | `department_id` | UUID | YES | FK → `org_department` |
-| `description` | TEXT | YES | — |
-| `inherent_impact` / `inherent_probability` | INT | YES | 1–5 |
+| `description` | TEXT | YES | - |
+| `inherent_impact` / `inherent_probability` | INT | YES | 1-5 |
 | `inherent_score` | INT | YES | impact × probability |
 | `residual_impact` / `residual_probability` / `residual_score` | INT | YES | after treatment |
 | `risk_level` | VARCHAR(20) | YES | low, medium, high, critical |
-| `project_id` / `asset_id` / `crm_opportunity_id` | UUID | YES | **UUID only — no FK** |
-| `inventory_ref_id` / `production_order_id` | UUID | YES | **UUID only — no FK** |
-| `document_id` | UUID | YES | **UUID only — no FK** |
-| `next_review_at` | DATE | YES | — |
+| `project_id` / `asset_id` / `crm_opportunity_id` | UUID | YES | **UUID only - no FK** |
+| `inventory_ref_id` / `production_order_id` | UUID | YES | **UUID only - no FK** |
+| `document_id` | UUID | YES | **UUID only - no FK** |
+| `next_review_at` | DATE | YES | - |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, open, mitigated, closed, accepted, cancelled |
 | `workflow_*` | | | Risk approval |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
@@ -382,9 +382,9 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 | `assessment_number` | `RAS-YYYY-NNNNNN` |
 | `assessed_by_employee_id` | FK → `master_employee` |
 | `assessed_at` | TIMESTAMPTZ |
-| `impact` / `probability` | INT 1–5 |
+| `impact` / `probability` | INT 1-5 |
 | `risk_score` | INT = impact × probability |
-| `risk_level` | low (1–5), medium (6–10), high (11–15), critical (16–25) |
+| `risk_level` | low (1-5), medium (6-10), high (11-15), critical (16-25) |
 | `assessment_notes` | TEXT |
 | `status` | draft, completed, archived |
 | **UK:** `(company_id, assessment_number)` |
@@ -397,7 +397,7 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 |--------|-------|
 | `risk_id` | FK → `grc_risk_register` |
 | `treatment_number` | `RTR-YYYY-NNNNNN` |
-| `treatment_strategy` | accept, avoid, reduce, transfer — FRD-20 §6 |
+| `treatment_strategy` | accept, avoid, reduce, transfer - FRD-20 §6 |
 | `action_plan` | TEXT |
 | `owner_employee_id` | FK → `master_employee` |
 | `target_date` | DATE |
@@ -417,7 +417,7 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 | `jurisdiction` | VARCHAR optional |
 | `description` | TEXT |
 | `owner_employee_id` | FK optional |
-| `document_id` | UUID optional — **no FK** |
+| `document_id` | UUID optional - **no FK** |
 | `status` | active, inactive, retired |
 
 ---
@@ -427,9 +427,9 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 | Column | Notes |
 |--------|-------|
 | `framework_id` | FK → `grc_compliance_framework` |
-| `requirement_code` / `requirement_name` | — |
+| `requirement_code` / `requirement_name` | - |
 | `description` | TEXT |
-| `compliance_area` | tax, labor, financial, info_security, environmental, industry, other — FRD-20 §8 |
+| `compliance_area` | tax, labor, financial, info_security, environmental, industry, other - FRD-20 §8 |
 | `owner_employee_id` | FK optional |
 | `due_date` | DATE optional |
 | `status` | active, inactive |
@@ -442,12 +442,12 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 | Column | Notes |
 |--------|-------|
 | `requirement_id` | FK → `grc_compliance_requirement` |
-| `assessment_number` | `CMP-YYYY-NNNNNN` — FRD-20 §9 |
+| `assessment_number` | `CMP-YYYY-NNNNNN` - FRD-20 §9 |
 | `assessed_by_employee_id` | FK → `master_employee` |
 | `assessed_at` | TIMESTAMPTZ |
-| `compliance_status` | compliant, partially_compliant, non_compliant — FRD-20 §8 |
+| `compliance_status` | compliant, partially_compliant, non_compliant - FRD-20 §8 |
 | `evidence_summary` | TEXT |
-| `document_id` | UUID optional — **no FK** |
+| `document_id` | UUID optional - **no FK** |
 | `next_due_at` | DATE |
 | `status` | draft, completed, overdue, archived |
 | **UK:** `(company_id, assessment_number)` |
@@ -475,14 +475,14 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 | `tenant_id` / `company_id` / `branch_id` | UUID | NO | Scope |
 | `audit_number` | VARCHAR(50) | NO | `AUD-YYYY-NNNNNN` |
 | `audit_plan_id` | UUID | YES | FK → `grc_audit_plan` |
-| `audit_type` | VARCHAR(40) | NO | internal, external, compliance, financial, operational, it — FRD-20 §11 |
-| `title` | VARCHAR(255) | NO | — |
+| `audit_type` | VARCHAR(40) | NO | internal, external, compliance, financial, operational, it - FRD-20 §11 |
+| `title` | VARCHAR(255) | NO | - |
 | `lead_auditor_employee_id` | UUID | NO | FK → `master_employee` |
 | `department_id` | UUID | YES | FK → `org_department` |
-| `planned_start` / `planned_end` | DATE | YES | — |
-| `actual_start` / `actual_end` | DATE | YES | — |
-| `document_id` | UUID | YES | **UUID only — no FK** |
-| `project_id` / `quality_nonconformance_id` | UUID | YES | **UUID only — no FK** |
+| `planned_start` / `planned_end` | DATE | YES | - |
+| `actual_start` / `actual_end` | DATE | YES | - |
+| `document_id` | UUID | YES | **UUID only - no FK** |
+| `project_id` / `quality_nonconformance_id` | UUID | YES | **UUID only - no FK** |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, planned, in_progress, completed, closed, cancelled |
 | `workflow_*` | | | Audit approval |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
@@ -497,13 +497,13 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 |--------|-------|
 | `audit_id` | FK → `grc_audit` |
 | `finding_number` | `FND-YYYY-NNNNNN` |
-| `severity` | observation, minor, major, critical — FRD-20 §12 |
+| `severity` | observation, minor, major, critical - FRD-20 §12 |
 | `title` / `description` | VARCHAR / TEXT |
 | `action_required` | TEXT |
 | `owner_employee_id` | FK optional |
 | `due_date` | DATE |
 | `control_id` / `risk_id` | FK optional |
-| `document_id` | UUID optional — **no FK** |
+| `document_id` | UUID optional - **no FK** |
 | `status` | open, in_remediation, closed, accepted |
 | **UK:** `(company_id, finding_number)` |
 
@@ -518,13 +518,13 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 | `capa_number` | VARCHAR(50) | NO | `CAPA-YYYY-NNNNNN` |
 | `finding_id` | UUID | YES | FK → `grc_audit_finding` |
 | `incident_id` | UUID | YES | FK → `grc_incident` |
-| `title` / `description` | VARCHAR / TEXT | NO / YES | — |
+| `title` / `description` | VARCHAR / TEXT | NO / YES | - |
 | `owner_employee_id` | UUID | NO | FK → `master_employee` |
-| `due_date` | DATE | YES | — |
-| `completed_at` | TIMESTAMPTZ | YES | — |
+| `due_date` | DATE | YES | - |
+| `completed_at` | TIMESTAMPTZ | YES | - |
 | `effectiveness_result` | VARCHAR(30) | YES | effective, ineffective, pending |
-| `document_id` | UUID | YES | **UUID only — no FK** |
-| `quality_nonconformance_id` / `helpdesk_ticket_id` | UUID | YES | **UUID only — no FK** |
+| `document_id` | UUID | YES | **UUID only - no FK** |
+| `quality_nonconformance_id` / `helpdesk_ticket_id` | UUID | YES | **UUID only - no FK** |
 | `finance_journal_id` | UUID | YES | after PostingService when cost posted |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, open, in_progress, completed, verified, cancelled |
 | `workflow_*` | | | Corrective action approval |
@@ -540,13 +540,13 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 | Column | Notes |
 |--------|-------|
 | `exception_number` | `EXC-YYYY-NNNNNN` |
-| `exception_type` | unauthorized_access, approval_bypass, process_violation, security_exception, policy_deviation, other — FRD-20 §13 |
-| `title` / `description` | — |
+| `exception_type` | unauthorized_access, approval_bypass, process_violation, security_exception, policy_deviation, other - FRD-20 §13 |
+| `title` / `description` | - |
 | `requested_by_employee_id` | FK → `master_employee` |
 | `approver_employee_id` | FK optional |
 | `policy_id` / `control_id` / `risk_id` | FK optional |
 | `valid_from` / `valid_to` | DATE |
-| `document_id` | UUID optional — **no FK** |
+| `document_id` | UUID optional - **no FK** |
 | `status` | draft, open, under_investigation, approved, rejected, closed, expired |
 | **UK:** `(company_id, exception_number)` |
 
@@ -560,17 +560,17 @@ Optional UUID-only (no FK): document_id, helpdesk_ticket_id, service_request_id,
 | `tenant_id` / `company_id` / `branch_id` | UUID | NO | Scope |
 | `incident_number` | VARCHAR(50) | NO | `INC-YYYY-NNNNNN` |
 | `incident_type` | VARCHAR(40) | NO | compliance, security, operational, safety, fraud, other |
-| `title` / `description` | VARCHAR / TEXT | NO / YES | — |
+| `title` / `description` | VARCHAR / TEXT | NO / YES | - |
 | `reported_by_employee_id` | UUID | NO | FK → `master_employee` |
 | `owner_employee_id` | UUID | YES | FK → `master_employee` |
 | `customer_id` | UUID | YES | FK → `master_customer` |
 | `department_id` | UUID | YES | FK → `org_department` |
 | `risk_id` / `control_id` | UUID | YES | FK optional |
 | `severity` | VARCHAR(20) | YES | low, medium, high, critical |
-| `occurred_at` / `detected_at` | TIMESTAMPTZ | YES | — |
-| `helpdesk_ticket_id` / `service_request_id` / `project_id` | UUID | YES | **UUID only — no FK** |
-| `quality_nonconformance_id` / `asset_id` | UUID | YES | **UUID only — no FK** |
-| `document_id` | UUID | YES | **UUID only — no FK** |
+| `occurred_at` / `detected_at` | TIMESTAMPTZ | YES | - |
+| `helpdesk_ticket_id` / `service_request_id` / `project_id` | UUID | YES | **UUID only - no FK** |
+| `quality_nonconformance_id` / `asset_id` | UUID | YES | **UUID only - no FK** |
+| `document_id` | UUID | YES | **UUID only - no FK** |
 | `finance_journal_id` | UUID | YES | after PostingService when loss / recovery posted |
 | `status` | VARCHAR(30) | NO | draft, submitted, under_review, open, contained, resolved, closed, cancelled |
 | `workflow_*` | | | Incident review |
@@ -750,7 +750,7 @@ Seed workflows only; instance rows use Foundation `wf_instance`. `is_parallel` r
 |-------|-----------|
 | Row audit | Standard columns on all mutable `grc_*` tables |
 | Business audit | Foundation `AuditService` on policy publish, risk approve, audit close, CAPA verify, incident close |
-| Notifications | Review / due / overdue / acknowledgement chase — Foundation + `grc_notification` |
+| Notifications | Review / due / overdue / acknowledgement chase - Foundation + `grc_notification` |
 
 ---
 
@@ -800,7 +800,7 @@ Seed workflows only; instance rows use Foundation `wf_instance`. `is_parallel` r
 
 Prior Alembic head: **`0332_seed_document_workflows`**.
 
-Revision budget **`0333`–`0354` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`grc_compliance_framework` and `grc_compliance_requirement` share one migration**.
+Revision budget **`0333`-`0354` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`grc_compliance_framework` and `grc_compliance_requirement` share one migration**.
 
 | Order | Revision ID (≤32 chars) | Migration | Tables / Actions |
 |-------|-------------------------|-----------|------------------|
@@ -856,10 +856,10 @@ Revision budget **`0333`–`0354` (22 revisions)**. Schema + 20 tables + permiss
 | Organization | company, branch, **department** | Direct FK |
 | Master Data | **`master_employee` · `master_customer`** | FK + services (C-01) |
 | Finance | **`PostingService.post_system_journal()`** | Adapter; store `finance_journal_id` |
-| Document | Optional policy / evidence docs | UUID only — **no FK** |
-| Helpdesk / Service / Project / Quality / Asset / CRM | Optional operational context | UUID only — **no FK** |
-| Inventory / Manufacturing | Optional operational context | UUID only — **no FK** |
-| HR / Payroll / Recruitment | Owner continuity; optional labor / hiring compliance read | Master FK / read port — **no writes** |
+| Document | Optional policy / evidence docs | UUID only - **no FK** |
+| Helpdesk / Service / Project / Quality / Asset / CRM | Optional operational context | UUID only - **no FK** |
+| Inventory / Manufacturing | Optional operational context | UUID only - **no FK** |
+| HR / Payroll / Recruitment | Owner continuity; optional labor / hiring compliance read | Master FK / read port - **no writes** |
 
 ### 16.2 Downstream
 
@@ -889,25 +889,25 @@ Revision budget **`0333`–`0354` (22 revisions)**. Schema + 20 tables + permiss
 | Router | Path prefix | Notes |
 |--------|-------------|--------|
 | policies | `/policies` | + submit / approve / publish |
-| policy-versions | `/policy-versions` | — |
-| policy-acknowledgements | `/policy-acknowledgements` | — |
-| controls | `/controls` | — |
-| control-tests | `/control-tests` | — |
-| risk-categories | `/risk-categories` | — |
+| policy-versions | `/policy-versions` | - |
+| policy-acknowledgements | `/policy-acknowledgements` | - |
+| controls | `/controls` | - |
+| control-tests | `/control-tests` | - |
+| risk-categories | `/risk-categories` | - |
 | risk-registers | `/risk-registers` | + submit / approve |
-| risk-assessments | `/risk-assessments` | — |
-| risk-treatments | `/risk-treatments` | — |
-| compliance-frameworks | `/compliance-frameworks` | — |
-| compliance-requirements | `/compliance-requirements` | — |
-| compliance-assessments | `/compliance-assessments` | — |
-| audit-plans | `/audit-plans` | — |
+| risk-assessments | `/risk-assessments` | - |
+| risk-treatments | `/risk-treatments` | - |
+| compliance-frameworks | `/compliance-frameworks` | - |
+| compliance-requirements | `/compliance-requirements` | - |
+| compliance-assessments | `/compliance-assessments` | - |
+| audit-plans | `/audit-plans` | - |
 | audits | `/audits` | + submit / approve |
-| audit-findings | `/audit-findings` | — |
+| audit-findings | `/audit-findings` | - |
 | corrective-actions | `/corrective-actions` | + submit / approve / complete |
 | exceptions | `/exceptions` | + approve |
 | incidents | `/incidents` | + submit / review / close |
-| notifications | `/notifications` | — |
-| reports | `/reports` | — |
+| notifications | `/notifications` | - |
+| reports | `/reports` | - |
 
 Path params use `/{row_id}` (platform convention).
 
@@ -923,12 +923,12 @@ Path params use `/{row_id}` (platform convention).
 | 4 | Consumes masters only (C-01) | ✅ |
 | 5 | Finance posting only via PostingService; store finance UUID refs | ✅ |
 | 6 | Document / Helpdesk / Service / Project / Quality / Asset / CRM / Inv / MFG UUID-only; HR/Payroll/Recruitment read-only | ✅ |
-| 7 | Migration order `0333`–`0354`, revision IDs ≤ 32 chars | ✅ |
+| 7 | Migration order `0333`-`0354`, revision IDs ≤ 32 chars | ✅ |
 | 8 | Workflows + RBAC + API mount + Celery stubs documented | ✅ |
 | 9 | Full BCM / regulatory feed deferred without blocking Sprint 19 | ✅ |
 | 10 | Architecture Lock v1.1 preserved; no prior module redesign | ✅ |
 
-### ERD Phase Gate — GRC Summary
+### ERD Phase Gate - GRC Summary
 
 | Metric | Value |
 |--------|-------|
@@ -936,10 +936,10 @@ Path params use `/{row_id}` (platform convention).
 | Schema | **`grc`** |
 | Prefix | `grc_` |
 | API mount | `/api/v1/grc` |
-| Migration range | `0333` – `0354` |
+| Migration range | `0333` - `0354` |
 | Prior head | `0332_seed_document_workflows` |
 | Planned head | `0354_seed_grc_workflows` |
-| Document Status | **Locked — Ready for Sprint 19 Implementation Planning** |
+| Document Status | **Locked - Ready for Sprint 19 Implementation Planning** |
 
 ---
 
@@ -948,7 +948,7 @@ Path params use `/{row_id}` (platform convention).
 | Version | Date | Change |
 |---------|------|--------|
 | 1.0 | 2026-07-15 | Initial ERD_19 GRC draft for Sprint 19 architecture review |
-| 1.1 | 2026-07-15 | Locked for Sprint 19 implementation planning — editorial status update only; no redesign |
+| 1.1 | 2026-07-15 | Locked for Sprint 19 implementation planning - editorial status update only; no redesign |
 
 ---
 

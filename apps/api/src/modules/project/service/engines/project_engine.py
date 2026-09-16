@@ -44,7 +44,7 @@ class ProjectEngine:
         row.status = ProjectStatus.COMPLETED.value
 
     def mark_completed(self, row) -> None:
-        """Admin shortcut — mark project completed from any active lifecycle state."""
+        """Admin shortcut - mark project completed from any active lifecycle state."""
         if row.status in _TERMINAL_STATUSES:
             raise InvalidProjectState("Project is already completed or closed")
         row.status = ProjectStatus.COMPLETED.value

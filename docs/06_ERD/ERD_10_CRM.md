@@ -1,13 +1,13 @@
-# ERD_10 — CRM Domain
+# ERD_10 - CRM Domain
 
-**Document:** Enterprise ERD — Customer Relationship Management Domain  
+**Document:** Enterprise ERD - Customer Relationship Management Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 10 Implementation Planning  
+**Status:** Locked - Ready for Sprint 10 Implementation Planning  
 **Schema:** `crm`  
 **Table Prefix:** `crm_`  
 **Aligned To:** BRD v1.0 · FRD-05 · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-05 CRM Domain](../02_FRD/FRD-05-CRM-Domain.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.4-beta](../07_RELEASES/ERP_Core_v1.4-beta.md)  
 
 ---
@@ -16,7 +16,7 @@
 
 The CRM Domain is the enterprise **customer relationship layer**: lead capture and assignment, lead activities, opportunities and stage history, sales pipeline, campaigns and campaign members, customer interactions, tasks, follow-ups, meetings, call / email / visit logs, lead sources, customer feedback, and satisfaction.
 
-CRM **consumes** Foundation, Organization, Master Data, Finance, Sales, and Quality. CRM **must never duplicate customer master** — authoritative party is **`master_customer` (C-01)**. Lead → customer conversion calls the **Master Data service**; CRM stores only `customer_id` FK after conversion. Quotation / Sales Order identity is **UUID + `source_module`** (no FK to `sales_*`). Finance customer ledger / credit and Quality complaint / CSAT links are service ports or UUID refs only.
+CRM **consumes** Foundation, Organization, Master Data, Finance, Sales, and Quality. CRM **must never duplicate customer master** - authoritative party is **`master_customer` (C-01)**. Lead → customer conversion calls the **Master Data service**; CRM stores only `customer_id` FK after conversion. Quotation / Sales Order identity is **UUID + `source_module`** (no FK to `sales_*`). Finance customer ledger / credit and Quality complaint / CSAT links are service ports or UUID refs only.
 
 **Business Tables: 18**  
 **Schema: `crm`**
@@ -62,30 +62,30 @@ Sales (downstream convert-to-quote) · BI (future)
 ## 2. Scope
 
 ### In Scope
-- Lead sources (website, referral, cold call, email campaign, social, events, manual) — FRD-05 §4
-- Lead management (`LEAD-YYYY-NNNNNN`), owner, mobile, status lifecycle — FRD-05 §4–§5
-- Lead assignment (manual / automatic by territory, industry, region, workload) — FRD-05 §6
-- Lead activity log (call, meeting, email, task, follow-up notes) — FRD-05 §10
-- BANT-style qualification fields on lead (budget, authority, need, timeline) — FRD-05 §7
-- Opportunity management (`OPP-YYYY-NNNNNN`) with expected revenue, close date, probability — FRD-05 §8–§9
+- Lead sources (website, referral, cold call, email campaign, social, events, manual) - FRD-05 §4
+- Lead management (`LEAD-YYYY-NNNNNN`), owner, mobile, status lifecycle - FRD-05 §4-§5
+- Lead assignment (manual / automatic by territory, industry, region, workload) - FRD-05 §6
+- Lead activity log (call, meeting, email, task, follow-up notes) - FRD-05 §10
+- BANT-style qualification fields on lead (budget, authority, need, timeline) - FRD-05 §7
+- Opportunity management (`OPP-YYYY-NNNNNN`) with expected revenue, close date, probability - FRD-05 §8-§9
 - Opportunity stage history (qualification → discovery → proposal → negotiation → won / lost)
-- Pipeline master (ordered stages / probabilities for funnel dashboard) — FRD-05 §13
+- Pipeline master (ordered stages / probabilities for funnel dashboard) - FRD-05 §13
 - Campaign + members (leads and/or customers)
 - Unified interaction history linking lead / opportunity / customer
-- Tasks, follow-ups, meetings — FRD-05 §11–§12
-- Call, email, and customer visit logs — FRD-05 §14
-- Customer feedback and satisfaction (CSAT/NPS) — Voice of Customer; optional Quality UUID refs
+- Tasks, follow-ups, meetings - FRD-05 §11-§12
+- Call, email, and customer visit logs - FRD-05 §14
+- Customer feedback and satisfaction (CSAT/NPS) - Voice of Customer; optional Quality UUID refs
 - Forecast **computed** as `expected_revenue × probability_percent / 100` (no separate forecast table in Sprint 10)
-- Lead conversion → Opportunity (+ optional `master_customer` via Master Data service) — FRD-05 §17
-- Won opportunity may generate Sales quotation via Sales Service (UUID back-ref) — FRD-05 §9
+- Lead conversion → Opportunity (+ optional `master_customer` via Master Data service) - FRD-05 §17
+- Won opportunity may generate Sales quotation via Sales Service (UUID back-ref) - FRD-05 §9
 - Workflow, audit, RBAC, notifications, Celery stubs
 
 ### Out of Scope (Phase 2 / Separate ERD)
-- **Dedicated `crm_sales_forecast` fact table** — FRD-05 §15; Phase 1 = service-computed from open opportunities
-- **`master_contact` party table** — not in ERD_03 today; CRM holds prospect fields on `crm_lead` and optional `contact_id` UUID (no invent of contact master). When Master Data adds contact, FK may be wired without schema redesign of CRM party ownership
-- **WhatsApp / SMS gateway tables** — channel logs may record `channel=whatsapp|sms`; no provider integration tables
-- **Duplicate `crm_customer` / party masters** — C-01 forbidden
-- **Direct writes to `sales_*`, `fin_*`, `qm_*`, `master_*` (except FK reads)** — service ports only for convert / quote / credit / complaint
+- **Dedicated `crm_sales_forecast` fact table** - FRD-05 §15; Phase 1 = service-computed from open opportunities
+- **`master_contact` party table** - not in ERD_03 today; CRM holds prospect fields on `crm_lead` and optional `contact_id` UUID (no invent of contact master). When Master Data adds contact, FK may be wired without schema redesign of CRM party ownership
+- **WhatsApp / SMS gateway tables** - channel logs may record `channel=whatsapp|sms`; no provider integration tables
+- **Duplicate `crm_customer` / party masters** - C-01 forbidden
+- **Direct writes to `sales_*`, `fin_*`, `qm_*`, `master_*` (except FK reads)** - service ports only for convert / quote / credit / complaint
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 - Analytics cubes / `ana_fact_crm`
 
@@ -105,9 +105,9 @@ Sales (downstream convert-to-quote) · BI (future)
 | ERD_01 Foundation | `sec_tenant`, `sec_user`, `wf_definition`, `wf_instance` |
 | ERD_02 Organization | `org_company`, `org_branch`, `org_department` |
 | ERD_03 Master Data | `master_customer`, `master_employee` (+ future optional contact) |
-| ERD_04 Finance | Customer ledger / credit **read via service** — UUID refs only |
-| ERD_05 Sales | Quotation / Sales Order UUID — **no FK** |
-| ERD_09 Quality | Complaint / satisfaction UUID — **no FK** |
+| ERD_04 Finance | Customer ledger / credit **read via service** - UUID refs only |
+| ERD_05 Sales | Quotation / Sales Order UUID - **no FK** |
+| ERD_09 Quality | Complaint / satisfaction UUID - **no FK** |
 
 ---
 
@@ -115,24 +115,24 @@ Sales (downstream convert-to-quote) · BI (future)
 
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
-| 1 | `crm_lead_source` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 2 | `crm_pipeline` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 3 | `crm_campaign` | Marketing Master | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 1 | `crm_lead_source` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 2 | `crm_pipeline` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 3 | `crm_campaign` | Marketing Master | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 4 | `crm_lead` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 5 | `crm_lead_assignment` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 6 | `crm_lead_activity` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 5 | `crm_lead_assignment` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 6 | `crm_lead_activity` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 7 | `crm_opportunity` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 8 | `crm_opportunity_stage` | History | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 9 | `crm_campaign_member` | Transaction Detail | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 10 | `crm_interaction` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 11 | `crm_task` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 12 | `crm_followup` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 13 | `crm_meeting` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 14 | `crm_call_log` | Log | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 15 | `crm_email_log` | Log | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 16 | `crm_visit_log` | Log | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 17 | `crm_customer_feedback` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 18 | `crm_customer_satisfaction` | KPI Snapshot | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 8 | `crm_opportunity_stage` | History | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 9 | `crm_campaign_member` | Transaction Detail | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 10 | `crm_interaction` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 11 | `crm_task` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 12 | `crm_followup` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 13 | `crm_meeting` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 14 | `crm_call_log` | Log | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 15 | `crm_email_log` | Log | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 16 | `crm_visit_log` | Log | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 17 | `crm_customer_feedback` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 18 | `crm_customer_satisfaction` | KPI Snapshot | ✅ | ✅ | optional | ✅ | ✅ | - |
 
 **Business Tables: 18**  
 **Schema: `crm`**
@@ -205,7 +205,7 @@ Quality complaint UUID ←── feedback / satisfaction (optional)
 | Scope | `tenant_id`, `company_id`, `branch_id` |
 | Party | `customer_id` FK to `master_customer` when known; lead prospect fields otherwise |
 | Owner | `owner_employee_id` → `master_employee` |
-| Source Link | `source_module`, `source_document_id` (Sales / Quality UUID — **no cross-schema FK**) |
+| Source Link | `source_module`, `source_document_id` (Sales / Quality UUID - **no cross-schema FK**) |
 | Audit + Soft Delete + Version | per DBS §28 |
 
 ### 5.3 CRM Log / History Profile (Assignment, Stage, Call, Email, Visit)
@@ -228,7 +228,7 @@ Quality complaint UUID ←── feedback / satisfaction (optional)
 | `id` | UUID | NO | PK |
 | `tenant_id` / `company_id` | UUID | NO | Scope |
 | `branch_id` | UUID | YES | Optional |
-| `source_code` | VARCHAR(50) | NO | UK per company — `LSRC-…` or stable code |
+| `source_code` | VARCHAR(50) | NO | UK per company - `LSRC-…` or stable code |
 | `source_name` | VARCHAR(255) | NO | Website, Referral, Cold Call, … |
 | `channel` | VARCHAR(30) | YES | web, referral, phone, email, social, event, manual |
 | `status` | VARCHAR(30) | NO | active, inactive |
@@ -244,9 +244,9 @@ Quality complaint UUID ←── feedback / satisfaction (optional)
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
 | Scope | UUID | NO | tenant/company |
-| `pipeline_code` | VARCHAR(50) | NO | UK — `PIPE-YYYY-NNNNNN` or code |
+| `pipeline_code` | VARCHAR(50) | NO | UK - `PIPE-YYYY-NNNNNN` or code |
 | `pipeline_name` | VARCHAR(255) | NO | Default sales funnel |
-| `is_default` | BOOLEAN | NO | DEFAULT false — one default per company (service) |
+| `is_default` | BOOLEAN | NO | DEFAULT false - one default per company (service) |
 | `status` | VARCHAR(30) | NO | active, inactive |
 | `stages_json` | JSONB | YES | Optional ordered stage defs `{code,name,seq,default_probability}` |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
@@ -260,12 +260,12 @@ Quality complaint UUID ←── feedback / satisfaction (optional)
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope | UUID | NO | — |
+| Scope | UUID | NO | - |
 | `campaign_code` | VARCHAR(50) | NO | `CMP-YYYY-NNNNNN` |
-| `campaign_name` | VARCHAR(255) | NO | — |
+| `campaign_name` | VARCHAR(255) | NO | - |
 | `campaign_type` | VARCHAR(30) | NO | email, event, social, tele, mixed |
-| `start_date` / `end_date` | DATE | YES | — |
-| `budget_amount` | NUMERIC(18,4) | YES | — |
+| `start_date` / `end_date` | DATE | YES | - |
+| `budget_amount` | NUMERIC(18,4) | YES | - |
 | `currency_code` | VARCHAR(10) | YES | Soft ref / master_currency code |
 | `owner_employee_id` | UUID | YES | FK → `master_employee` |
 | `status` | VARCHAR(30) | NO | draft, active, completed, cancelled |
@@ -282,10 +282,10 @@ Quality complaint UUID ←── feedback / satisfaction (optional)
 | `department_id` | UUID | YES | FK → `org_department` |
 | `lead_code` | VARCHAR(50) | NO | `LEAD-YYYY-NNNNNN` UK |
 | `document_date` | DATE | NO | Capture date |
-| `first_name` | VARCHAR(100) | NO | — |
-| `last_name` | VARCHAR(100) | YES | — |
+| `first_name` | VARCHAR(100) | NO | - |
+| `last_name` | VARCHAR(100) | YES | - |
 | `company_name` | VARCHAR(255) | YES | Prospect org (not master_customer) |
-| `email` | VARCHAR(255) | YES | — |
+| `email` | VARCHAR(255) | YES | - |
 | `mobile` | VARCHAR(30) | NO | Mandatory per FRD-05 |
 | `lead_source_id` | UUID | NO | FK → `crm_lead_source` |
 | `owner_employee_id` | UUID | NO | FK → `master_employee` |
@@ -294,20 +294,20 @@ Quality complaint UUID ←── feedback / satisfaction (optional)
 | `has_authority` | BOOLEAN | YES | BANT |
 | `need_text` | TEXT | YES | BANT |
 | `timeline_text` | VARCHAR(100) | YES | BANT |
-| `qualification_score` | SMALLINT | YES | Optional 0–100 |
+| `qualification_score` | SMALLINT | YES | Optional 0-100 |
 | `customer_id` | UUID | YES | FK → `master_customer` after convert |
-| `contact_id` | UUID | YES | Reserved UUID for future `master_contact` — **no FK Phase 1** |
+| `contact_id` | UUID | YES | Reserved UUID for future `master_contact` - **no FK Phase 1** |
 | `campaign_id` | UUID | YES | FK → `crm_campaign` optional origin |
 | `status` | VARCHAR(30) | NO | new, assigned, contacted, qualified, unqualified, converted, lost |
 | `workflow_*` | | YES | Lead conversion approval |
 | `converted_opportunity_id` | UUID | YES | Soft link after convert (or derive from opportunity.lead_id) |
-| `converted_at` | TIMESTAMPTZ | YES | — |
-| `lost_reason` | VARCHAR(255) | YES | — |
-| `notes` | TEXT | YES | — |
+| `converted_at` | TIMESTAMPTZ | YES | - |
+| `lost_reason` | VARCHAR(255) | YES | - |
+| `notes` | TEXT | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
 
 **UK:** `(company_id, lead_code)` where not deleted.  
-**Rule:** Convert requires mobile + contactability (email or company_name per service policy) — FRD-05 §5.
+**Rule:** Convert requires mobile + contactability (email or company_name per service policy) - FRD-05 §5.
 
 ---
 
@@ -351,14 +351,14 @@ Quality complaint UUID ←── feedback / satisfaction (optional)
 | `pipeline_id` | FK → `crm_pipeline` |
 | `current_stage` | qualification, discovery, proposal, negotiation, won, lost |
 | `expected_revenue` | NUMERIC(18,4) |
-| `probability_percent` | NUMERIC(5,2) 0–100 |
+| `probability_percent` | NUMERIC(5,2) 0-100 |
 | `expected_close_date` | DATE |
 | `owner_employee_id` | FK |
 | `forecast_amount` | GENERATED conceptually = revenue × probability/100 (stored NUMERIC optional for indexing) |
 | `status` | open, won, lost, cancelled |
 | `workflow_*` | Opportunity close (won/lost) manager validation |
-| `sales_quotation_id` | UUID — **no FK** to `sales_*` |
-| `sales_order_id` | UUID — **no FK** |
+| `sales_quotation_id` | UUID - **no FK** to `sales_*` |
+| `sales_order_id` | UUID - **no FK** |
 | `source_module` / `source_document_id` | Optional Quality complaint / campaign UUID |
 | `won_at` / `lost_at` / `lost_reason` | |
 
@@ -422,7 +422,7 @@ Quality complaint UUID ←── feedback / satisfaction (optional)
 | `owner_employee_id` | FK |
 | `due_at` | TIMESTAMPTZ |
 | `priority` | low, medium, high |
-| `status` | pending, in_progress, completed, cancelled — FRD-05 §12 |
+| `status` | pending, in_progress, completed, cancelled - FRD-05 §12 |
 | `completed_at` | |
 
 ---
@@ -455,7 +455,7 @@ Quality complaint UUID ←── feedback / satisfaction (optional)
 | `organizer_employee_id` | FK |
 | `participants_text` | TEXT (Phase 1; child participant table Phase 2) |
 | `notes` | |
-| `outcome` | interested, need_follow_up, closed, no_show — FRD-05 §11 |
+| `outcome` | interested, need_follow_up, closed, no_show - FRD-05 §11 |
 | `status` | scheduled, completed, cancelled |
 
 ---
@@ -510,7 +510,7 @@ Quality complaint UUID ←── feedback / satisfaction (optional)
 | `customer_id` | FK → `master_customer` |
 | `feedback_date` | DATE |
 | `feedback_type` | product, service, delivery, support, other |
-| `rating` | SMALLINT 1–5 optional |
+| `rating` | SMALLINT 1-5 optional |
 | `comments` | TEXT |
 | `source_module` / `source_document_id` | Optional Quality complaint UUID **no FK** |
 | `opportunity_id` / `lead_id` | Optional |
@@ -570,7 +570,7 @@ Quality complaint UUID ←── feedback / satisfaction (optional)
 | Workflow | `workflow_instance_id` | `foundation.wf_instance` |
 | Org | `tenant_id`, `company_id`, `branch_id` | foundation / organization |
 
-**No FK to:** `sales_*`, `fin_*`, `qm_*`, `inv_*` — UUID + `source_module` / `source_document_type` only.  
+**No FK to:** `sales_*`, `fin_*`, `qm_*`, `inv_*` - UUID + `source_module` / `source_document_type` only.  
 **No Phase-1 FK to:** `master_contact` (table not in ERD_03); `contact_id` is plain UUID.
 
 ---
@@ -585,7 +585,7 @@ Quality complaint UUID ←── feedback / satisfaction (optional)
 
 ### Check
 - `probability_percent` BETWEEN 0 AND 100
-- `expected_revenue` ≥ 0; rating 1–5 where set
+- `expected_revenue` ≥ 0; rating 1-5 where set
 - Campaign member: `(lead_id IS NOT NULL) <> (customer_id IS NOT NULL)` (XOR)
 - Enum status / stage / activity_type / channel sets
 
@@ -649,7 +649,7 @@ Quality complaint UUID ←── feedback / satisfaction (optional)
 |-------|-----------|
 | Row audit | Standard columns on all mutable CRM tables |
 | Business audit | `AuditService` on lead create/assign/convert, opportunity stage change / won-lost, campaign activate, feedback close |
-| Notifications | Lead assigned/qualified, opportunity created/won, meeting reminder, task due — FRD-05 §18 |
+| Notifications | Lead assigned/qualified, opportunity created/won, meeting reminder, task due - FRD-05 §18 |
 
 ---
 
@@ -721,7 +721,7 @@ Prior Alembic head: **`0135_seed_qm_workflows`**.
 |--------|----------|---------|
 | Foundation | tenant, user, workflow, audit, RBAC, notification | Direct FK / services |
 | Organization | company, branch, department | Direct FK |
-| Master Data | **`master_customer`**, `master_employee` | Direct FK — **C-01 no CRM customer table** |
+| Master Data | **`master_customer`**, `master_employee` | Direct FK - **C-01 no CRM customer table** |
 | Finance | Customer ledger / credit | **Read via service only** |
 | Sales | Quotation / Sales Order | UUID + Sales Service on won |
 | Quality | Complaint / CSAT cross-ref | UUID only |
@@ -733,7 +733,7 @@ Prior Alembic head: **`0135_seed_qm_workflows`**.
 | Sales | Opportunity won → create quotation (Sales owns `sales_*`) |
 | BI | Read-only CRM funnel / conversion facts |
 
-**Rule:** CRM never writes `master_customer` rows via ORM bypass — conversion uses Master Data application service. CRM never writes `sales_*` / `fin_*` / `qm_*`.
+**Rule:** CRM never writes `master_customer` rows via ORM bypass - conversion uses Master Data application service. CRM never writes `sales_*` / `fin_*` / `qm_*`.
 
 ---
 
@@ -746,20 +746,20 @@ Prior Alembic head: **`0135_seed_qm_workflows`**.
 | 3 | Aligned to FRD-05; lead → opportunity → pipeline → activities covered | ✅ |
 | 4 | No duplicate customer master; C-01 `master_customer` only | ✅ |
 | 5 | No FKs to `sales_*` / `fin_*` / `qm_*` | ✅ |
-| 6 | Migration order `0136`–`0156`, revision IDs ≤ 32 chars | ✅ |
+| 6 | Migration order `0136`-`0156`, revision IDs ≤ 32 chars | ✅ |
 | 7 | Workflows + RBAC + audit/notification documented | ✅ |
 | 8 | Cross-module dependencies documented | ✅ |
 | 9 | Forecast table / master_contact FK deferred without blocking Sprint 10 | ✅ |
 | 10 | No Architecture Lock changes; Architecture Lock v1.1 preserved | ✅ |
 
-### ERD Phase Gate — CRM Summary
+### ERD Phase Gate - CRM Summary
 
 | Metric | Value |
 |--------|-------|
 | Business Tables | **18** |
 | Schema | **`crm`** |
 | Prefix | `crm_` |
-| Migration range | `0136` – `0156` |
+| Migration range | `0136` - `0156` |
 | Prior head | `0135_seed_qm_workflows` |
 | Planned head | `0156_seed_crm_workflows` |
 

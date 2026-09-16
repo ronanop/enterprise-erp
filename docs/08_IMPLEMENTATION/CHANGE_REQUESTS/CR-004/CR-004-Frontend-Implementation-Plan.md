@@ -1,11 +1,11 @@
-# CR-004 — Frontend Implementation Plan (Phases 3.2–3.5)
+# CR-004 - Frontend Implementation Plan (Phases 3.2-3.5)
 
 **Prerequisite:** Phase 3.1 design freeze approved.  
 **Constraint:** No backend changes unless separate CR; use APIs in Phase 2C mapping.
 
 ---
 
-## Phase 3.2 — Shared UI foundation ✅
+## Phase 3.2 - Shared UI foundation ✅
 
 **Goal:** Reusable components in `components/assets/shared/` (StatCard, QueueCard, StatusBadge, BranchSelector, InventoryFilterBar, QuickActionCard, EmptyState, skeletons).
 
@@ -13,9 +13,9 @@
 
 ---
 
-## Phase 3.3A — Asset Operations layout ✅
+## Phase 3.3A - Asset Operations layout ✅
 
-**Goal:** `AssetOperationsDashboard` visual layout only — header, KPI row, quick actions, three queue cards.
+**Goal:** `AssetOperationsDashboard` visual layout only - header, KPI row, quick actions, three queue cards.
 
 | Work item | Detail |
 |-----------|--------|
@@ -29,7 +29,7 @@
 
 ---
 
-## Phase 3.3B — Dashboard data & route ✅
+## Phase 3.3B - Dashboard data & route ✅
 
 **Goal:** Mount layout on `/assets` and wire live data.
 
@@ -45,9 +45,9 @@
 
 ---
 
-## Phase 3.4A — Inventory foundation ✅
+## Phase 3.4A - Inventory foundation ✅
 
-**Goal:** One IT inventory screen at `/assets/assets` — presets + `InventoryFilterBar` + enhanced register table.
+**Goal:** One IT inventory screen at `/assets/assets` - presets + `InventoryFilterBar` + enhanced register table.
 
 | Work item | Detail |
 |-----------|--------|
@@ -60,7 +60,7 @@
 
 ---
 
-## Phase 3.4B-1 — Inventory interaction layer ✅
+## Phase 3.4B-1 - Inventory interaction layer ✅
 
 **Goal:** `InventoryActionMenu`, `AssetDetailDrawer`, drawer sections (no navigation).
 
@@ -68,7 +68,7 @@
 
 ---
 
-## Phase 3.4B-2 — Inventory workflow integration ✅
+## Phase 3.4B-2 - Inventory workflow integration ✅
 
 **Goal:** `AssetNavigation` + container wiring to existing modules.
 
@@ -76,7 +76,7 @@
 
 ---
 
-## Phase 4.1 — Excel migration architecture (analysis only) ✅
+## Phase 4.1 - Excel migration architecture (analysis only) ✅
 
 **Goal:** Assignment vs Excel gap analysis; ownership lock; import plan. **No frontend code.**
 
@@ -93,24 +93,24 @@
 
 ---
 
-## Phase 5 — Assignment enrichment
+## Phase 5 - Assignment enrichment
 
 **Goal:** Excel issue/return parity in Assignment workspace.
 
 | Work item | Detail | Status |
 |-----------|--------|--------|
 | Backend D-010 + return API | Phase 5A-1 / 5A-2 | ✅ |
-| UI design freeze | Phase 5B-1 — wizards, wireframes, journeys | ✅ |
+| UI design freeze | Phase 5B-1 - wizards, wireframes, journeys | ✅ |
 | Wizard implementation | Phase 5B-2+ per `CR-004-Phase-5B1-Assignment-UI-Design.md` | Planned |
 | Form fields | `delivery_reference_*`, `assignment_remarks` | Designed |
 | Return UX | Condition selector → ops bucket alignment | Designed |
 | Inventory drawer | Return link + enrichment display | Designed |
 
-**Prerequisite:** Backend D-010 columns + return request schema — **met**.
+**Prerequisite:** Backend D-010 columns + return request schema - **met**.
 
 ---
 
-## Phase 3.5 — Sidebar
+## Phase 3.5 - Sidebar
 
 **Goal:** Align shell nav with locked IA.
 
@@ -125,7 +125,7 @@
 
 ---
 
-## Phase 3.6 — Inventory views
+## Phase 3.6 - Inventory views
 
 **Goal:** Filtered register pages + column set.
 
@@ -138,7 +138,7 @@
 
 ---
 
-## Phase 3.6 — Quick actions + polish
+## Phase 3.6 - Quick actions + polish
 
 **Goal:** Speed up daily IT flows from dashboard and list toolbar.
 
@@ -150,7 +150,7 @@
 | Discovery | Asset picker → discovery section |
 | View Portal | Link to information portal route |
 | QR | Link to qr-barcode workspace |
-| Motion / a11y | 150–300ms transitions, focus rings, reduced motion |
+| Motion / a11y | 150-300ms transitions, focus rings, reduced motion |
 
 ---
 

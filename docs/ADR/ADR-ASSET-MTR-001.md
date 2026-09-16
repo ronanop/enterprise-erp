@@ -1,4 +1,4 @@
-# ADR-ASSET-MTR-001 — Asset Meter Reading Management
+# ADR-ASSET-MTR-001 - Asset Meter Reading Management
 
 **Status:** Accepted  
 **Date:** 2026-07-30  
@@ -18,7 +18,7 @@ Asset meter readings existed as a thin CRUD scaffold without validator, void act
 | MTR-01 | Scope = `ast_asset_meter_reading` only; ERD §6.18 columns |
 | MTR-02 | No Workflow / Finance / Governance |
 | MTR-03 | Lifecycle: `recorded` → `void` |
-| MTR-04 | Immutable after create — no business PATCH |
+| MTR-04 | Immutable after create - no business PATCH |
 | MTR-05 | Non-decreasing `reading_value` per `(asset_id, meter_type)` |
 | MTR-06 | Required: `asset_id`, `meter_type`, `reading_value`, `reading_at` |
 | MTR-07 | Block disposed / written-off assets |

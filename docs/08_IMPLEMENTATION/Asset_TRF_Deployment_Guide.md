@@ -1,4 +1,4 @@
-# Asset Transfer — Deployment Guide (FP-ASSET-002)
+# Asset Transfer - Deployment Guide (FP-ASSET-002)
 
 ## 1. Migrations
 

@@ -238,7 +238,7 @@ function SidebarNavBody({
   );
 }
 
-/** CACHE Digitech lettermark — open C with center dot. */
+/** CACHE Digitech lettermark - open C with center dot. */
 function CacheMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 40 40" className={className} aria-hidden>

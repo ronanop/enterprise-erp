@@ -109,7 +109,7 @@ function newestSites(rows: SiteInstallation[], limit = 8): SiteInstallation[] {
     .slice(0, limit);
 }
 
-/** Role-aware Projects home — portfolio for admins, personal for all other users. */
+/** Role-aware Projects home - portfolio for admins, personal for all other users. */
 export function ProjectsDashboard() {
   const { loading: authLoading, projectModuleAdmin } = useAuthUser();
 
@@ -378,7 +378,7 @@ function ProjectsAdminDashboard() {
                   {row.name}
                 </span>
                 <span className="font-medium tabular-nums text-foreground">
-                  {loading ? "—" : row.value}
+                  {loading ? "-" : row.value}
                 </span>
               </li>
             ))}
@@ -556,7 +556,7 @@ function ProjectsAdminDashboard() {
               <ProjectsActivityTile
                 key={stage.key}
                 label={stage.label}
-                value={loading ? "—" : String(count)}
+                value={loading ? "-" : String(count)}
                 icon={Icon}
                 tint={tints[i % tints.length]}
                 href={stage.href}

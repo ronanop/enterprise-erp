@@ -163,7 +163,7 @@ export function AgingReportPage({ mode }: Props) {
     <div className="space-y-4">
       <PageHeader
         title={title}
-        description={`${partyLabel} outstanding by aging bucket — as of ${asOf}.`}
+        description={`${partyLabel} outstanding by aging bucket - as of ${asOf}.`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -258,16 +258,16 @@ export function AgingReportPage({ mode }: Props) {
                         href={`${partyBase}/${row.party_id}`}
                         className="cursor-pointer hover:underline"
                       >
-                        {row.party_name ?? row.party_code ?? "—"}
+                        {row.party_name ?? row.party_code ?? "-"}
                       </Link>
                     </td>
-                    <td className="px-2 py-1.5 font-mono text-xs">{row.due_date ?? "—"}</td>
-                    <td className="px-2 py-1.5 text-xs">{row.aging_bucket ?? "—"}</td>
+                    <td className="px-2 py-1.5 font-mono text-xs">{row.due_date ?? "-"}</td>
+                    <td className="px-2 py-1.5 text-xs">{row.aging_bucket ?? "-"}</td>
                     <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">
                       {formatInrPrecise(row.balance_amount)}
                     </td>
                     <td className="px-2 py-1.5">
-                      {row.status ? <FinanceStatusBadge status={row.status} /> : "—"}
+                      {row.status ? <FinanceStatusBadge status={row.status} /> : "-"}
                     </td>
                   </tr>
                 ))}

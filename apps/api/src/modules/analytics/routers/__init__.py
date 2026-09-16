@@ -101,7 +101,7 @@ from modules.analytics.service import (
 from modules.foundation.domain.value_objects import TenantContext
 from shared.schemas import APIResponse
 
-dashboards_router = APIRouter(prefix="/dashboards", tags=["Analytics — Dashboard"])
+dashboards_router = APIRouter(prefix="/dashboards", tags=["Analytics - Dashboard"])
 
 @dashboards_router.get("", response_model=APIResponse[list[DashboardResponse]])
 def list_dashboards(
@@ -162,7 +162,7 @@ def publish_dashboards(
 ):
     return APIResponse(message="publish", data=DashboardService(db).publish(ctx, row_id))
 
-dashboard_widgets_router = APIRouter(prefix="/dashboard-widgets", tags=["Analytics — DashboardWidget"])
+dashboard_widgets_router = APIRouter(prefix="/dashboard-widgets", tags=["Analytics - DashboardWidget"])
 
 @dashboard_widgets_router.get("", response_model=APIResponse[list[DashboardWidgetResponse]])
 def list_dashboard_widgets(
@@ -199,7 +199,7 @@ def update_dashboard_widgets(
 ):
     return APIResponse(message="Updated", data=DashboardWidgetService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-reports_router = APIRouter(prefix="/reports", tags=["Analytics — Report"])
+reports_router = APIRouter(prefix="/reports", tags=["Analytics - Report"])
 
 @reports_router.get("", response_model=APIResponse[list[ReportResponse]])
 def list_reports(
@@ -268,7 +268,7 @@ def run_reports(
 ):
     return APIResponse(message="run", data=ReportService(db).run(ctx, row_id))
 
-report_schedules_router = APIRouter(prefix="/report-schedules", tags=["Analytics — ReportSchedule"])
+report_schedules_router = APIRouter(prefix="/report-schedules", tags=["Analytics - ReportSchedule"])
 
 @report_schedules_router.get("", response_model=APIResponse[list[ReportScheduleResponse]])
 def list_report_schedules(
@@ -305,7 +305,7 @@ def update_report_schedules(
 ):
     return APIResponse(message="Updated", data=ReportScheduleService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-report_executions_router = APIRouter(prefix="/report-executions", tags=["Analytics — ReportExecution"])
+report_executions_router = APIRouter(prefix="/report-executions", tags=["Analytics - ReportExecution"])
 
 @report_executions_router.get("", response_model=APIResponse[list[ReportExecutionResponse]])
 def list_report_executions(
@@ -342,7 +342,7 @@ def update_report_executions(
 ):
     return APIResponse(message="Updated", data=ReportExecutionService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-datasets_router = APIRouter(prefix="/datasets", tags=["Analytics — Dataset"])
+datasets_router = APIRouter(prefix="/datasets", tags=["Analytics - Dataset"])
 
 @datasets_router.get("", response_model=APIResponse[list[DatasetResponse]])
 def list_datasets(
@@ -403,7 +403,7 @@ def refresh_datasets(
 ):
     return APIResponse(message="refresh", data=DatasetService(db).refresh(ctx, row_id))
 
-dataset_sources_router = APIRouter(prefix="/dataset-sources", tags=["Analytics — DatasetSource"])
+dataset_sources_router = APIRouter(prefix="/dataset-sources", tags=["Analytics - DatasetSource"])
 
 @dataset_sources_router.get("", response_model=APIResponse[list[DatasetSourceResponse]])
 def list_dataset_sources(
@@ -440,7 +440,7 @@ def update_dataset_sources(
 ):
     return APIResponse(message="Updated", data=DatasetSourceService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-metrics_router = APIRouter(prefix="/metrics", tags=["Analytics — Metric"])
+metrics_router = APIRouter(prefix="/metrics", tags=["Analytics - Metric"])
 
 @metrics_router.get("", response_model=APIResponse[list[MetricResponse]])
 def list_metrics(
@@ -477,7 +477,7 @@ def update_metrics(
 ):
     return APIResponse(message="Updated", data=MetricService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-kpis_router = APIRouter(prefix="/kpis", tags=["Analytics — Kpi"])
+kpis_router = APIRouter(prefix="/kpis", tags=["Analytics - Kpi"])
 
 @kpis_router.get("", response_model=APIResponse[list[KpiResponse]])
 def list_kpis(
@@ -530,7 +530,7 @@ def approve_kpis(
 ):
     return APIResponse(message="approve", data=KpiService(db).approve(ctx, row_id))
 
-dimensions_router = APIRouter(prefix="/dimensions", tags=["Analytics — Dimension"])
+dimensions_router = APIRouter(prefix="/dimensions", tags=["Analytics - Dimension"])
 
 @dimensions_router.get("", response_model=APIResponse[list[DimensionResponse]])
 def list_dimensions(
@@ -567,7 +567,7 @@ def update_dimensions(
 ):
     return APIResponse(message="Updated", data=DimensionService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-fact_tables_router = APIRouter(prefix="/fact-tables", tags=["Analytics — FactTable"])
+fact_tables_router = APIRouter(prefix="/fact-tables", tags=["Analytics - FactTable"])
 
 @fact_tables_router.get("", response_model=APIResponse[list[FactTableResponse]])
 def list_fact_tables(
@@ -604,7 +604,7 @@ def update_fact_tables(
 ):
     return APIResponse(message="Updated", data=FactTableService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-data_snapshots_router = APIRouter(prefix="/data-snapshots", tags=["Analytics — DataSnapshot"])
+data_snapshots_router = APIRouter(prefix="/data-snapshots", tags=["Analytics - DataSnapshot"])
 
 @data_snapshots_router.get("", response_model=APIResponse[list[DataSnapshotResponse]])
 def list_data_snapshots(
@@ -641,7 +641,7 @@ def update_data_snapshots(
 ):
     return APIResponse(message="Updated", data=DataSnapshotService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-data_refreshes_router = APIRouter(prefix="/data-refreshes", tags=["Analytics — DataRefresh"])
+data_refreshes_router = APIRouter(prefix="/data-refreshes", tags=["Analytics - DataRefresh"])
 
 @data_refreshes_router.get("", response_model=APIResponse[list[DataRefreshResponse]])
 def list_data_refreshes(
@@ -686,7 +686,7 @@ def submit_data_refreshes(
 ):
     return APIResponse(message="submit", data=DataRefreshService(db).submit(ctx, row_id))
 
-alert_rules_router = APIRouter(prefix="/alert-rules", tags=["Analytics — AlertRule"])
+alert_rules_router = APIRouter(prefix="/alert-rules", tags=["Analytics - AlertRule"])
 
 @alert_rules_router.get("", response_model=APIResponse[list[AlertRuleResponse]])
 def list_alert_rules(
@@ -739,7 +739,7 @@ def approve_alert_rules(
 ):
     return APIResponse(message="approve", data=AlertRuleService(db).approve(ctx, row_id))
 
-alert_notifications_router = APIRouter(prefix="/alert-notifications", tags=["Analytics — AlertNotification"])
+alert_notifications_router = APIRouter(prefix="/alert-notifications", tags=["Analytics - AlertNotification"])
 
 @alert_notifications_router.get("", response_model=APIResponse[list[AlertNotificationResponse]])
 def list_alert_notifications(
@@ -784,7 +784,7 @@ def acknowledge_alert_notifications(
 ):
     return APIResponse(message="acknowledge", data=AlertNotificationService(db).acknowledge(ctx, row_id))
 
-subscriptions_router = APIRouter(prefix="/subscriptions", tags=["Analytics — Subscription"])
+subscriptions_router = APIRouter(prefix="/subscriptions", tags=["Analytics - Subscription"])
 
 @subscriptions_router.get("", response_model=APIResponse[list[SubscriptionResponse]])
 def list_subscriptions(
@@ -821,7 +821,7 @@ def update_subscriptions(
 ):
     return APIResponse(message="Updated", data=SubscriptionService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-data_exports_router = APIRouter(prefix="/data-exports", tags=["Analytics — DataExport"])
+data_exports_router = APIRouter(prefix="/data-exports", tags=["Analytics - DataExport"])
 
 @data_exports_router.get("", response_model=APIResponse[list[DataExportResponse]])
 def list_data_exports(
@@ -866,7 +866,7 @@ def run_data_exports(
 ):
     return APIResponse(message="run", data=DataExportService(db).run(ctx, row_id))
 
-data_imports_router = APIRouter(prefix="/data-imports", tags=["Analytics — DataImport"])
+data_imports_router = APIRouter(prefix="/data-imports", tags=["Analytics - DataImport"])
 
 @data_imports_router.get("", response_model=APIResponse[list[DataImportResponse]])
 def list_data_imports(
@@ -911,7 +911,7 @@ def run_data_imports(
 ):
     return APIResponse(message="run", data=DataImportService(db).run(ctx, row_id))
 
-query_history_router = APIRouter(prefix="/query-history", tags=["Analytics — QueryHistory"])
+query_history_router = APIRouter(prefix="/query-history", tags=["Analytics - QueryHistory"])
 
 @query_history_router.get("", response_model=APIResponse[list[QueryHistoryResponse]])
 def list_query_history(
@@ -948,7 +948,7 @@ def update_query_history(
 ):
     return APIResponse(message="Updated", data=QueryHistoryService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-usage_audits_router = APIRouter(prefix="/usage-audits", tags=["Analytics — UsageAudit"])
+usage_audits_router = APIRouter(prefix="/usage-audits", tags=["Analytics - UsageAudit"])
 
 @usage_audits_router.get("", response_model=APIResponse[list[UsageAuditResponse]])
 def list_usage_audits(

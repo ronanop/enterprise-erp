@@ -73,7 +73,7 @@ def get_tenant_context(
             }
             store.set_session(session_id, cached)
 
-    # Company without branch (common after company-only context switch) — fill default branch.
+    # Company without branch (common after company-only context switch) - fill default branch.
     if company_id and not branch_id:
         from modules.foundation.service.org_context_service import OrgContextService
 

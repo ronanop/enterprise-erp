@@ -68,7 +68,7 @@ export function ContactFormDialog({
 
   function companyName(id: string): string {
     if (companyAccount?.id === id) return companyAccount.customer_name;
-    return companies.find((c) => c.id === id)?.customer_name ?? "—";
+    return companies.find((c) => c.id === id)?.customer_name ?? "-";
   }
 
   function onSelectCompany(nextCompanyAccountId: string) {

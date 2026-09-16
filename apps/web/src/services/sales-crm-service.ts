@@ -1,9 +1,9 @@
 /**
- * Typed wrappers for the Sales CRM (Zoho-replacement) API surface — Companies,
+ * Typed wrappers for the Sales CRM (Zoho-replacement) API surface - Companies,
  * Contacts, Products, Quotes, OVF, My Jobs, Attachments, and the sales
  * blueprint state machine (lead / opportunity / quote / ovf).
  *
- * All calls go through the shared `apiClient` / `resourceService` — the UI
+ * All calls go through the shared `apiClient` / `resourceService` - the UI
  * never talks to the database directly (DG-01).
  */
 import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
@@ -44,11 +44,11 @@ export function formatInrPrecise(value: number | string | null | undefined): str
 }
 
 export function truncateId(id?: string | null): string {
-  return id ? id.slice(0, 8) : "—";
+  return id ? id.slice(0, 8) : "-";
 }
 
 export function fullName(row: { first_name?: string | null; last_name?: string | null }): string {
-  return [row.first_name, row.last_name].filter(Boolean).join(" ").trim() || "—";
+  return [row.first_name, row.last_name].filter(Boolean).join(" ").trim() || "-";
 }
 
 export function fileToBase64(file: File): Promise<string> {
@@ -216,9 +216,9 @@ export function companyToFormInput(company: Company, customerName?: string): Com
     source: company.source,
     rating: company.rating,
     first_name: company.first_name?.trim() || name,
-    last_name: company.last_name?.trim() || "—",
+    last_name: company.last_name?.trim() || "-",
     customer_email: company.customer_email?.trim() || "noreply@example.com",
-    phone: company.phone?.trim() || "—",
+    phone: company.phone?.trim() || "-",
     website: company.website,
     account_ownership_id: company.account_ownership_id,
     customer_id_ext: company.customer_id_ext,
@@ -1652,7 +1652,7 @@ export async function listEmployeeOptions(): Promise<Option[]> {
   }));
 }
 
-/** CRM module–assigned users with linked employee records (for owner/assignee pickers). */
+/** CRM module-assigned users with linked employee records (for owner/assignee pickers). */
 export async function listCrmMemberOptions(): Promise<Option[]> {
   const res = await resourceService.list("/crm/members");
   const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);

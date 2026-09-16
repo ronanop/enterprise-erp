@@ -1,6 +1,6 @@
 "use client";
 
-/** Delivery challan queue — pending + saved DCs with generated GRN numbers. */
+/** Delivery challan queue - pending + saved DCs with generated GRN numbers. */
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -279,16 +279,16 @@ function PendingGrnQueueCard({
                   }}
                 >
                   <td className={cn(procurementUi.td, "font-medium tabular-nums", isSaved ? "text-foreground" : "text-muted-foreground")}>
-                    {row.docNumber || "—"}
+                    {row.docNumber || "-"}
                   </td>
                   <td className={cn(procurementUi.tdNumeric, "text-muted-foreground")}>
-                    {row.docDate || "—"}
+                    {row.docDate || "-"}
                   </td>
                   <td className={cn(procurementUi.td, "max-w-[220px] font-medium tabular-nums")}>
                     {formatUniquePoLabels(row.purchaseOrderNumber)}
                   </td>
-                  <td className={procurementUi.tdMuted}>{row.vendorName || "—"}</td>
-                  <td className={procurementUi.td}>{row.customerName?.trim() || "—"}</td>
+                  <td className={procurementUi.tdMuted}>{row.vendorName || "-"}</td>
+                  <td className={procurementUi.td}>{row.customerName?.trim() || "-"}</td>
                   <td className={procurementUi.td} onClick={(e) => e.stopPropagation()}>
                     <div className="flex flex-wrap items-center gap-1">
                       <DeliveryBillTakenBadge status={billStatus} />

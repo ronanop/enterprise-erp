@@ -1,4 +1,4 @@
-"""Journal posting engine — atomic GL creation."""
+"""Journal posting engine - atomic GL creation."""
 
 from datetime import datetime, timezone
 

@@ -1,5 +1,5 @@
 /**
- * Analytics (BI) workspace config — aligned with FRD-18
+ * Analytics (BI) workspace config - aligned with FRD-18
  * and apps/api analytics routers (Dataset → Alert).
  */
 

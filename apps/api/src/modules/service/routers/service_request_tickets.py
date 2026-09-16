@@ -43,7 +43,7 @@ from shared.schemas import APIResponse
 
 service_request_tickets_router = APIRouter(
     prefix="/service-request-tickets",
-    tags=["Service — Request Tickets (SOP)"],
+    tags=["Service - Request Tickets (SOP)"],
 )
 
 
@@ -268,7 +268,7 @@ def open_ticket(
 ):
     data = ServiceRequestTicketService(db).open_ticket(ctx, row_id)
     db.commit()
-    return APIResponse(message="Ticket opened — SLA started", data=data)
+    return APIResponse(message="Ticket opened - SLA started", data=data)
 
 
 @service_request_tickets_router.post("/{row_id}/resolve", response_model=APIResponse[ServiceRequestTicketDetail])

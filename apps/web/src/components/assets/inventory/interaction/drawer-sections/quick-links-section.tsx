@@ -12,7 +12,7 @@ const QUICK_LINK_LABELS: Record<InventoryQuickLinkId, string> = {
 };
 
 export type QuickLinksSectionProps = {
-  /** Which quick links to show (interaction layer only — no navigation handlers). */
+  /** Which quick links to show (interaction layer only - no navigation handlers). */
   enabledLinks?: Partial<Record<InventoryQuickLinkId, boolean>>;
   onQuickLinkPress?: (id: InventoryQuickLinkId) => void;
   className?: string;

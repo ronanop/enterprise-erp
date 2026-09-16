@@ -158,11 +158,11 @@ export function GlDetailPage({ entryId }: { entryId: string }) {
         </div>
         <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
           <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Fiscal / Period</p>
-          <p className="mt-2 text-sm">{entry.fiscal_year_code ?? "—"} · {entry.period_name ?? "—"}</p>
+          <p className="mt-2 text-sm">{entry.fiscal_year_code ?? "-"} · {entry.period_name ?? "-"}</p>
         </div>
         <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
           <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Workflow</p>
-          <p className="mt-2 text-sm capitalize">{entry.workflow_status ?? journal?.workflow_status ?? "—"}</p>
+          <p className="mt-2 text-sm capitalize">{entry.workflow_status ?? journal?.workflow_status ?? "-"}</p>
         </div>
       </div>
 
@@ -178,7 +178,7 @@ export function GlDetailPage({ entryId }: { entryId: string }) {
                   {entry.journal_number ?? entry.journal_header_id.slice(0, 8)}
                 </Link>
               ) : (
-                entry.journal_number ?? "—"
+                entry.journal_number ?? "-"
               )}
             </dd>
           </div>
@@ -189,8 +189,8 @@ export function GlDetailPage({ entryId }: { entryId: string }) {
               </Link>
             </dd>
           </div>
-          <div><dt className="text-[11px] text-muted-foreground uppercase">Posting</dt><dd className="font-mono text-xs">{entry.posted_at?.slice(0, 19) ?? "—"} · {resolve(entry.posted_by)}</dd></div>
-          <div className="sm:col-span-2"><dt className="text-[11px] text-muted-foreground uppercase">Description</dt><dd>{entry.description ?? journal?.description ?? "—"}</dd></div>
+          <div><dt className="text-[11px] text-muted-foreground uppercase">Posting</dt><dd className="font-mono text-xs">{entry.posted_at?.slice(0, 19) ?? "-"} · {resolve(entry.posted_by)}</dd></div>
+          <div className="sm:col-span-2"><dt className="text-[11px] text-muted-foreground uppercase">Description</dt><dd>{entry.description ?? journal?.description ?? "-"}</dd></div>
         </dl>
       </div>
 
@@ -219,7 +219,7 @@ export function GlDetailPage({ entryId }: { entryId: string }) {
                         {line.account_id.slice(0, 8)}…
                       </Link>
                     </td>
-                    <td className="px-2 py-1.5 text-xs text-muted-foreground">{line.description ?? "—"}</td>
+                    <td className="px-2 py-1.5 text-xs text-muted-foreground">{line.description ?? "-"}</td>
                     <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(line.debit_amount)}</td>
                     <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(line.credit_amount)}</td>
                   </tr>

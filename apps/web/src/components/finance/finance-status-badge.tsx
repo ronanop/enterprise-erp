@@ -145,7 +145,7 @@ const DANGER = new Set([
 ]);
 
 export function FinanceStatusBadge({ status }: { status: string | null | undefined }) {
-  const value = (status ?? "—").toString();
+  const value = (status ?? "-").toString();
   const key = value.toLowerCase();
   const variant = SUCCESS.has(key)
     ? "success"
@@ -157,7 +157,7 @@ export function FinanceStatusBadge({ status }: { status: string | null | undefin
 
   return (
     <Badge variant={variant} className="font-medium capitalize">
-      {value.replaceAll("_", " ") || "—"}
+      {value.replaceAll("_", " ") || "-"}
     </Badge>
   );
 }

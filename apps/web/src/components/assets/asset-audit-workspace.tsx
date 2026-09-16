@@ -285,7 +285,7 @@ export function AssetAuditWorkspace() {
     <div className="space-y-6">
       <PageHeader
         title="Asset audits"
-        description="Physical verification of assets — planned, in progress, completed, or cancelled. No approval workflow."
+        description="Physical verification of assets - planned, in progress, completed, or cancelled. No approval workflow."
       />
 
       {error ? (
@@ -436,14 +436,14 @@ export function AssetAuditWorkspace() {
                           <td className="px-3 py-2 font-mono text-xs">{row.document_number}</td>
                           <td className="px-3 py-2">
                             <div className="font-medium">
-                              {asset?.asset_name ?? row.asset_id ?? "—"}
+                              {asset?.asset_name ?? row.asset_id ?? "-"}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {asset?.asset_code ?? "Unresolved"}
                             </div>
                           </td>
                           <td className="px-3 py-2 font-mono text-xs">
-                            {row.found_status ?? "—"}
+                            {row.found_status ?? "-"}
                           </td>
                           <td className="px-3 py-2">{statusBadge(row)}</td>
                         </tr>
@@ -481,7 +481,7 @@ export function AssetAuditWorkspace() {
                   <SelectContent>
                     {assetOptions.map((asset) => (
                       <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                        {asset.asset_code} — {asset.asset_name}
+                        {asset.asset_code} - {asset.asset_name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -565,9 +565,9 @@ export function AssetAuditWorkspace() {
                     <div className="font-mono text-xs">{selected.document_number}</div>
                     <div>{statusBadge(selected)}</div>
                     <div className="text-muted-foreground">
-                      Date {selected.audit_date ?? "—"} · Found {selected.found_status ?? "—"}
+                      Date {selected.audit_date ?? "-"} · Found {selected.found_status ?? "-"}
                     </div>
-                    <div className="text-muted-foreground">{selected.notes ?? "—"}</div>
+                    <div className="text-muted-foreground">{selected.notes ?? "-"}</div>
                   </div>
 
                   {selected.status === "planned" ? (

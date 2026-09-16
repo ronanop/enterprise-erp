@@ -114,7 +114,7 @@ export function AssetStep({
         ) : (
           filtered.map((asset) => {
             const active = state.assetId === asset.id;
-            const makeModel = [asset.make, asset.model].filter((v) => v && v !== "—").join(" · ");
+            const makeModel = [asset.make, asset.model].filter((v) => v && v !== "-").join(" · ");
             return (
               <li key={asset.id}>
                 <button
@@ -142,7 +142,7 @@ export function AssetStep({
                     ) : null}
                   </span>
                   <span className="text-[11px] text-muted-foreground">
-                    S/N: {asset.serialNumber ?? "—"}
+                    S/N: {asset.serialNumber ?? "-"}
                     {makeModel ? ` · ${makeModel}` : ""}
                     {asset.locationLabel ? ` · ${asset.locationLabel}` : ""}
                   </span>

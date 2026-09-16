@@ -13,11 +13,11 @@ import {
 import { isInventoryLedgerRow } from "@/utils/procurement-inventory-report";
 
 function formatReceiptDate(value: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
   if (iso) return `${iso[3]}-${iso[2]}-${iso[1]}`;
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "-";
   const day = String(d.getUTCDate()).padStart(2, "0");
   const month = String(d.getUTCMonth() + 1).padStart(2, "0");
   const year = d.getUTCFullYear();
@@ -114,7 +114,7 @@ export function GrnStockSummaryTable({
                     {formatReceiptDate(grn.receipt_at)}
                   </td>
                   <td className={procurementUi.tdMuted}>
-                    {grn.vendor_id ? (vendors[grn.vendor_id]?.label ?? "—") : "—"}
+                    {grn.vendor_id ? (vendors[grn.vendor_id]?.label ?? "-") : "-"}
                   </td>
                   <td className={cn(procurementUi.td, "max-w-[280px]")}>
                     <span className="line-clamp-3" title={formatGrnProductSummary(grn.lines)}>

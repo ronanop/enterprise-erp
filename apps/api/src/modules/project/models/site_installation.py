@@ -192,7 +192,7 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
     installation_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     acceptance_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    # Stage owners — set by project assignee before Survey work begins
+    # Stage owners - set by project assignee before Survey work begins
     survey_assignee_employee_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("master.master_employee.id", ondelete="RESTRICT"),
@@ -242,7 +242,7 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
         index=True,
     )
 
-    # Stage tracking — assigned when the step starts; finished when advanced
+    # Stage tracking - assigned when the step starts; finished when advanced
     survey_assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     survey_finished_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     scm_assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)

@@ -1,1 +1,1 @@
-"""Enterprise ERP API — application package."""
+"""Enterprise ERP API - application package."""

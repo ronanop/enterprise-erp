@@ -1,8 +1,8 @@
-# HRMS Modules — Inventory & Completion Checklist
+# HRMS Modules - Inventory & Completion Checklist
 
 **Project:** `cache_erp_hrms_payroll`  
 **Scope:** HRMS admin stack (`apps/api` + `apps/web` under `/hr`)  
-**Excluded:** `apps/employee-app` (ESS mobile portal — out of scope for this report)  
+**Excluded:** `apps/employee-app` (ESS mobile portal - out of scope for this report)  
 **Report date:** 2026-08-06  
 **Source:** Codebase structure, `apps/web/src/config/hr-nav.ts`, API routers under `modules/{foundation,organization,master_data,hr,payroll,recruitment,ess}`, and enterprise checklist in `docs/08_TRANSFORMATION/HRMS_Enterprise_Transformation_Phases.md` (last bulk update 2026-07-30).
 
@@ -12,8 +12,8 @@
 
 | Symbol | Meaning |
 |--------|---------|
-| ✅ | Done — API + DB + admin UI wired for typical use |
-| 🟠 | Partial — exists but localStorage fallback, mock, or gaps |
+| ✅ | Done - API + DB + admin UI wired for typical use |
+| 🟠 | Partial - exists but localStorage fallback, mock, or gaps |
 | ❌ | Not started / placeholder only |
 
 **Module %** = weighted score: ✅ = 100%, 🟠 = 50%, ❌ = 0% of checklist rows for that module.
@@ -59,8 +59,8 @@ Overall HRMS (admin)  [████████████████░░░
 | 18 | **Separation & FNF** | `/hr/separation`, FNF payroll hooks | `/hr/separation` | 74% | 🟠 |
 | 19 | **Payroll** | `modules/payroll` (policy, periods, runs, payslips) | `/hr/payroll` | 80% | 🟠 |
 | 20 | **HR reports & exports** | `/hr/reports/export` | `/hr/reports` | 82% | ✅ |
-| 21 | **ESS admin** (inbox, policies — not employee app) | `/hr/ess-inbox`, `/hr/ess-policies`, ESS password admin | `/hr/ess`, `/hr/ess-inbox`, `/hr/ess-policies` | 76% | 🟠 |
-| 22 | **ESS API** (backend only; consumed by employee app) | `modules/ess` `/api/v1/ess` | — (excluded UI) | 75% | 🟠 |
+| 21 | **ESS admin** (inbox, policies - not employee app) | `/hr/ess-inbox`, `/hr/ess-policies`, ESS password admin | `/hr/ess`, `/hr/ess-inbox`, `/hr/ess-policies` | 76% | 🟠 |
+| 22 | **ESS API** (backend only; consumed by employee app) | `modules/ess` `/api/v1/ess` | - (excluded UI) | 75% | 🟠 |
 
 **Roll-up:** (78+85+72+75+74+73+75+70+71+76+84+70+80+65+68+72+70+74+80+82+76+75) / 22 ≈ **74.5%** → **~74%**
 
@@ -73,7 +73,7 @@ Overall HRMS (admin)  [████████████████░░░
 | `foundation` | Login, JWT, RBAC role packs, in-app/email/push notifications |
 | `organization` | Org tree used by HR setup and assignments |
 | `master_data` | Canonical employee records linked to HR employment |
-| `hr` | Core HR domain (40+ routers — see below) |
+| `hr` | Core HR domain (40+ routers - see below) |
 | `payroll` | Salary structures, runs, statutory, FNF runs |
 | `recruitment` | ATS, offers, interviews, onboarding hire |
 | `ess` | Employee-facing REST (reported here for API completeness only; UI excluded) |
@@ -129,7 +129,7 @@ Job requisitions, postings, candidates, applications, interviews, offers, onboar
 
 ## Detailed checklists by module
 
-### 1. Foundation — 78%
+### 1. Foundation - 78%
 
 - [x] Login & session (100%)
 - [x] HR role packs (Super Admin, HR Admin, HR Executive, Manager, Employee) (100%)
@@ -139,14 +139,14 @@ Job requisitions, postings, candidates, applications, interviews, offers, onboar
 - [~] Push / FCM (env-gated stub) (50%)
 - [~] Audit trails across all HR writes (40%)
 
-### 2. Organization — 85%
+### 2. Organization - 85%
 
 - [x] Companies, branches, departments, locations (100%)
 - [x] Cost centers & business units (100%)
 - [x] HR Setup API-backed org tabs (100%)
 - [~] Geofence on locations (80%)
 
-### 3. Master data & workforce — 72%
+### 3. Master data & workforce - 72%
 
 - [x] Employee directory & profile (100%)
 - [x] KYC validators (Aadhaar, PAN, IFSC, UAN) (100%)
@@ -156,13 +156,13 @@ Job requisitions, postings, candidates, applications, interviews, offers, onboar
 - [x] Lightweight add employee `/hr/workforce/new` (100%)
 - [~] Lifecycle timeline UI (50%)
 
-### 4. HR dashboard — 75%
+### 4. HR dashboard - 75%
 
 - [x] Executive dashboard component (100%)
 - [x] KPI tiles / workforce metrics (80%)
 - [~] Real-time analytics depth (50%)
 
-### 5. HR setup & masters — 74%
+### 5. HR setup & masters - 74%
 
 - [x] Branches, departments, designations, locations (API) (100%)
 - [x] Leave types, holidays, shifts (API) (100%)
@@ -172,7 +172,7 @@ Job requisitions, postings, candidates, applications, interviews, offers, onboar
 - [~] Employment types, document types (local) (40%)
 - [~] Approval flows setup (local) (30%)
 
-### 6. Recruitment — 70%
+### 6. Recruitment - 70%
 
 - [x] Job requisition & publish (API-first) (100%)
 - [x] Applications & pipeline advance/reject (100%)
@@ -181,7 +181,7 @@ Job requisitions, postings, candidates, applications, interviews, offers, onboar
 - [~] Full UI SoR without localStorage (50%)
 - [~] Recruitment reports in admin (50%)
 
-### 7. Onboarding — 71%
+### 7. Onboarding - 71%
 
 - [x] API onboarding complete → employee + employment (100%)
 - [x] Mandatory document gates (100%)
@@ -189,7 +189,7 @@ Job requisitions, postings, candidates, applications, interviews, offers, onboar
 - [~] Onboarding cases in browser storage (40%)
 - [x] Activation with manual Emp ID + payroll eligible (100%)
 
-### 8. Leave management — 76%
+### 8. Leave management - 76%
 
 - [x] Leave types CL/SL/EL/CO/LOP/ML/PL (100%)
 - [x] Emp → Manager → HR approval (100%)
@@ -199,7 +199,7 @@ Job requisitions, postings, candidates, applications, interviews, offers, onboar
 - [~] Half-day & cycle enforcement (50%)
 - [~] Full leave policy engine (40%)
 
-### 9. Attendance & time — 84%
+### 9. Attendance & time - 84%
 
 - [x] Present / absent / late / half-day / week-off / holiday (100%)
 - [x] Auto-absent Celery + miss punch (100%)
@@ -209,21 +209,21 @@ Job requisitions, postings, candidates, applications, interviews, offers, onboar
 - [~] WFH workflow depth (60%)
 - [~] OT payroll integration edge cases (70%)
 
-### 10. On duty, OT, Comp Off — 80%
+### 10. On duty, OT, Comp Off - 80%
 
 - [x] On-duty requests + attendance write-back (100%)
 - [x] OT allotment approve/reject (100%)
 - [x] Comp Off Emp→Mgr→HR + credit (100%)
 - [~] Overday / complex OT rules (60%)
 
-### 11. Biometric — 65%
+### 11. Biometric - 65%
 
 - [x] Device registry & API keys (100%)
 - [x] Generic device-sync ingest (100%)
 - [~] Vendor-specific protocols (30%)
 - [~] Production device ops (50%)
 
-### 12. Shift & roster — 68%
+### 12. Shift & roster - 68%
 
 - [x] Shift CRUD & night shift (100%)
 - [x] Roster entries + calendar persist (100%)
@@ -231,21 +231,21 @@ Job requisitions, postings, candidates, applications, interviews, offers, onboar
 - [~] Shift swap / rotation UI vs API (60%)
 - [~] Manager assignment workflow polish (50%)
 
-### 13. Performance (PMS) — 72%
+### 13. Performance (PMS) - 72%
 
 - [x] Goals, reviews, appraisals API (100%)
 - [x] KPI & OKR API tables (100%)
 - [~] PMS cycles / feedback / PIP (30%)
 - [~] Remove PMS localStorage dual-write (50%)
 
-### 14. Training & learning — 70%
+### 14. Training & learning - 70%
 
 - [x] Training programs & attendance API (100%)
 - [x] Training rooms & requests (100%)
 - [~] HR admin UX completeness (60%)
 - [~] Compliance & certifications (40%)
 
-### 15. Separation & FNF — 74%
+### 15. Separation & FNF - 74%
 
 - [x] Dual-stage separation workflow (100%)
 - [x] FNF prepare / settle + encashment & gratuity (100%)
@@ -253,32 +253,32 @@ Job requisitions, postings, candidates, applications, interviews, offers, onboar
 - [~] Notice period tracking UI (50%)
 - [~] Asset clearance integration (60%)
 
-### 16. Payroll — 80%
+### 16. Payroll - 80%
 
 - [x] Payroll runs calculate with attendance/leave (100%)
 - [x] PF / ESI / PT / bonus / arrears / incentives (100%)
 - [x] Payslip generate & issue (90%)
 - [x] FNF settlement runs (100%)
-- [x] Company payroll policy & 20–20 periods (Phase 0–2) (85%)
+- [x] Company payroll policy & 20-20 periods (Phase 0-2) (85%)
 - [~] Leave LOP integration (Phase 3) (75%)
 - [~] Structure lines vs gross-only engine (60%)
 - [~] Hub without local cache fallback (55%)
 
-### 17. HR reports — 82%
+### 17. HR reports - 82%
 
 - [x] Attendance, leave, headcount, late, OT exports (100%)
 - [x] Probation, joining, exit CSV/PDF (100%)
 - [~] Payroll report richness (50%)
 - [~] Advanced filters on exports (60%)
 
-### 18. ESS admin (HR web only) — 76%
+### 18. ESS admin (HR web only) - 76%
 
 - [x] ESS inbox / approval notifications (100%)
 - [x] ESS policies admin & acknowledgements (90%)
 - [x] ESS password admin (100%)
 - [~] Full parity with all ESS request types in inbox (60%)
 
-### 19. ESS API (backend, no employee-app UI) — 75%
+### 19. ESS API (backend, no employee-app UI) - 75%
 
 - [x] Punch, leave, bank, KYC, documents (100%)
 - [x] Team leave manager actions (100%)
@@ -286,7 +286,7 @@ Job requisitions, postings, candidates, applications, interviews, offers, onboar
 - [~] Announcements (derived) (50%)
 - [~] Remove all mock fallbacks (55%)
 
-### 20. Notifications (cross-cutting) — 71%
+### 20. Notifications (cross-cutting) - 71%
 
 - [x] Probation, confirmation, leave, separation (100%)
 - [x] Attendance correction, shift change, payroll approve (100%)
@@ -294,12 +294,12 @@ Job requisitions, postings, candidates, applications, interviews, offers, onboar
 - [~] Central template coverage for all events (60%)
 - [~] Email delivery production-ready (50%)
 
-### 21. Management groups — 75%
+### 21. Management groups - 75%
 
 - [x] API & HR Setup panel (100%)
 - [~] Used across all approval routing (50%)
 
-### 22. Platform hygiene (localStorage / mocks) — 52%
+### 22. Platform hygiene (localStorage / mocks) - 52%
 
 - [~] ATS / payroll / PMS API-first writes (55%)
 - [~] No browser SoR for masters (45%)
@@ -329,7 +329,7 @@ Job requisitions, postings, candidates, applications, interviews, offers, onboar
 ## Suggested next priorities (admin HRMS)
 
 1. Migrate onboarding cases & remaining ATS/payroll hub data off `localStorage`.
-2. Payroll **Phases 0–6** (policy, 20–20, shift-N, LOP, salary/PF, payslips, bank export, ESS) — see `apps/api/docs/payroll/PHASE6-ROLLOUT.md`; optional: wire bank-export button in payroll UI.
+2. Payroll **Phases 0-6** (policy, 20-20, shift-N, LOP, salary/PF, payslips, bank export, ESS) - see `apps/api/docs/payroll/PHASE6-ROLLOUT.md`; optional: wire bank-export button in payroll UI.
 3. PMS cycles, feedback, and PIP APIs.
 4. Biometric vendor adapters and production push/email hardening.
 5. Full audit trail on salary, leave approval, and attendance edits.
@@ -338,9 +338,9 @@ Job requisitions, postings, candidates, applications, interviews, offers, onboar
 
 ## Related documents
 
-- `docs/08_TRANSFORMATION/HRMS_Enterprise_Transformation_Phases.md` — item-level ✅/🟠/❌ (236 rows)
-- `apps/api/docs/payroll/PHASE0-POLICY.md` through `PHASE6-ROLLOUT.md` — payroll policy implementation
-- `apps/web/src/config/hr-nav.ts` — sidebar module list
+- `docs/08_TRANSFORMATION/HRMS_Enterprise_Transformation_Phases.md` - item-level ✅/🟠/❌ (236 rows)
+- `apps/api/docs/payroll/PHASE0-POLICY.md` through `PHASE6-ROLLOUT.md` - payroll policy implementation
+- `apps/web/src/config/hr-nav.ts` - sidebar module list
 
 ---
 

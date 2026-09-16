@@ -128,7 +128,7 @@ function ProjectAlertBody({ alert }: { alert: ProjectStageSaveAlert }) {
   return (
     <div className="min-w-0 space-y-1 text-left">
       <p className="text-sm font-medium text-foreground">
-        {alert.stage_label} — {alert.progress_status_label}
+        {alert.stage_label} - {alert.progress_status_label}
       </p>
       <p className="text-xs text-muted-foreground">
         {alert.site_name || alert.document_number || "Site"} · {alert.project_name || "Project"}

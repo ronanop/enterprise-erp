@@ -1,4 +1,4 @@
-"""DepreciationService — period depreciation governance (FP-ASSET-006)."""
+"""DepreciationService - period depreciation governance (FP-ASSET-006)."""
 
 from __future__ import annotations
 

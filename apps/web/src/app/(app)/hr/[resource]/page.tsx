@@ -7,7 +7,7 @@ interface PageProps {
   params: Promise<{ resource: string }>;
 }
 
-/** Masters owned by HR Setup — avoid duplicate CRUD under /hr/{resource}. */
+/** Masters owned by HR Setup - avoid duplicate CRUD under /hr/{resource}. */
 const SETUP_REDIRECTS: Record<string, string> = {
   "leave-types": "/hr/setup?section=leave&tab=leave-types",
 };

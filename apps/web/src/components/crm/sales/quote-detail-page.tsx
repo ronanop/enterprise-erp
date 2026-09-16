@@ -66,7 +66,7 @@ import {
 } from "@/services/sales-crm-service";
 
 function formatQuoteStage(stage: string): string {
-  if (!stage) return "—";
+  if (!stage) return "-";
   return stage.replaceAll("_", " ");
 }
 
@@ -214,12 +214,12 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
     contacts.find((row) => row.id === quote.contact_id) ??
     contacts.find((row) => row.is_primary) ??
     null;
-  const contactName = contact ? fullName(contact) : "—";
+  const contactName = contact ? fullName(contact) : "-";
   const boqAttachmentLabel =
     attachments
       .filter((row) => row.category === "boq")
       .map((row) => row.file_name)
-      .join(", ") || "—";
+      .join(", ") || "-";
 
   const canCreateOvf =
     quote.quote_stage === "accepted" &&
@@ -272,7 +272,6 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
 
       <PageHeader
         title={`${formatCrmCode(quote.quote_no)}${quote.quote_revision > 1 ? ` (Rev ${quote.quote_revision})` : ""}`}
-        description={quote.subject ?? "Customer quotation"}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <CrmDetailEditLink href={`/crm/quotes/${quote.id}/edit`} />
@@ -325,7 +324,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         <CrmWarnBanner>
           <span className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-            No vendor quote attached yet — attach it below before sending this quote for approval.
+            No vendor quote attached yet - attach it below before sending this quote for approval.
           </span>
         </CrmWarnBanner>
       ) : null}

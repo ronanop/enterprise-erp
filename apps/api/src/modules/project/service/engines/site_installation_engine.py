@@ -35,7 +35,7 @@ from modules.project.domain.exceptions import InvalidSiteInstallationState
 ENTITY = "site_installation"
 
 _TRANSITIONS: dict[str, dict[str, str]] = {
-    # Intake goes straight to Survey — stage owners are assigned from Project Tracking.
+    # Intake goes straight to Survey - stage owners are assigned from Project Tracking.
     SiteWorkflowStage.INTAKE.value: {"complete_intake": SiteWorkflowStage.SURVEY.value},
     # Legacy sites that still sit on the removed assignment step
     SiteWorkflowStage.ASSIGNMENT.value: {
@@ -59,7 +59,7 @@ _TRANSITIONS: dict[str, dict[str, str]] = {
     },
     SiteWorkflowStage.INSTALLATION.value: {
         "complete_installation": SiteWorkflowStage.ACCEPTANCE.value,
-        # Legacy alias — same destination as complete_installation
+        # Legacy alias - same destination as complete_installation
         "complete_installation_rack_only": SiteWorkflowStage.ACCEPTANCE.value,
     },
     SiteWorkflowStage.ACCEPTANCE.value: {
@@ -68,7 +68,7 @@ _TRANSITIONS: dict[str, dict[str, str]] = {
     SiteWorkflowStage.COMPLETED.value: {},
 }
 
-# Visible workflow stepper (assignment is not shown — owners assigned from tracking).
+# Visible workflow stepper (assignment is not shown - owners assigned from tracking).
 DISPLAY_STAGE_ORDER: list[str] = [
     SiteWorkflowStage.INTAKE.value,
     SiteWorkflowStage.SURVEY.value,
@@ -167,7 +167,7 @@ def stage_progress_status(record: Any, stage: str) -> str | None:
 
 
 def is_stage_progress_unlocked(record: Any, stage: str) -> bool:
-    """Partial completed or Completed — unlocks next-stage assignment."""
+    """Partial completed or Completed - unlocks next-stage assignment."""
     return stage_progress_status(record, stage) in PROGRESS_UNLOCK_STATUSES
 
 
@@ -182,13 +182,13 @@ def is_stage_assignee_completed(record: Any, stage: str) -> bool:
 
 
 def is_stage_unlocked_by_progress(record: Any, stage: str) -> bool:
-    """Standalone steps — prior stage progress does not block this stage."""
+    """Standalone steps - prior stage progress does not block this stage."""
     del record, stage
     return True
 
 
 def assignee_work_status(record: Any, assigned_stage: str, current_stage: str) -> str:
-    """My Jobs / Completed Jobs — only Completed progress is ``done``."""
+    """My Jobs / Completed Jobs - only Completed progress is ``done``."""
     if is_stage_assignee_completed(record, assigned_stage):
         return "done"
     effective = resolve_legacy_onsite_stage(record) if current_stage == SiteWorkflowStage.ONSITE.value else current_stage
@@ -219,7 +219,7 @@ STAGE_ASSIGNEE_FIELDS: dict[str, str] = {
     SiteWorkflowStage.SCM.value: "scm_assignee_employee_id",
     SiteWorkflowStage.ONSITE_DELIVERY.value: "onsite_delivery_assignee_employee_id",
     SiteWorkflowStage.MATERIAL_HANDOVER.value: "material_handover_assignee_employee_id",
-    # Legacy combined stage — still referenced for historic rows
+    # Legacy combined stage - still referenced for historic rows
     SiteWorkflowStage.ONSITE.value: "onsite_assignee_employee_id",
     SiteWorkflowStage.INSTALLATION.value: "installation_assignee_employee_id",
     SiteWorkflowStage.ACCEPTANCE.value: "acceptance_assignee_employee_id",
@@ -255,7 +255,7 @@ STAGE_REMARKS_FIELDS: dict[str, str] = {
     SiteWorkflowStage.ACCEPTANCE.value: "acceptance_remarks",
 }
 
-# Yes/No checklist fields that can be answered No — labels for admin alerts.
+# Yes/No checklist fields that can be answered No - labels for admin alerts.
 STAGE_CHECKLIST_NO_FIELDS: dict[str, tuple[tuple[str, str], ...]] = {
     SiteWorkflowStage.SURVEY.value: (
         ("space_available", "Space Available"),
@@ -392,7 +392,7 @@ def _stage_index(stage: str) -> int:
 
 
 def stage_work_status(stage: str, current: str, delivery_type: str) -> str:
-    """pending | in_progress | done | skipped — based on workflow position."""
+    """pending | in_progress | done | skipped - based on workflow position."""
     del delivery_type  # reserved for future skipped-stage rules
     # Map legacy configuration stage onto installation for status display
     if stage == SiteWorkflowStage.CONFIGURATION.value:
@@ -524,7 +524,7 @@ def transition(stage: str, action: str, delivery_type: str) -> str:
 
 
 def resolve_action_target(action: str, delivery_type: str) -> str:
-    """Target workflow stage for a complete_* action (standalone — any step)."""
+    """Target workflow stage for a complete_* action (standalone - any step)."""
     del delivery_type
     if action == "complete_configuration":
         action = "complete_installation"
@@ -540,7 +540,7 @@ def resolve_action_target(action: str, delivery_type: str) -> str:
 
 
 def workflow_stage_after_action(current_stage: str, action: str, delivery_type: str) -> str | None:
-    """Move workflow forward only — completing a step never rewinds the pipeline."""
+    """Move workflow forward only - completing a step never rewinds the pipeline."""
     target = resolve_action_target(action, delivery_type)
     current = _normalize_stage(current_stage)
     if current == SiteWorkflowStage.ASSIGNMENT.value:
@@ -718,7 +718,7 @@ def assert_advance_gates(record: Any, action: str) -> None:
         return
 
     if action == "complete_onsite":
-        # Legacy combined gate — both delivery + handover verticals
+        # Legacy combined gate - both delivery + handover verticals
         _require_stage_attachment(record, "onsite_attachment_name", "On-site")
         _require_true_with_date(record, "mo_request", "mo_request_date", "MO Request")
         _require_true_with_date(record, "im_material", "im_material_date", "IM Material")
@@ -770,7 +770,7 @@ def blueprint_state(record: Any) -> dict[str, Any]:
     stage = getattr(record, "workflow_stage", SiteWorkflowStage.INTAKE.value)
     if stage == SiteWorkflowStage.CONFIGURATION.value:
         stage = SiteWorkflowStage.INSTALLATION.value
-    # Legacy assignment step — present as Survey in the UI stepper
+    # Legacy assignment step - present as Survey in the UI stepper
     if stage == SiteWorkflowStage.ASSIGNMENT.value:
         display_state = SiteWorkflowStage.SURVEY.value
     elif stage == SiteWorkflowStage.ONSITE.value:

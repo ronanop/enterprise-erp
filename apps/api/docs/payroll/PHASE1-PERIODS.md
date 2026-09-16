@@ -1,4 +1,4 @@
-# Payroll Phase 1 — Periods & leave calendar
+# Payroll Phase 1 - Periods & leave calendar
 
 ## Salary cycle (20 → 20)
 
@@ -32,12 +32,12 @@ POST /payroll/payroll-periods/generate
 }
 ```
 
-Creates Feb, Mar, Apr 2026 anchors (20–20 windows).
+Creates Feb, Mar, Apr 2026 anchors (20-20 windows).
 
-## Leave cycle (calendar 1–31)
+## Leave cycle (calendar 1-31)
 
 - Leave accrual task `hr.leave_balance_accrual` credits the **last completed calendar month** when `period_yyyymm` is not passed.
-- Example: run on **1 Mar 2026** → accrues **`2026-02`** (not March, not payroll 20–20).
+- Example: run on **1 Mar 2026** → accrues **`2026-02`** (not March, not payroll 20-20).
 - Manual override: `leave_balance_accrual.delay("2026-01")`.
 
 Helper: `modules.hr.domain.leave_accrual_calendar.completed_calendar_month_yyyymm`.

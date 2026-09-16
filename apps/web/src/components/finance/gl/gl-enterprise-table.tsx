@@ -166,8 +166,8 @@ export function GlEnterpriseTable(props: Props) {
                     {visible.has("journal") ? (
                       <td className="px-2 py-1.5 font-mono text-xs">
                         {row.journal_header_id ? (
-                          <Link href={`/finance/journals/${row.journal_header_id}`} className="cursor-pointer hover:underline">{row.journal_number ?? "—"}</Link>
-                        ) : (row.journal_number ?? "—")}
+                          <Link href={`/finance/journals/${row.journal_header_id}`} className="cursor-pointer hover:underline">{row.journal_number ?? "-"}</Link>
+                        ) : (row.journal_number ?? "-")}
                       </td>
                     ) : null}
                     {visible.has("voucher") ? (
@@ -176,19 +176,19 @@ export function GlEnterpriseTable(props: Props) {
                       </td>
                     ) : null}
                     {visible.has("date") ? <td className="px-2 py-1.5 font-mono text-xs">{row.entry_date}</td> : null}
-                    {visible.has("fiscal_year") ? <td className="px-2 py-1.5 text-xs">{row.fiscal_year_code ?? "—"}</td> : null}
-                    {visible.has("period") ? <td className="px-2 py-1.5 text-xs">{row.period_name ?? "—"}</td> : null}
+                    {visible.has("fiscal_year") ? <td className="px-2 py-1.5 text-xs">{row.fiscal_year_code ?? "-"}</td> : null}
+                    {visible.has("period") ? <td className="px-2 py-1.5 text-xs">{row.period_name ?? "-"}</td> : null}
                     {visible.has("account_code") ? (
                       <td className="px-2 py-1.5 font-mono text-xs">
                         <Link href={`/finance/general-ledger/accounts/${row.account_id}`} className="cursor-pointer hover:underline">{row.account_code}</Link>
                       </td>
                     ) : null}
-                    {visible.has("account_name") ? <td className="px-2 py-1.5">{row.account_name ?? "—"}</td> : null}
-                    {visible.has("cost_center") ? <td className="px-2 py-1.5 text-xs text-muted-foreground">{row.cost_center_name ?? (row.cost_center_id ? row.cost_center_id.slice(0, 8) : "—")}</td> : null}
-                    {visible.has("project") ? <td className="px-2 py-1.5 text-xs text-muted-foreground">{row.project_ref ?? "—"}</td> : null}
+                    {visible.has("account_name") ? <td className="px-2 py-1.5">{row.account_name ?? "-"}</td> : null}
+                    {visible.has("cost_center") ? <td className="px-2 py-1.5 text-xs text-muted-foreground">{row.cost_center_name ?? (row.cost_center_id ? row.cost_center_id.slice(0, 8) : "-")}</td> : null}
+                    {visible.has("project") ? <td className="px-2 py-1.5 text-xs text-muted-foreground">{row.project_ref ?? "-"}</td> : null}
                     {visible.has("debit") ? <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(row.base_debit_amount)}</td> : null}
                     {visible.has("credit") ? <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(row.base_credit_amount)}</td> : null}
-                    {visible.has("running") ? <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{row.running_balance != null ? formatInrPrecise(row.running_balance) : "—"}</td> : null}
+                    {visible.has("running") ? <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{row.running_balance != null ? formatInrPrecise(row.running_balance) : "-"}</td> : null}
                     {visible.has("status") ? <td className="px-2 py-1.5"><FinanceStatusBadge status={row.journal_status ?? "posted"} /></td> : null}
                   </tr>
                 ))

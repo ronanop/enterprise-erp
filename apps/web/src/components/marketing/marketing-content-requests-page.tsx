@@ -208,7 +208,7 @@ export function MarketingContentRequestsPage() {
                                 : row.document_name || "Open link"}
                             </button>
                           ) : (
-                            row.submission_notes || "—"
+                            row.submission_notes || "-"
                           )}
                           {row.submission_notes && (row.content_url || row.document_name) ? (
                             <p className="mt-1 text-[12px]">{row.submission_notes}</p>
@@ -220,7 +220,7 @@ export function MarketingContentRequestsPage() {
                           </Badge>
                         </td>
                         <td className="px-4 py-2.5 tabular-nums text-muted-foreground">
-                          {row.due_at ? String(row.due_at).slice(0, 10) : "—"}
+                          {row.due_at ? String(row.due_at).slice(0, 10) : "-"}
                         </td>
                         <td className="px-4 py-2.5">
                           {pending && reviewer ? (

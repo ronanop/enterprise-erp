@@ -1,4 +1,4 @@
-"""My Jobs — delivery steps assigned to the signed-in project team member."""
+"""My Jobs - delivery steps assigned to the signed-in project team member."""
 
 from typing import Annotated
 

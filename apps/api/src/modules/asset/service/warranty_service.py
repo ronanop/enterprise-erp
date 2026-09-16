@@ -1,4 +1,4 @@
-"""WarrantyService — asset warranty management (FP-ASSET-009)."""
+"""WarrantyService - asset warranty management (FP-ASSET-009)."""
 
 from datetime import date
 from uuid import UUID

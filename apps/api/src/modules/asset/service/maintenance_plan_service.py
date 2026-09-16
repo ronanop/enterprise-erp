@@ -1,4 +1,4 @@
-"""MaintenancePlanService — asset maintenance plan management (FP-ASSET-011)."""
+"""MaintenancePlanService - asset maintenance plan management (FP-ASSET-011)."""
 
 from datetime import date
 from uuid import UUID

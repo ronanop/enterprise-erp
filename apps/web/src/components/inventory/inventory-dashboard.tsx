@@ -176,28 +176,28 @@ export function InventoryDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="On hand qty"
-          value={loading ? "—" : formatQty(kpis.onHand)}
+          value={loading ? "-" : formatQty(kpis.onHand)}
           hint={`${kpis.skuCount} stock balances`}
           icon={Package}
           tone="default"
         />
         <FinanceKpiCard
           label="Available qty"
-          value={loading ? "—" : formatQty(kpis.available)}
+          value={loading ? "-" : formatQty(kpis.available)}
           hint={`${formatQty(kpis.reserved)} reserved`}
           icon={Scale}
           tone="success"
         />
         <FinanceKpiCard
           label="Open transfers"
-          value={loading ? "—" : String(kpis.openTransfers)}
+          value={loading ? "-" : String(kpis.openTransfers)}
           hint={`${kpis.openAdjustments} open adjustments`}
           icon={Shuffle}
           tone={kpis.openTransfers > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Valuation layers"
-          value={loading ? "—" : formatInr(kpis.valuation)}
+          value={loading ? "-" : formatInr(kpis.valuation)}
           hint={`${data?.valuation.length ?? 0} cost layers`}
           icon={ClipboardList}
           tone="default"
@@ -235,7 +235,7 @@ export function InventoryDashboard() {
             >
               <span className="text-xs font-medium text-muted-foreground">{item.label}</span>
               <span className="font-mono text-sm font-medium tabular-nums">
-                {loading ? "—" : item.value}
+                {loading ? "-" : item.value}
               </span>
             </Link>
           ))}
@@ -443,7 +443,7 @@ function DocTable({
                   className="border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
                 >
                   <td className="px-4 py-2.5 font-medium text-foreground">
-                    {String(row.document_number ?? "—")}
+                    {String(row.document_number ?? "-")}
                   </td>
                   <td className="px-4 py-2.5">
                     <FinanceStatusBadge status={asStatus(row.status) || String(row.status ?? "")} />

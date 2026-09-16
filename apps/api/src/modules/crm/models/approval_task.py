@@ -1,4 +1,4 @@
-"""My Jobs — team-routed approval tasks raised by the sales blueprint."""
+"""My Jobs - team-routed approval tasks raised by the sales blueprint."""
 
 from datetime import datetime
 from uuid import UUID, uuid4

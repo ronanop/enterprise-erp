@@ -13,18 +13,18 @@
 - **Structure:** App shell with **left Service sidebar** (CRM-style standalone chrome) → page header → KPI/charts → tables
 - **Max Width:** Full workspace (~1400px)
 - **Grid:** 12-col for KPIs; dense tables for request tickets / SLAs / resolved
-- **Navigation:** Left sidebar panes (Dashboard, Request Tickets, Mailbox, Field Engineer, SLAs, Resolved, Users) — not a top tab strip in standalone mode
+- **Navigation:** Left sidebar panes (Dashboard, Request Tickets, Mailbox, Field Engineer, SLAs, Resolved, Users) - not a top tab strip in standalone mode
 - **Do not** use FAQ/docs marketing heroes, Outfit/Work Sans shouty type, or dark themes
 
 ### Spacing Overrides
 
-- **Content Density:** Very high (9/10) — KPI `p-3`, table rows ~36px, funnel gaps `8px`
+- **Content Density:** Very high (9/10) - KPI `p-3`, table rows ~36px, funnel gaps `8px`
 
 ### Typography Overrides
 
-- Page title: medium weight ~1.5–1.65rem (Inter)
+- Page title: medium weight ~1.5-1.65rem (Inter)
 - KPI values: tabular numerals ~1.5rem
-- Funnel labels: 11–12px uppercase tracking
+- Funnel labels: 11-12px uppercase tracking
 
 ### Color Overrides
 
@@ -37,7 +37,7 @@
 ### Component Overrides
 
 - KPI strip: open requests, open tickets, open work orders, open escalations
-- Secondary nav: left sidebar — Dashboard · Request Tickets · Mailbox · Field Engineer · SLAs · Resolved · Users
+- Secondary nav: left sidebar - Dashboard · Request Tickets · Mailbox · Field Engineer · SLAs · Resolved · Users
 - Lifecycle funnel: Request → Ticket → Assignment · work on ticket detail
 - Prefer Lucide; sticky headers; `overflow-x-auto` on wide tables
 

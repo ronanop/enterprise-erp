@@ -116,7 +116,7 @@ export function JournalCommentsPanel({
                 <span className="text-[10px] text-muted-foreground">
                   {item.created_at
                     ? new Date(item.created_at).toLocaleString("en-IN")
-                    : "—"}
+                    : "-"}
                 </span>
               </div>
               <p className="mt-1 whitespace-pre-wrap text-foreground/90">{item.body}</p>

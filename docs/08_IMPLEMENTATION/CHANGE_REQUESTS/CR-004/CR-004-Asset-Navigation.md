@@ -1,4 +1,4 @@
-# CR-004 — Asset Navigation
+# CR-004 - Asset Navigation
 
 **Owner:** `apps/web/src/components/assets/navigation/asset-navigation.ts`  
 

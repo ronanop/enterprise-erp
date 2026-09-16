@@ -19,7 +19,7 @@ function DetailBlock({ label, value }: { label: string; value: string }) {
         {label}
       </div>
       <div className={cn("text-sm text-foreground", text.includes("\n") && "whitespace-pre-wrap")}>
-        {text || "—"}
+        {text || "-"}
       </div>
     </div>
   );

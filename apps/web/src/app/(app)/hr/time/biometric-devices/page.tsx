@@ -60,11 +60,11 @@ type LiveFeed = {
 };
 
 function modelLabel(value?: string | null) {
-  return DEVICE_MODELS.find((m) => m.value === value)?.label ?? value ?? "—";
+  return DEVICE_MODELS.find((m) => m.value === value)?.label ?? value ?? "-";
 }
 
 function formatDateTime(value?: string | null) {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? value : d.toLocaleString();
 }
@@ -199,7 +199,7 @@ export default function BiometricDevicesPage() {
       return;
     }
     if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
-      toast("Enter a valid port (1–65535)", "error");
+      toast("Enter a valid port (1-65535)", "error");
       return;
     }
 
@@ -284,9 +284,9 @@ export default function BiometricDevicesPage() {
                     <td className="px-3 py-2 text-muted-foreground">{modelLabel(r.device_model)}</td>
                     <td className="px-3 py-2">{r.device_name}</td>
                     <td className="px-3 py-2 font-mono text-xs">
-                      {r.ip_address ? `${r.ip_address}:${r.port ?? "—"}` : "—"}
+                      {r.ip_address ? `${r.ip_address}:${r.port ?? "-"}` : "-"}
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">{r.location_text || "—"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{r.location_text || "-"}</td>
                     <td className="px-3 py-2 text-xs uppercase text-muted-foreground">{r.status}</td>
                   </tr>
                 ))}
@@ -302,7 +302,7 @@ export default function BiometricDevicesPage() {
         title={feedDevice ? `${feedDevice.device_code} · Live feed` : "Device feed"}
         description={
           feedDevice
-            ? `${feedDevice.device_name} · ${feedDevice.ip_address ?? "—"}:${feedDevice.port ?? "—"}`
+            ? `${feedDevice.device_name} · ${feedDevice.ip_address ?? "-"}:${feedDevice.port ?? "-"}`
             : undefined
         }
         onClose={closeDeviceFeed}
@@ -378,7 +378,7 @@ export default function BiometricDevicesPage() {
                       <tr key={row.id} className="transition-colors duration-150 hover:bg-muted/20">
                         <td className="px-3 py-2 whitespace-nowrap text-xs">{row.attendance_date}</td>
                         <td className="px-3 py-2">
-                          <span className="font-medium">{row.employee_name || "—"}</span>
+                          <span className="font-medium">{row.employee_name || "-"}</span>
                           {row.employee_code ? (
                             <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">
                               {row.employee_code}
@@ -411,7 +411,7 @@ export default function BiometricDevicesPage() {
         title={createdApiKey ? "Device registered" : "Add biometric device"}
         description={
           createdApiKey
-            ? "Copy the API key now — it will not be shown again."
+            ? "Copy the API key now - it will not be shown again."
             : "Register a Fingerprint K40 TimeLabs device using network IP and port."
         }
         onClose={() => setOpen(false)}

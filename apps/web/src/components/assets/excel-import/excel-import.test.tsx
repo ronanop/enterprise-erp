@@ -640,7 +640,7 @@ describe("ExcelImportPage", () => {
   });
 });
 
-describe("regression — no write side effects", () => {
+describe("regression - no write side effects", () => {
   it("validators are pure over same input", () => {
     const sheet = makeSheet(goodHeaders, [["AST-1", "L", "Noida", "READY_TO_MOVE"]]);
     const mapping = suggestColumnMapping(goodHeaders);

@@ -60,7 +60,7 @@ function formatQty(value: number | string | null | undefined): string {
 }
 
 function formatDate(value?: string | null): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return value.slice(0, 10);
 }
 
@@ -517,7 +517,7 @@ export function IncomingAssetsWorkspace() {
                             </div>
                           </td>
                           <td className="px-3 py-2 font-mono text-xs">
-                            {row.po_document_number ?? "—"}
+                            {row.po_document_number ?? "-"}
                           </td>
                           <td className="px-3 py-2">
                             <div className="font-medium">
@@ -528,7 +528,7 @@ export function IncomingAssetsWorkspace() {
                             </div>
                           </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">
-                            {row.vendor_id ? row.vendor_id.slice(0, 8) : "—"}
+                            {row.vendor_id ? row.vendor_id.slice(0, 8) : "-"}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">
                             {formatQty(row.expected_quantity)}
@@ -615,7 +615,7 @@ export function IncomingAssetsWorkspace() {
                   </div>
                   <div>
                     <div className="text-xs text-muted-foreground">PO</div>
-                    <div className="font-medium">{selected.po_document_number ?? "—"}</div>
+                    <div className="font-medium">{selected.po_document_number ?? "-"}</div>
                   </div>
                   <div>
                     <div className="text-xs text-muted-foreground">Date</div>
@@ -756,7 +756,7 @@ export function IncomingAssetsWorkspace() {
                                       Arrive
                                     </Button>
                                   ) : (
-                                    <span className="text-xs text-muted-foreground">—</span>
+                                    <span className="text-xs text-muted-foreground">-</span>
                                   )}
                                 </td>
                               </tr>
@@ -783,7 +783,7 @@ export function IncomingAssetsWorkspace() {
         title="Confirm arrival"
         description={
           confirmPayload?.markAll
-            ? `Mark all remaining (${formatQty(pendingSelected)}) as arrived? This only records IT physical receiving — it does not create an asset.`
+            ? `Mark all remaining (${formatQty(pendingSelected)}) as arrived? This only records IT physical receiving - it does not create an asset.`
             : confirmPayload?.unitIndex != null
               ? `Mark unit ${confirmPayload.unitIndex} as arrived?`
               : `Mark quantity ${formatQty(confirmPayload?.quantity ?? 0)} as arrived? This does not create an asset record.`

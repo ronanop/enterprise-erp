@@ -769,7 +769,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
           setItemsSourceMode("selected_grns");
           setSelectedGrnKeys([fromGrn]);
           setGrnKind(kind);
-          // Skip the auto-apply effect triggered by the state setters above — we
+          // Skip the auto-apply effect triggered by the state setters above - we
           // already compute and set the correct lines immediately below.
           skipAutoApplyLinesRef.current = true;
           const resolvedBatches = resolveChallanReceiptBatches(batches, order);
@@ -793,7 +793,7 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
         } else {
           setItemsSourceMode("full_po");
           setSelectedGrnKeys([]);
-          // Skip the auto-apply effect — we set lines directly below.
+          // Skip the auto-apply effect - we set lines directly below.
           skipAutoApplyLinesRef.current = true;
           const itemLines = fullPoChallanLines(order, "", ovf);
           setLines(itemLines.length > 0 ? itemLines : [emptyChallanLine()]);
@@ -967,9 +967,9 @@ export function DeliveryChallanFormPage({ challanId, embedded }: DeliveryChallan
             selectedGrnNumbers.length > 0
               ? selectedGrnNumbers.join(", ")
               : source === "ovf_stock"
-                ? "—"
+                ? "-"
                 : batchKey.startsWith("ovf-")
-                  ? "—"
+                  ? "-"
                   : batchKey,
           purchaseOrderNumber: purchaseOrderNumber.trim(),
           vendorName: vendorName.trim(),

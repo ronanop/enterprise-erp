@@ -29,7 +29,7 @@ def main() -> None:
         org = OrgContextService(db)
         company, branch = org.get_tenant_primary_org(tenant.id)
         if company is None:
-            raise SystemExit("No org company — run seed_demo_data first")
+            raise SystemExit("No org company - run seed_demo_data first")
 
         users = db.scalars(
             select(SecUser).where(
@@ -50,7 +50,7 @@ def main() -> None:
             )
             assigned += 1
 
-        print(f"Default org scope: company={company.company_code}, branch={branch.branch_code if branch else '—'}")
+        print(f"Default org scope: company={company.company_code}, branch={branch.branch_code if branch else '-'}")
         print(f"Users checked: {len(users)}, newly assigned: {assigned}")
     finally:
         db.close()

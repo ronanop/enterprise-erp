@@ -81,7 +81,7 @@ def main() -> None:
             else None
         )
         if not tenant or not company or not admin or not branch:
-            raise SystemExit("DEMOCO / HQ / admin missing — run seed_demo_data first")
+            raise SystemExit("DEMOCO / HQ / admin missing - run seed_demo_data first")
 
         rooms = {
             r.room_code: r

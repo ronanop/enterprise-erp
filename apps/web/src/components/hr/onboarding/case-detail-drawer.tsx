@@ -330,7 +330,7 @@ export function CaseDetailDrawer({
               disabled={Boolean(actionBusy)}
               title={
                 joiningNotReached
-                  ? `Joining date ${caseRow.joiningDate} — will stay on Pending Join until then`
+                  ? `Joining date ${caseRow.joiningDate} - will stay on Pending Join until then`
                   : "Activate employee for Workforce"
               }
               onClick={() => void runActivate()}
@@ -529,14 +529,14 @@ export function CaseDetailDrawer({
                   placeholder={
                     masters.branches.length
                       ? "Select company branch…"
-                      : "No branches — add in Org Setup → Branches"
+                      : "No branches - add in Org Setup → Branches"
                   }
                 />
               </>
             ) : (
               <>
-                <Info label="Joining date" value={caseRow.joiningDate || "—"} />
-                <Info label="Legal entity" value={caseRow.entityName || "—"} />
+                <Info label="Joining date" value={caseRow.joiningDate || "-"} />
+                <Info label="Legal entity" value={caseRow.entityName || "-"} />
                 <Info
                   label="Employment type"
                   value={formatEmploymentTypeLabel(caseRow.employmentType)}
@@ -547,7 +547,7 @@ export function CaseDetailDrawer({
                     value={
                       caseRow.probationPeriodDays
                         ? `${caseRow.probationPeriodDays} days`
-                        : "—"
+                        : "-"
                     }
                   />
                 ) : null}
@@ -557,15 +557,15 @@ export function CaseDetailDrawer({
                     value={
                       caseRow.trainingDurationDays
                         ? `${caseRow.trainingDurationDays} days`
-                        : "—"
+                        : "-"
                     }
                   />
                 ) : null}
-                <Info label="Department" value={caseRow.department || "—"} />
-                <Info label="Designation" value={caseRow.designation || "—"} />
-                <Info label="Reporting manager" value={caseRow.reportingManager || "—"} />
-                <Info label="Branch" value={caseRow.branch || "—"} />
-                <Info label="HR owner" value={caseRow.hrOwner || "—"} />
+                <Info label="Department" value={caseRow.department || "-"} />
+                <Info label="Designation" value={caseRow.designation || "-"} />
+                <Info label="Reporting manager" value={caseRow.reportingManager || "-"} />
+                <Info label="Branch" value={caseRow.branch || "-"} />
+                <Info label="HR owner" value={caseRow.hrOwner || "-"} />
               </>
             )}
           </div>
@@ -645,7 +645,7 @@ export function CaseDetailDrawer({
                 disabled={Boolean(actionBusy)}
                 title={
                   joiningNotReached
-                    ? `Added to list — active on ${caseRow.joiningDate}`
+                    ? `Added to list - active on ${caseRow.joiningDate}`
                     : "Activate employee for Workforce"
                 }
                 onClick={() => void runActivate()}
@@ -712,11 +712,11 @@ export function CaseDetailDrawer({
               {maskEmail(caseRow.portal.personal.email || caseRow.candidateEmail)}
             </p>
             <p className="text-muted-foreground">
-              Phone {maskPhone(caseRow.portal.personal.phone || caseRow.candidatePhone) || "—"}
+              Phone {maskPhone(caseRow.portal.personal.phone || caseRow.candidatePhone) || "-"}
             </p>
             <p className="text-muted-foreground">
-              PAN {maskPan(caseRow.portal.governmentIds.pan) || "—"} · Aadhaar{" "}
-              {maskAadhaar(caseRow.portal.governmentIds.aadhaar) || "—"}
+              PAN {maskPan(caseRow.portal.governmentIds.pan) || "-"} · Aadhaar{" "}
+              {maskAadhaar(caseRow.portal.governmentIds.aadhaar) || "-"}
             </p>
           </div>
         </div>
@@ -751,7 +751,7 @@ export function CaseDetailDrawer({
       {tab === "checklist" && showChecklist ? (
         <div className="space-y-4">
           <p className="text-[11px] text-muted-foreground">
-            Post-join tasks — complete assignment details in Workforce as each item is done.
+            Post-join tasks - complete assignment details in Workforce as each item is done.
           </p>
           <ChecklistGroup
             title="HR Tasks"

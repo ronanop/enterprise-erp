@@ -36,8 +36,8 @@ function mapBranch(row: SetupRow): SetupRow {
     ...row,
     code: row.branch_code,
     name: row.branch_name,
-    location: [row.city, row.state_code, row.country_code].filter(Boolean).join(", ") || "—",
-    head: row.head_employee_id ?? "—",
+    location: [row.city, row.state_code, row.country_code].filter(Boolean).join(", ") || "-",
+    head: row.head_employee_id ?? "-",
   };
 }
 
@@ -46,7 +46,7 @@ function mapDepartment(row: SetupRow): SetupRow {
     ...row,
     code: row.department_code,
     name: row.department_name,
-    head: row.head_employee_id ?? "—",
+    head: row.head_employee_id ?? "-",
   };
 }
 
@@ -55,7 +55,7 @@ function mapDesignation(row: SetupRow): SetupRow {
     ...row,
     code: row.designation_code,
     name: row.designation_name,
-    level: row.job_level ?? "—",
+    level: row.job_level ?? "-",
   };
 }
 
@@ -65,8 +65,8 @@ function mapLeaveType(row: SetupRow): SetupRow {
     code: row.leave_type_code,
     name: row.leave_type_name,
     paid: row.is_paid ? "Yes" : "No",
-    max_year: row.max_days_per_year ?? "—",
-    per_month: row.monthly_credit_days ?? "—",
+    max_year: row.max_days_per_year ?? "-",
+    per_month: row.monthly_credit_days ?? "-",
   };
 }
 
@@ -89,7 +89,7 @@ function mapEntity(row: SetupRow): SetupRow {
 
 function mapGrade(row: SetupRow): SetupRow {
   const formatCtc = (v: unknown) => {
-    if (v == null || v === "") return "—";
+    if (v == null || v === "") return "-";
     const n = Number(v);
     return Number.isFinite(n) ? n.toLocaleString("en-IN") : String(v);
   };
@@ -122,7 +122,7 @@ function mapShift(row: SetupRow): SetupRow {
     name: row.shift_name,
     start_time: start,
     end_time: end,
-    timing: start && end ? `${start} – ${end}` : "—",
+    timing: start && end ? `${start} - ${end}` : "-",
   };
 }
 
@@ -190,7 +190,7 @@ function mapLocation(row: SetupRow): SetupRow {
     ...row,
     code: row.location_code,
     name: row.location_name,
-    branch: row.branch_name ?? row.branch ?? "—",
+    branch: row.branch_name ?? row.branch ?? "-",
   };
 }
 
@@ -548,7 +548,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         key: "min_ctc",
         label: "Minimum Salary (Annual CTC)",
         type: "number",
-        hint: "Annual CTC in INR — used by payroll salary bands",
+        hint: "Annual CTC in INR - used by payroll salary bands",
         placeholder: "360000",
       },
       {
@@ -636,7 +636,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         key: "geofence_radius_meters",
         label: "Geofence Radius (m)",
         type: "number",
-        hint: "e.g. 200 — employees must punch within this radius",
+        hint: "e.g. 200 - employees must punch within this radius",
       },
       STATUS_FIELD,
     ],
@@ -909,7 +909,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
           { value: "signature", label: "Signature" },
           { value: "other", label: "Other" },
         ],
-        hint: "Maps this type to the candidate onboarding upload slot (Offer Letter is ATS-only — not collected here)",
+        hint: "Maps this type to the candidate onboarding upload slot (Offer Letter is ATS-only - not collected here)",
       },
       { key: "mandatory", label: "Mandatory", type: "checkbox" },
       { key: "expiry_required", label: "Expiry Required", type: "checkbox" },
@@ -997,7 +997,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         key: "leave_cycle_start_day",
         label: "Cycle Start Day",
         type: "number",
-        hint: "Day of month leave cycle starts (1–28)",
+        hint: "Day of month leave cycle starts (1-28)",
       },
       ACTIVE_STATUS_FIELD,
     ],

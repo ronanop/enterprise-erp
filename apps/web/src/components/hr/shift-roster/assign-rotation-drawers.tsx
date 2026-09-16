@@ -248,7 +248,7 @@ export function CreateRotationDrawer({
             label="Assign employees"
             hint={
               employeeIds.length
-                ? `${employeeIds.length} selected — these people follow this rotation on the roster calendar`
+                ? `${employeeIds.length} selected - these people follow this rotation on the roster calendar`
                 : "Tick one or more employees who will rotate through the sequence"
             }
           >

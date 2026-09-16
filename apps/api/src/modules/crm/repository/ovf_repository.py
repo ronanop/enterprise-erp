@@ -41,6 +41,8 @@ class OvfRepository(CrmScopedRepository):
         company_id: UUID,
         *,
         opportunity_id: UUID | None = None,
+        opportunity_ids: list[UUID] | None = None,
+        created_by: UUID | None = None,
     ):
         stmt = select(CrmOvf).where(
             CrmOvf.company_id == company_id,
@@ -48,6 +50,12 @@ class OvfRepository(CrmScopedRepository):
         )
         if opportunity_id is not None:
             stmt = stmt.where(CrmOvf.opportunity_id == opportunity_id)
+        if opportunity_ids is not None:
+            if not opportunity_ids:
+                return []
+            stmt = stmt.where(CrmOvf.opportunity_id.in_(opportunity_ids))
+        if created_by is not None:
+            stmt = stmt.where(CrmOvf.created_by == created_by)
         stmt = self.apply_crm_filter(stmt, CrmOvf, ctx, branch_scoped=True)
         stmt = stmt.order_by(CrmOvf.created_at.desc())
         return list(self.db.scalars(stmt).all())

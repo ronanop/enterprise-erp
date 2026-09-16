@@ -148,10 +148,10 @@ export function WorkforceHub() {
           return {
             __key: String(row.id),
             name: employeeDisplayName(row),
-            code: String(row.employee_code ?? "—"),
-            type: String(emp?.employment_type ?? "—"),
-            joined: String(emp?.date_of_joining ?? "—"),
-            status: <HrStatusBadge status={String(row.status ?? "—")} />,
+            code: String(row.employee_code ?? "-"),
+            type: String(emp?.employment_type ?? "-"),
+            joined: String(emp?.date_of_joining ?? "-"),
+            status: <HrStatusBadge status={String(row.status ?? "-")} />,
           };
         })}
       />
@@ -217,9 +217,9 @@ export function LeaveHub() {
           rows={requests.map((row) => ({
             __key: String(row.id),
             doc: String(row.document_number ?? row.id),
-            dates: `${String(row.start_date ?? "—")} → ${String(row.end_date ?? "—")}`,
+            dates: `${String(row.start_date ?? "-")} → ${String(row.end_date ?? "-")}`,
             days: formatQty(Number(row.days_count ?? 0)),
-            status: <HrStatusBadge status={String(row.status ?? "—")} />,
+            status: <HrStatusBadge status={String(row.status ?? "-")} />,
           }))}
         />
       </HrSection>
@@ -238,8 +238,8 @@ export function LeaveHub() {
           emptyTitle="No leave balances"
           rows={(data?.leaveBalances ?? []).slice(0, 20).map((row) => ({
             __key: String(row.id),
-            emp: String(row.employee_id ?? "—").slice(0, 8),
-            type: String(row.leave_type_id ?? "—").slice(0, 8),
+            emp: String(row.employee_id ?? "-").slice(0, 8),
+            type: String(row.leave_type_id ?? "-").slice(0, 8),
             bal: formatQty(Number(row.balance_days ?? row.remaining_days ?? row.available_days ?? 0)),
           }))}
         />
@@ -307,10 +307,10 @@ export function TimeHub() {
         emptyDescription="Mark attendance to populate today’s register."
         rows={rows.map((row) => ({
           __key: String(row.id),
-          date: String(row.attendance_date ?? "—"),
-          emp: String(row.employee_id ?? "—").slice(0, 8),
-          att: <HrStatusBadge status={String(row.attendance_status ?? "—")} />,
-          status: <HrStatusBadge status={String(row.status ?? "—")} />,
+          date: String(row.attendance_date ?? "-"),
+          emp: String(row.employee_id ?? "-").slice(0, 8),
+          att: <HrStatusBadge status={String(row.attendance_status ?? "-")} />,
+          status: <HrStatusBadge status={String(row.status ?? "-")} />,
         }))}
       />
       <MarkAttendanceDialog open={open} onClose={() => setOpen(false)} onSaved={() => void load()} />
@@ -387,10 +387,10 @@ export function SetupHub() {
           emptyDescription="Add a designation to get started."
           rows={(data?.designations ?? []).map((row) => ({
             __key: String(row.id),
-            code: String(row.designation_code ?? "—"),
-            name: String(row.designation_name ?? "—"),
-            level: String(row.job_level ?? "—"),
-            status: <HrStatusBadge status={String(row.status ?? "—")} />,
+            code: String(row.designation_code ?? "-"),
+            name: String(row.designation_name ?? "-"),
+            level: String(row.job_level ?? "-"),
+            status: <HrStatusBadge status={String(row.status ?? "-")} />,
           }))}
         />
       </HrSection>
@@ -433,9 +433,9 @@ export function ShiftsHub() {
             emptyTitle="No shifts"
             rows={(data?.shifts ?? []).map((row) => ({
               __key: String(row.id),
-              code: String(row.shift_code ?? "—"),
-              name: String(row.shift_name ?? "—"),
-              status: <HrStatusBadge status={String(row.status ?? "—")} />,
+              code: String(row.shift_code ?? "-"),
+              name: String(row.shift_name ?? "-"),
+              status: <HrStatusBadge status={String(row.status ?? "-")} />,
             }))}
           />
         </HrSection>
@@ -454,9 +454,9 @@ export function ShiftsHub() {
             emptyTitle="No shift assignments"
             rows={(data?.shiftAssignments ?? []).map((row) => ({
               __key: String(row.id),
-              emp: String(row.employee_id ?? "—").slice(0, 8),
-              shift: String(row.shift_id ?? "—").slice(0, 8),
-              status: <HrStatusBadge status={String(row.status ?? "—")} />,
+              emp: String(row.employee_id ?? "-").slice(0, 8),
+              shift: String(row.shift_id ?? "-").slice(0, 8),
+              status: <HrStatusBadge status={String(row.status ?? "-")} />,
             }))}
           />
         </HrSection>
@@ -501,8 +501,8 @@ export function TalentHub() {
         rows={(data?.reviews ?? []).map((row) => ({
           __key: String(row.id),
           doc: String(row.document_number ?? row.id),
-          emp: String(row.employee_id ?? "—").slice(0, 8),
-          status: <HrStatusBadge status={String(row.status ?? "—")} />,
+          emp: String(row.employee_id ?? "-").slice(0, 8),
+          status: <HrStatusBadge status={String(row.status ?? "-")} />,
         }))}
       />
     </div>
@@ -544,8 +544,8 @@ export function TrainingHubPage() {
         rows={(data?.training ?? []).map((row) => ({
           __key: String(row.id),
           doc: String(row.document_number ?? row.id),
-          title: String(row.training_name ?? row.title ?? "—"),
-          status: <HrStatusBadge status={String(row.status ?? "—")} />,
+          title: String(row.training_name ?? row.title ?? "-"),
+          status: <HrStatusBadge status={String(row.status ?? "-")} />,
         }))}
       />
       <Link href="/hr/training" className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium transition-colors hover:bg-muted">Open training list</Link>
@@ -710,7 +710,7 @@ export function PayrollHubInHr() {
         rows={(data?.runs ?? []).slice(0, 15).map((row) => ({
           __key: String(row.id),
           doc: String(row.document_number ?? row.id),
-          status: <HrStatusBadge status={String(row.status ?? "—")} />,
+          status: <HrStatusBadge status={String(row.status ?? "-")} />,
         }))}
       />
     </div>
@@ -773,7 +773,7 @@ export function RecruitmentHubInHr() {
         rows={(data?.candidates ?? []).slice(0, 15).map((row) => ({
           __key: String(row.id),
           name: candidateDisplayName(row),
-          status: <HrStatusBadge status={String(row.status ?? "—")} />,
+          status: <HrStatusBadge status={String(row.status ?? "-")} />,
         }))}
       />
     </div>
@@ -829,7 +829,7 @@ export function OnboardingHub() {
         rows={(data?.onboarding ?? []).map((row) => ({
           __key: String(row.id),
           doc: String(row.document_number ?? row.id),
-          status: <HrStatusBadge status={String(row.status ?? "—")} />,
+          status: <HrStatusBadge status={String(row.status ?? "-")} />,
         }))}
       />
     </div>

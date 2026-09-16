@@ -1,5 +1,5 @@
 /**
- * Helpdesk workspace config — aligned with FRD-17 / ERD_17
+ * Helpdesk workspace config - aligned with FRD-17 / ERD_17
  * and apps/api helpdesk routers (Ticket → Feedback).
  */
 

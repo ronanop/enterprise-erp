@@ -22,7 +22,7 @@ import {
 const LOOKUPS = ["employees"] as const;
 
 function formatDateTime(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return value.slice(0, 16).replace("T", " ");
   return d.toLocaleString(undefined, {
@@ -75,7 +75,7 @@ export function ProjectFollowUpsPage() {
         label: "Site ID",
         sort: (r) => r.document_number ?? "",
         className: "font-mono text-xs text-muted-foreground",
-        cell: (r) => r.document_number ?? "—",
+        cell: (r) => r.document_number ?? "-",
       },
       {
         key: "stage_label",
@@ -96,7 +96,7 @@ export function ProjectFollowUpsPage() {
         sort: (r) => r.note ?? "",
         cell: (r) => (
           <span className="line-clamp-2 max-w-xs text-muted-foreground">
-            {r.note?.trim() || "—"}
+            {r.note?.trim() || "-"}
           </span>
         ),
       },
@@ -119,7 +119,7 @@ export function ProjectFollowUpsPage() {
         sort: (r) => (r.has_reply ? "replied" : r.delivery_status),
         cell: (r) => (
           <span className="capitalize text-muted-foreground">
-            {r.has_reply ? "Replied" : r.delivery_status || r.status || "—"}
+            {r.has_reply ? "Replied" : r.delivery_status || r.status || "-"}
           </span>
         ),
       },
@@ -147,7 +147,7 @@ export function ProjectFollowUpsPage() {
               Reply
             </Button>
           ) : (
-            <span className="text-xs text-muted-foreground">—</span>
+            <span className="text-xs text-muted-foreground">-</span>
           ),
       });
     }
@@ -167,7 +167,7 @@ export function ProjectFollowUpsPage() {
         panelTitle={projectModuleAdmin ? "Sent follow-ups" : "Received follow-ups"}
         panelSubtitle={
           projectModuleAdmin
-            ? "Newest first — tied to stage assignees from Assign owners"
+            ? "Newest first - tied to stage assignees from Assign owners"
             : "Only follow-ups where you are the stage assignee"
         }
         icon={Bell}

@@ -160,7 +160,7 @@ export function RecruitmentDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="Recruitment"
-        description="Talent acquisition — requisitions, candidates, applications, interviews, offers, verification, and onboarding."
+        description="Talent acquisition - requisitions, candidates, applications, interviews, offers, verification, and onboarding."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -207,28 +207,28 @@ export function RecruitmentDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Open requisitions"
-          value={loading ? "—" : String(kpis.openRequisitions)}
+          value={loading ? "-" : String(kpis.openRequisitions)}
           hint={`${kpis.openings} openings · ${data?.requisitions.length ?? 0} total`}
           icon={BriefcaseBusiness}
           tone={kpis.openRequisitions > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Pipeline applications"
-          value={loading ? "—" : String(kpis.pipelineApps)}
+          value={loading ? "-" : String(kpis.pipelineApps)}
           hint={`${data?.candidates.length ?? 0} candidates · ${data?.applications.length ?? 0} apps`}
           icon={UserRoundSearch}
           tone={kpis.pipelineApps > 0 ? "default" : "success"}
         />
         <FinanceKpiCard
           label="Scheduled interviews"
-          value={loading ? "—" : String(kpis.scheduledInterviews)}
+          value={loading ? "-" : String(kpis.scheduledInterviews)}
           hint={`${countByStatus(data?.interviews ?? [], ["completed"])} completed · ${data?.interviews.length ?? 0} total`}
           icon={CalendarClock}
           tone={kpis.scheduledInterviews > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Open offers"
-          value={loading ? "—" : String(kpis.openOffers)}
+          value={loading ? "-" : String(kpis.openOffers)}
           hint={`${formatInr(kpis.offerCtc)} CTC · ${countOpenDocs(data?.onboarding ?? [], ["completed", "cancelled", "failed"])} onboarding`}
           icon={FileCheck2}
           tone={kpis.openOffers > 0 ? "warning" : "success"}
@@ -356,17 +356,17 @@ export function RecruitmentDashboard() {
                       >
                         <td className="max-w-[160px] truncate px-4 py-2.5">
                           <p className="font-medium text-foreground">
-                            {String(row.document_number ?? "—")}
+                            {String(row.document_number ?? "-")}
                           </p>
                           <p className="truncate text-[11px] text-muted-foreground">
                             {String(row.applied_at ?? "").slice(0, 10)}
                           </p>
                         </td>
                         <td className="max-w-[140px] truncate px-4 py-2.5 text-xs text-foreground">
-                          {candidate ? candidateDisplayName(candidate) : "—"}
+                          {candidate ? candidateDisplayName(candidate) : "-"}
                         </td>
                         <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground">
-                          {String(row.current_stage_code ?? "—")}
+                          {String(row.current_stage_code ?? "-")}
                         </td>
                         <td className="px-4 py-2.5">
                           <FinanceStatusBadge
@@ -412,7 +412,7 @@ export function RecruitmentDashboard() {
                   >
                     <div className="flex items-center justify-between gap-2">
                       <p className="truncate text-sm font-medium">
-                        {String(row.document_number ?? "—")}
+                        {String(row.document_number ?? "-")}
                       </p>
                       <FinanceStatusBadge
                         status={asStatus(row.status) || String(row.status ?? "")}

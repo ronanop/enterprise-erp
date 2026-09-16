@@ -28,7 +28,7 @@ export function scoreVendorLabelForParty(label: string, party: string): number {
   return 0;
 }
 
-/** @deprecated OEM is brand, not vendor — use scoreVendorLabelForParty / matchVendorByDistributor. */
+/** @deprecated OEM is brand, not vendor - use scoreVendorLabelForParty / matchVendorByDistributor. */
 export function scoreVendorLabelForOem(label: string, oem: string): number {
   return scoreVendorLabelForParty(label, oem);
 }
@@ -58,7 +58,7 @@ export function matchVendorByDistributor(
   return ranked[0]?.row ?? null;
 }
 
-/** @deprecated Use matchVendorByDistributor — OEM is brand, not the buy-side vendor. */
+/** @deprecated Use matchVendorByDistributor - OEM is brand, not the buy-side vendor. */
 export function matchVendorByOem(
   vendors: VendorOption[],
   _oemName: string | null | undefined,
@@ -88,5 +88,5 @@ export function resolveVendorDisplayName(input: {
     .map((name) => normalizeDistributorDisplayName(name))
     .filter((name): name is string => Boolean(name));
   if (open.length > 0) return open.join(", ");
-  return "—";
+  return "-";
 }

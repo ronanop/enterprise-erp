@@ -15,7 +15,7 @@ router = APIRouter()
 def health_check(
     _: Annotated[None, Depends(optional_authentication)],
 ) -> APIResponse[dict[str, str]]:
-    """Public liveness probe — minimal payload (no stack/env disclosure)."""
+    """Public liveness probe - minimal payload (no stack/env disclosure)."""
     ok = check_database_connection()
     return APIResponse(
         success=True,

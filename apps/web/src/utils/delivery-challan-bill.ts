@@ -104,18 +104,18 @@ export function deriveBillStatusFromQuantities(
   return "partially_billed";
 }
 
-export type PoDcBillStatus = "—" | "Unbilled" | "Partially billed" | "Fully billed";
+export type PoDcBillStatus = "-" | "Unbilled" | "Partially billed" | "Fully billed";
 
 /**
  * Aggregate bill taken across DCs for a purchase order.
- * No DC yet → "—" (bill is only taken after a delivery challan exists).
+ * No DC yet → "-" (bill is only taken after a delivery challan exists).
  */
 export function aggregatePoDcBillStatus(orderId: string | null | undefined): PoDcBillStatus {
   const id = (orderId || "").trim();
-  if (!id) return "—";
+  if (!id) return "-";
 
   const challans = listDeliveryChallans().filter((c) => c.orderId === id);
-  if (challans.length === 0) return "—";
+  if (challans.length === 0) return "-";
 
   let anyUnbilled = false;
   let anyPartial = false;

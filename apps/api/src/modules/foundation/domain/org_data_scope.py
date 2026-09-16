@@ -49,7 +49,7 @@ def has_tenant_wide_data_access(ctx: TenantContext, module_key: str | None = Non
 
 
 def has_procurement_tenant_wide_data_access(ctx: TenantContext) -> bool:
-    """Compatibility wrapper — procurement module admin or platform."""
+    """Compatibility wrapper - procurement module admin or platform."""
     return has_module_wide_data_access(ctx, "procurement")
 
 

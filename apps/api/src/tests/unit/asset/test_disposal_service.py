@@ -198,7 +198,7 @@ def test_post_does_not_call_finance_when_claim_conflicts(_flag) -> None:
 
 @patch("modules.asset.service.disposal_service.asset_workflow_governance_enabled", return_value=True)
 def test_reject_delegates_audit_to_governance_only(_flag) -> None:
-    """Reject audit is owned by AssetGovernanceService — no duplicate service audit."""
+    """Reject audit is owned by AssetGovernanceService - no duplicate service audit."""
     db = MagicMock()
     svc = DisposalService(db)
     ctx = _ctx()

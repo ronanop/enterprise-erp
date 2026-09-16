@@ -1,4 +1,4 @@
-# Asset Checklist — Deployment Guide (FP-ASSET-014)
+# Asset Checklist - Deployment Guide (FP-ASSET-014)
 
 ## Prerequisites
 

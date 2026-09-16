@@ -62,7 +62,7 @@ class RecJobRequisition(Base, *RecTransactionMixin):
         nullable=False,
         index=True,
     )
-    # UUID ref — no FK here: rec_recruiter is created after this table (ERD §15 0202→0205)
+    # UUID ref - no FK here: rec_recruiter is created after this table (ERD §15 0202→0205)
     recruiter_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True, index=True)
     priority: Mapped[str] = mapped_column(String(20), nullable=False, default="medium")
     target_hire_date: Mapped[date | None] = mapped_column(Date, nullable=True)

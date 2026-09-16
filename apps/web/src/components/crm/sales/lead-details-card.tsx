@@ -15,9 +15,9 @@ import { FinanceField } from "@/components/finance/journals/finance-form-field";
 import { formatInr, type Company, type Option, type SalesLead } from "@/services/sales-crm-service";
 
 function textOrDash(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return "—";
+  if (value === null || value === undefined) return "-";
   const text = String(value).trim();
-  return text || "—";
+  return text || "-";
 }
 
 function ReadOnlyValue({ value }: { value: string }) {
@@ -53,7 +53,7 @@ type Props = {
   company?: Company | null;
   employees?: Option[];
   leadSources?: Option[];
-  /** Section heading — use Opportunity Information on converted deals. */
+  /** Section heading - use Opportunity Information on converted deals. */
   title?: string;
 };
 
@@ -66,16 +66,16 @@ export function LeadDetailsCard({
 }: Props) {
   const employeeName = (id: string | null | undefined) => {
     if (!id) return "None";
-    return employees.find((employee) => employee.id === id)?.label ?? "—";
+    return employees.find((employee) => employee.id === id)?.label ?? "-";
   };
 
   const leadSourceName = (id: string | null | undefined) => {
     if (!id) return "None";
-    return leadSources.find((source) => source.id === id)?.label ?? "—";
+    return leadSources.find((source) => source.id === id)?.label ?? "-";
   };
 
-  const companyName = company?.customer_name ?? "—";
-  const salutation = lead.salutation?.trim() || "—";
+  const companyName = company?.customer_name ?? "-";
+  const salutation = lead.salutation?.trim() || "-";
 
   return (
     <div className="space-y-5">
@@ -129,11 +129,11 @@ export function LeadDetailsCard({
 
           <LeadReadOnlyField
             label="Expected Order Value *"
-            value={lead.expected_amount != null ? formatInr(lead.expected_amount) : "—"}
+            value={lead.expected_amount != null ? formatInr(lead.expected_amount) : "-"}
           />
           <LeadReadOnlyField
             label="Committed Amount"
-            value={lead.committed_amount != null ? formatInr(lead.committed_amount) : "—"}
+            value={lead.committed_amount != null ? formatInr(lead.committed_amount) : "-"}
           />
           <LeadReadOnlyField label="Status" value={formatLeadStatus(lead)} />
 

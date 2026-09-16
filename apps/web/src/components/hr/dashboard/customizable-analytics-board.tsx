@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 
 export type AnalyticsLayoutItem = {
   id: string;
-  /** Column span 1–12 on large screens */
+  /** Column span 1-12 on large screens */
   colSpan: number;
   /** Total card height in px (includes title + padding) */
   height: number;

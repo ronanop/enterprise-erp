@@ -97,7 +97,7 @@ export function buildOnboardingWorkflowSteps(c: OnboardingCase): OnboardingWorkf
     },
   ];
 
-  // Optional manager step only when checklist exists — still no assignee UI.
+  // Optional manager step only when checklist exists - still no assignee UI.
   if (c.checklist.some((t) => t.owner === "manager")) {
     raw.splice(4, 0, {
       id: "manager",
@@ -121,21 +121,21 @@ export function onboardingStageRemark(c: OnboardingCase): string {
   const display = resolveOnboardingDisplayStatus(c.status, c.joiningDate);
   switch (c.status) {
     case "draft":
-      return "Case drafted — send an invitation to start the candidate portal.";
+      return "Case drafted - send an invitation to start the candidate portal.";
     case "invitation_sent":
-      return "Invitation sent — waiting for the candidate to open the portal.";
+      return "Invitation sent - waiting for the candidate to open the portal.";
     case "in_progress":
       return "Candidate is filling forms and uploading documents.";
     case "submitted":
-      return "Forms submitted — review details and documents.";
+      return "Forms submitted - review details and documents.";
     case "hr_review":
       return "Awaiting HR approval for submitted documents and employee details.";
     case "overdue":
-      return "Onboarding is overdue — follow up with the candidate or HR owner.";
+      return "Onboarding is overdue - follow up with the candidate or HR owner.";
     case "ready_to_join":
-      return "Ready to join — complete activation when the joining date arrives.";
+      return "Ready to join - complete activation when the joining date arrives.";
     case "pending_join":
-      return `Pending join — employee activates on ${c.joiningDate || "joining date"}.`;
+      return `Pending join - employee activates on ${c.joiningDate || "joining date"}.`;
     case "joined":
       return "Employee joined and is active in Workforce.";
     case "cancelled":

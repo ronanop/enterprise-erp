@@ -128,10 +128,10 @@ export function ScmCreatePoEntry({
             OVF status will move from{" "}
             <span className="font-semibold">Hold</span> to{" "}
             <span className="font-semibold">Open</span> when you save or finalize the vendor PO.
-            {scmHoldDayCountDisplay(scmOnHoldAt) !== "—"
+            {scmHoldDayCountDisplay(scmOnHoldAt) !== "-"
               ? ` Currently on hold for ${scmHoldDayCountDisplay(scmOnHoldAt)}`
               : ""}
-            {scmHoldSinceDisplay(scmOnHoldAt) !== "—"
+            {scmHoldSinceDisplay(scmOnHoldAt) !== "-"
               ? ` (since ${scmHoldSinceDisplay(scmOnHoldAt)}).`
               : "."}
           </p>

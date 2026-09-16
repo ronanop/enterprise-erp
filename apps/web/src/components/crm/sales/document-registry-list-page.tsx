@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { FileStack } from "lucide-react";
 
-import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
@@ -24,32 +24,28 @@ type SortKey = "document" | "opportunity" | "stage" | "size";
 
 const META: Record<
   DocumentCategory,
-  { title: string; description: string; flag: keyof Opportunity; label: string; subtitle: string }
+  { title: string; flag: keyof Opportunity; label: string; subtitle: string }
 > = {
   oem_quote: {
     title: "OEM Quote",
-    description: "OEM quotations attached on opportunities before customer quote creation.",
     flag: "oem_quote_attached",
     label: "OEM Quote",
     subtitle: "OEM quotation documents",
   },
   customer_po: {
     title: "Purchase Order",
-    description: "Customer purchase orders attached after quote acceptance.",
     flag: "customer_po_attached",
     label: "Customer PO",
     subtitle: "Customer purchase orders",
   },
   boq: {
     title: "BOQ",
-    description: "Bill of Quantities documents attached on opportunities.",
     flag: "boq_attached",
     label: "BOQ",
     subtitle: "Bill of quantities",
   },
   sow: {
     title: "SOW",
-    description: "Statement of Work documents attached on opportunities.",
     flag: "sow_attached",
     label: "SOW",
     subtitle: "Statements of work",
@@ -167,15 +163,7 @@ export function DocumentRegistryListPage({
       {!embedded ? (
         <PageHeader
           title={meta.title}
-          description={meta.description}
         />
-      ) : null}
-
-      {!embedded ? (
-        <CrmInfoBanner>
-          {meta.label} files are attached from an Opportunity blueprint step — open the opportunity to
-          upload or review.
-        </CrmInfoBanner>
       ) : null}
 
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
@@ -244,7 +232,7 @@ export function DocumentRegistryListPage({
                           {row.opportunity?.opportunity_name ?? row.opportunityId.slice(0, 8)}
                         </Link>
                       ) : (
-                        "—"
+                        "-"
                       )}
                       {row.opportunity?.opportunity_code ? (
                         <div className="text-[11px] text-muted-foreground">
@@ -253,13 +241,13 @@ export function DocumentRegistryListPage({
                       ) : null}
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground capitalize">
-                      {(row.opportunity?.blueprint_state ?? row.opportunity?.current_stage ?? "—").replaceAll(
+                      {(row.opportunity?.blueprint_state ?? row.opportunity?.current_stage ?? "-").replaceAll(
                         "_",
                         " ",
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">
-                      {row.size != null ? `${Math.max(1, Math.round(row.size / 1024))} KB` : "—"}
+                      {row.size != null ? `${Math.max(1, Math.round(row.size / 1024))} KB` : "-"}
                     </td>
                   </tr>
                 ))

@@ -289,7 +289,7 @@ class LeaveBalanceService:
                 template_name="Comp Off Credited",
                 event_type="hr.compoff_credit",
                 title="Comp off credited",
-                body=f"{days_dec} Comp Off day(s) credited" + (f" — {reason}" if reason else "."),
+                body=f"{days_dec} Comp Off day(s) credited" + (f" - {reason}" if reason else "."),
                 kind="leave",
             )
         except Exception:
@@ -743,7 +743,7 @@ class LeaveRequestService:
             start_date=start_date,
             end_date=end_date,
         )
-        # Leave cycle: calendar months only (past/current). Posted balance only — no early credit.
+        # Leave cycle: calendar months only (past/current). Posted balance only - no early credit.
         assert_no_future_calendar_month_leave(start_date, end_date)
         balance = self._find_open_balance(ctx, cid, employee_id, leave_type_id, start_date.year)
         if balance is not None:

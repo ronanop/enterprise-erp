@@ -130,7 +130,7 @@ export function DisposalEligibilityPanel({ asset }: { asset: DisposalAssetOption
         {isOperationalStatus(ops) ? (
           <StatusBadge kind="operational" status={ops} />
         ) : (
-          <Badge variant="outline">{ops || "—"}</Badge>
+          <Badge variant="outline">{ops || "-"}</Badge>
         )}
       </div>
       {eligible ? (
@@ -143,8 +143,8 @@ export function DisposalEligibilityPanel({ asset }: { asset: DisposalAssetOption
           {ops === "RETIRED"
             ? "Retired assets are not currently eligible for disposal."
             : ops === "ASSIGNED"
-              ? "Not eligible — return the asset with condition Dead first."
-              : "Not eligible — operational status must be Pending Disposal."}
+              ? "Not eligible - return the asset with condition Dead first."
+              : "Not eligible - operational status must be Pending Disposal."}
         </p>
       )}
     </div>
@@ -653,10 +653,10 @@ export function AssetDisposalWorkspace() {
                       const serial =
                         typeof asset.serial_number === "string" && asset.serial_number.trim()
                           ? asset.serial_number.trim()
-                          : "—";
+                          : "-";
                       return (
                         <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                          {asset.asset_code} — {asset.asset_name} · S/N: {serial} · Lifecycle:{" "}
+                          {asset.asset_code} - {asset.asset_name} · S/N: {serial} · Lifecycle:{" "}
                           {formatLifecycleStatusLabel(asset.status)} · Operational: {opsLabel}
                         </SelectItem>
                       );

@@ -183,7 +183,7 @@ export default function PayslipViewerPage() {
             </h2>
             <div className="grid grid-cols-3 divide-x divide-[#c3c6d7]/40 text-center">
               <Stat
-                value={periodDays ? String(periodDays) : "—"}
+                value={periodDays ? String(periodDays) : "-"}
                 label="Scheduled (N)"
                 color="text-[#004ac6]"
               />
@@ -206,7 +206,7 @@ export default function PayslipViewerPage() {
               tone={leaveStatusTone(row.status)}
             />
             <p className="text-xs text-[#434655]">
-              Issued {row.issued_at ? formatDateTime(row.issued_at) : "—"}
+              Issued {row.issued_at ? formatDateTime(row.issued_at) : "-"}
             </p>
           </div>
 

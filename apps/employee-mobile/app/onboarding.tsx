@@ -25,7 +25,7 @@ const STEPS = [
   {
     id: "features",
     title: "Everything in One Place",
-    body: "Leaves, salary, documents, meetings, and tasks—all together.",
+    body: "Leaves, salary, documents, meetings, and tasks-all together.",
     image: require("../assets/images/onboarding/features.png"),
     cta: "Next",
   },

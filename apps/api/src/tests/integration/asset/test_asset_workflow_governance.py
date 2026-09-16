@@ -1,4 +1,4 @@
-"""INT-WF-01 / INT-WF-02 / INT-WF-06 — asset workflow governance (real WorkflowService)."""
+"""INT-WF-01 / INT-WF-02 / INT-WF-06 - asset workflow governance (real WorkflowService)."""
 
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ def test_int_wf_01_submit_creates_workflow_instance(wf_db, tenant_ids) -> None:
 
 @pytest.mark.integration
 def test_int_wf_02_three_step_approve_activates_only_on_final(wf_db, tenant_ids) -> None:
-    """INT-WF-02: 3-step seed — intermediate stays submitted; final → active + master."""
+    """INT-WF-02: 3-step seed - intermediate stays submitted; final → active + master."""
     seed_ast_asset_approval(wf_db, tenant_ids["tenant_id"], tenant_ids["creator_id"])
     asset = insert_draft_asset(wf_db, tenant_ids)
     svc = AssetService(wf_db)

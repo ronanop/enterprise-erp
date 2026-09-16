@@ -85,7 +85,7 @@ export function EmsPagination({
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/70 px-3 py-2 text-xs text-muted-foreground">
       <span>
-        {start}–{end} of {total}
+        {start}-{end} of {total}
       </span>
       <div className="flex items-center gap-1">
         <Button

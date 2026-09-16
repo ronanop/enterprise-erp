@@ -14,7 +14,7 @@ type ProcurementPageHeaderProps = {
   onBack?: () => void;
 };
 
-/** Procurement page title — matches CRM PageHeader defaults. */
+/** Procurement page title - matches CRM PageHeader defaults. */
 export function ProcurementPageHeader({
   title,
   description,

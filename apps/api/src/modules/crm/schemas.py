@@ -748,7 +748,7 @@ class CampaignMemberResponse(OrmModel):
 
 
 # ---------------------------------------------------------------------------
-# Sales CRM (Zoho-replacement) — Company / Contact / Product / Quote / OVF /
+# Sales CRM (Zoho-replacement) - Company / Contact / Product / Quote / OVF /
 # My Jobs / Attachments / Blueprint schemas.
 # ---------------------------------------------------------------------------
 
@@ -900,7 +900,7 @@ class ContactResponse(OrmModel):
 
 
 class LeadCreateFromCompany(BaseModel):
-    """Body for POST /crm/companies/{id}/leads — the only sales-lead entry point."""
+    """Body for POST /crm/companies/{id}/leads - the only sales-lead entry point."""
 
     branch_id: UUID
     first_name: str | None = None
@@ -1570,7 +1570,7 @@ class OpportunityTimelineResponse(BaseModel):
 
 
 class BlueprintActionRequest(BaseModel):
-    """Generic action payload — fields are action-specific and all optional.
+    """Generic action payload - fields are action-specific and all optional.
 
     e.g. ``file_name``/``file_path``/``content_base64`` for attach_* actions,
     ``team_role``/``remarks`` for send_*_approval, ``deal_reg_number`` for

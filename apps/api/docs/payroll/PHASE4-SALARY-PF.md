@@ -1,4 +1,4 @@
-# Payroll Phase 4 — Salary structure & fixed PF
+# Payroll Phase 4 - Salary structure & fixed PF
 
 ## Policy-driven calculation
 
@@ -10,15 +10,15 @@ Payroll runs load **`PayPayrollPolicy`** (or code defaults) and pass it to `Payr
 |-----------|---------|
 | Basic | `basic_percent × gross` (default **60%**) |
 | HRA | `hra_percent_of_basic × basic` (default **50%**) |
-| Special | `gross − basic − hra` |
+| Special | `gross - basic - hra` |
 | Employee PF | **₹1,800** (`pf_employee_amount`) |
 | Employer PF | **₹1,900** (`pf_employer_amount`) |
 | PF total | **₹3,700** |
-| Net | `gross − 3,700` when `net_pay_formula = gross_minus_fixed_pf_total` |
+| Net | `gross - 3,700` when `net_pay_formula = gross_minus_fixed_pf_total` |
 
 Example **X = 30,000**, full month: net **₹26,300**.
 
-Proration (from Phase 2–3) applies to **gross first**, then components split on payable gross.
+Proration (from Phase 2-3) applies to **gross first**, then components split on payable gross.
 
 ### Modes
 

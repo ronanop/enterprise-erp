@@ -1,26 +1,26 @@
-# ERD_22 — E-Commerce / External Channel
+# ERD_22 - E-Commerce / External Channel
 
-**Document:** Enterprise ERD — E-Commerce / External Channel Domain  
+**Document:** Enterprise ERD - E-Commerce / External Channel Domain  
 **Version:** 1.1  
-**Status:** Locked — Ready for Sprint 22 Implementation Planning  
+**Status:** Locked - Ready for Sprint 22 Implementation Planning  
 **Schema:** `ecommerce`  
 **Table Prefix:** `ec_`  
 **Aligned To:** BRD v1.0 · FRD-22 E-Commerce & External Channel Integration · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-22 E-Commerce & External Channel Integration Domain](../02_FRD/FRD-22-Ecommerce-External-Channel-Integration-Domain.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.16-beta](../07_RELEASES/ERP_Core_v1.16-beta.md)  
 
-> **C-01 note:** Party / item identity remains **`master.master_employee`**, **`master.master_customer`**, **`master.master_vendor`**, and **`master.master_product`**. E-Commerce **never** invents parallel masters. This module **extends ERP to external channels** — it does **not** replace Sales. **Sales remains order-of-record**, **Inventory remains stock authority**, **Finance remains payment accounting authority**, and **Integration Hub** handles external marketplace sync. Peers communicate via **services · events · UUID refs** — **never** via peer ORM writes.
+> **C-01 note:** Party / item identity remains **`master.master_employee`**, **`master.master_customer`**, **`master.master_vendor`**, and **`master.master_product`**. E-Commerce **never** invents parallel masters. This module **extends ERP to external channels** - it does **not** replace Sales. **Sales remains order-of-record**, **Inventory remains stock authority**, **Finance remains payment accounting authority**, and **Integration Hub** handles external marketplace sync. Peers communicate via **services · events · UUID refs** - **never** via peer ORM writes.
 
 ---
 
 ## 1. Functional Overview (Purpose)
 
-The E-Commerce / External Channel domain provides the **enterprise omnichannel commerce layer** for online storefronts, sales channels, product publishing, catalog / price / inventory synchronization views, customer carts, channel orders, payments, shipping / tracking, returns, coupons / promotions, marketplace connector bindings, notifications, and channel reports (FRD-22 §1–§15 · §18–§19).
+The E-Commerce / External Channel domain provides the **enterprise omnichannel commerce layer** for online storefronts, sales channels, product publishing, catalog / price / inventory synchronization views, customer carts, channel orders, payments, shipping / tracking, returns, coupons / promotions, marketplace connector bindings, notifications, and channel reports (FRD-22 §1-§15 · §18-§19).
 
 This module **does not replace Sales**. It captures **channel-facing** commerce artifacts and maps confirmed orders into Sales as the **order-of-record**. It **does not own stock** (Inventory remains authoritative) and **does not own GL** (Finance posts only via `PostingService.post_system_journal()`).
 
-E-Commerce **depends on** Foundation, Organization, Master Data, Sales, Inventory, Finance (posting only), and Integration Hub. It **consumes existing masters only (C-01)** — **`master_employee`**, **`master_customer`**, **`master_vendor`**, **`master_product`**, and **`org_department`**.
+E-Commerce **depends on** Foundation, Organization, Master Data, Sales, Inventory, Finance (posting only), and Integration Hub. It **consumes existing masters only (C-01)** - **`master_employee`**, **`master_customer`**, **`master_vendor`**, **`master_product`**, and **`org_department`**.
 
 **Finance remains the only accounting system.** E-Commerce **never** ORM-writes `fin_*`. Any capture / settlement / refund journal uses **`finance_journal_id`** after **`PostingService.post_system_journal()`** only.
 
@@ -62,44 +62,44 @@ Website · Mobile · Marketplaces · B2B / dealer portals
 
 ### API Mount (planned)
 
-**`/api/v1/ecommerce`** — routers for all aggregates (stores, sales-channels, product-listings, listing-prices, listing-inventories, customer-carts, cart-items, orders, order-items, payments, payment-transactions, shipments, shipping-trackings, return-requests, return-items, coupons, promotions, marketplace-connectors, notifications, reports).
+**`/api/v1/ecommerce`** - routers for all aggregates (stores, sales-channels, product-listings, listing-prices, listing-inventories, customer-carts, cart-items, orders, order-items, payments, payment-transactions, shipments, shipping-trackings, return-requests, return-items, coupons, promotions, marketplace-connectors, notifications, reports).
 
 ---
 
 ## 2. Scope & Business Rules
 
 ### In Scope
-- **Online storefronts** and **sales channels** — FRD-22 §9–§13
-- **Product listings**, **listing prices**, **listing inventory projections** — FRD-22 §4–§5 · §11
+- **Online storefronts** and **sales channels** - FRD-22 §9-§13
+- **Product listings**, **listing prices**, **listing inventory projections** - FRD-22 §4-§5 · §11
 - **Customer carts** and **cart items**
 - **Channel orders** and **order items** with map-to-Sales
 - **Payments** and **payment transactions** (gateway envelopes)
-- **Shipments** and **shipping tracking** — FRD-22 §15
-- **Return requests** and **return items** — FRD-22 §14
-- **Coupons** and **promotions** — FRD-22 §12
-- **Marketplace connector** bindings (Hub UUID) — FRD-22 §8
+- **Shipments** and **shipping tracking** - FRD-22 §15
+- **Return requests** and **return items** - FRD-22 §14
+- **Coupons** and **promotions** - FRD-22 §12
+- **Marketplace connector** bindings (Hub UUID) - FRD-22 §8
 - **Notifications** and **channel reports**
 - Workflow, RBAC, Celery stubs (planning)
 
 ### Out of Scope (Phase 2 / Separate)
-- Replacing **Sales** order / invoice / delivery ownership — channel order **maps into** Sales; Sales remains order-of-record
-- Replacing **Inventory** stock ledgers / reservations ownership — listing inventory is a **channel mirror**, not stock truth
-- Full **payment gateway SDK product** — Phase 1: payment / transaction shells + PostingService path
-- Full **carrier label engine product** — Phase 1: shipment + tracking metadata
-- Duplicate `ec_employee` / `ec_customer` / `ec_vendor` / `ec_product` / `ec_department` — **forbidden (C-01)**
+- Replacing **Sales** order / invoice / delivery ownership - channel order **maps into** Sales; Sales remains order-of-record
+- Replacing **Inventory** stock ledgers / reservations ownership - listing inventory is a **channel mirror**, not stock truth
+- Full **payment gateway SDK product** - Phase 1: payment / transaction shells + PostingService path
+- Full **carrier label engine product** - Phase 1: shipment + tracking metadata
+- Duplicate `ec_employee` / `ec_customer` / `ec_vendor` / `ec_product` / `ec_department` - **forbidden (C-01)**
 - Direct ORM writes to any peer business schema
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 
 ### Business Rules
-1. **Sales remains order-of-record** — `ec_order.sales_order_id` is UUID-only; Hub/services create Sales orders — **no `sales_*` ORM writes from E-Commerce**
-2. **Inventory remains stock authority** — `ec_listing_inventory` is channel ATP projection; stock moves via Inventory services / events only
-3. **Finance:** capture / settle / refund journals **only** via `PostingService.post_system_journal()`; store `finance_journal_id` UUID — **no `fin_*` ORM writes**
-4. **Integration Hub** owns external marketplace / website / carrier transport — `ec_marketplace_connector` stores Hub connector UUID only
+1. **Sales remains order-of-record** - `ec_order.sales_order_id` is UUID-only; Hub/services create Sales orders - **no `sales_*` ORM writes from E-Commerce**
+2. **Inventory remains stock authority** - `ec_listing_inventory` is channel ATP projection; stock moves via Inventory services / events only
+3. **Finance:** capture / settle / refund journals **only** via `PostingService.post_system_journal()`; store `finance_journal_id` UUID - **no `fin_*` ORM writes**
+4. **Integration Hub** owns external marketplace / website / carrier transport - `ec_marketplace_connector` stores Hub connector UUID only
 5. **C-01:** customers / products / vendors / employees / department resolve via Master Data / Organization only
 6. Soft delete + version on mutable `ec_*` tables
 7. Numbers company-scoped (`STO-` / `CHN-` / `LST-` / `CRT-` / `ECO-` / `PAY-` / `SHP-` / `RET-` / `CPN-` / `PRO-` / `MPK-`)
-8. Credentials / gateway secrets are **vault refs** — never plaintext in DB
-9. Analytics / Document / Helpdesk / Service / peers consume via UUID / events — **no peer ORM writes**
+8. Credentials / gateway secrets are **vault refs** - never plaintext in DB
+9. Analytics / Document / Helpdesk / Service / peers consume via UUID / events - **no peer ORM writes**
 
 ### Assumptions
 - One `ec_store` may host many `ec_sales_channel` rows (web, mobile, marketplace brand store)
@@ -114,10 +114,10 @@ Website · Mobile · Marketplaces · B2B / dealer portals
 | ERD_01 Foundation | `sec_tenant`, `sec_user`, `wf_definition`, `wf_instance`, platform audit / notification |
 | ERD_02 Organization | `org_company`, `org_branch`, `org_department` |
 | ERD_03 Master Data | **`master_employee`**, **`master_customer`**, **`master_vendor`**, **`master_product`** |
-| ERD_05 Sales | Order-of-record via **service / UUID** — **no Sales ORM writes** |
-| ERD_08 Inventory | Stock authority via **service / events / UUID** — **no Inventory ORM writes** |
+| ERD_05 Sales | Order-of-record via **service / UUID** - **no Sales ORM writes** |
+| ERD_08 Inventory | Stock authority via **service / events / UUID** - **no Inventory ORM writes** |
 | ERD_04 Finance | **`PostingService.post_system_journal()`** only |
-| ERD_21 Integration Hub | Connector / webhook / sync UUID refs — **no Hub table ORM writes from E-Commerce adapters beyond published APIs** |
+| ERD_21 Integration Hub | Connector / webhook / sync UUID refs - **no Hub table ORM writes from E-Commerce adapters beyond published APIs** |
 
 ---
 
@@ -126,25 +126,25 @@ Website · Mobile · Marketplaces · B2B / dealer portals
 | # | Table | Classification | tenant_id | company_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-------------|---------|----------|
 | 1 | `ec_store` | Catalog | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 2 | `ec_sales_channel` | Catalog | ✅ | ✅ | ✅ | ✅ | — |
+| 2 | `ec_sales_channel` | Catalog | ✅ | ✅ | ✅ | ✅ | - |
 | 3 | `ec_product_listing` | Catalog / Transaction | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 4 | `ec_listing_price` | Config | ✅ | ✅ | ✅ | ✅ | — |
-| 5 | `ec_listing_inventory` | Projection | ✅ | ✅ | ✅ | ✅ | — |
-| 6 | `ec_customer_cart` | Transaction | ✅ | ✅ | ✅ | ✅ | — |
-| 7 | `ec_cart_item` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | — |
+| 4 | `ec_listing_price` | Config | ✅ | ✅ | ✅ | ✅ | - |
+| 5 | `ec_listing_inventory` | Projection | ✅ | ✅ | ✅ | ✅ | - |
+| 6 | `ec_customer_cart` | Transaction | ✅ | ✅ | ✅ | ✅ | - |
+| 7 | `ec_cart_item` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | - |
 | 8 | `ec_order` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 9 | `ec_order_item` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | — |
-| 10 | `ec_payment` | Transaction | ✅ | ✅ | ✅ | ✅ | — |
-| 11 | `ec_payment_transaction` | Ledger Detail | ✅ | ✅ | ✅ | ✅ | — |
-| 12 | `ec_shipment` | Transaction | ✅ | ✅ | ✅ | ✅ | — |
-| 13 | `ec_shipping_tracking` | Event Log | ✅ | ✅ | ✅ | ✅ | — |
+| 9 | `ec_order_item` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | - |
+| 10 | `ec_payment` | Transaction | ✅ | ✅ | ✅ | ✅ | - |
+| 11 | `ec_payment_transaction` | Ledger Detail | ✅ | ✅ | ✅ | ✅ | - |
+| 12 | `ec_shipment` | Transaction | ✅ | ✅ | ✅ | ✅ | - |
+| 13 | `ec_shipping_tracking` | Event Log | ✅ | ✅ | ✅ | ✅ | - |
 | 14 | `ec_return_request` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 15 | `ec_return_item` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | — |
-| 16 | `ec_coupon` | Config | ✅ | ✅ | ✅ | ✅ | — |
-| 17 | `ec_promotion` | Config | ✅ | ✅ | ✅ | ✅ | — |
+| 15 | `ec_return_item` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | - |
+| 16 | `ec_coupon` | Config | ✅ | ✅ | ✅ | ✅ | - |
+| 17 | `ec_promotion` | Config | ✅ | ✅ | ✅ | ✅ | - |
 | 18 | `ec_marketplace_connector` | Config | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 19 | `ec_notification` | Notification | ✅ | ✅ | ✅ | ✅ | — |
-| 20 | `ec_report` | Snapshot | ✅ | ✅ | ✅ | ✅ | — |
+| 19 | `ec_notification` | Notification | ✅ | ✅ | ✅ | ✅ | - |
+| 20 | `ec_report` | Snapshot | ✅ | ✅ | ✅ | ✅ | - |
 
 **Business Tables: 20** · **Schema: `ecommerce`**
 
@@ -221,7 +221,7 @@ master_employee / master_customer / master_vendor / master_product (C-01)
             │       │       └── ec_return_request → ec_return_item
             │       └── ec_notification
             ├── ec_marketplace_connector
-            │       └── int_connector_id / int_external_system_id (UUID — Integration Hub)
+            │       └── int_connector_id / int_external_system_id (UUID - Integration Hub)
             ├── ec_coupon
             ├── ec_promotion
             │       └── ec_coupon
@@ -243,7 +243,7 @@ Optional UUID-only (no FK): sales_order_id, sales_order_line_id, inventory_reser
 |--------|-------|
 | `store_number` | `STO-YYYY-NNNNNN` |
 | `store_code` / `store_name` | UK `(company_id, store_code)` |
-| `store_type` | b2c, b2b, marketplace_brand, headless, portal — FRD-22 §13 |
+| `store_type` | b2c, b2b, marketplace_brand, headless, portal - FRD-22 §13 |
 | `default_currency` | CHAR(3) |
 | `timezone` | VARCHAR |
 | `owner_employee_id` | FK → `master_employee` |
@@ -263,9 +263,9 @@ Optional UUID-only (no FK): sales_order_id, sales_order_line_id, inventory_reser
 | `channel_code` / `channel_name` | UK `(company_id, channel_code)` |
 | `store_id` | FK → `ec_store` |
 | `channel_type` | website, mobile_app, amazon, flipkart, shopify, woocommerce, magento, ebay, etsy, custom_marketplace, dealer_portal, distributor_portal |
-| `external_channel_ref` | VARCHAR — marketplace / CMS store id |
+| `external_channel_ref` | VARCHAR - marketplace / CMS store id |
 | `is_active` | BOOLEAN |
-| `config_json` | JSONB (locale, catalog filters — no secrets) |
+| `config_json` | JSONB (locale, catalog filters - no secrets) |
 | `status` | draft, active, paused, retired |
 | **UK:** `(company_id, channel_number)` |
 
@@ -294,7 +294,7 @@ Optional UUID-only (no FK): sales_order_id, sales_order_line_id, inventory_reser
 | Column | Notes |
 |--------|-------|
 | `product_listing_id` | FK → `ec_product_listing` |
-| `price_type` | retail, wholesale, contract, promotional — FRD-22 §11 |
+| `price_type` | retail, wholesale, contract, promotional - FRD-22 §11 |
 | `currency` | CHAR(3) |
 | `list_price` / `sale_price` | NUMERIC |
 | `effective_from` / `effective_to` | TIMESTAMPTZ |
@@ -309,10 +309,10 @@ Optional UUID-only (no FK): sales_order_id, sales_order_line_id, inventory_reser
 | Column | Notes |
 |--------|-------|
 | `product_listing_id` | FK → `ec_product_listing` |
-| `warehouse_id` | UUID optional — **no Inventory FK** |
-| `available_qty` / `reserved_qty` / `safety_stock_qty` | NUMERIC — **channel projection** |
+| `warehouse_id` | UUID optional - **no Inventory FK** |
+| `available_qty` / `reserved_qty` / `safety_stock_qty` | NUMERIC - **channel projection** |
 | `last_synced_at` | TIMESTAMPTZ |
-| `inventory_item_ref_id` | UUID optional — Inventory truth ref |
+| `inventory_item_ref_id` | UUID optional - Inventory truth ref |
 | `sync_status` | in_sync, pending, failed, stale |
 | `status` | active, inactive |
 | **Rule:** ERP Inventory = master inventory (FRD-22 §5); this table never posts stock |
@@ -360,11 +360,11 @@ Optional UUID-only (no FK): sales_order_id, sales_order_line_id, inventory_reser
 | `customer_id` | FK → `master_customer` |
 | `cart_id` | FK optional → `ec_customer_cart` |
 | `coupon_id` | FK optional → `ec_coupon` |
-| `external_order_ref` | VARCHAR — marketplace / website order id |
+| `external_order_ref` | VARCHAR - marketplace / website order id |
 | `currency` | CHAR(3) |
 | `subtotal_amount` / `discount_amount` / `tax_amount` / `shipping_amount` / `grand_total` | NUMERIC |
 | `shipping_address_json` / `billing_address_json` | JSONB |
-| `sales_order_id` | UUID optional — **Sales order-of-record; no FK** |
+| `sales_order_id` | UUID optional - **Sales order-of-record; no FK** |
 | `placed_at` | TIMESTAMPTZ |
 | `status` | new, submitted, under_review, accepted, processing, packed, shipped, delivered, returned, cancelled, failed |
 | `workflow_*` | Order review |
@@ -383,7 +383,7 @@ Optional UUID-only (no FK): sales_order_id, sales_order_line_id, inventory_reser
 | `product_id` | FK → `master_product` |
 | `external_line_ref` | VARCHAR optional |
 | `quantity` / `unit_price` / `discount_amount` / `tax_amount` / `line_total` | NUMERIC |
-| `sales_order_line_id` | UUID optional — **no Sales FK** |
+| `sales_order_line_id` | UUID optional - **no Sales FK** |
 | `status` | open, allocated, shipped, cancelled, returned |
 | **UK soft:** `(order_id, line_no)` |
 
@@ -401,7 +401,7 @@ Optional UUID-only (no FK): sales_order_id, sales_order_line_id, inventory_reser
 | `gateway_code` | VARCHAR |
 | `gateway_payment_ref` | VARCHAR |
 | `captured_at` | TIMESTAMPTZ |
-| `finance_journal_id` | UUID optional — after **`PostingService.post_system_journal()`** |
+| `finance_journal_id` | UUID optional - after **`PostingService.post_system_journal()`** |
 | `status` | pending, authorized, captured, failed, refunded, cancelled |
 | **UK:** `(company_id, payment_number)` |
 
@@ -417,7 +417,7 @@ Optional UUID-only (no FK): sales_order_id, sales_order_line_id, inventory_reser
 | `gateway_txn_ref` | VARCHAR |
 | `occurred_at` | TIMESTAMPTZ |
 | `raw_payload_json` | JSONB (sanitized / non-secret) |
-| `finance_journal_id` | UUID optional — PostingService only |
+| `finance_journal_id` | UUID optional - PostingService only |
 | `status` | recorded, posted, failed |
 | **UK soft:** `(payment_id, gateway_txn_ref)` when present |
 
@@ -429,11 +429,11 @@ Optional UUID-only (no FK): sales_order_id, sales_order_line_id, inventory_reser
 |--------|-------|
 | `shipment_number` | `SHP-YYYY-NNNNNN` |
 | `order_id` | FK → `ec_order` |
-| `carrier_code` | shiprocket, delhivery, bluedart, fedex, dhl, other — FRD-22 §15 |
+| `carrier_code` | shiprocket, delhivery, bluedart, fedex, dhl, other - FRD-22 §15 |
 | `tracking_number` | VARCHAR |
 | `shipped_at` / `delivered_at` | TIMESTAMPTZ |
 | `shipping_label_uri` | VARCHAR optional |
-| `sales_delivery_id` | UUID optional — **no Sales FK** |
+| `sales_delivery_id` | UUID optional - **no Sales FK** |
 | `status` | pending, packed, shipped, in_transit, delivered, cancelled, failed |
 | **UK:** `(company_id, shipment_number)` |
 
@@ -463,7 +463,7 @@ Optional UUID-only (no FK): sales_order_id, sales_order_line_id, inventory_reser
 | `reason_code` | defective, wrong_item, not_as_described, size_fit, changed_mind, other |
 | `requested_at` | TIMESTAMPTZ |
 | `refund_payment_id` | FK optional → `ec_payment` |
-| `sales_return_id` | UUID optional — **no Sales FK** |
+| `sales_return_id` | UUID optional - **no Sales FK** |
 | `status` | requested, submitted, approved, rejected, pickup_scheduled, received, inspected, refunded, closed, cancelled |
 | `workflow_*` | Return approval |
 | **UK:** `(company_id, return_number)` |
@@ -508,8 +508,8 @@ Optional UUID-only (no FK): sales_order_id, sales_order_line_id, inventory_reser
 | `promotion_number` | `PRO-YYYY-NNNNNN` |
 | `store_id` | FK → `ec_store` |
 | `promotion_code` / `promotion_name` | UK `(company_id, promotion_code)` |
-| `promotion_type` | percent, coupon_linked, bundle, flash_sale, seasonal — FRD-22 §12 |
-| `channel_scope_json` | JSONB — channel id list |
+| `promotion_type` | percent, coupon_linked, bundle, flash_sale, seasonal - FRD-22 §12 |
+| `channel_scope_json` | JSONB - channel id list |
 | `rules_json` | JSONB |
 | `valid_from` / `valid_to` | TIMESTAMPTZ |
 | `status` | draft, active, paused, expired, cancelled |
@@ -524,15 +524,15 @@ Optional UUID-only (no FK): sales_order_id, sales_order_line_id, inventory_reser
 | `connector_binding_number` | `MPK-YYYY-NNNNNN` |
 | `sales_channel_id` | FK → `ec_sales_channel` |
 | `marketplace_code` | amazon, flipkart, myntra, ebay, etsy, shopify, custom |
-| `int_external_system_id` | UUID — Integration Hub system ref (**no FK**) |
-| `int_connector_id` | UUID — Integration Hub connector ref (**no FK**) |
+| `int_external_system_id` | UUID - Integration Hub system ref (**no FK**) |
+| `int_connector_id` | UUID - Integration Hub connector ref (**no FK**) |
 | `vendor_id` | FK optional → `master_vendor` (marketplace / platform party) |
-| `sync_mode` | realtime, scheduled, manual — FRD-22 §4 |
+| `sync_mode` | realtime, scheduled, manual - FRD-22 §4 |
 | `last_sync_at` | TIMESTAMPTZ |
 | `status` | draft, submitted, approved, active, paused, failed, retired |
 | `workflow_*` | Marketplace sync approval |
 | **UK:** `(company_id, connector_binding_number)` |
-| **Rule:** Transport / retry / DLQ owned by Integration Hub — E-Commerce stores binding + business outcome only |
+| **Rule:** Transport / retry / DLQ owned by Integration Hub - E-Commerce stores binding + business outcome only |
 
 ---
 
@@ -541,7 +541,7 @@ Optional UUID-only (no FK): sales_order_id, sales_order_line_id, inventory_reser
 | Column | Notes |
 |--------|-------|
 | `sales_channel_id` / `order_id` / `return_request_id` / `shipment_id` | optional FKs / UUID as applicable |
-| `notification_type` | order_received, order_shipped, order_delivered, return_requested, inventory_low, sync_failed, payment_failed, other — FRD-22 §18 |
+| `notification_type` | order_received, order_shipped, order_delivered, return_requested, inventory_low, sync_failed, payment_failed, other - FRD-22 §18 |
 | `channel` | email, sms, whatsapp, push, in_app |
 | `recipient_customer_id` / `recipient_employee_id` | master / employee refs |
 | `payload_json` | JSONB |
@@ -578,7 +578,7 @@ Optional UUID-only (no FK): sales_order_id, sales_order_line_id, inventory_reser
 
 **No FK to:** `sales_*`, `inv_*` / inventory operational, `fin_*`, `int_*`, `crm_*`, `doc_*`, `bi_*`, `helpdesk_*`, `service_*`, …  
 **Finance:** `finance_journal_id` UUID only; writes **only** via `PostingService.post_system_journal()`.  
-**Sales / Inventory / Integration Hub:** UUID refs only — **no peer ORM writes**.
+**Sales / Inventory / Integration Hub:** UUID refs only - **no peer ORM writes**.
 
 ---
 
@@ -663,7 +663,7 @@ Seed only; instances on Foundation `wf_instance`. `is_parallel` on **`wf_step`**
 
 Prior Alembic head: **`0398_seed_integration_workflows`**.
 
-Revision budget **`0399`–`0420` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`ec_shipment` and `ec_shipping_tracking` share one migration**.
+Revision budget **`0399`-`0420` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`ec_shipment` and `ec_shipping_tracking` share one migration**.
 
 | Order | Revision ID (≤32 chars) | Tables / Actions |
 |-------|-------------------------|------------------|
@@ -714,15 +714,15 @@ Revision budget **`0399`–`0420` (22 revisions)**. Schema + 20 tables + permiss
 | Foundation | tenant, user, workflow, audit, notification services |
 | Organization | company, branch, **department** FK |
 | Master Data | **employee · customer · vendor · product** (C-01) |
-| Sales | **Order-of-record** — map via service / `sales_order_id` UUID — **no `sales_*` ORM writes** |
-| Inventory | **Stock authority** — events / services / UUID — **no Inventory ORM writes** |
-| Finance | **`PostingService.post_system_journal()`** — store `finance_journal_id` |
-| Integration Hub | marketplace / website / carrier sync — `int_connector_id` / system UUID only |
-| CRM | optional customer interaction UUID — **no CRM ORM writes** |
-| Document | optional packing slip / label document UUID — **no Document ORM writes** |
+| Sales | **Order-of-record** - map via service / `sales_order_id` UUID - **no `sales_*` ORM writes** |
+| Inventory | **Stock authority** - events / services / UUID - **no Inventory ORM writes** |
+| Finance | **`PostingService.post_system_journal()`** - store `finance_journal_id` |
+| Integration Hub | marketplace / website / carrier sync - `int_connector_id` / system UUID only |
+| CRM | optional customer interaction UUID - **no CRM ORM writes** |
+| Document | optional packing slip / label document UUID - **no Document ORM writes** |
 | Helpdesk / Service | optional ticket / request UUID from return/shipment exceptions |
-| Analytics | **read-only consumer** of channel metrics — **no Analytics ORM writes from E-Commerce** |
-| Project / Asset / Quality / Manufacturing / HR / Payroll / Recruitment | UUID / event only if needed — **no peer ORM writes** |
+| Analytics | **read-only consumer** of channel metrics - **no Analytics ORM writes from E-Commerce** |
+| Project / Asset / Quality / Manufacturing / HR / Payroll / Recruitment | UUID / event only if needed - **no peer ORM writes** |
 
 ### Downstream
 
@@ -759,11 +759,11 @@ Revision budget **`0399`–`0420` (22 revisions)**. Schema + 20 tables + permiss
 | 5 | Finance only via PostingService; no fin_* ORM writes | ✅ |
 | 6 | Sales order-of-record; Inventory stock authority; Hub marketplace sync; Analytics read-only | ✅ |
 | 7 | UUID-only peer refs; no peer ORM writes | ✅ |
-| 8 | Migration order `0399`–`0420`, revision IDs ≤ 32 chars | ✅ |
+| 8 | Migration order `0399`-`0420`, revision IDs ≤ 32 chars | ✅ |
 | 9 | Workflows (`EC_*`) + RBAC (`ecommerce.*`) + API mount + Celery stubs documented | ✅ |
 | 10 | Architecture Lock v1.1 preserved; no prior module redesign | ✅ |
 
-### ERD Phase Gate — E-Commerce / External Channel Summary
+### ERD Phase Gate - E-Commerce / External Channel Summary
 
 | Metric | Value |
 |--------|-------|
@@ -771,10 +771,10 @@ Revision budget **`0399`–`0420` (22 revisions)**. Schema + 20 tables + permiss
 | Schema | **`ecommerce`** |
 | Prefix | `ec_` |
 | API mount | `/api/v1/ecommerce` |
-| Migration range | `0399` – `0420` |
+| Migration range | `0399` - `0420` |
 | Prior head | `0398_seed_integration_workflows` |
 | Planned head | `0420_seed_ecommerce_workflows` |
-| Document Status | **Locked — Ready for Sprint 22 Implementation Planning** |
+| Document Status | **Locked - Ready for Sprint 22 Implementation Planning** |
 
 ---
 

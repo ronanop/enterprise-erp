@@ -34,7 +34,7 @@ class EmailParseResult(BaseModel):
     fields: dict
 
 
-email_inbound_router = APIRouter(prefix="/email-inbound", tags=["Service — Email Inbound"])
+email_inbound_router = APIRouter(prefix="/email-inbound", tags=["Service - Email Inbound"])
 
 
 def _verify_webhook_secret(x_email_webhook_secret: str | None = Header(default=None)) -> None:
@@ -55,7 +55,7 @@ def inbound_email_webhook(
     db: Annotated[Session, Depends(get_db)],
     x_email_webhook_secret: Annotated[str | None, Header()] = None,
 ):
-    """Public webhook — secured via X-Email-Webhook-Secret header."""
+    """Public webhook - secured via X-Email-Webhook-Secret header."""
     _verify_webhook_secret(x_email_webhook_secret)
     result = EmailToTicketService(db).process(body, source="webhook")
     db.commit()
@@ -90,7 +90,7 @@ def list_mailbox_messages(
     db: Annotated[Session, Depends(get_db)],
     top: Annotated[int, Query(ge=1, le=50)] = 50,
 ):
-    """Recent inbox mail for Service Head / Engineer — all messages until subject rules are configured."""
+    """Recent inbox mail for Service Head / Engineer - all messages until subject rules are configured."""
     _ = ctx
     if not settings.graph_mail_configured:
         raise HTTPException(
@@ -126,7 +126,7 @@ def email_automation_status(
     ctx: Annotated[TenantContext, Depends(require_permission("service.request:approve"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Email automation status — service head / manager only."""
+    """Email automation status - service head / manager only."""
     recent = db.scalar(
         select(func.count()).select_from(SvcEmailIngestLog).where(
             SvcEmailIngestLog.tenant_id == ctx.tenant_id,

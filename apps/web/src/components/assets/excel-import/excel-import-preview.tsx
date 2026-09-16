@@ -69,14 +69,14 @@ export function ExcelImportPreviewGrid({
                   {row.status}
                 </span>
               </td>
-              <td className="px-2 py-2 font-mono text-xs">{row.values.assetTag ?? "—"}</td>
-              <td className="max-w-[10rem] truncate px-2 py-2">{row.values.laptopName ?? "—"}</td>
-              <td className="px-2 py-2">{row.values.branch ?? "—"}</td>
+              <td className="px-2 py-2 font-mono text-xs">{row.values.assetTag ?? "-"}</td>
+              <td className="max-w-[10rem] truncate px-2 py-2">{row.values.laptopName ?? "-"}</td>
+              <td className="px-2 py-2">{row.values.branch ?? "-"}</td>
               <td className="px-2 py-2 font-mono text-xs">
-                {row.values.operationalStatus ?? "—"}
+                {row.values.operationalStatus ?? "-"}
               </td>
-              <td className="px-2 py-2">{row.values.assetType ?? "—"}</td>
-              <td className="px-2 py-2 font-mono text-xs">{row.values.employeeId ?? "—"}</td>
+              <td className="px-2 py-2">{row.values.assetType ?? "-"}</td>
+              <td className="px-2 py-2 font-mono text-xs">{row.values.employeeId ?? "-"}</td>
               <td className="px-2 py-2 text-xs text-muted-foreground">
                 {row.issues.length === 0 ? (
                   <span className="text-emerald-700">OK</span>

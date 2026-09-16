@@ -92,7 +92,7 @@ export function CoaEnterpriseTable({
   total,
   onPageChange,
   onPageSizeChange,
-  resolveUser = (id) => (id ? id.slice(0, 8) : "—"),
+  resolveUser = (id) => (id ? id.slice(0, 8) : "-"),
 }: Props) {
   const { prefs, setPrefs } = useCoaTablePrefs();
   const [colsOpen, setColsOpen] = useState(false);
@@ -272,7 +272,7 @@ export function CoaEnterpriseTable({
                       <td className="px-2 py-1.5 text-xs text-muted-foreground">
                         {row.parent_account_code
                           ? `${row.parent_account_code} · ${row.parent_account_name ?? ""}`
-                          : "—"}
+                          : "-"}
                       </td>
                     ) : null}
                     {visible.has("type") ? (
@@ -282,11 +282,11 @@ export function CoaEnterpriseTable({
                     ) : null}
                     {visible.has("category") ? (
                       <td className="px-2 py-1.5 text-xs">
-                        {row.account_group_name ?? row.account_group_code ?? "—"}
+                        {row.account_group_name ?? row.account_group_code ?? "-"}
                       </td>
                     ) : null}
                     {visible.has("currency") ? (
-                      <td className="px-2 py-1.5 font-mono text-xs">{row.currency_code ?? "—"}</td>
+                      <td className="px-2 py-1.5 font-mono text-xs">{row.currency_code ?? "-"}</td>
                     ) : null}
                     {visible.has("status") ? (
                       <td className="px-2 py-1.5">

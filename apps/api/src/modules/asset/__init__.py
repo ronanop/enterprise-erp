@@ -1,1 +1,1 @@
-"""Asset Management module — Sprint 15."""
+"""Asset Management module - Sprint 15."""

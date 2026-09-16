@@ -121,7 +121,7 @@ export function ProcurementOpenOvfDialog({
                 >
                   <div className="min-w-0">
                     <p className="truncate font-normal text-foreground">
-                      {row.customer_name?.trim() || row.ovf_no || "—"}
+                      {row.customer_name?.trim() || row.ovf_no || "-"}
                     </p>
                     <p className="truncate text-[11px] font-normal text-muted-foreground">
                       {row.ovf_no}

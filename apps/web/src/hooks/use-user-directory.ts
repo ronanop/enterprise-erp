@@ -52,7 +52,7 @@ export function useUserDirectory() {
 
   const resolve = useCallback(
     (userId?: string | null) => {
-      if (!userId) return "—";
+      if (!userId) return "-";
       return directory[userId] ?? "Unknown user";
     },
     [directory],

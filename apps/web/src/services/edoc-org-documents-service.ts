@@ -39,7 +39,7 @@ export type OrgDocument = {
 
 const STORAGE_KEY = "erp_edoc_org_documents_v1";
 
-/** Soft cap — attachments are stored in localStorage for the PWA demo. */
+/** Soft cap - attachments are stored in localStorage for the PWA demo. */
 export const MAX_ORG_DOC_ATTACHMENT_BYTES = 2 * 1024 * 1024;
 export const MAX_ORG_DOC_ATTACHMENTS = 8;
 

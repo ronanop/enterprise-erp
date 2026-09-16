@@ -1,4 +1,4 @@
-"""Finance reporting service — financial statements and operational reports."""
+"""Finance reporting service - financial statements and operational reports."""
 
 from __future__ import annotations
 
@@ -564,7 +564,7 @@ class ReportService:
             elif acct.account_type in ("liability", "equity") and acct.account_type:
                 financing_net += -period_mov  # credit increase = cash in for financing
 
-        # Working capital memo (Δ not tracked historically in this sprint — show 0)
+        # Working capital memo (Δ not tracked historically in this sprint - show 0)
         operating = [
             CashFlowSectionLine(label="Net Profit/(Loss)", amount=pl.net_profit),
             CashFlowSectionLine(label="Change in Receivables", amount=0.0),

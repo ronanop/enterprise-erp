@@ -1,4 +1,4 @@
-# ESS Phase 6 — Compliance & polish
+# ESS Phase 6 - Compliance & polish
 
 Phase 6 adds mandatory policy walkthroughs, forced password change for provisioned accounts, and clearer admin guidance in the PWA.
 
@@ -18,7 +18,7 @@ Run: `alembic upgrade head`
 
 - `must_change_password`
 - `pending_policy_count`
-- `is_ess_admin` / `admin_use_web_portal` — admins are directed to HRMS web for full admin work
+- `is_ess_admin` / `admin_use_web_portal` - admins are directed to HRMS web for full admin work
 
 ### Policies
 
@@ -38,7 +38,7 @@ Run: `alembic upgrade head`
 
 1. **ComplianceGuard** (app shell): if `must_change_password` → `/profile/change-password`; else if pending policies → `/compliance`.
 2. **Policy hub** `/compliance` → step-through `/compliance/[id]` with checkbox on last step.
-3. **Profile** — admin banner; links to policies and change password.
+3. **Profile** - admin banner; links to policies and change password.
 
 ## Seeds
 
@@ -55,4 +55,4 @@ python -m scripts.seed_ess_employee   # sets must_change_password=true on demo u
 
 ## Roadmap
 
-Phases 1–6 of the Timelabs-style ESS backlog are now covered in code. Further items (emp-code login field, captcha, native apps) are out of scope unless added as a new phase.
+Phases 1-6 of the Timelabs-style ESS backlog are now covered in code. Further items (emp-code login field, captcha, native apps) are out of scope unless added as a new phase.

@@ -1,6 +1,6 @@
 """AssetOperationalStatus transition engine (CR-004 Phase 2B-1).
 
-Pure business rules — no database, HTTP, or repository access.
+Pure business rules - no database, HTTP, or repository access.
 """
 
 from __future__ import annotations

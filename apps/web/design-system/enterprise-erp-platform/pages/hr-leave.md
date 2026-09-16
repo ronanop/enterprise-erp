@@ -19,11 +19,11 @@
 
 ### Spacing Overrides
 
-- **Content Density:** Low — focus on clarity
+- **Content Density:** Low - focus on clarity
 
 ### Typography Overrides
 
-- No overrides — use Master typography
+- No overrides - use Master typography
 
 ### Color Overrides
 

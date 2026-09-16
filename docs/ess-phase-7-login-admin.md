@@ -1,4 +1,4 @@
-# ESS Phase 7 — Login parity, HR policy admin, password ops
+# ESS Phase 7 - Login parity, HR policy admin, password ops
 
 ## Employee login (company + employee code)
 
@@ -11,7 +11,7 @@ Resolves `OrgCompany` + `MasterEmployee` (normalized emp code, e.g. `EMP-004` �
 
 **PWA:** Login screen defaults to **Employee code** tab (company + emp code + password). Email login remains available.
 
-## HR — ESS policies (web)
+## HR - ESS policies (web)
 
 | Endpoint | Permission |
 |----------|----------------|
@@ -19,11 +19,11 @@ Resolves `OrgCompany` + `MasterEmployee` (normalized emp code, e.g. `EMP-004` �
 | `POST .../publish` | Bumps `policy_version` when republishing |
 | `POST .../archive` | Archives policy |
 
-**Web UI:** [HR → ESS policies](/hr/ess-policies) — create draft, edit markdown, publish.
+**Web UI:** [HR → ESS policies](/hr/ess-policies) - create draft, edit markdown, publish.
 
 Employees see updates via existing Phase 6 `/ess/policies` walkthrough (`pending_policy_count` increases when version bumps).
 
-## HR — force password reset
+## HR - force password reset
 
 `POST /hr/employee-profiles/force-password-reset/{employee_id}`
 

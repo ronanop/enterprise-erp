@@ -156,7 +156,7 @@ export default function ProfilePage() {
                 employee and manager self-service.
               </p>
               <p className="mt-2 text-xs text-[#434655]">
-                Role: {me.ess_role ?? "admin"} · {me.role_codes?.join(", ") || "—"}
+                Role: {me.ess_role ?? "admin"} · {me.role_codes?.join(", ") || "-"}
               </p>
             </section>
           ) : null}
@@ -199,7 +199,7 @@ function InfoCard({
       <p className="text-[11px] font-semibold uppercase tracking-wide text-[#434655]/80">
         {label}
       </p>
-      <p className="mt-1 truncate font-semibold text-[#0b1c30]">{value || "—"}</p>
+      <p className="mt-1 truncate font-semibold text-[#0b1c30]">{value || "-"}</p>
     </div>
   );
 }
@@ -209,7 +209,7 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className={`${ui.listRow} justify-between text-sm`}>
       <span className={ui.muted}>{label}</span>
       <span className="max-w-[62%] truncate text-right font-semibold capitalize text-[#0b1c30]">
-        {value || "—"}
+        {value || "-"}
       </span>
     </div>
   );

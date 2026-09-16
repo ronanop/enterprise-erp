@@ -157,7 +157,7 @@ export function applyCustomerPoToChallanFields<
   };
 }
 
-/** GST place-of-supply for challan — entity dispatch state vs customer ship-to from PO/OVF. */
+/** GST place-of-supply for challan - entity dispatch state vs customer ship-to from PO/OVF. */
 export function resolveChallanTaxSupplyStates(
   order: ProcOrder | null,
   ovf: ScmOvfPreview | null,

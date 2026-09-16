@@ -1,4 +1,4 @@
-"""AssetReportService — hybrid live reports + snapshots (FP-ASSET-018).
+"""AssetReportService - hybrid live reports + snapshots (FP-ASSET-018).
 
 READ-ONLY on operational tables. Writes only to ast_asset_report.
 """
@@ -384,7 +384,7 @@ class AssetReportService:
         )
         return updated
 
-    # Legacy create retained for ApplicationService compatibility — maps to generate.
+    # Legacy create retained for ApplicationService compatibility - maps to generate.
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
         if "report_key" not in fields and "report_type" in fields:
             # Best-effort: treat report_type as live key if present in catalog

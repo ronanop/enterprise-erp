@@ -23,7 +23,7 @@ export function openPdfInNewTab(doc: jsPDF, fallbackFilename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
 }
 
-/** @deprecated Alias kept for older callers — opens PDF tab only. */
+/** @deprecated Alias kept for older callers - opens PDF tab only. */
 export function openPdfPrintPreview(doc: jsPDF, fallbackFilename = "preview.pdf"): void {
   openPdfInNewTab(doc, fallbackFilename);
 }

@@ -99,7 +99,7 @@ from modules.document.service import (
 from modules.foundation.domain.value_objects import TenantContext
 from shared.schemas import APIResponse
 
-folders_router = APIRouter(prefix="/folders", tags=["Document — Folder"])
+folders_router = APIRouter(prefix="/folders", tags=["Document - Folder"])
 
 @folders_router.get("", response_model=APIResponse[list[FolderResponse]])
 def list_folders(
@@ -136,7 +136,7 @@ def update_folders(
 ):
     return APIResponse(message="Updated", data=FolderService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-documents_router = APIRouter(prefix="/documents", tags=["Document — Document"])
+documents_router = APIRouter(prefix="/documents", tags=["Document - Document"])
 
 @documents_router.get("", response_model=APIResponse[list[DocumentResponse]])
 def list_documents(
@@ -197,7 +197,7 @@ def publish_documents(
 ):
     return APIResponse(message="publish", data=DocumentService(db).publish(ctx, row_id))
 
-document_versions_router = APIRouter(prefix="/document-versions", tags=["Document — DocumentVersion"])
+document_versions_router = APIRouter(prefix="/document-versions", tags=["Document - DocumentVersion"])
 
 @document_versions_router.get("", response_model=APIResponse[list[DocumentVersionResponse]])
 def list_document_versions(
@@ -234,7 +234,7 @@ def update_document_versions(
 ):
     return APIResponse(message="Updated", data=DocumentVersionService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-document_metadata_router = APIRouter(prefix="/document-metadata", tags=["Document — DocumentMetadata"])
+document_metadata_router = APIRouter(prefix="/document-metadata", tags=["Document - DocumentMetadata"])
 
 @document_metadata_router.get("", response_model=APIResponse[list[DocumentMetadataResponse]])
 def list_document_metadata(
@@ -271,7 +271,7 @@ def update_document_metadata(
 ):
     return APIResponse(message="Updated", data=MetadataService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-document_tags_router = APIRouter(prefix="/document-tags", tags=["Document — DocumentTag"])
+document_tags_router = APIRouter(prefix="/document-tags", tags=["Document - DocumentTag"])
 
 @document_tags_router.get("", response_model=APIResponse[list[DocumentTagResponse]])
 def list_document_tags(
@@ -308,7 +308,7 @@ def update_document_tags(
 ):
     return APIResponse(message="Updated", data=TagService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-document_tag_maps_router = APIRouter(prefix="/document-tag-maps", tags=["Document — DocumentTagMap"])
+document_tag_maps_router = APIRouter(prefix="/document-tag-maps", tags=["Document - DocumentTagMap"])
 
 @document_tag_maps_router.get("", response_model=APIResponse[list[DocumentTagMapResponse]])
 def list_document_tag_maps(
@@ -345,7 +345,7 @@ def update_document_tag_maps(
 ):
     return APIResponse(message="Updated", data=TagService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-document_permissions_router = APIRouter(prefix="/document-permissions", tags=["Document — DocumentPermission"])
+document_permissions_router = APIRouter(prefix="/document-permissions", tags=["Document - DocumentPermission"])
 
 @document_permissions_router.get("", response_model=APIResponse[list[DocumentPermissionResponse]])
 def list_document_permissions(
@@ -382,7 +382,7 @@ def update_document_permissions(
 ):
     return APIResponse(message="Updated", data=PermissionService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-document_shares_router = APIRouter(prefix="/document-shares", tags=["Document — DocumentShare"])
+document_shares_router = APIRouter(prefix="/document-shares", tags=["Document - DocumentShare"])
 
 @document_shares_router.get("", response_model=APIResponse[list[DocumentShareResponse]])
 def list_document_shares(
@@ -419,7 +419,7 @@ def update_document_shares(
 ):
     return APIResponse(message="Updated", data=ShareService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-document_comments_router = APIRouter(prefix="/document-comments", tags=["Document — DocumentComment"])
+document_comments_router = APIRouter(prefix="/document-comments", tags=["Document - DocumentComment"])
 
 @document_comments_router.get("", response_model=APIResponse[list[DocumentCommentResponse]])
 def list_document_comments(
@@ -456,7 +456,7 @@ def update_document_comments(
 ):
     return APIResponse(message="Updated", data=CommentService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-document_approvals_router = APIRouter(prefix="/document-approvals", tags=["Document — DocumentApproval"])
+document_approvals_router = APIRouter(prefix="/document-approvals", tags=["Document - DocumentApproval"])
 
 @document_approvals_router.get("", response_model=APIResponse[list[DocumentApprovalResponse]])
 def list_document_approvals(
@@ -509,7 +509,7 @@ def complete_document_approvals(
 ):
     return APIResponse(message="complete", data=ApprovalService(db).complete(ctx, row_id))
 
-document_workflows_router = APIRouter(prefix="/document-workflows", tags=["Document — DocumentWorkflow"])
+document_workflows_router = APIRouter(prefix="/document-workflows", tags=["Document - DocumentWorkflow"])
 
 @document_workflows_router.get("", response_model=APIResponse[list[DocumentWorkflowResponse]])
 def list_document_workflows(
@@ -546,7 +546,7 @@ def update_document_workflows(
 ):
     return APIResponse(message="Updated", data=WorkflowService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-document_checkouts_router = APIRouter(prefix="/document-checkouts", tags=["Document — DocumentCheckout"])
+document_checkouts_router = APIRouter(prefix="/document-checkouts", tags=["Document - DocumentCheckout"])
 
 @document_checkouts_router.get("", response_model=APIResponse[list[DocumentCheckoutResponse]])
 def list_document_checkouts(
@@ -607,7 +607,7 @@ def checkin_document_checkouts(
 ):
     return APIResponse(message="checkin", data=CheckoutService(db).checkin(ctx, row_id))
 
-document_audits_router = APIRouter(prefix="/document-audits", tags=["Document — DocumentAudit"])
+document_audits_router = APIRouter(prefix="/document-audits", tags=["Document - DocumentAudit"])
 
 @document_audits_router.get("", response_model=APIResponse[list[DocumentAuditResponse]])
 def list_document_audits(
@@ -644,7 +644,7 @@ def update_document_audits(
 ):
     return APIResponse(message="Updated", data=DocumentAuditService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-document_attachments_router = APIRouter(prefix="/document-attachments", tags=["Document — DocumentAttachment"])
+document_attachments_router = APIRouter(prefix="/document-attachments", tags=["Document - DocumentAttachment"])
 
 @document_attachments_router.get("", response_model=APIResponse[list[DocumentAttachmentResponse]])
 def list_document_attachments(
@@ -681,7 +681,7 @@ def update_document_attachments(
 ):
     return APIResponse(message="Updated", data=AttachmentService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-templates_router = APIRouter(prefix="/templates", tags=["Document — Template"])
+templates_router = APIRouter(prefix="/templates", tags=["Document - Template"])
 
 @templates_router.get("", response_model=APIResponse[list[TemplateResponse]])
 def list_templates(
@@ -718,7 +718,7 @@ def update_templates(
 ):
     return APIResponse(message="Updated", data=TemplateService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-template_fields_router = APIRouter(prefix="/template-fields", tags=["Document — TemplateField"])
+template_fields_router = APIRouter(prefix="/template-fields", tags=["Document - TemplateField"])
 
 @template_fields_router.get("", response_model=APIResponse[list[TemplateFieldResponse]])
 def list_template_fields(
@@ -755,7 +755,7 @@ def update_template_fields(
 ):
     return APIResponse(message="Updated", data=TemplateService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-retention_policies_router = APIRouter(prefix="/retention-policies", tags=["Document — RetentionPolicy"])
+retention_policies_router = APIRouter(prefix="/retention-policies", tags=["Document - RetentionPolicy"])
 
 @retention_policies_router.get("", response_model=APIResponse[list[RetentionPolicyResponse]])
 def list_retention_policies(
@@ -808,7 +808,7 @@ def approve_retention_policies(
 ):
     return APIResponse(message="approve", data=RetentionPolicyService(db).approve(ctx, row_id))
 
-archives_router = APIRouter(prefix="/archives", tags=["Document — Archive"])
+archives_router = APIRouter(prefix="/archives", tags=["Document - Archive"])
 
 @archives_router.get("", response_model=APIResponse[list[ArchiveResponse]])
 def list_archives(
@@ -861,7 +861,7 @@ def approve_archives(
 ):
     return APIResponse(message="approve", data=ArchiveService(db).approve(ctx, row_id))
 
-notifications_router = APIRouter(prefix="/notifications", tags=["Document — Notification"])
+notifications_router = APIRouter(prefix="/notifications", tags=["Document - Notification"])
 
 @notifications_router.get("", response_model=APIResponse[list[NotificationResponse]])
 def list_notifications(
@@ -898,7 +898,7 @@ def update_notifications(
 ):
     return APIResponse(message="Updated", data=NotificationService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-reports_router = APIRouter(prefix="/reports", tags=["Document — Report"])
+reports_router = APIRouter(prefix="/reports", tags=["Document - Report"])
 
 @reports_router.get("", response_model=APIResponse[list[ReportResponse]])
 def list_reports(

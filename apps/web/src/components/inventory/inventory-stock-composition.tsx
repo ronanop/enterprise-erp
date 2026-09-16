@@ -24,7 +24,7 @@ export function InventoryStockComposition({
     <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between gap-2">
         <h2 className="text-base font-extrabold tracking-tight">Stock composition</h2>
-        <p className="text-[11px] text-muted-foreground">Available = On hand − Reserved (FRD-08)</p>
+        <p className="text-[11px] text-muted-foreground">Available = On hand - Reserved (FRD-08)</p>
       </div>
       <ul className="space-y-3">
         {rows.map((row) => {
@@ -36,7 +36,7 @@ export function InventoryStockComposition({
                   {row.label}
                 </span>
                 <span className="font-mono tabular-nums text-foreground">
-                  {loading ? "—" : formatQty(row.value)}
+                  {loading ? "-" : formatQty(row.value)}
                 </span>
               </div>
               <div className="h-1.5 overflow-hidden rounded-full bg-muted">

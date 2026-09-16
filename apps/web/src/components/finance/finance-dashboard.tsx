@@ -105,7 +105,7 @@ export function FinanceDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="Finance"
-        description="General ledger, journals, AR/AP subledgers, fiscal periods, and financial reports — double-entry accounting workspace."
+        description="General ledger, journals, AR/AP subledgers, fiscal periods, and financial reports - double-entry accounting workspace."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button
@@ -153,28 +153,28 @@ export function FinanceDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Open journals"
-          value={loading ? "—" : String(kpis.openJournals)}
+          value={loading ? "-" : String(kpis.openJournals)}
           hint={`${kpis.postedJournals} posted / approved`}
           icon={BookOpen}
           tone={kpis.openJournals > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="AR outstanding"
-          value={loading ? "—" : formatInr(kpis.arOutstanding)}
+          value={loading ? "-" : formatInr(kpis.arOutstanding)}
           hint={`${data?.ar.length ?? 0} customer documents`}
           icon={Receipt}
           tone="default"
         />
         <FinanceKpiCard
           label="AP outstanding"
-          value={loading ? "—" : formatInr(kpis.apOutstanding)}
+          value={loading ? "-" : formatInr(kpis.apOutstanding)}
           hint={`${data?.ap.length ?? 0} vendor documents`}
           icon={Wallet}
           tone="default"
         />
         <FinanceKpiCard
           label="Open periods"
-          value={loading ? "—" : String(kpis.openPeriods)}
+          value={loading ? "-" : String(kpis.openPeriods)}
           hint={`${kpis.accounts} COA accounts`}
           icon={CalendarRange}
           tone={kpis.openPeriods > 0 ? "success" : "warning"}
@@ -296,14 +296,14 @@ export function FinanceDashboard() {
                     >
                       <td className="max-w-[220px] truncate px-4 py-2.5">
                         <p className="font-medium text-foreground">
-                          {String(row.journal_number ?? "—")}
+                          {String(row.journal_number ?? "-")}
                         </p>
                         <p className="truncate text-[11px] text-muted-foreground">
                           {String(row.description ?? row.journal_type ?? "")}
                         </p>
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">
-                        {String(row.journal_date ?? "—")}
+                        {String(row.journal_date ?? "-")}
                       </td>
                       <td className="px-4 py-2.5 font-mono text-xs tabular-nums text-foreground">
                         {formatInr(asNumber(row.total_debit))}

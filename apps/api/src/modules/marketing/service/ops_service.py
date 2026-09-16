@@ -775,7 +775,7 @@ class WorkloadService:
 
 
 class AiOpsService:
-    """Extends the existing agent pipeline — does not replace generation."""
+    """Extends the existing agent pipeline - does not replace generation."""
 
     def __init__(self, db: Session) -> None:
         self.db = db

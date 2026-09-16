@@ -79,7 +79,7 @@ export default async function CrmResourcePage({ params }: PageProps) {
       moduleKey={mod.key}
       moduleTitle={mod.title}
       title={resource.title}
-      description={resource.description}
+      description=""
       apiPath={resource.apiPath}
     />
   );

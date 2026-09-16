@@ -86,7 +86,7 @@ export function ContactsListPage({
   }, [load]);
 
   function companyName(id: string): string {
-    return companies.find((c) => c.id === id)?.customer_name ?? "—";
+    return companies.find((c) => c.id === id)?.customer_name ?? "-";
   }
 
   function openCreate() {
@@ -179,7 +179,6 @@ export function ContactsListPage({
       {!embedded ? (
         <PageHeader
           title="Contacts"
-          description="Company contact persons for the sales blueprint."
           actions={actions}
         />
       ) : null}
@@ -232,9 +231,9 @@ export function ContactsListPage({
                       {row.is_primary ? <Badge variant="secondary" className="ml-1.5">Primary</Badge> : null}
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">{companyName(row.company_account_id)}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{row.title ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{row.email ?? "—"}</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{row.mobile ?? row.phone ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{row.title ?? "-"}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{row.email ?? "-"}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{row.mobile ?? row.phone ?? "-"}</td>
                     <td className="px-4 py-2.5">
                       <FinanceStatusBadge status={row.status} />
                     </td>

@@ -1,4 +1,4 @@
-# Asset Document Management — Implementation Report (FP-ASSET-016)
+# Asset Document Management - Implementation Report (FP-ASSET-016)
 
 **Status:** Complete  
 **ADR:** ADR-ASSET-DOC-001  
@@ -23,7 +23,7 @@ All DOC-01 through DOC-15 decisions implemented.
 
 ## Known limitations
 
-- No binary upload (by design — DOC-14).
+- No binary upload (by design - DOC-14).
 - No auto-supersede on create.
 - `content_hash` stored but not verified against remote content.
 - Charts / DMS deep-link deferred.

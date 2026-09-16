@@ -37,7 +37,7 @@ class TenantContext:
     branch_id: UUID | None = None
     # Org-assigned module admin keys (role=admin). Platform admins do not need this list.
     admin_module_keys: frozenset[str] = frozenset()
-    # Legacy flags — prefer has_module_wide_data_access / admin_module_keys.
+    # Legacy flags - prefer has_module_wide_data_access / admin_module_keys.
     tenant_wide: bool = False
     procurement_tenant_wide: bool = False
     scoped_company_ids: tuple[UUID, ...] = ()

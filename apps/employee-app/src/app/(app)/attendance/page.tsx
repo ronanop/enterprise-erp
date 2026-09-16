@@ -344,7 +344,7 @@ export default function AttendancePage() {
                   </span>
                   <div>
                     <p className="text-sm font-semibold text-[#0b1c30]">
-                      Clock In — Office
+                      Clock In - Office
                     </p>
                     <p className="text-xs text-[#434655]">
                       {row.attendance_date}, {formatTime(row.check_in_at)}

@@ -1,4 +1,4 @@
-"""Add scm_hold_blocked on CRM OVF — one SCM hold cycle per OVF."""
+"""Add scm_hold_blocked on CRM OVF - one SCM hold cycle per OVF."""
 
 import sys
 from collections.abc import Sequence

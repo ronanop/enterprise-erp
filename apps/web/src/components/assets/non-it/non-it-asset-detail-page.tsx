@@ -30,7 +30,7 @@ function formatApiError(err: unknown, fallback: string): string {
 }
 
 function formatDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString(undefined, {
@@ -236,7 +236,7 @@ export function NonItAssetDetailPage() {
             ) : null}
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">Disposed — read only</p>
+          <p className="text-sm text-muted-foreground">Disposed - read only</p>
         )}
       </div>
 
@@ -253,23 +253,23 @@ export function NonItAssetDetailPage() {
           </CardHeader>
           <CardContent>
             <dl className="grid gap-4 sm:grid-cols-2">
-              <DetailField label="Type">{asset.asset_type_name ?? "—"}</DetailField>
-              <DetailField label="Serial number">{asset.serial_number ?? "—"}</DetailField>
-              <DetailField label="Condition">{asset.condition ?? "—"}</DetailField>
+              <DetailField label="Type">{asset.asset_type_name ?? "-"}</DetailField>
+              <DetailField label="Serial number">{asset.serial_number ?? "-"}</DetailField>
+              <DetailField label="Condition">{asset.condition ?? "-"}</DetailField>
               <DetailField label="Purchase date">{formatDate(asset.purchase_date)}</DetailField>
-              <DetailField label="Remarks">{asset.remarks ?? "—"}</DetailField>
+              <DetailField label="Remarks">{asset.remarks ?? "-"}</DetailField>
               {asset.status === "MAINTENANCE" ? (
                 <>
                   <DetailField label="Maintenance reason">
-                    {asset.maintenance_reason ?? "—"}
+                    {asset.maintenance_reason ?? "-"}
                   </DetailField>
-                  <DetailField label="Provider">{asset.maintenance_provider ?? "—"}</DetailField>
+                  <DetailField label="Provider">{asset.maintenance_provider ?? "-"}</DetailField>
                 </>
               ) : null}
               {isDisposed ? (
                 <>
                   <DetailField label="Disposal reason">
-                    {asset.disposal_reason ?? "—"}
+                    {asset.disposal_reason ?? "-"}
                   </DetailField>
                   <DetailField label="Disposal date">
                     {formatDate(asset.disposal_date)}

@@ -1,1 +1,1 @@
-"""Recruitment module — Sprint 13."""
+"""Recruitment module - Sprint 13."""

@@ -1,4 +1,4 @@
-# ESS Phase 4 — Push & foreground notifications
+# ESS Phase 4 - Push & foreground notifications
 
 Phase 4 wires HR events to in-app notifications and surfaces them in the employee PWA with polling, foreground toasts, and optional browser popups.
 
@@ -64,5 +64,5 @@ The PWA stores a stable `web-*` token for future FCM/Web Push. Today, foreground
 
 ## Related docs
 
-- [ess-phase-2-manager.md](./ess-phase-2-manager.md) — bell, unread count, mark-read
-- [ess-phase-3-attendance.md](./ess-phase-3-attendance.md) — attendance / WFH
+- [ess-phase-2-manager.md](./ess-phase-2-manager.md) - bell, unread count, mark-read
+- [ess-phase-3-attendance.md](./ess-phase-3-attendance.md) - attendance / WFH

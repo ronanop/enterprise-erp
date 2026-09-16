@@ -1,4 +1,4 @@
-"""Asset report repository — snapshots + read-only aggregations (FP-ASSET-018).
+"""Asset report repository - snapshots + read-only aggregations (FP-ASSET-018).
 
 WRITE: ast_asset_report only.
 READ: other asset tables for aggregations (never mutated here).
@@ -164,7 +164,7 @@ class AssetReportRepository(AstScopedRepository):
         self.db.flush()
         return row
 
-    # ── Read aggregations (operational tables — SELECT only) ──────────
+    # ── Read aggregations (operational tables - SELECT only) ──────────
 
     def _asset_base(self, ctx: TenantContext, filters: LiveReportFilters):
         stmt = select(AstAsset).where(

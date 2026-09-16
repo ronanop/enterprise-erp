@@ -1,4 +1,4 @@
-"""Employee document storage — MinIO when enabled, local disk otherwise."""
+"""Employee document storage - MinIO when enabled, local disk otherwise."""
 
 from __future__ import annotations
 

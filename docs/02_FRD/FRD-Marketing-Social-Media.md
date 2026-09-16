@@ -1,4 +1,4 @@
-# FRD — Marketing & Social Media (Content Intelligence)
+# FRD - Marketing & Social Media (Content Intelligence)
 
 **Module key:** `marketing`  
 **Owner:** connect  
@@ -7,7 +7,7 @@
 
 ## 1. Purpose
 
-Provide AI-assisted content research, generation, brand voice, campaign planning, social publishing calendar, and analytics inside the ERP — without a separate identity, approval, or notification stack.
+Provide AI-assisted content research, generation, brand voice, campaign planning, social publishing calendar, and analytics inside the ERP - without a separate identity, approval, or notification stack.
 
 ## 2. Scope (v1)
 
@@ -35,7 +35,7 @@ Provide AI-assisted content research, generation, brand voice, campaign planning
 
 ## 4. Permissions
 
-Prefix `marketing.<resource>:<action>` — see `modules/marketing/permissions.py`.
+Prefix `marketing.<resource>:<action>` - see `modules/marketing/permissions.py`.
 
 ## 5. API prefix
 

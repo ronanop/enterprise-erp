@@ -52,7 +52,7 @@ export function ProcurementPoSummaryCard({
                 {PO_OVERVIEW_BUCKET_LABELS[bucket]}
               </span>
               <span className="font-mono text-sm font-normal tabular-nums text-foreground">
-                {loading ? "—" : String(counts[bucket])}
+                {loading ? "-" : String(counts[bucket])}
               </span>
             </li>
           ))}

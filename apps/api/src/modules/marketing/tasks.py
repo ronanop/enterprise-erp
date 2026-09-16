@@ -43,7 +43,7 @@ def run_content_agent_pipeline(request_id: str, tenant_id: str, user_id: str) ->
         req.updated_at = _utcnow()
         db.commit()
         return {"status": "completed", "content_ids": [str(row.id) for row in created]}
-    except Exception as exc:  # noqa: BLE001 — worker must mark failure
+    except Exception as exc:  # noqa: BLE001 - worker must mark failure
         db.rollback()
         req = db.get(MktContentRequest, UUID(request_id))
         if req is not None:

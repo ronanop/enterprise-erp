@@ -23,7 +23,6 @@ import { ApiClientError } from "@/services/api-client";
 import {
   convertLead,
   deleteLead,
-  formatInr,
   fullName,
   getCompany,
   getLeadBlueprint,
@@ -130,11 +129,6 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
 
       <PageHeader
         title={`${fullName(lead)} · ${formatCrmCode(lead.lead_code)}`}
-        description={
-          lead.expected_amount
-            ? `Expected amount ${formatInr(lead.expected_amount)}`
-            : "No expected amount captured"
-        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             {lead.company_account_id ? (

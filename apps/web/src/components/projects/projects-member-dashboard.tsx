@@ -154,7 +154,7 @@ export function ProjectsMemberDashboard() {
     <ProjectsPage>
       <PageHeader
         title="My Delivery Dashboard"
-        description="Your assigned site steps — open work, waiting steps, completed jobs, and follow-ups."
+        description="Your assigned site steps - open work, waiting steps, completed jobs, and follow-ups."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button

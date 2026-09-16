@@ -94,7 +94,7 @@ def test_sandwich_waits_until_next_working_day_is_known():
 
 
 def test_sandwich_applies_without_leave_balance_check():
-    """Unused leave balance is irrelevant — only approved leave blocks sandwich."""
+    """Unused leave balance is irrelevant - only approved leave blocks sandwich."""
     fri = date(2026, 7, 24)
     sat = date(2026, 7, 25)
     sun = date(2026, 7, 26)

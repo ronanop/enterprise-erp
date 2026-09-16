@@ -1,1 +1,1 @@
-"""Service Management module — Sprint 16."""
+"""Service Management module - Sprint 16."""

@@ -1,1 +1,1 @@
-"""Customer Portal / External Channel module — Sprint 23."""
+"""Customer Portal / External Channel module - Sprint 23."""

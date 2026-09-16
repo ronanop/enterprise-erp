@@ -19,15 +19,15 @@
 
 ### Spacing Overrides
 
-- **Content Density:** High — optimize for information display
+- **Content Density:** High - optimize for information display
 - Use dense tokens from MASTER (`--space-md` / `--space-lg` for cards and tables)
 - Table row height ~36px; card padding ~12px; grid gap ~8px
 
 ### Typography Overrides
 
-- Body/UI: 12–14px for dense tables and sidebars
+- Body/UI: 12-14px for dense tables and sidebars
 - Page titles: clear hierarchy, not oversized display type
-- No clamp(3rem–12rem) hero typography inside the app shell
+- No clamp(3rem-12rem) hero typography inside the app shell
 
 ### Color Overrides
 

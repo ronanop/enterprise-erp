@@ -118,7 +118,7 @@ class DigitalOnboardingService:
 
         clear_email = str(case.get("candidateEmail") or case.get("candidate_email") or "").strip()
         if clear_email and ("*" in clear_email or "•" in clear_email):
-            # Client echoed a masked email — keep existing clear value
+            # Client echoed a masked email - keep existing clear value
             clear_email = (row.candidate_email if row else "") or ""
 
         if row is None:
@@ -275,7 +275,7 @@ class DigitalOnboardingService:
         return self._without_portal_secret(self._to_case(row, include_pii=True))
 
     def login_by_credentials(self, email: str, password: str) -> dict:
-        """Candidate portal login — email + auto-generated password from the invitation."""
+        """Candidate portal login - email + auto-generated password from the invitation."""
         email_norm = (email or "").strip().lower()
         password_plain = (password or "").strip()
         if not email_norm or not password_plain:

@@ -20,12 +20,12 @@ ElevenLabs Agent  ──MCP (streamable HTTP)──►  FastAPI /mcp
 
 ## How tools are generated
 
-1. **Allowlist** — Only endpoints listed in `mcp-server/exposed_endpoints.json` are exposed. Each entry defines `tool_name`, HTTP `method`/`path`, natural-language `description`, `access` (`read` \| `write`), and optional RBAC `permission`.
-2. **OpenAPI introspection** — On startup, the FastAPI app’s OpenAPI document is used to build each tool’s `inputSchema` (path/query/body parameters).
-3. **Registration** — Tools are registered on a `FastMCP` instance (`mcp.server.fastmcp`) with:
-   - Description prefix `[READ-ONLY]` or `[MUTATING — requires approval]`
+1. **Allowlist** - Only endpoints listed in `mcp-server/exposed_endpoints.json` are exposed. Each entry defines `tool_name`, HTTP `method`/`path`, natural-language `description`, `access` (`read` \| `write`), and optional RBAC `permission`.
+2. **OpenAPI introspection** - On startup, the FastAPI app’s OpenAPI document is used to build each tool’s `inputSchema` (path/query/body parameters).
+3. **Registration** - Tools are registered on a `FastMCP` instance (`mcp.server.fastmcp`) with:
+   - Description prefix `[READ-ONLY]` or `[MUTATING - requires approval]`
    - `ToolAnnotations.readOnlyHint` / `destructiveHint` for ElevenLabs approval modes
-4. **Execution** — Handlers call the same REST routes via `httpx` against `MCP_SERVER_BASE_URL`, forwarding `X-ERP-Access-Token` as the user’s JWT so normal API auth and tenant isolation apply.
+4. **Execution** - Handlers call the same REST routes via `httpx` against `MCP_SERVER_BASE_URL`, forwarding `X-ERP-Access-Token` as the user’s JWT so normal API auth and tenant isolation apply.
 
 Add or remove tools by editing the JSON file and restarting the API.
 
@@ -43,7 +43,7 @@ MCP_AUTH_TOKEN=your-long-random-integration-token
 | `MCP_SERVER_BASE_URL` | Origin used for internal ERP HTTP calls and advertised MCP base URL |
 | `MCP_AUTH_TOKEN` | Bearer token ElevenLabs sends on MCP requests (`Authorization: Bearer …`) |
 
-If `MCP_AUTH_TOKEN` is empty (local dev only), MCP transport auth is disabled — **set a token in production**.
+If `MCP_AUTH_TOKEN` is empty (local dev only), MCP transport auth is disabled - **set a token in production**.
 
 ### Headers for ElevenLabs
 
@@ -69,12 +69,12 @@ MCP endpoint: `http://127.0.0.1:8000/mcp/` (streamable HTTP).
 ElevenLabs must reach your MCP server over HTTPS. Use [ngrok](https://ngrok.com/) to tunnel local port **8000**:
 
 1. **One-time:** `ngrok config add-authtoken <your-token>` ([dashboard](https://dashboard.ngrok.com/get-started/your-authtoken)).
-2. **Terminal A** — API:
+2. **Terminal A** - API:
    ```bash
    cd apps/api
    uvicorn main:app --reload --host 0.0.0.0 --port 8000
    ```
-3. **Terminal B** — tunnel (from repo root):
+3. **Terminal B** - tunnel (from repo root):
    ```powershell
    .\mcp-server\scripts\tunnel-mcp.ps1
    ```

@@ -1,28 +1,28 @@
-# ERD_13 — Recruitment & Talent Acquisition Domain
+# ERD_13 - Recruitment & Talent Acquisition Domain
 
-**Document:** Enterprise ERD — Recruitment & Talent Acquisition Domain  
+**Document:** Enterprise ERD - Recruitment & Talent Acquisition Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 13 Implementation Planning  
+**Status:** Locked - Ready for Sprint 13 Implementation Planning  
 **Schema:** `recruitment`  
 **Table Prefix:** `rec_`  
 **Aligned To:** BRD v1.0 · FRD-11 Recruitment & Talent Acquisition · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
-**Functional Sources:** FRD-09 §§4–8 (Recruitment · Candidate · Interview · Offer · Onboarding deferred from HR) · Sprint 13 product track  
-**Classification:** Internal — Confidential  
+**Functional Sources:** FRD-09 §§4-8 (Recruitment · Candidate · Interview · Offer · Onboarding deferred from HR) · Sprint 13 product track  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.7-beta](../07_RELEASES/ERP_Core_v1.7-beta.md)  
 
-> **FRD numbering note:** Repo `FRD-11` is currently Project Management; recruitment business intent lives in FRD-09 §§4–8 (deferred from ERD_11). This ERD follows the Sprint 13 product labeling (**FRD-11 Recruitment & Talent Acquisition**) as requested.
+> **FRD numbering note:** Repo `FRD-11` is currently Project Management; recruitment business intent lives in FRD-09 §§4-8 (deferred from ERD_11). This ERD follows the Sprint 13 product labeling (**FRD-11 Recruitment & Talent Acquisition**) as requested.
 
 ---
 
 ## 1. Module Overview
 
-The Recruitment & Talent Acquisition Domain manages the **hire-to-onboard funnel**: job requisitions and postings, candidate intake, applications and stage progression, interviews and feedback, offers and approvals, background / reference checks, talent pools, and **pre-employee onboarding** — ending only when a candidate is converted to **`master_employee` (C-01)** through Master Data services, then handed to HR / Payroll via **integration ports** (never direct `hr_*` / `pay_*` writes).
+The Recruitment & Talent Acquisition Domain manages the **hire-to-onboard funnel**: job requisitions and postings, candidate intake, applications and stage progression, interviews and feedback, offers and approvals, background / reference checks, talent pools, and **pre-employee onboarding** - ending only when a candidate is converted to **`master_employee` (C-01)** through Master Data services, then handed to HR / Payroll via **integration ports** (never direct `hr_*` / `pay_*` writes).
 
 Recruitment **depends on** Foundation, Organization, Master Data, HR (read + onboarding request orchestration), and Payroll (**read-only** where offer / salary-band mapping is required). It **must never duplicate** employee, department, designation, or company masters. Authoritative employee identity remains **`master_employee`**. Department remains **`org_department`**. Designation remains **`hr_designation`** (UUID / read reference only). Company / branch remain Organization masters.
 
 **Candidate is not an employee.** Identity conversion occurs **only after hire acceptance** during onboarding completion via Master Data `EmployeeService` (or equivalent). Recruitment stores `employee_id` only **after** that creation succeeds.
 
-Inventory, Manufacturing, Procurement, Sales, Quality, and Finance journaling remain **isolated** — no writes; CRM may be referenced only as optional campaign UUID (no `crm_*` FK).
+Inventory, Manufacturing, Procurement, Sales, Quality, and Finance journaling remain **isolated** - no writes; CRM may be referenced only as optional campaign UUID (no `crm_*` FK).
 
 **Business Tables: 20**  
 **Schema: `recruitment`**
@@ -49,9 +49,9 @@ Inventory, Manufacturing, Procurement, Sales, Quality, and Finance journaling re
 ```text
 Foundation (ERD_01) ── Workflow, Audit, RBAC, Notification
 Organization (ERD_02) ── Company, Branch, Department
-Master Data (ERD_03) ── master_employee (C-01) — created only at hire completion
+Master Data (ERD_03) ── master_employee (C-01) - created only at hire completion
 HR (ERD_11) ── hr_designation (read); employment/profile created via HR services only
-Payroll (ERD_12) ── read-only salary-band / structure hints (optional UUID) — no pay_* writes
+Payroll (ERD_12) ── read-only salary-band / structure hints (optional UUID) - no pay_* writes
 CRM (ERD_10) ── optional campaign UUID (no crm_* FK)
         ↓
 Recruitment (ERD_13) ── Requisition → Candidate → Application → Interview → Offer → BGV → Onboard
@@ -64,28 +64,28 @@ master_employee (create) → HR onboarding/employment request → Payroll salary
 ## 2. Scope
 
 ### In Scope
-- **Job requisitions** with openings, department, designation, hiring manager — FRD-09 §4
+- **Job requisitions** with openings, department, designation, hiring manager - FRD-09 §4
 - **Job postings** published from approved requisitions (internal / external / agency)
-- **Candidates** as pre-employee persons (not `master_employee`) — FRD-09 §5
+- **Candidates** as pre-employee persons (not `master_employee`) - FRD-09 §5
 - **Candidate documents** and **resume** storage metadata (URI / checksum; blob in DMS later)
 - **Applications** linking candidate ↔ posting / requisition
-- **Application stages** (pipeline history) — applied → screening → interview → offer → hired / rejected / hold
-- **Interviews** and **interview feedback** — FRD-09 §6
-- **Offers** and **offer approval** trail — FRD-09 §7
+- **Application stages** (pipeline history) - applied → screening → interview → offer → hired / rejected / hold
+- **Interviews** and **interview feedback** - FRD-09 §6
+- **Offers** and **offer approval** trail - FRD-09 §7
 - **Background verification** and **reference checks**
 - **Recruiter** directory (employee-backed) and **recruitment sources**
 - **Talent pool** membership for passive / future candidates
 - **Candidate notes** (collaboration trail)
-- **Onboarding** header + **onboarding tasks**; completion creates employee via Master Data and requests HR employment — FRD-09 §8
+- **Onboarding** header + **onboarding tasks**; completion creates employee via Master Data and requests HR employment - FRD-09 §8
 - **Recruitment report** aggregate snapshots (funnel / time-to-hire / source ROI)
 - Workflow, audit, RBAC, notifications, Celery stubs (planning)
 
 ### Out of Scope (Phase 2 / Separate)
-- Full **DMS binary store** — Phase 1: URI / content hash on document / resume
-- **Agency billing / placement fee GL** (Finance journals) — deferred
-- Duplicate `rec_employee` / `rec_department` / `rec_designation` / `rec_company` — **forbidden (C-01)**
+- Full **DMS binary store** - Phase 1: URI / content hash on document / resume
+- **Agency billing / placement fee GL** (Finance journals) - deferred
+- Duplicate `rec_employee` / `rec_department` / `rec_designation` / `rec_company` - **forbidden (C-01)**
 - Direct writes to `hr_*`, `pay_*`, `fin_*`, `inv_*`, `mfg_*`, `proc_*`, `crm_*`, `qm_*`, `sales_*`
-- `master_customer` usage for candidates — **forbidden**
+- `master_customer` usage for candidates - **forbidden**
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 - Analytics cubes / `ana_fact_recruitment`
 
@@ -104,10 +104,10 @@ master_employee (create) → HR onboarding/employment request → Payroll salary
 |----------|------------------------|
 | ERD_01 Foundation | `sec_tenant`, `sec_user`, `wf_definition`, `wf_instance` |
 | ERD_02 Organization | `org_company`, `org_branch`, `org_department` |
-| ERD_03 Master Data | **`master_employee`** — FK for hiring manager / recruiter; **create only at hire via services** |
-| ERD_11 HR | `hr_designation` read; **HRIntegrationService / onboarding request** — **no HR table writes from Recruitment repos** |
-| ERD_12 Payroll | Optional read of salary structure/band metadata — **no `pay_*` writes** |
-| ERD_10 CRM | Optional `crm_campaign_id` UUID — **no `crm_*` FK** |
+| ERD_03 Master Data | **`master_employee`** - FK for hiring manager / recruiter; **create only at hire via services** |
+| ERD_11 HR | `hr_designation` read; **HRIntegrationService / onboarding request** - **no HR table writes from Recruitment repos** |
+| ERD_12 Payroll | Optional read of salary structure/band metadata - **no `pay_*` writes** |
+| ERD_10 CRM | Optional `crm_campaign_id` UUID - **no `crm_*` FK** |
 
 ---
 
@@ -116,25 +116,25 @@ master_employee (create) → HR onboarding/employment request → Payroll salary
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
 | 1 | `rec_job_requisition` | Transaction Header | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 2 | `rec_job_posting` | Transaction | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 3 | `rec_candidate` | Party Pre-Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 4 | `rec_candidate_document` | Document | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 5 | `rec_resume` | Document | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 6 | `rec_application` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 7 | `rec_application_stage` | Pipeline Detail | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 8 | `rec_interview` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 9 | `rec_interview_feedback` | Detail | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 2 | `rec_job_posting` | Transaction | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 3 | `rec_candidate` | Party Pre-Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 4 | `rec_candidate_document` | Document | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 5 | `rec_resume` | Document | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 6 | `rec_application` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 7 | `rec_application_stage` | Pipeline Detail | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 8 | `rec_interview` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 9 | `rec_interview_feedback` | Detail | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 10 | `rec_offer` | Transaction Header | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 11 | `rec_offer_approval` | Approval Detail | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 11 | `rec_offer_approval` | Approval Detail | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 12 | `rec_background_verification` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 13 | `rec_reference_check` | Transaction | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 14 | `rec_recruiter` | Catalog / Staff | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 15 | `rec_recruitment_source` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 16 | `rec_talent_pool` | Membership | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 17 | `rec_candidate_note` | Collaboration | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 13 | `rec_reference_check` | Transaction | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 14 | `rec_recruiter` | Catalog / Staff | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 15 | `rec_recruitment_source` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 16 | `rec_talent_pool` | Membership | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 17 | `rec_candidate_note` | Collaboration | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 18 | `rec_onboarding` | Transaction Header | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 19 | `rec_onboarding_task` | Checklist Detail | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 20 | `rec_recruitment_report` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 19 | `rec_onboarding_task` | Checklist Detail | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 20 | `rec_recruitment_report` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | - |
 
 **Business Tables: 20**  
 **Schema: `recruitment`**
@@ -245,7 +245,7 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
 | `tenant_id` / `company_id` / `branch_id` | UUID | NO | Scope (branch mandatory) |
-| `document_number` | VARCHAR(50) | NO | `REQ-YYYY-NNNNNN` — FRD-09 §4 |
+| `document_number` | VARCHAR(50) | NO | `REQ-YYYY-NNNNNN` - FRD-09 §4 |
 | `requisition_title` | VARCHAR(255) | NO | Position title text |
 | `department_id` | UUID | NO | FK → `org_department` |
 | `designation_id` | UUID | YES | UUID → `hr.hr_designation` (read; prefer no write FK) |
@@ -255,11 +255,11 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 | `hiring_manager_employee_id` | UUID | NO | FK → `master_employee` |
 | `recruiter_id` | UUID | YES | FK → `rec_recruiter` |
 | `priority` | VARCHAR(20) | NO | low, medium, high, critical |
-| `target_hire_date` | DATE | YES | — |
-| `min_experience_years` / `max_experience_years` | NUMERIC(5,2) | YES | — |
+| `target_hire_date` | DATE | YES | - |
+| `min_experience_years` / `max_experience_years` | NUMERIC(5,2) | YES | - |
 | `salary_band_min` / `salary_band_max` | NUMERIC(18,4) | YES | Indicative |
-| `currency_code` | VARCHAR(10) | YES | — |
-| `job_description` | TEXT | YES | — |
+| `currency_code` | VARCHAR(10) | YES | - |
+| `job_description` | TEXT | YES | - |
 | `justification` | TEXT | YES | Business case |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, open, on_hold, filled, closed, cancelled, rejected |
 | `workflow_*` | | | Job approval |
@@ -280,7 +280,7 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 | `recruitment_source_id` | FK optional default source |
 | `publish_from` / `publish_to` | DATE/TIMESTAMPTZ |
 | `external_url` | optional |
-| `crm_campaign_id` | UUID **optional — no `crm_*` FK** |
+| `crm_campaign_id` | UUID **optional - no `crm_*` FK** |
 | `status` | draft, published, paused, closed, cancelled |
 
 ---
@@ -289,8 +289,8 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 
 | Column | Notes |
 |--------|-------|
-| `candidate_code` | UK — `CAN-NNNNNN` — FRD-09 §5 |
-| `first_name` / `last_name` / `full_name` | — |
+| `candidate_code` | UK - `CAN-NNNNNN` - FRD-09 §5 |
+| `first_name` / `last_name` / `full_name` | - |
 | `email` / `mobile` | UK soft uniqueness per company (service) |
 | `current_title` / `current_employer` | optional |
 | `total_experience_years` | NUMERIC |
@@ -309,7 +309,7 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 |--------|-------|
 | `candidate_id` | FK |
 | `document_type` | identity, education, experience, portfolio, other |
-| `document_name` | — |
+| `document_name` | - |
 | `storage_uri` | URI / object key |
 | `content_hash` | VARCHAR optional |
 | `mime_type` / `file_size_bytes` | optional |
@@ -324,8 +324,8 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 |--------|-------|
 | `candidate_id` | FK |
 | `version_no` | SMALLINT |
-| `storage_uri` | — |
-| `content_hash` | — |
+| `storage_uri` | - |
+| `content_hash` | - |
 | `parsed_skills_json` | JSONB Phase 1 skill tags |
 | `is_primary` | BOOLEAN |
 | `status` | active, superseded, archived |
@@ -344,7 +344,7 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 | `recruitment_source_id` | FK optional (override attribution) |
 | `recruiter_id` | FK optional owner |
 | `applied_at` | TIMESTAMPTZ |
-| `current_stage_code` | VARCHAR — denormalized current stage |
+| `current_stage_code` | VARCHAR - denormalized current stage |
 | `rejection_reason` | TEXT optional |
 | `status` | applied, screening, interview, selected, offer, hired, rejected, on_hold, withdrawn |
 | **Service UK:** one active non-terminal application per `(candidate_id, job_requisition_id)` |
@@ -373,13 +373,13 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 | `document_number` | `INTV-YYYY-NNNNNN` |
 | `application_id` | FK |
 | `candidate_id` | FK (denormalized) |
-| `interview_type` | hr_round, technical, manager, final, other — FRD-09 §6 |
+| `interview_type` | hr_round, technical, manager, final, other - FRD-09 §6 |
 | `scheduled_at` | TIMESTAMPTZ |
 | `duration_minutes` | SMALLINT |
 | `location` / `meeting_url` | optional |
 | `interviewer_employee_id` | FK → `master_employee` |
 | `panel_json` | JSONB optional additional interviewers |
-| `result` | pending, pass, fail, hold — FRD-09 §6 |
+| `result` | pending, pass, fail, hold - FRD-09 §6 |
 | `status` | scheduled, completed, cancelled, no_show |
 
 ---
@@ -404,7 +404,7 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 
 | Column | Notes |
 |--------|-------|
-| `document_number` | `OFF-YYYY-NNNNNN` — FRD-09 §7 |
+| `document_number` | `OFF-YYYY-NNNNNN` - FRD-09 §7 |
 | `application_id` / `candidate_id` / `job_requisition_id` | FKs |
 | `department_id` | FK → `org_department` |
 | `designation_id` | UUID → `hr_designation` |
@@ -413,7 +413,7 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 | `joining_date` | DATE |
 | `offer_valid_until` | DATE |
 | `employment_type` | permanent, contract, intern, consultant |
-| `salary_structure_id` | UUID **optional read-hint → payroll.pay_salary_structure — no FK / no pay write** |
+| `salary_structure_id` | UUID **optional read-hint → payroll.pay_salary_structure - no FK / no pay write** |
 | `offer_letter_uri` | optional |
 | `status` | draft, submitted, approved, sent, accepted, rejected, expired, withdrawn, cancelled |
 | `workflow_*` | Offer approval |
@@ -442,7 +442,7 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 | `document_number` | `BGV-YYYY-NNNNNN` |
 | `candidate_id` / `offer_id` / `application_id` | FKs (offer preferred gate) |
 | `vendor_name` | optional agency |
-| `verification_scope_json` | JSONB — identity, education, employment, criminal, address |
+| `verification_scope_json` | JSONB - identity, education, employment, criminal, address |
 | `initiated_at` / `completed_at` | TIMESTAMPTZ |
 | `result` | pending, clear, adverse, inconclusive |
 | `report_uri` | optional |
@@ -456,7 +456,7 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 | Column | Notes |
 |--------|-------|
 | `candidate_id` / `application_id` | FKs |
-| `reference_name` / `reference_org` / `reference_email` / `reference_phone` | — |
+| `reference_name` / `reference_org` / `reference_email` / `reference_phone` | - |
 | `relationship` | manager, peer, client, academic, other |
 | `feedback_summary` | TEXT |
 | `rating` | NUMERIC optional |
@@ -470,9 +470,9 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 
 | Column | Notes |
 |--------|-------|
-| `recruiter_code` | UK — `RCR-…` |
-| `employee_id` | FK → `master_employee` **mandatory** — recruiter is an employee |
-| `display_name` | — |
+| `recruiter_code` | UK - `RCR-…` |
+| `employee_id` | FK → `master_employee` **mandatory** - recruiter is an employee |
+| `display_name` | - |
 | `max_open_requisitions` | SMALLINT optional capacity |
 | `status` | active, inactive |
 | **UK:** `(company_id, employee_id)` one active recruiter profile |
@@ -483,8 +483,8 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 
 | Column | Notes |
 |--------|-------|
-| `source_code` | UK — REFERRAL, LINKEDIN, NAUKRI, CAMPUS, AGENCY, CAREER_SITE, … |
-| `source_name` | — |
+| `source_code` | UK - REFERRAL, LINKEDIN, NAUKRI, CAMPUS, AGENCY, CAREER_SITE, … |
+| `source_name` | - |
 | `source_type` | organic, paid, agency, referral, campus, internal |
 | `is_active` | BOOLEAN (or status) |
 | `status` | active, inactive |
@@ -495,9 +495,9 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 
 | Column | Notes |
 |--------|-------|
-| `pool_code` | UK — `POOL-…` (or membership under named pool) |
-| `pool_name` | — |
-| `candidate_id` | FK — membership row pattern: one row per candidate-in-pool |
+| `pool_code` | UK - `POOL-…` (or membership under named pool) |
+| `pool_name` | - |
+| `candidate_id` | FK - membership row pattern: one row per candidate-in-pool |
 | `skill_tags_json` | JSONB |
 | `availability` | passive, active, do_not_contact |
 | `added_at` | TIMESTAMPTZ |
@@ -517,7 +517,7 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 | `author_user_id` | UUID → `sec_user` |
 | `note_type` | general, screening, risk, compensation, other |
 | `note_text` | TEXT |
-| `is_private` | BOOLEAN — visible to recruiter roles only when true |
+| `is_private` | BOOLEAN - visible to recruiter roles only when true |
 | `status` | active, archived |
 
 ---
@@ -533,11 +533,11 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 | `designation_id` | UUID → `hr_designation` |
 | `planned_joining_date` / `actual_joining_date` | DATE |
 | `employee_id` | FK → `master_employee` **NULL until conversion** |
-| `hr_employment_request_id` | UUID — opaque response from HR integration (**no `hr_*` FK**) |
-| `payroll_handoff_status` | not_required, pending, completed, failed — **metadata only; no pay write** |
+| `hr_employment_request_id` | UUID - opaque response from HR integration (**no `hr_*` FK**) |
+| `payroll_handoff_status` | not_required, pending, completed, failed - **metadata only; no pay write** |
 | `status` | draft, submitted, in_progress, completed, cancelled, failed |
 | `workflow_*` | Onboarding approval |
-| **Hard rule on complete:** (1) Master Data create `master_employee`; (2) set `employee_id`; (3) call HR service to create employment/profile/onboarding request; (4) optionally notify Payroll setup queue — **never ORM-write `hr_*` / `pay_*`** |
+| **Hard rule on complete:** (1) Master Data create `master_employee`; (2) set `employee_id`; (3) call HR service to create employment/profile/onboarding request; (4) optionally notify Payroll setup queue - **never ORM-write `hr_*` / `pay_*`** |
 
 ---
 
@@ -546,8 +546,8 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 | Column | Notes |
 |--------|-------|
 | `onboarding_id` | FK |
-| `task_code` | DOC_VERIFY, ASSET, ACCOUNT, TRAINING, MANAGER_ASSIGN, … — FRD-09 §8 |
-| `task_name` | — |
+| `task_code` | DOC_VERIFY, ASSET, ACCOUNT, TRAINING, MANAGER_ASSIGN, … - FRD-09 §8 |
+| `task_name` | - |
 | `sequence_no` | SMALLINT |
 | `is_mandatory` | BOOLEAN |
 | `due_date` | DATE optional |
@@ -563,12 +563,12 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 
 | Column | Notes |
 |--------|-------|
-| `report_code` | UK — period + type key |
+| `report_code` | UK - period + type key |
 | `report_type` | funnel, time_to_hire, source_roi, recruiter_productivity |
 | `period_start` / `period_end` | DATE |
 | `department_id` | FK optional → `org_department` |
 | `job_requisition_id` | FK optional |
-| `metrics_json` | JSONB — applications, interviews, offers, hires, avg_days, etc. |
+| `metrics_json` | JSONB - applications, interviews, offers, hires, avg_days, etc. |
 | `generated_at` | TIMESTAMPTZ |
 | `status` | draft, finalized |
 | **UK:** `(company_id, report_code)` |
@@ -621,9 +621,9 @@ Optional: pay_salary_structure_id UUID on offer (no FK / no pay write)
 | Org scope | `tenant_id`, `company_id`, `branch_id` | foundation / organization |
 
 **No FK to:** `inv_*`, `mfg_*`, `proc_*`, `crm_*`, `qm_*`, `sales_*`, `pay_*`, `fin_*`.  
-**HR:** `designation_id` and `hr_employment_request_id` stored as **UUID refs** — prefer **no FK** to `hr_*` (integration integrity via HR services). Optional read-only FK to `hr.hr_designation` allowed if implementation locks peer-schema FK policy.  
-**Payroll:** `salary_structure_id` on offer is **UUID only** — no `pay_*` FK.  
-**CRM:** `crm_campaign_id` UUID only — no `crm_*` FK.  
+**HR:** `designation_id` and `hr_employment_request_id` stored as **UUID refs** - prefer **no FK** to `hr_*` (integration integrity via HR services). Optional read-only FK to `hr.hr_designation` allowed if implementation locks peer-schema FK policy.  
+**Payroll:** `salary_structure_id` on offer is **UUID only** - no `pay_*` FK.  
+**CRM:** `crm_campaign_id` UUID only - no `crm_*` FK.  
 **No Recruitment duplicates of:** `master_employee`, `org_department`, `org_company`, `hr_designation`.
 
 ---
@@ -711,7 +711,7 @@ Seed workflows only; instance rows use Foundation `wf_instance`.
 |-------|-----------|
 | Row audit | Standard columns on all mutable `rec_*` tables |
 | Business audit | `AuditService` on requisition approve, offer approve/send/accept, BGV clear/fail, onboarding complete (employee create), candidate hire conversion |
-| Notifications | Requisition approved, interview scheduled, offer sent/accepted, BGV result, onboarding completed / failed — Foundation notification service |
+| Notifications | Requisition approved, interview scheduled, offer sent/accepted, BGV result, onboarding completed / failed - Foundation notification service |
 
 ---
 
@@ -755,7 +755,7 @@ Seed workflows only; instance rows use Foundation `wf_instance`.
 
 Prior Alembic head: **`0200_seed_payroll_workflows`**.
 
-Revision budget **`0201`–`0222` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`rec_candidate_document` and `rec_resume` share one migration**.
+Revision budget **`0201`-`0222` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`rec_candidate_document` and `rec_resume` share one migration**.
 
 | Order | Revision ID (≤32 chars) | Migration | Tables / Actions |
 |-------|-------------------------|-----------|------------------|
@@ -797,16 +797,16 @@ Revision budget **`0201`–`0222` (22 revisions)**. Schema + 20 tables + permiss
 | Foundation | tenant, user, workflow, audit, RBAC, notification | Direct FK / services |
 | Organization | company, branch, **department** | Direct FK |
 | Master Data | **`master_employee`** for staff roles; **create employee only at onboarding complete** | FK + **EmployeeService adapter** |
-| HR | **`hr_designation` read**; employment / profile **via HR integration service only** | UUID / service — **no `hr_*` ORM writes** |
-| Payroll | Optional salary structure/band **read hints** | UUID only — **no `pay_*` writes** |
-| CRM | Optional campaign attribution | UUID only — **no `crm_*` FK** |
+| HR | **`hr_designation` read**; employment / profile **via HR integration service only** | UUID / service - **no `hr_*` ORM writes** |
+| Payroll | Optional salary structure/band **read hints** | UUID only - **no `pay_*` writes** |
+| CRM | Optional campaign attribution | UUID only - **no `crm_*` FK** |
 
 ### 16.2 Downstream
 
 | Module | Pattern |
 |--------|---------|
 | HR | Receives onboarding/employment **request** after employee create |
-| Payroll | Receives **handoff signal** after employee exists (downstream salary assignment) — Recruitment does not write payroll |
+| Payroll | Receives **handoff signal** after employee exists (downstream salary assignment) - Recruitment does not write payroll |
 | BI | Read-only funnel / time-to-hire / source metrics |
 
 ### 16.3 Hard Rules
@@ -832,22 +832,22 @@ Revision budget **`0201`–`0222` (22 revisions)**. Schema + 20 tables + permiss
 | 4 | No duplicate employee / department / designation / company masters | ✅ |
 | 5 | Candidate becomes employee only after hiring/onboarding | ✅ |
 | 6 | Never write HR or Payroll tables directly | ✅ |
-| 7 | Migration order `0201`–`0222`, revision IDs ≤ 32 chars | ✅ |
+| 7 | Migration order `0201`-`0222`, revision IDs ≤ 32 chars | ✅ |
 | 8 | Workflows + RBAC + audit documented | ✅ |
 | 9 | CRM UUID-only; no `crm_*` FK | ✅ |
 | 10 | Architecture Lock v1.1 preserved; no prior module redesign | ✅ |
 
-### ERD Phase Gate — Recruitment Summary
+### ERD Phase Gate - Recruitment Summary
 
 | Metric | Value |
 |--------|-------|
 | Business Tables | **20** |
 | Schema | **`recruitment`** |
 | Prefix | `rec_` |
-| Migration range | `0201` – `0222` |
+| Migration range | `0201` - `0222` |
 | Prior head | `0200_seed_payroll_workflows` |
 | Planned head | `0222_seed_recruitment_workflows` |
-| Document Status | **Locked — Ready for Sprint 13 Implementation Planning** |
+| Document Status | **Locked - Ready for Sprint 13 Implementation Planning** |
 
 ---
 

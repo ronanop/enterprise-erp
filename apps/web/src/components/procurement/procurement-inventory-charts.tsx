@@ -106,7 +106,7 @@ export function ProcurementInventoryCharts({
             </p>
           </div>
           <p className="text-[11px] tabular-nums font-medium text-sky-900/70">
-            {loading ? "—" : `${summary.totalUnits.toLocaleString("en-IN")} units`}
+            {loading ? "-" : `${summary.totalUnits.toLocaleString("en-IN")} units`}
           </p>
         </div>
         {loading ? (

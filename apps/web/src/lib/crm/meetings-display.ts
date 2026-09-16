@@ -20,17 +20,17 @@ export function formatMeetingWhen(row: CrmMeeting): string {
   if (row.all_day) return `${date} · All day`;
   const start = row.start_time?.slice(0, 5) ?? "";
   const end = row.end_time?.slice(0, 5) ?? "";
-  if (start && end) return `${date} · ${start} – ${end}`;
+  if (start && end) return `${date} · ${start} - ${end}`;
   if (start) return `${date} · ${start}`;
   return date;
 }
 
 export function meetingTypeLabel(mode: string | null | undefined): string {
-  if (!mode) return "—";
+  if (!mode) return "-";
   return MEETING_VENUE_LABELS[mode] ?? mode.replaceAll("_", " ");
 }
 
 export function meetingRelatedToLabel(value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return MEETING_RELATED_TO_LABELS[value] ?? value.replaceAll("_", " ");
 }

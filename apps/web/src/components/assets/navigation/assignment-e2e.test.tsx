@@ -1,7 +1,7 @@
 /** @vitest-environment jsdom */
 
 /**
- * Phase 4 Task 6 — E2E / regression coverage for navigation + inventory lifecycle.
+ * Phase 4 Task 6 - E2E / regression coverage for navigation + inventory lifecycle.
  */
 
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -85,7 +85,7 @@ beforeEach(() => {
   );
 });
 
-describe("E2E — Inventory → Issue navigation", () => {
+describe("E2E - Inventory → Issue navigation", () => {
   it("Assign closes drawer and opens issue wizard once", async () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
@@ -111,7 +111,7 @@ describe("E2E — Inventory → Issue navigation", () => {
   });
 });
 
-describe("E2E — refresh lifecycle (no duplicate)", () => {
+describe("E2E - refresh lifecycle (no duplicate)", () => {
   it("stale remount loads inventory without reloadToken storm", async () => {
     markInventoryStale({ reason: "issue", assetId: "asset-99" });
     render(<AssetInventoryContainer />);
@@ -150,7 +150,7 @@ describe("E2E — refresh lifecycle (no duplicate)", () => {
   });
 });
 
-describe("E2E — AssignmentNavigation ↔ AssetNavigation parity", () => {
+describe("E2E - AssignmentNavigation ↔ AssetNavigation parity", () => {
   it("AssetNavigation.assign matches AssignmentNavigation.openIssue href", () => {
     const assetPush = vi.fn();
     const asgPush = vi.fn();
@@ -168,7 +168,7 @@ describe("E2E — AssignmentNavigation ↔ AssetNavigation parity", () => {
   });
 });
 
-describe("E2E — browser navigation contracts (pure)", () => {
+describe("E2E - browser navigation contracts (pure)", () => {
   it("cancel path equals inventory path", () => {
     const push = vi.fn();
     createAssignmentNavigation(push).openInventory();

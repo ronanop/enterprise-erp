@@ -1,4 +1,4 @@
-"""AssetReportEngine — aggregation shaping and snapshot finalize (FP-ASSET-018).
+"""AssetReportEngine - aggregation shaping and snapshot finalize (FP-ASSET-018).
 
 No persistence. No HTTP. No writes to operational tables.
 """

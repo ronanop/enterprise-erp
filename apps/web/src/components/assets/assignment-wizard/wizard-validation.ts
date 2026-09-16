@@ -33,7 +33,7 @@ export function listMissingAssignmentFields(state: AssignmentWizardState): Missi
   return missing;
 }
 
-/** Per-step gate for Issue Asset Next — only validates fields for the current step. */
+/** Per-step gate for Issue Asset Next - only validates fields for the current step. */
 export function validateAssignmentStep(
   stepIndex: number,
   state: AssignmentWizardState,

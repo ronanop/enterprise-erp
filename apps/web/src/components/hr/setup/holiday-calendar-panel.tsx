@@ -287,7 +287,7 @@ export function HolidayCalendarPanel({ tab }: { tab: HrSetupTab }) {
             </Badge>
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Define holidays with title, date, type, repeat, and applicability — used by leave, ESS, and Comp Off.
+            Define holidays with title, date, type, repeat, and applicability - used by leave, ESS, and Comp Off.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -447,7 +447,7 @@ export function HolidayCalendarPanel({ tab }: { tab: HrSetupTab }) {
               </SetupSelect>
             </SetupField>
             <div className="sm:col-span-2">
-              <SetupField label="Branch" hint="Optional — leave blank for company-wide">
+              <SetupField label="Branch" hint="Optional - leave blank for company-wide">
                 <SetupSelect value={branchId} onChange={(e) => setBranchId(e.target.value)}>
                   <option value="">All branches</option>
                   {branches.map((b) => (
