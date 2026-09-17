@@ -51,6 +51,19 @@ class JWTService:
         token = jwt.encode(payload, self._secret, algorithm=self._algorithm)
         return token, token_id
 
+    def create_access_gate_token(self, *, target: str, hours: int | None = None) -> str:
+        """Short-lived token proving a landing access code was verified."""
+        now = datetime.now(timezone.utc)
+        ttl = hours if hours is not None else settings.access_gate_token_hours
+        payload = {
+            "type": "access_gate",
+            "target": target,
+            "jti": str(uuid4()),
+            "iat": now,
+            "exp": now + timedelta(hours=max(1, ttl)),
+        }
+        return jwt.encode(payload, self._secret, algorithm=self._algorithm)
+
     def decode_token(self, token: str, *, expected_type: str | None = None) -> dict[str, Any]:
         try:
             payload = jwt.decode(token, self._secret, algorithms=[self._algorithm])

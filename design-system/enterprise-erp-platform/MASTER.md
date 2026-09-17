@@ -7,8 +7,8 @@
 ---
 
 **Project:** Enterprise ERP Platform
-**Generated:** 2026-09-04 18:12:17
-**Category:** Booking & Appointment App
+**Generated:** 2026-09-17 11:55:18
+**Category:** Link-in-Bio Page Builder
 
 ---
 
@@ -18,29 +18,29 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#2563EB` | `--color-primary` |
+| Primary | `#0F172A` | `--color-primary` |
 | On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#3B82F6` | `--color-secondary` |
-| Accent/CTA | `#059669` | `--color-accent` |
-| Background | `#F8FAFC` | `--color-background` |
-| Foreground | `#0F172A` | `--color-foreground` |
-| Muted | `#F1F5FD` | `--color-muted` |
-| Border | `#E4ECFC` | `--color-border` |
-| Destructive | `#DC2626` | `--color-destructive` |
-| Ring | `#2563EB` | `--color-ring` |
+| Secondary | `#1E293B` | `--color-secondary` |
+| Accent/CTA | `#A16207` | `--color-accent` |
+| Background | `#020617` | `--color-background` |
+| Foreground | `#F8FAFC` | `--color-foreground` |
+| Muted | `#1A1E2F` | `--color-muted` |
+| Border | `#334155` | `--color-border` |
+| Destructive | `#22C55E` | `--color-destructive` |
+| Ring | `#0F172A` | `--color-ring` |
 
-**Color Notes:** Calendar blue + event green
+**Color Notes:** Dark code + star gold + fork silver + sponsor purple
 
 ### Typography
 
-- **Heading Font:** Libre Bodoni
-- **Body Font:** Public Sans
-- **Mood:** magazine, editorial, publishing, refined, journalism, print
-- **Google Fonts:** [Libre Bodoni + Public Sans](https://fonts.googleapis.com/css2?family=Libre+Bodoni:wght@400;500;600;700&family=Public+Sans:wght@300;400;500;600;700&display=swap)
+- **Heading Font:** Fira Code
+- **Body Font:** Fira Sans
+- **Mood:** dashboard, data, analytics, code, technical, precise
+- **Google Fonts:** [Fira Code + Fira Sans](https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap)
 
 **CSS Import:**
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Libre+Bodoni:wght@400;500;600;700&family=Public+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
 ```
 
 ### Spacing Variables
@@ -73,7 +73,7 @@
 ```css
 /* Primary Button */
 .btn-primary {
-  background: #059669;
+  background: #A16207;
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -90,8 +90,8 @@
 /* Secondary Button */
 .btn-secondary {
   background: transparent;
-  color: #2563EB;
-  border: 2px solid #2563EB;
+  color: #0F172A;
+  border: 2px solid #0F172A;
   padding: 12px 24px;
   border-radius: 8px;
   font-weight: 600;
@@ -104,7 +104,7 @@
 
 ```css
 .card {
-  background: #F8FAFC;
+  background: #020617;
   border-radius: 12px;
   padding: 24px;
   box-shadow: var(--shadow-md);
@@ -130,9 +130,9 @@
 }
 
 .input:focus {
-  border-color: #2563EB;
+  border-color: #0F172A;
   outline: none;
-  box-shadow: 0 0 0 3px #2563EB20;
+  box-shadow: 0 0 0 3px #0F172A20;
 }
 ```
 
@@ -158,37 +158,37 @@
 
 ## Style Guidelines
 
-**Style:** Soft UI Evolution
+**Style:** Vibrant & Block-based
 
-**Keywords:** Evolved soft UI, better contrast, modern aesthetics, subtle depth, accessibility-focused, improved shadows, hybrid
+**Keywords:** Bold, energetic, playful, block layout, geometric shapes, high color contrast, duotone, modern, energetic
 
-**Best For:** Modern enterprise apps, SaaS platforms, health/wellness, modern business tools, professional, hybrid
+**Best For:** Startups, creative agencies, gaming, social media, youth-focused, entertainment, consumer
 
-**Key Effects:** Improved shadows (softer than flat, clearer than neumorphism), modern (200-300ms), focus visible, WCAG AA/AAA
+**Key Effects:** Large sections (48px+ gaps), animated patterns, bold hover (color shift), scroll-snap, large type (32px+), 200-300ms
 
 ### Page Pattern
 
-**Pattern Name:** Portfolio Grid
+**Pattern Name:** Waitlist/Coming Soon
 
-- **Conversion Strategy:** Visuals first. Filter by category. Fast loading essential.
-- **CTA Placement:** Project Card Hover + Footer Contact
-- **Section Order:** 1. Hero (Name/Role), 2. Project Grid (Masonry), 3. About/Philosophy, 4. Contact
+- **Conversion Strategy:** Scarcity + exclusivity. Show waitlist count. Early access benefits. Referral program.
+- **CTA Placement:** Email form prominent (above fold) + Sticky form on scroll
+- **Section Order:** 1. Hero with countdown, 2. Product teaser/preview, 3. Email capture form, 4. Social proof (waitlist count)
 
 ---
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ Complex shadows
-- ❌ 3D effects
+- ❌ Muted colors
+- ❌ Low energy
 
 ### Additional Forbidden Patterns
 
-- ❌ **Emojis as icons** - Use SVG icons (Heroicons, Lucide, Simple Icons)
-- ❌ **Missing cursor:pointer** - All clickable elements must have cursor:pointer
-- ❌ **Layout-shifting hovers** - Avoid scale transforms that shift layout
-- ❌ **Low contrast text** - Maintain 4.5:1 minimum contrast ratio
-- ❌ **Instant state changes** - Always use transitions (150-300ms)
-- ❌ **Invisible focus states** - Focus states must be visible for a11y
+- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
+- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
+- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
+- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
+- ❌ **Instant state changes** — Always use transitions (150-300ms)
+- ❌ **Invisible focus states** — Focus states must be visible for a11y
 
 ---
 

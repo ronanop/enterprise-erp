@@ -17,6 +17,7 @@ from modules.hr.router import hr_router
 from modules.hr.routers.digital_onboarding import public_onboarding_router
 from modules.integration.router import integration_router
 from modules.inventory.router import inventory_router
+from modules.landing.router import landing_router
 from modules.manufacturing.router import manufacturing_router
 from modules.marketing.router import marketing_router
 from modules.master_data.router import master_data_router
@@ -34,6 +35,7 @@ from shared.health import router as health_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(health_router, tags=["Health"])
+api_v1_router.include_router(landing_router)
 api_v1_router.include_router(foundation_router)
 api_v1_router.include_router(organization_router)
 # Asset module before master-data: master /assets/{asset_id} must not swallow

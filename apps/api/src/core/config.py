@@ -243,6 +243,14 @@ class Settings(BaseSettings):
         alias="MICROSOFT_PLATFORM_ADMIN_EMAILS",
     )
 
+    # Landing access gate (iconnectplus.com Sign in → code → demo | ConnectPlus ERP)
+    access_code_demo: str = Field(default="ICP-DEMO-2026", alias="ACCESS_CODE_DEMO")
+    access_code_connectplus: str = Field(
+        default="ICP-CONNECT-2026",
+        alias="ACCESS_CODE_CONNECTPLUS",
+    )
+    access_gate_token_hours: int = Field(default=12, alias="ACCESS_GATE_TOKEN_HOURS")
+
     def microsoft_platform_admin_email_set(self) -> set[str]:
         return {
             email.strip().lower()

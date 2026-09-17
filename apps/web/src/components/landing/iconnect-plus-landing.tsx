@@ -17,6 +17,7 @@ import {
   Zap,
 } from "lucide-react";
 
+import { AccessCodeDialog } from "@/components/landing/access-code-dialog";
 import SplitText from "@/components/landing/split-text";
 import GlowCursor from "@/components/landing/glow-cursor";
 import AeroShards from "@/components/landing/AeroShards";
@@ -335,6 +336,7 @@ export function IConnectPlusLanding() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [glowEnabled, setGlowEnabled] = useState(true);
+  const [signInOpen, setSignInOpen] = useState(false);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -425,12 +427,13 @@ export function IConnectPlusLanding() {
             >
               Request demo
             </a>
-            <Link
-              href="/login"
+            <button
+              type="button"
+              onClick={() => setSignInOpen(true)}
               className="inline-flex cursor-pointer items-center justify-center rounded-full bg-[#2563FF] px-4 py-2 text-sm font-semibold !text-white shadow-[0_8px_20px_-10px_rgba(37,99,255,0.85)] transition-[transform,filter] duration-200 hover:-translate-y-px hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563FF] focus-visible:ring-offset-2 sm:px-5 sm:py-2.5"
             >
               Sign in
-            </Link>
+            </button>
             <button
               type="button"
               aria-expanded={menuOpen}
@@ -470,11 +473,21 @@ export function IConnectPlusLanding() {
               <a
                 href="#contact"
                 onClick={() => setMenuOpen(false)}
-                className="mt-2 inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-[#2563FF] px-5 py-3 text-sm font-semibold !text-white transition-[filter] duration-200 hover:brightness-110"
+                className="mt-2 inline-flex cursor-pointer items-center justify-center gap-2 rounded-full border border-[#0A0A0F]/10 bg-white px-5 py-3 text-sm font-semibold text-[#0A0A0F] transition-colors duration-200 hover:bg-[#F5F7FF]"
               >
                 Request a demo
-                <ArrowRight className="size-4" aria-hidden />
               </a>
+              <button
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  setSignInOpen(true);
+                }}
+                className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-full bg-[#2563FF] px-5 py-3 text-sm font-semibold !text-white transition-[filter] duration-200 hover:brightness-110"
+              >
+                Sign in
+                <ArrowRight className="size-4" aria-hidden />
+              </button>
             </nav>
           </div>
         ) : null}
@@ -839,12 +852,13 @@ export function IConnectPlusLanding() {
                 Book a conversation
                 <ArrowRight className="size-4" aria-hidden />
               </a>
-              <Link
-                href="/login"
+              <button
+                type="button"
+                onClick={() => setSignInOpen(true)}
                 className="inline-flex cursor-pointer items-center rounded-full border-[1.5px] border-[#0A0A0F]/20 px-8 py-4 text-sm font-semibold transition-[transform,border-color] duration-200 hover:-translate-y-px hover:border-[#0A0A0F]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2563FF] focus-visible:ring-offset-2"
               >
                 Sign in to platform
-              </Link>
+              </button>
             </div>
           </div>
         </section>
@@ -858,6 +872,8 @@ export function IConnectPlusLanding() {
           </p>
         </div>
       </footer>
+
+      <AccessCodeDialog open={signInOpen} onClose={() => setSignInOpen(false)} />
     </GlowCursor>
   );
 }
