@@ -19,6 +19,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Connect Plus",
   description: "Multi-Industry, Multi-Company ERP Platform",
+  icons: {
+    icon: [
+      { url: "/favicon.png", type: "image/png", sizes: "32x32" },
+      { url: "/site/brand/iconnect-plus-mark.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/site/brand/iconnect-plus-mark.png", sizes: "180x180" }],
+    shortcut: ["/favicon.png"],
+  },
 };
 
 export default function RootLayout({
