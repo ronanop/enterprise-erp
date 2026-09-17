@@ -18,9 +18,6 @@ import {
 } from "lucide-react";
 
 import { AccessCodeDialog } from "@/components/landing/access-code-dialog";
-import SplitText from "@/components/landing/split-text";
-import GlowCursor from "@/components/landing/glow-cursor";
-import AeroShards from "@/components/landing/AeroShards";
 
 const PROOF = [
   { value: "98%", label: "Process fit score" },
@@ -335,7 +332,6 @@ function HeroPlatformSlider() {
 export function IConnectPlusLanding() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [glowEnabled, setGlowEnabled] = useState(true);
   const [signInOpen, setSignInOpen] = useState(false);
 
   useEffect(() => {
@@ -343,14 +339,6 @@ export function IConnectPlusLanding() {
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const sync = () => setGlowEnabled(!media.matches);
-    sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
   }, []);
 
   useEffect(() => {
@@ -367,27 +355,7 @@ export function IConnectPlusLanding() {
   }, [menuOpen]);
 
   return (
-    <GlowCursor
-      className="icp-landing min-h-dvh bg-white font-sans text-[#0A0A0F] antialiased [&_h1]:font-[family-name:var(--font-icp-display),sans-serif] [&_h2]:font-[family-name:var(--font-icp-display),sans-serif] [&_h3]:font-[family-name:var(--font-icp-display),sans-serif]"
-      color="#2563FF"
-      secondaryColor="#00D9C7"
-      trailLength={40}
-      trailWidth={8}
-      trailTaper={0.8}
-      followSpeed={0.16}
-      glowIntensity={1.9}
-      glowSpread={1.2}
-      hotspot={0.65}
-      brightness={1.25}
-      opacity={1}
-      pulseSpeed={1.1}
-      noiseStrength={0.035}
-      idleFade
-      idleTimeout={700}
-      fadeDuration={900}
-      blendMode="screen"
-      enabled={glowEnabled}
-    >
+    <div className="icp-landing min-h-dvh bg-white font-sans text-[#0A0A0F] antialiased [&_h1]:font-[family-name:var(--font-icp-display),sans-serif] [&_h2]:font-[family-name:var(--font-icp-display),sans-serif] [&_h3]:font-[family-name:var(--font-icp-display),sans-serif]">
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-[#2563FF] focus:px-4 focus:py-2 focus:text-white"
@@ -398,8 +366,8 @@ export function IConnectPlusLanding() {
       <header
         className={`sticky top-0 z-40 transition-[background-color,box-shadow,border-color] duration-200 ${
           scrolled
-            ? "border-b border-[#0A0A0F]/[0.08] bg-white/90 shadow-[0_8px_30px_-12px_rgba(15,23,42,0.18)] backdrop-blur-xl"
-            : "border-b border-transparent bg-white/70 backdrop-blur-md"
+            ? "border-b border-[#0A0A0F]/[0.08] bg-white shadow-[0_8px_30px_-12px_rgba(15,23,42,0.12)]"
+            : "border-b border-transparent bg-white"
         }`}
       >
         <div className="relative mx-auto flex h-[4.25rem] max-w-6xl items-center justify-between gap-4 px-5 sm:px-8 lg:h-[4.75rem] lg:px-10">
@@ -407,7 +375,7 @@ export function IConnectPlusLanding() {
 
           <nav
             aria-label="Primary"
-            className="absolute left-1/2 hidden -translate-x-1/2 items-center rounded-full border border-[#0A0A0F]/[0.06] bg-[#F5F7FF]/80 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] backdrop-blur-sm lg:flex"
+            className="absolute left-1/2 hidden -translate-x-1/2 items-center rounded-full border border-[#0A0A0F]/[0.06] bg-[#F5F7FF] p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] lg:flex"
           >
             {NAV.map((item) => (
               <a
@@ -454,7 +422,7 @@ export function IConnectPlusLanding() {
         {menuOpen ? (
           <div
             id="icp-mobile-nav"
-            className="border-t border-[#0A0A0F]/[0.06] bg-white/95 backdrop-blur-xl lg:hidden"
+            className="border-t border-[#0A0A0F]/[0.06] bg-white lg:hidden"
           >
             <nav
               aria-label="Mobile"
@@ -496,58 +464,15 @@ export function IConnectPlusLanding() {
       <main id="main">
         {/* Award hero — Figma Hero v2 */}
         <section className="relative overflow-hidden border-b border-[#0A0A0F]/[0.04] bg-white">
-          <div className="pointer-events-none absolute inset-0 z-0">
-            <AeroShards
-              backgroundColor="#FFFFFF"
-              shardColor="#2563FF"
-              accentColor="#00D9C7"
-              placement="right"
-              flow="stream"
-              material="pearl"
-              detail="balanced"
-              effect="none"
-              scale={1}
-              spread={1}
-              depth={1}
-              speed={1}
-              spin={1}
-              interaction="repel"
-              density={1.5}
-              shardSize={1.1}
-              stretch={1}
-              turbulence={1}
-              glow={1}
-              edgeSoftness={2}
-              bloom={0.5}
-              grain={0.04}
-              chromaticAberration={0.005}
-              transitionDuration={1}
-              interactionRadius={1.5}
-              interactionStrength={0.45}
-              rippleIntensity={1}
-              holdToGather
-              className="h-full w-full"
-              onError={(error: Error) => {
-                console.warn("[AeroShards]", error.message);
-              }}
-            />
-          </div>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(ellipse_80%_60%_at_85%_20%,rgba(37,99,255,0.07),transparent_55%)]"
+          />
           <div className="relative z-10 mx-auto grid max-w-6xl gap-12 px-5 pb-10 pt-14 sm:px-8 lg:grid-cols-[minmax(0,1.08fr)_minmax(0,0.92fr)] lg:items-center lg:gap-14 lg:px-10 lg:pb-0 lg:pt-24">
             <div className="icp-anim-rise flex flex-col">
-              <SplitText
-                tag="h1"
-                text="We make custom AI-powered Enterprise Apps that drive growth."
-                className="max-w-[22ch] text-balance text-[2.35rem] font-bold leading-[1.05] tracking-[-0.04em] text-[#0A0A0F] sm:text-5xl sm:leading-[1.04] lg:text-[3.35rem] lg:leading-[1.02]"
-                delay={35}
-                duration={0.65}
-                ease="power3.out"
-                splitType="chars"
-                from={{ opacity: 0, y: 28 }}
-                to={{ opacity: 1, y: 0 }}
-                threshold={0.1}
-                rootMargin="-80px"
-                textAlign="left"
-              />
+              <h1 className="max-w-[22ch] text-balance text-[2.35rem] font-bold leading-[1.05] tracking-[-0.04em] text-[#0A0A0F] sm:text-5xl sm:leading-[1.04] lg:text-[3.35rem] lg:leading-[1.02]">
+                We make custom AI-powered Enterprise Apps that drive growth.
+              </h1>
 
               <p className="mt-6 max-w-[34rem] text-pretty text-[1.05rem] leading-[1.65] text-[#5A6070] sm:text-lg sm:leading-[1.7]">
                 Modular systems for finance, CRM, GRC, HR, and operations —
@@ -874,6 +799,6 @@ export function IConnectPlusLanding() {
       </footer>
 
       <AccessCodeDialog open={signInOpen} onClose={() => setSignInOpen(false)} />
-    </GlowCursor>
+    </div>
   );
 }
