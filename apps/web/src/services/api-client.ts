@@ -320,8 +320,12 @@ export const authService = {
       auth: false,
     }),
   microsoftLoginUrl: (returnTo = "/organization") => {
-    const path = `/auth/microsoft/login?return_to=${encodeURIComponent(returnTo)}`;
-    return `${getApiUrl()}${path}`;
+    const params = new URLSearchParams({ return_to: returnTo });
+    // Send the browser origin so API redirects back here (not a fixed FRONTEND_URL / VM).
+    if (typeof window !== "undefined" && window.location?.origin) {
+      params.set("frontend_origin", window.location.origin);
+    }
+    return `${getApiUrl()}/auth/microsoft/login?${params.toString()}`;
   },
   exchangeMicrosoftCode: (code: string) =>
     apiClient<TokenData>("/auth/microsoft/exchange", {

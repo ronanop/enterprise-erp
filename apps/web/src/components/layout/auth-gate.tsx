@@ -1,10 +1,16 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
+import { WelcomeSplash } from "@/components/auth/welcome-splash";
 import { AuthSessionProvider } from "@/hooks/use-auth-user";
 import { isAuthenticated } from "@/lib/auth";
+import {
+  clearWelcomeSplash,
+  peekWelcomeSplash,
+  type WelcomeSplashPayload,
+} from "@/lib/welcome-splash-session";
 
 function AuthGatePlaceholder({ message }: { message: string }) {
   return (
@@ -20,10 +26,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [mounted, setMounted] = useState(false);
   const [authed, setAuthed] = useState(false);
+  const [welcome, setWelcome] = useState<WelcomeSplashPayload | null>(null);
 
   useEffect(() => {
     setMounted(true);
     setAuthed(isAuthenticated());
+    setWelcome(peekWelcomeSplash());
   }, []);
 
   useEffect(() => {
@@ -51,6 +59,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     };
   }, [mounted, authed]);
 
+  const finishWelcome = useCallback(() => {
+    clearWelcomeSplash();
+    setWelcome(null);
+  }, []);
+
   if (!mounted) {
     return <AuthGatePlaceholder message="Loading…" />;
   }
@@ -59,5 +72,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return <AuthGatePlaceholder message="Redirecting to sign-in…" />;
   }
 
-  return <AuthSessionProvider>{children}</AuthSessionProvider>;
+  return (
+    <AuthSessionProvider>
+      {welcome ? (
+        <WelcomeSplash userName={welcome.userName} onComplete={finishWelcome} />
+      ) : null}
+      {children}
+    </AuthSessionProvider>
+  );
 }

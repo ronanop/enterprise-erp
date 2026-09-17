@@ -18,7 +18,10 @@ from modules.foundation.models.security import SecRole, SecUser, SecUserRole
 from modules.foundation.repository.session_repository import SessionRepository
 from modules.foundation.repository.user_repository import UserRepository
 from modules.foundation.service.audit_service import AuditService
-from modules.foundation.service.microsoft_oauth_service import MicrosoftOAuthService
+from modules.foundation.service.microsoft_oauth_service import (
+    MicrosoftOAuthService,
+    resolve_frontend_base,
+)
 from security.jwt import JWTService
 from security.password import PasswordHasher
 
@@ -106,7 +109,7 @@ class AuthService:
         state: str,
         ip_address: str | None = None,
         user_agent: str | None = None,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, str]:
         oauth = MicrosoftOAuthService()
         stored = self._store.pop_oauth_state(state)
         if stored is None:
@@ -114,6 +117,10 @@ class AuthService:
 
         return_to = (
             stored.get("return_to") if isinstance(stored.get("return_to"), str) else "/"
+        )
+        frontend_origin = stored.get("frontend_origin")
+        frontend_base = resolve_frontend_base(
+            frontend_origin if isinstance(frontend_origin, str) else None
         )
         claims = oauth.exchange_authorization_code(code)
         email = MicrosoftOAuthService.email_from_claims(claims)
@@ -126,8 +133,11 @@ class AuthService:
             user_agent=user_agent,
         )
         exchange_code = oauth.create_exchange_code()
-        self._store.set_oauth_exchange(exchange_code, {**tokens, "return_to": return_to})
-        return exchange_code, return_to
+        self._store.set_oauth_exchange(
+            exchange_code,
+            {**tokens, "return_to": return_to, "frontend_base": frontend_base},
+        )
+        return exchange_code, return_to, frontend_base
 
     def redeem_microsoft_exchange(self, exchange_code: str) -> dict:
         payload = self._store.pop_oauth_exchange(exchange_code)

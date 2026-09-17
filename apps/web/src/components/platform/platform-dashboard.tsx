@@ -1,6 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+/**
+ * Platform home — Apple monochrome chrome; color only on charts + alerts.
+ * Spec: design-system/.../pages/home.md + Figma file Connect Plus — Home.
+ */
+
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import {
   Activity,
@@ -33,21 +38,15 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import {
-  CrmHeadlineBand,
-  CrmHeadlineStat,
-  CrmSection,
-} from "@/components/crm/crm-ui";
-import {
   PlatformConnectedPipelineChart,
   PlatformModuleActivityChart,
   PlatformModuleHealthDonut,
   PlatformModuleShareDonut,
 } from "@/components/platform/platform-dashboard-charts";
-import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { erpModules } from "@/config/modules";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { welcomeDisplayName } from "@/lib/welcome-display-name";
 import { canAccessHref, hasModuleAssignments } from "@/lib/module-access";
 import { cn } from "@/lib/utils";
 import {
@@ -55,6 +54,9 @@ import {
   type ModuleAnalytics,
   type PlatformDashboardData,
 } from "@/services/platform-dashboard-service";
+
+const APPLE_TYPE =
+  '-apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif';
 
 const MODULE_ICONS: Record<string, LucideIcon> = {
   crm: Handshake,
@@ -88,39 +90,83 @@ function moduleIcon(key: string): LucideIcon {
   return MODULE_ICONS[key] ?? LayoutDashboard;
 }
 
+function formatCount(n: number) {
+  return n.toLocaleString("en-IN");
+}
+
+function timeGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 17) return "Good afternoon";
+  return "Good evening";
+}
+
 function statusMeta(status: ModuleAnalytics["status"]) {
   if (status === "ok") {
     return {
       label: "Live",
-      badge: "success" as const,
       icon: CheckCircle2,
-      tone: "text-emerald-700 bg-emerald-50 border-emerald-200",
-      bar: "bg-emerald-500",
-      dot: "bg-emerald-500",
+      // monochrome for live
+      tone: "text-[#1d1d1f] bg-[#f5f5f7] border-[#e8e8ed]",
+      bar: "bg-[#1d1d1f]",
     };
   }
   if (status === "partial") {
     return {
       label: "Partial",
-      badge: "secondary" as const,
       icon: AlertTriangle,
-      tone: "text-amber-800 bg-amber-50 border-amber-200",
+      // alert color allowed
+      tone: "text-amber-900 bg-amber-50 border-amber-300",
       bar: "bg-amber-500",
-      dot: "bg-amber-500",
     };
   }
   return {
     label: "Offline",
-    badge: "destructive" as const,
     icon: XCircle,
-    tone: "text-slate-700 bg-slate-100 border-slate-200",
-    bar: "bg-slate-400",
-    dot: "bg-slate-400",
+    tone: "text-[#6e6e73] bg-[#f5f5f7] border-[#e8e8ed]",
+    bar: "bg-[#d2d2d7]",
   };
 }
 
-function formatCount(n: number) {
-  return n.toLocaleString("en-IN");
+function HomeCard({
+  title,
+  subtitle,
+  icon: Icon,
+  children,
+  delayMs = 0,
+  className,
+}: {
+  title: string;
+  subtitle?: string;
+  icon?: LucideIcon;
+  children: ReactNode;
+  delayMs?: number;
+  className?: string;
+}) {
+  return (
+    <section
+      className={cn(
+        "home-rise rounded-2xl border border-[#e8e8ed] bg-white p-5 transition-[box-shadow,transform] duration-200 hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)]",
+        className,
+      )}
+      style={{ animationDelay: `${delayMs}ms` }}
+    >
+      <div className="mb-4 flex items-start gap-3">
+        {Icon ? (
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#f5f5f7] text-[#1d1d1f]">
+            <Icon className="size-4" strokeWidth={1.75} aria-hidden />
+          </span>
+        ) : null}
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-semibold tracking-[-0.02em] text-[#1d1d1f]">{title}</h2>
+          {subtitle ? (
+            <p className="mt-0.5 text-[12px] leading-snug text-[#6e6e73]">{subtitle}</p>
+          ) : null}
+        </div>
+      </div>
+      {children}
+    </section>
+  );
 }
 
 function DepartmentAnalyticsTable({
@@ -136,21 +182,23 @@ function DepartmentAnalyticsTable({
     return (
       <div className="space-y-2">
         {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="h-14 animate-pulse rounded-lg bg-muted/40" />
+          <div key={i} className="h-14 animate-pulse rounded-xl bg-[#f5f5f7]" />
         ))}
       </div>
     );
   }
 
   if (!modules.length) {
-    return <p className="py-10 text-center text-sm text-muted-foreground">No module analytics available.</p>;
+    return (
+      <p className="py-10 text-center text-sm text-[#6e6e73]">No module analytics available.</p>
+    );
   }
 
   return (
-    <div className="erp-scroll overflow-x-auto rounded-lg border border-border/70">
+    <div className="erp-scroll overflow-x-auto rounded-xl border border-[#e8e8ed]">
       <table className="w-full min-w-[720px] text-left text-sm">
         <thead>
-          <tr className="border-b border-border/70 bg-[#eef2f6] text-[11px] font-medium text-muted-foreground">
+          <tr className="border-b border-[#e8e8ed] bg-[#f5f5f7] text-[11px] font-medium tracking-wide text-[#86868b] uppercase">
             <th className="px-3 py-2.5">#</th>
             <th className="px-3 py-2.5">Department</th>
             <th className="px-3 py-2.5">Status</th>
@@ -171,67 +219,67 @@ function DepartmentAnalyticsTable({
             return (
               <tr
                 key={mod.key}
-                className="border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
+                className="border-b border-[#e8e8ed]/80 transition-colors duration-200 last:border-0 hover:bg-[#f5f5f7]/70"
               >
-                <td className="px-3 py-2.5 text-[11px] tabular-nums text-muted-foreground">{index + 1}</td>
-                <td className="px-3 py-2.5">
+                <td className="px-3 py-3 text-[11px] tabular-nums text-[#86868b]">{index + 1}</td>
+                <td className="px-3 py-3">
                   <Link
                     href={mod.href}
-                    className="group inline-flex max-w-[200px] cursor-pointer items-center gap-2"
+                    className="group inline-flex max-w-[220px] cursor-pointer items-center gap-2.5"
                   >
-                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-800">
-                      <Icon className="size-3.5" aria-hidden />
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#f5f5f7] text-[#1d1d1f] transition-colors duration-200 group-hover:bg-[#e8e8ed]">
+                      <Icon className="size-3.5" strokeWidth={1.75} aria-hidden />
                     </span>
                     <span className="min-w-0">
-                      <span className="block truncate font-medium text-foreground group-hover:underline">
+                      <span className="block truncate font-medium tracking-[-0.01em] text-[#1d1d1f] group-hover:underline">
                         {mod.title}
                       </span>
-                      <span className="block truncate text-[10px] text-muted-foreground">{mod.key}</span>
+                      <span className="block truncate text-[10px] text-[#86868b]">{mod.key}</span>
                     </span>
                   </Link>
                 </td>
-                <td className="px-3 py-2.5">
+                <td className="px-3 py-3">
                   <span
                     className={cn(
                       "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
                       meta.tone,
                     )}
                   >
-                    <StatusIcon className="size-3" aria-hidden />
+                    <StatusIcon className="size-3" strokeWidth={1.75} aria-hidden />
                     {meta.label}
                   </span>
                 </td>
-                <td className="px-3 py-2.5 text-right font-semibold tabular-nums text-foreground">
+                <td className="px-3 py-3 text-right font-semibold tabular-nums tracking-[-0.02em] text-[#1d1d1f]">
                   {formatCount(mod.recordCount)}
                 </td>
-                <td className="hidden px-3 py-2.5 md:table-cell">
+                <td className="hidden px-3 py-3 md:table-cell">
                   <div className="flex items-center gap-2">
-                    <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
+                    <div className="h-1.5 w-24 overflow-hidden rounded-full bg-[#e8e8ed]">
                       <div
                         className={cn("h-full rounded-full transition-all duration-300", meta.bar)}
                         style={{ width: `${Math.max(pct, mod.recordCount > 0 ? 6 : 0)}%` }}
                       />
                     </div>
-                    <span className="w-8 text-right text-[10px] tabular-nums text-muted-foreground">{pct}%</span>
+                    <span className="w-8 text-right text-[10px] tabular-nums text-[#86868b]">{pct}%</span>
                   </div>
                 </td>
-                <td className="px-3 py-2.5">
+                <td className="px-3 py-3">
                   <div className="flex flex-wrap gap-1.5">
                     {kpis.length ? (
                       kpis.map((kpi) => (
                         <span
                           key={kpi.label}
-                          className="inline-flex max-w-[160px] items-baseline gap-1 rounded-md bg-muted/50 px-1.5 py-0.5"
+                          className="inline-flex max-w-[160px] items-baseline gap-1 rounded-md bg-[#f5f5f7] px-1.5 py-0.5"
                           title={kpi.hint}
                         >
-                          <span className="truncate text-[10px] text-muted-foreground">{kpi.label}</span>
-                          <span className="shrink-0 text-[11px] font-semibold tabular-nums text-foreground">
+                          <span className="truncate text-[10px] text-[#86868b]">{kpi.label}</span>
+                          <span className="shrink-0 text-[11px] font-semibold tabular-nums text-[#1d1d1f]">
                             {kpi.value}
                           </span>
                         </span>
                       ))
                     ) : (
-                      <span className="text-[11px] text-muted-foreground">No KPIs</span>
+                      <span className="text-[11px] text-[#86868b]">No KPIs</span>
                     )}
                   </div>
                   {mod.errors[0] ? (
@@ -240,13 +288,13 @@ function DepartmentAnalyticsTable({
                     </p>
                   ) : null}
                 </td>
-                <td className="px-3 py-2.5 text-right">
+                <td className="px-3 py-3 text-right">
                   <Link
                     href={mod.href}
-                    className="inline-flex cursor-pointer items-center gap-0.5 text-[11px] font-medium text-sky-700 transition-colors duration-200 hover:text-sky-900"
+                    className="inline-flex cursor-pointer items-center gap-0.5 text-[11px] font-medium text-[#1d1d1f] transition-opacity duration-200 hover:opacity-60"
                   >
                     Hub
-                    <ArrowUpRight className="size-3" aria-hidden />
+                    <ArrowUpRight className="size-3" strokeWidth={1.75} aria-hidden />
                   </Link>
                 </td>
               </tr>
@@ -274,38 +322,38 @@ function HealthSummaryStrip({
   const coverage = total ? Math.round((live / total) * 100) : 0;
 
   return (
-    <div className="mb-3 grid gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
+    <div className="mb-4 grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
       <div className="grid grid-cols-3 gap-2">
-        <div className="rounded-lg border border-emerald-200/80 bg-emerald-50/80 px-2.5 py-2">
-          <p className="text-[10px] font-medium text-emerald-800/80 uppercase">Live</p>
-          <p className="mt-0.5 text-lg font-semibold tabular-nums text-emerald-900">
-            {loading ? "-" : live}
+        <div className="rounded-xl bg-[#f5f5f7] px-3 py-2.5">
+          <p className="text-[10px] font-medium tracking-wide text-[#86868b] uppercase">Live</p>
+          <p className="mt-0.5 text-xl font-semibold tabular-nums tracking-[-0.03em] text-[#1d1d1f]">
+            {loading ? "—" : live}
           </p>
         </div>
-        <div className="rounded-lg border border-amber-200/80 bg-amber-50/80 px-2.5 py-2">
-          <p className="text-[10px] font-medium text-amber-900/80 uppercase">Partial</p>
-          <p className="mt-0.5 text-lg font-semibold tabular-nums text-amber-950">
-            {loading ? "-" : partial}
+        <div className="rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5">
+          <p className="text-[10px] font-medium tracking-wide text-amber-900/80 uppercase">Partial</p>
+          <p className="mt-0.5 text-xl font-semibold tabular-nums tracking-[-0.03em] text-amber-950">
+            {loading ? "—" : partial}
           </p>
         </div>
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-2">
-          <p className="text-[10px] font-medium text-slate-600 uppercase">Offline</p>
-          <p className="mt-0.5 text-lg font-semibold tabular-nums text-slate-800">
-            {loading ? "-" : offline}
+        <div className="rounded-xl bg-[#f5f5f7] px-3 py-2.5">
+          <p className="text-[10px] font-medium tracking-wide text-[#86868b] uppercase">Offline</p>
+          <p className="mt-0.5 text-xl font-semibold tabular-nums tracking-[-0.03em] text-[#1d1d1f]">
+            {loading ? "—" : offline}
           </p>
         </div>
       </div>
-      <div className="flex min-w-[180px] items-center gap-3 rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
+      <div className="flex min-w-[180px] items-center gap-3 rounded-xl border border-[#e8e8ed] bg-white px-3 py-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2 text-[11px]">
-            <span className="text-muted-foreground">API coverage</span>
-            <span className="font-semibold tabular-nums text-foreground">
-              {loading ? "-" : `${coverage}%`}
+            <span className="text-[#6e6e73]">API coverage</span>
+            <span className="font-semibold tabular-nums text-[#1d1d1f]">
+              {loading ? "—" : `${coverage}%`}
             </span>
           </div>
-          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-muted">
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#e8e8ed]">
             <div
-              className="h-full rounded-full bg-emerald-600 transition-all duration-300"
+              className="h-full rounded-full bg-[#1d1d1f] transition-all duration-300"
               style={{ width: `${loading ? 0 : coverage}%` }}
             />
           </div>
@@ -319,7 +367,7 @@ function HealthSummaryStrip({
 }
 
 export function PlatformDashboard() {
-const {
+  const {
     user,
     moduleKeys,
     adminModuleKeys,
@@ -373,161 +421,206 @@ const {
   const tracked = data?.modules.length ?? 0;
   const showLoading = loading || authLoading || authStatus === "loading";
   const hasModules = hasModuleAssignments(moduleKeys, user?.userType, adminModuleKeys);
+  const displayName = welcomeDisplayName(user?.displayName, user?.email);
+
+  const shell = (children: ReactNode) => (
+    <div className="home-shell -mx-1 space-y-7 px-1 pb-2" style={{ fontFamily: APPLE_TYPE }}>
+      <style>{`
+        .home-shell .home-rise {
+          animation: home-rise 650ms cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        @keyframes home-rise {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .home-shell .home-rise {
+            animation: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+          }
+        }
+      `}</style>
+      {children}
+    </div>
+  );
 
   if (authStatus === "error") {
-    return (
-      <div className="space-y-5">
-        <PageHeader
-          title="Welcome"
-          description="We could not load your module assignments. This is usually temporary."
-        />
-        <div className="rounded-xl border border-border/80 bg-card px-6 py-10 text-center shadow-sm">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
-            <Shield className="size-5 text-muted-foreground" aria-hidden />
+    return shell(
+      <>
+        <header className="home-rise">
+          <p className="text-[13px] font-medium tracking-[0.04em] text-[#86868b]">{timeGreeting()}</p>
+          <h1 className="mt-2 text-[2rem] font-semibold tracking-[-0.04em] text-[#1d1d1f] sm:text-[2.5rem]">
+            Welcome home
+          </h1>
+        </header>
+        <div className="home-rise rounded-2xl border border-[#e8e8ed] bg-white px-6 py-10 text-center" style={{ animationDelay: "80ms" }}>
+          <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-[#f5f5f7]">
+            <Shield className="size-5 text-[#6e6e73]" strokeWidth={1.75} aria-hidden />
           </div>
-          <h2 className="mt-4 text-lg font-semibold text-foreground">Session loading failed</h2>
-          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+          <h2 className="mt-4 text-lg font-semibold text-[#1d1d1f]">Session loading failed</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-[#6e6e73]">
             {authError || "Retry to restore your modules. Your account is still signed in."}
           </p>
           <Button
             type="button"
-            className="mt-5 cursor-pointer"
+            className="mt-5 cursor-pointer rounded-full bg-[#1d1d1f] text-white hover:bg-black"
             onClick={() => void refresh()}
           >
             Retry
           </Button>
         </div>
-      </div>
+      </>,
     );
   }
 
-  // Only show "no modules" after a confirmed successful /auth/me - never on failed loads.
   if (!showLoading && authStatus === "authenticated" && user && !hasModules) {
-    return (
-      <div className="space-y-5">
-        <PageHeader
-          title="Welcome"
-          description="Your ERP account is active, but no modules have been assigned yet."
-        />
-        <div className="rounded-xl border border-border/80 bg-card px-6 py-10 text-center shadow-sm">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
-            <Shield className="size-5 text-muted-foreground" aria-hidden />
+    return shell(
+      <>
+        <header className="home-rise">
+          <p className="text-[13px] font-medium tracking-[0.04em] text-[#86868b]">{timeGreeting()}</p>
+          <h1 className="mt-2 text-[2rem] font-semibold tracking-[-0.04em] text-[#1d1d1f] sm:text-[2.5rem]">
+            {displayName}
+          </h1>
+          <p className="mt-2 text-[15px] text-[#6e6e73]">
+            Your account is active, but no modules have been assigned yet.
+          </p>
+        </header>
+        <div className="home-rise rounded-2xl border border-[#e8e8ed] bg-white px-6 py-10 text-center" style={{ animationDelay: "80ms" }}>
+          <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-[#f5f5f7]">
+            <Shield className="size-5 text-[#6e6e73]" strokeWidth={1.75} aria-hidden />
           </div>
-          <h2 className="mt-4 text-lg font-semibold text-foreground">No modules assigned</h2>
-          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-            Contact your ERP administrator to assign the modules you need. Once assigned, they will
-            appear in the sidebar menu and on this dashboard.
+          <h2 className="mt-4 text-lg font-semibold text-[#1d1d1f]">No modules assigned</h2>
+          <p className="mx-auto mt-2 max-w-md text-sm text-[#6e6e73]">
+            Contact your ERP administrator. Once assigned, modules appear in the sidebar and here.
           </p>
           <a
             href="mailto:techbank@cachedigitech.com"
-            className="mt-5 inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors duration-200 hover:bg-accent"
+            className="mt-5 inline-flex cursor-pointer items-center gap-2 rounded-full border border-[#e8e8ed] bg-white px-4 py-2 text-sm font-medium text-[#1d1d1f] transition-colors duration-200 hover:bg-[#f5f5f7]"
           >
-            <Mail className="size-4" aria-hidden />
+            <Mail className="size-4" strokeWidth={1.75} aria-hidden />
             Contact admin
           </a>
         </div>
-      </div>
+      </>,
     );
   }
 
-  return (
-    <div className="space-y-5">
-      <PageHeader
-        title="Enterprise analytics"
-        description="KPIs and activity for the modules assigned to your account."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{visibleModules.length} modules</Badge>
-            {data?.loadedAt ? (
-              <span className="hidden text-[11px] text-muted-foreground sm:inline">
-                Updated{" "}
-                {new Date(data.loadedAt).toLocaleTimeString("en-IN", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
-            ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="cursor-pointer"
-              disabled={showLoading}
-              onClick={() => void load()}
-            >
-              <RefreshCw className={cn("size-3.5", showLoading && "animate-spin")} />
-              Refresh
-            </Button>
-          </div>
-        }
-      />
+  const kpis =
+    headline.length > 0
+      ? headline.slice(0, 4)
+      : [
+          { label: "Modules", value: String(visibleModules.length), hint: "Assigned" },
+          { label: "Records", value: "—", hint: "Tracked" },
+          { label: "Live feeds", value: "—", hint: "Healthy" },
+          { label: "Coverage", value: "—", hint: "API" },
+        ];
+
+  return shell(
+    <>
+      <header className="home-rise flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-[13px] font-medium tracking-[0.04em] text-[#86868b]">{timeGreeting()}</p>
+          <h1 className="mt-2 text-[2rem] font-semibold leading-[1.05] tracking-[-0.045em] text-[#1d1d1f] sm:text-[2.5rem]">
+            {displayName !== "there" ? displayName : "Welcome home"}
+          </h1>
+          <p className="mt-2 max-w-xl text-[15px] leading-snug text-[#6e6e73]">
+            KPIs and activity for modules assigned to your account.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {data?.loadedAt ? (
+            <span className="text-[11px] text-[#86868b]">
+              Updated{" "}
+              {new Date(data.loadedAt).toLocaleTimeString("en-IN", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 cursor-pointer rounded-full border-[#e8e8ed] bg-white px-4 text-[#1d1d1f] transition-colors duration-200 hover:bg-[#f5f5f7]"
+            disabled={showLoading}
+            onClick={() => void load()}
+          >
+            <RefreshCw className={cn("size-3.5", showLoading && "animate-spin")} strokeWidth={1.75} />
+            Refresh
+          </Button>
+        </div>
+      </header>
 
       {authBlocked ? (
-        <div className="rounded-xl border border-border/80 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-          Sign in to load live analytics across modules.{" "}
-          <Link href="/login" className="cursor-pointer font-medium text-primary underline underline-offset-2">
+        <div className="home-rise rounded-2xl border border-[#e8e8ed] bg-[#f5f5f7] px-4 py-3 text-sm text-[#6e6e73]" style={{ animationDelay: "40ms" }}>
+          Sign in to load live analytics.{" "}
+          <Link href="/login" className="cursor-pointer font-medium text-[#1d1d1f] underline underline-offset-2">
             Go to login
           </Link>
         </div>
       ) : null}
 
       {data?.partial && !authBlocked ? (
-        <div className="rounded-xl border border-amber-200/80 bg-amber-50/70 px-4 py-2.5 text-xs text-amber-950">
-          Some module endpoints were slow or unavailable. Showing available analytics - refresh or check Module health for details.
+        <div
+          className="home-rise rounded-2xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs text-amber-950"
+          style={{ animationDelay: "60ms" }}
+          role="status"
+        >
+          Some module endpoints were slow or unavailable. Showing available analytics — refresh or check module health.
         </div>
       ) : null}
 
-      <CrmHeadlineBand>
-        <div
-          className={cn(
-            "grid divide-y divide-white/10 sm:divide-x sm:divide-y-0",
-            headline.length <= 1
-              ? "sm:grid-cols-1"
-              : headline.length === 2
-                ? "sm:grid-cols-2"
-                : headline.length === 3
-                  ? "sm:grid-cols-3"
-                  : "sm:grid-cols-2 lg:grid-cols-4",
-          )}
-        >
-          {(headline.length ? headline.slice(0, 4) : [{ label: "Modules", value: "-", hint: "Assigned modules" }]).map(
-            (stat) => (
-              <CrmHeadlineStat
-                key={stat.label}
-                label={stat.label}
-                value={stat.value}
-                sub={stat.hint}
-                loading={showLoading}
-              />
-            ),
-          )}
-        </div>
-      </CrmHeadlineBand>
+      <div
+        className="home-rise grid overflow-hidden rounded-2xl border border-[#e8e8ed] bg-white sm:grid-cols-2 lg:grid-cols-4"
+        style={{ animationDelay: "100ms" }}
+      >
+        {kpis.map((stat, i) => (
+          <div
+            key={stat.label}
+            className={cn(
+              "min-w-0 px-5 py-5",
+              i > 0 && "border-t border-[#e8e8ed] sm:border-t-0 sm:border-l",
+              i === 2 && "lg:border-l",
+            )}
+          >
+            <p className="text-[11px] font-medium tracking-[0.08em] text-[#86868b] uppercase">
+              {stat.label}
+            </p>
+            {showLoading ? (
+              <div className="mt-2 h-8 w-24 animate-pulse rounded bg-[#f5f5f7]" />
+            ) : (
+              <p className="mt-1.5 truncate text-[1.75rem] font-semibold tracking-[-0.04em] text-[#1d1d1f] tabular-nums">
+                {stat.value}
+              </p>
+            )}
+            {stat.hint ? <p className="mt-1 text-[11px] text-[#86868b]">{stat.hint}</p> : null}
+          </div>
+        ))}
+      </div>
 
-      <div className="grid gap-3 xl:grid-cols-3">
-        <CrmSection
-          title="Lead-to-delivery flow"
-          subtitle="Stage counts for your assigned CRM, procurement, and projects modules"
+      <div className="grid gap-4 xl:grid-cols-3">
+        <HomeCard
+          title="Lead-to-delivery"
+          subtitle="Pipeline stage counts"
           icon={GitBranch}
-          badge={<Badge variant="secondary">Pipeline</Badge>}
+          delayMs={160}
         >
           <PlatformConnectedPipelineChart data={pipelineChart} loading={showLoading} />
-        </CrmSection>
-
-        <CrmSection
+        </HomeCard>
+        <HomeCard
           title="Module activity"
-          subtitle="Absolute record volume by assigned department"
+          subtitle="Record volume by department"
           icon={BarChart3}
-          badge={<Badge variant="secondary">Volume</Badge>}
+          delayMs={200}
         >
           <PlatformModuleActivityChart data={moduleActivityChart} loading={showLoading} />
-        </CrmSection>
-
-        <CrmSection
+        </HomeCard>
+        <HomeCard
           title="Department share"
-          subtitle="How total tracked records split across top modules"
+          subtitle="Mix across top modules"
           icon={PieChart}
-          badge={<Badge variant="secondary">Mix</Badge>}
+          delayMs={240}
         >
           <PlatformModuleShareDonut
             data={(data?.moduleActivity ?? []).map((row) => ({
@@ -536,34 +629,33 @@ const {
             }))}
             loading={showLoading}
           />
-          <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border/60 pt-2">
+          <ul className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 border-t border-[#e8e8ed] pt-3">
             {(data?.moduleActivity ?? []).slice(0, 6).map((row, index) => {
               const total = (data?.moduleActivity ?? []).reduce((sum, r) => sum + r.count, 0) || 1;
               const pct = Math.round((row.count / total) * 100);
+              const hues = ["#1d1d1f", "#4b5563", "#6b7280", "#9ca3af", "#0071e3", "#34c759"];
               return (
                 <li key={row.name} className="flex items-center justify-between gap-2 text-[11px]">
-                  <span className="flex min-w-0 items-center gap-1.5 truncate text-muted-foreground">
+                  <span className="flex min-w-0 items-center gap-1.5 truncate text-[#6e6e73]">
                     <span
                       className="size-1.5 shrink-0 rounded-full"
-                      style={{
-                        backgroundColor: `hsl(${205 - index * 12}, 65%, ${38 + index * 3}%)`,
-                      }}
+                      style={{ backgroundColor: hues[index % hues.length] }}
                     />
                     {row.name}
                   </span>
-                  <span className="font-medium tabular-nums text-foreground">{pct}%</span>
+                  <span className="font-medium tabular-nums text-[#1d1d1f]">{pct}%</span>
                 </li>
               );
             })}
           </ul>
-        </CrmSection>
+        </HomeCard>
       </div>
 
-      <CrmSection
-        title="Department analytics & health"
-        subtitle="Status, record volume, and KPIs for modules you can access"
+      <HomeCard
+        title="Departments"
+        subtitle="Status, volume, and KPIs — alerts use color; chrome stays monochrome."
         icon={LayoutDashboard}
-        badge={<Badge variant="outline">{tracked} modules</Badge>}
+        delayMs={280}
       >
         <HealthSummaryStrip
           health={data?.moduleHealth ?? []}
@@ -575,7 +667,7 @@ const {
           maxRecords={maxModuleRecords}
           loading={showLoading}
         />
-      </CrmSection>
-    </div>
+      </HomeCard>
+    </>,
   );
 }

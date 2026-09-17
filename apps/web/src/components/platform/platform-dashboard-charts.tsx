@@ -17,18 +17,18 @@ import { CRM_CHART_COLORS } from "@/components/crm/crm-dashboard-charts";
 import { cn } from "@/lib/utils";
 
 const MODULE_COLORS = [
-  CRM_CHART_COLORS.sky,
-  CRM_CHART_COLORS.skyDark,
-  CRM_CHART_COLORS.teal,
-  CRM_CHART_COLORS.emerald,
-  CRM_CHART_COLORS.amber,
-  CRM_CHART_COLORS.slate,
+  "#1D1D1F",
+  "#4B5563",
+  "#6B7280",
+  "#9CA3AF",
+  "#0071E3",
+  "#34C759",
 ] as const;
 
 const HEALTH_COLORS = [
-  CRM_CHART_COLORS.emerald,
-  CRM_CHART_COLORS.amber,
-  CRM_CHART_COLORS.slate,
+  "#1D1D1F", // Live — black
+  "#F59E0B", // Partial — alert amber
+  "#D2D2D7", // Offline — grey
 ] as const;
 
 type ChartTooltipProps = {
@@ -42,9 +42,9 @@ function ChartTooltip({ active, payload, label, valueFormatter }: ChartTooltipPr
   if (!active || !payload?.length) return null;
   const value = Number(payload[0]?.value ?? 0);
   return (
-    <div className="rounded-lg border border-border/80 bg-card px-2.5 py-1.5 text-xs shadow-md">
-      <p className="font-medium text-foreground">{label ?? payload[0]?.name}</p>
-      <p className="mt-0.5 tabular-nums text-muted-foreground">
+    <div className="rounded-xl border border-[#e8e8ed] bg-white px-2.5 py-1.5 text-xs shadow-md">
+      <p className="font-medium text-[#1d1d1f]">{label ?? payload[0]?.name}</p>
+      <p className="mt-0.5 tabular-nums text-[#6e6e73]">
         {valueFormatter ? valueFormatter(value) : value.toLocaleString("en-IN")}
       </p>
     </div>

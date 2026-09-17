@@ -1,7 +1,7 @@
-﻿"""Authentication router."""
+"""Authentication router."""
 
 from typing import Annotated
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import RedirectResponse
@@ -26,7 +26,10 @@ from modules.foundation.schemas import (
     UserResponse,
 )
 from modules.foundation.service.auth_service import AuthService
-from modules.foundation.service.microsoft_oauth_service import MicrosoftOAuthService
+from modules.foundation.service.microsoft_oauth_service import (
+    MicrosoftOAuthService,
+    resolve_frontend_base,
+)
 from modules.foundation.service.rbac_service import RBACService
 from modules.foundation.service.user_service import UserService
 from shared.schemas import APIResponse
@@ -51,6 +54,7 @@ def microsoft_login(
     db: Annotated[Session, Depends(get_db)],
     _: Annotated[None, Depends(optional_authentication)],
     return_to: Annotated[str, Query(max_length=200)] = "/organization",
+    frontend_origin: Annotated[str | None, Query(max_length=300)] = None,
 ) -> RedirectResponse:
     if not MicrosoftOAuthService.is_enabled():
         raise MicrosoftLoginNotConfiguredException()
@@ -62,9 +66,15 @@ def microsoft_login(
         if return_to.startswith("/") and not return_to.startswith("//")
         else "/organization"
     )
+    # Remember which UI started SSO (localhost vs LAN VM) for post-login redirect.
+    safe_frontend = resolve_frontend_base(frontend_origin)
     SessionStore().set_oauth_state(
         state,
-        {"return_to": safe_return, "ip": get_client_ip(request)},
+        {
+            "return_to": safe_return,
+            "frontend_origin": safe_frontend,
+            "ip": get_client_ip(request),
+        },
     )
     return RedirectResponse(oauth.build_authorization_url(state=state), status_code=302)
 
@@ -79,7 +89,7 @@ def microsoft_callback(
 ) -> RedirectResponse:
     service = AuthService(db)
     try:
-        exchange_code, _return_to = service.complete_microsoft_oauth(
+        exchange_code, _return_to, frontend_base = service.complete_microsoft_oauth(
             code=code,
             state=state,
             ip_address=get_client_ip(request),
@@ -87,13 +97,21 @@ def microsoft_callback(
         )
         db.commit()
         redirect_url = (
-            f"{settings.frontend_url.rstrip('/')}/auth/microsoft/callback?code={quote(exchange_code)}"
+            f"{frontend_base.rstrip('/')}/auth/microsoft/callback?code={quote(exchange_code)}"
         )
         return RedirectResponse(redirect_url, status_code=302)
     except Exception as exc:
         db.rollback()
         message = getattr(exc, "message", str(exc))
-        redirect_url = f"{settings.frontend_url.rstrip('/')}/login?error={quote(message)}"
+        # Best-effort: Prefer Referer host when allowed; else FRONTEND_URL.
+        referer = request.headers.get("Referer")
+        origin_guess = None
+        if referer:
+            parsed = urlparse(referer)
+            if parsed.scheme and parsed.netloc:
+                origin_guess = f"{parsed.scheme}://{parsed.netloc}"
+        frontend_base = resolve_frontend_base(origin_guess)
+        redirect_url = f"{frontend_base.rstrip('/')}/login?error={quote(message)}"
         return RedirectResponse(redirect_url, status_code=302)
 
 

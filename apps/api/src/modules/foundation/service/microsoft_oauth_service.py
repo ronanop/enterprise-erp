@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import re
 import secrets
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import httpx
 import jwt
@@ -12,6 +13,34 @@ from jwt import PyJWKClient
 
 from core.config import settings
 from modules.foundation.domain.exceptions import MicrosoftLoginNotConfiguredException
+
+
+def resolve_frontend_base(frontend_origin: str | None) -> str:
+    """Pick post-login frontend host.
+
+    Prefer the browser origin that started Microsoft sign-in when it matches
+    CORS allowlists; otherwise fall back to FRONTEND_URL (often a LAN VM).
+    """
+    default = settings.frontend_url.rstrip("/")
+    if not frontend_origin or not isinstance(frontend_origin, str):
+        return default
+
+    raw = frontend_origin.strip()
+    parsed = urlparse(raw)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        return default
+    if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        return default
+
+    candidate = f"{parsed.scheme}://{parsed.netloc}"
+    if candidate == default or candidate in settings.cors_origins:
+        return candidate
+
+    pattern = (settings.cors_origin_regex or "").strip()
+    if pattern and re.fullmatch(pattern, candidate):
+        return candidate
+
+    return default
 
 
 class MicrosoftOAuthService:
