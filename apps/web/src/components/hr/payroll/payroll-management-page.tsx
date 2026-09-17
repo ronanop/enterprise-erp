@@ -1214,7 +1214,7 @@ export function PayrollManagementPage() {
                             <p className="text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
                               Company Logo
                             </p>
-                            <p className="text-sm font-semibold">Enterprise ERP</p>
+                            <p className="text-sm font-semibold">Connect Plus</p>
                           </div>
                           <div className="size-12 rounded border border-dashed border-border grid place-items-center text-[9px] text-muted-foreground">
                             QR

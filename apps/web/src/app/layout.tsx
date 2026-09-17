@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Enterprise ERP",
-  description: "Multi-Industry Enterprise ERP Platform",
+  title: "Connect Plus",
+  description: "Multi-Industry, Multi-Company ERP Platform",
 };
 
 export default function RootLayout({

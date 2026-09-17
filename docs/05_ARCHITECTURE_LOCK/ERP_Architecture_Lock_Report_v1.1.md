@@ -4,7 +4,7 @@
 **Prepared By:** CTO · Principal Enterprise Architect · ERP Product Architect · Software Governance Architect  
 **Date:** 2026-07-06  
 **Classification:** Internal - Confidential  
-**Scope:** Multi-Industry Enterprise ERP Platform  
+**Scope:** Connect Plus  
 
 ---
 

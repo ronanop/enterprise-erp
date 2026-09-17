@@ -94,7 +94,7 @@
 
 | Item          | Details                               |
 | ------------- | ------------------------------------- |
-| Project Name  | Enterprise ERP System                 |
+| Project Name  | Connect Plus                 |
 | Document Type | Business Requirements Document (BRD)  |
 | Version       | 1.0                                   |
 | Status        | Draft                                 |

@@ -1,6 +1,6 @@
 # Procurement SCM Page Overrides
 
-> **PROJECT:** Enterprise ERP Platform
+> **PROJECT:** Connect Plus
 > **Page Type:** SCM workspace (OVF queue → vendor PO → GRN)
 > Rules override `MASTER.md` and extend `procurement.md`.
 

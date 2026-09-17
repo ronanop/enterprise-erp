@@ -1,6 +1,6 @@
 # Email Page Overrides
 
-> **PROJECT:** Enterprise ERP Platform  
+> **PROJECT:** Connect Plus  
 > **Page Type:** Operations / Admin (Notification Engine)  
 > **IMPORTANT:** Rules here override `MASTER.md` for `/email/*` screens.
 

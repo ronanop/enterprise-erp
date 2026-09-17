@@ -2,7 +2,7 @@
 
 > Overrides `MASTER.md` for `/hr` executive overview only.
 
-**Project:** Enterprise ERP Platform  
+**Project:** Connect Plus  
 **Page:** hr-dashboard  
 **Generated:** 2026-07-23
 

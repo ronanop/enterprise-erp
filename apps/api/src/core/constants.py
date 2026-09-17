@@ -2,7 +2,7 @@
 
 API_V1_PREFIX = "/api/v1"
 
-APP_DESCRIPTION = "Enterprise ERP Platform API - Modular Monolith with Clean Architecture and DDD."
+APP_DESCRIPTION = "Connect Plus API - Modular Monolith with Clean Architecture and DDD."
 
 HEALTH_ENDPOINT = "/health"
 

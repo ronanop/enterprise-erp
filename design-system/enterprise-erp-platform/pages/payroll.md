@@ -1,6 +1,6 @@
 # Payroll Page Overrides
 
-> **PROJECT:** Enterprise ERP Platform
+> **PROJECT:** Connect Plus
 > **Page Type:** Payroll compensation workspace (authenticated app)
 > Rules in this file **override** `MASTER.md`. Only deviations are listed.
 

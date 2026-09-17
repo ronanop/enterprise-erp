@@ -1,4 +1,4 @@
-# Enterprise ERP Platform
+# Connect Plus
 
 Multi-Industry, Multi-Company, Enterprise-Grade ERP Platform.
 

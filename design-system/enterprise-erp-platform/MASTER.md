@@ -6,9 +6,15 @@
 
 ---
 
+<<<<<<< HEAD
 **Project:** Enterprise ERP Platform
 **Generated:** 2026-09-17 11:55:18
 **Category:** Link-in-Bio Page Builder
+=======
+**Project:** Connect Plus
+**Generated:** 2026-08-21 11:30:11
+**Category:** Social Media App
+>>>>>>> cf665840 (Rename product to Connect Plus and fix Asset org lookup access.)
 
 ---
 

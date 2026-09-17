@@ -2,7 +2,7 @@
 
 > Overrides MASTER only where noted. Otherwise follow `MASTER.md` and `pages/marketing.md`.
 
-**Project:** Enterprise ERP Platform  
+**Project:** Connect Plus  
 **Page:** `/marketing/calendar`  
 **Stack:** Next.js + TypeScript + Tailwind + ShadCN  
 

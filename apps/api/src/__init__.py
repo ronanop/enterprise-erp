@@ -1,1 +1,1 @@
-"""Enterprise ERP API - application package."""
+"""Connect Plus API - application package."""

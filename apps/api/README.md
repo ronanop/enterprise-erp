@@ -1,6 +1,6 @@
-# Enterprise ERP API
+# Connect Plus API
 
-FastAPI backend for the Enterprise ERP Platform.
+FastAPI backend for the Connect Plus.
 
 ## Requirements
 

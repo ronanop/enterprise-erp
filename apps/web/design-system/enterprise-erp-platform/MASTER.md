@@ -6,7 +6,7 @@
 
 ---
 
-**Project:** Enterprise ERP Platform
+**Project:** Connect Plus
 **Generated:** 2026-07-23 12:34:40
 **Category:** Analytics Dashboard
 

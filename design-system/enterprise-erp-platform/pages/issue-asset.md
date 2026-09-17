@@ -1,6 +1,6 @@
 # Issue Asset Page Overrides
 
-> **PROJECT:** Enterprise ERP Platform
+> **PROJECT:** Connect Plus
 > **Page Type:** Asset issue wizard (authenticated app)
 > Rules in this file **override** `MASTER.md` and `pages/assets.md`. Only deviations are listed.
 

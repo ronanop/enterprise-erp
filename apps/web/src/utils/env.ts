@@ -78,7 +78,7 @@ export const env = {
     return activeApiUrl;
   },
   apiUrlPrimary: normalizeApiBase(PRIMARY_API_URL),
-  appName: process.env.NEXT_PUBLIC_APP_NAME ?? "Enterprise ERP",
+  appName: process.env.NEXT_PUBLIC_APP_NAME ?? "Connect Plus",
   demoEmail: process.env.NEXT_PUBLIC_DEMO_EMAIL ?? "admin@example.com",
   /** Shared default for every demo / module login account. */
   demoPassword: process.env.NEXT_PUBLIC_DEMO_PASSWORD || "Secure1!",

@@ -1,6 +1,6 @@
 # Hr Leave Page Overrides
 
-> **PROJECT:** Enterprise ERP Platform
+> **PROJECT:** Connect Plus
 > **Generated:** 2026-07-22 15:45:39
 > **Page Type:** Dashboard / Data View
 

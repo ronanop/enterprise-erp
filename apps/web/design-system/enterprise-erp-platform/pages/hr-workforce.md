@@ -1,6 +1,6 @@
 # Hr Workforce Page Overrides
 
-> **PROJECT:** Enterprise ERP Platform
+> **PROJECT:** Connect Plus
 > **Generated:** 2026-07-22 15:07:12
 > **Page Type:** Dashboard / Data View
 

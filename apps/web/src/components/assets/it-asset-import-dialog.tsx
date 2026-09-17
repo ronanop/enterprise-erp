@@ -14,7 +14,11 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { listEmployeeDirectory, type EmployeeDirectoryEntry } from "@/lib/org-options";
+import {
+  listEmployeeDirectory,
+  normalizeEmployeeCodeKey,
+  type EmployeeDirectoryEntry,
+} from "@/lib/org-options";
 import { ApiClientError } from "@/services/api-client";
 import type { SiteLocation } from "@/services/asset-site-location-service";
 import type { ItAssetType } from "@/services/asset-type-service";
@@ -202,11 +206,12 @@ function validateRows(
   locations: SiteLocation[],
   assetTypes: ItAssetType[],
 ): ParsedImportRow[] {
-  const empByCode = new Map(
-    employees
-      .filter((e) => e.employeeCode)
-      .map((e) => [e.employeeCode!.toLowerCase(), e]),
-  );
+  const empByCode = new Map<string, EmployeeDirectoryEntry>();
+  for (const e of employees) {
+    if (!e.employeeCode) continue;
+    empByCode.set(e.employeeCode.toLowerCase(), e);
+    empByCode.set(normalizeEmployeeCodeKey(e.employeeCode), e);
+  }
   const locByName = new Map(locations.map((l) => [l.name.trim().toLowerCase(), l]));
   const typeByName = new Map(
     assetTypes
@@ -226,7 +231,9 @@ function validateRows(
       errors.push("Assigned status requires Employee ID");
     }
     if (row.employee_code) {
-      const emp = empByCode.get(row.employee_code.toLowerCase());
+      const emp =
+        empByCode.get(row.employee_code.toLowerCase()) ??
+        empByCode.get(normalizeEmployeeCodeKey(row.employee_code));
       if (!emp) {
         errors.push(`Employee ID '${row.employee_code}' not found`);
       } else if (row.assignee_name && !namesMatch(row.assignee_name, emp)) {
@@ -368,11 +375,12 @@ export function ItAssetImportDialog({
     setBusy(true);
     setError(null);
     try {
-      const empByCode = new Map(
-        employees
-          .filter((e) => e.employeeCode)
-          .map((e) => [e.employeeCode!.toLowerCase(), e.id]),
-      );
+      const empByCode = new Map<string, string>();
+      for (const e of employees) {
+        if (!e.employeeCode) continue;
+        empByCode.set(e.employeeCode.toLowerCase(), e.id);
+        empByCode.set(normalizeEmployeeCodeKey(e.employeeCode), e.id);
+      }
       const typeByName = new Map(
         assetTypes.filter((t) => t.active).map((t) => [t.name.trim().toLowerCase(), t.id]),
       );
@@ -384,7 +392,9 @@ export function ItAssetImportDialog({
         ...(fallbackBranchId ? { branch_id: fallbackBranchId } : {}),
         operational_status: row.operational_status,
         employee_id: row.employee_code
-          ? empByCode.get(row.employee_code.toLowerCase()) ?? null
+          ? (empByCode.get(row.employee_code.toLowerCase()) ??
+            empByCode.get(normalizeEmployeeCodeKey(row.employee_code)) ??
+            null)
           : null,
         asset_type_id: typeByName.get(row.asset_type.toLowerCase())!,
         serial_number: row.serial_number,

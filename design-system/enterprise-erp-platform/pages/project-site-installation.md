@@ -1,6 +1,6 @@
 # Project Site Installation Page Overrides
 
-> **PROJECT:** Enterprise ERP Platform
+> **PROJECT:** Connect Plus
 > **Generated:** 2026-07-27 14:35:37
 > **Page Type:** General
 

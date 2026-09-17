@@ -4,7 +4,7 @@
 **Date:** 2026-08-03  
 **Audience:** IT Administrators  
 **Prerequisite:** Phase 5A-1/5A-2 (enrichment + return API)  
-**Design baseline:** Enterprise ERP Platform - Data-Dense Dashboard + Swiss Minimalism (`design-system/enterprise-erp-platform/MASTER.md`)
+**Design baseline:** Connect Plus - Data-Dense Dashboard + Swiss Minimalism (`design-system/enterprise-erp-platform/MASTER.md`)
 
 ---
 

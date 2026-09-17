@@ -1,6 +1,6 @@
 # Ecommerce Page Overrides
 
-> **PROJECT:** Enterprise ERP Platform
+> **PROJECT:** Connect Plus
 > **Page Type:** E-Commerce / External Channel workspace (authenticated app)
 > Rules in this file **override** `MASTER.md`. Only deviations are listed.
 

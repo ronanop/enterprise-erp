@@ -1,6 +1,6 @@
 # Project Tracker Page Overrides
 
-> **PROJECT:** Enterprise ERP Platform  
+> **PROJECT:** Connect Plus  
 > **Page Type:** Admin upload and version-history workspace
 
 ## Page-Specific Rules

@@ -1,7 +1,7 @@
 [project]
 name = "erp-api"
 version = "0.1.0"
-description = "Enterprise ERP Platform API"
+description = "Connect Plus API"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

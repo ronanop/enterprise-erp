@@ -15,7 +15,7 @@
 
 ## 1. Executive Summary
 
-ERP Core **v1.2-beta** advances the multi-tenant Enterprise ERP Platform from the **v1.1-beta** baseline by delivering **Sprint 7 - Inventory & Warehouse**.
+ERP Core **v1.2-beta** advances the multi-tenant Connect Plus from the **v1.1-beta** baseline by delivering **Sprint 7 - Inventory & Warehouse**.
 
 The platform remains a **Modular Monolith** with **Clean Architecture** and **DDD**, governed by **Architecture Lock v1.1**. Documentation hierarchy BRD → FRD → SDD v1.1 → DBS v1.1 → ERD → code continues to be followed.
 

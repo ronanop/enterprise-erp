@@ -3,7 +3,7 @@
 | Attribute | Value |
 |-----------|-------|
 | **Document ID** | FLOW-HRMS-PAY-v1.0 |
-| **Product** | Enterprise ERP Platform |
+| **Product** | Connect Plus |
 | **Parent BRD** | [BRD-HRMS-Payroll-v1.0.md](./BRD-HRMS-Payroll-v1.0.md) |
 | **Related FRD** | [FRD-09 HR](../02_FRD/FRD-09-HR-Domain.md) · [FRD-10 Payroll](../02_FRD/FRD-10-Payroll-Domain.md) |
 | **Version** | 1.0 |

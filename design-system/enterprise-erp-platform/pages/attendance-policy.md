@@ -1,6 +1,6 @@
 # Attendance Policy Page Overrides
 
-> **PROJECT:** Enterprise ERP Platform
+> **PROJECT:** Connect Plus
 > **Generated:** 2026-07-31 12:21:20
 > **Page Type:** General
 

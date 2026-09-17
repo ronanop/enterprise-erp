@@ -41,9 +41,9 @@ def get_mcp_server() -> FastMCP:
         )
 
     _mcp_instance = FastMCP(
-        name="Enterprise ERP MCP",
+        name="Connect Plus MCP",
         instructions=(
-            "Tools expose a curated subset of the Enterprise ERP REST API. "
+            "Tools expose a curated subset of the Connect Plus REST API. "
             "Read-only tools are tagged in descriptions; mutating tools require approval."
         ),
         streamable_http_path="/",

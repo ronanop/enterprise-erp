@@ -283,7 +283,7 @@ def build_html(md_text: str) -> str:
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>Enterprise ERP Platform - Master Architecture</title>
+  <title>Connect Plus - Master Architecture</title>
   <style>{CSS}</style>
 </head>
 <body>
@@ -322,7 +322,7 @@ def html_to_pdf() -> None:
             header_template=(
                 '<div style="font-size:8px; width:100%; text-align:right; '
                 'color:#64748b; padding-right:12mm;">'
-                "Enterprise ERP - Master Architecture</div>"
+                "Connect Plus - Master Architecture</div>"
             ),
             footer_template=(
                 '<div style="font-size:8px; width:100%; text-align:center; '

@@ -1,11 +1,11 @@
 ---
-description: Enterprise ERP architecture baseline — locked stack, patterns, and governance
+description: Connect Plus architecture baseline — locked stack, patterns, and governance
 alwaysApply: true
 ---
 
-# Enterprise ERP Platform — Architecture Rules
+# Connect Plus — Architecture Rules
 
-This is an **Enterprise ERP Platform**. Architecture Baseline **v1.1** is locked.
+This is an **Connect Plus**. Architecture Baseline **v1.1** is locked.
 
 ## Documentation Hierarchy (Read Before Code)
 
