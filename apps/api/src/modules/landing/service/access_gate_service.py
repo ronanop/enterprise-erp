@@ -55,9 +55,15 @@ class AccessGateService:
     def _match_target(self, normalized: str) -> AccessGateTarget | None:
         demo = _normalize_code(settings.access_code_demo)
         connect = _normalize_code(settings.access_code_connectplus)
-        # Constant-time compare against both configured codes.
-        matches_demo = bool(demo) and hmac.compare_digest(normalized, demo)
-        matches_connect = bool(connect) and hmac.compare_digest(normalized, connect)
+
+        def _eq(candidate: str, expected: str) -> bool:
+            # hmac.compare_digest raises if lengths differ — treat as non-match.
+            if not expected or len(candidate) != len(expected):
+                return False
+            return hmac.compare_digest(candidate, expected)
+
+        matches_demo = _eq(normalized, demo)
+        matches_connect = _eq(normalized, connect)
         if matches_demo and matches_connect:
             # Misconfiguration: same code for both — prefer connectplus.
             return "connectplus"

@@ -49,3 +49,21 @@ def test_access_gate_connectplus_code(client: TestClient, monkeypatch) -> None:
     body = response.json()
     assert body["data"]["target"] == "connectplus"
     assert body["data"]["redirect_path"] == "/login"
+
+
+def test_access_gate_different_length_codes_do_not_500(client: TestClient, monkeypatch) -> None:
+    """hmac.compare_digest raises on unequal lengths — must return 401, not 500."""
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "access_code_demo", "SHORT")
+    monkeypatch.setattr(settings, "access_code_connectplus", "ICP-CONNECT-2026")
+
+    response = client.post(
+        "/api/v1/public/access-gate/verify",
+        json={"code": "ICP-CONNECT-2026"},
+    )
+    assert response.status_code == 200
+    assert response.json()["data"]["target"] == "connectplus"
+
+    bad = client.post("/api/v1/public/access-gate/verify", json={"code": "NOPE"})
+    assert bad.status_code == 401

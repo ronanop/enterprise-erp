@@ -48,15 +48,21 @@ export function clearAccessGateToken(): void {
 }
 
 async function parseJson<T>(response: Response): Promise<ApiResponse<T>> {
-  const payload = (await response.json()) as ApiResponse<T> & {
-    errors?: string[];
-    message?: string;
-  };
-  if (!response.ok || payload.success === false) {
+  const raw = await response.text();
+  let payload: (ApiResponse<T> & { errors?: string[]; message?: string }) | null = null;
+  try {
+    payload = raw ? (JSON.parse(raw) as ApiResponse<T> & { errors?: string[]; message?: string }) : null;
+  } catch {
     throw new ApiClientError(
-      payload.message || "Request failed",
+      raw.trim().slice(0, 160) || `Request failed (${response.status})`,
       response.status,
-      payload.errors ?? [],
+    );
+  }
+  if (!payload || !response.ok || payload.success === false) {
+    throw new ApiClientError(
+      payload?.message || raw.trim().slice(0, 160) || "Request failed",
+      response.status,
+      payload?.errors ?? [],
     );
   }
   return payload;
