@@ -1,4 +1,4 @@
-"""Landing access-gate client (Sign in code → demo | ConnectPlus)."""
+/** Landing access-gate client (Sign in code → demo | ConnectPlus). */
 
 import { ApiClientError } from "@/services/api-client";
 import type { ApiResponse } from "@/types/api";
