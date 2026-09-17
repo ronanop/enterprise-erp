@@ -3,6 +3,7 @@
 ERP_MODULE_KEYS: tuple[str, ...] = (
     "foundation",
     "email",
+    "voice-agent",
     "organization",
     "master-data",
     "finance",

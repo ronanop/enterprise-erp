@@ -7,7 +7,7 @@ import { erpModules } from "@/config/modules";
 const STANDALONE_KEY = "erp-standalone";
 
 /** Extra in-app routes that still use the ERP shell (not module workspace chrome). */
-const EXTRA_IN_APP_ROOTS = ["/organization/users", "/erp-settings"] as const;
+const EXTRA_IN_APP_ROOTS = ["/organization/users"] as const;
 
 const IN_APP_MODULE_ROOTS: readonly string[] = [
   ...erpModules

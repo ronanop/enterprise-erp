@@ -14,8 +14,11 @@ from modules.asset.domain.enums import (
     DomainMembershipRole,
 )
 from modules.asset.repository.domain_membership_repository import DomainMembershipRepository
+from modules.asset.service.asset_module_admin import ASSET_MODULE_KEY
 from modules.asset.service.asset_scope_validator import AssetScopeValidator
+from modules.foundation.domain.erp_modules import MODULE_ROLE_ADMIN, MODULE_ROLE_MEMBER
 from modules.foundation.domain.value_objects import TenantContext
+from modules.foundation.repository.user_module_repository import UserModuleRepository
 from modules.foundation.service.audit_service import AuditService
 from modules.foundation.service.rbac_service import RBACService
 from modules.organization.models.company import OrgCompany
@@ -28,6 +31,7 @@ class DomainMembershipService:
         self._scope = AssetScopeValidator(db)
         self._audit = AuditService(db)
         self._rbac = RBACService(db)
+        self._modules = UserModuleRepository(db)
 
     def is_module_admin(self, ctx: TenantContext) -> bool:
         from modules.asset.service.asset_module_admin import AssetModuleAdminService
@@ -196,6 +200,7 @@ class DomainMembershipService:
             performed_by=ctx.user_id,
             new_value={"user_id": str(user_id), "domain": domain, "role": role},
         )
+        self.ensure_assets_org_member(ctx.tenant_id, user_id, assigned_by=ctx.user_id)
         user = users[user_id]
         return {
             "id": row.id,
@@ -257,6 +262,7 @@ class DomainMembershipService:
             row.domain,
             existing_role=row.role,
         )
+        user_id = row.user_id
         self._repo.soft_delete(ctx, row)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
@@ -264,8 +270,69 @@ class DomainMembershipService:
             entity_id=row.id,
             operation="delete",
             performed_by=ctx.user_id,
-            new_value={"domain": row.domain, "user_id": str(row.user_id)},
+            new_value={"domain": row.domain, "user_id": str(user_id)},
         )
+        self.release_assets_org_member_if_unused(ctx.tenant_id, user_id)
+
+    def ensure_assets_org_member(
+        self,
+        tenant_id: UUID,
+        user_id: UUID,
+        *,
+        assigned_by: UUID | None = None,
+    ) -> None:
+        """Mirror domain membership into Organization Module users (sec_user_module)."""
+        existing = self._modules.get_assignment(tenant_id, user_id, ASSET_MODULE_KEY)
+        if existing is not None:
+            return
+        self._modules.add_member(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            module_key=ASSET_MODULE_KEY,
+            assigned_by=assigned_by,
+            role=MODULE_ROLE_MEMBER,
+        )
+
+    def release_assets_org_member_if_unused(self, tenant_id: UUID, user_id: UUID) -> None:
+        """Drop assets member assignment when no domain memberships remain (keep admins)."""
+        from modules.asset.models.domain_membership import AstDomainMembership
+
+        remaining = self._db.scalar(
+            select(AstDomainMembership.id).where(
+                AstDomainMembership.tenant_id == tenant_id,
+                AstDomainMembership.user_id == user_id,
+                AstDomainMembership.is_deleted.is_(False),
+            ).limit(1)
+        )
+        if remaining is not None:
+            return
+        existing = self._modules.get_assignment(tenant_id, user_id, ASSET_MODULE_KEY)
+        if existing is None:
+            return
+        if (existing.role or MODULE_ROLE_MEMBER) == MODULE_ROLE_ADMIN:
+            return
+        self._modules.delete_assignment(existing)
+
+    def sync_all_active_to_org_modules(self, tenant_id: UUID) -> int:
+        """Backfill sec_user_module assets member for every active domain membership."""
+        from modules.asset.models.domain_membership import AstDomainMembership
+
+        user_ids = set(
+            self._db.scalars(
+                select(AstDomainMembership.user_id).where(
+                    AstDomainMembership.tenant_id == tenant_id,
+                    AstDomainMembership.is_deleted.is_(False),
+                )
+            ).all()
+        )
+        synced = 0
+        for user_id in user_ids:
+            before = self._modules.get_assignment(tenant_id, user_id, ASSET_MODULE_KEY)
+            self.ensure_assets_org_member(tenant_id, user_id)
+            after = self._modules.get_assignment(tenant_id, user_id, ASSET_MODULE_KEY)
+            if before is None and after is not None:
+                synced += 1
+        return synced
 
     def _resolve_company_for_write(
         self, ctx: TenantContext, company_id: UUID | None

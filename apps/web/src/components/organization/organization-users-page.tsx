@@ -1,24 +1,27 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ShieldCheck, Users } from "lucide-react";
+import { Crown, RefreshCw, ShieldCheck, UserRound, Users } from "lucide-react";
 
 import { UserAvatar } from "@/components/layout/user-avatar";
-import { OrganizationMembers } from "@/components/organization/organization-members";
+import { UserMemberModulesCell } from "@/components/organization/user-member-modules-cell";
 import { UserModulesCell } from "@/components/organization/user-modules-cell";
 import { useAuthUser } from "@/hooks/use-auth-user";
-import { canManageUserModules, moduleTitle } from "@/lib/module-access";
 import {
-  hasModuleAdminAssignment,
+  canManageUserModules,
+  isModuleAdmin,
+  moduleTitle,
+} from "@/lib/module-access";
+import {
+  hasModuleMemberAssignment,
   memberOnlyModuleKeys,
 } from "@/lib/module-membership";
 import { PageHeader } from "@/components/layout/page-header";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
 import {
-  createOrganizationMember,
-  isOrganizationDomainEmail,
   listFoundationUsers,
   syncM365OrganizationUsers,
   type FoundationUser,
@@ -48,7 +51,18 @@ function filterUsers(rows: FoundationUser[], query: string): FoundationUser[] {
   });
 }
 
-type TableVariant = "admin";
+/** Platform ERP admins (super_admin / tenant_admin) — not per-module admins. */
+function isErpAdminUser(userType: string): boolean {
+  return isModuleAdmin(userType);
+}
+
+/** Module-level admins only (excludes ERP platform admins). */
+function isModuleAdminUser(row: FoundationUser): boolean {
+  if (isErpAdminUser(row.user_type)) return false;
+  return (row.admin_module_keys ?? []).length > 0;
+}
+
+type TableVariant = "erp" | "admin" | "member";
 
 function UsersTableCard({
   title,
@@ -58,6 +72,7 @@ function UsersTableCard({
   loading,
   emptyLabel,
   rows,
+  variant,
   canEditModules,
   onModulesSaved,
 }: {
@@ -68,6 +83,7 @@ function UsersTableCard({
   loading: boolean;
   emptyLabel: string;
   rows: FoundationUser[];
+  variant: TableVariant;
   canEditModules: boolean;
   onModulesSaved: (
     userId: string,
@@ -75,6 +91,13 @@ function UsersTableCard({
     admin_module_keys: string[],
   ) => void;
 }) {
+  const modulesColumnLabel =
+    variant === "member"
+      ? "Module membership"
+      : variant === "erp"
+        ? "Access"
+        : "Module admins";
+
   return (
     <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
@@ -96,7 +119,7 @@ function UsersTableCard({
             <tr className="border-b border-border/80 bg-muted/60 text-xs font-semibold tracking-wide text-foreground uppercase">
               <th className="px-4 py-2.5">User</th>
               <th className="px-4 py-2.5">Email</th>
-              <th className="px-4 py-2.5">Module admins</th>
+              <th className="px-4 py-2.5">{modulesColumnLabel}</th>
               <th className="px-4 py-2.5">Status</th>
             </tr>
           </thead>
@@ -131,16 +154,23 @@ function UsersTableCard({
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">{row.email}</td>
                   <td className="px-4 py-2.5">
-                    <UserModulesCell
-                      userId={row.id}
-                      userType={row.user_type}
-                      assignedModuleKeys={row.assigned_module_keys ?? []}
-                      adminModuleKeys={row.admin_module_keys ?? []}
-                      canEdit={canEditModules}
-                      onSaved={(assigned_module_keys, admin_module_keys) => {
-                        onModulesSaved(row.id, assigned_module_keys, admin_module_keys);
-                      }}
-                    />
+                    {variant === "member" ? (
+                      <UserMemberModulesCell
+                        assignedModuleKeys={row.assigned_module_keys ?? []}
+                        adminModuleKeys={row.admin_module_keys ?? []}
+                      />
+                    ) : (
+                      <UserModulesCell
+                        userId={row.id}
+                        userType={row.user_type}
+                        assignedModuleKeys={row.assigned_module_keys ?? []}
+                        adminModuleKeys={row.admin_module_keys ?? []}
+                        canEdit={canEditModules && variant !== "erp"}
+                        onSaved={(assigned_module_keys, admin_module_keys) => {
+                          onModulesSaved(row.id, assigned_module_keys, admin_module_keys);
+                        }}
+                      />
+                    )}
                   </td>
                   <td className="px-4 py-2.5">
                     <FinanceStatusBadge status={row.status} />
@@ -157,7 +187,7 @@ function UsersTableCard({
 
 export function OrganizationUsersPage({
   title = "Organization users",
-  description = "Assign module admins, and map organization members to department, roles, and hierarchy.",
+  description = "ERP admins, module admins, module members, and Entra users without module assignment.",
   backHref,
   backLabel,
 }: {
@@ -166,17 +196,16 @@ export function OrganizationUsersPage({
   backHref?: string;
   backLabel?: string;
 } = {}) {
-  const { user: sessionUser, permissions, signedIn } = useAuthUser();
+  const { user: sessionUser, permissions } = useAuthUser();
   const canEditModules = canManageUserModules(permissions, sessionUser?.userType);
-  const canManageMembers = Boolean(signedIn);
   const [rows, setRows] = useState<FoundationUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [erpQuery, setErpQuery] = useState("");
   const [adminQuery, setAdminQuery] = useState("");
   const [memberQuery, setMemberQuery] = useState("");
   const [unassignedQuery, setUnassignedQuery] = useState("");
   const [syncing, setSyncing] = useState(false);
-  const [adding, setAdding] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
 
@@ -212,7 +241,7 @@ export function OrganizationUsersPage({
     try {
       const result = await syncM365OrganizationUsers();
       setSyncMessage(
-        `Saved @${result.domain} to the database without duplicates: ${result.directory_count} users (${result.created} created, ${result.updated} updated).`,
+        `Synced @${result.domain}: ${result.directory_count} users (${result.created} created, ${result.updated} updated).`,
       );
       await load();
     } catch (err) {
@@ -226,44 +255,37 @@ export function OrganizationUsersPage({
     }
   }, [load]);
 
-  const onAddMember = useCallback(
-    async (input: { email: string; display_name: string }) => {
-      setAdding(true);
-      setSyncError(null);
-      setSyncMessage(null);
-      try {
-        const created = await createOrganizationMember(input);
-        setSyncMessage(`Added organization member ${created.display_name} (${created.email}).`);
-        await load();
-      } catch (err) {
-        const message =
-          err instanceof ApiClientError ? err.message : "Failed to add organization member.";
-        setSyncError(message);
-        throw new Error(message);
-      } finally {
-        setAdding(false);
-      }
-    },
-    [load],
-  );
+  const erpAdmins = useMemo(() => {
+    const list = rows.filter((row) => isErpAdminUser(row.user_type));
+    return sortUsersByName(filterUsers(list, erpQuery));
+  }, [rows, erpQuery]);
 
   const adminUsers = useMemo(() => {
-    const list = rows.filter((row) =>
-      hasModuleAdminAssignment(row.user_type, row.admin_module_keys ?? []),
-    );
+    const list = rows.filter((row) => isModuleAdminUser(row));
     return sortUsersByName(filterUsers(list, adminQuery));
   }, [rows, adminQuery]);
 
   const memberUsers = useMemo(() => {
-    const list = rows.filter((row) => isOrganizationDomainEmail(row.email));
+    const list = rows.filter((row) =>
+      hasModuleMemberAssignment(
+        row.user_type,
+        row.assigned_module_keys ?? [],
+        row.admin_module_keys ?? [],
+      ),
+    );
     return sortUsersByName(filterUsers(list, memberQuery));
   }, [rows, memberQuery]);
 
   const unassignedUsers = useMemo(() => {
     const list = rows.filter(
       (row) =>
-        !hasModuleAdminAssignment(row.user_type, row.admin_module_keys ?? []) &&
-        !isOrganizationDomainEmail(row.email),
+        !isErpAdminUser(row.user_type) &&
+        !isModuleAdminUser(row) &&
+        !hasModuleMemberAssignment(
+          row.user_type,
+          row.assigned_module_keys ?? [],
+          row.admin_module_keys ?? [],
+        ),
     );
     return sortUsersByName(filterUsers(list, unassignedQuery));
   }, [rows, unassignedQuery]);
@@ -280,28 +302,57 @@ export function OrganizationUsersPage({
     );
   }
 
-  function onMemberUpdated(user: FoundationUser) {
-    setRows((prev) => prev.map((r) => (r.id === user.id ? { ...r, ...user } : r)));
-  }
+  const erpSearchInput = (
+    <Input
+      value={erpQuery}
+      onChange={(e) => setErpQuery(e.target.value)}
+      placeholder="Search name or email…"
+      className="h-9 w-full min-w-[200px] max-w-xs cursor-pointer"
+      aria-label="Search ERP admins"
+    />
+  );
 
   const adminSearchInput = (
     <Input
       value={adminQuery}
       onChange={(e) => setAdminQuery(e.target.value)}
       placeholder="Search name or email…"
-      className="h-9 w-full min-w-[200px] max-w-xs"
+      className="h-9 w-full min-w-[200px] max-w-xs cursor-pointer"
       aria-label="Search module admin users"
     />
   );
 
-  const unassignedSearchInput = (
+  const memberSearchInput = (
     <Input
-      value={unassignedQuery}
-      onChange={(e) => setUnassignedQuery(e.target.value)}
+      value={memberQuery}
+      onChange={(e) => setMemberQuery(e.target.value)}
       placeholder="Search name or email…"
-      className="h-9 w-full min-w-[200px] max-w-xs"
-      aria-label="Search users outside the organization domain"
+      className="h-9 w-full min-w-[200px] max-w-xs cursor-pointer"
+      aria-label="Search module member users"
     />
+  );
+
+  const unassignedToolbar = (
+    <div className="flex flex-nowrap items-center gap-2">
+      <Input
+        value={unassignedQuery}
+        onChange={(e) => setUnassignedQuery(e.target.value)}
+        placeholder="Search name or email…"
+        className="h-9 w-[200px] shrink-0 cursor-pointer sm:w-64"
+        aria-label="Search users without module assignment"
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-9 shrink-0 cursor-pointer gap-1.5"
+        disabled={syncing || !canEditModules}
+        onClick={() => void onSyncM365()}
+      >
+        <RefreshCw className={`size-3.5 ${syncing ? "animate-spin" : ""}`} aria-hidden />
+        {syncing ? "Syncing…" : "Sync Entra"}
+      </Button>
+    </div>
   );
 
   return (
@@ -319,6 +370,35 @@ export function OrganizationUsersPage({
         </div>
       ) : null}
 
+      {syncError ? (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {syncError}
+        </div>
+      ) : null}
+
+      {syncMessage ? (
+        <div className="rounded-xl border border-border/80 bg-muted/40 px-4 py-3 text-sm text-foreground">
+          {syncMessage}
+        </div>
+      ) : null}
+
+      <UsersTableCard
+        title="ERP admins"
+        subtitle={
+          loading ? "Loading…" : `${erpAdmins.length} platform admin${erpAdmins.length === 1 ? "" : "s"}`
+        }
+        icon={<Crown className="size-4" />}
+        toolbar={erpSearchInput}
+        loading={loading}
+        emptyLabel={
+          erpQuery.trim() ? "No ERP admins match your search." : "No ERP admins found."
+        }
+        rows={erpAdmins}
+        variant="erp"
+        canEditModules={canEditModules}
+        onModulesSaved={onModulesSaved}
+      />
+
       <UsersTableCard
         title="Module admin users"
         subtitle={
@@ -333,41 +413,49 @@ export function OrganizationUsersPage({
             : "No module admins assigned yet."
         }
         rows={adminUsers}
+        variant="admin"
         canEditModules={canEditModules}
         onModulesSaved={onModulesSaved}
       />
 
-      <OrganizationMembers
-        rows={memberUsers}
-        loading={loading}
-        query={memberQuery}
-        onQueryChange={setMemberQuery}
-        canManageMembers={canManageMembers}
-        syncing={syncing}
-        adding={adding}
-        syncMessage={syncMessage}
-        syncError={syncError}
-        onSyncM365={() => void onSyncM365()}
-        onAddMember={onAddMember}
-        onMemberUpdated={onMemberUpdated}
-      />
-
       <UsersTableCard
-        title="All other users"
+        title="Module users"
         subtitle={
           loading
             ? "Loading…"
-            : `${unassignedUsers.length} outside @cachedigitech.com`
+            : `${memberUsers.length} with member access (managed in module panels)`
+        }
+        icon={<UserRound className="size-4" />}
+        toolbar={memberSearchInput}
+        loading={loading}
+        emptyLabel={
+          memberQuery.trim()
+            ? "No module users match your search."
+            : "No module members assigned yet."
+        }
+        rows={memberUsers}
+        variant="member"
+        canEditModules={canEditModules}
+        onModulesSaved={onModulesSaved}
+      />
+
+      <UsersTableCard
+        title="Non-assigned users"
+        subtitle={
+          loading
+            ? "Loading…"
+            : `${unassignedUsers.length} Entra users without module assignment`
         }
         icon={<Users className="size-4" />}
-        toolbar={unassignedSearchInput}
+        toolbar={unassignedToolbar}
         loading={loading}
         emptyLabel={
           unassignedQuery.trim()
-            ? "No other users match your search."
-            : "No users outside the organization domain."
+            ? "No unassigned users match your search."
+            : "Every user has a module assignment."
         }
         rows={unassignedUsers}
+        variant="admin"
         canEditModules={canEditModules}
         onModulesSaved={onModulesSaved}
       />

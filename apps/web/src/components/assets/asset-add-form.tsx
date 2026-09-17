@@ -424,6 +424,7 @@ export function AssetAddForm({
         assetTypes={assetTypes}
         siteLocations={siteLocations}
         fallbackBranchId={form.branch_id || undefined}
+        companyId={siteLocations.find((l) => l.company_id)?.company_id}
         currencyCode={form.currency_code}
         onImported={() => {
           /* summary shown in dialog */

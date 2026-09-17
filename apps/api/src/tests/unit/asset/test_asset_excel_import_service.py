@@ -225,6 +225,16 @@ def test_company_id_forwarded() -> None:
     assert eng.import_row.call_args.kwargs["company_id"] == ctx.company_id
 
 
+def test_company_id_resolved_from_session_when_omitted() -> None:
+    svc, _, eng, _ = _service_with_engine()
+    ctx = _ctx()
+    eng.import_row.return_value = ExcelImportRowResult(
+        row_number=1, outcome=ExcelImportRowOutcome.IMPORTED.value
+    )
+    svc.import_rows(ctx, [_row(1)], defaults=_defaults(), company_id=None)
+    assert eng.import_row.call_args.kwargs["company_id"] == ctx.company_id
+
+
 def test_partial_failures_across_batches() -> None:
     svc, db, eng, _ = _service_with_engine()
 

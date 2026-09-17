@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { updateUserModules } from "@/services/foundation-users-service";
+import { ApiClientError } from "@/services/api-client";
 
 type Props = {
   userId: string;
@@ -110,8 +111,14 @@ export function UserModulesCell({
       const updated = await updateUserModules(userId, draft);
       onSaved(updated.assigned_module_keys, updated.admin_module_keys ?? []);
       setOpen(false);
-    } catch {
-      setError("Could not save modules");
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError
+          ? err.message || "Could not save modules"
+          : err instanceof Error
+            ? err.message
+            : "Could not save modules",
+      );
     } finally {
       setSaving(false);
     }

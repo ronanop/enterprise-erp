@@ -1,7 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { ErpSettingsPage } from "@/components/platform/erp-settings-page";
-
-export default function ErpSettingsRoutePage() {
-  return <ErpSettingsPage />;
+/** ERP Settings hub removed — user management lives under Organization → Users. */
+export default function ErpSettingsPage() {
+  redirect("/organization/users");
 }

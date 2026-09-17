@@ -24,6 +24,7 @@ from modules.asset.domain.excel_import import (
 from modules.asset.domain.exceptions import DuplicateAssetRegistrationError
 from modules.asset.repository.site_location_repository import SiteLocationRepository
 from modules.asset.service.asset_operational_status_service import AssetOperationalStatusService
+from modules.asset.service.asset_scope_validator import AssetScopeValidator
 from modules.asset.service.asset_service import AssetService
 from modules.asset.service.assignment_service import AssignmentService
 from modules.foundation.domain.value_objects import TenantContext
@@ -95,7 +96,9 @@ class AssetExcelImportEngine:
             )
 
         try:
-            cid = company_id or row.company_id
+            cid = AssetScopeValidator(self._db).resolve_company_id(
+                ctx, company_id or row.company_id
+            )
             if row.branch_id is None:
                 return ExcelImportRowResult(
                     row_number=row.row_number,
@@ -193,10 +196,10 @@ class AssetExcelImportEngine:
             raise RegistrationValidationError("asset_type_id is required for Excel import")
         location_label = (row.location_label or "").strip() or None
         location_id = row.location_id
+        cid = AssetScopeValidator(self._db).resolve_company_id(
+            ctx, company_id or row.company_id
+        )
         if location_label and location_id is None:
-            cid = company_id or row.company_id
-            if cid is None:
-                raise ValueError("company_id is required to resolve location")
             site_loc = SiteLocationRepository(self._db).get_by_name(ctx, cid, location_label)
             if site_loc is None:
                 raise ValueError(f"Location '{location_label}' not found in Locations master")
@@ -205,7 +208,7 @@ class AssetExcelImportEngine:
         asset = self._assets.create_for_import(
             ctx,
             branch_id=row.branch_id,
-            company_id=company_id,
+            company_id=cid,
             asset_code=(row.asset_tag or "").strip() or None,
             asset_name=row.asset_name.strip(),
             asset_category_id=category_id,

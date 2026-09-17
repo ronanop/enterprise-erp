@@ -59,6 +59,8 @@ type Props = {
   siteLocations: SiteLocation[];
   /** Used only for API payload when session branch is unset - not shown in UI. */
   fallbackBranchId?: string;
+  /** Prefer explicit company; otherwise derived from site locations. */
+  companyId?: string;
   currencyCode?: string;
   onImported: () => void;
 };
@@ -317,6 +319,7 @@ export function ItAssetImportDialog({
   assetTypes,
   siteLocations,
   fallbackBranchId,
+  companyId,
   currencyCode = "INR",
   onImported,
 }: Props) {
@@ -330,6 +333,9 @@ export function ItAssetImportDialog({
   const [summary, setSummary] = useState<ImportSummary | null>(null);
 
   if (!open) return null;
+
+  const resolvedCompanyId =
+    companyId || siteLocations.find((l) => l.company_id)?.company_id || undefined;
 
   const validated = validateRows(preview, employees, siteLocations, assetTypes);
   const invalidCount = validated.filter((r) => r.errors.length > 0).length;
@@ -384,27 +390,38 @@ export function ItAssetImportDialog({
       const typeByName = new Map(
         assetTypes.filter((t) => t.active).map((t) => [t.name.trim().toLowerCase(), t.id]),
       );
+      const locByName = new Map(
+        siteLocations.map((l) => [l.name.trim().toLowerCase(), l]),
+      );
 
-      const apiRows = validated.map((row) => ({
-        row_number: row.row_number,
-        preview_status: "valid",
-        asset_name: row.asset_name,
-        ...(fallbackBranchId ? { branch_id: fallbackBranchId } : {}),
-        operational_status: row.operational_status,
-        employee_id: row.employee_code
-          ? (empByCode.get(row.employee_code.toLowerCase()) ??
-            empByCode.get(normalizeEmployeeCodeKey(row.employee_code)) ??
-            null)
-          : null,
-        asset_type_id: typeByName.get(row.asset_type.toLowerCase())!,
-        serial_number: row.serial_number,
-        make: row.make,
-        model: row.model,
-        location_label: row.location,
-        issue_date: row.issue_date,
-      }));
+      const apiRows = validated.map((row) => {
+        const matchedLoc = row.location
+          ? locByName.get(row.location.trim().toLowerCase())
+          : undefined;
+        return {
+          row_number: row.row_number,
+          preview_status: "valid",
+          asset_name: row.asset_name,
+          ...(fallbackBranchId ? { branch_id: fallbackBranchId } : {}),
+          ...(resolvedCompanyId ? { company_id: resolvedCompanyId } : {}),
+          operational_status: row.operational_status,
+          employee_id: row.employee_code
+            ? (empByCode.get(row.employee_code.toLowerCase()) ??
+              empByCode.get(normalizeEmployeeCodeKey(row.employee_code)) ??
+              null)
+            : null,
+          asset_type_id: typeByName.get(row.asset_type.toLowerCase())!,
+          serial_number: row.serial_number,
+          make: row.make,
+          model: row.model,
+          location_label: row.location,
+          ...(matchedLoc ? { location_id: matchedLoc.id } : {}),
+          issue_date: row.issue_date,
+        };
+      });
 
       const result = await assetOperationsService.importExcelRegister({
+        ...(resolvedCompanyId ? { company_id: resolvedCompanyId } : {}),
         confirm_warnings: true,
         defaults: {
           asset_type: "fixed",
@@ -517,15 +534,26 @@ export function ItAssetImportDialog({
           ) : null}
 
           {summary ? (
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+            <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
               <p className="flex items-center gap-2 font-medium">
                 <CheckCircle2 className="size-4" />
                 Import complete
               </p>
-              <p className="mt-1">
+              <p>
                 {summary.imported} imported · {summary.failed} failed · {summary.duplicates}{" "}
                 duplicates · {summary.skipped} skipped
               </p>
+              {summary.rows.filter((r) => r.outcome === "failed" && r.reason).length > 0 ? (
+                <ul className="mt-2 list-disc space-y-1 border-t border-emerald-200/80 pt-2 pl-5 text-destructive">
+                  {summary.rows
+                    .filter((r) => r.outcome === "failed" && r.reason)
+                    .map((r) => (
+                      <li key={r.row_number}>
+                        Row {r.row_number}: {r.reason}
+                      </li>
+                    ))}
+                </ul>
+              ) : null}
             </div>
           ) : null}
 

@@ -1,14 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { OrganizationUsersPage } from "@/components/organization/organization-users-page";
-
+/** Legacy ERP Settings users route — use Organization → Users. */
 export default function ErpSettingsUsersPage() {
-  return (
-    <OrganizationUsersPage
-      title="User Management"
-      description="Manage ERP users, assign module admins, and sync organization members from Microsoft 365 (@cachedigitech.com)."
-      backHref="/erp-settings"
-      backLabel="ERP Settings"
-    />
-  );
+  redirect("/organization/users");
 }

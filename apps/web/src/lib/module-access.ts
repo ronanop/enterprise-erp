@@ -3,8 +3,16 @@ import type { NavGroup } from "@/config/navigation";
 
 const ADMIN_USER_TYPES = new Set(["super_admin", "tenant_admin"]);
 
+/** Sidebar groups / modules only ERP platform admins may open. */
+const ERP_ADMIN_ONLY_GROUPS = new Set(["foundation", "organization", "master-data"]);
+
 export function isModuleAdmin(userType?: string): boolean {
   return Boolean(userType && ADMIN_USER_TYPES.has(userType));
+}
+
+/** Alias: platform ERP admin (super_admin / tenant_admin), not per-module admin. */
+export function isErpAdmin(userType?: string): boolean {
+  return isModuleAdmin(userType);
 }
 
 export function allErpModuleKeys(): string[] {
@@ -20,10 +28,20 @@ export function hasAllModulesAdmin(adminModuleKeys: string[]): boolean {
 }
 
 export function moduleKeyForHref(href: string): string | null {
-  if (href === "/" || href === "/erp-settings" || href.startsWith("/erp-settings/")) return null;
-  if (href === "/organization/users") return "organization";
+  if (href === "/" || href === "/home") return null;
+  if (href === "/organization/users" || href.startsWith("/organization/")) {
+    return "organization";
+  }
   const mod = erpModules.find((m) => href === m.href || href.startsWith(`${m.href}/`));
   return mod?.key ?? null;
+}
+
+function moduleGroupForHref(href: string): string | null {
+  if (href === "/organization/users" || href.startsWith("/organization/")) {
+    return "organization";
+  }
+  const mod = erpModules.find((m) => href === m.href || href.startsWith(`${m.href}/`));
+  return mod?.group ?? null;
 }
 
 export function hasModuleAssignments(
@@ -31,7 +49,7 @@ export function hasModuleAssignments(
   userType?: string,
   adminModuleKeys: string[] = [],
 ): boolean {
-  if (isModuleAdmin(userType)) return true;
+  if (isErpAdmin(userType)) return true;
   return moduleKeys.length > 0 || adminModuleKeys.length > 0;
 }
 
@@ -41,13 +59,16 @@ export function canAccessHref(
   userType?: string,
   adminModuleKeys: string[] = [],
 ): boolean {
-  if (href === "/" || href === "/erp-settings") return true;
-  if (href === "/erp-settings/users" || href === "/organization/users") {
-    return isModuleAdmin(userType) || moduleKeys.includes("foundation");
+  if (href === "/" || href === "/home") return true;
+
+  const group = moduleGroupForHref(href);
+  if (group && ERP_ADMIN_ONLY_GROUPS.has(group)) {
+    return isErpAdmin(userType);
   }
+
   const key = moduleKeyForHref(href);
   if (!key) return true;
-  if (isModuleAdmin(userType)) return true;
+  if (isErpAdmin(userType)) return true;
   // Module admins can open every screen in the modules they administer.
   if (adminModuleKeys.includes(key)) return true;
   return moduleKeys.includes(key);
@@ -59,7 +80,15 @@ export function filterNavigationGroups(
   userType?: string,
   adminModuleKeys: string[] = [],
 ): NavGroup[] {
+  const erpAdmin = isErpAdmin(userType);
   return groups
+    .filter((group) => {
+      const title = group.title.toLowerCase();
+      if (title === "foundation" || title === "organization" || title === "master data") {
+        return erpAdmin;
+      }
+      return true;
+    })
     .map((group) => ({
       ...group,
       items: group.items.filter((item) =>
@@ -74,7 +103,7 @@ export function moduleTitle(key: string): string {
 }
 
 export function canManageUserModules(permissions: string[], userType?: string): boolean {
-  if (isModuleAdmin(userType)) return true;
+  if (isErpAdmin(userType)) return true;
   return permissions.includes("foundation.user:update");
 }
 
@@ -89,7 +118,7 @@ export function canManageModuleUsers(
   adminModuleKeys: string[],
   userType?: string,
 ): boolean {
-  if (isModuleAdmin(userType)) return true;
+  if (isErpAdmin(userType)) return true;
   return adminModuleKeys.includes(moduleKey);
 }
 
@@ -103,7 +132,7 @@ export function canViewAllModuleScreens(
   userType?: string,
   moduleRoles: Record<string, string> = {},
 ): boolean {
-  if (isModuleAdmin(userType)) return true;
+  if (isErpAdmin(userType)) return true;
   if (adminModuleKeys.includes(moduleKey)) return true;
   // Legacy: role "admin" on the module assignment is module admin.
   return moduleRoles[moduleKey] === "admin";

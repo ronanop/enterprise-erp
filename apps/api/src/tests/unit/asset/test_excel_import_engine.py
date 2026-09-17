@@ -489,3 +489,63 @@ def test_case_insensitive_preview_status() -> None:
     )
     assert result.outcome == ExcelImportRowOutcome.SKIPPED.value
     assets.create_for_import.assert_not_called()
+
+
+def test_location_resolved_from_session_company_id() -> None:
+    """Excel Location name matches Locations master using session company_id."""
+    from unittest.mock import patch
+
+    engine, assets, _, _ = _engine()
+    ctx = _ctx()
+    loc_id = uuid4()
+    assets.find_by_asset_code.return_value = None
+    assets.find_by_serial_number.return_value = None
+    assets.create_for_import.return_value = SimpleNamespace(id=uuid4())
+    assets.submit.return_value = SimpleNamespace(id=uuid4())
+    assets.approve.return_value = SimpleNamespace(id=uuid4(), version=1)
+
+    site = SimpleNamespace(id=loc_id, name="Mumbai")
+    with patch(
+        "modules.asset.service.excel_import_engine.SiteLocationRepository"
+    ) as repo_cls:
+        repo_cls.return_value.get_by_name.return_value = site
+        result = engine.import_row(
+            ctx,
+            _row(location_label="Mumbai", location_id=None, company_id=None),
+            defaults=_defaults(),
+            confirm_warnings=False,
+            company_id=None,
+        )
+
+    assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
+    repo_cls.return_value.get_by_name.assert_called_once_with(ctx, ctx.company_id, "Mumbai")
+    kwargs = assets.create_for_import.call_args.kwargs
+    assert kwargs["company_id"] == ctx.company_id
+    assert kwargs["location_id"] == loc_id
+    assert kwargs["location_label"] == "Mumbai"
+
+
+def test_missing_location_name_gives_clear_error_not_company_id() -> None:
+    from unittest.mock import patch
+
+    engine, assets, _, _ = _engine()
+    ctx = _ctx()
+    assets.find_by_asset_code.return_value = None
+    assets.find_by_serial_number.return_value = None
+
+    with patch(
+        "modules.asset.service.excel_import_engine.SiteLocationRepository"
+    ) as repo_cls:
+        repo_cls.return_value.get_by_name.return_value = None
+        result = engine.import_row(
+            ctx,
+            _row(location_label="Nowhere", location_id=None),
+            defaults=_defaults(),
+            confirm_warnings=False,
+            company_id=None,
+        )
+
+    assert result.outcome == ExcelImportRowOutcome.FAILED.value
+    assert "Location 'Nowhere' not found" in (result.reason or "")
+    assert "company_id" not in (result.reason or "").lower()
+    assets.create_for_import.assert_not_called()

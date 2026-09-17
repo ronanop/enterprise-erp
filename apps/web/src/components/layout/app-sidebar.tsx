@@ -43,7 +43,7 @@ const {
         .map((group) => ({
           ...group,
           items: group.items.filter(
-            (item) => item.href === "/" || item.href === "/erp-settings" || item.href === "/home",
+            (item) => item.href === "/" || item.href === "/home",
           ),
         }))
         .filter((group) => group.items.length > 0);
