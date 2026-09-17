@@ -15,20 +15,20 @@ Marketing site + ERP web share one Next app; ESS is a separate Next app:
 
 | Hostinger DNS | Points to | Coolify service |
 |---------------|-----------|-----------------|
-| `iconnectplus.com` / `www` | Coolify EC2 (A/CNAME) | `web:3000` |
-| `api.iconnectplus.com` | Coolify EC2 | `api:8000` |
-| `ess.iconnectplus.com` | Coolify EC2 | `employee-app:3001` |
+| `iconnectplus.in` / `www` | Coolify EC2 (A/CNAME) | `web:3000` |
+| `api.iconnectplus.in` | Coolify EC2 | `api:8000` |
+| `ess.iconnectplus.in` | Coolify EC2 | `employee-app:3001` |
 
 Landing (`/`) → **Sign in** → access code → **demo** (`/demo`) or **ConnectPlus** (`/login`).
-Employee self-service PWA: `https://ess.iconnectplus.com`.
+Employee self-service PWA: `https://ess.iconnectplus.in` (container port **3001**).
 
 ## Services to expose
 
 | Coolify service | Port | Domain example |
 |-----------------|------|----------------|
-| `web` | 3000 | `https://iconnectplus.com` |
-| `api` | 8000 | `https://api.iconnectplus.com` |
-| `employee-app` | 3001 | `https://ess.iconnectplus.com` |
+| `web` | 3000 | `https://iconnectplus.in` |
+| `api` | 8000 | `https://api.iconnectplus.in` |
+| `employee-app` | 3001 | `https://ess.iconnectplus.in` |
 
 Point `NEXT_PUBLIC_API_URL` at the **public** API URL (includes `/api/v1`), or use same-origin `/api/v1` via Next rewrites when web/employee-app proxies to API.
 
@@ -42,11 +42,13 @@ DATABASE_URL=postgresql+psycopg://USER:PASS@YOUR_RDS_HOST:5432/DBNAME?sslmode=re
 JWT_SECRET_KEY=long-random-string
 
 # Public URLs
-NEXT_PUBLIC_API_URL=https://api.iconnectplus.com/api/v1
-FRONTEND_URL=https://iconnectplus.com
-CORS_ORIGINS=["https://iconnectplus.com","https://www.iconnectplus.com","https://ess.iconnectplus.com"]
+NEXT_PUBLIC_API_URL=https://api.iconnectplus.in/api/v1
+FRONTEND_URL=https://iconnectplus.in
+CORS_ORIGINS=["https://iconnectplus.in","https://www.iconnectplus.in","https://ess.iconnectplus.in"]
+MICROSOFT_REDIRECT_URI=https://api.iconnectplus.in/api/v1/auth/microsoft/callback
 NEXT_PUBLIC_APP_NAME_EMPLOYEE=Employee App
 NEXT_PUBLIC_USE_MOCK=false
+EMPLOYEE_APP_PORT=3001
 
 # Landing access gate (two codes)
 ACCESS_CODE_DEMO=your-sales-demo-code
@@ -69,7 +71,7 @@ AWS_SECRET_ACCESS_KEY=...
 
 ## Access gate behaviour
 
-1. User opens `https://iconnectplus.com` and clicks **Sign in**.
+1. User opens `https://iconnectplus.in` and clicks **Sign in**.
 2. Enters code → `POST /api/v1/public/access-gate/verify`.
 3. **Demo code** → `/demo` (sales frontend, sample data only).
 4. **ConnectPlus code** → `/login` (Microsoft SSO into live ERP).
@@ -84,6 +86,6 @@ AWS_SECRET_ACCESS_KEY=...
 ## After first deploy
 
 1. API logs show `Starting uvicorn`
-2. `https://api.iconnectplus.com/api/v1/health` returns OK
+2. `https://api.iconnectplus.in/api/v1/health` returns OK
 3. Landing loads; Sign in accepts both codes
 4. Demo code → demo shell; ConnectPlus code → Microsoft login

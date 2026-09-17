@@ -177,12 +177,12 @@ services:
       dockerfile: Dockerfile
       network: host
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.iconnectplus.com/api/v1}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.iconnectplus.in/api/v1}
         NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME_EMPLOYEE:-Employee App}
         NEXT_PUBLIC_USE_MOCK: ${NEXT_PUBLIC_USE_MOCK:-false}
     restart: unless-stopped
     environment:
-      PORT: "3001"
+      PORT: ${EMPLOYEE_APP_PORT:-3001}
       HOSTNAME: 0.0.0.0
       NODE_ENV: production
       API_PROXY_TARGET: http://api:8000

@@ -1,7 +1,7 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 
 FROM node:20-alpine AS builder
 WORKDIR /app
@@ -17,6 +17,10 @@ ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
 ENV NEXT_PUBLIC_USE_MOCK=$NEXT_PUBLIC_USE_MOCK
 
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+# Coolify builders can be memory-constrained
+ENV NODE_OPTIONS=--max-old-space-size=4096
+
 RUN npx next build
 
 FROM node:20-alpine AS runner

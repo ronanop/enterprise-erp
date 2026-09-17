@@ -1,7 +1,6 @@
 import withPWAInit from "@ducanh2912/next-pwa";
 import type { NextConfig } from "next";
 import path from "node:path";
-import { allowedDevOriginsForPort } from "../../scripts/next-dev-origins";
 
 const withPWA = withPWAInit({
   dest: "public",
@@ -13,13 +12,25 @@ const withPWA = withPWAInit({
 });
 
 const apiProxyTarget =
-  process.env.API_PROXY_TARGET?.replace(/\/$/, "") ?? "http://127.0.0.1:8000";
+  process.env.API_PROXY_TARGET?.replace(/\/$/, "") ??
+  process.env.API_INTERNAL_URL?.replace(/\/$/, "") ??
+  "http://127.0.0.1:8000";
 
 const projectRoot = path.resolve(__dirname);
 
 const DEV_PORT = Number(process.env.PORT ?? 3001);
 
+/** LAN / tunnel hosts for `next dev` (comma-separated in ALLOWED_DEV_ORIGINS). */
+function allowedDevOriginsForPort(port: number): string[] {
+  const fromEnv =
+    process.env.ALLOWED_DEV_ORIGINS?.split(",")
+      .map((s) => s.trim())
+      .filter(Boolean) ?? [];
+  return [`localhost:${port}`, `127.0.0.1:${port}`, ...fromEnv];
+}
+
 const nextConfig: NextConfig = {
+  output: "standalone",
   allowedDevOrigins: allowedDevOriginsForPort(DEV_PORT),
   reactStrictMode: true,
   devIndicators: false,
