@@ -1,13 +1,13 @@
 # Coolify stack (docker-compose.coolify.yml)
 # ------------------------------------------
-# In-compose: Redis, RabbitMQ, API, Celery, Web
+# In-compose: Redis, RabbitMQ, API, Celery, Web, Employee App (ESS)
 # External: AWS RDS (DATABASE_URL) + optional AWS S3
-# Coolify proxy terminates TLS — do NOT publish host ports for api/web.
+# Coolify proxy terminates TLS — do NOT publish host ports for api/web/employee-app.
 #
 # Coolify UI:
 #   - Docker Compose Location: docker-compose.coolify.yml
 #   - Env vars: see docs/coolify-deploy.md
-#   - Domains → web:3000 and api:8000
+#   - Domains → web:3000, api:8000, employee-app:3001
 
 services:
   redis:
@@ -170,6 +170,27 @@ services:
         condition: service_started
     expose:
       - "3000"
+
+  employee-app:
+    build:
+      context: ./apps/employee-app
+      dockerfile: Dockerfile
+      network: host
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.iconnectplus.com/api/v1}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME_EMPLOYEE:-Employee App}
+        NEXT_PUBLIC_USE_MOCK: ${NEXT_PUBLIC_USE_MOCK:-false}
+    restart: unless-stopped
+    environment:
+      PORT: "3001"
+      HOSTNAME: 0.0.0.0
+      NODE_ENV: production
+      API_PROXY_TARGET: http://api:8000
+    depends_on:
+      api:
+        condition: service_started
+    expose:
+      - "3001"
 
 volumes:
   coolify_redis_data:

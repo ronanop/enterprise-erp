@@ -6,19 +6,21 @@ Use **Docker Compose** mode in Coolify with compose file:
 docker-compose.coolify.yml
 ```
 
-Coolify terminates HTTPS. Stack includes **Redis + RabbitMQ + API + Celery + Web**.
+Coolify terminates HTTPS. Stack includes **Redis + RabbitMQ + API + Celery + Web + Employee App**.
 Postgres = **AWS RDS** via `DATABASE_URL`. Object storage = **AWS S3**.
 
 ## Public domain (Hostinger → Coolify)
 
-Marketing site + ERP web share one Next app:
+Marketing site + ERP web share one Next app; ESS is a separate Next app:
 
 | Hostinger DNS | Points to | Coolify service |
 |---------------|-----------|-----------------|
 | `iconnectplus.com` / `www` | Coolify EC2 (A/CNAME) | `web:3000` |
 | `api.iconnectplus.com` | Coolify EC2 | `api:8000` |
+| `ess.iconnectplus.com` | Coolify EC2 | `employee-app:3001` |
 
 Landing (`/`) → **Sign in** → access code → **demo** (`/demo`) or **ConnectPlus** (`/login`).
+Employee self-service PWA: `https://ess.iconnectplus.com`.
 
 ## Services to expose
 
@@ -26,8 +28,9 @@ Landing (`/`) → **Sign in** → access code → **demo** (`/demo`) or **Connec
 |-----------------|------|----------------|
 | `web` | 3000 | `https://iconnectplus.com` |
 | `api` | 8000 | `https://api.iconnectplus.com` |
+| `employee-app` | 3001 | `https://ess.iconnectplus.com` |
 
-Point `NEXT_PUBLIC_API_URL` at the **public** API URL (includes `/api/v1`), or use same-origin `/api/v1` via Next rewrites when web proxies to API.
+Point `NEXT_PUBLIC_API_URL` at the **public** API URL (includes `/api/v1`), or use same-origin `/api/v1` via Next rewrites when web/employee-app proxies to API.
 
 ## Required environment variables
 
@@ -41,7 +44,9 @@ JWT_SECRET_KEY=long-random-string
 # Public URLs
 NEXT_PUBLIC_API_URL=https://api.iconnectplus.com/api/v1
 FRONTEND_URL=https://iconnectplus.com
-CORS_ORIGINS=["https://iconnectplus.com","https://www.iconnectplus.com"]
+CORS_ORIGINS=["https://iconnectplus.com","https://www.iconnectplus.com","https://ess.iconnectplus.com"]
+NEXT_PUBLIC_APP_NAME_EMPLOYEE=Employee App
+NEXT_PUBLIC_USE_MOCK=false
 
 # Landing access gate (two codes)
 ACCESS_CODE_DEMO=your-sales-demo-code
