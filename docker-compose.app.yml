@@ -36,6 +36,9 @@ services:
       S3_REGION: ${S3_REGION:-ap-south-1}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      ACCESS_CODE_DEMO: ${ACCESS_CODE_DEMO:-ICP-DEMO-2026}
+      ACCESS_CODE_CONNECTPLUS: ${ACCESS_CODE_CONNECTPLUS:-ICP-CONNECT-2026}
+      ACCESS_GATE_TOKEN_HOURS: ${ACCESS_GATE_TOKEN_HOURS:-12}
     ports:
       - "8010:8000"
     volumes:
@@ -78,6 +81,9 @@ services:
       S3_REGION: ${S3_REGION:-ap-south-1}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      ACCESS_CODE_DEMO: ${ACCESS_CODE_DEMO:-ICP-DEMO-2026}
+      ACCESS_CODE_CONNECTPLUS: ${ACCESS_CODE_CONNECTPLUS:-ICP-CONNECT-2026}
+      ACCESS_GATE_TOKEN_HOURS: ${ACCESS_GATE_TOKEN_HOURS:-12}
     volumes:
       - erp_crm_uploads:/app/var/crm-attachments
       - erp_asset_storage:/app/var/asset-storage
