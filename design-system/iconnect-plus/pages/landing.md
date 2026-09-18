@@ -1,11 +1,11 @@
-# Landing Page Overrides — iConnect Plus
+# Landing Page Overrides — Connect Plus
 
 > Overrides `design-system/iconnect-plus/MASTER.md` for the public marketing landing only.
 > Inspired by Apple (whitespace, bold type) + Stripe (vibrant product energy).
 
 ## Product
 
-- **Name:** iConnect Plus
+- **Name:** Connect Plus
 - **Motto:** We make custom AI-powered Enterprise Apps that drive growth.
 
 ## Color (locked — do not use AI purple/pink)
@@ -32,7 +32,7 @@
 - Hero first viewport: brand + one headline + one supporting sentence + CTA group + one full-bleed visual plane
 - No cards in hero
 - Large section padding (96–140px)
-- Comparison: dark band, two columns (Generic SaaS vs iConnect Plus)
+- Comparison: dark band, two columns (Generic SaaS vs Connect Plus)
 - Motion: subtle fade/slide 200–300ms; respect `prefers-reduced-motion`
 
 ## CTAs

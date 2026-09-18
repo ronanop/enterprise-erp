@@ -1,7 +1,7 @@
 # App-only stack for coexistence with other host services.
 # Shared infra: 172.16.200.26 (Postgres, Redis, RabbitMQ, OpenSearch) + AWS S3.
 # Does NOT bind 80/443/5432/6379/5672/9200.
-# Host ports: API http://172.16.200.30:8010  |  Web http://172.16.200.30:3000
+# Host ports: API :8010  |  Web :3000  |  Employee :3001  |  Nginx TLS :8443
 
 services:
   api:
@@ -113,6 +113,29 @@ services:
       API_INTERNAL_URL: http://api:8000
     ports:
       - "3000:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  employee-app:
+    build:
+      context: ./apps/employee-app
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_EMPLOYEE_API_URL:-/api/v1}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME_EMPLOYEE:-Employee App}
+        NEXT_PUBLIC_USE_MOCK: ${NEXT_PUBLIC_USE_MOCK:-false}
+    image: enterprise-erp-employee:local
+    container_name: erp-employee-app
+    restart: unless-stopped
+    environment:
+      PORT: "3001"
+      HOSTNAME: 0.0.0.0
+      NODE_ENV: production
+      API_PROXY_TARGET: http://api:8000
+      API_INTERNAL_URL: http://api:8000
+    ports:
+      - "3001:3001"
     depends_on:
       api:
         condition: service_healthy

@@ -2,7 +2,7 @@
 
 > Overrides MASTER only where noted. Apple-inspired monochrome ERP home.
 
-**Project:** iConnect Plus / iConnect Plus  
+**Project:** iConnect Plus / iConnect Plus
 **Page:** Home (`/home`)  
 **Stack:** Next.js + TypeScript + Tailwind + Lucide  
 

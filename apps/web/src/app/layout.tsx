@@ -20,8 +20,12 @@ export const metadata: Metadata = {
   title: "iConnect Plus",
   description: "Multi-Industry, Multi-Company ERP Platform",
   icons: {
-    icon: [{ url: "/brand/iconnect-plus-logo.png", type: "image/png" }],
-    apple: [{ url: "/brand/iconnect-plus-logo.png", type: "image/png" }],
+    icon: [
+      { url: "/favicon.png", type: "image/png", sizes: "32x32" },
+      { url: "/brand/iconnect-plus-logo.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/brand/iconnect-plus-logo.png", sizes: "180x180" }],
+    shortcut: ["/favicon.png"],
   },
 };
 

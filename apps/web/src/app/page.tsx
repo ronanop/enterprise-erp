@@ -1,27 +1,30 @@
-import type { Metadata } from "next";
-import { Space_Grotesk } from "next/font/google";
+import type { Metadata, Viewport } from "next";
 
-import { IiConnectPlusLanding } from "@/components/landing/iconnect-plus-landing";
-
-import "./home.css";
-
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-icp-display",
-  display: "swap",
-});
+import { ConnectPlusLanding } from "@/components/landing/connect-plus/connect-plus-landing";
 
 export const metadata: Metadata = {
-  title: "iConnect Plus — Custom AI-powered Enterprise Apps",
+  title: "Connect Plus - Custom AI-powered Enterprise Apps",
   description:
-    "We make custom AI-powered Enterprise Apps that drive growth. Purpose-built platforms for finance, CRM, GRC, HR, and operations.",
+    "Custom AI-powered enterprise apps for finance, CRM, GRC, HR, and operations - without trading accuracy for speed.",
+  icons: {
+    icon: [
+      { url: "/favicon.png", type: "image/png", sizes: "32x32" },
+      { url: "/landing/mark.png", type: "image/png" },
+    ],
+    apple: "/landing/mark.png",
+  },
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#05070f",
+};
+
+/**
+ * Native Next.js landing — scroll animations owned in React (no Framer iframe).
+ */
 export default function HomePage() {
-  return (
-    <div className={spaceGrotesk.variable}>
-      <IiConnectPlusLanding />
-    </div>
-  );
+  return <ConnectPlusLanding />;
 }
