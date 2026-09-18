@@ -140,6 +140,14 @@ class AssetDisposalRepository(AstScopedRepository):
                 "proceeds_amount",
                 "book_value_at_disposal",
                 "finance_journal_id",
+                "remarks",
+                "ceo_instruction",
+                "rejection_reason",
+                "previous_operational_status",
+                "approved_at",
+                "approved_by",
+                "completed_at",
+                "completed_by",
             }:
                 setattr(row, k, v)
         row.updated_at = utcnow()

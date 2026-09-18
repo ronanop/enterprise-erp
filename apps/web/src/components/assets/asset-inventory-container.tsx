@@ -190,7 +190,15 @@ export async function fetchInventoryPage(input: {
   return { assetList, assignmentList, accessoriesByAssetId };
 }
 
-export function AssetInventoryContainer() {
+export type AssetInventoryContainerProps = {
+  pageTitle?: string;
+  pageDescription?: string;
+};
+
+export function AssetInventoryContainer({
+  pageTitle,
+  pageDescription,
+}: AssetInventoryContainerProps) {
   const navigation = useAssetNavigation();
   const router = useRouter();
   const { can } = useUserPermissions();
@@ -592,6 +600,8 @@ export function AssetInventoryContainer() {
   return (
     <>
       <AssetInventoryWorkspace
+        pageTitle={pageTitle}
+        pageDescription={pageDescription}
         preset={preset}
         onPresetChange={onPresetChange}
         headerLocationId={headerLocationId}

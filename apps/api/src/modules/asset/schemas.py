@@ -64,7 +64,8 @@ class AssetCreate(BaseModel):
     """Alias for asset registration create (FP-ASSET-REG-001)."""
 
     company_id: UUID | None = None
-    branch_id: UUID
+    # Optional: when omitted, create uses TenantContext.branch_id (user org scope).
+    branch_id: UUID | None = None
     asset_name: str
     asset_category_id: UUID
     asset_type_id: UUID
@@ -655,6 +656,111 @@ class AssetTransferListResult(BaseModel):
     page: int
     page_size: int
 
+
+class UserTransferContextResponse(BaseModel):
+    """Assigned-asset context for inventory → user transfer entry (Step 1/2)."""
+
+    asset_id: UUID
+    asset_code: str
+    asset_name: str
+    operational_status: str
+    lifecycle_status: str
+    current_user: str | None = None
+    current_employee_id: UUID | None = None
+    department_id: UUID | None = None
+    department_name: str | None = None
+    location_label: str | None = None
+    assignment_id: UUID
+    assignment_document_number: str | None = None
+    assignment_allocated_at: datetime | None = None
+    assignment_status: str | None = None
+    components: list["UserTransferComponentItem"] = []
+    company_id: UUID
+    branch_id: UUID
+    version: int
+
+
+class UserTransferComponentItem(BaseModel):
+    """Issued accessory/component on the active assignment."""
+
+    component_id: UUID
+    assignment_component_id: UUID
+    component_code: str | None = None
+    component_name: str | None = None
+    component_type: str | None = None
+    serial_number: str | None = None
+    issue_status: str
+    linked_asset_code: str | None = None
+    linked_asset_name: str | None = None
+
+
+class UserTransferVerificationRequest(BaseModel):
+    """Pre-transfer verification payload (Step 2). Does not complete transfer."""
+
+    data_backup_verified: bool
+    qc_completed: bool
+    qc_remarks: str | None = None
+    physical_condition: str = Field(
+        description="Reuses assignment return conditions: good | outdated | dead"
+    )
+    verified_component_ids: list[UUID] = Field(default_factory=list)
+    asset_version: int | None = None
+
+
+class UserTransferVerificationResponse(BaseModel):
+    """Verified snapshot for Step 3 consumption."""
+
+    verification_id: UUID
+    asset_id: UUID
+    assignment_id: UUID
+    previous_employee_id: UUID | None = None
+    previous_user_label: str | None = None
+    data_backup_verified: bool
+    qc_completed: bool
+    qc_remarks: str | None = None
+    physical_condition: str
+    verified_component_ids: list[UUID]
+    verified_at: datetime
+    verified_by: UUID | None = None
+    status: str = "verified"
+
+
+class UserTransferAssignRequest(BaseModel):
+    """Step 3 — transfer custody to a new employee (requires prior verification)."""
+
+    verification_id: UUID
+    employee_id: UUID
+    department_id: UUID | None = None
+    to_location_id: UUID
+    to_building_id: UUID
+    allocated_at: date
+    assignment_remarks: str | None = None
+    asset_version: int | None = None
+
+
+class UserTransferReturnToStockRequest(BaseModel):
+    """Step 3 — release assignment and return asset to READY_TO_MOVE."""
+
+    verification_id: UUID
+    reason: str = Field(min_length=1, max_length=500)
+    remarks: str | None = None
+    asset_version: int | None = None
+
+
+class UserTransferCompleteResponse(BaseModel):
+    """Result of a finalized user transfer (assign or return to stock)."""
+
+    outcome: str
+    transfer_id: UUID
+    document_number: str
+    asset_id: UUID
+    operational_status: str
+    previous_assignment_id: UUID
+    new_assignment_id: UUID | None = None
+    new_assignment_document_number: str | None = None
+    verification_id: UUID
+
+
 class AssetLocationCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID | None = None
@@ -1043,13 +1149,23 @@ class AssetDisposalCreate(BaseModel):
     disposal_date: date | None = None
     proceeds_amount: Decimal | None = None
     book_value_at_disposal: Decimal | None = None
+    remarks: str | None = Field(default=None, max_length=4000)
 
 class AssetDisposalUpdate(BaseModel):
     disposal_type: str | None = None
     disposal_date: date | None = None
     proceeds_amount: Decimal | None = None
     book_value_at_disposal: Decimal | None = None
+    remarks: str | None = Field(default=None, max_length=4000)
     version: int
+
+class AssetDisposalApproveRequest(BaseModel):
+    ceo_instruction: str = Field(..., min_length=1, max_length=4000)
+    comments: str | None = Field(default=None, max_length=4000)
+
+class AssetDisposalRejectRequest(BaseModel):
+    rejection_reason: str = Field(..., min_length=1, max_length=4000)
+    comments: str | None = Field(default=None, max_length=4000)
 
 class AssetDisposalResponse(OrmModel):
     id: UUID
@@ -1059,6 +1175,14 @@ class AssetDisposalResponse(OrmModel):
     disposal_date: date | None
     proceeds_amount: Decimal | None
     book_value_at_disposal: Decimal | None
+    remarks: str | None = None
+    ceo_instruction: str | None = None
+    rejection_reason: str | None = None
+    previous_operational_status: str | None = None
+    approved_at: datetime | None = None
+    approved_by: UUID | None = None
+    completed_at: datetime | None = None
+    completed_by: UUID | None = None
     finance_journal_id: UUID | None
     status: str
     workflow_status: str | None
@@ -1067,6 +1191,7 @@ class AssetDisposalResponse(OrmModel):
     branch_id: UUID
     version: int
     created_by: UUID | None = None
+    created_at: datetime | None = None
 
 
 class AssetDisposalListResult(BaseModel):
@@ -1178,6 +1303,16 @@ class AssetDocumentResponse(OrmModel):
     status: str
     company_id: UUID
     version: int
+    created_at: datetime | None = None
+    content_type: str | None = None
+    file_size_bytes: int | None = None
+    downloadable: bool = False
+
+
+class AssetDocumentUploadLimits(BaseModel):
+    max_upload_mb: int
+    allowed_content_types: list[str]
+    accepted_extensions: list[str] = Field(default_factory=list)
 
 
 class AssetDocumentListResult(BaseModel):
@@ -1192,6 +1327,7 @@ DocumentCreate = AssetDocumentCreate
 DocumentUpdate = AssetDocumentUpdate
 DocumentResponse = AssetDocumentResponse
 DocumentListResult = AssetDocumentListResult
+DocumentUploadLimits = AssetDocumentUploadLimits
 
 class AssetChecklistCreate(BaseModel):
     company_id: UUID | None = None

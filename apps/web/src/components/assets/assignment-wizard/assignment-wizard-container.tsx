@@ -24,6 +24,8 @@ import {
   EMPTY_ASSIGNMENT_WIZARD_STATE,
   type AssignmentWizardState,
 } from "@/components/assets/assignment-wizard/wizard-types";
+import { PendingTransferErrorBanner } from "@/components/assets/pending-transfer-error-banner";
+import { parsePendingTransferError } from "@/components/assets/pending-transfer-error";
 import { isAuthenticated } from "@/lib/auth";
 import { listEmployeeOptions } from "@/lib/org-options";
 import { dcChallanService } from "@/services/assets-service";
@@ -344,7 +346,14 @@ export function AssignmentWizardContainer({
   return (
     <div className="space-y-3">
       {actionError ? (
-        <WizardLoadErrorBanner message={actionError} onRetry={() => setActionError(null)} />
+        parsePendingTransferError(actionError) ? (
+          <PendingTransferErrorBanner
+            message={actionError}
+            onDismiss={() => setActionError(null)}
+          />
+        ) : (
+          <WizardLoadErrorBanner message={actionError} onRetry={() => setActionError(null)} />
+        )
       ) : null}
       <AssignmentWizard
         key={hydrationKey}

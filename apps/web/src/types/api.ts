@@ -25,6 +25,7 @@ export interface TokenData {
   token_type?: string;
   expires_in?: number;
   mfa_required?: boolean;
+  redirect_to?: string;
 }
 
 export interface UserProfile {

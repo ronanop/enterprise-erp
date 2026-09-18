@@ -44,10 +44,32 @@ def _clear_custody(validator: DisposalValidator):
     )
 
 
+def _create_fields(asset_id, **extra):
+    return {
+        "asset_id": asset_id,
+        "disposal_type": "scrap",
+        "remarks": "End of life — send to scrap",
+        **extra,
+    }
+
+
 def test_create_requires_asset_id() -> None:
     validator = DisposalValidator(MagicMock())
     with pytest.raises(DisposalValidationError, match="asset_id is required"):
         validator.validate_create_fields(_ctx(), company_id=uuid4(), fields={})
+
+
+def test_create_requires_remarks() -> None:
+    validator = DisposalValidator(MagicMock())
+    ctx = _ctx()
+    asset = _pending_asset(company_id=ctx.company_id)
+    with patch.object(validator._assets, "get", return_value=asset):
+        with pytest.raises(DisposalValidationError, match="Remarks are required"):
+            validator.validate_create_fields(
+                ctx,
+                company_id=ctx.company_id,
+                fields={"asset_id": asset.id, "disposal_type": "scrap"},
+            )
 
 
 def test_create_blocks_disposed_asset() -> None:
@@ -59,21 +81,20 @@ def test_create_blocks_disposed_asset() -> None:
             validator.validate_create_fields(
                 ctx,
                 company_id=ctx.company_id,
-                fields={"asset_id": asset.id, "disposal_type": "scrap"},
+                fields=_create_fields(asset.id),
             )
 
 
 @pytest.mark.parametrize(
     "ops,match",
     [
-        ("READY_TO_MOVE", "PENDING_DISPOSAL"),
-        ("ASSIGNED", "PENDING_DISPOSAL"),
-        ("DISPOSED", "PENDING_DISPOSAL"),
-        ("RETIRED", "Start Disposal"),
-        (None, "PENDING_DISPOSAL"),
+        ("DISPOSED", "Disposed assets cannot be disposed again"),
+        ("IN_MAINTENANCE", "Ready to Move"),
+        ("IN_USE_AS_COMPONENT", "Ready to Move"),
+        (None, "Ready to Move"),
     ],
 )
-def test_create_blocks_non_pending_operational_status(ops: str | None, match: str) -> None:
+def test_create_blocks_non_send_eligible_operational_status(ops: str | None, match: str) -> None:
     validator = DisposalValidator(MagicMock())
     ctx = _ctx()
     asset = _pending_asset(company_id=ctx.company_id, ops=ops)
@@ -82,7 +103,22 @@ def test_create_blocks_non_pending_operational_status(ops: str | None, match: st
             validator.validate_create_fields(
                 ctx,
                 company_id=ctx.company_id,
-                fields={"asset_id": asset.id, "disposal_type": "scrap"},
+                fields=_create_fields(asset.id),
+            )
+
+
+@pytest.mark.parametrize("ops", ["READY_TO_MOVE", "ASSIGNED", "RETIRED", "PENDING_DISPOSAL"])
+def test_create_accepts_send_eligible_operational_status(ops: str) -> None:
+    validator = DisposalValidator(MagicMock())
+    ctx = _ctx()
+    asset = _pending_asset(company_id=ctx.company_id, ops=ops)
+    with patch.object(validator._assets, "get", return_value=asset):
+        patches = _clear_custody(validator)
+        with patches[0], patches[1], patches[2], patches[3]:
+            validator.validate_create_fields(
+                ctx,
+                company_id=ctx.company_id,
+                fields=_create_fields(asset.id),
             )
 
 
@@ -98,7 +134,7 @@ def test_create_blocks_open_maintenance() -> None:
                     validator.validate_create_fields(
                         ctx,
                         company_id=ctx.company_id,
-                        fields={"asset_id": asset.id, "disposal_type": "sale"},
+                        fields=_create_fields(asset.id, disposal_type="sale"),
                     )
 
 
@@ -119,7 +155,7 @@ def test_create_blocks_open_assignment() -> None:
                         validator.validate_create_fields(
                             ctx,
                             company_id=ctx.company_id,
-                            fields={"asset_id": asset.id, "disposal_type": "donation"},
+                            fields=_create_fields(asset.id, disposal_type="donation"),
                         )
 
 
@@ -143,7 +179,7 @@ def test_create_blocks_pending_transfer() -> None:
                             validator.validate_create_fields(
                                 ctx,
                                 company_id=ctx.company_id,
-                                fields={"asset_id": asset.id, "disposal_type": "scrap"},
+                                fields=_create_fields(asset.id),
                             )
 
 
@@ -158,7 +194,7 @@ def test_create_blocks_second_open_disposal() -> None:
                 validator.validate_create_fields(
                     ctx,
                     company_id=ctx.company_id,
-                    fields={"asset_id": asset.id, "disposal_type": "write_off"},
+                    fields=_create_fields(asset.id, disposal_type="write_off"),
                 )
 
 
@@ -233,11 +269,7 @@ def test_create_accepts_pending_disposal_asset() -> None:
             validator.validate_create_fields(
                 ctx,
                 company_id=ctx.company_id,
-                fields={
-                    "asset_id": asset.id,
-                    "disposal_type": "scrap",
-                    "disposal_date": date.today(),
-                },
+                fields=_create_fields(asset.id, disposal_date=date.today()),
             )
 
 

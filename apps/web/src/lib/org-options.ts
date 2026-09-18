@@ -11,6 +11,7 @@ export type EmployeeDirectoryEntry = {
   displayName: string;
   employeeCode: string | null;
   mobile: string | null;
+  departmentId: string | null;
 };
 
 function asArray(data: unknown): Record<string, unknown>[] {
@@ -55,12 +56,14 @@ export async function listEmployeeDirectory(): Promise<EmployeeDirectoryEntry[]>
           ? ` · ${r.designation}`
           : "";
       const id = String(r.id);
+      const departmentId = r.department_id != null ? String(r.department_id) : null;
       return {
         id,
         displayName: displayName || id,
         label: `${displayName || id}${codeSuffix}${dept}`,
         employeeCode,
         mobile: trimOrNull(r.mobile),
+        departmentId,
       };
     });
   } catch {

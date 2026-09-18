@@ -17,7 +17,7 @@ export const OPERATIONAL_STATUS_LABELS: Record<OperationalStatusValue, string> =
   ASSIGNED: "Assigned",
   IN_MAINTENANCE: "In Maintenance",
   RETIRED: "Retired",
-  PENDING_DISPOSAL: "Pending Disposal",
+  PENDING_DISPOSAL: "Disposal",
   DISPOSED: "Disposed",
   IN_USE_AS_COMPONENT: "In Use as Component",
 };
@@ -201,12 +201,22 @@ export function isOpsBlockedForNormalOperations(
   );
 }
 
-/** Phase 5E: Transfer/Maintenance require no employee custody (not ASSIGNED). */
+/** Phase 5E: Maintenance requires no employee custody (not ASSIGNED). */
 export function isOpsBlockedForTransferOrMaintenance(
   operationalStatus: string | null | undefined,
 ): boolean {
   const ops = String(operationalStatus ?? "").toUpperCase();
   return isOpsBlockedForNormalOperations(ops) || ops === "ASSIGNED" || ops === "IN_MAINTENANCE";
+}
+
+/**
+ * Inventory → user transfer entry: only operationally ASSIGNED assets.
+ * Location/branch transfers (Transfers workspace) remain a separate flow.
+ */
+export function canUserTransferFromOperationalStatus(
+  operationalStatus: string | null | undefined,
+): boolean {
+  return String(operationalStatus ?? "").toUpperCase() === "ASSIGNED";
 }
 
 export function operationalStatusHelpText(
@@ -217,7 +227,7 @@ export function operationalStatusHelpText(
     return "Retired — not available for assignment.";
   }
   if (ops === "PENDING_DISPOSAL") {
-    return "Pending Disposal — disposal workflow in progress.";
+    return "Disposal — disposal workflow in progress.";
   }
   if (ops === "DISPOSED") {
     return "Disposed — asset has completed the disposal workflow.";

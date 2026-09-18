@@ -4,8 +4,10 @@ from typing import Annotated
 from datetime import date, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+from urllib.parse import quote
 
 from modules.asset.models import AstAssetMaintenance
 from modules.asset.dependencies import (
@@ -56,12 +58,15 @@ from modules.asset.schemas import (
     DepreciationGenerateRunResult,
     AssetDisposalCreate,
     AssetDisposalListResult,
+    AssetDisposalApproveRequest,
+    AssetDisposalRejectRequest,
     AssetDisposalResponse,
     AssetDisposalUpdate,
     AssetDocumentCreate,
     AssetDocumentListResult,
     AssetDocumentResponse,
     AssetDocumentUpdate,
+    AssetDocumentUploadLimits,
     AssetInformationPortalResponse,
     DiscoveryApplyRequest,
     DiscoveryApplyResult,
@@ -127,6 +132,12 @@ from modules.asset.schemas import (
     AssetTransferListResult,
     AssetTransferResponse,
     AssetTransferUpdate,
+    UserTransferAssignRequest,
+    UserTransferCompleteResponse,
+    UserTransferContextResponse,
+    UserTransferReturnToStockRequest,
+    UserTransferVerificationRequest,
+    UserTransferVerificationResponse,
     AssetUpdate,
     AssetWarrantyCreate,
     AssetWarrantyExtend,
@@ -613,7 +624,7 @@ def create_assets(
     db: Annotated[Session, Depends(get_db)],
 ):
     payload = body.model_dump(exclude_none=True)
-    branch_id = payload.pop("branch_id")
+    branch_id = payload.pop("branch_id", None)
     row = AssetService(db).create(ctx, branch_id=branch_id, **payload)
     type_names = _asset_type_name_map(db, ctx, [row])
     return APIResponse(
@@ -1096,6 +1107,87 @@ def list_asset_transfers(
         page_size=pagination.page_size,
     )
     return APIResponse(message="OK", data=payload)
+
+
+@asset_transfers_router.get(
+    "/user-transfer-context/{asset_id}",
+    response_model=APIResponse[UserTransferContextResponse],
+)
+def get_user_transfer_context(
+    asset_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.transfer:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Assigned-asset entry context for inventory → user transfer (Step 1/2).
+
+    Rejects READY_TO_MOVE and any asset that is not operationally ASSIGNED
+    with an active assignment. Does not mutate records.
+    """
+    return APIResponse(
+        message="OK",
+        data=TransferService(db).get_user_transfer_context(ctx, asset_id),
+    )
+
+
+@asset_transfers_router.post(
+    "/user-transfer-verification/{asset_id}",
+    response_model=APIResponse[UserTransferVerificationResponse],
+)
+def submit_user_transfer_verification(
+    asset_id: UUID,
+    body: UserTransferVerificationRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.transfer:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Step 2 pre-transfer verification. Audits + stages payload; does not release custody."""
+    return APIResponse(
+        message="Verification recorded",
+        data=TransferService(db).submit_user_transfer_verification(
+            ctx,
+            asset_id,
+            data_backup_verified=body.data_backup_verified,
+            qc_completed=body.qc_completed,
+            qc_remarks=body.qc_remarks,
+            physical_condition=body.physical_condition,
+            verified_component_ids=list(body.verified_component_ids),
+            asset_version=body.asset_version,
+        ),
+    )
+
+
+@asset_transfers_router.post(
+    "/user-transfer-assign/{asset_id}",
+    response_model=APIResponse[UserTransferCompleteResponse],
+)
+def complete_user_transfer_assign(
+    asset_id: UUID,
+    body: UserTransferAssignRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.transfer:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Step 3 — close active assignment and assign asset to a new employee."""
+    return APIResponse(
+        message="Transfer completed",
+        data=TransferService(db).complete_user_transfer_assign(ctx, asset_id, body),
+    )
+
+
+@asset_transfers_router.post(
+    "/user-transfer-return/{asset_id}",
+    response_model=APIResponse[UserTransferCompleteResponse],
+)
+def complete_user_transfer_return_to_stock(
+    asset_id: UUID,
+    body: UserTransferReturnToStockRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.transfer:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Step 3 — return assigned asset to READY_TO_MOVE after verification."""
+    return APIResponse(
+        message="Asset returned to stock",
+        data=TransferService(db).complete_user_transfer_return_to_stock(ctx, asset_id, body),
+    )
+
 
 @asset_transfers_router.get("/{row_id}", response_model=APIResponse[AssetTransferResponse])
 def get_asset_transfers(
@@ -2092,22 +2184,47 @@ def submit_asset_disposals(
 @asset_disposals_router.post("/{row_id}/approve", response_model=APIResponse[AssetDisposalResponse])
 def approve_asset_disposals(
     row_id: UUID,
+    body: AssetDisposalApproveRequest,
     ctx: Annotated[TenantContext, Depends(require_permission("asset.disposal:approve"))],
     db: Annotated[Session, Depends(get_db)],
-    body: WorkflowActionRequest | None = None,
 ):
-    comments = body.comments if body else None
-    return APIResponse(message="approve", data=DisposalService(db).approve(ctx, row_id, comments=comments))
+    return APIResponse(
+        message="approve",
+        data=DisposalService(db).approve(
+            ctx,
+            row_id,
+            comments=body.comments,
+            ceo_instruction=body.ceo_instruction,
+        ),
+    )
 
 @asset_disposals_router.post("/{row_id}/reject", response_model=APIResponse[AssetDisposalResponse])
 def reject_asset_disposals(
     row_id: UUID,
+    body: AssetDisposalRejectRequest,
     ctx: Annotated[TenantContext, Depends(require_permission("asset.disposal:approve"))],
     db: Annotated[Session, Depends(get_db)],
-    body: WorkflowActionRequest | None = None,
 ):
-    comments = body.comments if body else None
-    return APIResponse(message="reject", data=DisposalService(db).reject(ctx, row_id, comments=comments))
+    return APIResponse(
+        message="reject",
+        data=DisposalService(db).reject(
+            ctx,
+            row_id,
+            comments=body.comments,
+            rejection_reason=body.rejection_reason,
+        ),
+    )
+
+@asset_disposals_router.post("/{row_id}/complete", response_model=APIResponse[AssetDisposalResponse])
+def complete_asset_disposals(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.disposal:post"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="complete",
+        data=DisposalService(db).complete(ctx, row_id),
+    )
 
 @asset_disposals_router.post("/{row_id}/cancel", response_model=APIResponse[AssetDisposalResponse])
 def cancel_asset_disposals(
@@ -2377,6 +2494,36 @@ def cancel_asset_audits(
 
 asset_documents_router = APIRouter(prefix="/asset-documents", tags=["Asset — AssetDocument"])
 
+_ASSET_DOC_CHUNK = 64 * 1024
+
+
+def _asset_doc_content_disposition(disposition: str, filename: str) -> str:
+    safe = filename.replace('"', "")
+    encoded = quote(filename)
+    return f"{disposition}; filename=\"{safe}\"; filename*=UTF-8''{encoded}"
+
+
+async def _read_asset_document_upload(upload: UploadFile) -> tuple[bytes, str | None, str | None]:
+    from modules.asset.service.document_file import allowed_types_message, max_upload_bytes
+    from modules.asset.domain.exceptions import DocumentValidationError
+
+    limit = max_upload_bytes()
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await upload.read(_ASSET_DOC_CHUNK)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            mb = limit // (1024 * 1024)
+            raise DocumentValidationError(
+                f"File is larger than the {mb} MB upload limit. {allowed_types_message()}"
+            )
+        chunks.append(chunk)
+    return b"".join(chunks), upload.filename, upload.content_type
+
+
 @asset_documents_router.get("", response_model=APIResponse[AssetDocumentListResult])
 def list_asset_documents(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.document:read"))],
@@ -2389,7 +2536,8 @@ def list_asset_documents(
     status: str | None = None,
     q: str | None = None,
 ):
-    items, total = DocumentService(db).search(
+    service = DocumentService(db)
+    items, total = service.search(
         ctx,
         company_id=company_id,
         asset_id=asset_id,
@@ -2401,12 +2549,47 @@ def list_asset_documents(
         limit=pagination.page_size,
     )
     payload = AssetDocumentListResult(
-        items=items,
+        items=[service.to_response(row) for row in items],
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
     )
     return APIResponse(message="OK", data=payload)
+
+
+@asset_documents_router.get(
+    "/upload-limits",
+    response_model=APIResponse[AssetDocumentUploadLimits],
+)
+def get_asset_document_upload_limits(
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.document:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=DocumentService(db).upload_limits())
+
+
+@asset_documents_router.post("/upload", response_model=APIResponse[AssetDocumentResponse])
+async def upload_asset_document(
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.document:create"))],
+    db: Annotated[Session, Depends(get_db)],
+    file: Annotated[UploadFile, File()],
+    asset_id: Annotated[UUID, Form()],
+    document_type: Annotated[str | None, Form()] = None,
+    branch_id: Annotated[UUID | None, Form()] = None,
+):
+    data, filename, content_type = await _read_asset_document_upload(file)
+    service = DocumentService(db)
+    row = service.upload(
+        ctx,
+        asset_id=asset_id,
+        file_bytes=data,
+        original_filename=filename,
+        declared_content_type=content_type,
+        document_type=document_type,
+        branch_id=branch_id,
+    )
+    return APIResponse(message="Uploaded", data=service.to_response(row))
+
 
 @asset_documents_router.get("/{row_id}", response_model=APIResponse[AssetDocumentResponse])
 def get_asset_documents(
@@ -2414,7 +2597,43 @@ def get_asset_documents(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.document:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=DocumentService(db).get(ctx, row_id))
+    service = DocumentService(db)
+    return APIResponse(message="OK", data=service.to_response(service.get(ctx, row_id)))
+
+
+@asset_documents_router.get("/{row_id}/content")
+def get_asset_document_content(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.document:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    disposition: Annotated[str, Query()] = "inline",
+):
+    disp = disposition if disposition in {"inline", "attachment"} else "inline"
+    service = DocumentService(db)
+    handle, filename, content_type, file_size = service.open_stored_content(ctx, row_id)
+
+    def _iter():
+        try:
+            while True:
+                chunk = handle.read(_ASSET_DOC_CHUNK)
+                if not chunk:
+                    break
+                yield chunk
+        finally:
+            handle.close()
+
+    headers = {
+        "Content-Disposition": _asset_doc_content_disposition(disp, filename or "document"),
+        "X-Content-Type-Options": "nosniff",
+    }
+    if file_size:
+        headers["Content-Length"] = str(file_size)
+    return StreamingResponse(
+        _iter(),
+        media_type=content_type or "application/octet-stream",
+        headers=headers,
+    )
+
 
 @asset_documents_router.post("", response_model=APIResponse[AssetDocumentResponse])
 def create_asset_documents(
@@ -2422,10 +2641,10 @@ def create_asset_documents(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.document:create"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(
-        message="Created",
-        data=DocumentService(db).create(ctx, **body.model_dump(exclude_none=True)),
-    )
+    service = DocumentService(db)
+    row = service.create(ctx, **body.model_dump(exclude_none=True))
+    return APIResponse(message="Created", data=service.to_response(row))
+
 
 @asset_documents_router.patch("/{row_id}", response_model=APIResponse[AssetDocumentResponse])
 def update_asset_documents(
@@ -2434,10 +2653,10 @@ def update_asset_documents(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.document:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(
-        message="Updated",
-        data=DocumentService(db).update(ctx, row_id, **body.model_dump(exclude_unset=True)),
-    )
+    service = DocumentService(db)
+    row = service.update(ctx, row_id, **body.model_dump(exclude_unset=True))
+    return APIResponse(message="Updated", data=service.to_response(row))
+
 
 @asset_documents_router.post("/{row_id}/supersede", response_model=APIResponse[AssetDocumentResponse])
 def supersede_asset_documents(
@@ -2445,7 +2664,9 @@ def supersede_asset_documents(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.document:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="supersede", data=DocumentService(db).supersede(ctx, row_id))
+    service = DocumentService(db)
+    return APIResponse(message="supersede", data=service.to_response(service.supersede(ctx, row_id)))
+
 
 @asset_documents_router.post("/{row_id}/archive", response_model=APIResponse[AssetDocumentResponse])
 def archive_asset_documents(
@@ -2453,7 +2674,8 @@ def archive_asset_documents(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.document:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="archive", data=DocumentService(db).archive(ctx, row_id))
+    service = DocumentService(db)
+    return APIResponse(message="archive", data=service.to_response(service.archive(ctx, row_id)))
 
 asset_checklists_router = APIRouter(prefix="/asset-checklists", tags=["Asset — AssetChecklist"])
 

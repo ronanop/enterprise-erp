@@ -132,12 +132,11 @@ export const INVENTORY_MENU_ITEMS: Array<{
   { id: "viewDetails", label: "View Details", permissionKey: "viewDetails" },
   { id: "assign", label: "Assign Asset", permissionKey: "assign" },
   { id: "return", label: "Return Asset", permissionKey: "return" },
+  // History + Discovery live inside Information Portal — single menu entry.
   { id: "portal", label: "Information Portal", permissionKey: "portal" },
-  { id: "discovery", label: "Discovery", permissionKey: "discovery" },
   { id: "qr", label: "QR Code", permissionKey: "qr" },
-  { id: "transfer", label: "Transfer", permissionKey: "transfer" },
+  { id: "transfer", label: "User Transfer", permissionKey: "transfer" },
   { id: "maintenance", label: "Maintenance", permissionKey: "maintenance" },
   { id: "startDisposal", label: "Start Disposal", permissionKey: "startDisposal" },
   { id: "reinstate", label: "Reinstate", permissionKey: "reinstate" },
-  { id: "history", label: "History", permissionKey: "history" },
 ];

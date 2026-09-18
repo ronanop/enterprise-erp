@@ -17,18 +17,21 @@ export const assetNavigationPaths = {
   returnAsset: (assetId: string) => buildReturnWizardHref({ assetId }),
   informationPortal: (assetId: string) =>
     `/assets/information-portal/${encodeURIComponent(assetId)}`,
-  discovery: (assetId: string) => `/assets/assets/${encodeURIComponent(assetId)}`,
+  /** Discovery UI lives on Information Portal — keep path alias for callers. */
+  discovery: (assetId: string) =>
+    `/assets/information-portal/${encodeURIComponent(assetId)}`,
   qr: (assetId: string) => `/assets/qr-barcode?assetId=${encodeURIComponent(assetId)}`,
   transfer: (assetId: string) =>
-    `/assets/asset-transfers?assetId=${encodeURIComponent(assetId)}`,
+    `/assets/asset-transfers/new?assetId=${encodeURIComponent(assetId)}`,
   maintenance: (assetId: string) =>
     `/assets/asset-maintenances?assetId=${encodeURIComponent(assetId)}`,
   disposal: (assetId?: string) =>
     assetId
       ? `/assets/asset-disposals?assetId=${encodeURIComponent(assetId)}`
       : "/assets/asset-disposals",
+  /** Assignment/activity history is surfaced via Information Portal. */
   history: (assetId: string) =>
-    `/assets/assets/${encodeURIComponent(assetId)}?tab=activity`,
+    `/assets/information-portal/${encodeURIComponent(assetId)}`,
   dcChallan: (assetId: string, assignmentId?: string) =>
     buildDcChallanHref({ assetId, assignmentId }),
 } as const;
@@ -87,7 +90,8 @@ export function dispatchInventoryMenuAction(
       navigation.openPortal(assetId);
       break;
     case "discovery":
-      navigation.openDiscovery(assetId);
+      // Consolidated into Information Portal (Discovery section on that page).
+      navigation.openPortal(assetId);
       break;
     case "qr":
       navigation.openQr(assetId);
@@ -105,7 +109,8 @@ export function dispatchInventoryMenuAction(
       // Handled by inventory container (confirm + API).
       break;
     case "history":
-      navigation.openHistory(assetId);
+      // Consolidated into Information Portal (history sections on that page).
+      navigation.openPortal(assetId);
       break;
     default: {
       const _exhaustive: never = action;
@@ -124,13 +129,13 @@ export function dispatchInventoryQuickLink(
       navigation.openPortal(assetId);
       break;
     case "discovery":
-      navigation.openDiscovery(assetId);
+      navigation.openPortal(assetId);
       break;
     case "qr":
       navigation.openQr(assetId);
       break;
     case "history":
-      navigation.openHistory(assetId);
+      navigation.openPortal(assetId);
       break;
     default: {
       const _exhaustive: never = link;

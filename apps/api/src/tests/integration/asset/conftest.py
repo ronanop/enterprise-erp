@@ -9,7 +9,7 @@ from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import JSON, create_engine, event, select
+from sqlalchemy import JSON, create_engine, event, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
@@ -31,6 +31,7 @@ from modules.asset.domain.workflow_codes import (
 from modules.asset.models.asset import AstAsset
 from modules.asset.models.asset_assignment import AstAssetAssignment
 from modules.asset.models.asset_category import AstAssetCategory
+from modules.asset.models.asset_component import AstAssetComponent
 from modules.asset.models.asset_disposal import AstAssetDisposal
 from modules.asset.models.asset_location import AstAssetLocation
 from modules.asset.models.asset_maintenance import AstAssetMaintenance
@@ -114,6 +115,7 @@ def wf_db() -> Generator[Session, None, None]:
         AstAssetAssignment.__table__,
         AstDcChallan.__table__,
         AstAssignmentComponent.__table__,
+        AstAssetComponent.__table__,
         AstAssetMaintenance.__table__,
         AstAssetServiceHistory.__table__,
         AstAssetLocation.__table__,
@@ -125,6 +127,11 @@ def wf_db() -> Generator[Session, None, None]:
 
     SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
     session = SessionLocal()
+    # SQLite ignores postgresql_where on unique indexes, turning the active-issue
+    # partial unique into a full unique on component_id. Drop it so RETURNED + new
+    # ISSUED custody (valid on PostgreSQL) can be exercised in this harness.
+    session.execute(text("DROP INDEX IF EXISTS uq_ast_assignment_component_active_issue"))
+    session.commit()
     try:
         yield session
         session.rollback()

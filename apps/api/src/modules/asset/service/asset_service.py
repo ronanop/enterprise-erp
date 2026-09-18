@@ -207,8 +207,16 @@ class AssetService:
         )
         return loc.location_label
 
-    def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
+    def create(self, ctx: TenantContext, *, branch_id: UUID | None = None, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
+        resolved_branch = branch_id if branch_id is not None else ctx.branch_id
+        if resolved_branch is None:
+            from core.exceptions import AppException
+
+            raise AppException(
+                "branch_id is required (set user branch context or pass branch_id)"
+            )
+        branch_id = resolved_branch
         self._scope.validate_branch_access(ctx, branch_id)
         fields.pop("asset_code", None)
         fields.pop("document_number", None)

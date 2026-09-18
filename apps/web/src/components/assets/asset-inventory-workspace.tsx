@@ -106,6 +106,8 @@ export type AssetInventoryWorkspaceProps = {
   exportSuccess?: string | null;
   onExportExcel?: () => void;
   onExportCsv?: () => void;
+  pageTitle?: string;
+  pageDescription?: string;
 };
 
 const TABLE_COLUMNS = [
@@ -165,6 +167,8 @@ export function AssetInventoryWorkspace({
   exportSuccess,
   onExportExcel,
   onExportCsv,
+  pageTitle = "IT Asset Inventory",
+  pageDescription = "Search, filter, and manage the enterprise IT asset register.",
 }: AssetInventoryWorkspaceProps) {
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const emptyCopy = PRESET_EMPTY_COPY[preset];
@@ -215,8 +219,8 @@ export function AssetInventoryWorkspace({
   return (
     <AssetsPremiumPage testId="asset-inventory-workspace">
       <PageHeader
-        title="IT Asset Inventory"
-        description="Search, filter, and manage the enterprise IT asset register."
+        title={pageTitle}
+        description={pageDescription}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <BranchSelector

@@ -6,17 +6,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   AssetDisposalWorkspace,
-  DisposalEligibilityPanel,
+  disposalRecordStatusLabel,
+  formatAssetOptionLabel,
   formatDisposalGateError,
   isDisposalEligibleAsset,
 } from "@/components/assets/asset-disposal-workspace";
-import { ApiClientError } from "@/services/api-client";
 
 const listMock = vi.fn();
 const createMock = vi.fn();
 const getMock = vi.fn();
-const actionMock = vi.fn();
-const updateMock = vi.fn();
 
 vi.mock("@/lib/auth", () => ({
   isAuthenticated: () => true,
@@ -33,8 +31,6 @@ vi.mock("@/services/api-client", async () => {
       list: (...args: unknown[]) => listMock(...args),
       create: (...args: unknown[]) => createMock(...args),
       get: (...args: unknown[]) => getMock(...args),
-      action: (...args: unknown[]) => actionMock(...args),
-      update: (...args: unknown[]) => updateMock(...args),
     },
   };
 });
@@ -44,15 +40,18 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function pendingAsset(overrides: Record<string, unknown> = {}) {
+function readyAsset(overrides: Record<string, unknown> = {}) {
   return {
     id: "asset-1",
     asset_code: "AST-000123",
     asset_name: "Laptop Dell Latitude 5420",
     branch_id: "branch-1",
     status: "active",
-    operational_status: "PENDING_DISPOSAL",
+    operational_status: "READY_TO_MOVE",
     serial_number: "ABC123456",
+    make: "Dell",
+    model: "Latitude 5420",
+    asset_type_name: "Laptop",
     ...overrides,
   };
 }
@@ -62,132 +61,171 @@ beforeEach(() => {
     if (String(path).includes("asset-disposals")) {
       return { data: { items: [], total: 0, page: 1, page_size: 25 } };
     }
-    if (String(path).includes("operational_status=PENDING_DISPOSAL")) {
-      return { data: { items: [pendingAsset()], total: 1, page: 1, page_size: 100 } };
-    }
-    return { data: { items: [], total: 0, page: 1, page_size: 100 } };
+    return { data: { items: [readyAsset()], total: 1, page: 1, page_size: 200 } };
   });
-  createMock.mockResolvedValue({ data: { id: "d1" } });
+  createMock.mockResolvedValue({
+    data: {
+      id: "d1",
+      document_number: "ADISP-1",
+      status: "draft",
+      disposal_type: "scrap",
+      remarks: "EOL",
+    },
+  });
+  getMock.mockResolvedValue({ data: readyAsset() });
 });
 
-describe("disposal eligibility helpers", () => {
-  it("accepts only PENDING_DISPOSAL", () => {
-    expect(isDisposalEligibleAsset({ operational_status: "PENDING_DISPOSAL" })).toBe(true);
-    expect(isDisposalEligibleAsset({ operational_status: "READY_TO_MOVE" })).toBe(false);
-    expect(isDisposalEligibleAsset({ operational_status: "ASSIGNED" })).toBe(false);
-    expect(isDisposalEligibleAsset({ operational_status: "RETIRED" })).toBe(false);
+describe("disposal helpers", () => {
+  it("accepts Ready/Assigned/Retired only for picker eligibility", () => {
+    expect(isDisposalEligibleAsset({ operational_status: "READY_TO_MOVE" })).toBe(true);
+    expect(isDisposalEligibleAsset({ operational_status: "ASSIGNED" })).toBe(true);
+    expect(isDisposalEligibleAsset({ operational_status: "RETIRED" })).toBe(true);
+    expect(isDisposalEligibleAsset({ operational_status: "PENDING_DISPOSAL" })).toBe(false);
     expect(isDisposalEligibleAsset({ operational_status: "DISPOSED" })).toBe(false);
   });
 
-  it("formats pending disposal gate errors", () => {
-    const formatted = formatDisposalGateError(
-      "Asset must be in PENDING_DISPOSAL status before creating a disposal request.",
-    );
-    expect(formatted.title).toBe("Asset is not pending disposal.");
-    expect(formatted.showAssignmentsLink).toBe(true);
+  it("maps record status labels", () => {
+    expect(disposalRecordStatusLabel("draft")).toBe("Sent to Disposal");
+    expect(disposalRecordStatusLabel("posted")).toBe("Disposed");
   });
 
-  it("formats retired gate errors", () => {
-    const formatted = formatDisposalGateError(
-      "Retired assets are not currently eligible for disposal.",
-    );
-    expect(formatted.title).toMatch(/Retired assets/i);
-    expect(formatted.showAssignmentsLink).toBe(false);
-  });
-});
-
-describe("DisposalEligibilityPanel", () => {
-  it("shows eligible copy for pending disposal", () => {
-    render(<DisposalEligibilityPanel asset={pendingAsset()} />);
-    expect(screen.getByTestId("disposal-eligibility-panel")).toHaveTextContent(
-      /Asset eligible for disposal/i,
-    );
-    expect(screen.getByText("Lifecycle Status")).toBeInTheDocument();
-    expect(screen.getByText("Operational Status")).toBeInTheDocument();
-    expect(screen.getByText("Pending Disposal")).toBeInTheDocument();
-    expect(screen.getByText("Active")).toBeInTheDocument();
-  });
-
-  it("blocks READY_TO_MOVE with clear reason", () => {
-    render(
-      <DisposalEligibilityPanel
-        asset={pendingAsset({ operational_status: "READY_TO_MOVE" })}
-      />,
-    );
-    expect(screen.getByTestId("disposal-eligibility-panel")).toHaveTextContent(
-      /Asset cannot be disposed/i,
-    );
-    expect(screen.getByTestId("disposal-eligibility-reason")).toHaveTextContent(
-      /Pending Disposal/i,
-    );
-  });
-
-  it("blocks ASSIGNED with return guidance", () => {
-    render(
-      <DisposalEligibilityPanel asset={pendingAsset({ operational_status: "ASSIGNED" })} />,
-    );
-    expect(screen.getByTestId("disposal-eligibility-reason")).toHaveTextContent(
-      /return the asset with condition Dead/i,
-    );
-  });
-
-  it("blocks RETIRED explicitly", () => {
-    render(
-      <DisposalEligibilityPanel asset={pendingAsset({ operational_status: "RETIRED" })} />,
-    );
-    expect(screen.getByTestId("disposal-eligibility-reason")).toHaveTextContent(
-      /Retired assets are not currently eligible/i,
-    );
-  });
-
-  it("blocks DISPOSED", () => {
-    render(
-      <DisposalEligibilityPanel asset={pendingAsset({ operational_status: "DISPOSED" })} />,
-    );
-    expect(screen.getByTestId("disposal-eligibility-panel")).toHaveTextContent(
-      /Asset cannot be disposed/i,
-    );
+  it("builds rich labels and remarks gate message", () => {
+    expect(formatAssetOptionLabel(readyAsset())).toContain("AST-000123");
+    expect(formatDisposalGateError("Remarks are required").title).toMatch(/Remarks/i);
   });
 });
 
 describe("AssetDisposalWorkspace", () => {
-  it("requests PENDING_DISPOSAL assets for the picker", async () => {
+  it("loads inventory assets via /assets/assets query", async () => {
     render(<AssetDisposalWorkspace />);
     await waitFor(() => expect(listMock).toHaveBeenCalled());
     expect(
-      listMock.mock.calls.some((c) => String(c[0]).includes("operational_status=PENDING_DISPOSAL")),
+      listMock.mock.calls.some(
+        (c) => String(c[0]) === "/assets/assets" || String(c[0]).startsWith("/assets/assets"),
+      ),
     ).toBe(true);
   });
 
-  it("shows empty pending state when no eligible assets", async () => {
+  it("shows asset select when eligible assets exist", async () => {
+    render(<AssetDisposalWorkspace />);
+    expect(await screen.findByTestId("disposal-asset-select")).toBeInTheDocument();
+  });
+
+  it("shows empty state when no eligible assets", async () => {
     listMock.mockImplementation(async (path: string) => {
       if (String(path).includes("asset-disposals")) {
         return { data: { items: [], total: 0, page: 1, page_size: 25 } };
       }
-      return { data: { items: [], total: 0, page: 1, page_size: 100 } };
+      return { data: { items: [], total: 0, page: 1, page_size: 200 } };
     });
     render(<AssetDisposalWorkspace />);
-    expect(await screen.findByTestId("disposal-no-pending-assets")).toHaveTextContent(
-      /No assets are pending disposal/i,
+    expect(await screen.findByTestId("disposal-no-eligible-assets")).toHaveTextContent(
+      /No assets are available to send to disposal/i,
     );
   });
 
-  it("maps backend PENDING create failures into gate banner", async () => {
-    // Drive error path without relying on Radix Select selection in jsdom:
-    // open workspace, then invoke create after injecting via validate by selecting
-    // through programmatic click on option when available; fallback assert helper.
-    const formatted = formatDisposalGateError(
-      new ApiClientError(
-        "Asset must be in PENDING_DISPOSAL status before creating a disposal request.",
-        422,
-      ).message,
-    );
-    expect(formatted.title).toBe("Asset is not pending disposal.");
-    expect(formatted.detail).toMatch(/Dead/i);
-    expect(formatted.showAssignmentsLink).toBe(true);
-
+  it("still loads assets when disposal list fails", async () => {
+    listMock.mockImplementation(async (path: string, query?: Record<string, unknown>) => {
+      if (String(path).includes("asset-disposals") && !query?.q) {
+        // first disposals calls used by loadAssets / load
+        throw new Error("disposals down");
+      }
+      if (String(path).includes("asset-disposals")) {
+        throw new Error("disposals down");
+      }
+      return { data: { items: [readyAsset()], total: 1, page: 1, page_size: 200 } };
+    });
     render(<AssetDisposalWorkspace />);
-    await screen.findByTestId("disposal-asset-select");
-    // Banner wiring is covered when create fails after selection; helper proves message mapping.
+    expect(await screen.findByTestId("disposal-asset-select")).toBeInTheDocument();
+  });
+
+  it("renders Scrap-only type, remarks, and Send to Disposal", async () => {
+    render(<AssetDisposalWorkspace />);
+    expect(await screen.findByTestId("disposal-send-button")).toHaveTextContent(
+      /Send to Disposal/i,
+    );
+    expect(screen.getByTestId("disposal-remarks")).toHaveAttribute(
+      "placeholder",
+      expect.stringMatching(/reason for sending this asset to disposal/i),
+    );
+    expect(screen.getByTestId("disposal-type-select")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Book Value/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId("disposal-ceo-instruction")).not.toBeInTheDocument();
+  });
+
+  it("requires remarks before create", async () => {
+    const user = userEvent.setup();
+    render(<AssetDisposalWorkspace />);
+    const select = await screen.findByTestId("disposal-asset-select");
+    await user.selectOptions(select, "asset-1");
+    await user.click(screen.getByTestId("disposal-send-button"));
+    expect(await screen.findByTestId("disposal-gate-error")).toHaveTextContent(/Remarks/i);
+    expect(createMock).not.toHaveBeenCalled();
+  });
+
+  it("creates scrap disposal with remarks and shows success", async () => {
+    const user = userEvent.setup();
+    listMock.mockImplementation(async (path: string) => {
+      if (String(path).includes("asset-disposals")) {
+        return { data: { items: [], total: 0, page: 1, page_size: 25 } };
+      }
+      return { data: { items: [readyAsset()], total: 1, page: 1, page_size: 200 } };
+    });
+    createMock.mockResolvedValue({
+      data: {
+        id: "d1",
+        document_number: "ADISP-1",
+        status: "draft",
+        disposal_type: "scrap",
+        remarks: "Broken beyond repair",
+        asset_id: "asset-1",
+      },
+    });
+    render(<AssetDisposalWorkspace />);
+    const select = await screen.findByTestId("disposal-asset-select");
+    await user.selectOptions(select, "asset-1");
+    await user.type(screen.getByTestId("disposal-remarks"), "Broken beyond repair");
+    await user.click(screen.getByTestId("disposal-send-button"));
+    await waitFor(() => expect(createMock).toHaveBeenCalled());
+    expect(createMock.mock.calls[0]?.[1]).toMatchObject({
+      asset_id: "asset-1",
+      disposal_type: "scrap",
+      remarks: "Broken beyond repair",
+      branch_id: "branch-1",
+    });
+    expect(await screen.findByTestId("disposal-success")).toHaveTextContent(
+      /Asset sent to disposal successfully/i,
+    );
+  });
+
+  it("shows existing disposal records with remarks", async () => {
+    listMock.mockImplementation(async (path: string) => {
+      if (String(path).includes("asset-disposals")) {
+        return {
+          data: {
+            items: [
+              {
+                id: "d1",
+                document_number: "ADISP-2026-000001",
+                asset_id: "asset-1",
+                disposal_type: "scrap",
+                remarks: "End of life",
+                status: "draft",
+                version: 1,
+                branch_id: "branch-1",
+              },
+            ],
+            total: 1,
+            page: 1,
+            page_size: 25,
+          },
+        };
+      }
+      return { data: { items: [readyAsset()], total: 1, page: 1, page_size: 200 } };
+    });
+    render(<AssetDisposalWorkspace />);
+    expect(await screen.findByText("ADISP-2026-000001")).toBeInTheDocument();
+    expect(screen.getByText("End of life")).toBeInTheDocument();
+    expect(screen.getByText("Sent to Disposal")).toBeInTheDocument();
   });
 });

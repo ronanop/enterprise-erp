@@ -1,452 +1,495 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  CheckCircle2,
+  Download,
+  Eye,
+  FileImage,
+  FileSpreadsheet,
+  FileText,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+
+import {
+  ASSETS_SURFACE_CARD,
   TABLE_SERIAL_HEADER_LABEL,
   tableRowSerial,
   tableSerialCellClassName,
   tableSerialHeaderClassName,
 } from "@/components/assets/shared";
-
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Archive, FileText, Loader2, Plus, RefreshCw, Replace } from "lucide-react";
-
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { isAuthenticated } from "@/lib/auth";
+import { cn } from "@/lib/utils";
+import { ApiClientError } from "@/services/api-client";
 import {
-  type DocumentRow,
+  assetOperationsService,
   documentService,
+  type DocumentRow,
+  type DocumentUploadLimits,
+  type AssetsRow,
 } from "@/services/assets-service";
-import { ApiClientError, resourceService } from "@/services/api-client";
 
-type AssetRow = {
+const ASSET_PAGE_SIZE = 25;
+const DOC_PAGE_SIZE = 100;
+
+type AssetListItem = {
   id: string;
-  asset_code: string;
-  asset_name: string;
+  assetCode: string;
+  assetName: string;
+  assetType: string;
+  holder: string;
 };
 
-type ListPayload<T> = {
-  items: T[];
-  total: number;
-  page: number;
-  page_size: number;
-};
-
-const DOCUMENT_TYPES = [
-  "invoice",
-  "warranty",
-  "insurance",
-  "manual",
-  "photo",
-  "other",
-] as const;
-const STATUS_OPTIONS = ["", "active", "superseded", "archived"] as const;
-const PAGE_SIZE = 25;
-
-function parseListPayload<T>(data: unknown): ListPayload<T> {
-  if (data && typeof data === "object" && "items" in data) {
-    const payload = data as ListPayload<T>;
-    return {
-      items: Array.isArray(payload.items) ? payload.items : [],
-      total: payload.total ?? 0,
-      page: payload.page ?? 1,
-      page_size: payload.page_size ?? PAGE_SIZE,
-    };
-  }
-  return { items: [], total: 0, page: 1, page_size: PAGE_SIZE };
+function asText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : value == null ? "" : String(value).trim();
 }
 
-function statusVariant(status: string): "default" | "secondary" | "outline" {
-  if (status === "active") return "default";
-  if (status === "superseded") return "secondary";
-  return "outline";
+function mapAssetRow(row: AssetsRow): AssetListItem {
+  const type =
+    asText(row.asset_type_name) ||
+    asText(row.asset_type) ||
+    asText(row.category_name) ||
+    "—";
+  const holder =
+    asText(row.assignee_label) ||
+    asText(row.current_holder) ||
+    asText(row.custodian_label) ||
+    "—";
+  return {
+    id: asText(row.id),
+    assetCode: asText(row.asset_code) || asText(row.document_number) || "—",
+    assetName: asText(row.asset_name) || "—",
+    assetType: type,
+    holder,
+  };
+}
+
+function formatBytes(size?: number | null): string {
+  if (size == null || !Number.isFinite(size) || size < 0) return "—";
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(size < 10 * 1024 ? 1 : 0)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(size < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+}
+
+function fileTypeLabel(doc: DocumentRow): string {
+  const mime = (doc.content_type || "").toLowerCase();
+  if (mime.includes("pdf")) return "PDF";
+  if (mime.includes("wordprocessingml") || mime.endsWith("msword")) return mime.includes("wordprocessingml") ? "DOCX" : "DOC";
+  if (mime.includes("spreadsheetml") || mime.includes("ms-excel")) {
+    return mime.includes("spreadsheetml") ? "XLSX" : "XLS";
+  }
+  if (mime.includes("jpeg")) return "JPG";
+  if (mime.includes("png")) return "PNG";
+  const ext = doc.document_name.includes(".")
+    ? doc.document_name.split(".").pop()?.toUpperCase()
+    : "";
+  return ext || doc.document_type?.toUpperCase() || "FILE";
+}
+
+function FileTypeIcon({ doc }: { doc: DocumentRow }) {
+  const label = fileTypeLabel(doc);
+  const className = "size-4 shrink-0 text-muted-foreground";
+  if (label === "PNG" || label === "JPG") return <FileImage className={className} aria-hidden />;
+  if (label === "XLS" || label === "XLSX") return <FileSpreadsheet className={className} aria-hidden />;
+  return <FileText className={className} aria-hidden />;
+}
+
+function formatUploadedAt(value?: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function friendlyUploadError(err: unknown): string {
+  if (err instanceof ApiClientError) {
+    const msg = (err.message || "").toLowerCase();
+    if (msg.includes("larger") || msg.includes("type") || msg.includes("allowed") || msg.includes("empty")) {
+      return "Unable to upload this file. Please check the file type and size and try again.";
+    }
+    if (err.status === 0) {
+      return "Unable to upload this file. Please check your connection and try again.";
+    }
+  }
+  return "Unable to upload this file. Please check the file type and size and try again.";
+}
+
+function validateSelectedFile(file: File, limits: DocumentUploadLimits): string | null {
+  const maxBytes = Math.max(limits.max_upload_mb, 1) * 1024 * 1024;
+  if (file.size <= 0) {
+    return "Unable to upload this file. Please check the file type and size and try again.";
+  }
+  if (file.size > maxBytes) {
+    return `Unable to upload this file. Please check the file type and size and try again.`;
+  }
+  const allowed = new Set(limits.allowed_content_types.map((t) => t.toLowerCase()));
+  const mime = (file.type || "").toLowerCase();
+  const ext = file.name.includes(".") ? file.name.split(".").pop()?.toLowerCase() : "";
+  const extAllowed = limits.accepted_extensions.map((e) => e.toLowerCase());
+  if (mime && allowed.has(mime)) return null;
+  if (mime === "image/jpg" && allowed.has("image/jpeg")) return null;
+  if (ext && extAllowed.includes(ext)) return null;
+  if (!mime && ext && extAllowed.includes(ext)) return null;
+  return "Unable to upload this file. Please check the file type and size and try again.";
+}
+
+function acceptAttribute(limits: DocumentUploadLimits): string {
+  const mimes = limits.allowed_content_types.join(",");
+  const exts = limits.accepted_extensions.map((e) => `.${e.replace(/^\./, "")}`).join(",");
+  return [mimes, exts].filter(Boolean).join(",");
+}
+
+function acceptedFormatsLabel(limits: DocumentUploadLimits): string {
+  const exts = limits.accepted_extensions
+    .map((e) => e.replace(/^\./, "").toUpperCase())
+    .filter(Boolean);
+  if (!exts.length) return "PDF, DOC, DOCX, XLS, XLSX, PNG, JPG";
+  return exts.join(", ");
 }
 
 export function AssetDocumentWorkspace() {
-  const assetsPath = "/assets/assets";
+  const [assets, setAssets] = useState<AssetListItem[]>([]);
+  const [assetTotal, setAssetTotal] = useState(0);
+  const [assetPage, setAssetPage] = useState(1);
+  const [assetSearch, setAssetSearch] = useState("");
+  const [assetsLoading, setAssetsLoading] = useState(true);
 
-  const [rows, setRows] = useState<DocumentRow[]>([]);
-  const [assetOptions, setAssetOptions] = useState<AssetRow[]>([]);
-  const [selected, setSelected] = useState<DocumentRow | null>(null);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState("");
-  const [typeFilter, setTypeFilter] = useState("");
-  const [assetFilter, setAssetFilter] = useState("");
-  const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [docCounts, setDocCounts] = useState<Record<string, number>>({});
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<DocumentRow[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+
+  const [uploadLimits, setUploadLimits] = useState<DocumentUploadLimits | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
   const [error, setError] = useState<string | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
-  const [editing, setEditing] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [draft, setDraft] = useState({
-    asset_id: "",
-    document_type: "invoice",
-    document_name: "",
-    storage_uri: "",
-    content_hash: "",
-  });
-
-  const [editDraft, setEditDraft] = useState({
-    document_name: "",
-    storage_uri: "",
-    content_hash: "",
-  });
-
-  const assetMap = useMemo(
-    () => new Map(assetOptions.map((asset) => [asset.id, asset])),
-    [assetOptions],
+  const selectedAsset = useMemo(
+    () => assets.find((a) => a.id === selectedAssetId) ?? null,
+    [assets, selectedAssetId],
   );
 
-  const canEdit = selected?.status === "active";
-  const canSupersede = selected?.status === "active";
-  const canArchive =
-    selected?.status === "active" || selected?.status === "superseded";
+  const loadUploadLimits = useCallback(async () => {
+    const limits = await documentService.getUploadLimits();
+    setUploadLimits(limits);
+  }, []);
+
+  const loadDocCounts = useCallback(async () => {
+    try {
+      const payload = await documentService.search({
+        page: 1,
+        page_size: 200,
+        status: "active",
+      });
+      const counts: Record<string, number> = {};
+      for (const doc of payload.items) {
+        counts[doc.asset_id] = (counts[doc.asset_id] ?? 0) + 1;
+      }
+      setDocCounts(counts);
+    } catch {
+      setDocCounts({});
+    }
+  }, []);
 
   const loadAssets = useCallback(async () => {
     if (!isAuthenticated()) return;
+    setAssetsLoading(true);
+    setError(null);
     try {
-      const res = await resourceService.list<ListPayload<AssetRow>>(
-        `${assetsPath}?page=1&page_size=200&status=active`,
-      );
-      setAssetOptions(parseListPayload<AssetRow>(res.data).items);
-    } catch {
-      setAssetOptions([]);
+      const result = await assetOperationsService.listAssets({
+        page: assetPage,
+        page_size: ASSET_PAGE_SIZE,
+        q: assetSearch.trim() || undefined,
+        status: "active",
+      });
+      setAssets(result.items.map(mapAssetRow).filter((a) => a.id));
+      setAssetTotal(result.total);
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Failed to load assets");
+      setAssets([]);
+      setAssetTotal(0);
+    } finally {
+      setAssetsLoading(false);
     }
-  }, [assetsPath]);
+  }, [assetPage, assetSearch]);
 
-  const load = useCallback(async () => {
-    if (!isAuthenticated()) return;
-    setLoading(true);
+  const loadDocumentsForAsset = useCallback(async (assetId: string) => {
+    setDocsLoading(true);
     setError(null);
     try {
       const payload = await documentService.search({
-        page,
-        page_size: PAGE_SIZE,
-        status: statusFilter || undefined,
-        document_type: typeFilter || undefined,
-        asset_id: assetFilter || undefined,
-        q: search.trim() || undefined,
+        page: 1,
+        page_size: DOC_PAGE_SIZE,
+        asset_id: assetId,
+        status: "active",
       });
-      setRows(payload.items);
-      setTotal(payload.total);
+      setDocuments(payload.items);
+      setDocCounts((prev) => ({ ...prev, [assetId]: payload.total }));
     } catch (err) {
+      setDocuments([]);
       setError(err instanceof ApiClientError ? err.message : "Failed to load documents");
-      setRows([]);
-      setTotal(0);
     } finally {
-      setLoading(false);
+      setDocsLoading(false);
     }
-  }, [page, statusFilter, typeFilter, assetFilter, search]);
+  }, []);
 
   useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    void loadAssets();
-  }, [loadAssets]);
-
-  useEffect(() => {
-    if (!selected) return;
-    setEditDraft({
-      document_name: selected.document_name,
-      storage_uri: selected.storage_uri ?? "",
-      content_hash: selected.content_hash ?? "",
+    void Promise.resolve().then(() => {
+      void loadUploadLimits();
     });
-    setEditing(false);
-  }, [selected]);
+  }, [loadUploadLimits]);
 
-  const handleCreate = async () => {
-    if (!draft.asset_id || !draft.document_name.trim()) {
-      setError("Asset and document name are required.");
+  useEffect(() => {
+    void Promise.resolve().then(() => {
+      void loadAssets();
+      void loadDocCounts();
+    });
+  }, [loadAssets, loadDocCounts]);
+
+  useEffect(() => {
+    if (!selectedAssetId) return;
+    void Promise.resolve().then(() => {
+      void loadDocumentsForAsset(selectedAssetId);
+    });
+  }, [selectedAssetId, loadDocumentsForAsset]);
+
+  const visibleDocuments = selectedAssetId ? documents : [];
+
+  const openAsset = (assetId: string) => {
+    setSuccess(null);
+    setError(null);
+    setDocuments([]);
+    setSelectedAssetId(assetId);
+  };
+
+  const openUpload = () => {
+    setSelectedFile(null);
+    setError(null);
+    setSuccess(null);
+    setUploadOpen(true);
+  };
+
+  const closeUpload = () => {
+    if (uploading) return;
+    setUploadOpen(false);
+    setSelectedFile(null);
+  };
+
+  const handleFilePick = (file: File | null) => {
+    setError(null);
+    if (!file || !uploadLimits) {
+      setSelectedFile(null);
       return;
     }
-    setActionLoading(true);
-    setError(null);
-    try {
-      const created = await documentService.create({
-        asset_id: draft.asset_id,
-        document_type: draft.document_type,
-        document_name: draft.document_name.trim(),
-        storage_uri: draft.storage_uri.trim() || undefined,
-        content_hash: draft.content_hash.trim() || undefined,
-      });
-      setShowCreate(false);
-      setDraft({
-        asset_id: "",
-        document_type: "invoice",
-        document_name: "",
-        storage_uri: "",
-        content_hash: "",
-      });
-      setSelected(created);
-      setPage(1);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to create document");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleUpdate = async () => {
-    if (!selected || !canEdit) return;
-    if (!editDraft.document_name.trim()) {
-      setError("Document name is required.");
+    const validationError = validateSelectedFile(file, uploadLimits);
+    if (validationError) {
+      setSelectedFile(null);
+      setError(validationError);
       return;
     }
-    setActionLoading(true);
+    setSelectedFile(file);
+  };
+
+  const handleUpload = async () => {
+    if (!selectedAsset || !selectedFile) return;
+    setUploading(true);
     setError(null);
+    setSuccess(null);
     try {
-      const updated = await documentService.update(selected.id, {
-        document_name: editDraft.document_name.trim(),
-        storage_uri: editDraft.storage_uri.trim() || null,
-        content_hash: editDraft.content_hash.trim() || null,
-        version: selected.version,
-      });
-      setSelected(updated);
-      setEditing(false);
-      await load();
+      const created = await documentService.upload(selectedAsset.id, selectedFile);
+      setSuccess(`Document uploaded successfully — ${created.document_name}`);
+      setUploadOpen(false);
+      setSelectedFile(null);
+      await loadDocumentsForAsset(selectedAsset.id);
+      await loadDocCounts();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to update document");
+      setError(friendlyUploadError(err));
     } finally {
-      setActionLoading(false);
+      setUploading(false);
     }
   };
 
-  const handleSupersede = async () => {
-    if (!selected) return;
-    setActionLoading(true);
+  const handleViewOrDownload = async (doc: DocumentRow, disposition: "inline" | "attachment") => {
+    if (!doc.downloadable) {
+      if (doc.storage_uri?.startsWith("https://")) {
+        window.open(doc.storage_uri, "_blank", "noopener,noreferrer");
+        return;
+      }
+      setError("This document cannot be opened from storage.");
+      return;
+    }
+    setActionLoadingId(doc.id);
     setError(null);
     try {
-      const row = await documentService.supersede(selected.id);
-      setSelected(row);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to supersede document");
+      const { blob, filename } = await documentService.getContentBlob(doc.id, disposition);
+      const url = URL.createObjectURL(blob);
+      if (disposition === "inline") {
+        window.open(url, "_blank", "noopener,noreferrer");
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      } else {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename || doc.document_name;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      setError("Unable to open this document. Please try again.");
     } finally {
-      setActionLoading(false);
+      setActionLoadingId(null);
     }
   };
 
-  const handleArchive = async () => {
-    if (!selected) return;
-    setActionLoading(true);
+  const handleRemove = async (doc: DocumentRow) => {
+    setActionLoadingId(doc.id);
     setError(null);
     try {
-      const row = await documentService.archive(selected.id);
-      setSelected(row);
-      await load();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to archive document");
+      await documentService.archive(doc.id);
+      setSuccess(`Removed ${doc.document_name}`);
+      if (selectedAssetId) await loadDocumentsForAsset(selectedAssetId);
+      await loadDocCounts();
+    } catch {
+      setError("Unable to remove this document. Please try again.");
     } finally {
-      setActionLoading(false);
+      setActionLoadingId(null);
     }
   };
+
+  const limits = uploadLimits;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5" data-testid="asset-document-workspace">
       <PageHeader
-        title="Asset documents"
-        description="Register asset document metadata (URI pointers). Binary files are managed by the enterprise Documents platform."
+        title="Asset Documents"
+        description="Select an asset and upload or view its documents."
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="cursor-pointer transition-colors duration-200"
-              onClick={() => void load()}
-              disabled={loading}
-            >
-              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-            <Button
-              type="button"
-              className="cursor-pointer transition-colors duration-200"
-              onClick={() => setShowCreate(true)}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add document
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="cursor-pointer transition-colors duration-200"
+            onClick={() => {
+              void loadAssets();
+              void loadDocCounts();
+              if (selectedAssetId) void loadDocumentsForAsset(selectedAssetId);
+            }}
+            disabled={assetsLoading || docsLoading}
+          >
+            <RefreshCw
+              className={cn("mr-2 h-4 w-4", (assetsLoading || docsLoading) && "animate-spin")}
+            />
+            Refresh
+          </Button>
         }
       />
 
-      <div className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-        Asset Documents store metadata only. Binary file management is handled by the
-        enterprise Documents platform.
-      </div>
-
       {error ? (
-        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+        <div
+          className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+          role="alert"
+        >
           {error}
         </div>
       ) : null}
+      {success ? (
+        <div
+          className="flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+          role="status"
+        >
+          <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <span>{success}</span>
+        </div>
+      ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-        <Card>
-          <CardHeader className="flex flex-row items-center gap-2">
-            <FileText className="h-5 w-5 text-muted-foreground" />
-            <CardTitle>Document register</CardTitle>
+      <div className="grid gap-5 lg:grid-cols-[1.15fr_1fr]">
+        <Card className={ASSETS_SURFACE_CARD}>
+          <CardHeader className="space-y-3">
+            <CardTitle className="text-base">Assets</CardTitle>
+            <Input
+              aria-label="Search assets"
+              placeholder="Search by asset name or number…"
+              value={assetSearch}
+              onChange={(e) => {
+                setAssetPage(1);
+                setAssetSearch(e.target.value);
+              }}
+              className="max-w-sm"
+            />
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex flex-wrap gap-3">
-              <Input
-                aria-label="Search documents"
-                placeholder="Search name, type, or asset"
-                value={search}
-                onChange={(e) => {
-                  setPage(1);
-                  setSearch(e.target.value);
-                }}
-                className="max-w-xs"
-              />
-              <Select
-                value={statusFilter || "__all"}
-                onValueChange={(value) => {
-                  setPage(1);
-                  setStatusFilter(value === "__all" ? "" : value);
-                }}
-              >
-                <SelectTrigger className="w-36 cursor-pointer" aria-label="Filter by status">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {STATUS_OPTIONS.map((status) => (
-                    <SelectItem
-                      key={status || "__all"}
-                      value={status || "__all"}
-                      className="cursor-pointer"
-                    >
-                      {status || "All statuses"}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={typeFilter || "__all"}
-                onValueChange={(value) => {
-                  setPage(1);
-                  setTypeFilter(value === "__all" ? "" : value);
-                }}
-              >
-                <SelectTrigger className="w-40 cursor-pointer" aria-label="Filter by type">
-                  <SelectValue placeholder="Type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all" className="cursor-pointer">
-                    All types
-                  </SelectItem>
-                  {DOCUMENT_TYPES.map((type) => (
-                    <SelectItem key={type} value={type} className="cursor-pointer">
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={assetFilter || "__all"}
-                onValueChange={(value) => {
-                  setPage(1);
-                  setAssetFilter(value === "__all" ? "" : value);
-                }}
-              >
-                <SelectTrigger className="w-44 cursor-pointer" aria-label="Filter by asset">
-                  <SelectValue placeholder="Asset" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all" className="cursor-pointer">
-                    All assets
-                  </SelectItem>
-                  {assetOptions.map((asset) => (
-                    <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                      {asset.asset_code}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <div className="ml-auto flex items-center gap-2 text-sm text-muted-foreground">
-                <span>
-                  Page {page} · {total} total
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="cursor-pointer transition-colors duration-200"
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Prev
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="cursor-pointer transition-colors duration-200"
-                  disabled={page * PAGE_SIZE >= total}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-
-            {loading ? (
+          <CardContent>
+            {assetsLoading ? (
               <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Loading documents…
+                Loading assets…
               </div>
-            ) : rows.length === 0 ? (
-              <p className="py-8 text-sm text-muted-foreground">No documents found.</p>
+            ) : assets.length === 0 ? (
+              <p className="py-8 text-sm text-muted-foreground">No assets found.</p>
             ) : (
               <div className="overflow-x-auto rounded-md border">
-                <table className="w-full text-left text-sm">
+                <table className="w-full text-left text-sm" data-testid="asset-documents-asset-table">
                   <thead className="border-b bg-muted/50 text-muted-foreground">
                     <tr>
-                    <th className={tableSerialHeaderClassName()} scope="col">
-                      {TABLE_SERIAL_HEADER_LABEL}
-                    </th>
-                    <th className="px-3 py-2 font-medium">Name</th>
-                      <th className="px-3 py-2 font-medium">Type</th>
+                      <th className={tableSerialHeaderClassName()} scope="col">
+                        {TABLE_SERIAL_HEADER_LABEL}
+                      </th>
                       <th className="px-3 py-2 font-medium">Asset</th>
-                      <th className="px-3 py-2 font-medium">Status</th>
+                      <th className="px-3 py-2 font-medium">Asset No.</th>
+                      <th className="px-3 py-2 font-medium">Type</th>
+                      <th className="px-3 py-2 font-medium">Current User</th>
+                      <th className="px-3 py-2 font-medium">Documents</th>
+                      <th className="px-3 py-2 font-medium">Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row, index) => {
-                      const asset = assetMap.get(row.asset_id);
-                      const active = selected?.id === row.id;
+                    {assets.map((asset, index) => {
+                      const count = docCounts[asset.id] ?? 0;
+                      const active = selectedAssetId === asset.id;
                       return (
                         <tr
-                          key={row.id}
-                          className={`cursor-pointer border-b transition-colors duration-200 hover:bg-muted/40 ${
-                            active ? "bg-muted/60" : ""
-                          }`}
-                          onClick={() => setSelected(row)}
+                          key={asset.id}
+                          className={cn(
+                            "border-b transition-colors duration-200 hover:bg-muted/40",
+                            active && "bg-muted/60",
+                          )}
+                          data-testid={`asset-documents-row-${asset.assetCode}`}
                         >
-                          <td className={tableSerialCellClassName()}>{tableRowSerial(page, PAGE_SIZE, index)}</td>
-                          <td className="px-3 py-2 font-medium">{row.document_name}</td>
-                          <td className="px-3 py-2">{row.document_type}</td>
+                          <td className={tableSerialCellClassName()}>
+                            {tableRowSerial(assetPage, ASSET_PAGE_SIZE, index)}
+                          </td>
+                          <td className="px-3 py-2 font-medium">{asset.assetName}</td>
+                          <td className="px-3 py-2 font-mono text-xs">{asset.assetCode}</td>
+                          <td className="px-3 py-2">{asset.assetType}</td>
+                          <td className="px-3 py-2 text-muted-foreground">{asset.holder}</td>
                           <td className="px-3 py-2">
-                            {asset ? asset.asset_code : row.asset_id.slice(0, 8)}
+                            {count === 0 ? "0 files" : `${count} file${count === 1 ? "" : "s"}`}
                           </td>
                           <td className="px-3 py-2">
-                            <Badge variant={statusVariant(row.status)}>{row.status}</Badge>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="cursor-pointer transition-colors duration-200"
+                              onClick={() => openAsset(asset.id)}
+                            >
+                              {count === 0 ? "Add Document" : "View Documents"}
+                            </Button>
                           </td>
                         </tr>
                       );
@@ -455,241 +498,259 @@ export function AssetDocumentWorkspace() {
                 </table>
               </div>
             )}
+            <div className="mt-3 flex items-center justify-end gap-2 text-sm text-muted-foreground">
+              <span>
+                Page {assetPage} · {assetTotal} total
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="cursor-pointer transition-colors duration-200"
+                disabled={assetPage <= 1}
+                onClick={() => setAssetPage((p) => Math.max(1, p - 1))}
+              >
+                Prev
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="cursor-pointer transition-colors duration-200"
+                disabled={assetPage * ASSET_PAGE_SIZE >= assetTotal}
+                onClick={() => setAssetPage((p) => p + 1)}
+              >
+                Next
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Detail</CardTitle>
+        <Card className={ASSETS_SURFACE_CARD} data-testid="asset-documents-detail">
+          <CardHeader className="flex flex-row items-start justify-between gap-3">
+            <div>
+              <CardTitle className="text-base">Documents</CardTitle>
+              {selectedAsset ? (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">{selectedAsset.assetName}</span>
+                  <span className="mx-1.5">·</span>
+                  <span className="font-mono text-xs">{selectedAsset.assetCode}</span>
+                  {visibleDocuments.length > 0 ? (
+                    <span className="ml-2">({visibleDocuments.length})</span>
+                  ) : null}
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Select an asset to view or upload documents.
+                </p>
+              )}
+            </div>
+            {selectedAsset ? (
+              <Button
+                type="button"
+                className="cursor-pointer transition-colors duration-200"
+                onClick={openUpload}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Document
+              </Button>
+            ) : null}
           </CardHeader>
-          <CardContent className="space-y-4">
-            {!selected ? (
-              <p className="text-sm text-muted-foreground">Select a document to view details.</p>
+          <CardContent>
+            {!selectedAsset ? (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                Choose an asset from the list to manage its documents.
+              </p>
+            ) : docsLoading ? (
+              <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading documents…
+              </div>
+            ) : visibleDocuments.length === 0 ? (
+              <div className="space-y-4 py-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No documents uploaded for this asset.
+                </p>
+                <Button
+                  type="button"
+                  className="cursor-pointer transition-colors duration-200"
+                  onClick={openUpload}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Document
+                </Button>
+              </div>
             ) : (
-              <>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={statusVariant(selected.status)}>{selected.status}</Badge>
-                  <span className="text-sm text-muted-foreground">v{selected.version}</span>
-                </div>
-                <dl className="space-y-2 text-sm">
-                  <div>
-                    <dt className="text-muted-foreground">Name</dt>
-                    <dd className="font-medium">{selected.document_name}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground">Type</dt>
-                    <dd>{selected.document_type}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground">Asset</dt>
-                    <dd>
-                      {assetMap.get(selected.asset_id)?.asset_code ?? selected.asset_id}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground">Storage URI</dt>
-                    <dd className="break-all">{selected.storage_uri || "—"}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-muted-foreground">Content hash</dt>
-                    <dd className="break-all font-mono text-xs">
-                      {selected.content_hash || "—"}
-                    </dd>
-                  </div>
-                </dl>
-
-                {editing && canEdit ? (
-                  <div className="space-y-3 rounded-md border p-3">
-                    <div className="space-y-1">
-                      <Label htmlFor="edit-name">Document name</Label>
-                      <Input
-                        id="edit-name"
-                        value={editDraft.document_name}
-                        onChange={(e) =>
-                          setEditDraft((d) => ({ ...d, document_name: e.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="edit-uri">Storage URI</Label>
-                      <Input
-                        id="edit-uri"
-                        placeholder="https://… or s3://…"
-                        value={editDraft.storage_uri}
-                        onChange={(e) =>
-                          setEditDraft((d) => ({ ...d, storage_uri: e.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="edit-hash">Content hash</Label>
-                      <Input
-                        id="edit-hash"
-                        placeholder="hex digest"
-                        value={editDraft.content_hash}
-                        onChange={(e) =>
-                          setEditDraft((d) => ({ ...d, content_hash: e.target.value }))
-                        }
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button
-                        type="button"
-                        className="cursor-pointer transition-colors duration-200"
-                        disabled={actionLoading}
-                        onClick={() => void handleUpdate()}
-                      >
-                        Save
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="cursor-pointer transition-colors duration-200"
-                        onClick={() => setEditing(false)}
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : null}
-
-                <div className="flex flex-wrap gap-2">
-                  {canEdit && !editing ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="cursor-pointer transition-colors duration-200"
-                      disabled={actionLoading}
-                      onClick={() => setEditing(true)}
-                    >
-                      Edit metadata
-                    </Button>
-                  ) : null}
-                  {canSupersede ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="cursor-pointer transition-colors duration-200"
-                      disabled={actionLoading}
-                      onClick={() => void handleSupersede()}
-                    >
-                      <Replace className="mr-2 h-4 w-4" />
-                      Supersede
-                    </Button>
-                  ) : null}
-                  {canArchive ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="cursor-pointer transition-colors duration-200"
-                      disabled={actionLoading}
-                      onClick={() => void handleArchive()}
-                    >
-                      <Archive className="mr-2 h-4 w-4" />
-                      Archive
-                    </Button>
-                  ) : null}
-                </div>
-              </>
+              <div className="overflow-x-auto rounded-md border">
+                <table className="w-full text-left text-sm" data-testid="asset-documents-file-table">
+                  <thead className="border-b bg-muted/50 text-muted-foreground">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">File Name</th>
+                      <th className="px-3 py-2 font-medium">File Type</th>
+                      <th className="px-3 py-2 font-medium">File Size</th>
+                      <th className="px-3 py-2 font-medium">Uploaded</th>
+                      <th className="px-3 py-2 font-medium">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleDocuments.map((doc) => (
+                      <tr key={doc.id} className="border-b">
+                        <td className="px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <FileTypeIcon doc={doc} />
+                            <span className="font-medium break-all">{doc.document_name}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">{fileTypeLabel(doc)}</td>
+                        <td className="px-3 py-2">{formatBytes(doc.file_size_bytes)}</td>
+                        <td className="px-3 py-2">{formatUploadedAt(doc.created_at)}</td>
+                        <td className="px-3 py-2">
+                          <div className="flex flex-wrap gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="cursor-pointer transition-colors duration-200"
+                              disabled={actionLoadingId === doc.id}
+                              onClick={() => void handleViewOrDownload(doc, "inline")}
+                            >
+                              <Eye className="mr-1 size-3.5" aria-hidden />
+                              Open
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="cursor-pointer transition-colors duration-200"
+                              disabled={actionLoadingId === doc.id}
+                              onClick={() => void handleViewOrDownload(doc, "attachment")}
+                            >
+                              <Download className="mr-1 size-3.5" aria-hidden />
+                              Download
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="cursor-pointer text-destructive transition-colors duration-200 hover:text-destructive"
+                              disabled={actionLoadingId === doc.id}
+                              onClick={() => void handleRemove(doc)}
+                            >
+                              <Trash2 className="mr-1 size-3.5" aria-hidden />
+                              Remove
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </CardContent>
         </Card>
       </div>
 
-      {showCreate ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Register document metadata</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Provide a storage URI pointer only. Do not upload binary files here.
-            </p>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1">
-                <Label>Asset</Label>
-                <Select
-                  value={draft.asset_id || undefined}
-                  onValueChange={(value) => setDraft((d) => ({ ...d, asset_id: value }))}
-                >
-                  <SelectTrigger className="cursor-pointer" aria-label="Select asset">
-                    <SelectValue placeholder="Select asset" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {assetOptions.map((asset) => (
-                      <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                        {asset.asset_code} — {asset.asset_name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+      {uploadOpen && selectedAsset && limits ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !uploading) closeUpload();
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="asset-doc-upload-title"
+            data-testid="asset-document-upload-dialog"
+            className="w-full max-w-md rounded-md border border-border bg-background p-4 shadow-lg"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h2 id="asset-doc-upload-title" className="text-base font-semibold">
+                  Upload document
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {selectedAsset.assetName} —{" "}
+                  <span className="font-mono text-xs">{selectedAsset.assetCode}</span>
+                </p>
               </div>
-              <div className="space-y-1">
-                <Label>Document type</Label>
-                <Select
-                  value={draft.document_type}
-                  onValueChange={(value) => setDraft((d) => ({ ...d, document_type: value }))}
-                >
-                  <SelectTrigger className="cursor-pointer" aria-label="Document type">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DOCUMENT_TYPES.map((type) => (
-                      <SelectItem key={type} value={type} className="cursor-pointer">
-                        {type}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1 sm:col-span-2">
-                <Label htmlFor="doc-name">Document name</Label>
-                <Input
-                  id="doc-name"
-                  value={draft.document_name}
-                  onChange={(e) => setDraft((d) => ({ ...d, document_name: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="doc-uri">Storage URI (optional)</Label>
-                <Input
-                  id="doc-uri"
-                  placeholder="https://… or s3://…"
-                  value={draft.storage_uri}
-                  onChange={(e) => setDraft((d) => ({ ...d, storage_uri: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="doc-hash">Content hash (optional)</Label>
-                <Input
-                  id="doc-hash"
-                  placeholder="hex digest"
-                  value={draft.content_hash}
-                  onChange={(e) => setDraft((d) => ({ ...d, content_hash: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div className="flex gap-2">
               <Button
                 type="button"
-                className="cursor-pointer transition-colors duration-200"
-                disabled={actionLoading}
-                onClick={() => void handleCreate()}
+                variant="ghost"
+                size="icon"
+                className="size-8 cursor-pointer"
+                disabled={uploading}
+                aria-label="Close"
+                onClick={closeUpload}
               >
-                {actionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Create
+                <X className="size-4" />
               </Button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="sr-only"
+                  accept={acceptAttribute(limits)}
+                  onChange={(e) => handleFilePick(e.target.files?.[0] ?? null)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full cursor-pointer transition-colors duration-200"
+                  disabled={uploading}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload className="mr-2 h-4 w-4" />
+                  Choose File
+                </Button>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Accepted formats: {acceptedFormatsLabel(limits)} (up to {limits.max_upload_mb}{" "}
+                  MB).
+                </p>
+              </div>
+
+              {selectedFile ? (
+                <div
+                  className="rounded-md border bg-muted/40 px-3 py-2 text-sm"
+                  data-testid="asset-document-selected-file"
+                >
+                  <p className="font-medium break-all">{selectedFile.name}</p>
+                  <p className="mt-1 text-muted-foreground">
+                    {formatBytes(selectedFile.size)}
+                    <span className="mx-1.5">·</span>
+                    {selectedFile.name.split(".").pop()?.toUpperCase() || "FILE"}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
               <Button
                 type="button"
                 variant="outline"
                 className="cursor-pointer transition-colors duration-200"
-                onClick={() => setShowCreate(false)}
+                disabled={uploading}
+                onClick={closeUpload}
               >
                 Cancel
               </Button>
+              <Button
+                type="button"
+                className="cursor-pointer transition-colors duration-200"
+                disabled={!selectedFile || uploading}
+                onClick={() => void handleUpload()}
+              >
+                {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Save
+              </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       ) : null}
     </div>
   );

@@ -29,9 +29,12 @@ ALLOWED_OPERATIONAL_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
         (Assigned, Ready),
         (Assigned, Retired),
         (Assigned, Pending),
+        (Ready, Pending),  # Scrap send-to-disposal from inventory (no assignment)
         (Retired, Pending),
         (Pending, Disposed),
         (Pending, Ready),
+        (Pending, Assigned),  # Reject restore when prior ops was Assigned
+        (Pending, Retired),  # Reject restore when prior ops was Retired
         (Ready, InUseAsComponent),
         (InUseAsComponent, Ready),
         (InUseAsComponent, Disposed),

@@ -47,15 +47,16 @@ def get_tenant_context(
         store.touch_session(session_id)
     company_id = UUID(cached["company_id"]) if cached.get("company_id") else None
     branch_id = UUID(cached["branch_id"]) if cached.get("branch_id") else None
-    if not company_id:
+    # Fill missing company/branch from the user's default org scope (single-branch tenants).
+    if not company_id or not branch_id:
         from modules.organization.repository.org_scope_repository import OrgScopeRepository
 
         default_scope = OrgScopeRepository(db).get_default_scope(
             UUID(payload["sub"]), UUID(payload["tenant_id"])
         )
         if default_scope:
-            company_id = default_scope.company_id
-            branch_id = default_scope.branch_id
+            company_id = company_id or default_scope.company_id
+            branch_id = branch_id or default_scope.branch_id
     return TenantContext(
         tenant_id=UUID(payload["tenant_id"]),
         user_id=UUID(payload["sub"]),

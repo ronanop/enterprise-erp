@@ -77,6 +77,9 @@ export type DashboardTransferRow = {
   reason: string | null;
   status: string;
   workflowStatus: string | null;
+  /** Present when API returns it — used by Transfers register actions. */
+  version?: number;
+  createdBy?: string | null;
 };
 
 export type BranchLabelLookup = Record<string, string>;
@@ -305,6 +308,8 @@ export function mapTransfersToDashboardRows(
       reason: row.reason != null ? String(row.reason) : null,
       status: String(row.status ?? "draft"),
       workflowStatus: row.workflow_status != null ? String(row.workflow_status) : null,
+      version: typeof row.version === "number" ? row.version : undefined,
+      createdBy: row.created_by != null ? String(row.created_by) : null,
     };
   });
 }

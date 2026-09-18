@@ -1,18 +1,23 @@
 """Authentication service."""
 
+import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.config import settings
 from core.exceptions import UnauthorizedException
 from core.redis import SessionStore
 from modules.foundation.domain.exceptions import AccountLockedException, InvalidCredentialsException
-from modules.foundation.models.security import SecUser
+from modules.foundation.models.security import SecTenant, SecUser
+from modules.foundation.repository.role_repository import RoleRepository
 from modules.foundation.repository.session_repository import SessionRepository
 from modules.foundation.repository.user_repository import UserRepository
 from modules.foundation.service.audit_service import AuditService
+from modules.foundation.service.microsoft_oauth_service import MicrosoftOAuthService
+from modules.foundation.service.user_service import UserService
 from security.jwt import JWTService
 from security.password import PasswordHasher
 
@@ -76,6 +81,103 @@ class AuthService:
         if not totp.verify(otp, valid_window=1):
             raise InvalidCredentialsException()
         return self._issue_tokens(user, ip_address=ip_address, user_agent=user_agent)
+
+    def login_with_microsoft(
+        self,
+        *,
+        email: str,
+        display_name: str | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> dict:
+        domain = settings.microsoft_user_email_domain.strip().lower().lstrip("@")
+        if domain and not email.endswith(f"@{domain}"):
+            raise InvalidCredentialsException(
+                f"Microsoft sign-in is limited to @{domain} accounts"
+            )
+
+        user = self._users.get_active_by_email(email)
+        if user is None:
+            user = self._provision_microsoft_user(email=email, display_name=display_name or email)
+
+        if user.locked_until and user.locked_until > datetime.now(timezone.utc):
+            raise AccountLockedException()
+
+        return self._issue_tokens(user, ip_address=ip_address, user_agent=user_agent)
+
+    def complete_microsoft_oauth(
+        self,
+        *,
+        code: str,
+        state: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> tuple[str, str]:
+        oauth = MicrosoftOAuthService()
+        stored = self._store.pop_oauth_state(state)
+        if stored is None:
+            raise InvalidCredentialsException("Microsoft sign-in session expired. Try again.")
+
+        return_to = stored.get("return_to") if isinstance(stored.get("return_to"), str) else "/"
+        claims = oauth.exchange_authorization_code(code)
+        email = MicrosoftOAuthService.email_from_claims(claims)
+        if not email:
+            raise InvalidCredentialsException("Microsoft account did not include an email address")
+
+        tokens = self.login_with_microsoft(
+            email=email,
+            display_name=MicrosoftOAuthService.display_name_from_claims(claims, email),
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        exchange_code = oauth.create_exchange_code()
+        self._store.set_oauth_exchange(exchange_code, {**tokens, "return_to": return_to})
+        return exchange_code, return_to
+
+    def redeem_microsoft_exchange(self, exchange_code: str) -> dict:
+        payload = self._store.pop_oauth_exchange(exchange_code)
+        if payload is None:
+            raise InvalidCredentialsException("Sign-in code expired or already used")
+        return payload
+
+    def _provision_microsoft_user(self, *, email: str, display_name: str) -> SecUser:
+        tenant = self._db.scalars(
+            select(SecTenant).where(
+                SecTenant.is_deleted.is_(False),
+                SecTenant.status == "active",
+            )
+        ).first()
+        if tenant is None:
+            raise InvalidCredentialsException(
+                "No ERP tenant is available to link this Microsoft account"
+            )
+
+        is_platform_admin = email in settings.microsoft_platform_admin_email_set()
+        user_type = "super_admin" if is_platform_admin else "employee"
+        users = UserService(self._db)
+        created = users.create_user(
+            tenant_id=tenant.id,
+            email=email,
+            password=secrets.token_urlsafe(32) + "Aa1!",
+            display_name=display_name,
+            user_type=user_type,
+            created_by=None,
+        )
+        role_code = "SUPER_ADMIN" if is_platform_admin else "TENANT_ADMIN"
+        role = RoleRepository(self._db).get_by_code(tenant.id, role_code)
+        if role is None and role_code != "SUPER_ADMIN":
+            role = RoleRepository(self._db).get_by_code(tenant.id, "SUPER_ADMIN")
+        if role is not None:
+            users.assign_role(
+                tenant_id=tenant.id,
+                user_id=created.id,
+                role_id=role.id,
+                assigned_by=None,
+            )
+        user = self._db.get(SecUser, created.id)
+        if user is None:
+            raise InvalidCredentialsException("Failed to provision Microsoft account")
+        return user
 
     def refresh(self, refresh_token: str) -> dict:
         payload = self._jwt.decode_token(refresh_token, expected_type="refresh")

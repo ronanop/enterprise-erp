@@ -223,6 +223,7 @@ describe("mapDashboardPayloadToViewModel", () => {
         retired: 2,
         pendingDisposal: 2,
         disposed: 1,
+        inUseAsComponent: 0,
       },
     ]);
     expect(view.byLocation).toEqual([]);
@@ -260,6 +261,7 @@ describe("mapDashboardPayloadToViewModel", () => {
         retired: 2,
         pendingDisposal: 2,
         disposed: 1,
+        inUseAsComponent: 0,
       },
     ]);
   });
@@ -306,6 +308,8 @@ describe("mapTransfersToDashboardRows", () => {
         reason: "Relocation",
         status: "submitted",
         workflowStatus: null,
+        version: undefined,
+        createdBy: null,
       },
     ]);
   });

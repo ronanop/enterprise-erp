@@ -301,6 +301,10 @@ export type DocumentRow = {
   status: string;
   company_id: string;
   version: number;
+  created_at?: string | null;
+  content_type?: string | null;
+  file_size_bytes?: number | null;
+  downloadable?: boolean;
 };
 
 export type DocumentListResult = {
@@ -310,7 +314,27 @@ export type DocumentListResult = {
   page_size: number;
 };
 
+export type DocumentUploadLimits = {
+  max_upload_mb: number;
+  allowed_content_types: string[];
+  accepted_extensions: string[];
+};
+
 const ASSET_DOCUMENTS_PATH = "/assets/asset-documents";
+
+const FALLBACK_DOCUMENT_UPLOAD_LIMITS: DocumentUploadLimits = {
+  max_upload_mb: 10,
+  allowed_content_types: [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "image/jpeg",
+    "image/png",
+  ],
+  accepted_extensions: ["pdf", "doc", "docx", "xls", "xlsx", "jpg", "jpeg", "png"],
+};
 
 function parseDocumentList(data: unknown): DocumentListResult {
   if (data && typeof data === "object" && "items" in data) {
@@ -352,6 +376,52 @@ export const documentService = {
   async get(id: string): Promise<DocumentRow> {
     const res = await resourceService.get<DocumentRow>(ASSET_DOCUMENTS_PATH, id);
     return res.data as DocumentRow;
+  },
+
+  async getUploadLimits(): Promise<DocumentUploadLimits> {
+    try {
+      const res = await apiClient<DocumentUploadLimits>(`${ASSET_DOCUMENTS_PATH}/upload-limits`, {
+        method: "GET",
+      });
+      const data = res.data;
+      if (!data) return FALLBACK_DOCUMENT_UPLOAD_LIMITS;
+      return {
+        max_upload_mb: data.max_upload_mb || FALLBACK_DOCUMENT_UPLOAD_LIMITS.max_upload_mb,
+        allowed_content_types:
+          data.allowed_content_types?.length
+            ? data.allowed_content_types
+            : FALLBACK_DOCUMENT_UPLOAD_LIMITS.allowed_content_types,
+        accepted_extensions:
+          data.accepted_extensions?.length
+            ? data.accepted_extensions
+            : FALLBACK_DOCUMENT_UPLOAD_LIMITS.accepted_extensions,
+      };
+    } catch {
+      return FALLBACK_DOCUMENT_UPLOAD_LIMITS;
+    }
+  },
+
+  async upload(assetId: string, file: File): Promise<DocumentRow> {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("asset_id", assetId);
+    const res = await apiUpload<DocumentRow>(`${ASSET_DOCUMENTS_PATH}/upload`, form);
+    return res.data as DocumentRow;
+  },
+
+  async getContentBlob(
+    id: string,
+    disposition: "inline" | "attachment" = "inline",
+  ): Promise<{ blob: Blob; contentType: string; filename: string }> {
+    const result = await apiGetBlob(`${ASSET_DOCUMENTS_PATH}/${id}/content`, { disposition });
+    if (result.kind === "legacy") {
+      throw new ApiClientError("External document links cannot be previewed here.", 400);
+    }
+    return {
+      blob: result.blob,
+      contentType: result.contentType,
+      filename: result.filename,
+    };
   },
 
   async create(body: {
@@ -2114,6 +2184,143 @@ export const assetRegisterService = {
   /** Phase 5E: PENDING_DISPOSAL → READY_TO_MOVE */
   async reinstate(id: string, comments?: string): Promise<AssetsRow> {
     return this.action(id, "reinstate", comments ? { comments } : undefined);
+  },
+};
+
+export type UserTransferComponentItem = {
+  component_id: string;
+  assignment_component_id: string;
+  component_code?: string | null;
+  component_name?: string | null;
+  component_type?: string | null;
+  serial_number?: string | null;
+  issue_status: string;
+  linked_asset_code?: string | null;
+  linked_asset_name?: string | null;
+};
+
+export type UserTransferContext = {
+  asset_id: string;
+  asset_code: string;
+  asset_name: string;
+  operational_status: string;
+  lifecycle_status: string;
+  current_user?: string | null;
+  current_employee_id?: string | null;
+  department_id?: string | null;
+  department_name?: string | null;
+  location_label?: string | null;
+  assignment_id: string;
+  assignment_document_number?: string | null;
+  assignment_allocated_at?: string | null;
+  assignment_status?: string | null;
+  components?: UserTransferComponentItem[];
+  company_id: string;
+  branch_id: string;
+  version: number;
+};
+
+export type UserTransferVerificationPayload = {
+  data_backup_verified: boolean;
+  qc_completed: boolean;
+  qc_remarks?: string | null;
+  physical_condition: string;
+  verified_component_ids: string[];
+  asset_version?: number;
+};
+
+export type UserTransferVerificationResult = {
+  verification_id: string;
+  asset_id: string;
+  assignment_id: string;
+  previous_employee_id?: string | null;
+  previous_user_label?: string | null;
+  data_backup_verified: boolean;
+  qc_completed: boolean;
+  qc_remarks?: string | null;
+  physical_condition: string;
+  verified_component_ids: string[];
+  verified_at: string;
+  verified_by?: string | null;
+  status: string;
+};
+
+export type UserTransferAssignPayload = {
+  verification_id: string;
+  employee_id: string;
+  department_id?: string | null;
+  to_location_id: string;
+  to_building_id: string;
+  allocated_at: string;
+  assignment_remarks?: string | null;
+  asset_version?: number;
+};
+
+export type UserTransferReturnPayload = {
+  verification_id: string;
+  reason: string;
+  remarks?: string | null;
+  asset_version?: number;
+};
+
+export type UserTransferCompleteResult = {
+  outcome: string;
+  transfer_id: string;
+  document_number: string;
+  asset_id: string;
+  operational_status: string;
+  previous_assignment_id: string;
+  new_assignment_id?: string | null;
+  new_assignment_document_number?: string | null;
+  verification_id: string;
+};
+
+const USER_TRANSFER_CONTEXT_PATH = "/assets/asset-transfers/user-transfer-context";
+const USER_TRANSFER_VERIFICATION_PATH =
+  "/assets/asset-transfers/user-transfer-verification";
+const USER_TRANSFER_ASSIGN_PATH = "/assets/asset-transfers/user-transfer-assign";
+const USER_TRANSFER_RETURN_PATH = "/assets/asset-transfers/user-transfer-return";
+
+/** Assigned → user transfer entry (Step 1/2). Backend rejects non-ASSIGNED. */
+export const userTransferService = {
+  async getContext(assetId: string): Promise<UserTransferContext> {
+    const res = await apiClient<UserTransferContext>(
+      `${USER_TRANSFER_CONTEXT_PATH}/${encodeURIComponent(assetId)}`,
+    );
+    return res.data as UserTransferContext;
+  },
+
+  async submitVerification(
+    assetId: string,
+    body: UserTransferVerificationPayload,
+  ): Promise<UserTransferVerificationResult> {
+    const res = await apiClient<UserTransferVerificationResult>(
+      `${USER_TRANSFER_VERIFICATION_PATH}/${encodeURIComponent(assetId)}`,
+      { method: "POST", body },
+    );
+    return res.data as UserTransferVerificationResult;
+  },
+
+  async assignToNewUser(
+    assetId: string,
+    body: UserTransferAssignPayload,
+  ): Promise<UserTransferCompleteResult> {
+    const res = await apiClient<UserTransferCompleteResult>(
+      `${USER_TRANSFER_ASSIGN_PATH}/${encodeURIComponent(assetId)}`,
+      { method: "POST", body },
+    );
+    return res.data as UserTransferCompleteResult;
+  },
+
+  async returnToStock(
+    assetId: string,
+    body: UserTransferReturnPayload,
+  ): Promise<UserTransferCompleteResult> {
+    const res = await apiClient<UserTransferCompleteResult>(
+      `${USER_TRANSFER_RETURN_PATH}/${encodeURIComponent(assetId)}`,
+      { method: "POST", body },
+    );
+    return res.data as UserTransferCompleteResult;
   },
 };
 

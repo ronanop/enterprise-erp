@@ -11,7 +11,6 @@ import {
   Package,
   PackagePlus,
   Plus,
-  QrCode,
   ScanSearch,
   Trash2,
   Truck,
@@ -500,7 +499,7 @@ export function AssetOperationsDashboard({
           Quick actions
         </h2>
         <div
-          className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-7"
+          className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 xl:grid-cols-5"
           data-testid="asset-ops-quick-actions-grid"
         >
           <QuickActionCard
@@ -539,13 +538,6 @@ export function AssetOperationsDashboard({
             onPress={() =>
               navigateDashboardQuickAction(push, "informationPortal", locationId)
             }
-          />
-          <QuickActionCard
-            compact
-            title="QR / Barcode"
-            icon={QrCode}
-            description="Scan or print labels"
-            onPress={() => navigateDashboardQuickAction(push, "qr", locationId)}
           />
         </div>
       </section>

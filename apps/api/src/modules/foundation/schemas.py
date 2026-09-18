@@ -27,6 +27,16 @@ class TokenResponse(BaseModel):
     session_id: str | None = None
     mfa_required: bool = False
     mfa_challenge_token: str | None = None
+    redirect_to: str | None = None
+
+
+class MicrosoftLoginConfigResponse(BaseModel):
+    enabled: bool
+    authorization_path: str = "/auth/microsoft/login"
+
+
+class MicrosoftExchangeRequest(BaseModel):
+    code: str = Field(min_length=8)
 
 
 class TenantCreateRequest(BaseModel):

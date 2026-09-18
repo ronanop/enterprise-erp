@@ -5,10 +5,10 @@ import { cn } from "@/lib/utils";
 import { DrawerEmptyLine, DrawerSectionCard } from "./drawer-section";
 
 const QUICK_LINK_LABELS: Record<InventoryQuickLinkId, string> = {
-  portal: "Portal",
-  discovery: "Discovery",
+  portal: "Information Portal",
+  discovery: "Information Portal",
   qr: "QR",
-  history: "History",
+  history: "Information Portal",
 };
 
 export type QuickLinksSectionProps = {
@@ -18,10 +18,11 @@ export type QuickLinksSectionProps = {
   className?: string;
 };
 
-const LINK_ORDER: InventoryQuickLinkId[] = ["portal", "discovery", "qr", "history"];
+/** Discovery/History are available inside Information Portal — do not list separately. */
+const LINK_ORDER: InventoryQuickLinkId[] = ["portal", "qr"];
 
 export function QuickLinksSection({
-  enabledLinks = { portal: true, discovery: true, qr: true, history: true },
+  enabledLinks = { portal: true, discovery: false, qr: true, history: false },
   onQuickLinkPress,
   className,
 }: QuickLinksSectionProps) {

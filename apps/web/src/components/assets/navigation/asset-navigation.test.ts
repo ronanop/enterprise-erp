@@ -43,13 +43,15 @@ describe("createAssetNavigation", () => {
     expect(push).toHaveBeenCalledWith("/assets/information-portal/a1");
 
     nav.openDiscovery("a1");
-    expect(push).toHaveBeenCalledWith("/assets/assets/a1");
+    expect(push).toHaveBeenCalledWith("/assets/information-portal/a1");
 
     nav.openQr("a1");
     expect(push).toHaveBeenCalledWith(expect.stringContaining("/assets/qr-barcode"));
 
     nav.openTransfer("a1");
-    expect(push).toHaveBeenCalledWith(expect.stringContaining("/assets/asset-transfers"));
+    expect(push).toHaveBeenCalledWith(
+      expect.stringContaining("/assets/asset-transfers/new?assetId=a1"),
+    );
 
     nav.openMaintenance("a1");
     expect(push).toHaveBeenCalledWith(expect.stringContaining("/assets/asset-maintenances"));
@@ -58,7 +60,7 @@ describe("createAssetNavigation", () => {
     expect(push).toHaveBeenCalledWith(expect.stringContaining("/assets/asset-disposals"));
 
     nav.openHistory("a1");
-    expect(push).toHaveBeenCalledWith(expect.stringContaining("tab=activity"));
+    expect(push).toHaveBeenCalledWith("/assets/information-portal/a1");
 
     nav.openDcChallan("a1");
     expect(push).toHaveBeenCalledWith("/assets/asset-dc-challans?assetId=a1");
@@ -87,10 +89,17 @@ describe("dispatchInventoryMenuAction", () => {
 });
 
 describe("dispatchInventoryQuickLink", () => {
-  it("routes discovery quick link", () => {
+  it("routes discovery quick link to Information Portal", () => {
     const nav = createAssetNavigation(vi.fn());
-    const spy = vi.spyOn(nav, "openDiscovery");
+    const spy = vi.spyOn(nav, "openPortal");
     dispatchInventoryQuickLink(nav, "discovery", "asset-3");
     expect(spy).toHaveBeenCalledWith("asset-3");
+  });
+
+  it("routes history quick link to Information Portal", () => {
+    const nav = createAssetNavigation(vi.fn());
+    const spy = vi.spyOn(nav, "openPortal");
+    dispatchInventoryQuickLink(nav, "history", "asset-4");
+    expect(spy).toHaveBeenCalledWith("asset-4");
   });
 });

@@ -26,7 +26,6 @@ import {
   isIntelProcessor,
 } from "@/config/asset-hardware-options";
 import { isAuthenticated } from "@/lib/auth";
-import { listBranchOptions, type OrgOption } from "@/lib/org-options";
 import { buildSelfServiceUrl } from "@/services/assets-service";
 import {
   assetCategoryService,
@@ -62,8 +61,7 @@ type FieldErrors = Partial<
     | "ram"
     | "storage"
     | "location_id"
-    | "building_id"
-    | "branch_id",
+    | "building_id",
     string
   >
 >;
@@ -78,7 +76,6 @@ export function AssetAddForm({
   incomingLineId,
 }: AssetAddFormProps = {}) {
   const router = useRouter();
-  const [branches, setBranches] = useState<OrgOption[]>([]);
   const [siteLocations, setSiteLocations] = useState<SiteLocation[]>([]);
   const [siteBuildings, setSiteBuildings] = useState<SiteBuilding[]>([]);
   const [assetTypes, setAssetTypes] = useState<ItAssetType[]>([]);
@@ -96,7 +93,6 @@ export function AssetAddForm({
     serial_number: "",
     asset_category_id: "",
     asset_type_id: "",
-    branch_id: "",
     purchase_date: new Date().toISOString().slice(0, 10),
     purchase_cost: "0",
     currency_code: "INR",
@@ -126,18 +122,16 @@ export function AssetAddForm({
     void (async () => {
       if (!isAuthenticated()) return;
       try {
-        const [categoryPayload, branchOptions, locs, types] = await Promise.all([
+        const [categoryPayload, locs, types] = await Promise.all([
           assetCategoryService.search({
             page: 1,
             page_size: 200,
             status: "active",
           }),
-          listBranchOptions(),
           listSiteLocations().catch(() => [] as SiteLocation[]),
           listItAssetTypes({ active: true }).catch(() => [] as ItAssetType[]),
         ]);
         const active = filterActiveCategories(categoryPayload.items);
-        setBranches(branchOptions);
         setSiteLocations(locs);
         setAssetTypes(types);
 
@@ -157,7 +151,6 @@ export function AssetAddForm({
               ...next,
               asset_name: prefill.asset_name || next.asset_name,
               serial_number: prefill.serial_number || "",
-              branch_id: prefill.branch_id || next.branch_id,
               asset_category_id: prefill.asset_category_id || next.asset_category_id,
               purchase_date:
                 (prefill.purchase_date || "").slice(0, 10) || next.purchase_date,
@@ -180,16 +173,13 @@ export function AssetAddForm({
           if (!next.asset_type_id && types.length > 0) {
             next = { ...next, asset_type_id: types[0]!.id };
           }
-          if (!next.branch_id && branchOptions.length > 0) {
-            next = { ...next, branch_id: branchOptions[0].id };
-          }
           return next;
         });
       } catch (err) {
         setError(
           err instanceof ApiClientError
             ? err.message
-            : "Failed to load registration defaults (branch / location / types).",
+            : "Failed to load registration defaults (categories / location / types).",
         );
       }
     })();
@@ -214,7 +204,6 @@ export function AssetAddForm({
       next.asset_category_id = "No active asset category is available. Contact an administrator.";
     }
     if (!form.asset_type_id) next.asset_type_id = "Asset type is required.";
-    if (!form.branch_id) next.branch_id = "Branch is required.";
     if (!form.location_id) next.location_id = "Location is required.";
     if (!form.building_id) next.building_id = "Building is required.";
 
@@ -253,8 +242,8 @@ export function AssetAddForm({
               storage: form.storage,
             })
           : undefined;
+        // branch_id omitted — API resolves from the authenticated user's org scope / session.
         const createBody: Record<string, unknown> = {
-          branch_id: form.branch_id,
           asset_category_id: form.asset_category_id,
           asset_name: form.asset_name.trim(),
           asset_type_id: form.asset_type_id,
@@ -271,6 +260,7 @@ export function AssetAddForm({
         if (fromIncoming && incomingUnitId) {
           createBody.incoming_unit_id = incomingUnitId;
           if (incomingLineId) createBody.incoming_line_id = incomingLineId;
+          if (incomingPrefill?.branch_id) createBody.branch_id = incomingPrefill.branch_id;
           if (incomingPrefill?.grn_id) createBody.grn_id = incomingPrefill.grn_id;
           if (incomingPrefill?.purchase_order_id) {
             createBody.purchase_order_id = incomingPrefill.purchase_order_id;
@@ -423,7 +413,6 @@ export function AssetAddForm({
         onOpenChange={setImportOpen}
         assetTypes={assetTypes}
         siteLocations={siteLocations}
-        fallbackBranchId={form.branch_id || undefined}
         currencyCode={form.currency_code}
         onImported={() => {
           /* summary shown in dialog */

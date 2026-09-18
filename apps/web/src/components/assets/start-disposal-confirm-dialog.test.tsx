@@ -48,6 +48,11 @@ describe("inventory ops gates", () => {
     expect(ready.startDisposal).toBe(false);
     expect(ready.reinstate).toBe(false);
     expect(ready.assign).toBe(true);
+    expect(ready.transfer).toBe(false);
+
+    const assigned = applyOperationalGatesToInventoryPermissions(base, "ASSIGNED");
+    expect(assigned.transfer).toBe(true);
+    expect(assigned.assign).toBe(false);
   });
 
   it("requires disposal:create for Start Disposal RBAC", () => {

@@ -90,12 +90,19 @@ describe("InventoryActionMenu", () => {
     expect(onView).toHaveBeenCalledWith(testAsset);
   });
 
-  it("opens more menu and lists permitted actions", async () => {
+  it("opens more menu with Assign and Transfer when permitted", async () => {
     const user = userEvent.setup();
     render(<InventoryActionMenu asset={testAsset} onMenuAction={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /^Assign$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Transfer$/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "More actions" }));
     expect(screen.getByRole("menu")).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Return Asset" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Assign Asset" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "User Transfer" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Information Portal" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Discovery" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "History" })).not.toBeInTheDocument();
   });
 
   it("hides assign when permission false", async () => {
@@ -107,8 +114,24 @@ describe("InventoryActionMenu", () => {
         onMenuAction={vi.fn()}
       />,
     );
+    expect(screen.queryByRole("button", { name: /^Assign$/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "More actions" }));
     expect(screen.queryByRole("menuitem", { name: "Assign Asset" })).not.toBeInTheDocument();
+  });
+
+  it("fires onMenuAction for Transfer from the menu", async () => {
+    const user = userEvent.setup();
+    const onMenuAction = vi.fn();
+    render(
+      <InventoryActionMenu
+        asset={testAsset}
+        permissions={{ assign: false, transfer: true }}
+        onMenuAction={onMenuAction}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "User Transfer" }));
+    expect(onMenuAction).toHaveBeenCalledWith("transfer", testAsset);
   });
 
   it("fires onMenuAction for menu item", async () => {
@@ -298,8 +321,10 @@ describe("ConfigurationSection", () => {
 describe("QuickLinksSection", () => {
   it("disables buttons without handler", () => {
     render(<QuickLinksSection />);
-    const portal = screen.getByRole("button", { name: "Portal" });
+    const portal = screen.getByRole("button", { name: "Information Portal" });
     expect(portal).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Discovery" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "History" })).not.toBeInTheDocument();
   });
 
   it("calls handler when enabled", async () => {
@@ -314,8 +339,8 @@ describe("QuickLinksSection", () => {
         onQuickLink={onQuickLink}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Discovery" }));
-    expect(onQuickLink).toHaveBeenCalledWith("discovery", testAsset);
+    await user.click(screen.getByRole("button", { name: "Information Portal" }));
+    expect(onQuickLink).toHaveBeenCalledWith("portal", testAsset);
   });
 
   it("shows message when no links enabled", () => {

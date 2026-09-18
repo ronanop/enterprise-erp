@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     """Runtime configuration loaded from environment variables."""
-
+    
     model_config = SettingsConfigDict(
         env_file=(".env", "../../.env"),
         env_file_encoding="utf-8",
@@ -78,10 +78,63 @@ class Settings(BaseSettings):
         default=10,
         alias="ASSET_DC_CHALLAN_MAX_UPLOAD_MB",
     )
+    asset_document_max_upload_mb: int = Field(
+        default=10,
+        alias="ASSET_DOCUMENT_MAX_UPLOAD_MB",
+    )
     asset_dc_challan_scm_allowed_hosts: str = Field(
         default="",
         alias="ASSET_DC_CHALLAN_SCM_ALLOWED_HOSTS",
     )
+
+    frontend_url: str = Field(default="http://localhost:3000", alias="FRONTEND_URL")
+    microsoft_tenant_id: str = Field(default="", alias="MICROSOFT_TENANT_ID")
+    microsoft_client_id: str = Field(default="", alias="MICROSOFT_CLIENT_ID")
+    microsoft_client_secret: str = Field(default="", alias="MICROSOFT_CLIENT_SECRET")
+    microsoft_redirect_uri: str = Field(
+        default="http://localhost:8000/api/v1/auth/microsoft/callback",
+        alias="MICROSOFT_REDIRECT_URI",
+    )
+    microsoft_user_email_domain: str = Field(
+        default="cachedigitech.com",
+        alias="MICROSOFT_USER_EMAIL_DOMAIN",
+    )
+    microsoft_platform_admin_emails: str = Field(
+        default="techbank@cachedigitech.com",
+        alias="MICROSOFT_PLATFORM_ADMIN_EMAILS",
+    )
+    asset_disposal_approver_emails: str = Field(
+        default="",
+        alias="ASSET_DISPOSAL_APPROVER_EMAILS",
+    )
+    smtp_host: str = Field(default="", alias="SMTP_HOST")
+    smtp_port: int = Field(default=587, alias="SMTP_PORT")
+    smtp_username: str = Field(default="", alias="SMTP_USERNAME")
+    smtp_password: str = Field(default="", alias="SMTP_PASSWORD")
+    smtp_from_email: str = Field(default="", alias="SMTP_FROM_EMAIL")
+    smtp_use_tls: bool = Field(default=True, alias="SMTP_USE_TLS")
+
+    def asset_disposal_approver_email_set(self) -> set[str]:
+        return {
+            email.strip().lower()
+            for email in self.asset_disposal_approver_emails.split(",")
+            if email.strip()
+        }
+
+    @property
+    def microsoft_login_enabled(self) -> bool:
+        return bool(
+            self.microsoft_client_id.strip()
+            and self.microsoft_client_secret.strip()
+            and self.microsoft_redirect_uri.strip()
+        )
+
+    def microsoft_platform_admin_email_set(self) -> set[str]:
+        return {
+            email.strip().lower()
+            for email in self.microsoft_platform_admin_emails.split(",")
+            if email.strip()
+        }
 
     @field_validator("cors_origins", mode="before")
     @classmethod

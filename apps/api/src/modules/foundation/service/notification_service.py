@@ -61,6 +61,9 @@ class NotificationService:
         payload_json: dict | None,
         created_by: UUID | None = None,
     ):
+        templates = self._repo.list_templates(tenant_id)
+        template = next((t for t in templates if t.id == template_id), None)
+        channel = (getattr(template, "channel", None) or "in_app").lower()
         event = self._repo.create_event(
             tenant_id=tenant_id,
             template_id=template_id,
@@ -72,7 +75,7 @@ class NotificationService:
         delivery = self._repo.create_delivery(
             tenant_id=tenant_id,
             event_id=event.id,
-            channel="in_app",
+            channel=channel,
         )
         send_notification_task.delay(str(event.id), str(delivery.id))
         self._audit.log_entity_change(

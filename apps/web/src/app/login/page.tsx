@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -22,6 +22,20 @@ export default function LoginPage() {
   const [password, setPassword] = useState(env.demoPassword || DEMO_PASSWORD);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [microsoftEnabled, setMicrosoftEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const oauthError = params.get("error");
+    if (oauthError) setError(oauthError);
+  }, []);
+
+  useEffect(() => {
+    void authService
+      .microsoftConfig()
+      .then((res) => setMicrosoftEnabled(Boolean(res.data?.enabled)))
+      .catch(() => setMicrosoftEnabled(false));
+  }, []);
 
   function selectAccount(nextEmail: string) {
     setEmail(nextEmail);
@@ -73,6 +87,25 @@ export default function LoginPage() {
           </div>
 
           <div className="rounded-2xl border border-border/80 bg-card/95 p-6 shadow-lg backdrop-blur-sm">
+            {microsoftEnabled === false ? (
+              <p className="mb-4 text-sm text-muted-foreground">
+                Microsoft sign-in is not configured. Use a demo password account below, or set{" "}
+                <code className="rounded bg-muted px-1 text-xs">MICROSOFT_CLIENT_ID</code> on the
+                API.
+              </p>
+            ) : (
+              <Button
+                type="button"
+                className="mb-5 h-10 w-full cursor-pointer font-medium transition-colors duration-200"
+                disabled={microsoftEnabled === null || loading}
+                onClick={() => {
+                  window.location.href = authService.microsoftLoginUrl("/");
+                }}
+              >
+                {microsoftEnabled === null ? "Checking sign-in…" : "Sign in with Microsoft"}
+              </Button>
+            )}
+
             <div className="mb-5 rounded-xl border border-border/70 bg-muted/40 px-3.5 py-3 text-xs text-muted-foreground">
               <p className="font-medium text-foreground">
                 Shared demo password: <span className="font-semibold">Secure1!</span>

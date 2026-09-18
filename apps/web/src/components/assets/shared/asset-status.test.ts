@@ -9,7 +9,7 @@ import {
 describe("asset-status labels", () => {
   it("formats operational labels for UX", () => {
     expect(OPERATIONAL_STATUS_LABELS.READY_TO_MOVE).toBe("Ready to Move");
-    expect(OPERATIONAL_STATUS_LABELS.PENDING_DISPOSAL).toBe("Pending Disposal");
+    expect(OPERATIONAL_STATUS_LABELS.PENDING_DISPOSAL).toBe("Disposal");
     expect(OPERATIONAL_STATUS_LABELS.IN_USE_AS_COMPONENT).toBe("In Use as Component");
   });
 

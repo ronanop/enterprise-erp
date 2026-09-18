@@ -20,7 +20,6 @@ import {
   PackageCheck,
   PackagePlus,
   Plus,
-  QrCode,
   Scale,
   ScrollText,
   Tags,
@@ -192,7 +191,6 @@ export const itAssetWorkspaceNav: AssetManagementNavGroup[] = [
     items: [
       { title: "Components", href: "/assets/asset-components", icon: Boxes },
       { title: "Documents", href: "/assets/asset-documents", icon: FileText },
-      { title: "QR / Barcode", href: "/assets/qr-barcode", icon: QrCode },
       { title: "Reports", href: "/assets/reports", icon: BarChart3 },
       {
         title: "Users",
