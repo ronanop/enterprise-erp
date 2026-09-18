@@ -602,9 +602,8 @@ function NumbersSection() {
 }
 
 /**
- * Scroll-zoom capsule — "CUSTOM" and "ERP" sit outside; the capsule itself
- * only appears once you start scrolling, then expands to reveal the CTA.
- * Capsule is absolutely centered so full-bleed expansion never leaves a side gap.
+ * Scroll-zoom capsule — "CUSTOM" and "ERP" sit outside the capsule and slide
+ * outward as it grows. Capsule is absolutely centered so expansion stays even.
  */
 function CtaSection() {
   const ref = useRef<HTMLElement>(null);
@@ -613,11 +612,14 @@ function CtaSection() {
   const p = reduced ? 1 : progress;
 
   // Grow against the pin (not 100vw) so scrollbar width can't open a side gap.
-  const size = `${p * 100}%`;
+  const sizePct = p * 100;
+  const size = `${sizePct}%`;
   const radius = `${50 * (1 - p)}px`;
   const capsuleVisible = phase(p, 0.02, 0.14);
   const content = phase(p, 0.45, 0.62);
   const sideFade = 1 - phase(p, 0.55, 0.85);
+  // Keep labels just outside the capsule edge (center ± half-size ± gap).
+  const sideClearance = `calc(50% + ${sizePct / 2}% + clamp(0.85rem, 2vw, 1.5rem))`;
 
   return (
     <section
@@ -626,26 +628,24 @@ function CtaSection() {
       ref={ref}
     >
       <div className="cp-cta-pin">
-        <div className="cp-cta-row">
-          <span
-            className="cp-cta-side cp-cta-side-left"
-            style={{ opacity: sideFade }}
-          >
-            CUSTOM
-          </span>
-          {/* Keeps the side labels apart as the capsule grows. */}
-          <div
-            className="cp-cta-spacer"
-            style={{ width: size }}
-            aria-hidden
-          />
-          <span
-            className="cp-cta-side cp-cta-side-right"
-            style={{ opacity: sideFade }}
-          >
-            ERP
-          </span>
-        </div>
+        <span
+          className="cp-cta-side cp-cta-side-left"
+          style={{
+            opacity: sideFade,
+            right: sideClearance,
+          }}
+        >
+          CUSTOM
+        </span>
+        <span
+          className="cp-cta-side cp-cta-side-right"
+          style={{
+            opacity: sideFade,
+            left: sideClearance,
+          }}
+        >
+          ERP
+        </span>
 
         <div
           className="cp-cta-capsule"
