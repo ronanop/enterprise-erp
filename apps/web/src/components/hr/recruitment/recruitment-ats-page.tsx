@@ -1,49 +1,49 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   BarChart3,
   Briefcase,
   CalendarClock,
-  ClipboardList,
-  Download,
   FileCheck2,
+  FolderOpen,
   LayoutDashboard,
-  Plus,
-  Upload,
-  UserPlus,
+  Search,
   Users,
 } from "lucide-react";
 
 import { CandidateDrawer } from "@/components/hr/recruitment/candidate-drawer";
+import { CandidateViewDrawer } from "@/components/hr/recruitment/candidate-view-drawer";
+import { RecruitmentOverviewDashboard } from "@/components/hr/recruitment/dashboard/recruitment-overview-dashboard";
 import { InterviewDrawer } from "@/components/hr/recruitment/interview-drawer";
+import { InterviewOutcomeDrawer } from "@/components/hr/recruitment/interview-outcome-drawer";
 import { JobOpeningDrawer } from "@/components/hr/recruitment/job-opening-drawer";
+import { JobOpeningsPanel } from "@/components/hr/recruitment/job-openings-panel";
+import { CandidatesPanel } from "@/components/hr/recruitment/candidates-panel";
+import { InterviewsPanel } from "@/components/hr/recruitment/interviews-panel";
 import { OfferDrawer } from "@/components/hr/recruitment/offer-drawer";
+import { OffersPanel } from "@/components/hr/recruitment/offers-panel";
+import { DocumentsPanel } from "@/components/hr/recruitment/documents-panel";
 import { PipelineKanban } from "@/components/hr/recruitment/pipeline-kanban";
 import {
-  HrAuthBanner,
   HrEmptyState,
   HrStatusBadge,
-  HrToolbar,
   HrUnderlineTabs,
   type HrTabItem,
 } from "@/components/hr/hr-primitives";
 import { SetupDrawer, SetupField, SetupTextarea } from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { EmsPagination, EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
-import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isAuthenticated } from "@/lib/auth";
-import { cn } from "@/lib/utils";
 import {
   addDocument,
+  advanceApplication,
   applyCandidateToJob,
-  computeAtsStats,
   createCandidate,
   createJob,
-  departmentHiring,
   downloadTextFile,
   exportCandidatesCsv,
   exportJobsCsv,
@@ -52,29 +52,39 @@ import {
   filterJobs,
   generateOffer,
   importCandidatesCsv,
-  listAtsAudit,
   loadAtsDirectory,
+  markApplicationBackedOut,
+  markApplicationHired,
   moveApplicationStage,
-  recruiterPerformance,
+  recordInterviewOutcome,
+  rejectApplication,
   scheduleInterview,
-  sourcePerformance,
+  updateApplicationNotes,
+  updateCandidate,
+  updateDocumentStatus,
   updateOfferStatus,
   updateJob,
   type AtsDirectory,
 } from "@/services/recruitment-ats-service";
+import {
+  loadOnboardingDirectory,
+  sendInvitation,
+  startOnboarding,
+} from "@/services/onboarding-management-service";
+import { listEntityOptions } from "@/services/hr-setup-service";
 import type {
+  AtsCandidate,
   AtsFilters,
+  AtsInterview,
+  AtsOffer,
   CreateCandidateInput,
   CreateJobInput,
   JobOpening,
-  PipelineStage,
+  PipelineApplication,
 } from "@/types/recruitment-ats";
 import {
   emptyAtsFilters,
-  JOB_STATUS_LABELS,
-  OFFER_STATUS_LABELS,
   PIPELINE_STAGES,
-  SOURCE_LABELS,
 } from "@/types/recruitment-ats";
 
 const PAGE = 10;
@@ -86,11 +96,10 @@ type Tab =
   | "pipeline"
   | "interviews"
   | "offers"
-  | "documents"
-  | "reports"
-  | "audit";
+  | "documents";
 
 export function RecruitmentAtsPage() {
+  const router = useRouter();
   const [dir, setDir] = useState<AtsDirectory | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("dashboard");
@@ -103,7 +112,10 @@ export function RecruitmentAtsPage() {
   const [offerOpen, setOfferOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [outcomeInterview, setOutcomeInterview] = useState<AtsInterview | null>(null);
+  const [viewCandidate, setViewCandidate] = useState<AtsCandidate | null>(null);
+  const [editCandidate, setEditCandidate] = useState<AtsCandidate | null>(null);
+  const [onboardingOfferId, setOnboardingOfferId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -122,7 +134,6 @@ export function RecruitmentAtsPage() {
 
   useEffect(() => setPage(1), [filters, tab]);
 
-  const stats = useMemo(() => (dir ? computeAtsStats(dir) : null), [dir]);
   const jobs = useMemo(() => filterJobs(dir?.jobs ?? [], filters), [dir, filters]);
   const candidates = useMemo(
     () => filterCandidates(dir?.candidates ?? [], filters),
@@ -133,17 +144,7 @@ export function RecruitmentAtsPage() {
       filterApplications(dir?.applications ?? [], filters, dir?.candidates ?? [], dir?.jobs ?? []),
     [dir, filters],
   );
-  const audit = useMemo(() => listAtsAudit(), [dir, tab]);
   const authBlocked = !isAuthenticated() && !loading && !(dir?.jobs.length || dir?.candidates.length);
-
-  const pageJobs = useMemo(() => {
-    const s = (page - 1) * PAGE;
-    return jobs.slice(s, s + PAGE);
-  }, [jobs, page]);
-  const pageCands = useMemo(() => {
-    const s = (page - 1) * PAGE;
-    return candidates.slice(s, s + PAGE);
-  }, [candidates, page]);
 
   async function handleCreateJob(input: CreateJobInput) {
     if (editJob) {
@@ -159,8 +160,15 @@ export function RecruitmentAtsPage() {
 
   async function handleCreateCandidate(input: CreateCandidateInput, jobId?: string) {
     try {
+      if (editCandidate) {
+        await updateCandidate(editCandidate.id, input);
+        toast(`Candidate ${editCandidate.candidateCode} updated`);
+        setEditCandidate(null);
+        void load();
+        return;
+      }
       const cand = await createCandidate(input);
-      if (jobId) await applyCandidateToJob(cand.id, jobId, "applied");
+      if (jobId) await applyCandidateToJob(cand.id, jobId, "sourced");
       if (input.resumeName) addDocument(cand.id, "resume", input.resumeName);
       toast(`Candidate ${cand.candidateCode} added`);
       void load();
@@ -169,428 +177,412 @@ export function RecruitmentAtsPage() {
     }
   }
 
+  function primaryAppFor(candidateId: string): PipelineApplication | null {
+    const apps = dir?.applications ?? [];
+    const active = apps.find((a) => a.candidateId === candidateId && a.status === "active");
+    if (active) return active;
+    return apps.find((a) => a.candidateId === candidateId) ?? null;
+  }
+
+  function exportCurrent() {
+    downloadTextFile(
+      `recruitment-${new Date().toISOString().slice(0, 10)}.csv`,
+      tab === "candidates" ? exportCandidatesCsv(candidates) : exportJobsCsv(jobs),
+    );
+    toast("Export downloaded");
+  }
+
+  function openCreateJob() {
+    setEditJob(null);
+    setJobOpen(true);
+  }
+
+  function openAddCandidate() {
+    setEditCandidate(null);
+    setCandOpen(true);
+  }
+
+  const applicationsByJob = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of dir?.applications ?? []) {
+      map.set(a.jobId, (map.get(a.jobId) ?? 0) + 1);
+    }
+    return map;
+  }, [dir?.applications]);
+
+  const moduleTabs = useMemo(
+    () =>
+      [
+        { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+        {
+          id: "jobs",
+          label: "Job Openings",
+          icon: Briefcase,
+          badge: (dir?.jobs ?? []).filter((j) => j.status === "open").length,
+        },
+        {
+          id: "candidates",
+          label: "Candidates",
+          icon: Users,
+          badge: dir?.candidates.length ?? 0,
+        },
+        { id: "pipeline", label: "Pipeline", icon: BarChart3 },
+        {
+          id: "interviews",
+          label: "Interviews",
+          icon: CalendarClock,
+          badge: (dir?.interviews ?? []).filter((i) => i.status === "scheduled").length,
+        },
+        {
+          id: "offers",
+          label: "Offers",
+          icon: FileCheck2,
+          badge: dir?.offers.length ?? 0,
+        },
+        { id: "documents", label: "Documents", icon: FolderOpen },
+      ] satisfies HrTabItem[],
+    [dir],
+  );
+
   return (
     <div className="space-y-5">
       <SetupToastHost />
-      <PageHeader
-        title="Recruitment"
-        actions={
-          <HrToolbar onRefresh={() => void load()} loading={loading}>
-            <Button size="sm" className="cursor-pointer" onClick={() => { setEditJob(null); setJobOpen(true); }}>
-              <Plus className="size-3.5" />
-              Create Job Opening
-            </Button>
-            <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setCandOpen(true)}>
-              <UserPlus className="size-3.5" />
-              Add Candidate
-            </Button>
-            <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setImportOpen(true)}>
-              <Upload className="size-3.5" />
-              Import Candidates
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="cursor-pointer"
-              onClick={() => {
-                downloadTextFile(
-                  `recruitment-${new Date().toISOString().slice(0, 10)}.csv`,
-                  tab === "candidates" ? exportCandidatesCsv(candidates) : exportJobsCsv(jobs),
-                );
-                toast("Export downloaded");
-              }}
-            >
-              <Download className="size-3.5" />
-              Export
-            </Button>
-          </HrToolbar>
+
+      <RecruitmentOverviewDashboard
+        dir={dir}
+        loading={loading}
+        authBlocked={authBlocked}
+        showHome={tab === "dashboard"}
+        handlers={{
+          onCreateJob: openCreateJob,
+          onAddCandidate: openAddCandidate,
+          onImport: () => setImportOpen(true),
+          onExport: exportCurrent,
+          onScheduleInterview: () => setIntOpen(true),
+          onGenerateOffer: () => setOfferOpen(true),
+          onViewJobs: () => setTab("jobs"),
+          onViewCandidates: () => setTab("candidates"),
+          onViewInterviews: () => setTab("interviews"),
+          onViewOffers: () => setTab("offers"),
+          onViewPipeline: (stage) => {
+            if (stage) setFilters((f) => ({ ...f, stage }));
+            setTab("pipeline");
+          },
+          onOpenJob: (job) => {
+            setEditJob(job);
+            setJobOpen(true);
+          },
+          onEditJob: (job) => {
+            setEditJob(job);
+            setJobOpen(true);
+          },
+          onOpenCandidate: (candidate) => setViewCandidate(candidate),
+          onEditCandidate: (candidate) => {
+            setEditCandidate(candidate);
+            setCandOpen(true);
+          },
+          onOpenInterview: (interview) => setOutcomeInterview(interview),
+        }}
+        tabsSlot={
+          <HrUnderlineTabs
+            size="sm"
+            variant="pills"
+            tabs={moduleTabs}
+            value={tab}
+            onChange={(id) => setTab(id as Tab)}
+          />
         }
-      />
+      >
+        {tab !== "dashboard" && loading && !dir ? <EmsSkeleton /> : null}
 
-      {authBlocked ? <HrAuthBanner /> : null}
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
-        {[
-          { label: "Open Positions", value: stats?.openPositions ?? 0 },
-          { label: "Applications", value: stats?.applications ?? 0 },
-          { label: "Shortlisted", value: stats?.shortlisted ?? 0 },
-          { label: "Interview Scheduled", value: stats?.interviewScheduled ?? 0 },
-          { label: "Offers Sent", value: stats?.offersSent ?? 0 },
-          { label: "Offers Accepted", value: stats?.offersAccepted ?? 0 },
-          { label: "Positions Filled", value: stats?.positionsFilled ?? 0 },
-          { label: "Avg Time to Hire", value: `${stats?.avgTimeToHire ?? 0}d` },
-        ].map((k) => (
-          <div
-            key={k.label}
-            className="rounded-xl border border-border/70 bg-card px-3 py-3 shadow-sm transition-shadow duration-200 hover:shadow-md"
-          >
-            <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-              {k.label}
-            </p>
-            <p className="mt-1 text-xl font-semibold tracking-tight">{k.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <HrUnderlineTabs
-        size="sm"
-        tabs={
-          [
-            { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-            { id: "jobs", label: "Job Openings", icon: Briefcase },
-            { id: "candidates", label: "Candidates", icon: Users },
-            { id: "pipeline", label: "Pipeline", icon: ClipboardList },
-            { id: "interviews", label: "Interviews", icon: CalendarClock },
-            { id: "offers", label: "Offers", icon: FileCheck2 },
-            { id: "documents", label: "Documents", icon: FileCheck2 },
-            { id: "reports", label: "Reports", icon: BarChart3 },
-            { id: "audit", label: "Audit", icon: ClipboardList },
-          ] satisfies HrTabItem[]
-        }
-        value={tab}
-        onChange={(id) => setTab(id as Tab)}
-      />
-
-      {loading && !dir ? <EmsSkeleton /> : null}
-
-      <div className="flex flex-wrap gap-2">
-        <Input
-          value={filters.query}
-          onChange={(e) => setFilters((f) => ({ ...f, query: e.target.value }))}
-          placeholder="Search…"
-          className="max-w-xs"
-        />
-        {tab === "pipeline" ? (
-          <select
-            className="h-8 cursor-pointer rounded-lg border border-input bg-transparent px-2 text-xs"
-            value={filters.stage}
-            onChange={(e) => setFilters((f) => ({ ...f, stage: e.target.value }))}
-          >
-            <option value="all">All stages</option>
-            {PIPELINE_STAGES.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
+        {tab === "jobs" ? (
+          <JobOpeningsPanel
+            jobs={dir?.jobs ?? []}
+            applicationsByJob={applicationsByJob}
+            onCreate={openCreateJob}
+            onView={(job) => {
+              setEditJob(job);
+              setJobOpen(true);
+            }}
+            onEdit={(job) => {
+              setEditJob(job);
+              setJobOpen(true);
+            }}
+          />
         ) : null}
-      </div>
 
-      {tab === "dashboard" ? (
-        <div className="grid gap-3 lg:grid-cols-2">
-          <div className="rounded-xl border border-border/70 bg-card p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Pipeline snapshot
-            </p>
-            <div className="space-y-2">
-              {PIPELINE_STAGES.map((s) => {
-                const n = (dir?.applications ?? []).filter((a) => a.stage === s.id).length;
-                const max = Math.max(1, dir?.applications.length ?? 1);
-                return (
-                  <div key={s.id} className="flex items-center gap-2 text-xs">
-                    <span className="w-36 shrink-0 text-muted-foreground">{s.label}</span>
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className="h-full bg-primary transition-all duration-300"
-                        style={{ width: `${(n / max) * 100}%` }}
-                      />
-                    </div>
-                    <span className="w-6 text-right font-medium">{n}</span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-          <div className="rounded-xl border border-border/70 bg-card p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Quick actions
-            </p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <QuickAction icon={Briefcase} label="Create job" onClick={() => setJobOpen(true)} />
-              <QuickAction icon={UserPlus} label="Add candidate" onClick={() => setCandOpen(true)} />
-              <QuickAction icon={CalendarClock} label="Schedule interview" onClick={() => setIntOpen(true)} />
-              <QuickAction icon={FileCheck2} label="Generate offer" onClick={() => setOfferOpen(true)} />
-            </div>
-            <p className="mt-4 text-xs text-muted-foreground">
-              After offer acceptance, continue in{" "}
-              <Link href="/hr/onboarding" className="cursor-pointer text-primary underline">
-                Onboarding
-              </Link>
-              .
-            </p>
-          </div>
-        </div>
-      ) : null}
+        {tab === "candidates" ? (
+          <CandidatesPanel
+            candidates={dir?.candidates ?? []}
+            jobs={dir?.jobs ?? []}
+            applications={dir?.applications ?? []}
+            onAdd={openAddCandidate}
+            onView={(c) => setViewCandidate(c)}
+            onEdit={(c) => {
+              setEditCandidate(c);
+              setCandOpen(true);
+            }}
+            onChangeStage={(applicationId, stage) => {
+              void (async () => {
+                try {
+                  await moveApplicationStage(applicationId, stage);
+                  toast(
+                    `Moved to ${PIPELINE_STAGES.find((s) => s.id === stage)?.label ?? stage}`,
+                  );
+                  await load();
+                } catch (e) {
+                  toast(e instanceof Error ? e.message : "Stage update failed", "error");
+                }
+              })();
+            }}
+          />
+        ) : null}
 
-      {tab === "jobs" ? (
-        <EntityTable
-          emptyTitle="No job openings"
-          emptyAction={
-            <Button size="sm" className="cursor-pointer" onClick={() => setJobOpen(true)}>
-              Create Job
-            </Button>
-          }
-          headers={["Job ID", "Title", "Department", "Positions", "Status", "Priority", ""]}
-          rows={pageJobs.map((j) => [
-            j.jobCode,
-            j.title,
-            j.department,
-            `${j.filled}/${j.positions}`,
-            <HrStatusBadge key="s" status={JOB_STATUS_LABELS[j.status]} />,
-            j.priority,
-            <Button
-              key="e"
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 cursor-pointer"
-              onClick={() => {
-                setEditJob(j);
-                setJobOpen(true);
-              }}
-            >
-              Edit
-            </Button>,
-          ])}
-          page={page}
-          total={jobs.length}
-          onPageChange={setPage}
-        />
-      ) : null}
+        {tab === "interviews" ? (
+          <InterviewsPanel
+            interviews={dir?.interviews ?? []}
+            candidates={dir?.candidates ?? []}
+            jobs={dir?.jobs ?? []}
+            onSchedule={() => setIntOpen(true)}
+            onOutcome={(interview) => setOutcomeInterview(interview)}
+          />
+        ) : null}
 
-      {tab === "candidates" ? (
-        <EntityTable
-          emptyTitle="No candidates"
-          emptyAction={
-            <Button size="sm" className="cursor-pointer" onClick={() => setCandOpen(true)}>
-              Add Candidate
-            </Button>
-          }
-          headers={["ID", "Name", "Email", "Source", "Exp", "Expected", ""]}
-          rows={pageCands.map((c) => [
-            <span key="id" className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                className="cursor-pointer"
-                checked={selected.has(c.id)}
-                onChange={(e) => {
-                  setSelected((prev) => {
-                    const next = new Set(prev);
-                    if (e.target.checked) next.add(c.id);
-                    else next.delete(c.id);
-                    return next;
-                  });
-                }}
-              />
-              {c.candidateCode}
-            </span>,
-            c.fullName,
-            c.email,
-            SOURCE_LABELS[c.source] ?? c.source,
-            `${c.experienceYears}y`,
-            c.expectedSalary ? `₹${c.expectedSalary.toLocaleString("en-IN")}` : "—",
-            c.resumeName || "—",
-          ])}
-          page={page}
-          total={candidates.length}
-          onPageChange={setPage}
-          bulk={
-            selected.size > 0 ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="cursor-pointer"
-                onClick={() => {
-                  toast(`${selected.size} candidates selected — use Pipeline to advance`);
-                }}
+        {tab === "pipeline" ? (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2 rounded-[12px] border border-[#EEEFF3] bg-white p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+              <div className="relative min-w-0 flex-1">
+                <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-[#9CA3AF]" />
+                <Input
+                  value={filters.query}
+                  onChange={(e) => setFilters((f) => ({ ...f, query: e.target.value }))}
+                  placeholder="Search…"
+                  className="h-9 max-w-md rounded-full border-[#E5E7EB] bg-white pl-9 text-[13px]"
+                />
+              </div>
+              <select
+                className="h-9 cursor-pointer rounded-full border border-[#E5E7EB] bg-white px-3 text-xs"
+                value={filters.stage}
+                onChange={(e) => setFilters((f) => ({ ...f, stage: e.target.value }))}
               >
-                Bulk ({selected.size})
-              </Button>
-            ) : null
-          }
-        />
-      ) : null}
+                <option value="all">All stages</option>
+                {PIPELINE_STAGES.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <PipelineKanban
+              applications={applications}
+              candidates={dir?.candidates ?? []}
+              jobs={dir?.jobs ?? []}
+              interviews={dir?.interviews ?? []}
+              onAddCandidate={openAddCandidate}
+              onViewProfile={(c) => setViewCandidate(c)}
+              onMoveStage={(applicationId, stage) => {
+                void (async () => {
+                  try {
+                    await moveApplicationStage(applicationId, stage);
+                    toast(
+                      `Moved to ${PIPELINE_STAGES.find((s) => s.id === stage)?.label ?? stage}`,
+                    );
+                    await load();
+                  } catch (e) {
+                    toast(e instanceof Error ? e.message : "Stage update failed", "error");
+                  }
+                })();
+              }}
+              onAdvance={(id) => {
+                void (async () => {
+                  try {
+                    await advanceApplication(id);
+                    toast("Advanced to next stage");
+                    await load();
+                  } catch (e) {
+                    toast(e instanceof Error ? e.message : "Advance failed", "error");
+                  }
+                })();
+              }}
+              onReject={(id, reason) => {
+                void (async () => {
+                  try {
+                    await rejectApplication(id, reason);
+                    toast("Candidate rejected");
+                    await load();
+                  } catch (e) {
+                    toast(e instanceof Error ? e.message : "Reject failed", "error");
+                  }
+                })();
+              }}
+              onMarkHired={(id) => {
+                void (async () => {
+                  try {
+                    await markApplicationHired(id);
+                    toast("Marked hired");
+                    await load();
+                  } catch (e) {
+                    toast(e instanceof Error ? e.message : "Mark hired failed", "error");
+                  }
+                })();
+              }}
+              onMarkBackedOut={(id, reason) => {
+                void (async () => {
+                  try {
+                    await markApplicationBackedOut(id, reason);
+                    toast("Marked backed out");
+                    await load();
+                  } catch (e) {
+                    toast(e instanceof Error ? e.message : "Back out failed", "error");
+                  }
+                })();
+              }}
+            />
+          </div>
+        ) : null}
 
-      {tab === "pipeline" ? (
-        <PipelineKanban
-          applications={applications}
+      {tab === "offers" ? (
+        <OffersPanel
+          offers={dir?.offers ?? []}
           candidates={dir?.candidates ?? []}
           jobs={dir?.jobs ?? []}
-          onMove={(id, stage: PipelineStage) => {
+          onGenerate={() => setOfferOpen(true)}
+          onSend={(id) => {
             void (async () => {
-              await moveApplicationStage(id, stage);
-              toast(`Moved to ${PIPELINE_STAGES.find((s) => s.id === stage)?.label ?? stage}`);
+              await updateOfferStatus(id, "sent");
+              toast("Offer sent");
               await load();
+            })();
+          }}
+          onAccept={(id) => {
+            void (async () => {
+              await updateOfferStatus(id, "accepted");
+              toast("Offer accepted — ready to onboard");
+              await load();
+            })();
+          }}
+          onDecline={(id) => {
+            void (async () => {
+              await updateOfferStatus(id, "rejected");
+              await load();
+            })();
+          }}
+          onboardingOfferId={onboardingOfferId}
+          onOnboard={(offer: AtsOffer) => {
+            void (async () => {
+              setOnboardingOfferId(offer.id);
+              try {
+                const cand = dir?.candidates.find((c) => c.id === offer.candidateId);
+                const job = dir?.jobs.find((j) => j.id === offer.jobId);
+                if (!cand) {
+                  toast("Candidate not found for this offer", "error");
+                  return;
+                }
+
+                const existing = await loadOnboardingDirectory();
+                const already = existing.cases.find(
+                  (c) =>
+                    c.offerId === offer.id ||
+                    (c.candidateId === offer.candidateId &&
+                      c.status !== "cancelled" &&
+                      c.status !== "completed"),
+                );
+                if (already) {
+                  toast(`Onboarding already started (${already.caseCode})`);
+                  router.push("/hr/onboarding");
+                  return;
+                }
+
+                const entities = await listEntityOptions();
+                const entity = entities[0];
+                const employmentRaw = String(
+                  offer.employmentType || job?.employmentType || "full_time",
+                );
+                const employmentType =
+                  employmentRaw === "full_time"
+                    ? "permanent"
+                    : employmentRaw === "intern"
+                      ? "intern"
+                      : employmentRaw === "contract"
+                        ? "contract"
+                        : employmentRaw === "part_time"
+                          ? "part_time"
+                          : employmentRaw || "permanent";
+
+                const created = await startOnboarding({
+                  candidateId: cand.id,
+                  candidateName: cand.fullName,
+                  candidateEmail: cand.email,
+                  candidatePhone: cand.phone,
+                  joiningDate: offer.joiningDate,
+                  entityId: entity?.value || "",
+                  entityName: entity?.label || "",
+                  department: offer.department || job?.department || "",
+                  designation: job?.designation || job?.title || "",
+                  reportingManager:
+                    offer.reportingManager || job?.hiringManager || "",
+                  branch: job?.branch || "",
+                  employmentType,
+                  invitationExpiryDays: 14,
+                  employeeIdMode: "auto",
+                  offerId: offer.id,
+                  offerCode: offer.offerCode,
+                });
+
+                try {
+                  await sendInvitation(created.id, "email", 14);
+                } catch {
+                  /* invitation optional if email channel fails */
+                }
+
+                if (offer.applicationId) {
+                  try {
+                    await markApplicationHired(offer.applicationId);
+                  } catch {
+                    /* pipeline hire is best-effort */
+                  }
+                }
+
+                toast(`Onboarding ${created.caseCode} started for ${cand.fullName}`);
+                router.push("/hr/onboarding");
+              } catch (e) {
+                toast(
+                  e instanceof Error ? e.message : "Could not start onboarding",
+                  "error",
+                );
+              } finally {
+                setOnboardingOfferId(null);
+              }
             })();
           }}
         />
       ) : null}
 
-      {tab === "interviews" ? (
-        <div className="space-y-3">
-          <Button size="sm" className="cursor-pointer" onClick={() => setIntOpen(true)}>
-            <CalendarClock className="size-3.5" />
-            Schedule Interview
-          </Button>
-          <EntityTable
-            emptyTitle="No interviews"
-            headers={["Code", "Candidate", "Type", "When", "Mode", "Interviewer", "Status"]}
-            rows={(dir?.interviews ?? []).map((i) => {
-              const c = dir?.candidates.find((x) => x.id === i.candidateId);
-              return [
-                i.interviewCode,
-                c?.fullName ?? "—",
-                i.interviewType,
-                `${i.date} ${i.time}`,
-                i.mode,
-                i.interviewer || "—",
-                <HrStatusBadge key="st" status={i.status} />,
-              ];
-            })}
-            page={1}
-            total={dir?.interviews.length ?? 0}
-            onPageChange={() => undefined}
-          />
-        </div>
-      ) : null}
-
-      {tab === "offers" ? (
-        <div className="space-y-3">
-          <Button size="sm" className="cursor-pointer" onClick={() => setOfferOpen(true)}>
-            <FileCheck2 className="size-3.5" />
-            Generate Offer
-          </Button>
-          <EntityTable
-            emptyTitle="No offers"
-            headers={["Offer", "Candidate", "CTC", "Join", "Status", ""]}
-            rows={(dir?.offers ?? []).map((o) => {
-              const c = dir?.candidates.find((x) => x.id === o.candidateId);
-              return [
-                o.offerCode,
-                c?.fullName ?? "—",
-                o.ctc ? `₹${o.ctc.toLocaleString("en-IN")}` : "—",
-                o.joiningDate || "—",
-                <HrStatusBadge key="s" status={OFFER_STATUS_LABELS[o.status]} />,
-                <div key="a" className="flex gap-1">
-                  {o.status === "sent" ? (
-                    <>
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="h-7 cursor-pointer"
-                        onClick={() => {
-                          void (async () => {
-                            await updateOfferStatus(o.id, "accepted");
-                            toast("Offer accepted — start Onboarding");
-                            await load();
-                          })();
-                        }}
-                      >
-                        Accept
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="h-7 cursor-pointer"
-                        onClick={() => {
-                          void (async () => {
-                            await updateOfferStatus(o.id, "rejected");
-                            await load();
-                          })();
-                        }}
-                      >
-                        Reject
-                      </Button>
-                    </>
-                  ) : o.status === "accepted" ? (
-                    <Link
-                      href="/hr/onboarding"
-                      className="inline-flex h-7 cursor-pointer items-center rounded-md border px-2 text-[11px] hover:bg-muted"
-                    >
-                      Onboard
-                    </Link>
-                  ) : null}
-                </div>,
-              ];
-            })}
-            page={1}
-            total={dir?.offers.length ?? 0}
-            onPageChange={() => undefined}
-          />
-        </div>
-      ) : null}
-
       {tab === "documents" ? (
-        <EntityTable
-          emptyTitle="No documents"
-          headers={["File", "Candidate", "Type", "Uploaded"]}
-          rows={(dir?.documents ?? []).map((d) => {
-            const c = dir?.candidates.find((x) => x.id === d.candidateId);
-            return [d.fileName, c?.fullName ?? "—", d.kind, new Date(d.uploadedAt).toLocaleString()];
-          })}
-          page={1}
-          total={dir?.documents.length ?? 0}
-          onPageChange={() => undefined}
+        <DocumentsPanel
+          documents={dir?.documents ?? []}
+          candidates={dir?.candidates ?? []}
+          jobs={dir?.jobs ?? []}
+          applications={dir?.applications ?? []}
+          onView={(doc) => {
+            toast(`Viewing ${doc.fileName}`);
+          }}
+          onDownload={(doc) => {
+            toast(`Download started: ${doc.fileName}`);
+          }}
+          onVerify={(id) => {
+            updateDocumentStatus(id, "verified");
+            toast("Document marked verified");
+            void load();
+          }}
+          onMarkPending={(id) => {
+            updateDocumentStatus(id, "pending");
+            toast("Document marked pending");
+            void load();
+          }}
         />
       ) : null}
-
-      {tab === "reports" ? (
-        <div className="grid gap-3 md:grid-cols-2">
-          <ReportBlock title="Offer Acceptance Rate" value={`${stats?.offerAcceptanceRate ?? 0}%`} />
-          <ReportBlock title="Avg Time to Hire" value={`${stats?.avgTimeToHire ?? 0} days`} />
-          <div className="rounded-xl border border-border/70 bg-card p-4">
-            <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Source performance</p>
-            <ul className="space-y-1 text-xs">
-              {sourcePerformance(dir ?? emptyDir()).map((r) => (
-                <li key={r.source} className="flex justify-between">
-                  <span>{SOURCE_LABELS[r.source as keyof typeof SOURCE_LABELS] ?? r.source}</span>
-                  <span className="font-medium">{r.count}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="rounded-xl border border-border/70 bg-card p-4">
-            <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Recruiter performance</p>
-            <ul className="space-y-1 text-xs">
-              {recruiterPerformance(dir ?? emptyDir()).map((r) => (
-                <li key={r.recruiter} className="flex justify-between">
-                  <span>{r.recruiter}</span>
-                  <span className="font-medium">{r.count}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="rounded-xl border border-border/70 bg-card p-4 md:col-span-2">
-            <p className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Department hiring</p>
-            <ul className="space-y-1 text-xs">
-              {departmentHiring(dir ?? emptyDir()).map((r) => (
-                <li key={r.department} className="flex justify-between">
-                  <span>{r.department}</span>
-                  <span className="font-medium">{r.filled} filled</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      ) : null}
-
-      {tab === "audit" ? (
-        <EntityTable
-          emptyTitle="No audit entries"
-          headers={["When", "Action", "Detail", "Actor"]}
-          rows={audit.slice(0, 100).map((a) => [
-            new Date(a.at).toLocaleString(),
-            a.action,
-            a.detail,
-            a.actor,
-          ])}
-          page={1}
-          total={audit.length}
-          onPageChange={() => undefined}
-        />
-      ) : null}
+      </RecruitmentOverviewDashboard>
 
       <JobOpeningDrawer
         key={editJob?.id ?? "new-job"}
@@ -603,10 +595,49 @@ export function RecruitmentAtsPage() {
         onSubmit={handleCreateJob}
       />
       <CandidateDrawer
+        key={editCandidate?.id ?? "new-cand"}
         open={candOpen}
-        onClose={() => setCandOpen(false)}
+        initial={editCandidate}
+        onClose={() => {
+          setCandOpen(false);
+          setEditCandidate(null);
+        }}
         jobs={dir?.jobs ?? []}
         onSubmit={handleCreateCandidate}
+      />
+      <CandidateViewDrawer
+        open={Boolean(viewCandidate)}
+        onClose={() => setViewCandidate(null)}
+        candidate={viewCandidate}
+        application={viewCandidate ? primaryAppFor(viewCandidate.id) : null}
+        job={
+          viewCandidate
+            ? (() => {
+                const app = primaryAppFor(viewCandidate.id);
+                return app ? (dir?.jobs.find((j) => j.id === app.jobId) ?? null) : null;
+              })()
+            : null
+        }
+        documents={dir?.documents ?? []}
+        interviews={dir?.interviews ?? []}
+        offers={dir?.offers ?? []}
+        candidates={dir?.candidates ?? []}
+        onNavigate={(c) => setViewCandidate(c)}
+        onSave={async ({ candidateId, patch, notes }) => {
+          try {
+            if (patch) {
+              const updated = await updateCandidate(candidateId, patch);
+              if (updated) setViewCandidate(updated);
+            }
+            const app = primaryAppFor(candidateId);
+            if (app) updateApplicationNotes(app.id, notes);
+            toast(patch ? "Candidate updated" : "Candidate notes saved");
+            await load();
+          } catch (e) {
+            toast(e instanceof Error ? e.message : "Failed to save candidate", "error");
+            throw e;
+          }
+        }}
       />
       <InterviewDrawer
         open={intOpen}
@@ -631,8 +662,40 @@ export function RecruitmentAtsPage() {
         onSubmit={(input) => {
           void (async () => {
             await generateOffer(input);
-            toast("Offer generated");
+            toast(
+              input.status === "sent"
+                ? "Offer sent — pipeline at Offer Sent"
+                : "Offer draft saved",
+            );
             await load();
+          })();
+        }}
+      />
+      <InterviewOutcomeDrawer
+        key={outcomeInterview?.id ?? "outcome"}
+        open={Boolean(outcomeInterview)}
+        onClose={() => setOutcomeInterview(null)}
+        interview={outcomeInterview}
+        candidate={
+          outcomeInterview
+            ? (dir?.candidates.find((c) => c.id === outcomeInterview.candidateId) ?? null)
+            : null
+        }
+        job={
+          outcomeInterview
+            ? (dir?.jobs.find((j) => j.id === outcomeInterview.jobId) ?? null)
+            : null
+        }
+        onSave={(input) => {
+          void (async () => {
+            try {
+              await recordInterviewOutcome(input);
+              toast(`Interview marked ${input.recommendation}`);
+              setOutcomeInterview(null);
+              await load();
+            } catch (e) {
+              toast(e instanceof Error ? e.message : "Failed to save outcome", "error");
+            }
           })();
         }}
       />
@@ -672,49 +735,6 @@ export function RecruitmentAtsPage() {
   );
 }
 
-function emptyDir(): AtsDirectory {
-  return {
-    jobs: [],
-    candidates: [],
-    applications: [],
-    interviews: [],
-    offers: [],
-    documents: [],
-    departments: [],
-    apiPartial: false,
-  };
-}
-
-function QuickAction({
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  icon: typeof Briefcase;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex cursor-pointer items-center gap-2 rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5 text-left text-xs font-medium transition-colors duration-200 hover:bg-muted"
-    >
-      <Icon className="size-3.5 text-primary" />
-      {label}
-    </button>
-  );
-}
-
-function ReportBlock({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-border/70 bg-card px-4 py-4">
-      <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{title}</p>
-      <p className="mt-1 text-2xl font-semibold">{value}</p>
-    </div>
-  );
-}
-
 function EntityTable({
   headers,
   rows,
@@ -740,12 +760,12 @@ function EntityTable({
   return (
     <div className="space-y-2">
       {bulk}
-      <div className="overflow-hidden rounded-xl border border-border/70 bg-card">
+      <div className="overflow-x-auto rounded-[12px] border border-[#EEEFF3] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
         <table className="w-full text-left text-xs">
-          <thead className="border-b border-border/70 bg-muted/40 text-[10px] uppercase tracking-wide text-muted-foreground">
+          <thead className="border-b border-[#F3F4F6] text-[11px] font-medium tracking-wide text-[#9CA3AF] uppercase">
             <tr>
               {headers.map((h) => (
-                <th key={h || "a"} className="px-3 py-2 font-medium">
+                <th key={h || "a"} className="px-3 py-3 font-medium">
                   {h}
                 </th>
               ))}
@@ -755,10 +775,10 @@ function EntityTable({
             {rows.map((row, i) => (
               <tr
                 key={i}
-                className="border-b border-border/50 transition-colors duration-150 hover:bg-muted/30"
+                className="border-b border-[#F8F8FA] transition-colors duration-150 hover:bg-[#FAFAFC]"
               >
                 {row.map((cell, j) => (
-                  <td key={j} className="px-3 py-2 align-middle">
+                  <td key={j} className="px-3 py-3 align-middle text-[12px] text-[#374151]">
                     {cell}
                   </td>
                 ))}

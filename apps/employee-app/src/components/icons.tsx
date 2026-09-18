@@ -269,3 +269,111 @@ export function IconBrand(props: IconProps) {
     </svg>
   );
 }
+
+export function IconMail(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3" y="5" width="18" height="14" rx="2.5" />
+      <path d="M3.5 7.5 12 13l8.5-5.5" />
+    </svg>
+  );
+}
+
+export function IconPhone(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M8 3.5h3.2l1.2 4.2-2 1.2a12 12 0 0 0 5.7 5.7l1.2-2 4.2 1.2V17a2 2 0 0 1-2.2 2A15.5 15.5 0 0 1 4 7.2 2 2 0 0 1 6 5h2z" />
+    </svg>
+  );
+}
+
+export function IconBuilding(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 20h16" />
+      <path d="M6 20V6.5A1.5 1.5 0 0 1 7.5 5h9A1.5 1.5 0 0 1 18 6.5V20" />
+      <path d="M9 9h.01" />
+      <path d="M12 9h.01" />
+      <path d="M15 9h.01" />
+      <path d="M9 13h.01" />
+      <path d="M12 13h.01" />
+      <path d="M15 13h.01" />
+      <path d="M10 20v-3h4v3" />
+    </svg>
+  );
+}
+
+export function IconUsers(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="9" cy="8" r="3" />
+      <path d="M3.5 19c1.4-2.6 3.3-3.8 5.5-3.8S13.1 16.4 14.5 19" />
+      <circle cx="17" cy="9" r="2.4" />
+      <path d="M15.2 19c.7-1.5 1.8-2.4 3.3-2.7" />
+    </svg>
+  );
+}
+
+export function IconDocument(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M7 3.5h7l4 4V20a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 20V5A1.5 1.5 0 0 1 7 3.5z" />
+      <path d="M14 3.5V8h4.5" />
+      <path d="M8.5 12h7" />
+      <path d="M8.5 16h5" />
+    </svg>
+  );
+}
+
+export function IconLaptop(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="4" y="5" width="16" height="11" rx="1.8" />
+      <path d="M2.5 19h19" />
+      <path d="M9 19h6" />
+    </svg>
+  );
+}
+
+export function IconBank(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M3 10.5 12 4l9 6.5" />
+      <path d="M5 10.5V18" />
+      <path d="M9.5 10.5V18" />
+      <path d="M14.5 10.5V18" />
+      <path d="M19 10.5V18" />
+      <path d="M3.5 18h17" />
+      <path d="M2.5 21h19" />
+    </svg>
+  );
+}
+
+export function IconCacheMark(props: IconProps) {
+  const size = props.size ?? 36;
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 40 40"
+      fill="none"
+      aria-hidden
+      className={props.className}
+    >
+      <path
+        d="M20 2.5 34.5 11v18L20 37.5 5.5 29V11L20 2.5z"
+        fill="url(#cacheMarkGrad)"
+      />
+      <defs>
+        <linearGradient id="cacheMarkGrad" x1="6" y1="4" x2="34" y2="36">
+          <stop stopColor="#7c5cfc" />
+          <stop offset="1" stopColor="#4f46e5" />
+        </linearGradient>
+      </defs>
+      <path
+        d="M13.5 20.2c0-3.5 2.7-6.2 6.5-6.2 2.6 0 4.7 1.1 5.8 2.9l-2.4 1.5c-.7-1.1-1.9-1.8-3.4-1.8-2.1 0-3.6 1.6-3.6 3.6s1.5 3.6 3.6 3.6c1.5 0 2.7-.7 3.4-1.8l2.4 1.5c-1.1 1.8-3.2 2.9-5.8 2.9-3.8 0-6.5-2.7-6.5-6.2z"
+        fill="white"
+      />
+    </svg>
+  );
+}

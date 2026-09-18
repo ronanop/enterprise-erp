@@ -269,6 +269,7 @@ export function HrUnderlineTabs({
   trailing,
   embedded,
   size = "md",
+  variant = "underline",
 }: {
   tabs: HrTabItem[];
   value: string;
@@ -278,15 +279,22 @@ export function HrUnderlineTabs({
   /** Skip outer card chrome when tabs sit inside another container. */
   embedded?: boolean;
   size?: "sm" | "md";
+  variant?: "underline" | "pills";
 }) {
-  const pad = size === "sm" ? "px-2.5 py-2 text-xs" : "px-3 py-2.5 text-sm sm:px-4";
-  const iconSize = size === "sm" ? "size-3.5" : "size-4";
+  const pills = variant === "pills";
+  const pad = pills
+    ? "px-3 py-1.5 text-[12px]"
+    : size === "sm"
+      ? "px-2.5 py-2 text-xs"
+      : "px-3 py-2.5 text-sm sm:px-4";
+  const iconSize = pills || size === "sm" ? "size-3.5" : "size-4";
 
   return (
     <div
       className={cn(
         "flex flex-wrap items-center justify-between gap-2",
-        !embedded && "rounded-2xl border border-border bg-card px-2 shadow-sm",
+        !embedded && !pills && "rounded-2xl border border-border bg-card px-2 shadow-sm",
+        !embedded && pills && "rounded-full border border-[#E5E7EB] bg-white px-1.5 py-1 shadow-[0_1px_2px_rgba(15,23,42,0.04)]",
         className,
       )}
     >
@@ -300,17 +308,36 @@ export function HrUnderlineTabs({
               type="button"
               onClick={() => onChange(t.id)}
               className={cn(
-                "-mb-px flex shrink-0 cursor-pointer items-center gap-2 border-b-[3px] transition-colors",
+                "flex shrink-0 cursor-pointer items-center gap-2 transition-colors duration-200",
                 pad,
-                active
-                  ? "border-primary font-semibold text-foreground"
-                  : "border-transparent font-normal text-muted-foreground hover:text-foreground",
+                pills
+                  ? cn(
+                      "rounded-full font-medium",
+                      active
+                        ? "bg-[#7C3AED] text-white"
+                        : "text-[#6B7280] hover:bg-[#F5F3FF] hover:text-[#7C3AED]",
+                    )
+                  : cn(
+                      "-mb-px border-b-[3px]",
+                      active
+                        ? "border-primary font-semibold text-foreground"
+                        : "border-transparent font-normal text-muted-foreground hover:text-foreground",
+                    ),
               )}
             >
-              {Icon ? <Icon className={cn(iconSize, "shrink-0")} /> : null}
+              {Icon ? <Icon className={cn(iconSize, "shrink-0")} strokeWidth={1.75} /> : null}
               <span className="whitespace-nowrap">{t.label}</span>
               {t.badge != null && t.badge !== 0 ? (
-                <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                <span
+                  className={cn(
+                    "inline-flex min-w-5 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                    pills
+                      ? active
+                        ? "bg-white/20 text-white"
+                        : "bg-[#7C3AED] text-white"
+                      : "bg-primary text-primary-foreground",
+                  )}
+                >
                   {t.badge}
                 </span>
               ) : null}
@@ -318,7 +345,11 @@ export function HrUnderlineTabs({
           );
         })}
       </div>
-      {trailing ? <div className="flex shrink-0 flex-wrap items-center gap-2 pb-1">{trailing}</div> : null}
+      {trailing ? (
+        <div className={cn("flex shrink-0 flex-wrap items-center gap-2", !pills && "pb-1")}>
+          {trailing}
+        </div>
+      ) : null}
     </div>
   );
 }

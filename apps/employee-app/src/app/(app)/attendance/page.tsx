@@ -9,12 +9,11 @@ import {
   IconCheck,
   IconChevronRight,
   IconClock,
-  IconFingerprint,
   IconLocation,
   IconLogin,
   IconLogout,
 } from "@/components/icons";
-import { AlertBox, EmptyState } from "@/components/ui";
+import { AlertBox } from "@/components/ui";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
 import type { EssAttendance, EssAttendanceSummary, EssMe, EssPunchPolicy } from "@/types/api";
@@ -132,7 +131,6 @@ export default function AttendancePage() {
   const lateDays = summary?.late_days ?? 0;
   const overtimeH = (summary?.total_overtime_minutes ?? 0) / 60;
   const firstName = me?.display_name?.split(/\s+/)[0] ?? "there";
-  const recent = rows.slice(0, 5);
   const calendar = useMemo(() => buildMonthGrid(todayStr), [todayStr]);
 
   if (showSuccess && today?.check_in_at && !today.check_out_at) {
@@ -323,48 +321,14 @@ export default function AttendancePage() {
         onConfirm={(img) => void runPunch(punchSheet ?? "in", img)}
       />
 
-      <section className="space-y-3">
-        <h3 className="text-lg font-semibold text-[#0b1c30]">Recent Activity</h3>
-        {recent.length === 0 ? (
-          <EmptyState
-            title="No attendance yet"
-            description="Your punches will show up here."
-            icon={<IconFingerprint size={20} />}
-          />
-        ) : (
-          <ul className="space-y-2">
-            {recent.map((row) => (
-              <li
-                key={row.id}
-                className={`${ui.card} flex items-center justify-between gap-3 p-4`}
-              >
-                <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#eff4ff] text-[#434655]">
-                    <IconClock size={18} />
-                  </span>
-                  <div>
-                    <p className="text-sm font-semibold text-[#0b1c30]">
-                      Clock In — Office
-                    </p>
-                    <p className="text-xs text-[#434655]">
-                      {row.attendance_date}, {formatTime(row.check_in_at)}
-                    </p>
-                  </div>
-                </div>
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#10B981]">
-                  Verified <IconChevronRight size={14} className="text-[#c3c6d7]" />
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+      <div className="pb-2 text-center">
         <Link
           href="/attendance/history"
-          className="block py-2 text-center text-sm font-semibold text-[#004ac6]"
+          className="text-sm font-semibold text-[#004ac6]"
         >
           View Full Attendance Report
         </Link>
-      </section>
+      </div>
     </div>
   );
 }

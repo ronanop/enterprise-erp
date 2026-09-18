@@ -256,13 +256,18 @@ class ApplicationUpdate(BaseModel):
     status: str | None = None
     current_stage_code: str | None = None
     rejection_reason: str | None = None
+    exit_reason: str | None = None
+    exited_at_stage: str | None = None
     version: int | None = None
 
 class ApplicationAdvanceRequest(BaseModel):
     stage: str
 
 class ApplicationRejectRequest(BaseModel):
-    reason: str | None = None
+    reason: str
+
+class ApplicationBackOutRequest(BaseModel):
+    reason: str
 
 class ApplicationResponse(OrmModel):
     id: UUID
@@ -275,10 +280,20 @@ class ApplicationResponse(OrmModel):
     applied_at: datetime
     current_stage_code: str | None
     rejection_reason: str | None
+    exited_at_stage: str | None = None
+    exited_at: datetime | None = None
+    exit_reason: str | None = None
     status: str
     company_id: UUID
     branch_id: UUID
     version: int
+
+class PipelineStatsResponse(BaseModel):
+    by_stage: dict[str, int]
+    background_checks_pending: int
+    backed_out: int
+    hired: int
+    backout_rate: float
 
 class ApplicationStageCreate(BaseModel):
     company_id: UUID | None = None

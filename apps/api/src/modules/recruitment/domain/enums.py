@@ -57,15 +57,26 @@ class ResumeStatus(str, Enum):
 
 
 class ApplicationStatus(str, Enum):
-    APPLIED = "applied"
-    SCREENING = "screening"
-    INTERVIEW = "interview"
-    SELECTED = "selected"
-    OFFER = "offer"
-    HIRED = "hired"
+    """Outcome / activity — independent of pipeline stage (kanban column)."""
+
+    ACTIVE = "active"
     REJECTED = "rejected"
-    ON_HOLD = "on_hold"
-    WITHDRAWN = "withdrawn"
+    OFFER_DECLINED = "offer_declined"
+    BACKED_OUT = "backed_out"
+    HIRED = "hired"
+
+
+class ApplicationPipelineStage(str, Enum):
+    """Kanban column — preserved after exit for conversion metrics."""
+
+    SOURCED = "sourced"
+    SCREENING = "screening"
+    INTERVIEW_ROUND_1 = "interview_round_1"
+    INTERVIEW_ROUND_2 = "interview_round_2"
+    HR_DISCUSSION = "hr_discussion"
+    BACKGROUND_CHECK = "background_check"
+    OFFER_SENT = "offer_sent"
+    OFFER_ACCEPTED = "offer_accepted"
 
 
 class ApplicationStageStatus(str, Enum):

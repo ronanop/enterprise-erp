@@ -86,6 +86,7 @@ def microsoft_login(
     request: Request,
     db: Annotated[Session, Depends(get_db)],
     return_to: Annotated[str, Query(max_length=200)] = "/organization",
+    client: Annotated[str | None, Query(max_length=32)] = None,
 ) -> RedirectResponse:
     if not MicrosoftOAuthService.is_enabled():
         raise MicrosoftLoginNotConfiguredException()
@@ -97,9 +98,19 @@ def microsoft_login(
         if return_to.startswith("/") and not return_to.startswith("//")
         else "/organization"
     )
+    # Employee PWA uses EMPLOYEE_APP_URL so OAuth lands back on :3001, not admin web.
+    frontend_base = (
+        settings.employee_app_url.rstrip("/")
+        if (client or "").strip().lower() in {"ess", "employee", "employee-app"}
+        else settings.frontend_url.rstrip("/")
+    )
     SessionStore().set_oauth_state(
         state,
-        {"return_to": safe_return, "ip": get_client_ip(request)},
+        {
+            "return_to": safe_return,
+            "frontend_base": frontend_base,
+            "ip": get_client_ip(request),
+        },
     )
     return RedirectResponse(oauth.build_authorization_url(state=state), status_code=302)
 
@@ -113,16 +124,15 @@ def microsoft_callback(
 ) -> RedirectResponse:
     service = AuthService(db)
     try:
-        exchange_code, _return_to = service.complete_microsoft_oauth(
+        exchange_code, _return_to, frontend_base = service.complete_microsoft_oauth(
             code=code,
             state=state,
             ip_address=get_client_ip(request),
             user_agent=request.headers.get("User-Agent"),
         )
         db.commit()
-        redirect_url = (
-            f"{settings.frontend_url.rstrip('/')}/auth/microsoft/callback?code={quote(exchange_code)}"
-        )
+        base = (frontend_base or settings.frontend_url).rstrip("/")
+        redirect_url = f"{base}/auth/microsoft/callback?code={quote(exchange_code)}"
         return RedirectResponse(redirect_url, status_code=302)
     except Exception as exc:
         db.rollback()

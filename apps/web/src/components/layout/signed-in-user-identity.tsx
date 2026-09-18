@@ -7,8 +7,8 @@ import { cn } from "@/lib/utils";
 type SignedInUserIdentityProps = {
   /** Sidebar collapsed — avatar only with tooltip via title. */
   collapsed?: boolean;
-  /** Top bar: single-line name + email beside avatar. */
-  variant?: "sidebar" | "topbar";
+  /** Top bar: single-line name + email beside avatar. Compact: initials circle only. */
+  variant?: "sidebar" | "topbar" | "compact";
   className?: string;
 };
 
@@ -25,13 +25,18 @@ export function SignedInUserIdentity({
         className={cn(
           "flex items-center gap-3",
           variant === "topbar" && "min-w-0",
-          collapsed && "justify-center",
+          (collapsed || variant === "compact") && "justify-center",
           className,
         )}
         aria-busy="true"
         aria-label="Loading user"
       >
-        <div className="size-9 shrink-0 animate-pulse rounded-xl bg-muted" />
+        <div
+          className={cn(
+            "shrink-0 animate-pulse bg-muted",
+            variant === "compact" ? "size-8 rounded-full" : "size-9 rounded-xl",
+          )}
+        />
         {!collapsed && variant === "sidebar" ? (
           <div className="min-w-0 flex-1 space-y-1.5">
             <div className="h-3.5 w-24 animate-pulse rounded bg-muted" />
@@ -54,6 +59,18 @@ export function SignedInUserIdentity({
 
   const title = `${user.displayName} · ${user.email}`;
 
+  if (variant === "compact") {
+    return (
+      <div className={cn("flex items-center", className)} title={title}>
+        <UserAvatar
+          displayName={user.displayName}
+          size="sm"
+          className="!size-8 !rounded-full !bg-[#7C3AED] !text-[11px] !text-white !shadow-none"
+        />
+      </div>
+    );
+  }
+
   if (variant === "topbar") {
     return (
       <div className={cn("flex min-w-0 items-center gap-2.5", className)} title={title}>
@@ -66,22 +83,27 @@ export function SignedInUserIdentity({
     );
   }
 
-  return (
-    <div
-      className={cn("flex items-center gap-3", collapsed && "justify-center", className)}
-      title={collapsed ? title : undefined}
-    >
-      <span className="shrink-0">
-        <UserAvatar displayName={user.displayName} size="sm" />
-      </span>
-      {!collapsed ? (
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
-            {user.displayName}
-          </p>
-          <p className="truncate text-[11px] text-sidebar-foreground/65">{user.email}</p>
-        </div>
-      ) : null}
-    </div>
-  );
+  if (variant === "sidebar") {
+    return (
+      <div
+        className={cn("flex items-center gap-3", collapsed && "justify-center", className)}
+        title={collapsed ? title : undefined}
+      >
+        <span className="shrink-0">
+          <UserAvatar displayName={user.displayName} size="sm" />
+        </span>
+        {!collapsed ? (
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
+              {user.displayName}
+            </p>
+            <p className="truncate text-[11px] text-sidebar-foreground/65">{user.email}</p>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  const _exhaustive: never = variant;
+  return _exhaustive;
 }

@@ -181,7 +181,7 @@ class AuthService:
         state: str,
         ip_address: str | None = None,
         user_agent: str | None = None,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, str | None]:
         oauth = MicrosoftOAuthService()
         stored = self._store.pop_oauth_state(state)
         if stored is None:
@@ -189,6 +189,11 @@ class AuthService:
 
         return_to = (
             stored.get("return_to") if isinstance(stored.get("return_to"), str) else "/"
+        )
+        frontend_base = (
+            stored.get("frontend_base")
+            if isinstance(stored.get("frontend_base"), str)
+            else None
         )
         claims = oauth.exchange_authorization_code(code)
         email = MicrosoftOAuthService.email_from_claims(claims)
@@ -202,7 +207,7 @@ class AuthService:
         )
         exchange_code = oauth.create_exchange_code()
         self._store.set_oauth_exchange(exchange_code, {**tokens, "return_to": return_to})
-        return exchange_code, return_to
+        return exchange_code, return_to, frontend_base
 
     def redeem_microsoft_exchange(self, exchange_code: str) -> dict:
         payload = self._store.pop_oauth_exchange(exchange_code)

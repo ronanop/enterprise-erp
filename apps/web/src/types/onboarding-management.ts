@@ -398,4 +398,7 @@ export type StartOnboardingInput = {
   invitationExpiryDays: number;
   employeeIdMode?: "auto" | "manual";
   assignedEmployeeCode?: string;
+  /** Optional link back to ATS offer */
+  offerId?: string;
+  offerCode?: string;
 };

@@ -88,14 +88,13 @@ export function RecruitmentDashboard() {
         "approved",
         "submitted",
       ]),
-      pipelineApps: countByStatus(data.applications, [
-        "applied",
-        "screening",
-        "interview",
-        "selected",
-        "offer",
-        "on_hold",
-      ]),
+      pipelineApps: (data.applications ?? []).filter((r) => {
+        const s = asStatus(r.status);
+        return (
+          s === "active" ||
+          ["applied", "screening", "interview", "selected", "offer", "on_hold"].includes(s)
+        );
+      }).length,
       scheduledInterviews: countByStatus(data.interviews, ["scheduled"]),
       openOffers: countOpenDocs(data.offers, [
         "accepted",

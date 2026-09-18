@@ -17,6 +17,7 @@ export type TokenData = {
   session_id: string | null;
   mfa_required: boolean;
   mfa_challenge_token: string | null;
+  redirect_to?: string | null;
 };
 
 export type AuthUser = {
@@ -49,6 +50,9 @@ export type EssMe = {
   date_of_joining: string;
   status: string;
   display_name: string;
+  department_name?: string | null;
+  manager_name?: string | null;
+  date_of_birth?: string | null;
   role_codes?: string[];
   ess_role?: "employee" | "manager" | "admin";
   is_manager?: boolean;

@@ -15,7 +15,9 @@ class RecApplicationStage(Base, *RecDetailMixin):
     __tablename__ = "rec_application_stage"
     __table_args__ = (
         CheckConstraint(
-            "stage_code IN ('applied','screening','interview','selected','offer','hired','rejected','on_hold')",
+            "stage_code IN ("
+            "'sourced','screening','interview_round_1','interview_round_2',"
+            "'hr_discussion','background_check','offer_sent','offer_accepted')",
             name="ck_rec_app_stage_code",
         ),
         CheckConstraint(

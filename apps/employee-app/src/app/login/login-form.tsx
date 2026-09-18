@@ -43,6 +43,17 @@ function saveRemembered(data: Remembered | null) {
   }
 }
 
+function MicrosoftIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="18" height="18" viewBox="0 0 23 23" aria-hidden>
+      <path fill="#f35325" d="M1 1h10v10H1z" />
+      <path fill="#81bc06" d="M12 1h10v10H12z" />
+      <path fill="#05a6f0" d="M1 12h10v10H1z" />
+      <path fill="#ffba08" d="M12 12h10v10H12z" />
+    </svg>
+  );
+}
+
 const fieldClass =
   "w-full rounded-2xl border border-[#e5e7eb] bg-white px-4 py-3.5 text-[0.95rem] text-[#111827] outline-none placeholder:text-[#9ca3af] transition focus:border-[#7c5cfc] focus:shadow-[0_0_0_3px_rgba(124,92,252,0.15)]";
 
@@ -60,6 +71,23 @@ export default function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [microsoftEnabled, setMicrosoftEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const oauthError = searchParams.get("error");
+    if (oauthError) setError(oauthError);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (env.useMock) {
+      setMicrosoftEnabled(false);
+      return;
+    }
+    authService
+      .microsoftConfig()
+      .then((res) => setMicrosoftEnabled(Boolean(res.data?.enabled)))
+      .catch(() => setMicrosoftEnabled(false));
+  }, []);
 
   useEffect(() => {
     if (env.useMock) return;
@@ -77,13 +105,6 @@ export default function LoginForm() {
     await essService.me();
     clearFaceVerified();
     const next = searchParams.get("next") || "/home";
-    if (!env.useMock) {
-      const face = await essService.faceStatus();
-      if (face.data?.verification_required) {
-        router.replace(`/login/face-verify?next=${encodeURIComponent(next)}`);
-        return;
-      }
-    }
     router.replace(next);
   }
 
@@ -152,6 +173,11 @@ export default function LoginForm() {
     setInfo("Password resets are managed by HR. Contact your HR team for help.");
   }
 
+  function onMicrosoftSignIn() {
+    const next = searchParams.get("next") || "/home";
+    window.location.href = authService.microsoftLoginUrl(next);
+  }
+
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-[#f5f5f7] px-6 py-10 text-[#111827]">
       <div className="flex flex-1 flex-col justify-center">
@@ -179,9 +205,38 @@ export default function LoginForm() {
             Welcome Back
           </h1>
           <p className="mt-2 max-w-xs text-[0.95rem] leading-relaxed text-[#6b7280]">
-            Log in to your account to continue.
+            Log in with SSO or your employee credentials.
           </p>
         </div>
+
+        {!env.useMock ? (
+          <div className="mb-5 space-y-3">
+            <button
+              type="button"
+              disabled={microsoftEnabled === false || microsoftEnabled === null}
+              onClick={onMicrosoftSignIn}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#e5e7eb] bg-white px-4 py-3.5 text-[1rem] font-semibold text-[#111827] shadow-sm transition hover:bg-[#f9fafb] disabled:opacity-55"
+            >
+              <MicrosoftIcon />
+              {microsoftEnabled === null
+                ? "Checking SSO…"
+                : microsoftEnabled === false
+                  ? "SSO not configured"
+                  : "Sign in with Microsoft"}
+            </button>
+            {microsoftEnabled === false ? (
+              <p className="text-center text-xs text-[#6b7280]">
+                Ask IT to enable Microsoft SSO, or use employee code / email below.
+              </p>
+            ) : (
+              <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-[#9ca3af]">
+                <span className="h-px flex-1 bg-[#e5e7eb]" />
+                Or
+                <span className="h-px flex-1 bg-[#e5e7eb]" />
+              </div>
+            )}
+          </div>
+        ) : null}
 
         <form onSubmit={onSubmit} className="space-y-4">
           <div className="flex rounded-2xl bg-[#ebebef] p-1">

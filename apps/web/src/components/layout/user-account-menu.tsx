@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 type UserAccountMenuProps = {
   onSignOut: () => void | Promise<void>;
   className?: string;
-  variant?: "topbar" | "sidebar";
+  variant?: "topbar" | "sidebar" | "compact";
   collapsed?: boolean;
 };
 
@@ -83,6 +83,8 @@ export function UserAccountMenu({
   }, [open, updatePosition]);
 
   const isSidebar = variant === "sidebar";
+  const isCompact = variant === "compact";
+  const showChevron = isCompact || !collapsed;
 
   return (
     <div className={cn("relative", className)}>
@@ -91,17 +93,23 @@ export function UserAccountMenu({
         type="button"
         className={cn(
           "flex w-full max-w-full cursor-pointer items-center gap-1 rounded-lg border border-transparent text-left transition-colors duration-200",
-          isSidebar
+          isCompact
             ? cn(
-              "px-0 py-0",
-              !collapsed && "hover:bg-sidebar-accent/40",
-              open && !collapsed && "bg-sidebar-accent/40",
-            )
-            : cn(
-              "max-w-[min(100%,280px)] px-1.5 py-1",
-              "hover:border-border/80 hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-              open && "border-border/80 bg-muted/60",
-            ),
+                "w-auto rounded-full p-0.5 pr-1.5",
+                "hover:bg-[#F5F3FF] focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+                open && "bg-[#F5F3FF]",
+              )
+            : isSidebar
+              ? cn(
+                  "px-0 py-0",
+                  !collapsed && "hover:bg-sidebar-accent/40",
+                  open && !collapsed && "bg-sidebar-accent/40",
+                )
+              : cn(
+                  "max-w-[min(100%,280px)] px-1.5 py-1",
+                  "hover:border-border/80 hover:bg-muted/60 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+                  open && "border-border/80 bg-muted/60",
+                ),
         )}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -109,11 +117,11 @@ export function UserAccountMenu({
         onClick={() => setOpen((v) => !v)}
       >
         <SignedInUserIdentity
-          variant={isSidebar ? "sidebar" : "topbar"}
+          variant={isCompact ? "compact" : isSidebar ? "sidebar" : "topbar"}
           collapsed={isSidebar ? collapsed : false}
-          className="min-w-0 flex-1"
+          className={cn("min-w-0", !isCompact && "flex-1")}
         />
-        {!collapsed ? (
+        {showChevron ? (
           <ChevronDown
             className={cn(
               "size-4 shrink-0 transition-transform duration-200",

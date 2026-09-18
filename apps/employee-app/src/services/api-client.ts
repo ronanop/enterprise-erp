@@ -160,6 +160,29 @@ export const authService = {
       enabled: boolean;
     }>("/auth/ess/captcha", { method: "GET", auth: false }),
 
+  microsoftConfig: () =>
+    apiClient<{ enabled: boolean }>("/auth/microsoft/config", {
+      method: "GET",
+      auth: false,
+    }),
+
+  microsoftLoginUrl: (returnTo = "/home") => {
+    const path = `/auth/microsoft/login?return_to=${encodeURIComponent(returnTo)}&client=ess`;
+    return `${env.apiUrl}${path}`;
+  },
+
+  exchangeMicrosoftCode: (code: string) =>
+    apiClient<TokenData>("/auth/microsoft/exchange", {
+      method: "POST",
+      auth: false,
+      body: { code },
+    }).then((res) => {
+      if (res.data?.access_token) {
+        setTokens(res.data.access_token, res.data.refresh_token ?? undefined);
+      }
+      return res;
+    }),
+
   essLogin: async (body: {
     company_code: string;
     employee_code: string;

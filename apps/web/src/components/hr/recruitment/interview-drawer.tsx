@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   SetupDrawer,
@@ -10,15 +10,26 @@ import {
   SetupTextarea,
 } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
+import { loadAtsLookups, type NamedOption } from "@/services/recruitment-ats-lookups";
 import type {
   AtsCandidate,
   AtsInterview,
   InterviewMode,
-  InterviewRecommendation,
-  InterviewType,
+  InterviewRound,
   JobOpening,
   PipelineApplication,
 } from "@/types/recruitment-ats";
+import { INTERVIEW_ROUND_LABELS } from "@/types/recruitment-ats";
+
+type SchedulePayload = Omit<
+  AtsInterview,
+  "id" | "interviewCode" | "createdAt" | "status" | "notes" | "feedback" | "rating" | "recommendation"
+> & {
+  notes?: string;
+  feedback?: string;
+  rating?: number;
+  recommendation?: AtsInterview["recommendation"];
+};
 
 type Props = {
   open: boolean;
@@ -26,7 +37,7 @@ type Props = {
   candidates: AtsCandidate[];
   jobs: JobOpening[];
   applications: PipelineApplication[];
-  onSubmit: (input: Omit<AtsInterview, "id" | "interviewCode" | "createdAt" | "status">) => void;
+  onSubmit: (input: SchedulePayload) => void;
 };
 
 export function InterviewDrawer({
@@ -39,17 +50,33 @@ export function InterviewDrawer({
 }: Props) {
   const [candidateId, setCandidateId] = useState("");
   const [jobId, setJobId] = useState("");
-  const [interviewType, setInterviewType] = useState<InterviewType>("hr");
+  const [round, setRound] = useState<InterviewRound>("round_1");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("10:00");
   const [mode, setMode] = useState<InterviewMode>("online");
-  const [interviewer, setInterviewer] = useState("");
+  const [participantIds, setParticipantIds] = useState<string[]>([]);
   const [meetingLink, setMeetingLink] = useState("");
   const [location, setLocation] = useState("");
-  const [notes, setNotes] = useState("");
-  const [feedback, setFeedback] = useState("");
-  const [rating, setRating] = useState("3");
-  const [recommendation, setRecommendation] = useState<InterviewRecommendation | "">("");
+  const [resumeLink, setResumeLink] = useState("");
+  const [sectionContent, setSectionContent] = useState("");
+  const [employees, setEmployees] = useState<NamedOption[]>([]);
+
+  useEffect(() => {
+    if (!open) return;
+    void loadAtsLookups().then((lookups) => setEmployees(lookups.employees));
+  }, [open]);
+
+  const selectedCandidate = candidates.find((c) => c.id === candidateId);
+  const selectedJob = jobs.find((j) => j.id === jobId);
+
+  useEffect(() => {
+    if (!candidateId) return;
+    const cand = candidates.find((c) => c.id === candidateId);
+    if (cand?.resumeUrl) setResumeLink(cand.resumeUrl);
+    else if (cand?.resumeName) setResumeLink(cand.resumeName);
+    const app = applications.find((a) => a.candidateId === candidateId);
+    if (app && !jobId) setJobId(app.jobId);
+  }, [candidateId, candidates, applications, jobId]);
 
   const applicationId = useMemo(() => {
     const app = applications.find(
@@ -58,25 +85,46 @@ export function InterviewDrawer({
     return app?.id ?? "";
   }, [applications, candidateId, jobId]);
 
+  function toggleParticipant(id: string) {
+    setParticipantIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
   function save() {
-    if (!candidateId || !date) return;
+    if (!candidateId || !date || participantIds.length === 0) return;
+    const names = employees
+      .filter((e) => participantIds.includes(e.id))
+      .map((e) => e.name);
     onSubmit({
       candidateId,
       jobId: jobId || applications.find((a) => a.candidateId === candidateId)?.jobId || "",
       applicationId,
-      interviewType,
+      interviewType: round,
+      round,
       date,
       time,
       mode,
-      interviewer,
+      interviewer: names.join(", "),
+      participantIds,
+      participantNames: names,
       meetingLink,
       location,
-      notes,
-      feedback,
-      rating: Number(rating) || 0,
-      recommendation,
+      resumeLink,
+      sectionContent,
+      notes: "",
+      feedback: "",
+      rating: 0,
+      recommendation: "",
     });
     onClose();
+    setCandidateId("");
+    setJobId("");
+    setRound("round_1");
+    setDate("");
+    setParticipantIds([]);
+    setResumeLink("");
+    setSectionContent("");
   }
 
   return (
@@ -85,7 +133,7 @@ export function InterviewDrawer({
       onClose={onClose}
       wide
       title="Schedule Interview"
-      description="Interview reminders are logged in audit when scheduled."
+      description="Attach resume & JD, pick round and participants. Outcome is recorded after the interview."
       footer={
         <>
           <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose}>
@@ -93,8 +141,8 @@ export function InterviewDrawer({
           </Button>
           <Button
             type="button"
-            className="cursor-pointer"
-            disabled={!candidateId || !date}
+            className="cursor-pointer bg-[#7C3AED] text-white hover:bg-[#6D28D9]"
+            disabled={!candidateId || !date || participantIds.length === 0}
             onClick={save}
           >
             Schedule Interview
@@ -113,9 +161,9 @@ export function InterviewDrawer({
             ))}
           </SetupSelect>
         </SetupField>
-        <SetupField label="Position">
+        <SetupField label="Job role" required>
           <SetupSelect value={jobId} onChange={(e) => setJobId(e.target.value)}>
-            <option value="">Any / from application</option>
+            <option value="">Select job role…</option>
             {jobs.map((j) => (
               <option key={j.id} value={j.id}>
                 {j.jobCode} · {j.title}
@@ -123,16 +171,48 @@ export function InterviewDrawer({
             ))}
           </SetupSelect>
         </SetupField>
+
+        {(selectedCandidate?.resumeName || selectedJob?.jdFileName || selectedJob?.description) && (
+          <div className="rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-xs">
+            <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+              Attachments
+            </p>
+            {selectedCandidate?.resumeName ? (
+              <p className="mt-1">
+                Resume:{" "}
+                {selectedCandidate.resumeUrl ? (
+                  <a
+                    href={selectedCandidate.resumeUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="cursor-pointer text-[#7C3AED] underline"
+                  >
+                    {selectedCandidate.resumeName}
+                  </a>
+                ) : (
+                  selectedCandidate.resumeName
+                )}
+              </p>
+            ) : null}
+            {selectedJob?.jdFileName ? (
+              <p className="mt-0.5">JD file: {selectedJob.jdFileName}</p>
+            ) : selectedJob?.description ? (
+              <p className="mt-0.5 text-muted-foreground">JD: available on job opening</p>
+            ) : null}
+          </div>
+        )}
+
         <div className="grid gap-3 sm:grid-cols-2">
-          <SetupField label="Interview type">
+          <SetupField label="Round name" required>
             <SetupSelect
-              value={interviewType}
-              onChange={(e) => setInterviewType(e.target.value as InterviewType)}
+              value={round}
+              onChange={(e) => setRound(e.target.value as InterviewRound)}
             >
-              <option value="hr">HR</option>
-              <option value="technical">Technical</option>
-              <option value="manager">Manager</option>
-              <option value="final">Final</option>
+              {(Object.keys(INTERVIEW_ROUND_LABELS) as InterviewRound[]).map((k) => (
+                <option key={k} value={k}>
+                  {INTERVIEW_ROUND_LABELS[k]}
+                </option>
+              ))}
             </SetupSelect>
           </SetupField>
           <SetupField label="Mode">
@@ -150,9 +230,34 @@ export function InterviewDrawer({
             <SetupInput type="time" value={time} onChange={(e) => setTime(e.target.value)} />
           </SetupField>
         </div>
-        <SetupField label="Interviewer">
-          <SetupInput value={interviewer} onChange={(e) => setInterviewer(e.target.value)} />
+
+        <SetupField label="Participants" required hint="Company employees taking the interview">
+          <div className="max-h-40 space-y-1 overflow-y-auto rounded-lg border border-border/70 p-2">
+            {employees.map((e) => (
+              <label
+                key={e.id}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-xs hover:bg-muted/50"
+              >
+                <input
+                  type="checkbox"
+                  className="cursor-pointer"
+                  checked={participantIds.includes(e.id)}
+                  onChange={() => toggleParticipant(e.id)}
+                />
+                {e.name}
+              </label>
+            ))}
+          </div>
         </SetupField>
+
+        <SetupField label="Resume link">
+          <SetupInput
+            value={resumeLink}
+            onChange={(e) => setResumeLink(e.target.value)}
+            placeholder="https://… or uploaded resume"
+          />
+        </SetupField>
+
         {mode === "online" ? (
           <SetupField label="Meeting link">
             <SetupInput value={meetingLink} onChange={(e) => setMeetingLink(e.target.value)} />
@@ -162,34 +267,15 @@ export function InterviewDrawer({
             <SetupInput value={location} onChange={(e) => setLocation(e.target.value)} />
           </SetupField>
         )}
-        <SetupField label="Notes">
-          <SetupTextarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
+
+        <SetupField label="Section content" hint="Agenda / topics for this round">
+          <SetupTextarea
+            value={sectionContent}
+            onChange={(e) => setSectionContent(e.target.value)}
+            rows={3}
+            placeholder="Topics to cover, evaluation focus…"
+          />
         </SetupField>
-        <SetupField label="Feedback (optional)">
-          <SetupTextarea value={feedback} onChange={(e) => setFeedback(e.target.value)} rows={2} />
-        </SetupField>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <SetupField label="Rating (1–5)">
-            <SetupInput
-              type="number"
-              min={1}
-              max={5}
-              value={rating}
-              onChange={(e) => setRating(e.target.value)}
-            />
-          </SetupField>
-          <SetupField label="Recommendation">
-            <SetupSelect
-              value={recommendation}
-              onChange={(e) => setRecommendation(e.target.value as InterviewRecommendation | "")}
-            >
-              <option value="">Pending</option>
-              <option value="selected">Selected</option>
-              <option value="hold">Hold</option>
-              <option value="rejected">Rejected</option>
-            </SetupSelect>
-          </SetupField>
-        </div>
       </div>
     </SetupDrawer>
   );

@@ -223,6 +223,21 @@ class EssService:
         pending_policy_count = self._compliance().pending_policy_count(ctx)
         is_ess_admin = ess_role == "admin"
 
+        from modules.organization.models.hierarchy import OrgDepartment
+
+        department_name: str | None = None
+        if emp.department_id:
+            dept = self._db.get(OrgDepartment, emp.department_id)
+            if dept and not getattr(dept, "is_deleted", False):
+                department_name = getattr(dept, "department_name", None)
+
+        manager_name: str | None = None
+        manager_id = getattr(emp, "reporting_manager_id", None)
+        if manager_id:
+            manager = self._db.get(MasterEmployee, manager_id)
+            if manager and not getattr(manager, "is_deleted", False):
+                manager_name = f"{manager.first_name} {manager.last_name}".strip()
+
         return EssMeResponse(
             employee_id=emp.id,
             company_id=emp.company_id,
@@ -237,6 +252,9 @@ class EssService:
             date_of_joining=emp.date_of_joining,
             status=emp.status,
             display_name=f"{emp.first_name} {emp.last_name}".strip(),
+            department_name=department_name,
+            manager_name=manager_name,
+            date_of_birth=getattr(emp, "date_of_birth", None),
             role_codes=role_codes,
             ess_role=ess_role,
             is_manager=is_manager,

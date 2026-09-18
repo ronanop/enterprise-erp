@@ -6,10 +6,10 @@ import { AppHeader } from "@/components/app-header";
 import {
   IconCalendar,
   IconClock,
-  IconFingerprint,
   IconHelp,
-  IconHome,
   IconLocation,
+  IconSparkle,
+  IconUser,
   IconWallet,
 } from "@/components/icons";
 import { AlertBox } from "@/components/ui";
@@ -27,6 +27,51 @@ import {
 } from "@/utils/datetime";
 
 const DAILY_GOAL_H = 8;
+
+const QUICK_ACTIONS = [
+  {
+    href: "/rooms",
+    label: "Meeting room",
+    Icon: IconLocation,
+    iconClass: ui.quickIconPremiumViolet,
+  },
+  {
+    href: "/performance",
+    label: "Performance",
+    Icon: IconSparkle,
+    iconClass: ui.quickIconPremiumEmerald,
+  },
+  {
+    href: "/timesheet",
+    label: "Timesheet",
+    Icon: IconClock,
+    iconClass: ui.quickIconPremiumAmber,
+  },
+  {
+    href: "/training",
+    label: "Training",
+    Icon: IconUser,
+    iconClass: ui.quickIconPremium,
+  },
+  {
+    href: "/announcements",
+    label: "Announcement",
+    Icon: IconHelp,
+    iconClass: ui.quickIconPremiumAmber,
+  },
+  {
+    href: "/compliance",
+    label: "Policies",
+    Icon: IconWallet,
+    iconClass: ui.quickIconPremiumEmerald,
+  },
+  {
+    href: "/roster",
+    label: "Roster",
+    Icon: IconCalendar,
+    iconClass: ui.quickIconPremiumViolet,
+  },
+] as const;
 
 export default function HomePage() {
   const { me, loading: meLoading } = useEssMe();
@@ -155,7 +200,9 @@ export default function HomePage() {
             </div>
             {(me.pending_approvals_count ?? 0) > 0 ? (
               <span className="flex h-8 min-w-8 items-center justify-center rounded-full bg-[#ba1a1a] px-2 text-sm font-bold text-white">
-                {me.pending_approvals_count! > 99 ? "99+" : me.pending_approvals_count}
+                {me.pending_approvals_count! > 99
+                  ? "99+"
+                  : me.pending_approvals_count}
               </span>
             ) : (
               <span className="text-sm font-semibold text-[#004ac6]">Open</span>
@@ -191,7 +238,7 @@ export default function HomePage() {
             <p className="text-sm text-[#434655]">
               {today?.check_in_at
                 ? `Since ${formatTime(today.check_in_at)}`
-                : "Tap Check In when you arrive"}
+                : "Open Attendance to check in"}
             </p>
           </div>
           <div className="text-right">
@@ -213,6 +260,12 @@ export default function HomePage() {
             />
           </div>
         </div>
+        <Link
+          href="/attendance"
+          className="text-center text-sm font-semibold text-[#004ac6]"
+        >
+          {punchDone ? "View attendance" : punchedIn ? "Check out" : "Check in"}
+        </Link>
       </section>
 
       <section className="space-y-3">
@@ -220,93 +273,31 @@ export default function HomePage() {
           Quick Actions
         </h3>
         <div className="grid grid-cols-4 gap-2.5">
-          <Link
-            href="/attendance"
-            className={`${ui.quickPremium} ${ui.fadeUp}`}
-            style={{ animationDelay: "0ms" }}
-          >
-            <span
-              className={
-                punchDone
-                  ? ui.quickIconPremium
-                  : ui.quickIconPremiumPrimary
-              }
+          {QUICK_ACTIONS.map((item, index) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`${ui.quickPremium} ${ui.fadeUp}`}
+              style={{ animationDelay: `${index * 40}ms` }}
             >
-              <IconFingerprint size={28} />
-            </span>
-            <span className={ui.quickLabel}>
-              {punchDone ? "Attendance" : punchedIn ? "Check Out" : "Check In"}
-            </span>
-          </Link>
-          <Link
-            href="/leave"
-            className={`${ui.quickPremium} ${ui.fadeUp}`}
-            style={{ animationDelay: "40ms" }}
-          >
-            <span className={ui.quickIconPremiumViolet}>
-              <IconCalendar size={28} />
-            </span>
-            <span className={ui.quickLabel}>Apply Leave</span>
-          </Link>
-          <Link
-            href="/payslips"
-            className={`${ui.quickPremium} ${ui.fadeUp}`}
-            style={{ animationDelay: "80ms" }}
-          >
-            <span className={ui.quickIconPremiumEmerald}>
-              <IconWallet size={28} />
-            </span>
-            <span className={ui.quickLabel}>Payslip</span>
-          </Link>
-          <Link
-            href="/attendance/correction"
-            className={`${ui.quickPremium} ${ui.fadeUp}`}
-            style={{ animationDelay: "120ms" }}
-          >
-            <span className={ui.quickIconPremiumAmber}>
-              <IconClock size={28} />
-            </span>
-            <span className={ui.quickLabel}>Correction</span>
-          </Link>
-        </div>
-        <div className="grid grid-cols-4 gap-2.5">
-          <Link
-            href="/attendance/wfh"
-            className={`${ui.quickPremium} ${ui.fadeUp}`}
-            style={{ animationDelay: "160ms" }}
-          >
-            <span className={ui.quickIconPremium}>
-              <IconHome size={28} />
-            </span>
-            <span className={ui.quickLabel}>WFH</span>
-          </Link>
-          <Link
-            href="/rooms"
-            className={`${ui.quickPremium} ${ui.fadeUp}`}
-            style={{ animationDelay: "200ms" }}
-          >
-            <span className={ui.quickIconPremiumViolet}>
-              <IconLocation size={28} />
-            </span>
-            <span className={ui.quickLabel}>Meeting rooms</span>
-          </Link>
-          <Link
-            href="/support"
-            className={`${ui.quickPremium} ${ui.fadeUp}`}
-            style={{ animationDelay: "240ms" }}
-          >
-            <span className={ui.quickIconPremiumAmber}>
-              <IconHelp size={28} />
-            </span>
-            <span className={ui.quickLabel}>Help</span>
-          </Link>
+              <span className={item.iconClass}>
+                <item.Icon size={28} />
+              </span>
+              <span className={ui.quickLabel}>{item.label}</span>
+            </Link>
+          ))}
         </div>
       </section>
 
       <section className="space-y-3">
         <div className="flex items-end justify-between px-1">
-          <h3 className="text-lg font-semibold text-[#0b1c30]">Upcoming Today</h3>
-          <Link href="/announcements" className="text-sm font-medium text-[#004ac6]">
+          <h3 className="text-lg font-semibold text-[#0b1c30]">
+            Upcoming Today
+          </h3>
+          <Link
+            href="/announcements"
+            className="text-sm font-medium text-[#004ac6]"
+          >
             View All
           </Link>
         </div>
@@ -346,7 +337,6 @@ export default function HomePage() {
           />
         </div>
       </section>
-
     </div>
   );
 }
@@ -371,9 +361,7 @@ function TimelineItem({
       <div className="flex flex-col items-center">
         <div
           className={`h-3 w-3 rounded-full ${
-            active
-              ? "bg-[#004ac6] ring-4 ring-[#dbe1ff]"
-              : "bg-[#c3c6d7]"
+            active ? "bg-[#004ac6] ring-4 ring-[#dbe1ff]" : "bg-[#c3c6d7]"
           }`}
         />
         {!last ? (

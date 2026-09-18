@@ -16,8 +16,14 @@ class RecApplication(Base, *RecTransactionMixin):
     __table_args__ = (
         UniqueConstraint("company_id", "document_number", name="uk_rec_app_company_doc"),
         CheckConstraint(
-            "status IN ('applied','screening','interview','selected','offer','hired','rejected','on_hold','withdrawn')",
+            "status IN ('active','rejected','offer_declined','backed_out','hired')",
             name="ck_rec_app_status",
+        ),
+        CheckConstraint(
+            "current_stage_code IS NULL OR current_stage_code IN ("
+            "'sourced','screening','interview_round_1','interview_round_2',"
+            "'hr_discussion','background_check','offer_sent','offer_accepted')",
+            name="ck_rec_app_current_stage_code",
         ),
         {"schema": "recruitment"},
     )
@@ -57,4 +63,7 @@ class RecApplication(Base, *RecTransactionMixin):
     applied_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     current_stage_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
     rejection_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(String(30), nullable=False, default="applied", index=True)
+    exited_at_stage: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    exited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    exit_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="active", index=True)

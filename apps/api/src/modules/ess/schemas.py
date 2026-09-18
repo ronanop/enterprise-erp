@@ -25,6 +25,9 @@ class EssMeResponse(BaseModel):
     date_of_joining: date
     status: str
     display_name: str
+    department_name: str | None = None
+    manager_name: str | None = None
+    date_of_birth: date | None = None
     role_codes: list[str] = Field(default_factory=list)
     ess_role: str = "employee"
     is_manager: bool = False

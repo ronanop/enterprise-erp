@@ -171,6 +171,10 @@ class Settings(BaseSettings):
     mcp_auth_token: str = Field(default="", alias="MCP_AUTH_TOKEN")
 
     frontend_url: str = Field(default="http://localhost:3000", alias="FRONTEND_URL")
+    employee_app_url: str = Field(
+        default="http://localhost:3001",
+        alias="EMPLOYEE_APP_URL",
+    )
 
     microsoft_tenant_id: str = Field(default="", alias="MICROSOFT_TENANT_ID")
     microsoft_client_id: str = Field(default="", alias="MICROSOFT_CLIENT_ID")

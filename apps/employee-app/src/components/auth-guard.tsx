@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { SessionSplash } from "@/components/session-splash";
 import { isAuthenticated } from "@/lib/auth";
-import { isFaceVerified } from "@/lib/face-auth";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
 import { env } from "@/utils/env";
@@ -33,14 +32,8 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     let cancelled = false;
     (async () => {
       try {
-        const status = await essService.faceStatus();
-        const required = status.data?.verification_required ?? false;
-        if (required && !isFaceVerified()) {
-          router.replace(
-            `/login/face-verify?next=${encodeURIComponent(pathname)}`,
-          );
-          return;
-        }
+        // Confirm token still maps to an ESS employee profile.
+        await essService.me();
         if (!cancelled) setSessionComplete(true);
       } catch (err) {
         if (!cancelled) {

@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -22,6 +22,7 @@ type RowActionsMenuProps = {
   buttonSize?: "icon-sm" | "icon-xs";
   className?: string;
   menuClassName?: string;
+  icon?: LucideIcon;
 };
 
 /**
@@ -36,6 +37,7 @@ export function RowActionsMenu({
   buttonSize = "icon-sm",
   className,
   menuClassName,
+  icon: Icon = MoreHorizontal,
 }: RowActionsMenuProps) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -115,7 +117,7 @@ export function RowActionsMenu({
           onOpenChange(!open);
         }}
       >
-        <MoreHorizontal className="size-4" />
+        <Icon className="size-4" />
       </Button>
       {mounted && open
         ? createPortal(

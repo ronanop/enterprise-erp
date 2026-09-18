@@ -8,6 +8,7 @@ import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
 import type { EssMe } from "@/types/api";
 import * as ui from "@/theme/classes";
+import { formatDisplayDateDDMMYYYY } from "@/utils/datetime";
 
 export default function PersonalInformationPage() {
   const [me, setMe] = useState<EssMe | null>(null);
@@ -50,7 +51,14 @@ export default function PersonalInformationPage() {
           </section>
 
           <Card title="Bio Data" icon={<IconUser size={18} />} iconBg="bg-[#dbe1ff] text-[#004ac6]">
-            <Row label="Date of Birth" value="June 12, 1994" />
+            <Row
+              label="Date of Birth"
+              value={
+                me.date_of_birth
+                  ? formatDisplayDateDDMMYYYY(me.date_of_birth)
+                  : "—"
+              }
+            />
             <Row label="Gender" value="—" />
             <Row label="Nationality" value="India" />
           </Card>

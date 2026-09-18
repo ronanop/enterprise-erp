@@ -60,12 +60,18 @@ export function AppShell({ children }: AppShellProps) {
           className={cn(
             "min-h-0 min-w-0 flex-1 overflow-x-clip px-4 py-4 sm:px-6 lg:px-8",
             lockPageScroll ? "flex flex-col overflow-hidden" : "erp-scroll overflow-y-auto",
+            (pathname === "/hr/recruitment" || pathname.startsWith("/hr/recruitment/")) &&
+              "px-3 py-3 sm:px-4 lg:px-5",
           )}
         >
           <div
             className={cn(
               "mx-auto w-full min-w-0 animate-in fade-in-0 duration-300",
-              pathname === "/hr" ? "max-w-[1680px]" : "max-w-[1400px]",
+              pathname === "/hr" ||
+                pathname === "/hr/recruitment" ||
+                pathname.startsWith("/hr/recruitment/")
+                ? "max-w-[1680px]"
+                : "max-w-[1400px]",
               lockPageScroll && "flex min-h-0 flex-1 flex-col overflow-hidden",
             )}
           >

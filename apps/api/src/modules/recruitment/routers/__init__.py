@@ -17,6 +17,7 @@ from modules.recruitment.dependencies import (
 )
 from modules.recruitment.schemas import (
     ApplicationAdvanceRequest,
+    ApplicationBackOutRequest,
     ApplicationCreate,
     ApplicationRejectRequest,
     ApplicationResponse,
@@ -24,6 +25,7 @@ from modules.recruitment.schemas import (
     ApplicationStageResponse,
     ApplicationStageUpdate,
     ApplicationUpdate,
+    PipelineStatsResponse,
     BackgroundVerificationCreate,
     BackgroundVerificationResponse,
     BackgroundVerificationUpdate,
@@ -351,10 +353,21 @@ def create_applications(
 
         data["applied_at"] = datetime.now(timezone.utc)
     if "status" not in data:
-        data["status"] = "applied"
+        data["status"] = "active"
     if "current_stage_code" not in data:
-        data["current_stage_code"] = data.get("status", "applied")
+        data["current_stage_code"] = "sourced"
     return APIResponse(message="Created", data=ApplicationService(db).create(ctx, **data))
+
+@applications_router.get("/stats/pipeline", response_model=APIResponse[PipelineStatsResponse])
+def pipeline_stats(
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.application:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    return APIResponse(
+        message="OK",
+        data=ApplicationService(db).pipeline_stats(ctx, company_id),
+    )
 
 @applications_router.patch("/{row_id}", response_model=APIResponse[ApplicationResponse])
 def update_applications(
@@ -382,6 +395,26 @@ def reject_applications(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="Rejected", data=ApplicationService(db).reject(ctx, row_id, reason=body.reason))
+
+@applications_router.post("/{row_id}/mark-hired", response_model=APIResponse[ApplicationResponse])
+def mark_hired_applications(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.application:advance"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="Hired", data=ApplicationService(db).mark_hired(ctx, row_id))
+
+@applications_router.post("/{row_id}/mark-backed-out", response_model=APIResponse[ApplicationResponse])
+def mark_backed_out_applications(
+    row_id: UUID,
+    body: ApplicationBackOutRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("recruitment.application:advance"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Backed out",
+        data=ApplicationService(db).mark_backed_out(ctx, row_id, reason=body.reason),
+    )
 
 @application_stages_router.get("", response_model=APIResponse[list[ApplicationStageResponse]])
 def list_application_stages(
