@@ -99,7 +99,7 @@ const STATS = [
 
 const FAQ = [
   {
-    q: "How does iConnect Plus automate workflows?",
+    q: "How does Connect Plus automate workflows?",
     a: "State machines and gates encode your operating system. Approvals, notifications, and AI suggestions run on the same blueprint — not a bolted-on chatbot.",
   },
   {
@@ -152,7 +152,7 @@ function BrandMark({ light = false }: { light?: boolean }) {
           light ? "text-white" : "text-white"
         }`}
       >
-        iConnect Plus
+        Connect Plus
       </span>
     </Link>
   );
@@ -355,7 +355,7 @@ export function IConnectPlusLanding() {
 
           <div className="relative z-10 mx-auto flex max-w-3xl flex-col items-center text-center">
             <p className="icp-anim-fade text-xs font-semibold uppercase tracking-[0.22em] text-white/45">
-              iConnect Plus
+              Connect Plus
             </p>
             <h1 className="icp-anim-rise mt-5 text-balance text-[2.6rem] font-bold leading-[1.05] tracking-[-0.04em] sm:text-5xl sm:leading-[1.02] lg:text-[3.75rem]">
               All your enterprise ops,
@@ -479,7 +479,7 @@ export function IConnectPlusLanding() {
           </div>
           <p className="mx-auto mt-8 max-w-2xl px-5 text-center text-sm leading-relaxed text-white/45">
             Large enterprises need to streamline operations and raise
-            efficiency. iConnect Plus improves productivity, reduces errors, and
+            efficiency. Connect Plus improves productivity, reduces errors, and
             delivers measurable impact — module by module.
           </p>
         </section>
@@ -571,7 +571,7 @@ export function IConnectPlusLanding() {
               intelligent optimization — built around how you actually work.
             </p>
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-              <PillButton href="mailto:hello@iconnectplus.com?subject=iConnect%20Plus%20demo">
+              <PillButton href="mailto:hello@iconnectplus.com?subject=Connect%20Plus%20demo">
                 Book a conversation
                 <ArrowRight className="size-4" aria-hidden />
               </PillButton>
@@ -606,7 +606,7 @@ export function IConnectPlusLanding() {
             </a>
           </div>
         </div>
-        <p className="mx-auto mt-10 max-w-6xl text-xs text-white/30">© iConnect Plus 2026</p>
+        <p className="mx-auto mt-10 max-w-6xl text-xs text-white/30">© Connect Plus 2026</p>
       </footer>
 
       <AccessCodeDialog open={signInOpen} onClose={() => setSignInOpen(false)} />

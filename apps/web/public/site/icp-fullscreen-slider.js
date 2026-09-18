@@ -26,7 +26,7 @@
     },
     {
       image: IMG + "erp-05-platform.jpg",
-      title: "iConnect Plus - AI-powered ERP apps, module by module.",
+      title: "Connect Plus - AI-powered ERP apps, module by module.",
     },
   ];
 
@@ -397,10 +397,96 @@
     onScroll();
   }
 
+  /**
+   * Numbers section: left column is position:sticky (top:144px) while headline
+   * words scrub muted → white. Framer GSAP often missing on the mirror — drive
+   * the highlight from scroll.
+   */
+  function ensureNumbersReveal() {
+    const sec = document.getElementById("numbers-section");
+    if (!sec) return;
+
+    const DIM_A = 0.22;
+
+    const findHeadline = () => {
+      const named = sec.querySelector(
+        '[data-framer-name*="AI-assisted"], .framer-g3mtlg'
+      );
+      return (named && named.querySelector("h2")) || sec.querySelector("h2");
+    };
+
+    const ensureWords = () => {
+      const h2 = findHeadline();
+      if (!h2) return [];
+      if (h2.dataset.icpWords === "1") {
+        return [...h2.querySelectorAll(".icp-num-word")];
+      }
+      const text = (h2.textContent || "").replace(/\s+/g, " ").trim();
+      if (!text) return [];
+      h2.textContent = "";
+      const words = [];
+      text.split(/(\s+)/).forEach((token) => {
+        if (!token) return;
+        if (/^\s+$/.test(token)) {
+          h2.appendChild(document.createTextNode(token));
+          return;
+        }
+        const span = document.createElement("span");
+        span.className = "icp-num-word";
+        span.textContent = token;
+        span.style.color = "rgba(255, 255, 255, " + DIM_A + ")";
+        h2.appendChild(span);
+        words.push(span);
+      });
+      h2.dataset.icpWords = "1";
+      return words;
+    };
+
+    let ticking = false;
+    const onScroll = () => {
+      const words = ensureWords();
+      if (!words.length) return;
+
+      const rect = sec.getBoundingClientRect();
+      const stickyTop = 144;
+      const travel = Math.max(rect.height - window.innerHeight + stickyTop, 1);
+      const scrolled = stickyTop - rect.top;
+      const progress = Math.min(1, Math.max(0, scrolled / travel));
+
+      const n = words.length;
+      const windowSize = Math.max(1.2 / n, 0.04);
+      words.forEach((el, i) => {
+        const t0 = i / n;
+        const local = Math.min(1, Math.max(0, (progress - t0) / windowSize));
+        const a = (DIM_A + local * (1 - DIM_A)).toFixed(3);
+        el.style.color = "rgba(255, 255, 255, " + a + ")";
+      });
+    };
+
+    const requestTick = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        ticking = false;
+        onScroll();
+      });
+    };
+
+    if (!sec.dataset.icpNumbersRevealBound) {
+      window.addEventListener("scroll", requestTick, { passive: true, capture: true });
+      document.addEventListener("scroll", requestTick, { passive: true, capture: true });
+      window.addEventListener("resize", requestTick, { passive: true });
+      setInterval(onScroll, 120);
+      sec.dataset.icpNumbersRevealBound = "fallback";
+    }
+    onScroll();
+  }
+
   global.IcpFullscreenSlider = {
     mount: mount,
     replaceFeaturesSection: replaceFeaturesSection,
     ensureSolutionReveal: ensureSolutionReveal,
+    ensureNumbersReveal: ensureNumbersReveal,
     DEFAULT_SLIDES: DEFAULT_SLIDES,
   };
 })(typeof window !== "undefined" ? window : globalThis);

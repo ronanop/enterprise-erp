@@ -173,7 +173,7 @@ export function DemoErpShell() {
       <div className="mx-auto flex max-w-[1440px]">
         <aside className="sticky top-0 hidden h-[calc(100dvh-2.75rem)] w-56 shrink-0 flex-col border-r border-[#E4ECFC] bg-white py-4 lg:flex">
           <div className="px-4 pb-4">
-            <p className="text-sm font-semibold tracking-tight">iConnect Plus</p>
+            <p className="text-sm font-semibold tracking-tight">Connect Plus</p>
             <p className="text-xs text-[#64748B]">Enterprise demo</p>
           </div>
           <nav aria-label="Demo modules" className="flex flex-1 flex-col gap-0.5 px-2">

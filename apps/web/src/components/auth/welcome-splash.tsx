@@ -15,7 +15,7 @@ type WelcomeSplashProps = {
 };
 
 /**
- * Post–Microsoft-login welcome — “hi” Lottie + name + iConnect Plus.
+ * Post–Microsoft-login welcome — “hi” Lottie + name + Connect Plus.
  * Apple.com-style type; Lottie already says hi, so no Hello! copy.
  */
 export function WelcomeSplash({ userName, onComplete }: WelcomeSplashProps) {
@@ -63,7 +63,7 @@ export function WelcomeSplash({ userName, onComplete }: WelcomeSplashProps) {
       role="status"
       aria-live="polite"
       aria-atomic="true"
-      aria-label={`${displayName}. Welcome to iConnect Plus`}
+      aria-label={`${displayName}. Welcome to Connect Plus`}
       className="fixed inset-0 z-[9999] flex min-h-dvh flex-col items-center justify-center overflow-hidden bg-[#f5f5f7] px-6"
       style={{
         fontFamily: APPLE_TYPE,
@@ -138,7 +138,7 @@ export function WelcomeSplash({ userName, onComplete }: WelcomeSplashProps) {
           className="cp-welcome-rise mt-2 text-[1.0625rem] font-normal leading-snug tracking-[-0.02em] text-[#6e6e73] sm:mt-2.5 sm:text-[1.25rem]"
           style={{ animationDelay: "260ms" }}
         >
-          Welcome to iConnect Plus
+          Welcome to Connect Plus
         </p>
       </div>
     </div>

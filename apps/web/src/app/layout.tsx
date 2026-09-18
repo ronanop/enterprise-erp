@@ -22,9 +22,9 @@ export const metadata: Metadata = {
   icons: {
     icon: [
       { url: "/favicon.png", type: "image/png", sizes: "32x32" },
-      { url: "/site/brand/iconnect-plus-mark.png", type: "image/png", sizes: "512x512" },
+      { url: "/landing/mark.png", type: "image/png", sizes: "512x512" },
     ],
-    apple: [{ url: "/site/brand/iconnect-plus-mark.png", sizes: "180x180" }],
+    apple: [{ url: "/landing/mark.png", sizes: "180x180" }],
     shortcut: ["/favicon.png"],
   },
 };

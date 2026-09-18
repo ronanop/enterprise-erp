@@ -89,7 +89,7 @@ export function LoginGateClient() {
             onClick={() => router.push("/")}
             className="mt-3 block w-full cursor-pointer text-sm font-medium text-[#2563FF] transition-colors duration-200 hover:text-[#1D4ED8]"
           >
-            Back to iConnect Plus
+            Back to Connect Plus
           </button>
         </div>
         <AccessCodeDialog

@@ -6,7 +6,7 @@
 
 ---
 
-**Project:** iConnect Plus
+**Project:** Connect Plus
 **Generated:** 2026-09-16 15:57:23
 **Category:** Luxury/Premium Brand
 
