@@ -604,6 +604,7 @@ function NumbersSection() {
 /**
  * Scroll-zoom capsule — "CUSTOM" and "ERP" sit outside; the capsule itself
  * only appears once you start scrolling, then expands to reveal the CTA.
+ * Capsule is absolutely centered so full-bleed expansion never leaves a side gap.
  */
 function CtaSection() {
   const ref = useRef<HTMLElement>(null);
@@ -611,13 +612,10 @@ function CtaSection() {
   const reduced = usePrefersReducedMotion();
   const p = reduced ? 1 : progress;
 
-  // Capsule starts invisible and zero-size so "CUSTOM ERP" read as one line,
-  // then fades in and expands to the full viewport while scrolling.
-  const width = `${p * 100}vw`;
-  const height = `${p * 100}vh`;
+  // Grow against the pin (not 100vw) so scrollbar width can't open a side gap.
+  const size = `${p * 100}%`;
   const radius = `${50 * (1 - p)}px`;
   const capsuleVisible = phase(p, 0.02, 0.14);
-  // Content appears once the capsule is mostly open.
   const content = phase(p, 0.45, 0.62);
   const sideFade = 1 - phase(p, 0.55, 0.85);
 
@@ -635,42 +633,47 @@ function CtaSection() {
           >
             CUSTOM
           </span>
-
+          {/* Keeps the side labels apart as the capsule grows. */}
           <div
-            className="cp-cta-capsule"
-            style={{
-              width,
-              height,
-              borderRadius: radius,
-              opacity: capsuleVisible,
-            }}
-            aria-hidden={capsuleVisible < 0.05}
-          >
-            <div className="cp-cta-capsule-bg" aria-hidden />
-            <div
-              className="cp-cta-content"
-              style={{
-                opacity: content,
-                transform: `translate3d(0, ${(1 - content) * 48}px, 0)`,
-              }}
-            >
-              <div className="cp-cta-logo">
-                <LogoMark large />
-              </div>
-              <h2>{CTA.title}</h2>
-              <p>{CTA.body}</p>
-              <Link href="/login" className="cp-signin">
-                Sign in
-              </Link>
-            </div>
-          </div>
-
+            className="cp-cta-spacer"
+            style={{ width: size }}
+            aria-hidden
+          />
           <span
             className="cp-cta-side cp-cta-side-right"
             style={{ opacity: sideFade }}
           >
             ERP
           </span>
+        </div>
+
+        <div
+          className="cp-cta-capsule"
+          style={{
+            width: size,
+            height: size,
+            borderRadius: radius,
+            opacity: capsuleVisible,
+          }}
+          aria-hidden={capsuleVisible < 0.05}
+        >
+          <div className="cp-cta-capsule-bg" aria-hidden />
+          <div
+            className="cp-cta-content"
+            style={{
+              opacity: content,
+              transform: `translate3d(0, ${(1 - content) * 48}px, 0)`,
+            }}
+          >
+            <div className="cp-cta-logo">
+              <LogoMark large />
+            </div>
+            <h2>{CTA.title}</h2>
+            <p>{CTA.body}</p>
+            <Link href="/login" className="cp-signin">
+              Sign in
+            </Link>
+          </div>
         </div>
       </div>
     </section>
