@@ -1,6 +1,6 @@
 # Documents Page Overrides
 
-> **PROJECT:** Connect Plus
+> **PROJECT:** iConnect Plus
 > **Page Type:** Document Management (DMS) workspace (authenticated app)
 > Rules in this file **override** `MASTER.md`. Only deviations are listed.
 

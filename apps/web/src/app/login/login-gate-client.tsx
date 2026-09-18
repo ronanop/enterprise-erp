@@ -13,7 +13,7 @@ import {
 import LoginPage from "./login-page";
 
 /**
- * ConnectPlus path: landing code must unlock this login.
+ * iConnectPlus path: landing code must unlock this login.
  * Direct /login visits without a valid connectplus gate token open the code dialog.
  */
 export function LoginGateClient() {
@@ -75,7 +75,7 @@ export function LoginGateClient() {
             Access code required
           </h1>
           <p className="mt-2 text-sm text-[#5A6070]">
-            Sign in from the landing page with your ConnectPlus code to open the live ERP.
+            Sign in from the landing page with your iConnectPlus code to open the live ERP.
           </p>
           <button
             type="button"

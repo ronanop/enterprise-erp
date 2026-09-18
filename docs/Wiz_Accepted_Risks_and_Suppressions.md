@@ -1,6 +1,6 @@
 # Wiz Accepted Risks & Suppressions
 
-**Product:** Connect Plus  
+**Product:** iConnect Plus  
 **Owner:** Platform / Security (connect)  
 **Last updated:** 2026-09-04  
 **Applies to:** Wiz SAST + dependency (SCA) findings that recur after remediation

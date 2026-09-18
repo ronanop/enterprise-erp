@@ -1,6 +1,6 @@
 # Email Page Overrides
 
-> **PROJECT:** Connect Plus  
+> **PROJECT:** iConnect Plus  
 > **Page Type:** Operations / Admin (Notification Engine)  
 > **IMPORTANT:** Rules here override `MASTER.md` for `/email/*` screens.
 

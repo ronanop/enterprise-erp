@@ -1,7 +1,7 @@
-# Connect Plus - Master Architecture Document
+# iConnect Plus - Master Architecture Document
 
 **Document type:** Solution Architecture & Shipping Master  
-**Product:** Connect Plus (ConnectPlus-aligned portfolio)  
+**Product:** iConnect Plus (iConnectPlus-aligned portfolio)  
 **Baseline:** Architecture Lock v1.1 · ADR-001 · ADR-002  
 **Classification:** Internal - Confidential  
 **Audience:** Engineering, Architecture, DevOps, Product  
@@ -38,7 +38,7 @@ This is the **master architecture document** for the full ERP portfolio. It cons
 
 ## 1. Executive Summary
 
-The Connect Plus is a **modular monolith** ERP ecosystem covering foundation platform services and twenty-plus business domains - Finance, CRM, Sales, Procurement, Inventory, Manufacturing, Quality, HR, Payroll, Projects, Assets, Service, Helpdesk, Documents, GRC, Analytics, Integration, Ecommerce, Portal, Marketing, and employee self-service - with roadmap extensions for AI Assistant / Virtual E.A., Licensing, and Backup & DR.
+iConnect Plus is a **modular monolith** ERP ecosystem covering foundation platform services and twenty-plus business domains - Finance, CRM, Sales, Procurement, Inventory, Manufacturing, Quality, HR, Payroll, Projects, Assets, Service, Helpdesk, Documents, GRC, Analytics, Integration, Ecommerce, Portal, Marketing, and employee self-service - with roadmap extensions for AI Assistant / Virtual E.A., Licensing, and Backup & DR.
 
 Every module shares:
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
 
-import { IConnectPlusLanding } from "@/components/landing/iconnect-plus-landing";
+import { IiConnectPlusLanding } from "@/components/landing/iconnect-plus-landing";
 
 import "./home.css";
 
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 export default function HomePage() {
   return (
     <div className={spaceGrotesk.variable}>
-      <IConnectPlusLanding />
+      <IiConnectPlusLanding />
     </div>
   );
 }

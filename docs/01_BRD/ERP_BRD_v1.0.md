@@ -94,7 +94,7 @@
 
 | Item          | Details                               |
 | ------------- | ------------------------------------- |
-| Project Name  | Connect Plus                 |
+| Project Name  | iConnect Plus                 |
 | Document Type | Business Requirements Document (BRD)  |
 | Version       | 1.0                                   |
 | Status        | Draft                                 |

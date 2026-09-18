@@ -1,6 +1,6 @@
 # Hr Workforce Page Overrides
 
-> **PROJECT:** Connect Plus
+> **PROJECT:** iConnect Plus
 > **Generated:** 2026-07-22 15:07:12
 > **Page Type:** Dashboard / Data View
 

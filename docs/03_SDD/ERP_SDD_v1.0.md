@@ -1,5 +1,5 @@
 # SYSTEM DESIGN DOCUMENT (SDD)
-## Connect Plus
+## iConnect Plus
 
 **Version:** 1.1
 **Status:** Architecture Baseline Approved (Backend Stack Updated - ADR-002)
@@ -178,7 +178,7 @@
 
 # Volume 1 - Enterprise Architecture
 
-**Project:** Connect Plus
+**Project:** iConnect Plus
 **Version:** 1.1
 **Status:** Architecture Baseline Approved (ADR-002 Backend Stack)
 **Document Type:** System Design Document (SDD)
@@ -191,7 +191,7 @@
 
 | Field            | Value                                 |
 | ---------------- | ------------------------------------- |
-| Document Name    | Connect Plus Design Document |
+| Document Name    | iConnect Plus Design Document |
 | Volume           | Volume 1 - Enterprise Architecture    |
 | Version          | 1.1                                   |
 | Status           | Approved (ADR-002 Backend Stack)      |
@@ -1295,7 +1295,7 @@ is completed and approved.
 
 # Volume 2 - Technical Architecture
 
-**Project:** Connect Plus
+**Project:** iConnect Plus
 **Version:** 1.1
 **Status:** Architecture Baseline Approved (ADR-002 Backend Stack)
 **Document Type:** System Design Document (SDD)
@@ -2647,7 +2647,7 @@ Tenant context enforced via FastAPI dependencies and repository layer filters.
 
 # Volume 3 - Data Architecture
 
-**Project:** Connect Plus
+**Project:** iConnect Plus
 **Version:** 1.1
 **Status:** Architecture Baseline Approved (ADR-002 Backend Stack)
 **Document Type:** System Design Document (SDD)
@@ -2658,7 +2658,7 @@ Tenant context enforced via FastAPI dependencies and repository layer filters.
 
 ## <a name="v3-1-purpose"></a>1. Purpose
 
-This document defines the complete Data Architecture for the Connect Plus.
+This document defines the complete Data Architecture for the iConnect Plus.
 
 This volume governs:
 
@@ -3795,7 +3795,7 @@ No Enterprise ERD design shall begin without following this architecture.
 
 # Volume 4 - Infrastructure, DevOps & Production Architecture
 
-**Project:** Connect Plus
+**Project:** iConnect Plus
 **Version:** 1.1
 **Status:** Architecture Baseline Approved (ADR-002 Backend Stack)
 **Document Type:** System Design Document (SDD)
@@ -5115,7 +5115,7 @@ This section defines the dependencies between all ERP domains. Arrows indicate d
 
 ## Official Technical Baseline Declaration
 
-This System Design Document (SDD) - comprising Volume 1 (Enterprise Architecture), Volume 2 (Technical Architecture), Volume 3 (Data Architecture), and Volume 4 (Infrastructure, DevOps & Production Architecture) - is hereby declared the **Official Technical Baseline** for the Connect Plus.
+This System Design Document (SDD) - comprising Volume 1 (Enterprise Architecture), Volume 2 (Technical Architecture), Volume 3 (Data Architecture), and Volume 4 (Infrastructure, DevOps & Production Architecture) - is hereby declared the **Official Technical Baseline** for the iConnect Plus.
 
 ---
 
@@ -5255,4 +5255,4 @@ This SDD shall be reviewed:
 
 ---
 
-*End of Master System Design Document - Connect Plus - Version 1.1*
+*End of Master System Design Document - iConnect Plus - Version 1.1*

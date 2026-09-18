@@ -93,9 +93,8 @@ export function UserAccountMenu({
           "flex w-full max-w-full cursor-pointer items-center gap-1 rounded-lg border border-transparent text-left transition-colors duration-200",
           isSidebar
             ? cn(
-              "px-0 py-0",
-              !collapsed && "hover:bg-sidebar-accent/40",
-              open && !collapsed && "bg-sidebar-accent/40",
+              "px-0 py-0 hover:bg-sidebar-accent/40",
+              open && "bg-sidebar-accent/40",
             )
             : cn(
               "max-w-[min(100%,280px)] rounded-full border border-border/60 bg-muted/30 px-2 py-1 shadow-xs transition-all duration-150",

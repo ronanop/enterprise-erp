@@ -16,7 +16,7 @@
 
 ## 1. Executive Summary
 
-ERP Core **v1.0-alpha** establishes the first **stable development baseline** of the multi-tenant Connect Plus after completion of the **Infrastructure Phase (Sprint 0)** and **Delivery Sprints 1-5 (Foundation through Sales)**.
+ERP Core **v1.0-alpha** establishes the first **stable development baseline** of the multi-tenant iConnect Plus after completion of the **Infrastructure Phase (Sprint 0)** and **Delivery Sprints 1-5 (Foundation through Sales)**.
 
 **Overall milestones completed: 6** (Sprint 0 + Sprints 1-5).
 

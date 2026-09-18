@@ -6,7 +6,7 @@
 
 ---
 
-**Project:** Connect Plus
+**Project:** iConnect Plus
 **Generated:** 2026-09-17 11:55:18
 **Category:** B2B SaaS Admin Dashboard
 

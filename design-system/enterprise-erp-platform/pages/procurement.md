@@ -1,6 +1,6 @@
 # Procurement Page Overrides
 
-> **PROJECT:** Connect Plus
+> **PROJECT:** iConnect Plus
 > **Page Type:** Procurement procure-to-pay workspace (authenticated app)
 > Rules in this file **override** `MASTER.md`. Only deviations are listed.
 

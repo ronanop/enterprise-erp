@@ -224,13 +224,16 @@ function BrandMark({ className = "" }: { className?: string }) {
       href="/"
       className={`group flex cursor-pointer items-center gap-2.5 transition-opacity duration-200 hover:opacity-90 ${className}`}
     >
-      <span
-        aria-hidden
-        className="relative flex size-8 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-[#2563FF] via-[#1E47FA] to-[#00D9C7] shadow-[0_6px_16px_-6px_rgba(37,99,255,0.7)] transition-transform duration-200 group-hover:scale-[1.03]"
-      >
-        <span className="font-[family-name:var(--font-icp-display),sans-serif] text-[11px] font-bold tracking-tight text-white">
-          iC
-        </span>
+      <span className="relative flex size-8 items-center justify-center overflow-hidden rounded-xl bg-white shadow-[0_6px_16px_-6px_rgba(0,0,0,0.18)] ring-1 ring-black/5 transition-transform duration-200 group-hover:scale-[1.03]">
+        <Image
+          src="/brand/iconnect-plus-logo.png"
+          alt=""
+          width={32}
+          height={32}
+          className="size-full object-contain p-[12%]"
+          aria-hidden
+          priority
+        />
       </span>
       <span className="font-[family-name:var(--font-icp-display),sans-serif] text-[1.05rem] font-bold tracking-[-0.03em] text-[#0A0A0F]">
         iConnect Plus
@@ -329,7 +332,7 @@ function HeroPlatformSlider() {
   );
 }
 
-export function IConnectPlusLanding() {
+export function IiConnectPlusLanding() {
   const [scrolled, setScrolled] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);

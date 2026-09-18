@@ -1,6 +1,6 @@
 # Payroll Page Overrides
 
-> **PROJECT:** Connect Plus
+> **PROJECT:** iConnect Plus
 > **Page Type:** Payroll compensation workspace (authenticated app)
 > Rules in this file **override** `MASTER.md`. Only deviations are listed.
 

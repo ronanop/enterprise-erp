@@ -1,6 +1,6 @@
 # Employee App (PWA)
 
-Mobile-first employee self-service app for the Connect Plus platform.
+Mobile-first employee self-service app for the iConnect Plus platform.
 
 It talks **only** to the FastAPI backend at `cache_erp_hrms_payroll` (`/api/v1`). It does **not** connect to PostgreSQL and does **not** modify `apps/web`.
 

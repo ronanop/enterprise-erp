@@ -3,7 +3,7 @@
 | Attribute | Value |
 |-----------|-------|
 | **Document ID** | BRD-HRMS-PAY-v1.0 |
-| **Product** | Connect Plus |
+| **Product** | iConnect Plus |
 | **Domains** | HR (FRD-09) · Payroll (FRD-10) |
 | **Version** | 1.0 |
 | **Status** | Draft for Business Review |
@@ -16,7 +16,7 @@
 
 ## 1. Executive Summary
 
-This Business Requirements Document defines the **complete HRMS and Payroll** capability for the Connect Plus.
+This Business Requirements Document defines the **complete HRMS and Payroll** capability for iConnect Plus.
 
 HRMS manages the **people lifecycle** - from requisition and hiring through attendance, leave, shifts, performance, training, and exit.
 

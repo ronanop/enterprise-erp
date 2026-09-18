@@ -1,11 +1,11 @@
 ---
-description: Connect Plus architecture baseline — locked stack, patterns, and governance
+description: iConnect Plus architecture baseline — locked stack, patterns, and governance
 alwaysApply: true
 ---
 
-# Connect Plus — Architecture Rules
+# iConnect Plus — Architecture Rules
 
-This is an **Connect Plus**. Architecture Baseline **v1.1** is locked.
+This is **iConnect Plus**. Architecture Baseline **v1.1** is locked.
 
 ## Documentation Hierarchy (Read Before Code)
 

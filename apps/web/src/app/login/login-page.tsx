@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
+import { AppLogo } from "@/components/brand/app-logo";
 import { Button } from "@/components/ui/button";
 import { authService } from "@/services/api-client";
 import { env } from "@/utils/env";
@@ -57,8 +58,8 @@ export default function LoginPage() {
 
       <div className="relative w-full max-w-md animate-in fade-in-0 zoom-in-95 duration-300">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex size-11 items-center justify-center rounded-2xl bg-primary text-xs font-semibold tracking-wide text-primary-foreground shadow-md">
-            ERP
+          <div className="mx-auto mb-3 flex justify-center">
+            <AppLogo size={48} priority className="rounded-2xl shadow-md" />
           </div>
           <h1 className="text-2xl font-medium tracking-tight">{env.appName}</h1>
           <p className="mt-1.5 text-sm text-muted-foreground">

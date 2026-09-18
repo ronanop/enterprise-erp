@@ -2,7 +2,7 @@
 
 > Overrides MASTER only where noted. Otherwise follow `MASTER.md` (Data-Dense Dashboard + Swiss Minimalism).
 
-**Project:** Connect Plus  
+**Project:** iConnect Plus  
 **Page:** Marketing & Social Media  
 **Stack:** Next.js + TypeScript + Tailwind + ShadCN  
 

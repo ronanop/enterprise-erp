@@ -1,6 +1,6 @@
-# Connect Plus API
+# iConnect Plus API
 
-FastAPI backend for the Connect Plus.
+FastAPI backend for the iConnect Plus.
 
 ## Requirements
 

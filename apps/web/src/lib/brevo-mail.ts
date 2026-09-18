@@ -77,7 +77,7 @@ export async function sendDeliveryReminderMail(
     `PO: ${po}`,
     `Expected delivery date: ${input.expectedDeliveryDate}`,
     "",
-    "- Connect Plus Procurement",
+    "- iConnect Plus Procurement",
   ].join("\n");
 
   const html = `
@@ -88,11 +88,11 @@ export async function sendDeliveryReminderMail(
       <li><strong>PO:</strong> ${escapeHtml(po)}</li>
       <li><strong>Expected delivery:</strong> ${escapeHtml(input.expectedDeliveryDate)}</li>
     </ul>
-    <p style="color:#64748b;font-size:12px">Connect Plus Procurement</p>
+    <p style="color:#64748b;font-size:12px">iConnect Plus Procurement</p>
   `;
 
   await getTransporter().sendMail({
-    from: `"Connect Plus" <${brevo.from}>`,
+    from: `"iConnect Plus" <${brevo.from}>`,
     to: input.to.trim(),
     subject,
     text,
@@ -199,7 +199,7 @@ export async function sendDeliveryDispatchMail(input: DeliveryDispatchMailInput)
     ...metaLines,
     "",
     buildItemsTableText(input.lines),
-    "- Connect Plus Procurement",
+    "- iConnect Plus Procurement",
   ].join("\n");
 
   const html = `
@@ -219,12 +219,12 @@ export async function sendDeliveryDispatchMail(input: DeliveryDispatchMailInput)
       </table>
       <p style="margin:16px 0 8px;font-weight:600">Items</p>
       ${buildItemsTableHtml(input.lines)}
-      <p style="color:#64748b;font-size:12px;margin-top:24px">Connect Plus Procurement</p>
+      <p style="color:#64748b;font-size:12px;margin-top:24px">iConnect Plus Procurement</p>
     </div>
   `;
 
   await getTransporter().sendMail({
-    from: `"Connect Plus" <${brevo.from}>`,
+    from: `"iConnect Plus" <${brevo.from}>`,
     to: input.to.trim(),
     subject,
     text,

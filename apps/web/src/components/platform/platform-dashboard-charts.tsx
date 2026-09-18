@@ -75,7 +75,7 @@ export function PlatformModuleActivityChart({
 
   return (
     <div className="h-[220px] w-full min-w-0" role="img" aria-label="Record counts by module">
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" debounce={200}>
         <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={CRM_CHART_COLORS.track} vertical={false} />
           <XAxis
@@ -119,7 +119,7 @@ export function PlatformConnectedPipelineChart({
 
   return (
     <div className="h-[220px] w-full min-w-0" role="img" aria-label="Connected revenue-to-fulfillment pipeline">
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" debounce={200}>
         <BarChart data={data} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={CRM_CHART_COLORS.track} horizontal={false} />
           <XAxis
@@ -163,7 +163,7 @@ export function PlatformModuleShareDonut({
 
   return (
     <div className="relative h-[220px] w-full min-w-0" role="img" aria-label="Record share by department">
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" debounce={200}>
         <PieChart>
           <Pie
             data={data}
@@ -229,7 +229,7 @@ export function PlatformModuleHealthDonut({
       role="img"
       aria-label="Module data health"
     >
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" debounce={200}>
         <PieChart>
           <Pie
             data={data}

@@ -2,7 +2,7 @@
 
 > Overrides MASTER only where noted. Otherwise follow `MASTER.md` and `pages/marketing.md`.
 
-**Project:** Connect Plus  
+**Project:** iConnect Plus  
 **Page:** `/marketing/calendar`  
 **Stack:** Next.js + TypeScript + Tailwind + ShadCN  
 

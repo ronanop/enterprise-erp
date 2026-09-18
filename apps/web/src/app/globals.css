@@ -74,13 +74,13 @@
   --chart-4: oklch(0.7 0.08 80);
   --chart-5: oklch(0.6 0.1 30);
   --radius: 0.7rem;
-  --sidebar: oklch(0.22 0.025 240);
+  --sidebar: #000000;
   --sidebar-foreground: oklch(0.92 0.01 220);
   --sidebar-primary: oklch(0.72 0.1 190);
   --sidebar-primary-foreground: oklch(0.18 0.03 220);
-  --sidebar-accent: oklch(0.3 0.03 230);
+  --sidebar-accent: oklch(0.22 0.01 240);
   --sidebar-accent-foreground: oklch(0.96 0.01 210);
-  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.65 0.08 190);
 }
 
@@ -103,13 +103,13 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 12%);
   --ring: oklch(0.65 0.08 190);
-  --sidebar: oklch(0.15 0.02 240);
+  --sidebar: #000000;
   --sidebar-foreground: oklch(0.92 0.01 220);
   --sidebar-primary: oklch(0.72 0.1 190);
   --sidebar-primary-foreground: oklch(0.18 0.03 220);
-  --sidebar-accent: oklch(0.24 0.03 230);
+  --sidebar-accent: oklch(0.22 0.01 240);
   --sidebar-accent-foreground: oklch(0.96 0.01 210);
-  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.65 0.08 190);
 }
 
@@ -194,4 +194,10 @@
   .erp-scroll::-webkit-scrollbar-thumb:hover {
     background: oklch(0.65 0.03 220 / 80%);
   }
+}
+
+/* While the rail width animates, keep dashboard charts from thrashing. */
+html.erp-sidebar-animating #erp-workspace-main {
+  contain: layout paint;
+  pointer-events: none;
 }

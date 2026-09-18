@@ -1,6 +1,7 @@
 "use client";
 
 import { UserAvatar } from "@/components/layout/user-avatar";
+import { useAuthAvatar } from "@/hooks/use-auth-avatar";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,7 @@ export function SignedInUserIdentity({
   className,
 }: SignedInUserIdentityProps) {
   const { user, loading, signedIn } = useAuthUser();
+  const avatarUrl = useAuthAvatar(Boolean(signedIn && user));
 
   if (loading) {
     return (
@@ -57,7 +59,12 @@ export function SignedInUserIdentity({
   if (variant === "topbar") {
     return (
       <div className={cn("flex min-w-0 items-center gap-2.5", className)} title={title}>
-        <UserAvatar displayName={user.displayName} size="sm" className="!size-8 !text-[10px]" />
+        <UserAvatar
+          displayName={user.displayName}
+          imageUrl={avatarUrl}
+          size="sm"
+          className="!size-8 !text-[10px]"
+        />
         <div className="min-w-0 hidden sm:block">
           <p className="truncate text-sm font-medium tracking-tight text-foreground">{user.displayName}</p>
           <p className="truncate text-xs text-muted-foreground">{user.email}</p>
@@ -68,14 +75,24 @@ export function SignedInUserIdentity({
 
   return (
     <div
-      className={cn("flex items-center gap-3", collapsed && "justify-center", className)}
+      className={cn(
+        "flex min-w-0 items-center",
+        collapsed ? "justify-center" : "gap-3",
+        className,
+      )}
       title={collapsed ? title : undefined}
     >
-      <span className="shrink-0">
-        <UserAvatar displayName={user.displayName} size="sm" />
-      </span>
+      <UserAvatar
+        displayName={user.displayName}
+        imageUrl={avatarUrl}
+        size="sm"
+        className={cn(
+          "!size-8 !text-[10px]",
+          collapsed && "!size-10 !rounded-full",
+        )}
+      />
       {!collapsed ? (
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 overflow-hidden">
           <p className="truncate text-sm font-medium tracking-tight text-sidebar-foreground">
             {user.displayName}
           </p>

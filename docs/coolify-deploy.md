@@ -19,7 +19,7 @@ Marketing site + ERP web share one Next app; ESS is a separate Next app:
 | `api.iconnectplus.in` | Coolify EC2 | `api:8000` |
 | `ess.iconnectplus.in` | Coolify EC2 | `employee-app:3001` |
 
-Landing (`/`) → **Sign in** → access code → **demo** (`/demo`) or **ConnectPlus** (`/login`).
+Landing (`/`) → **Sign in** → access code → **demo** (`/demo`) or **iConnectPlus** (`/login`).
 Employee self-service PWA: `https://ess.iconnectplus.in` (container port **3001**).
 
 ## Services to expose
@@ -74,7 +74,7 @@ AWS_SECRET_ACCESS_KEY=...
 1. User opens `https://iconnectplus.in` and clicks **Sign in**.
 2. Enters code → `POST /api/v1/public/access-gate/verify`.
 3. **Demo code** → `/demo` (sales frontend, sample data only).
-4. **ConnectPlus code** → `/login` (Microsoft SSO into live ERP).
+4. **iConnectPlus code** → `/login` (Microsoft SSO into live ERP).
 5. Gate token is stored in `sessionStorage` and checked on `/demo` and `/login`.
 
 ## If deploy hangs on Waiting for api
@@ -88,4 +88,4 @@ AWS_SECRET_ACCESS_KEY=...
 1. API logs show `Starting uvicorn`
 2. `https://api.iconnectplus.in/api/v1/health` returns OK
 3. Landing loads; Sign in accepts both codes
-4. Demo code → demo shell; ConnectPlus code → Microsoft login
+4. Demo code → demo shell; iConnectPlus code → Microsoft login

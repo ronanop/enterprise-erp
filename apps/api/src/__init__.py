@@ -1,1 +1,1 @@
-"""Connect Plus API - application package."""
+"""iConnect Plus API - application package."""

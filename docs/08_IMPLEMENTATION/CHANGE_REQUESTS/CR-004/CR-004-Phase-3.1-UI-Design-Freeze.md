@@ -3,7 +3,7 @@
 **Status:** LOCKED - design freeze (documentation only)  
 **Date:** 2026-08-03  
 **Audience:** IT Administrators (daily operational workspace)  
-**Design baseline:** Connect Plus - Data-Dense Dashboard + Swiss Minimalism (`design-system/enterprise-erp-platform/MASTER.md`)
+**Design baseline:** iConnect Plus - Data-Dense Dashboard + Swiss Minimalism (`design-system/enterprise-erp-platform/MASTER.md`)
 
 ---
 

@@ -1,5 +1,5 @@
 # ENTERPRISE DATABASE STANDARDS (DBS)
-## Connect Plus
+## iConnect Plus
 
 **Version:** 1.1
 **Status:** Architecture Baseline Approved (Technology Alignment - SDD v1.1 ADR-002)
@@ -14,7 +14,7 @@
 | Field            | Value                                        |
 | ---------------- | -------------------------------------------- |
 | Document Name    | Enterprise Database Standards (DBS)          |
-| Project          | Connect Plus       |
+| Project          | iConnect Plus       |
 | Version          | 1.1                                          |
 | Status           | Architecture Baseline Approved (ADR-002)     |
 | Document Type    | Database Governance Standard                 |
@@ -470,7 +470,7 @@ No implementation shall bypass the standards defined in this document.
 
 ## 12. Architecture Approval
 
-This document establishes the official database governance baseline for the Connect Plus.
+This document establishes the official database governance baseline for the iConnect Plus.
 
 Any deviation from these standards must be documented through an Architecture Decision Record (ADR) and approved by the Enterprise Architecture Review Board.
 
@@ -1678,7 +1678,7 @@ Every new table must satisfy the following before approval:
 
 **PART 3 APPROVAL**
 
-The Connect Plus now has standardized templates for every major table category.
+The iConnect Plus now has standardized templates for every major table category.
 
 These standards shall be mandatory for:
 
@@ -3187,7 +3187,7 @@ Rules:
 
 ## 90. Final Database Architecture Approval
 
-This document establishes the official Enterprise Database Standards (DBS) baseline for the Connect Plus.
+This document establishes the official Enterprise Database Standards (DBS) baseline for the iConnect Plus.
 
 All future:
 
@@ -3511,4 +3511,4 @@ Development
 
 ---
 
-*End of Enterprise Database Standards (DBS) - Connect Plus - Version 1.1*
+*End of Enterprise Database Standards (DBS) - iConnect Plus - Version 1.1*

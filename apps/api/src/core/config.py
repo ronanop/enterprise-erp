@@ -28,7 +28,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = Field(default="Connect Plus API", alias="APP_NAME")
+    app_name: str = Field(default="iConnect Plus API", alias="APP_NAME")
     app_version: str = Field(default="0.1.0", alias="APP_VERSION")
     environment: str = Field(default="development", alias="ENVIRONMENT")
     debug: bool = Field(default=False, alias="DEBUG")
@@ -243,7 +243,7 @@ class Settings(BaseSettings):
         alias="MICROSOFT_PLATFORM_ADMIN_EMAILS",
     )
 
-    # Landing access gate (iconnectplus.com Sign in → code → demo | ConnectPlus ERP)
+    # Landing access gate (iconnectplus.com Sign in → code → demo | iConnectPlus ERP)
     access_code_demo: str = Field(default="ICP-DEMO-2026", alias="ACCESS_CODE_DEMO")
     access_code_connectplus: str = Field(
         default="ICP-CONNECT-2026",

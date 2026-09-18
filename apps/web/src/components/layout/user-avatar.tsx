@@ -1,7 +1,5 @@
 "use client";
 
-import Image from "next/image";
-
 import { userInitials } from "@/lib/auth-user";
 import { cn } from "@/lib/utils";
 
@@ -34,12 +32,13 @@ export function UserAvatar({
           className,
         )}
       >
-        <Image
+        {/* blob:/data: URLs from Microsoft photo — plain img avoids Next image optimizer */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           src={imageUrl}
           alt=""
-          fill
-          className="object-cover"
-          sizes={size === "sm" ? "36px" : "44px"}
+          className="size-full object-cover"
+          draggable={false}
         />
       </div>
     );

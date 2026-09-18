@@ -106,7 +106,7 @@ export function AccessCodeDialog({ open, onClose }: AccessCodeDialogProps) {
             </h2>
             <p className="mt-1 text-sm leading-relaxed text-[#5A6070]">
               Enter the code linked to your workspace. Demo codes open the sales
-              preview; ConnectPlus codes open the live ERP.
+              preview; iConnectPlus codes open the live ERP.
             </p>
           </div>
         </div>

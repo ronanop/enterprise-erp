@@ -1,4 +1,4 @@
-# MCP server (Connect Plus)
+# MCP server (iConnect Plus)
 
 Expose a **curated** subset of ERP REST operations to an ElevenLabs Conversational AI agent via the [Model Context Protocol](https://modelcontextprotocol.io). ElevenLabs connects to **one** MCP server and discovers tools dynamically instead of registering hundreds of webhooks by hand.
 

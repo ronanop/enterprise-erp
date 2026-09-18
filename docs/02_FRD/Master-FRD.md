@@ -1,10 +1,10 @@
 # MASTER FUNCTIONAL REQUIREMENTS DOCUMENT (FRD)
-## Connect Plus - Consolidated Master FRD
+## iConnect Plus - Consolidated Master FRD
 
 **Version:** 1.0
 **Status:** Architecture Approved (All 22 Domains Locked)
 
-This Master FRD consolidates all 22 domain-level Functional Requirements Documents (FRD-01 through FRD-22) covering the complete Connect Plus architecture. Content within each domain section is preserved exactly as approved in the corresponding standalone module FRD file. Each module is also available as a separate file in the `modules/` folder, cross-referenced below.
+This Master FRD consolidates all 22 domain-level Functional Requirements Documents (FRD-01 through FRD-22) covering the complete iConnect Plus architecture. Content within each domain section is preserved exactly as approved in the corresponding standalone module FRD file. Each module is also available as a separate file in the `modules/` folder, cross-referenced below.
 
 ---
 

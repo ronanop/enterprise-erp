@@ -1,6 +1,6 @@
 # DC Challan Page Overrides
 
-> **PROJECT:** Connect Plus
+> **PROJECT:** iConnect Plus
 > **Page Type:** Asset operations register (authenticated app)
 > Rules in this file **override** `MASTER.md` and `pages/assets.md`. Only deviations are listed.
 

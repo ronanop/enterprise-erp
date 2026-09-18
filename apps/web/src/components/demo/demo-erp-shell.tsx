@@ -77,7 +77,7 @@ const MODULE_CARDS = [
   },
   {
     title: "Org readiness",
-    body: "RBAC + SSO ready for your ConnectPlus production cutover.",
+    body: "RBAC + SSO ready for your iConnectPlus production cutover.",
     meta: "Demo mode",
     icon: Building2,
   },
@@ -172,9 +172,20 @@ export function DemoErpShell() {
 
       <div className="mx-auto flex max-w-[1440px]">
         <aside className="sticky top-0 hidden h-[calc(100dvh-2.75rem)] w-56 shrink-0 flex-col border-r border-[#E4ECFC] bg-white py-4 lg:flex">
-          <div className="px-4 pb-4">
-            <p className="text-sm font-semibold tracking-tight">iConnect Plus</p>
-            <p className="text-xs text-[#64748B]">Enterprise demo</p>
+          <div className="flex items-center gap-2.5 px-4 pb-4">
+            {/* eslint-disable-next-line @next/next/no-img-element -- demo brand mark */}
+            <img
+              src="/brand/iconnect-plus-logo.png"
+              alt=""
+              width={36}
+              height={36}
+              className="size-9 rounded-xl bg-white object-contain p-1 shadow-sm ring-1 ring-black/5"
+              aria-hidden
+            />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold tracking-tight">iConnect Plus</p>
+              <p className="text-xs text-[#64748B]">Enterprise demo</p>
+            </div>
           </div>
           <nav aria-label="Demo modules" className="flex flex-1 flex-col gap-0.5 px-2">
             {NAV.map((item) => {
@@ -297,7 +308,7 @@ export function DemoErpShell() {
           </section>
 
           <p className="mt-8 text-center text-xs text-[#94A3B8]">
-            Want the live ConnectPlus ERP? Use your ConnectPlus access code from the
+            Want the live iConnectPlus ERP? Use your iConnectPlus access code from the
             landing Sign in dialog.
           </p>
         </main>

@@ -49,7 +49,7 @@ export function AppShell({ children }: AppShellProps) {
       ) : (
         <AppSidebar />
       )}
-      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
+      <div id="erp-workspace-main" className="flex min-w-0 flex-1 flex-col overflow-x-clip">
         <AppTopbar />
         <main className="min-w-0 flex-1 overflow-x-clip px-4 py-6 sm:px-6 lg:px-8">
           <div className="mx-auto w-full min-w-0 max-w-[1400px] animate-in fade-in-50 slide-in-from-bottom-2 duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:animate-none">

@@ -4,7 +4,7 @@ from typing import Annotated
 from urllib.parse import quote, urlparse
 
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -192,6 +192,26 @@ def logout(
     return APIResponse(message="Logged out", data=None)
 
 
+@router.get("/me/avatar")
+def me_avatar(
+    user: Annotated[SecUser, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    """Microsoft / Entra profile photo for the signed-in user (cached)."""
+    service = AuthService(db)
+    photo = service.resolve_user_avatar(user_id=user.id, email=user.email)
+    if photo is None:
+        return Response(status_code=204)
+    content, content_type = photo
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={
+            "Cache-Control": "private, max-age=3600",
+        },
+    )
+
+
 @router.get("/me", response_model=APIResponse[dict])
 def me(
     user: Annotated[SecUser, Depends(get_current_user)],
@@ -219,6 +239,7 @@ def me(
         "module_keys": module_keys,
         "admin_module_keys": admin_module_keys,
         "module_roles": module_roles,
+        "avatar_url": "/auth/me/avatar",
     }
     from modules.project.service.project_module_admin import ProjectModuleAdminService
     from modules.hr.service.hr_module_admin import HrModuleAdminService

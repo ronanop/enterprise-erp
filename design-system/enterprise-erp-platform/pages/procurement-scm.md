@@ -1,6 +1,6 @@
 # Procurement SCM Page Overrides
 
-> **PROJECT:** Connect Plus
+> **PROJECT:** iConnect Plus
 > **Page Type:** SCM workspace (OVF queue → vendor PO → GRN)
 > Rules override `MASTER.md` and extend `procurement.md`.
 

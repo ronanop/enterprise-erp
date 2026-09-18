@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogIn } from "lucide-react";
@@ -9,16 +10,6 @@ import { AppTopbarNotifications } from "@/components/layout/app-topbar-notificat
 import { ProjectsGlobalSearch } from "@/components/projects/projects-global-search";
 import { useAuthUser } from "@/hooks/use-auth-user";
 
-function workspaceSubtitle(pathname: string, signedIn: boolean, loading: boolean): string {
-  if (loading) return "Loading session…";
-  if (!signedIn) return "Guest · sign in for protected APIs";
-  if (pathname === "/crm" || pathname.startsWith("/crm/")) return "Sales CRM · secure session";
-  if (pathname === "/projects" || pathname.startsWith("/projects/")) {
-    return "Projects · secure session";
-  }
-  return "Signed in · secure session";
-}
-
 export function AppTopbar() {
   const pathname = usePathname();
   const { signedIn, loading } = useAuthUser();
@@ -27,16 +18,22 @@ export function AppTopbar() {
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-4 border-b border-border/80 bg-card/80 px-4 backdrop-blur-md supports-backdrop-filter:bg-card/70 sm:px-6">
-      <div className="min-w-0 shrink-0 sm:w-44">
+      <div className="min-w-0 shrink-0">
         <Link
           href="/home"
-          className="block cursor-pointer truncate text-sm font-medium tracking-tight transition-opacity duration-200 hover:opacity-80"
+          className="flex cursor-pointer items-center transition-opacity duration-200 hover:opacity-80"
+          aria-label="iConnect Plus home"
         >
-          Workspace
+          <Image
+            src="/brand/iconnect-plus-topbar.png"
+            alt="iConnect Plus"
+            width={200}
+            height={80}
+            priority
+            unoptimized
+            className="h-9 w-auto max-w-[200px] object-contain object-left sm:h-10"
+          />
         </Link>
-        <p className="truncate text-xs text-muted-foreground">
-          {workspaceSubtitle(pathname, signedIn, loading)}
-        </p>
       </div>
 
       {isCrm ? (

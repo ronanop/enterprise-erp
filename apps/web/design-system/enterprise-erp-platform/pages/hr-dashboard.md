@@ -2,7 +2,7 @@
 
 > Overrides `MASTER.md` for `/hr` executive overview only.
 
-**Project:** Connect Plus  
+**Project:** iConnect Plus  
 **Page:** hr-dashboard  
 **Generated:** 2026-07-23
 

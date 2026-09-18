@@ -1,6 +1,6 @@
 # Project Tracker Page Overrides
 
-> **PROJECT:** Connect Plus  
+> **PROJECT:** iConnect Plus  
 > **Page Type:** Admin upload and version-history workspace
 
 ## Page-Specific Rules

@@ -1,6 +1,6 @@
 # Issue Asset Page Overrides
 
-> **PROJECT:** Connect Plus
+> **PROJECT:** iConnect Plus
 > **Page Type:** Asset issue wizard (authenticated app)
 > Rules in this file **override** `MASTER.md` and `pages/assets.md`. Only deviations are listed.
 

@@ -41,9 +41,9 @@ def get_mcp_server() -> FastMCP:
         )
 
     _mcp_instance = FastMCP(
-        name="Connect Plus MCP",
+        name="iConnect Plus MCP",
         instructions=(
-            "Tools expose a curated subset of the Connect Plus REST API. "
+            "Tools expose a curated subset of the iConnect Plus REST API. "
             "Read-only tools are tagged in descriptions; mutating tools require approval."
         ),
         streamable_http_path="/",

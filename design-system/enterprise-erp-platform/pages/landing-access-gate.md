@@ -1,6 +1,6 @@
 # Landing Access Gate Page Overrides
 
-> **PROJECT:** Enterprise ERP Platform
+> **PROJECT:** iConnect Plus
 > **Generated:** 2026-09-17 11:55:18
 > **Page Type:** Landing / Marketing
 

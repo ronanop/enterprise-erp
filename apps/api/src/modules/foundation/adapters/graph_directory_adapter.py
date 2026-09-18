@@ -112,3 +112,24 @@ class GraphDirectoryAdapter:
                 url = body.get("@odata.nextLink")
                 params = None
         return rows
+
+    def fetch_user_photo(self, email: str, *, token: str | None = None) -> tuple[bytes, str] | None:
+        """Fetch a user's Microsoft profile photo by UPN/email (app permissions)."""
+        mail = (email or "").strip()
+        if not mail or "@" not in mail:
+            return None
+        access_token = token or self.acquire_token()
+        # Graph accepts UPN in the path; encode @ as %40.
+        encoded = mail.replace("@", "%40")
+        url = f"https://graph.microsoft.com/v1.0/users/{encoded}/photo/$value"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        with httpx.Client(timeout=15.0) as client:
+            response = client.get(url, headers=headers)
+        if response.status_code == 404:
+            return None
+        if response.status_code >= 400:
+            return None
+        content_type = response.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+        if not content_type.startswith("image/") or not response.content:
+            return None
+        return response.content, content_type

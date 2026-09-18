@@ -562,7 +562,7 @@ def build_workbook(rows: list[Row]) -> Workbook:
     grouped = group_rows_by_module(rows)
     order = module_order(rows)
 
-    title_a1 = "Connect Plus - Project Completion"
+    title_a1 = "iConnect Plus - Project Completion"
     title_a2 = f"As of {date.today().isoformat()} · Release baseline ERP Core v1.18-beta"
 
     detail_headers = [

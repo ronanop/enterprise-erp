@@ -1,5 +1,6 @@
 """Authentication service."""
 
+import base64
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.exceptions import UnauthorizedException
 from core.redis import SessionStore
+from modules.foundation.adapters.graph_directory_adapter import GraphDirectoryAdapter
 from modules.foundation.domain.exceptions import (
     AccountLockedException,
     InvalidCredentialsException,
@@ -122,7 +124,11 @@ class AuthService:
         frontend_base = resolve_frontend_base(
             frontend_origin if isinstance(frontend_origin, str) else None
         )
-        claims = oauth.exchange_authorization_code(code)
+        claims_bundle = oauth.exchange_authorization_code(code)
+        claims = claims_bundle.get("claims")
+        if not isinstance(claims, dict):
+            raise InvalidCredentialsException("Microsoft sign-in did not return identity claims")
+        ms_access_token = claims_bundle.get("access_token")
         email = MicrosoftOAuthService.email_from_claims(claims)
         if not email:
             raise InvalidCredentialsException("Microsoft account did not include an email address")
@@ -132,12 +138,63 @@ class AuthService:
             ip_address=ip_address,
             user_agent=user_agent,
         )
+        user = self._users.get_active_by_email(email)
+        if user is not None and isinstance(ms_access_token, str) and ms_access_token:
+            self._cache_microsoft_avatar(user.id, ms_access_token)
+
         exchange_code = oauth.create_exchange_code()
         self._store.set_oauth_exchange(
             exchange_code,
             {**tokens, "return_to": return_to, "frontend_base": frontend_base},
         )
         return exchange_code, return_to, frontend_base
+
+    def resolve_user_avatar(self, *, user_id: UUID, email: str) -> tuple[bytes, str] | None:
+        """Return cached Microsoft profile photo, refreshing from Graph when needed."""
+        cached = self._store.get_user_avatar(user_id)
+        if cached is not None:
+            try:
+                return base64.b64decode(cached["data_b64"]), cached["content_type"]
+            except Exception:
+                pass
+
+        if self._store.has_user_avatar_miss(user_id):
+            return None
+
+        adapter = GraphDirectoryAdapter()
+        if not adapter.configured:
+            self._store.set_user_avatar_miss(user_id)
+            return None
+
+        try:
+            photo = adapter.fetch_user_photo(email)
+        except Exception:
+            self._store.set_user_avatar_miss(user_id)
+            return None
+
+        if photo is None:
+            self._store.set_user_avatar_miss(user_id)
+            return None
+
+        content, content_type = photo
+        self._store.set_user_avatar(
+            user_id,
+            content_type=content_type,
+            data_b64=base64.b64encode(content).decode("ascii"),
+        )
+        return content, content_type
+
+    def _cache_microsoft_avatar(self, user_id: UUID, ms_access_token: str) -> None:
+        photo = MicrosoftOAuthService.fetch_profile_photo(ms_access_token)
+        if photo is None:
+            self._store.set_user_avatar_miss(user_id)
+            return
+        content, content_type = photo
+        self._store.set_user_avatar(
+            user_id,
+            content_type=content_type,
+            data_b64=base64.b64encode(content).decode("ascii"),
+        )
 
     def redeem_microsoft_exchange(self, exchange_code: str) -> dict:
         payload = self._store.pop_oauth_exchange(exchange_code)

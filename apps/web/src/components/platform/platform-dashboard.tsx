@@ -2,7 +2,7 @@
 
 /**
  * Platform home — Apple monochrome chrome; color only on charts + alerts.
- * Spec: design-system/.../pages/home.md + Figma file Connect Plus — Home.
+ * Spec: design-system/.../pages/home.md + Figma file iConnect Plus — Home.
  */
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";

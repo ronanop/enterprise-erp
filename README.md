@@ -1,4 +1,4 @@
-# Connect Plus
+# iConnect Plus
 
 Multi-Industry, Multi-Company, Enterprise-Grade ERP Platform.
 

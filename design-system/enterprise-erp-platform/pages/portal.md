@@ -1,6 +1,6 @@
 # Portal Page Overrides
 
-> **PROJECT:** Connect Plus
+> **PROJECT:** iConnect Plus
 > **Page Type:** Customer Portal & Self-Service workspace (authenticated app admin)
 > Rules in this file **override** `MASTER.md`. Only deviations are listed.
 

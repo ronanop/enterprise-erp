@@ -99,7 +99,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://172.16.200.30:8443/api/v1}
-        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Connect Plus}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-iConnect Plus}
         NEXT_PUBLIC_DEMO_EMAIL: ${NEXT_PUBLIC_DEMO_EMAIL:-admin@example.com}
         NEXT_PUBLIC_DEMO_PASSWORD: ${NEXT_PUBLIC_DEMO_PASSWORD:-Secure1!}
         NEXT_PUBLIC_ELEVENLABS_AGENT_ID: ${NEXT_PUBLIC_ELEVENLABS_AGENT_ID:-}

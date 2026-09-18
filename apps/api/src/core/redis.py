@@ -126,3 +126,52 @@ class SessionStore:
             return None
         self._client.delete(key)
         return json.loads(raw)
+
+    def set_user_avatar(
+        self,
+        user_id: UUID,
+        *,
+        content_type: str,
+        data_b64: str,
+        ttl_seconds: int = 86_400,
+    ) -> None:
+        key = f"avatar:{user_id}"
+        try:
+            self._client.setex(
+                key,
+                ttl_seconds,
+                json.dumps({"content_type": content_type, "data_b64": data_b64}),
+            )
+            self._client.delete(f"avatar:miss:{user_id}")
+        except RedisError as exc:
+            logger.warning("Redis unavailable for set_user_avatar: %s", exc)
+
+    def get_user_avatar(self, user_id: UUID) -> dict[str, str] | None:
+        try:
+            raw = cast(str | None, self._client.get(f"avatar:{user_id}"))
+        except RedisError as exc:
+            logger.warning("Redis unavailable for get_user_avatar: %s", exc)
+            return None
+        if raw is None:
+            return None
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            return None
+        content_type = payload.get("content_type")
+        data_b64 = payload.get("data_b64")
+        if not isinstance(content_type, str) or not isinstance(data_b64, str):
+            return None
+        return {"content_type": content_type, "data_b64": data_b64}
+
+    def set_user_avatar_miss(self, user_id: UUID, *, ttl_seconds: int = 3_600) -> None:
+        try:
+            self._client.setex(f"avatar:miss:{user_id}", ttl_seconds, "1")
+        except RedisError as exc:
+            logger.warning("Redis unavailable for set_user_avatar_miss: %s", exc)
+
+    def has_user_avatar_miss(self, user_id: UUID) -> bool:
+        try:
+            return bool(self._client.exists(f"avatar:miss:{user_id}"))
+        except RedisError as exc:
+            logger.warning("Redis unavailable for has_user_avatar_miss: %s", exc)
+            return False

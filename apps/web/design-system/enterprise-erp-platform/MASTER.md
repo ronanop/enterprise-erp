@@ -6,7 +6,7 @@
 
 ---
 
-**Project:** Connect Plus
+**Project:** iConnect Plus
 **Generated:** 2026-07-23 12:34:40
 **Category:** Analytics Dashboard
 

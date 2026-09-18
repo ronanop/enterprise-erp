@@ -44,7 +44,8 @@ def resolve_frontend_base(frontend_origin: str | None) -> str:
 
 
 class MicrosoftOAuthService:
-    SCOPES = ("openid", "profile", "email", "offline_access")
+    # User.Read lets us pull the signed-in user's Microsoft profile photo via Graph.
+    SCOPES = ("openid", "profile", "email", "offline_access", "User.Read")
 
     def __init__(self) -> None:
         self._ensure_configured()
@@ -101,7 +102,29 @@ class MicrosoftOAuthService:
         id_token = payload.get("id_token")
         if not isinstance(id_token, str) or not id_token:
             raise MicrosoftLoginNotConfiguredException("Microsoft did not return an ID token")
-        return self.decode_id_token(id_token)
+        access_token = payload.get("access_token")
+        return {
+            "claims": self.decode_id_token(id_token),
+            "access_token": access_token if isinstance(access_token, str) else None,
+        }
+
+    @staticmethod
+    def fetch_profile_photo(access_token: str) -> tuple[bytes, str] | None:
+        """Fetch the signed-in user's Microsoft 365 / Entra profile photo."""
+        headers = {"Authorization": f"Bearer {access_token}"}
+        with httpx.Client(timeout=15.0) as client:
+            response = client.get(
+                "https://graph.microsoft.com/v1.0/me/photo/$value",
+                headers=headers,
+            )
+        if response.status_code == 404:
+            return None
+        if response.status_code >= 400:
+            return None
+        content_type = response.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+        if not content_type.startswith("image/") or not response.content:
+            return None
+        return response.content, content_type
 
     def decode_id_token(self, id_token: str) -> dict[str, Any]:
         metadata_url = f"{self._authority}/v2.0/.well-known/openid-configuration"
