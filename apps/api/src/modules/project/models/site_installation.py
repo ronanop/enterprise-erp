@@ -1,12 +1,13 @@
 """Site installation workflow extension for Project Management."""
 
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Date,
+    DateTime,
     ForeignKey,
     Integer,
     String,
@@ -158,6 +159,21 @@ class PrjSiteInstallation(Base, *PrjDetailMixin):
     hwat_signoff_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Customer-signed work completion certificate - required evidence for the
+    # service invoice and for tender work-completion submissions.
+    completion_certificate_number: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    completion_certificate_issued_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completion_certificate_signed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    completion_certificate_signed_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    completion_certificate_signatory: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    completion_certificate_attachment_name: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
 
     # Stage evidence attachments (file name required before advancing)
     survey_attachment_name: Mapped[str | None] = mapped_column(String(255), nullable=True)

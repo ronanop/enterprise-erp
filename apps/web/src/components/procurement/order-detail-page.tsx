@@ -12,6 +12,8 @@ import {
 
 import { DeliveryChallanFormPage } from "@/components/procurement/delivery-challan-form-page";
 import { GrnPdfPickDialog } from "@/components/procurement/grn-pdf-pick-dialog";
+import { DeliveryTrackingCard } from "@/components/procurement/delivery-tracking-card";
+import { NegotiationApprovalCard } from "@/components/procurement/negotiation-approval-card";
 import { PoFulfillmentCharts } from "@/components/procurement/po-fulfillment-charts";
 import {
   ReceiptSerialsDialog,
@@ -860,12 +862,25 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
     (approvalPendingFlag || order?.source_module === "crm");
   const finalizeBlockedByApproval =
     Boolean(pendingApproval) || (isAdmin && approvalPendingFlag);
+  // Management must approve the post-negotiation price before the PO can be
+  // issued to the distributor.
+  const negotiationApplies = Boolean(
+    order && order.status === "draft" && order.source_module === "crm",
+  );
+  // Delivery correspondence only matters once the PO is live with the distributor.
+  const deliveryTrackingApplies = Boolean(
+    order &&
+      order.source_module === "crm" &&
+      !["draft", "submitted", "cancelled"].includes((order.status || "").toLowerCase()),
+  );
+  const negotiationApproved = order?.negotiation_status === "approved";
   const canFinalize =
     order &&
     order.status === "draft" &&
     order.source_module === "crm" &&
     (order.lines?.length ?? 0) > 0 &&
     !finalizeBlockedByApproval &&
+    negotiationApproved &&
     !isAdmin;
   const editPoHref =
     order?.source_module === "crm" && order.source_document_id
@@ -1079,9 +1094,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
                 disabled={busy}
                 onClick={() => void onFinalize()}
               >
-                {approvalRejected
-                    ? "Resubmit for approval"
-                    : "Send for admin approval"}
+                {approvalRejected ? "Resubmit for approval" : "Send for admin approval"}
               </Button>
             ) : null}
             {isAdmin && approvalPendingFlag && !showGrnWorkspace ? (
@@ -1206,6 +1219,21 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
             />
           ) : !showGrnWorkspace ? (
             <>
+              <NegotiationApprovalCard
+                orderId={order.id}
+                enabled={negotiationApplies}
+                isAdmin={isAdmin}
+                onDecided={() => void load()}
+              />
+
+              {deliveryTrackingApplies ? (
+                <DeliveryTrackingCard
+                  order={order}
+                  isAdmin={isAdmin}
+                  onSaved={() => void load()}
+                />
+              ) : null}
+
               <SectionCard title="Purchase order overview">
                 <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   <DetailItem label="Company PO">

@@ -15,7 +15,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -37,6 +37,14 @@ class CrmOpportunity(Base, *CrmTransactionMixin):
         CheckConstraint(
             "probability_percent >= 0 AND probability_percent <= 100",
             name="ck_crm_opp_prob",
+        ),
+        CheckConstraint(
+            "po_finance_status IN ('not_required','pending','approved','rejected')",
+            name="ck_crm_opp_po_finance_status",
+        ),
+        CheckConstraint(
+            "po_terms_status IN ('not_required','pending','approved','rejected')",
+            name="ck_crm_opp_po_terms_status",
         ),
         {"schema": "crm"},
     )
@@ -123,6 +131,25 @@ class CrmOpportunity(Base, *CrmTransactionMixin):
     customer_po_approved: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+
+    # Customer PO is validated by Finance (tax/GST) and Legal (terms &
+    # conditions) before Management gives the final go-ahead. Sales never
+    # validates terms. ``po_approval_chain`` stores the approvers chosen for
+    # each stage when the PO is first sent for approval.
+    po_finance_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="not_required", server_default="not_required"
+    )
+    po_finance_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    po_finance_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    po_finance_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    po_terms_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="not_required", server_default="not_required"
+    )
+    po_terms_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    po_terms_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    po_terms_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    po_approval_chain: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     deal_won_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
 
     project_title: Mapped[str | None] = mapped_column(String(255), nullable=True)

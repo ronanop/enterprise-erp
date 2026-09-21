@@ -987,6 +987,86 @@ class CashFlowSectionLine(BaseModel):
     amount: float = 0
 
 
+class CashFlowWeekResponse(BaseModel):
+    week_number: int
+    week_start: date
+    week_end: date
+    inflow: float = 0
+    outflow: float = 0
+    net: float = 0
+    closing_balance: float = 0
+    item_count: int = 0
+
+
+class StuckStockItemResponse(BaseModel):
+    reference: str
+    product_name: str
+    quantity: float = 0
+    value: float = 0
+    received_on: date | None = None
+    days_held: int = 0
+    on_hold: bool = False
+
+
+class StuckStockSummaryResponse(BaseModel):
+    total_value: float = 0
+    unit_count: int = 0
+    oldest_days_held: int = 0
+    monthly_carry_cost: float = 0
+    carry_cost_to_date: float = 0
+    on_hold_value: float = 0
+    items: list[StuckStockItemResponse] = Field(default_factory=list)
+
+
+class WorkingCapitalLeverageResponse(BaseModel):
+    collection_days: int = 0
+    payment_days: int = 0
+    leverage_days: int = 0
+    average_monthly_outflow: float = 0
+    leverage_value: float = 0
+    narrative: str = ""
+
+
+class CashFlowForecastResponse(BaseModel):
+    as_of: date
+    horizon_weeks: int
+    opening_balance: float = 0
+    closing_balance: float = 0
+    total_inflow: float = 0
+    total_outflow: float = 0
+    overdue_inflow: float = 0
+    overdue_outflow: float = 0
+    lowest_balance: float = 0
+    lowest_balance_week: int | None = None
+    shortfall_weeks: list[int] = Field(default_factory=list)
+    weeks: list[CashFlowWeekResponse] = Field(default_factory=list)
+    stuck_stock: StuckStockSummaryResponse
+    leverage: WorkingCapitalLeverageResponse | None = None
+
+
+class TreasurySuggestionResponse(BaseModel):
+    rank: int
+    kind: str
+    title: str
+    amount: float = 0
+    days: int = 0
+    annual_rate_pct: float = 0
+    expected_return: float = 0
+    liquidity: str
+    rationale: str
+
+
+class TreasuryPlanResponse(BaseModel):
+    as_of: date
+    deployable_amount: float = 0
+    deployable_days: int = 0
+    operating_buffer: float = 0
+    lowest_forecast_balance: float = 0
+    total_opportunity: float = 0
+    suggestions: list[TreasurySuggestionResponse] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class CashFlowReportResponse(BaseModel):
     operating: list[CashFlowSectionLine] = Field(default_factory=list)
     investing: list[CashFlowSectionLine] = Field(default_factory=list)

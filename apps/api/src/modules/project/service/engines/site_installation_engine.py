@@ -660,6 +660,20 @@ def _assert_material_handover_gates(record: Any, delivery: str) -> None:
         )
 
 
+def _require_survey_evidence_for_material(record: Any) -> None:
+    """Site material cannot be ordered without the signed-off survey report."""
+    attachment = getattr(record, "survey_attachment_name", None)
+    if not (isinstance(attachment, str) and attachment.strip()):
+        raise InvalidSiteInstallationState(
+            "Upload the site survey report before ordering site material - "
+            "cable and socket quantities are ordered off that report"
+        )
+    if not getattr(record, "survey_completed", False):
+        raise InvalidSiteInstallationState(
+            "Mark the site survey complete before ordering site material"
+        )
+
+
 def assert_advance_gates(record: Any, action: str) -> None:
     """Validate mandatory verticals before a stage transition."""
     delivery = getattr(record, "delivery_type", SiteDeliveryType.SERVER_OS_RACK.value)
@@ -698,6 +712,9 @@ def assert_advance_gates(record: Any, action: str) -> None:
     if action == "complete_scm":
         _require_stage_attachment(record, "scm_attachment_name", "SCM / Logistics")
         if delivery_includes_rack(delivery):
+            # Cable and other site material is ordered off the site survey
+            # report, so that evidence has to be on record first.
+            _require_survey_evidence_for_material(record)
             _require_material_lines(record, "cable_lines", "Cable", require_date=True)
             _require_material_lines(
                 record, "industrial_socket_lines", "Industrial Socket", require_date=True

@@ -17,6 +17,7 @@ import { CrmEntityRejectionAlert } from "@/components/crm/sales/crm-approval-inb
 import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
 import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
+import { OvfInvoicePaymentSection } from "@/components/crm/sales/ovf-invoice-payment-section";
 import { CrmRecordActionsMenu } from "@/components/crm/sales/crm-record-actions-menu";
 import {
   OvfOrderLinesSection,
@@ -478,6 +479,8 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
           <CrmDetailItem label="Version">{ovf.version}</CrmDetailItem>
         </CrmDetailGrid>
       </CrmSection>
+
+      <OvfInvoicePaymentSection ovfId={ovfId} enabled={ovf.shared_to_scm} />
 
       <OvfOrderLinesSection
         customerRows={customerRows}

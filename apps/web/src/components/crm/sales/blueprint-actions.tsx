@@ -12,7 +12,21 @@ import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
 import { fileToBase64, listCrmApprovalUsers, type BlueprintActionPayload } from "@/services/sales-crm-service";
 
-type FieldType = "text" | "textarea" | "date" | "number" | "file" | "approver";
+type FieldType =
+  | "text"
+  | "textarea"
+  | "date"
+  | "number"
+  | "file"
+  | "approver"
+  | "approver_stage";
+
+/**
+ * Stages of the customer PO validation chain, in the order they run.
+ * ``operations`` is not an approval - it is the team handed the services
+ * scope the moment Management approves.
+ */
+type PoStage = "finance" | "legal" | "management" | "operations";
 
 type FieldConfig = {
   key:
@@ -24,10 +38,15 @@ type FieldConfig = {
   | "deal_won_amount"
   | "onboarding_date"
   | "file_name"
-  | "assigned_user_id";
+  | "assigned_user_id"
+  | "finance_user_ids"
+  | "legal_user_ids"
+  | "management_user_ids"
+  | "operations_user_ids";
   label: string;
   type: FieldType;
   required?: boolean;
+  stage?: PoStage;
 };
 
 type ActionConfig = {
@@ -54,6 +73,47 @@ const APPROVAL_DIALOG_FIELDS: FieldConfig[] = [
 
 const APPROVAL_ADMIN_NOTE =
   "A copy is also sent to tenant admins. Any selected approver or an admin can decide in My Jobs.";
+
+// The customer PO is validated in sequence: Finance checks tax/GST and the
+// commercials, Legal checks terms & conditions, then Management approves.
+// Each stage's My Jobs task is raised only once the previous one is approved.
+const PO_APPROVAL_DIALOG_FIELDS: FieldConfig[] = [
+  {
+    key: "finance_user_ids",
+    label: "1. Finance - tax, GST & commercials",
+    type: "approver_stage",
+    stage: "finance",
+    required: true,
+  },
+  {
+    key: "legal_user_ids",
+    label: "2. Legal - terms & conditions",
+    type: "approver_stage",
+    stage: "legal",
+    required: true,
+  },
+  {
+    key: "management_user_ids",
+    label: "3. Management - final go-ahead",
+    type: "approver_stage",
+    stage: "management",
+    required: true,
+  },
+  {
+    key: "operations_user_ids",
+    label: "Operations owner - services & installation scope (optional)",
+    type: "approver_stage",
+    stage: "operations",
+  },
+  { key: "remarks", label: "Remarks", type: "textarea", required: true },
+];
+
+const EMPTY_PO_STAGE_APPROVERS: Record<PoStage, string[]> = {
+  finance: [],
+  legal: [],
+  management: [],
+  operations: [],
+};
 
 const ACTION_CONFIG: Record<string, ActionConfig> = {
   convert: {
@@ -131,8 +191,12 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   },
   send_po_approval: {
     label: "Send PO for Approval",
-    fields: APPROVAL_DIALOG_FIELDS,
-    description: `Routes the customer PO to the Management team via My Jobs. ${APPROVAL_ADMIN_NOTE}`,
+    fields: PO_APPROVAL_DIALOG_FIELDS,
+    description:
+      "Routes the customer PO through Finance (tax & commercials), then Legal (terms & conditions), " +
+      "then Management. Each stage is raised in My Jobs only after the previous one approves. " +
+      "If the PO carries service (SAC) lines, the Operations owner is handed that scope as soon as " +
+      `Management approves - they do not wait for the hardware. ${APPROVAL_ADMIN_NOTE}`,
   },
   send_for_approval: {
     label: "Send for Approval",
@@ -280,6 +344,8 @@ export function BlueprintActions({
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [approverIds, setApproverIds] = useState<string[]>([]);
+  const [poStageApprovers, setPoStageApprovers] =
+    useState<Record<PoStage, string[]>>(EMPTY_PO_STAGE_APPROVERS);
   const [file, setFile] = useState<File | null>(null);
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
@@ -318,6 +384,9 @@ export function BlueprintActions({
         label: action.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()),
         fields: [REMARK_FIELD_ALT],
       };
+    if (action === "send_po_approval") {
+      return { ...base, fields: PO_APPROVAL_DIALOG_FIELDS };
+    }
     if (SEND_APPROVAL_ACTIONS.has(action)) {
       return {
         ...base,
@@ -363,6 +432,12 @@ export function BlueprintActions({
       ),
     );
     setApproverIds(pinnedIds);
+    // Finance owns the first PO check, so the pinned accounts approvers seed it.
+    setPoStageApprovers(
+      action === "send_po_approval"
+        ? { ...EMPTY_PO_STAGE_APPROVERS, finance: pinnedIds }
+        : EMPTY_PO_STAGE_APPROVERS,
+    );
     setFile(null);
     setFiles([]);
     setError(null);
@@ -373,6 +448,7 @@ export function BlueprintActions({
     setActiveAction(null);
     setValues({});
     setApproverIds([]);
+    setPoStageApprovers(EMPTY_PO_STAGE_APPROVERS);
     setFile(null);
     setFiles([]);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -393,6 +469,13 @@ export function BlueprintActions({
       if (field.required && field.type === "approver") {
         if (approverIds.length === 0) {
           setError(`${field.label} is required`);
+          return;
+        }
+        continue;
+      }
+      if (field.required && field.type === "approver_stage") {
+        if (!field.stage || poStageApprovers[field.stage].length === 0) {
+          setError(`Pick at least one approver for "${field.label}"`);
           return;
         }
         continue;
@@ -418,7 +501,13 @@ export function BlueprintActions({
     try {
       const payloadBase: BlueprintActionPayload = {};
       for (const field of config.fields) {
-        if (field.type === "file" || field.type === "approver") continue;
+        if (
+          field.type === "file" ||
+          field.type === "approver" ||
+          field.type === "approver_stage"
+        ) {
+          continue;
+        }
         const raw = values[field.key];
         if (!raw) continue;
         if (field.key === "deal_won_amount") payloadBase.deal_won_amount = Number(raw);
@@ -429,6 +518,16 @@ export function BlueprintActions({
       if (approverIds.length > 0) {
         payloadBase.assigned_user_ids = approverIds;
         payloadBase.assigned_user_id = approverIds[0];
+      }
+      if (dispatchAction === "send_po_approval") {
+        payloadBase.finance_user_ids = poStageApprovers.finance;
+        payloadBase.legal_user_ids = poStageApprovers.legal;
+        payloadBase.management_user_ids = poStageApprovers.management;
+        payloadBase.operations_user_ids = poStageApprovers.operations;
+        // Only Finance is raised now; the later stages are stored on the
+        // opportunity and raised as each stage approves.
+        payloadBase.assigned_user_ids = poStageApprovers.finance;
+        payloadBase.assigned_user_id = poStageApprovers.finance[0];
       }
       if (activeAction === "lost" && values.reason) {
         payloadBase.remark = values.reason;
@@ -568,6 +667,21 @@ export function BlueprintActions({
                     value={approverIds}
                     lockedIds={activePinnedApproverIds}
                     onChange={(ids) => setApproverIds(mergeApproverSelection(ids, activePinnedApproverIds))}
+                  />
+                ) : field.type === "approver_stage" && field.stage ? (
+                  <ApproverMultiSelect
+                    options={approvalUsers}
+                    value={poStageApprovers[field.stage]}
+                    lockedIds={field.stage === "finance" ? activePinnedApproverIds : []}
+                    onChange={(ids) =>
+                      setPoStageApprovers((prev) => ({
+                        ...prev,
+                        [field.stage as PoStage]:
+                          field.stage === "finance"
+                            ? mergeApproverSelection(ids, activePinnedApproverIds)
+                            : ids,
+                      }))
+                    }
                   />
                 ) : field.type === "file" ? (
                   <div className="flex min-w-0 flex-col gap-1.5">

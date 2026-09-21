@@ -7,7 +7,8 @@ legacy CRM lead & opportunity flows:
     LEAD:        open -> converted | lost
     OPPORTUNITY: open -> boq_pending -> boq_approval -> deal_reg ->
                  oem_pending -> oem_attached -> quote_ready ->
-                 quote_in_progress -> po_pending -> po_approval ->
+                 quote_in_progress -> po_pending -> po_approval
+                 (finance -> legal terms -> management) ->
                  ovf_ready -> won | lost
     QUOTE:       draft -> internal_approval -> approved_internal ->
                  sent_to_customer -> negotiation | follow_up | accepted | lost
@@ -113,7 +114,18 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
             "send_po_approval": "po_approval",
             "lost": "lost",
         },
-        "po_approval": {"approve_po": "ovf_ready", "reject_po": "po_pending", "lost": "lost"},
+        # Customer PO validation runs Finance (tax/GST) → Legal (terms &
+        # conditions) → Management. The first two stages stay in ``po_approval``
+        # and each one raises the next stage's My Jobs task on approval.
+        "po_approval": {
+            "approve_po_finance": "po_approval",
+            "reject_po_finance": "po_pending",
+            "approve_po_terms": "po_approval",
+            "reject_po_terms": "po_pending",
+            "approve_po": "ovf_ready",
+            "reject_po": "po_pending",
+            "lost": "lost",
+        },
         "ovf_ready": {"create_ovf": "ovf_ready", "deal_won": "won", "lost": "lost"},
         "won": {},
         "lost": {},

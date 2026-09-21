@@ -19,6 +19,8 @@ from modules.project.schemas import (
     ChangeRequestCreate,
     ChangeRequestResponse,
     ChangeRequestUpdate,
+    CompletionCertificateResponse,
+    CompletionCertificateSignoffRequest,
     ProjectBudgetCreate,
     ProjectBudgetResponse,
     ProjectBudgetUpdate,
@@ -1054,6 +1056,54 @@ def advance_site_installation(
     return APIResponse(
         message="Advanced",
         data=SiteInstallationService(db).advance(ctx, project_id, body.action),
+    )
+
+
+@site_installations_router.get(
+    "/by-project/{project_id}/completion-certificate",
+    response_model=APIResponse[CompletionCertificateResponse],
+)
+def get_completion_certificate(
+    project_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=SiteInstallationService(db).completion_certificate(ctx, project_id),
+    )
+
+
+@site_installations_router.post(
+    "/by-project/{project_id}/completion-certificate",
+    response_model=APIResponse[CompletionCertificateResponse],
+)
+def issue_completion_certificate(
+    project_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Completion certificate issued",
+        data=SiteInstallationService(db).issue_completion_certificate(ctx, project_id),
+    )
+
+
+@site_installations_router.post(
+    "/by-project/{project_id}/completion-certificate/signoff",
+    response_model=APIResponse[CompletionCertificateResponse],
+)
+def record_completion_certificate_signoff(
+    project_id: UUID,
+    body: CompletionCertificateSignoffRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Customer sign-off recorded",
+        data=SiteInstallationService(db).record_completion_signoff(
+            ctx, project_id, **body.model_dump()
+        ),
     )
 
 

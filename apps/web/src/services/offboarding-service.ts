@@ -1,4 +1,4 @@
-import { ApiClientError, resourceService } from "@/services/api-client";
+import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
 import { listHrEmployeeOptions } from "@/services/hr-service";
 import type { HrRow } from "@/services/hr-service";
 import type {
@@ -226,6 +226,73 @@ export async function offboardingAction(
 ): Promise<HrRow> {
   const res = await resourceService.action<HrRow>("/hr/separation", caseId, action, body ?? {});
   return (res.data ?? {}) as HrRow;
+}
+
+export type ExitAgreementType = "noc" | "nda" | "non_solicit";
+
+export type ExitAgreement = {
+  id: string;
+  document_number: string;
+  separation_id: string;
+  employee_id: string;
+  agreement_type: ExitAgreementType;
+  title: string;
+  body_text: string;
+  body_sha256: string;
+  status: "issued" | "signed" | "declined" | "void";
+  issued_at: string;
+  restriction_months?: number | null;
+  restriction_end_date?: string | null;
+  signed_at?: string | null;
+  signature_name?: string | null;
+  signature_ip?: string | null;
+  declined_at?: string | null;
+  decline_reason?: string | null;
+};
+
+export async function listExitAgreements(caseId: string): Promise<ExitAgreement[]> {
+  const res = await apiClient<ExitAgreement[]>(`/hr/separation/${caseId}/agreements`);
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function issueExitAgreement(
+  caseId: string,
+  agreementType: ExitAgreementType,
+  restrictionMonths?: number,
+): Promise<ExitAgreement> {
+  const res = await apiClient<ExitAgreement>(`/hr/separation/${caseId}/agreements`, {
+    method: "POST",
+    body: {
+      agreement_type: agreementType,
+      restriction_months: restrictionMonths ?? null,
+    },
+  });
+  if (!res.data) throw new ApiClientError("Failed to issue agreement", 500);
+  return res.data;
+}
+
+export async function signExitAgreement(
+  agreementId: string,
+  signatureName: string,
+): Promise<ExitAgreement> {
+  const res = await apiClient<ExitAgreement>(
+    `/hr/separation/agreements/${agreementId}/sign`,
+    { method: "POST", body: { signature_name: signatureName } },
+  );
+  if (!res.data) throw new ApiClientError("Failed to sign agreement", 500);
+  return res.data;
+}
+
+export async function declineExitAgreement(
+  agreementId: string,
+  reason: string,
+): Promise<ExitAgreement> {
+  const res = await apiClient<ExitAgreement>(
+    `/hr/separation/agreements/${agreementId}/decline`,
+    { method: "POST", body: { reason } },
+  );
+  if (!res.data) throw new ApiClientError("Failed to decline agreement", 500);
+  return res.data;
 }
 
 export function isApiError(e: unknown): string {

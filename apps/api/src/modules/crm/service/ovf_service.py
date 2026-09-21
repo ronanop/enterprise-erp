@@ -9,7 +9,7 @@ Product rules enforced here:
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Sequence
 from uuid import UUID
@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import ConflictException, ForbiddenException, NotFoundException
 from modules.crm.domain.enums import CrmEntityType
+from modules.crm.domain.tax_codes import classify_hsn_sac
 from modules.crm.models import CrmOpportunity, CrmOvf, CrmOvfLine, CrmQuote
 from modules.crm.repository.company_repository import CompanyRepository
 from modules.crm.repository.lead_repository import LeadRepository
@@ -1048,6 +1049,209 @@ class OvfService:
                 f"additional_charges={fields.get('additional_charges', ovf.additional_charges)}, "
                 f"finance_cost_pct={fields.get('finance_cost_pct', ovf.finance_cost_pct)}"
             ),
+        )
+        return row
+
+    # -- SCM savings visibility -------------------------------------------
+    def can_view_scm_savings(self, ctx: TenantContext) -> bool:
+        """Supply-chain savings are visible to Management/SCM, never to Sales."""
+        from modules.foundation.repository.user_module_repository import UserModuleRepository
+
+        if self._crm_admin.is_admin(ctx):
+            return True
+        if ctx.user_id is None:
+            return False
+        return ctx.user_id in UserModuleRepository(self._db).list_user_ids_for_module(
+            ctx.tenant_id, "procurement"
+        )
+
+    def get_scm_savings(self, ctx: TenantContext, ovf_id: UUID) -> dict[str, Any]:
+        if not self.can_view_scm_savings(ctx):
+            raise ForbiddenException(
+                "Supply-chain negotiation savings are visible to Management and Supply Chain only"
+            )
+        ovf = self.get(ctx, ovf_id)
+        return {
+            "ovf_id": ovf.id,
+            "ovf_no": ovf.ovf_no,
+            "scm_savings_amount": Decimal(str(ovf.scm_savings_amount or 0)),
+            "scm_negotiated_vendor_total": ovf.scm_negotiated_vendor_total,
+        }
+
+    # -- invoice routing + AR follow-up -----------------------------------
+    def _invoice_line_mix(self, ctx: TenantContext, ovf: CrmOvf) -> tuple[int, int]:
+        """(hsn_line_count, sac_line_count) from the source quote lines."""
+        hsn = sac = 0
+        for line in self._quote_lines.list_for_quote(ctx, ovf.quote_id):
+            kind = classify_hsn_sac(getattr(line, "hsn_sac", None))
+            if kind == "sac":
+                sac += 1
+            elif kind == "hsn":
+                hsn += 1
+        return hsn, sac
+
+    @staticmethod
+    def _invoice_channel(hsn_count: int, sac_count: int) -> str | None:
+        if hsn_count and sac_count:
+            return "mixed"
+        if sac_count:
+            return "portal"
+        if hsn_count:
+            return "physical"
+        return None
+
+    def get_invoice_status(self, ctx: TenantContext, ovf_id: UUID) -> dict[str, Any]:
+        """Invoice routing (HSN vs SAC) plus the payment follow-up state."""
+        ovf = self.get(ctx, ovf_id)
+        hsn_count, sac_count = self._invoice_line_mix(ctx, ovf)
+        channel = ovf.invoice_channel or self._invoice_channel(hsn_count, sac_count)
+
+        today = date.today()
+        delay_days = 0
+        if ovf.payment_received_date and ovf.payment_due_date:
+            delay_days = max((ovf.payment_received_date - ovf.payment_due_date).days, 0)
+        elif ovf.payment_due_date and ovf.payment_received_date is None:
+            delay_days = max((today - ovf.payment_due_date).days, 0)
+
+        if ovf.payment_received_date is not None:
+            payment_status = "delayed" if delay_days else "received"
+        elif not ovf.invoice_submitted_at:
+            payment_status = "not_invoiced"
+        elif ovf.payment_due_date and today > ovf.payment_due_date:
+            payment_status = "overdue"
+        else:
+            payment_status = "awaiting_payment"
+
+        return {
+            "ovf_id": ovf.id,
+            "ovf_no": ovf.ovf_no,
+            "customer_name": ovf.customer_name,
+            "invoice_channel": channel,
+            "portal_submission_required": channel in {"portal", "mixed"},
+            "physical_delivery_invoice": channel in {"physical", "mixed"},
+            "hsn_line_count": hsn_count,
+            "sac_line_count": sac_count,
+            "invoice_submitted_portal": bool(ovf.invoice_submitted_portal),
+            "invoice_submitted_at": ovf.invoice_submitted_at,
+            "invoice_reference": ovf.invoice_reference,
+            "payment_due_date": ovf.payment_due_date,
+            "payment_received_date": ovf.payment_received_date,
+            "payment_delay_reason": ovf.payment_delay_reason,
+            "payment_delay_days": delay_days,
+            "payment_status": payment_status,
+        }
+
+    def record_invoice_submission(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        invoice_reference: str | None = None,
+        submitted_on_portal: bool = True,
+        payment_due_date: date | None = None,
+    ) -> dict[str, Any]:
+        """Log who submitted the customer invoice and when (portal or physical)."""
+        ovf = self.get(ctx, ovf_id)
+        hsn_count, sac_count = self._invoice_line_mix(ctx, ovf)
+        channel = self._invoice_channel(hsn_count, sac_count)
+
+        due = payment_due_date
+        if due is None and ovf.payment_due_date is None:
+            terms_days = int(ovf.customer_payment_days or 0)
+            if terms_days > 0:
+                due = date.today() + timedelta(days=terms_days)
+
+        fields: dict[str, Any] = {
+            "invoice_submitted_portal": bool(submitted_on_portal),
+            "invoice_submitted_at": datetime.now(timezone.utc),
+            "invoice_submitted_by": ctx.user_id,
+        }
+        if channel is not None:
+            fields["invoice_channel"] = channel
+        if invoice_reference is not None:
+            fields["invoice_reference"] = invoice_reference.strip() or None
+        if due is not None:
+            fields["payment_due_date"] = due
+
+        if self._repo.update(ctx, ovf_id, **fields) is None:
+            raise NotFoundException("OVF not found")
+        self._log(
+            ctx,
+            ovf,
+            ovf.blueprint_state,
+            ovf.blueprint_state,
+            "invoice_submitted",
+            f"channel={channel or 'unknown'}, portal={bool(submitted_on_portal)}",
+        )
+        return self.get_invoice_status(ctx, ovf_id)
+
+    def update_payment(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        payment_received_date: date | None = None,
+        payment_due_date: date | None = None,
+        payment_delay_reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Accounts Receivable follow-up. A late payment needs a reason on record."""
+        ovf = self.get(ctx, ovf_id)
+        fields: dict[str, Any] = {}
+        if payment_due_date is not None:
+            fields["payment_due_date"] = payment_due_date
+        if payment_received_date is not None:
+            fields["payment_received_date"] = payment_received_date
+        if payment_delay_reason is not None:
+            fields["payment_delay_reason"] = payment_delay_reason.strip() or None
+
+        due = fields.get("payment_due_date", ovf.payment_due_date)
+        received = fields.get("payment_received_date", ovf.payment_received_date)
+        reason = fields.get("payment_delay_reason", ovf.payment_delay_reason)
+        if received is not None and due is not None and received > due and not reason:
+            raise ConflictException(
+                "Payment landed after the due date - record why before closing it off"
+            )
+
+        if not fields:
+            return self.get_invoice_status(ctx, ovf_id)
+        if self._repo.update(ctx, ovf_id, **fields) is None:
+            raise NotFoundException("OVF not found")
+        return self.get_invoice_status(ctx, ovf_id)
+
+    def record_scm_savings(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        savings_amount: Decimal | float | str,
+        negotiated_vendor_total: Decimal | float | str | None = None,
+    ) -> CrmOvf:
+        """Store the supply-chain negotiation savings against the OVF.
+
+        The saving belongs to Supply Chain, not to the sales incentive, so it is
+        stripped from every Sales-facing OVF payload (see ``can_view_scm_savings``).
+        """
+        ovf = self.get(ctx, ovf_id)
+        if not ovf.shared_to_scm:
+            raise ConflictException("OVF has not been shared to SCM")
+        amount = Decimal(str(savings_amount)).quantize(Decimal("0.0001"))
+        if amount < 0:
+            raise ConflictException("Negotiation savings cannot be negative")
+        fields: dict[str, Any] = {"scm_savings_amount": amount}
+        if negotiated_vendor_total is not None:
+            fields["scm_negotiated_vendor_total"] = Decimal(
+                str(negotiated_vendor_total)
+            ).quantize(Decimal("0.0001"))
+        row = self._repo.update(ctx, ovf_id, **fields)
+        if row is None:
+            raise NotFoundException("OVF not found")
+        self._log(
+            ctx,
+            ovf,
+            ovf.blueprint_state,
+            ovf.blueprint_state,
+            "scm_record_savings",
+            f"scm_savings_amount={amount}",
         )
         return row
 

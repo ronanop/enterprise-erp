@@ -22,6 +22,7 @@ from modules.hr.service.leave_service import (
 from modules.hr.service.performance_service import AppraisalService, GoalService, PerformanceService
 from modules.hr.service.report_service import HRReportService
 from modules.hr.service.roster_service import RosterEntryService
+from modules.hr.service.exit_agreement_service import ExitAgreementService
 from modules.hr.service.separation_service import SeparationService
 from modules.hr.service.shift_service import ShiftAssignmentService, ShiftService
 from modules.hr.service.training_service import (
@@ -55,6 +56,7 @@ __all__ = [
     "LeaveTypeService",
     "PerformanceService",
     "RosterEntryService",
+    "ExitAgreementService",
     "SeparationService",
     "ShiftAssignmentService",
     "ShiftService",

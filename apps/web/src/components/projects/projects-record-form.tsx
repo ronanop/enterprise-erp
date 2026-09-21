@@ -153,6 +153,7 @@ export function ProjectsRecordForm({
   readOnly = false,
   readOnlyBanner,
   headerActions,
+  afterSections,
 }: {
   title: string;
   description?: string;
@@ -172,6 +173,8 @@ export function ProjectsRecordForm({
   readOnly?: boolean;
   readOnlyBanner?: string;
   headerActions?: ReactNode;
+  /** Extra content rendered below the form sections, above the save bar. */
+  afterSections?: ReactNode;
 }) {
   const router = useRouter();
   const [values, setValues] = useState<FormValues>(emptyValues);
@@ -647,6 +650,8 @@ export function ProjectsRecordForm({
           </ProjectsSection>
         ))}
       </div>
+
+      {afterSections}
 
       <div className="flex justify-end gap-2">
         <Button

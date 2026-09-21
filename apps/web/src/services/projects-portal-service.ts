@@ -631,6 +631,58 @@ export async function updateSiteInstallationByProject(
   );
 }
 
+/** Customer work completion certificate for a site delivery. */
+export type CompletionCertificate = {
+  project_id: string;
+  project_name: string;
+  site_name: string | null;
+  document_number: string;
+  certificate_number: string | null;
+  issued_at: string | null;
+  signed: boolean;
+  signed_date: string | null;
+  signatory_name: string | null;
+  attachment_name: string | null;
+  declaration: string;
+};
+
+export async function getCompletionCertificate(
+  projectId: string,
+): Promise<CompletionCertificate> {
+  return unwrap(
+    await apiClient<CompletionCertificate>(
+      `${SITE_INSTALLATIONS_API}/by-project/${projectId}/completion-certificate`,
+    ),
+  );
+}
+
+export async function issueCompletionCertificate(
+  projectId: string,
+): Promise<CompletionCertificate> {
+  return unwrap(
+    await apiClient<CompletionCertificate>(
+      `${SITE_INSTALLATIONS_API}/by-project/${projectId}/completion-certificate`,
+      { method: "POST", body: {} },
+    ),
+  );
+}
+
+export async function recordCompletionCertificateSignoff(
+  projectId: string,
+  body: {
+    signatory_name: string;
+    signed_date?: string | null;
+    attachment_name?: string | null;
+  },
+): Promise<CompletionCertificate> {
+  return unwrap(
+    await apiClient<CompletionCertificate>(
+      `${SITE_INSTALLATIONS_API}/by-project/${projectId}/completion-certificate/signoff`,
+      { method: "POST", body },
+    ),
+  );
+}
+
 export async function advanceSiteInstallation(
   projectId: string,
   action: string,

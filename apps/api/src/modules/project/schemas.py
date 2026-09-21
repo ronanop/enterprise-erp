@@ -1267,6 +1267,12 @@ class SiteInstallationResponse(OrmModel):
     acceptance_remarks: str | None = None
     material_handover_to_name: str | None = None
     remarks: str | None
+    completion_certificate_number: str | None = None
+    completion_certificate_issued_at: datetime | None = None
+    completion_certificate_signed: bool = False
+    completion_certificate_signed_date: date | None = None
+    completion_certificate_signatory: str | None = None
+    completion_certificate_attachment_name: str | None = None
     status: str
     company_id: UUID
     created_at: datetime | None = None
@@ -1302,6 +1308,28 @@ class SiteInstallationBlueprintResponse(BaseModel):
 
 class SiteInstallationAdvanceRequest(BaseModel):
     action: str = Field(min_length=1, max_length=80)
+
+
+class CompletionCertificateResponse(BaseModel):
+    """Customer work completion certificate for a site delivery."""
+
+    project_id: UUID
+    project_name: str
+    site_name: str | None = None
+    document_number: str
+    certificate_number: str | None = None
+    issued_at: datetime | None = None
+    signed: bool = False
+    signed_date: date | None = None
+    signatory_name: str | None = None
+    attachment_name: str | None = None
+    declaration: str
+
+
+class CompletionCertificateSignoffRequest(BaseModel):
+    signatory_name: str = Field(min_length=1, max_length=255)
+    signed_date: date | None = None
+    attachment_name: str | None = Field(default=None, max_length=255)
 
 
 class SiteInstallationFollowUpRequest(BaseModel):

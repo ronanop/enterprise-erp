@@ -71,6 +71,19 @@ export function fileToBase64(file: File): Promise<string> {
 
 export type BlueprintEntity = "lead" | "opportunity" | "quote" | "ovf";
 
+export type PoValidationStage = {
+  status: "not_required" | "pending" | "approved" | "rejected";
+  remark: string | null;
+  decided_at: string | null;
+};
+
+/** Finance (tax & commercials) → Legal (terms) → Management sign-off. */
+export type PoValidation = {
+  finance: PoValidationStage;
+  legal: PoValidationStage;
+  management: PoValidationStage;
+};
+
 export type BlueprintState = {
   entity_type: string;
   entity_id: string;
@@ -78,6 +91,7 @@ export type BlueprintState = {
   locked: boolean;
   allowed_actions: string[];
   is_sales_blueprint?: boolean | null;
+  po_validation?: PoValidation | null;
 };
 
 export type BlueprintActionPayload = {
@@ -88,6 +102,12 @@ export type BlueprintActionPayload = {
   team_role?: string;
   assigned_user_id?: string;
   assigned_user_ids?: string[];
+  /** Per-stage approvers for the customer PO validation chain. */
+  finance_user_ids?: string[];
+  legal_user_ids?: string[];
+  management_user_ids?: string[];
+  /** Operations owners handed the services scope once the PO is approved. */
+  operations_user_ids?: string[];
   remarks?: string;
   remark?: string;
   reason?: string;
@@ -1054,9 +1074,52 @@ export type Ovf = {
   freight: number;
   total_margin_pct: number;
   total_margin_amount: number;
+  invoice_channel: "portal" | "physical" | "mixed" | null;
+  invoice_submitted_portal: boolean;
+  invoice_submitted_at: string | null;
+  invoice_reference: string | null;
+  payment_due_date: string | null;
+  payment_received_date: string | null;
+  payment_delay_reason: string | null;
   version: number;
   created_at?: string | null;
   updated_at?: string | null;
+};
+
+/**
+ * HSN lines ship physically with the invoice; SAC lines are submitted on the
+ * customer portal. Drives the AR follow-up on the OVF.
+ */
+export type OvfInvoiceStatus = {
+  ovf_id: string;
+  ovf_no: string;
+  customer_name: string | null;
+  invoice_channel: "portal" | "physical" | "mixed" | null;
+  portal_submission_required: boolean;
+  physical_delivery_invoice: boolean;
+  hsn_line_count: number;
+  sac_line_count: number;
+  invoice_submitted_portal: boolean;
+  invoice_submitted_at: string | null;
+  invoice_reference: string | null;
+  payment_due_date: string | null;
+  payment_received_date: string | null;
+  payment_delay_reason: string | null;
+  payment_delay_days: number;
+  payment_status:
+  | "not_invoiced"
+  | "awaiting_payment"
+  | "overdue"
+  | "received"
+  | "delayed";
+};
+
+/** Supply-chain negotiation savings - Management / SCM only, never Sales. */
+export type OvfScmSavings = {
+  ovf_id: string;
+  ovf_no: string;
+  scm_savings_amount: number;
+  scm_negotiated_vendor_total: number | null;
 };
 
 export type OvfFormInput = {
@@ -1133,6 +1196,47 @@ export async function listOvfs(params?: {
 
 export async function getOvf(id: string): Promise<Ovf> {
   return unwrap(await resourceService.get<Ovf>(CRM_OVF_API, id));
+}
+
+export async function getOvfInvoiceStatus(id: string): Promise<OvfInvoiceStatus> {
+  return unwrap(await apiClient<OvfInvoiceStatus>(`${CRM_OVF_API}/${id}/invoice-status`));
+}
+
+export async function recordOvfInvoiceSubmission(
+  id: string,
+  body: {
+    invoice_reference?: string | null;
+    submitted_on_portal?: boolean;
+    payment_due_date?: string | null;
+  },
+): Promise<OvfInvoiceStatus> {
+  return unwrap(
+    await apiClient<OvfInvoiceStatus>(`${CRM_OVF_API}/${id}/invoice-submission`, {
+      method: "POST",
+      body,
+    }),
+  );
+}
+
+export async function updateOvfPayment(
+  id: string,
+  body: {
+    payment_received_date?: string | null;
+    payment_due_date?: string | null;
+    payment_delay_reason?: string | null;
+  },
+): Promise<OvfInvoiceStatus> {
+  return unwrap(
+    await apiClient<OvfInvoiceStatus>(`${CRM_OVF_API}/${id}/payment`, {
+      method: "PATCH",
+      body,
+    }),
+  );
+}
+
+/** Throws for Sales users - savings belong to the supply-chain incentive pool. */
+export async function getOvfScmSavings(id: string): Promise<OvfScmSavings> {
+  return unwrap(await apiClient<OvfScmSavings>(`${CRM_OVF_API}/${id}/scm-savings`));
 }
 
 export async function createOvf(body: OvfFormInput): Promise<Ovf> {

@@ -215,6 +215,18 @@ export const erpModules: ErpModule[] = [
     icon: "boxes",
     resources: [
       { key: "employees", title: "Employees", description: "Employee master", apiPath: "/employees" },
+      {
+        key: "customer-registrations",
+        title: "Customer Registrations",
+        description: "Customer Registration Forms with KYC and credit assessment",
+        apiPath: "/party-registrations",
+      },
+      {
+        key: "vendor-registrations",
+        title: "Vendor Registrations",
+        description: "Vendor Registration Forms with KYC and payment terms",
+        apiPath: "/party-registrations",
+      },
       { key: "customers", title: "Customers", description: "Customer master", apiPath: "/customers" },
       { key: "vendors", title: "Vendors", description: "Vendor master", apiPath: "/vendors" },
       { key: "products", title: "Products", description: "Product catalog", apiPath: "/products" },
@@ -1688,6 +1700,12 @@ export const erpModules: ErpModule[] = [
         key: "documents",
         title: "Documents",
         description: "Central document library",
+        apiPath: "/documents/documents",
+      },
+      {
+        key: "pdf-editor",
+        title: "PDF Editor",
+        description: "Fill and sign PDFs in the browser",
         apiPath: "/documents/documents",
       },
       {

@@ -1,8 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ClipboardList, Clock, FileText, GitBranch, MessageSquare, Plus, Upload, Wallet } from "lucide-react";
+import {
+  Check,
+  ClipboardList,
+  Clock,
+  FileSignature,
+  FileText,
+  GitBranch,
+  MessageSquare,
+  Plus,
+  Upload,
+  Wallet,
+} from "lucide-react";
 
+import { ExitAgreementsPanel } from "@/components/hr/offboarding/exit-agreements-panel";
 import {
   ExitDocumentDrawer,
   ExitInterviewDrawer,
@@ -45,7 +57,15 @@ import {
   workflowStepIndex,
 } from "@/types/offboarding";
 
-type TabId = "resignations" | "on_notice" | "workflow" | "clearance" | "exit_interview" | "documents" | "fnf";
+type TabId =
+  | "resignations"
+  | "on_notice"
+  | "workflow"
+  | "clearance"
+  | "exit_interview"
+  | "documents"
+  | "agreements"
+  | "fnf";
 type KpiFilter = "all" | "on_notice" | "direct_exit" | "fnf_pending";
 
 const TABS: HrTabItem[] = [
@@ -55,6 +75,7 @@ const TABS: HrTabItem[] = [
   { id: "clearance", label: "Clearance", icon: ClipboardList },
   { id: "exit_interview", label: "Exit Interview", icon: MessageSquare },
   { id: "documents", label: "Documents", icon: Upload },
+  { id: "agreements", label: "Agreements", icon: FileSignature },
   { id: "fnf", label: "FNF Settlement", icon: Wallet },
 ];
 
@@ -1096,6 +1117,17 @@ export function OffboardingManagementPage() {
               ))}
             </ul>
           )}
+        </section>
+      ) : null}
+
+      {selected && tab === "agreements" ? (
+        <section className="space-y-3 rounded-xl border border-border/70 bg-card p-4 shadow-sm">
+          <OffboardingCaseHeader c={selected} />
+          <ExitAgreementsPanel
+            caseId={selected.id}
+            caseStatus={selected.status}
+            employeeName={selected.employeeName}
+          />
         </section>
       ) : null}
 

@@ -495,6 +495,11 @@ export type ScmVendorPo = {
   customer_total?: number;
   margin_amount?: number;
   grn_status: string;
+  /** OVF vendor price handed over by Sales, before supply-chain negotiation. */
+  baseline_amount?: number;
+  negotiated_savings_amount?: number;
+  negotiation_status?: "not_required" | "pending" | "approved" | "rejected";
+  negotiation_decided_by_name?: string | null;
   /** When receipt qty was last saved on any line (ISO datetime). */
   receipt_saved_at?: string | null;
   current_receipt_batch_id?: string | null;
@@ -517,9 +522,18 @@ export type ProcOrder = {
   total_amount: number;
   received_amount: number;
   source_module: string | null;
+  source_document_type?: string | null;
   source_document_id: string | null;
   company_po_number: string | null;
   entity_code?: string | null;
+  baseline_amount?: number;
+  negotiated_savings_amount?: number;
+  negotiation_status?: "not_required" | "pending" | "approved" | "rejected";
+  negotiation_decided_by_name?: string | null;
+  expected_delivery_date?: string | null;
+  etd_confirmed_at?: string | null;
+  customer_ack_sent_at?: string | null;
+  etd_reminder_last_sent_at?: string | null;
   customer_name: string | null;
   ovf_no?: string | null;
   approved_by_name?: string | null;
@@ -780,6 +794,93 @@ export async function peekNextCompanyPoNumber(
     `${SCM_API}/company-po-numbers/next?${params.toString()}`,
   );
   return unwrapData(res);
+}
+
+/**
+ * Post-negotiation price approval. Supply chain negotiates below the OVF price
+ * (baseline) and Management signs off before the PO reaches the distributor.
+ */
+export type ScmNegotiation = {
+  order_id: string;
+  document_number: string;
+  company_po_number: string | null;
+  status: string;
+  baseline_amount: number;
+  negotiated_amount: number;
+  savings_amount: number;
+  savings_pct: number;
+  negotiation_status: "not_required" | "pending" | "approved" | "rejected";
+  negotiation_remark: string | null;
+  negotiation_submitted_at: string | null;
+  negotiation_decided_at: string | null;
+  negotiation_decided_by_name: string | null;
+  can_issue: boolean;
+};
+
+export async function getScmNegotiation(orderId: string): Promise<ScmNegotiation> {
+  return unwrapData(
+    await apiClient<ScmNegotiation>(`${SCM_API}/orders/${orderId}/negotiation`),
+  );
+}
+
+export async function submitScmNegotiation(
+  orderId: string,
+  remark?: string | null,
+): Promise<ScmNegotiation> {
+  const res = await apiClient<ScmNegotiation>(
+    `${SCM_API}/orders/${orderId}/negotiation/submit`,
+    { method: "POST", body: { remark: remark ?? null } },
+  );
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
+export async function decideScmNegotiation(
+  orderId: string,
+  decision: "approved" | "rejected",
+  remark?: string | null,
+): Promise<ScmNegotiation> {
+  const res = await apiClient<ScmNegotiation>(
+    `${SCM_API}/orders/${orderId}/negotiation/decide`,
+    { method: "POST", body: { decision, remark: remark ?? null } },
+  );
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
+export type ScmEtdUpdate = {
+  order_id: string;
+  expected_delivery_date: string | null;
+  etd_confirmed_at: string | null;
+  customer_notified: boolean;
+};
+
+/** Record the delivery date the distributor confirmed, and tell the customer. */
+export async function updateScmExpectedDeliveryDate(
+  orderId: string,
+  body: { expected_delivery_date: string | null; notify_customer?: boolean },
+): Promise<ScmEtdUpdate> {
+  const res = await apiClient<ScmEtdUpdate>(`${SCM_API}/orders/${orderId}/etd`, {
+    method: "PATCH",
+    body,
+  });
+  invalidateProcurementListCache();
+  return unwrapData(res);
+}
+
+export type ScmDeliveryNotificationRun = {
+  acknowledged: number;
+  etd_chased: number;
+  delivery_dates_shared: number;
+};
+
+export async function runScmDeliveryNotifications(): Promise<ScmDeliveryNotificationRun> {
+  return unwrapData(
+    await apiClient<ScmDeliveryNotificationRun>(`${SCM_API}/delivery-notifications/run`, {
+      method: "POST",
+      body: {},
+    }),
+  );
 }
 
 export async function finalizeScmOrder(orderId: string): Promise<ProcOrder> {

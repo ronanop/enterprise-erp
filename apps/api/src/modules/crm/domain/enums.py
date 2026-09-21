@@ -175,8 +175,9 @@ CODE_PREFIXES: dict[CrmEntityType, tuple[str, int]] = {
     CrmEntityType.KYC: ("KYC-", 0),
 }
 
-# Team roles that can receive a "My Jobs" approval task.
-APPROVAL_TEAM_ROLES = ("presales", "project", "management", "accounts", "scm")
+# Team roles that can receive a "My Jobs" approval task. ``legal`` validates
+# customer PO terms & conditions - that validation never sits with Sales.
+APPROVAL_TEAM_ROLES = ("presales", "project", "management", "accounts", "scm", "legal")
 APPROVAL_TASK_STATUSES = ("pending", "approved", "rejected", "cancelled")
 
 SOURCE_MODULE = "crm"

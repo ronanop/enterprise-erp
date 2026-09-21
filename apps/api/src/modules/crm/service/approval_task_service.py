@@ -31,6 +31,8 @@ def utcnow() -> datetime:
 _REJECT_ACTION_MAP = {
     "approve_boq": "reject_boq",
     "approve_sow": "reject_sow",
+    "approve_po_finance": "reject_po_finance",
+    "approve_po_terms": "reject_po_terms",
     "approve_po": "reject_po",
     "approve_cloud_discount": "reject_cloud_discount",
     "approve_internally": "reject_internally",
@@ -40,6 +42,8 @@ _REJECT_ACTION_MAP = {
 _REJECT_DOC_LABEL = {
     "approve_boq": "BOQ",
     "approve_sow": "SOW",
+    "approve_po_finance": "customer PO",
+    "approve_po_terms": "customer PO terms & conditions",
     "approve_po": "customer PO",
     "approve_internally": "quote",
     "approve": "OVF",

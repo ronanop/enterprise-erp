@@ -3,6 +3,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { CloudUpload } from "lucide-react";
 
+import { CompletionCertificateCard } from "@/components/projects/completion-certificate-card";
 import {
   deliveryIncludesOs,
   deliveryIsRackOnly,
@@ -254,6 +255,9 @@ export function SiteAcceptanceFormPage({ projectId }: { projectId: string }) {
       emptyValues={EMPTY}
       load={load}
       onSave={onSave}
+      afterSections={
+        <CompletionCertificateCard projectId={projectId} readOnly={stageFormMeta.readOnly} />
+      }
       headerActions={
         stageFormMeta.readOnly ? (
           <SiteStageExportButton projectId={projectId} stage="acceptance" />

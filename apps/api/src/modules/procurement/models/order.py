@@ -13,6 +13,7 @@ from sqlalchemy import (
     Numeric,
     SmallInteger,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
@@ -30,6 +31,10 @@ class ProcOrderHeader(Base, *ProcTransactionMixin):
             "status IN "
             "('draft','submitted','approved','sent','partially_received','received','closed','cancelled')",
             name="ck_proc_oh_status",
+        ),
+        CheckConstraint(
+            "negotiation_status IN ('not_required','pending','approved','rejected')",
+            name="ck_proc_oh_negotiation_status",
         ),
         {"schema": "procurement"},
     )
@@ -102,6 +107,40 @@ class ProcOrderHeader(Base, *ProcTransactionMixin):
     approved_by_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Manual CACHE order reference printed on PO PDF (optional).
     order_ref_cache: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # Post-negotiation gate: supply chain negotiates off the OVF vendor price
+    # (baseline_amount) and Management approves the final price before the PO
+    # can be issued to the distributor.
+    baseline_amount: Mapped[float] = mapped_column(
+        Numeric(18, 4), nullable=False, default=0, server_default="0"
+    )
+    negotiated_savings_amount: Mapped[float] = mapped_column(
+        Numeric(18, 4), nullable=False, default=0, server_default="0"
+    )
+    negotiation_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="not_required", server_default="not_required"
+    )
+    negotiation_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    negotiation_submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    negotiation_submitted_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    negotiation_decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    negotiation_decided_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    negotiation_decided_by_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Delivery notification bookkeeping. ``expected_delivery_date`` is the ETD;
+    # these record what the customer and the distributor have already been told.
+    customer_ack_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    etd_reminder_last_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    etd_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    etd_customer_notified_for: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     lines: Mapped[list["ProcOrderLine"]] = relationship(
         back_populates="order_header",

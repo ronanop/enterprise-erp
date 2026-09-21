@@ -1579,6 +1579,49 @@ class SeparationResponse(OrmModel):
     version: int
 
 
+class ExitAgreementIssueRequest(BaseModel):
+    """`agreement_type` is one of noc, nda, non_solicit."""
+
+    agreement_type: str
+    # Non-solicit only: how many months the restriction runs for.
+    restriction_months: int | None = None
+
+
+class ExitAgreementSignRequest(BaseModel):
+    """`signature_name` must be the employee's full name, typed by them."""
+
+    signature_name: str
+
+
+class ExitAgreementDeclineRequest(BaseModel):
+    reason: str
+
+
+class ExitAgreementResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    document_number: str
+    separation_id: UUID
+    employee_id: UUID
+    agreement_type: str
+    title: str
+    body_text: str
+    body_sha256: str
+    status: str
+    issued_at: datetime
+    restriction_months: int | None = None
+    restriction_end_date: date | None = None
+    issued_by: UUID | None = None
+    signed_at: datetime | None = None
+    signed_by: UUID | None = None
+    signature_name: str | None = None
+    signature_ip: str | None = None
+    declined_at: datetime | None = None
+    decline_reason: str | None = None
+    version: int
+
+
 class ReportSummaryResponse(BaseModel):
     company_id: UUID
     attendance_count: int

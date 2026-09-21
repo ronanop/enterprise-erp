@@ -15,6 +15,7 @@ from modules.grc.router import grc_router
 from modules.helpdesk.router import helpdesk_router
 from modules.hr.router import hr_router
 from modules.hr.routers.digital_onboarding import public_onboarding_router
+from modules.procurement.routers.order_tracking import public_order_tracking_router
 from modules.integration.router import integration_router
 from modules.inventory.router import inventory_router
 from modules.landing.router import landing_router
@@ -51,6 +52,7 @@ api_v1_router.include_router(quality_router)
 api_v1_router.include_router(crm_router)
 api_v1_router.include_router(hr_router)
 api_v1_router.include_router(public_onboarding_router)
+api_v1_router.include_router(public_order_tracking_router)
 api_v1_router.include_router(ess_router)
 api_v1_router.include_router(payroll_router)
 api_v1_router.include_router(recruitment_router)

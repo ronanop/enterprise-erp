@@ -832,6 +832,12 @@ class SiteInstallationService:
             raise InvalidSiteInstallationState("Cancelled site installation cannot advance")
 
         engine.assert_advance_gates(row, action)
+        if action == "complete_acceptance" and not row.completion_certificate_signed:
+            # Without a signed work completion certificate the service invoice
+            # cannot be raised and the job cannot be used in tender submissions.
+            raise InvalidSiteInstallationState(
+                "Record the customer-signed completion certificate before closing Acceptance"
+            )
         updates: dict = {
             **engine.stage_date_updates_for_action(action, date.today()),
         }
@@ -890,6 +896,94 @@ class SiteInstallationService:
             performed_by=ctx.user_id,
         )
         return updated
+
+    # ------------------------------------------------------------------
+    # Customer work completion certificate
+    # ------------------------------------------------------------------
+    def completion_certificate(self, ctx: TenantContext, project_id: UUID) -> dict:
+        """Certificate payload for print / download plus its sign-off state."""
+        row = self.get_by_project(ctx, project_id)
+        project = self._projects.get(ctx, project_id)
+        if project is None:
+            raise NotFoundException("Project not found")
+        return {
+            "project_id": project_id,
+            "project_name": project.project_name,
+            "site_name": row.site_name or row.document_number,
+            "document_number": row.document_number,
+            "certificate_number": row.completion_certificate_number,
+            "issued_at": row.completion_certificate_issued_at,
+            "signed": bool(row.completion_certificate_signed),
+            "signed_date": row.completion_certificate_signed_date,
+            "signatory_name": row.completion_certificate_signatory,
+            "attachment_name": row.completion_certificate_attachment_name,
+            "declaration": (
+                f"This is to certify that the project \"{project.project_name}\" "
+                "has been completed successfully."
+            ),
+        }
+
+    def issue_completion_certificate(self, ctx: TenantContext, project_id: UUID) -> dict:
+        """Generate the certificate the customer signs at handover."""
+        row = self.get_by_project(ctx, project_id)
+        if row.workflow_stage not in {
+            SiteWorkflowStage.ACCEPTANCE.value,
+            SiteWorkflowStage.COMPLETED.value,
+        }:
+            raise InvalidSiteInstallationState(
+                "The completion certificate is issued at the Acceptance stage"
+            )
+        if not row.completion_certificate_number:
+            self._repo.update(
+                ctx,
+                row.id,
+                completion_certificate_number=f"WCC/{row.document_number}",
+                completion_certificate_issued_at=datetime.now(timezone.utc),
+            )
+            self._audit.log_entity_change(
+                tenant_id=ctx.tenant_id,
+                entity_name="prj_site_installation",
+                entity_id=row.id,
+                operation="issue_completion_certificate",
+                performed_by=ctx.user_id,
+            )
+        return self.completion_certificate(ctx, project_id)
+
+    def record_completion_signoff(
+        self,
+        ctx: TenantContext,
+        project_id: UUID,
+        *,
+        signatory_name: str,
+        signed_date: date | None = None,
+        attachment_name: str | None = None,
+    ) -> dict:
+        """Log the customer's signature on the completion certificate."""
+        row = self.get_by_project(ctx, project_id)
+        if not row.completion_certificate_number:
+            raise InvalidSiteInstallationState(
+                "Issue the completion certificate before recording the customer sign-off"
+            )
+        name = (signatory_name or "").strip()
+        if not name:
+            raise InvalidSiteInstallationState("Customer signatory name is required")
+        self._repo.update(
+            ctx,
+            row.id,
+            completion_certificate_signed=True,
+            completion_certificate_signed_date=signed_date or date.today(),
+            completion_certificate_signatory=name,
+            completion_certificate_attachment_name=(attachment_name or "").strip() or None,
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="prj_site_installation",
+            entity_id=row.id,
+            operation="completion_certificate_signed",
+            performed_by=ctx.user_id,
+            new_value={"signatory_name": name},
+        )
+        return self.completion_certificate(ctx, project_id)
 
     def _resolve_scm_head_employee_id(self, ctx: TenantContext) -> UUID | None:
         """Temporary SCM owner for testing - prefer known employee id, else email."""

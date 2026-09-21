@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy.orm import Session
 
 from modules.foundation.dependencies import require_any_permission, require_permission
@@ -115,6 +115,10 @@ from modules.hr.schemas import (
     SeparationDocumentUploadRequest,
     SeparationExitInterviewRequest,
     SeparationResponse,
+    ExitAgreementDeclineRequest,
+    ExitAgreementIssueRequest,
+    ExitAgreementResponse,
+    ExitAgreementSignRequest,
     ShiftAssignmentCreate,
     ShiftAssignmentResponse,
     ShiftAssignmentUpdate,
@@ -155,6 +159,7 @@ from modules.hr.service import (
     LeaveRequestService,
     LeaveTypeService,
     PerformanceService,
+    ExitAgreementService,
     RosterEntryService,
     SeparationService,
     ShiftAssignmentService,
@@ -2069,6 +2074,88 @@ def upload_separation_document(
     return APIResponse(
         message="Document recorded",
         data=SeparationService(db).add_document(ctx, row_id, **body.model_dump()),
+    )
+
+
+@separation_router.get(
+    "/{row_id}/agreements", response_model=APIResponse[list[ExitAgreementResponse]]
+)
+def list_exit_agreements(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=ExitAgreementService(db).list_for_separation(ctx, row_id),
+    )
+
+
+@separation_router.post(
+    "/{row_id}/agreements", response_model=APIResponse[ExitAgreementResponse]
+)
+def issue_exit_agreement(
+    row_id: UUID,
+    body: ExitAgreementIssueRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Exit agreement issued",
+        data=ExitAgreementService(db).issue(ctx, row_id, **body.model_dump()),
+    )
+
+
+@separation_router.post(
+    "/agreements/{agreement_id}/sign", response_model=APIResponse[ExitAgreementResponse]
+)
+def sign_exit_agreement(
+    agreement_id: UUID,
+    body: ExitAgreementSignRequest,
+    request: Request,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Exit agreement signed",
+        data=ExitAgreementService(db).sign(
+            ctx,
+            agreement_id,
+            signature_name=body.signature_name,
+            signature_ip=request.client.host if request.client else None,
+            signature_user_agent=request.headers.get("user-agent"),
+        ),
+    )
+
+
+@separation_router.post(
+    "/agreements/{agreement_id}/decline",
+    response_model=APIResponse[ExitAgreementResponse],
+)
+def decline_exit_agreement(
+    agreement_id: UUID,
+    body: ExitAgreementDeclineRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Exit agreement declined",
+        data=ExitAgreementService(db).decline(ctx, agreement_id, reason=body.reason),
+    )
+
+
+@separation_router.post(
+    "/agreements/{agreement_id}/void", response_model=APIResponse[ExitAgreementResponse]
+)
+def void_exit_agreement(
+    agreement_id: UUID,
+    body: ExitAgreementDeclineRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.separation:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Exit agreement voided",
+        data=ExitAgreementService(db).void(ctx, agreement_id, reason=body.reason),
     )
 
 

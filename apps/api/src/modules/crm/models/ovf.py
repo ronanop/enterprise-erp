@@ -37,6 +37,10 @@ class CrmOvf(Base, *CrmTransactionMixin):
             "blueprint_state IN ('draft','approval','approved','shared_scm','deal_won')",
             name="ck_crm_ovf_blueprint_state",
         ),
+        CheckConstraint(
+            "invoice_channel IS NULL OR invoice_channel IN ('portal','physical','mixed')",
+            name="ck_crm_ovf_invoice_channel",
+        ),
         {"schema": "crm"},
     )
 
@@ -107,6 +111,26 @@ class CrmOvf(Base, *CrmTransactionMixin):
 
     locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     blueprint_state: Mapped[str] = mapped_column(String(30), nullable=False, default="draft")
+
+    # Savings supply chain negotiated off the OVF vendor price after handoff.
+    # Credited to SCM, never to the sales incentive, and never exposed to Sales.
+    scm_savings_amount: Mapped[Decimal] = mapped_column(
+        Numeric(18, 4), nullable=False, default=0, server_default="0"
+    )
+    scm_negotiated_vendor_total: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+
+    # Customer invoicing + AR. HSN lines ship physically with the material;
+    # SAC lines are submitted on the customer portal.
+    invoice_channel: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    invoice_submitted_portal: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    invoice_submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    invoice_submitted_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    invoice_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    payment_due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    payment_received_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    payment_delay_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class CrmOvfLine(Base, *CrmTransactionMixin):

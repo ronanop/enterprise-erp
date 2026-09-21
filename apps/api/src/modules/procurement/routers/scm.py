@@ -18,6 +18,9 @@ from modules.procurement.schemas import (
     ScmCommercialAttachmentSummary,
     ScmCreateInventoryPoRequest,
     ScmCreatePoFromOvfRequest,
+    ScmDeliveryNotificationRunResponse,
+    ScmEtdUpdateRequest,
+    ScmEtdUpdateResponse,
     ScmFulfillFromStockRequest,
     ScmFulfillFromStockResponse,
     ScmInventoryDescriptionUpdate,
@@ -25,6 +28,9 @@ from modules.procurement.schemas import (
     ScmInventorySerialUpdate,
     ScmItemPlanVendorUpdateRequest,
     ScmLineReceiptUpdateRequest,
+    ScmNegotiationDecisionRequest,
+    ScmNegotiationResponse,
+    ScmNegotiationSubmitRequest,
     ScmNextCompanyPoResponse,
     ScmOvfHoldRequest,
     ScmOvfPreviewResponse,
@@ -45,6 +51,9 @@ from modules.procurement.schemas import (
 )
 from modules.procurement.service.order_service import OrderService
 from modules.procurement.service.ovf_timeline_service import OvfTimelineService
+from modules.procurement.service.scm_delivery_notification_service import (
+    ScmDeliveryNotificationService,
+)
 from modules.procurement.service.scm_handoff_service import ScmHandoffService
 from shared.schemas import APIResponse
 
@@ -382,6 +391,97 @@ def create_po_from_ovf(
     return APIResponse(
         message="Vendor purchase order created from OVF",
         data=OrderResponse.model_validate(row),
+    )
+
+
+@scm_router.get(
+    "/orders/{order_id}/negotiation",
+    response_model=APIResponse[ScmNegotiationResponse],
+)
+def get_scm_negotiation(
+    order_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:read"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[ScmNegotiationResponse]:
+    row = ScmHandoffService(db).negotiation_summary(ctx, order_id)
+    return APIResponse(
+        message="Negotiation summary retrieved",
+        data=ScmNegotiationResponse.model_validate(row),
+    )
+
+
+@scm_router.post(
+    "/orders/{order_id}/negotiation/submit",
+    response_model=APIResponse[ScmNegotiationResponse],
+)
+def submit_scm_negotiation(
+    order_id: UUID,
+    body: ScmNegotiationSubmitRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[ScmNegotiationResponse]:
+    row = ScmHandoffService(db).submit_negotiation(ctx, order_id, remark=body.remark)
+    db.commit()
+    return APIResponse(
+        message="Negotiated price sent to Management for approval",
+        data=ScmNegotiationResponse.model_validate(row),
+    )
+
+
+@scm_router.post(
+    "/orders/{order_id}/negotiation/decide",
+    response_model=APIResponse[ScmNegotiationResponse],
+)
+def decide_scm_negotiation(
+    order_id: UUID,
+    body: ScmNegotiationDecisionRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[ScmNegotiationResponse]:
+    row = ScmHandoffService(db).decide_negotiation(
+        ctx, order_id, decision=body.decision, remark=body.remark
+    )
+    db.commit()
+    return APIResponse(
+        message=f"Negotiated price {body.decision}",
+        data=ScmNegotiationResponse.model_validate(row),
+    )
+
+
+@scm_router.patch("/orders/{order_id}/etd", response_model=APIResponse[ScmEtdUpdateResponse])
+def update_scm_expected_delivery_date(
+    order_id: UUID,
+    body: ScmEtdUpdateRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[ScmEtdUpdateResponse]:
+    row = ScmDeliveryNotificationService(db).set_expected_delivery_date(
+        ctx,
+        order_id,
+        expected_delivery_date=body.expected_delivery_date,
+        notify_customer=body.notify_customer,
+    )
+    db.commit()
+    return APIResponse(
+        message="Expected delivery date updated",
+        data=ScmEtdUpdateResponse.model_validate(row),
+    )
+
+
+@scm_router.post(
+    "/delivery-notifications/run",
+    response_model=APIResponse[ScmDeliveryNotificationRunResponse],
+)
+def run_scm_delivery_notifications(
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[ScmDeliveryNotificationRunResponse]:
+    """Manual trigger for the same pass the scheduled job runs."""
+    counts = ScmDeliveryNotificationService(db).run(ctx)
+    db.commit()
+    return APIResponse(
+        message="Delivery notifications processed",
+        data=ScmDeliveryNotificationRunResponse.model_validate(counts),
     )
 
 

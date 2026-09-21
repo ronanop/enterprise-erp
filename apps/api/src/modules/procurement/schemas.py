@@ -1,6 +1,7 @@
 """Procurement Pydantic schemas."""
 
 from datetime import date, datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -329,6 +330,13 @@ class OrderResponse(BaseModel):
     source_document_id: UUID | None = None
     company_po_number: str | None = None
     entity_code: str | None = None
+    baseline_amount: float = 0
+    negotiated_savings_amount: float = 0
+    negotiation_status: str = "not_required"
+    negotiation_decided_by_name: str | None = None
+    etd_confirmed_at: datetime | None = None
+    customer_ack_sent_at: datetime | None = None
+    etd_reminder_last_sent_at: datetime | None = None
     customer_name: str | None = None
     ovf_no: str | None = None
     approved_by_name: str | None = None
@@ -656,6 +664,82 @@ class ScmUpdateOvfChargesRequest(BaseModel):
     finance_cost_pct: float = 0
 
 
+class ScmNegotiationSubmitRequest(BaseModel):
+    """Send the post-negotiation vendor price to Management for approval."""
+
+    remark: str | None = Field(default=None, max_length=2000)
+
+
+class ScmNegotiationDecisionRequest(BaseModel):
+    decision: Literal["approved", "rejected"]
+    remark: str | None = Field(default=None, max_length=2000)
+
+
+class ScmNegotiationResponse(BaseModel):
+    order_id: UUID
+    document_number: str
+    company_po_number: str | None = None
+    status: str
+    baseline_amount: float
+    negotiated_amount: float
+    savings_amount: float
+    savings_pct: float
+    negotiation_status: str
+    negotiation_remark: str | None = None
+    negotiation_submitted_at: datetime | None = None
+    negotiation_decided_at: datetime | None = None
+    negotiation_decided_by_name: str | None = None
+    can_issue: bool
+
+
+class OrderTrackingRequest(BaseModel):
+    """Customer self-service lookup: their PO number + their registered email."""
+
+    order_number: str = Field(min_length=1, max_length=100)
+    email: str = Field(min_length=3, max_length=255)
+
+
+class OrderTrackingMilestone(BaseModel):
+    stage: str
+    label: str
+    done: bool
+    on: date | None = None
+
+
+class OrderTrackingResponse(BaseModel):
+    """Milestone-level order status. Carries no commercial detail."""
+
+    order_number: str | None = None
+    customer_name: str | None = None
+    order_date: date | None = None
+    current_stage: str
+    current_stage_label: str
+    expected_delivery_date: date | None = None
+    milestones: list[OrderTrackingMilestone] = Field(default_factory=list)
+
+
+class ScmEtdUpdateRequest(BaseModel):
+    """Record the delivery date the distributor confirmed."""
+
+    expected_delivery_date: date | None = None
+    notify_customer: bool = True
+
+
+class ScmEtdUpdateResponse(BaseModel):
+    order_id: UUID
+    expected_delivery_date: date | None = None
+    etd_confirmed_at: datetime | None = None
+    customer_notified: bool = False
+
+
+class ScmDeliveryNotificationRunResponse(BaseModel):
+    """Counts from one pass of the automated order/delivery correspondence."""
+
+    acknowledged: int = 0
+    etd_chased: int = 0
+    delivery_dates_shared: int = 0
+
+
 class ScmItemPlanVendorUpdateRequest(BaseModel):
     """Update distributor_name on a CRM OVF vendor line from SCM item plan."""
 
@@ -725,6 +809,10 @@ class ScmVendorPoResponse(BaseModel):
     customer_total: float = 0
     margin_amount: float = 0
     grn_status: str
+    baseline_amount: float = 0
+    negotiated_savings_amount: float = 0
+    negotiation_status: str = "not_required"
+    negotiation_decided_by_name: str | None = None
     receipt_saved_at: datetime | None = None
     current_receipt_batch_id: UUID | None = None
     current_grn_number: str | None = None

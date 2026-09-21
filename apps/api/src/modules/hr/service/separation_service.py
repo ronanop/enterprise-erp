@@ -648,6 +648,17 @@ class SeparationService:
         except Exception:
             pass
 
+    def _require_signed_exit_agreements(self, ctx: TenantContext, row_id: UUID) -> None:
+        """An exit is not closed until the NOC and confidentiality undertaking are signed."""
+        from modules.hr.service.exit_agreement_service import ExitAgreementService
+
+        missing = ExitAgreementService(self._db).missing_required_signatures(ctx, row_id)
+        if missing:
+            labels = ", ".join(m.upper().replace("_", " ") for m in missing)
+            raise InvalidSeparationState(
+                f"The following exit agreements must be signed before completing: {labels}"
+            )
+
     def _ensure_clearance(self, row: HrSeparation) -> dict:
         clearance = dict(row.clearance_json or {})
         if not isinstance(clearance.get("checklist"), list) or not clearance["checklist"]:
@@ -1043,6 +1054,7 @@ class SeparationService:
             raise InvalidSeparationState(
                 "Settle or waive FNF before completing separation"
             )
+        self._require_signed_exit_agreements(ctx, row_id)
         self._engine.complete(row)
         lwd = approved_last_working_date or row.approved_last_working_date or row.requested_last_working_date
         updated = self._repo.update(

@@ -7,6 +7,7 @@ transition to :mod:`sales_blueprint_engine`.
 """
 
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -99,11 +100,46 @@ _UNLOCKING_ACTIONS = {
     "reject_boq",
     "approve_sow",
     "reject_sow",
+    "approve_po_finance",
+    "reject_po_finance",
+    "approve_po_terms",
+    "reject_po_terms",
     "approve_po",
     "reject_po",
     "approve_cloud_discount",
     "reject_cloud_discount",
 }
+
+# Customer PO validation chain: Finance checks tax/GST and commercial
+# correctness, Legal checks terms & conditions, Management gives the final
+# go-ahead. Each stage names the My Jobs team that owns it.
+PO_VALIDATION_STAGES: tuple[tuple[str, str, str], ...] = (
+    ("finance", "accounts", "approve_po_finance"),
+    ("legal", "legal", "approve_po_terms"),
+    ("management", "management", "approve_po"),
+)
+
+_PO_STAGE_TITLES = {
+    "finance": "Validate Customer PO (Finance - tax & commercials)",
+    "legal": "Validate Customer PO Terms & Conditions (Legal)",
+    "management": "Approve Customer PO",
+}
+
+# Operations owners who receive the services/installation scope as soon as the
+# customer PO is approved - they do not wait for the hardware to arrive.
+OPERATIONS_STAGE = "operations"
+
+# Entity type used for the Operations notice. It is informational, so it is
+# deliberately outside the blueprint dispatch in ApprovalTaskService._resume.
+SERVICE_SCOPE_ENTITY = "service_scope"
+
+
+def _po_stage_user_ids(payload: dict[str, Any], stage: str) -> list[UUID]:
+    """Approvers selected for one stage, falling back to the generic selection."""
+    raw = payload.get(f"{stage}_user_ids")
+    if raw:
+        return _require_assigned_users({"assigned_user_ids": raw})
+    return _require_assigned_users(payload)
 
 
 class OpportunityBlueprintService:
@@ -154,7 +190,7 @@ class OpportunityBlueprintService:
             allowed = [action for action in allowed if action != "attach_po"]
         if opp.customer_po_approved or not opp.customer_po_attached:
             allowed = [action for action in allowed if action != "send_po_approval"]
-        if current in {"boq_approval", "sow_approval"} and not opp.locked:
+        if current in {"boq_approval", "sow_approval", "po_approval"} and not opp.locked:
             # Approve/reject run via My Jobs while locked; hide stale actions if unlocked.
             allowed = [action for action in allowed if action not in _UNLOCKING_ACTIONS]
         allowed = self._ensure_peer_document_actions(allowed, opp, current)
@@ -166,6 +202,36 @@ class OpportunityBlueprintService:
             "locked": opp.locked,
             "allowed_actions": allowed,
             "is_sales_blueprint": is_sales_blueprint,
+            "po_validation": self._po_validation(opp, current),
+        }
+
+    @staticmethod
+    def _po_validation(opp: CrmOpportunity, current: str) -> dict[str, Any]:
+        """Finance → Legal (terms) → Management progress on the customer PO."""
+        finance_status = getattr(opp, "po_finance_status", None) or "not_required"
+        terms_status = getattr(opp, "po_terms_status", None) or "not_required"
+        if opp.customer_po_approved:
+            management_status = "approved"
+        elif terms_status == "approved" and current == "po_approval":
+            management_status = "pending"
+        else:
+            management_status = "not_required"
+        return {
+            "finance": {
+                "status": finance_status,
+                "remark": getattr(opp, "po_finance_remark", None),
+                "decided_at": getattr(opp, "po_finance_at", None),
+            },
+            "legal": {
+                "status": terms_status,
+                "remark": getattr(opp, "po_terms_remark", None),
+                "decided_at": getattr(opp, "po_terms_at", None),
+            },
+            "management": {
+                "status": management_status,
+                "remark": None,
+                "decided_at": None,
+            },
         }
 
     def _filter_create_actions_when_children_exist(
@@ -409,23 +475,67 @@ class OpportunityBlueprintService:
         elif action == "send_po_approval":
             if not opp.customer_po_attached:
                 raise ConflictException("Attach the customer PO before requesting approval")
-            self._raise_approval(
-                ctx,
-                opp,
-                action="approve_po",
-                team_role=payload.get("team_role", "management"),
-                title=f"Approve Customer PO - {opp.opportunity_name}",
-                remarks=payload.get("remarks"),
-                assigned_user_ids=_require_assigned_users(payload),
+            chain = {
+                stage: [str(uid) for uid in _po_stage_user_ids(payload, stage)]
+                for stage, _team, _stage_action in PO_VALIDATION_STAGES
+            }
+            chain[OPERATIONS_STAGE] = [
+                str(uid) for uid in (payload.get("operations_user_ids") or [])
+            ]
+            updates["po_approval_chain"] = chain
+            updates["po_finance_status"] = "pending"
+            updates["po_terms_status"] = "not_required"
+            updates["po_finance_remark"] = None
+            updates["po_terms_remark"] = None
+            self._raise_po_stage(ctx, opp, stage="finance", chain=chain, remarks=payload.get("remarks"))
+            updates["locked"] = True
+        elif action == "approve_po_finance":
+            updates["po_finance_status"] = "approved"
+            updates["po_finance_by"] = ctx.user_id
+            updates["po_finance_at"] = utcnow()
+            updates["po_finance_remark"] = payload.get("remark")
+            updates["po_terms_status"] = "pending"
+            # Finance signed off on tax/GST; terms & conditions go to Legal next.
+            self._raise_po_stage(ctx, opp, stage="legal", chain=opp.po_approval_chain, remarks=None)
+            updates["locked"] = True
+        elif action == "reject_po_finance":
+            updates["po_finance_status"] = "rejected"
+            updates["po_finance_by"] = ctx.user_id
+            updates["po_finance_at"] = utcnow()
+            updates["po_finance_remark"] = payload.get("remark")
+            updates["locked"] = False
+        elif action == "approve_po_terms":
+            updates["po_terms_status"] = "approved"
+            updates["po_terms_by"] = ctx.user_id
+            updates["po_terms_at"] = utcnow()
+            updates["po_terms_remark"] = payload.get("remark")
+            self._raise_po_stage(
+                ctx, opp, stage="management", chain=opp.po_approval_chain, remarks=None
             )
             updates["locked"] = True
+        elif action == "reject_po_terms":
+            # T&C need revision - the PO stays attached so Sales can send the
+            # amended terms back through the chain without re-uploading.
+            updates["po_terms_status"] = "rejected"
+            updates["po_terms_by"] = ctx.user_id
+            updates["po_terms_at"] = utcnow()
+            updates["po_terms_remark"] = payload.get("remark")
+            updates["locked"] = False
         elif action == "approve_po":
+            if opp.po_finance_status != "approved" or opp.po_terms_status != "approved":
+                raise ConflictException(
+                    "Customer PO needs Finance and Legal (terms & conditions) validation "
+                    "before Management approval"
+                )
             updates["customer_po_approved"] = True
             updates["locked"] = False
+            self._notify_operations_of_service_scope(ctx, opp)
         elif action == "reject_po":
             self._clear_approval_attachment(ctx, opp.id, "customer_po")
             updates["customer_po_approved"] = False
             updates["customer_po_attached"] = False
+            updates["po_finance_status"] = "not_required"
+            updates["po_terms_status"] = "not_required"
             updates["locked"] = False
         elif action in _GATED_OPPORTUNITY_ACTIONS:
             # These transitions are driven exclusively by QuoteService /
@@ -507,6 +617,115 @@ class OpportunityBlueprintService:
             entity_id=opp.id,
             team_role=team_role,
             action=action,
+            company_id=opp.company_id,
+            branch_id=opp.branch_id,
+            remarks=remarks,
+        )
+
+    def _raise_po_stage(
+        self,
+        ctx: TenantContext,
+        opp: CrmOpportunity,
+        *,
+        stage: str,
+        chain: dict[str, Any] | None,
+        remarks: str | None,
+    ) -> None:
+        """Raise the My Jobs task for one stage of the customer PO chain."""
+        team_role, stage_action = next(
+            (team, stage_action)
+            for name, team, stage_action in PO_VALIDATION_STAGES
+            if name == stage
+        )
+        raw_ids = (chain or {}).get(stage) or []
+        assigned_user_ids: list[UUID] = []
+        seen: set[UUID] = set()
+        for item in raw_ids:
+            uid = UUID(str(item))
+            if uid in seen:
+                continue
+            seen.add(uid)
+            assigned_user_ids.append(uid)
+        if not assigned_user_ids:
+            raise ConflictException(
+                f"No {stage} approver was selected for this customer PO. "
+                "Send the PO for approval again and pick approvers for every stage."
+            )
+        self._raise_approval(
+            ctx,
+            opp,
+            action=stage_action,
+            team_role=team_role,
+            title=f"{_PO_STAGE_TITLES[stage]} - {opp.opportunity_name}",
+            remarks=remarks,
+            assigned_user_ids=assigned_user_ids,
+        )
+
+    def _service_scope_summary(
+        self, ctx: TenantContext, opp: CrmOpportunity
+    ) -> tuple[Decimal, list[str]] | None:
+        """Value and product names of the SAC (service) lines on the accepted quote."""
+        from modules.crm.domain.tax_codes import is_service_code
+        from modules.crm.repository.quote_repository import QuoteLineRepository, QuoteRepository
+
+        quotes = QuoteRepository(self._db).list_quotes(
+            ctx, opp.company_id, opportunity_id=opp.id
+        )
+        accepted = next((q for q in quotes if q.quote_stage == "accepted"), None)
+        if accepted is None:
+            return None
+
+        lines = QuoteLineRepository(self._db).list_for_quote(ctx, accepted.id)
+        service_lines = [ln for ln in lines if is_service_code(getattr(ln, "hsn_sac", None))]
+        if not service_lines:
+            return None
+
+        total = Decimal("0")
+        names: list[str] = []
+        for line in service_lines:
+            qty = Decimal(str(getattr(line, "qty", 0) or 0))
+            unit = Decimal(str(getattr(line, "unit_sell", 0) or 0))
+            total += qty * unit
+            name = (getattr(line, "product_name", None) or "").strip()
+            if name and name not in names:
+                names.append(name)
+        return total, names
+
+    def _notify_operations_of_service_scope(
+        self, ctx: TenantContext, opp: CrmOpportunity
+    ) -> None:
+        """Hand the services/installation scope to Operations at PO approval.
+
+        Services do not wait for the hardware: site survey and other onsite work
+        can start the moment the customer PO clears, so Operations gets an open
+        task now rather than after the material lands.
+        """
+        raw_ids = (opp.po_approval_chain or {}).get(OPERATIONS_STAGE) or []
+        if not raw_ids:
+            return
+        summary = self._service_scope_summary(ctx, opp)
+        if summary is None:
+            return
+        service_value, product_names = summary
+
+        scope = ", ".join(product_names[:5])
+        if len(product_names) > 5:
+            scope = f"{scope}, +{len(product_names) - 5} more"
+        remarks = (
+            f"Customer PO approved. Service / installation scope worth {service_value} "
+            f"is yours to start now - do not wait for the hardware delivery. Scope: {scope}."
+        )
+
+        from modules.crm.service.approval_task_service import ApprovalTaskService
+
+        ApprovalTaskService(self._db).route_approval(
+            ctx,
+            assigned_user_ids=[UUID(str(uid)) for uid in raw_ids],
+            title=f"Start service / installation scope - {opp.opportunity_name}",
+            entity_type=SERVICE_SCOPE_ENTITY,
+            entity_id=opp.id,
+            team_role="project",
+            action="acknowledge_service_scope",
             company_id=opp.company_id,
             branch_id=opp.branch_id,
             remarks=remarks,

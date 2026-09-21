@@ -32,6 +32,12 @@ celery_app.conf.update(
             "task": "service.poll_support_mailbox",
             "schedule": 120.0,
         },
+        # Order acknowledgement, distributor ETD chase, customer delivery
+        # updates. Idempotent per PO, so a daily pass is enough.
+        "procurement.delivery_notifications": {
+            "task": "procurement.delivery_notifications",
+            "schedule": 86400.0,
+        },
     },
 )
 

@@ -27,7 +27,7 @@ import {
   type ApprovalTask,
 } from "@/services/sales-crm-service";
 
-const TEAM_ROLES = ["presales", "project", "management", "accounts", "scm"];
+const TEAM_ROLES = ["presales", "project", "management", "accounts", "scm", "legal"];
 const STATUSES = ["pending", "approved", "rejected", "cancelled"];
 
 type SortKey = "title" | "opportunity_name" | "team_role" | "status";

@@ -301,6 +301,12 @@ class OpportunityResponse(OrmModel):
     oem_quote_attached: bool = False
     customer_po_attached: bool = False
     customer_po_approved: bool = False
+    po_finance_status: str = "not_required"
+    po_finance_remark: str | None = None
+    po_finance_at: datetime | None = None
+    po_terms_status: str = "not_required"
+    po_terms_remark: str | None = None
+    po_terms_at: datetime | None = None
     cloud_blueprint_variant: str | None = None
     product_type: str | None = None
     cloud_sub_product: str | None = None
@@ -1387,8 +1393,61 @@ class OvfResponse(OrmModel):
     freight: Decimal
     total_margin_pct: Decimal
     total_margin_amount: Decimal
+    # Invoice routing + AR follow-up. Supply-chain negotiation savings are
+    # deliberately absent here: Sales must never see them (see OvfScmSavingsResponse).
+    invoice_channel: str | None = None
+    invoice_submitted_portal: bool = False
+    invoice_submitted_at: datetime | None = None
+    invoice_reference: str | None = None
+    payment_due_date: date | None = None
+    payment_received_date: date | None = None
+    payment_delay_reason: str | None = None
     version: int
     created_at: datetime | None = None
+
+
+class OvfScmSavingsResponse(BaseModel):
+    """Supply-chain negotiation savings - Management / SCM only, never Sales."""
+
+    ovf_id: UUID
+    ovf_no: str
+    scm_savings_amount: Decimal
+    scm_negotiated_vendor_total: Decimal | None = None
+
+
+class OvfInvoiceSubmissionRequest(BaseModel):
+    """Record the customer invoice submission (portal for SAC, physical for HSN)."""
+
+    invoice_reference: str | None = Field(default=None, max_length=100)
+    submitted_on_portal: bool = True
+    payment_due_date: date | None = None
+
+
+class OvfPaymentUpdateRequest(BaseModel):
+    payment_received_date: date | None = None
+    payment_due_date: date | None = None
+    payment_delay_reason: str | None = None
+
+
+class OvfInvoiceStatusResponse(BaseModel):
+    """HSN vs SAC invoice routing and the AR follow-up state for one OVF."""
+
+    ovf_id: UUID
+    ovf_no: str
+    customer_name: str | None = None
+    invoice_channel: str | None = None
+    portal_submission_required: bool = False
+    physical_delivery_invoice: bool = False
+    hsn_line_count: int = 0
+    sac_line_count: int = 0
+    invoice_submitted_portal: bool = False
+    invoice_submitted_at: datetime | None = None
+    invoice_reference: str | None = None
+    payment_due_date: date | None = None
+    payment_received_date: date | None = None
+    payment_delay_reason: str | None = None
+    payment_delay_days: int = 0
+    payment_status: str = "not_invoiced"
 
 
 class OvfLineCreate(BaseModel):
@@ -1529,6 +1588,20 @@ class ApprovalTaskDecisionRequest(BaseModel):
     remark: str | None = None
 
 
+class PoValidationStageResponse(BaseModel):
+    status: str = "not_required"
+    remark: str | None = None
+    decided_at: datetime | None = None
+
+
+class PoValidationResponse(BaseModel):
+    """Finance → Legal (terms) → Management validation of the customer PO."""
+
+    finance: PoValidationStageResponse
+    legal: PoValidationStageResponse
+    management: PoValidationStageResponse
+
+
 class BlueprintStateResponse(BaseModel):
     entity_type: str
     entity_id: UUID
@@ -1536,6 +1609,7 @@ class BlueprintStateResponse(BaseModel):
     locked: bool
     allowed_actions: list[str]
     is_sales_blueprint: bool | None = None
+    po_validation: PoValidationResponse | None = None
 
 
 class OpportunityTimelineEventResponse(BaseModel):
@@ -1594,6 +1668,14 @@ class BlueprintActionRequest(BaseModel):
     onboarding_date: date | None = None
     assigned_user_id: UUID | None = None
     assigned_user_ids: list[UUID] | None = None
+    # Per-stage approvers for the customer PO chain (send_po_approval). When
+    # omitted, ``assigned_user_ids`` is used for every stage.
+    finance_user_ids: list[UUID] | None = None
+    legal_user_ids: list[UUID] | None = None
+    management_user_ids: list[UUID] | None = None
+    # Operations owners notified of the services/installation scope as soon as
+    # the customer PO is approved (optional - only used when the PO has SAC lines).
+    operations_user_ids: list[UUID] | None = None
 
     def to_payload(self) -> dict:
         return self.model_dump(exclude_none=True)

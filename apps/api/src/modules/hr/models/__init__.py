@@ -10,6 +10,7 @@ from modules.hr.models.designation_assignment import HrDesignationAssignment
 from modules.hr.models.employee_document import HrEmployeeDocument
 from modules.hr.models.employee_profile import HrEmployeeProfile
 from modules.hr.models.employment import HrEmployment
+from modules.hr.models.exit_agreement import HrExitAgreement
 from modules.hr.models.goal import HrGoal
 from modules.hr.models.grade import HrGrade
 from modules.hr.models.holiday_calendar import HrHolidayCalendar
@@ -45,6 +46,7 @@ __all__ = [
     "HrDesignation",
     "HrEmployeeProfile",
     "HrEmployment",
+    "HrExitAgreement",
     "HrManagementGroup",
     "HrDepartmentAssignment",
     "HrDesignationAssignment",

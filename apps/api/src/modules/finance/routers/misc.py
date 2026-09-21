@@ -1,6 +1,7 @@
 """Tax, currency, asset, and report routers."""
 
 from datetime import date
+from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
@@ -14,7 +15,9 @@ from modules.finance.schemas import (
     AssetTransactionCreateRequest,
     AssetTransactionResponse,
     BalanceSheetReportResponse,
+    CashFlowForecastResponse,
     CashFlowReportResponse,
+    CashFlowWeekResponse,
     CostCenterSummaryReportResponse,
     CurrencyRateCreateRequest,
     CurrencyRateResponse,
@@ -22,12 +25,18 @@ from modules.finance.schemas import (
     JournalRegisterReportResponse,
     ProfitLossReportResponse,
     ReportCatalogItem,
+    StuckStockItemResponse,
+    StuckStockSummaryResponse,
     TaxRegisterResponse,
     TaxSummaryReportResponse,
+    TreasuryPlanResponse,
+    TreasurySuggestionResponse,
     TrialBalanceLineResponse,
     TrialBalanceReportResponse,
+    WorkingCapitalLeverageResponse,
 )
 from modules.finance.service.asset_accounting_service import AssetAccountingService
+from modules.finance.service.cash_flow_forecast_service import CashFlowForecastService
 from modules.finance.service.currency_service import CurrencyService
 from modules.finance.service.report_service import ReportService
 from modules.finance.service.tax_service import TaxService
@@ -214,6 +223,130 @@ def cash_flow(
         to_date=to_date,
     )
     return APIResponse(message="Cash flow generated", data=data)
+
+
+@reports_router.get(
+    "/cash-flow-forecast", response_model=APIResponse[CashFlowForecastResponse]
+)
+def cash_flow_forecast(
+    ctx: Annotated[TenantContext, Depends(require_permission("finance.report:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+    as_of: date | None = None,
+    horizon_weeks: Annotated[int, Query(ge=1, le=52)] = 13,
+    monthly_interest_rate_pct: Annotated[float | None, Query(ge=0, le=100)] = None,
+    include_committed_orders: bool = True,
+) -> APIResponse[CashFlowForecastResponse]:
+    forecast = CashFlowForecastService(db).forecast(
+        ctx,
+        company_id=company_id,
+        as_of=as_of,
+        horizon_weeks=horizon_weeks,
+        monthly_interest_rate_pct=(
+            Decimal(str(monthly_interest_rate_pct))
+            if monthly_interest_rate_pct is not None
+            else None
+        ),
+        include_committed_orders=include_committed_orders,
+    )
+    return APIResponse(
+        message="Cash flow forecast generated",
+        data=_forecast_response(forecast),
+    )
+
+
+def _forecast_response(forecast) -> CashFlowForecastResponse:
+    stock = forecast.stuck_stock
+    return CashFlowForecastResponse(
+        as_of=forecast.as_of,
+        horizon_weeks=forecast.horizon_weeks,
+        opening_balance=float(forecast.opening_balance),
+        closing_balance=float(forecast.closing_balance),
+        total_inflow=float(forecast.total_inflow),
+        total_outflow=float(forecast.total_outflow),
+        overdue_inflow=float(forecast.overdue_inflow),
+        overdue_outflow=float(forecast.overdue_outflow),
+        lowest_balance=float(forecast.lowest_balance),
+        lowest_balance_week=forecast.lowest_balance_week,
+        shortfall_weeks=list(forecast.shortfall_weeks),
+        weeks=[
+            CashFlowWeekResponse(
+                week_number=w.week_number,
+                week_start=w.week_start,
+                week_end=w.week_end,
+                inflow=float(w.inflow),
+                outflow=float(w.outflow),
+                net=float(w.net),
+                closing_balance=float(w.closing_balance),
+                item_count=w.item_count,
+            )
+            for w in forecast.weeks
+        ],
+        stuck_stock=StuckStockSummaryResponse(
+            **stock.to_json(),
+            items=[
+                StuckStockItemResponse(
+                    reference=i.reference,
+                    product_name=i.product_name,
+                    quantity=float(i.quantity),
+                    value=float(i.value),
+                    received_on=i.received_on,
+                    days_held=i.days_held,
+                    on_hold=i.on_hold,
+                )
+                for i in stock.items
+            ],
+        ),
+        leverage=(
+            WorkingCapitalLeverageResponse(
+                collection_days=forecast.leverage.collection_days,
+                payment_days=forecast.leverage.payment_days,
+                leverage_days=forecast.leverage.leverage_days,
+                average_monthly_outflow=float(forecast.leverage.average_monthly_outflow),
+                leverage_value=float(forecast.leverage.leverage_value),
+                narrative=forecast.leverage.narrative,
+            )
+            if forecast.leverage
+            else None
+        ),
+    )
+
+
+@reports_router.get(
+    "/treasury-suggestions", response_model=APIResponse[TreasuryPlanResponse]
+)
+def treasury_suggestions(
+    ctx: Annotated[TenantContext, Depends(require_permission("finance.report:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+    as_of: date | None = None,
+    horizon_weeks: Annotated[int, Query(ge=1, le=52)] = 13,
+    operating_buffer: Annotated[float | None, Query(ge=0)] = None,
+) -> APIResponse[TreasuryPlanResponse]:
+    plan = CashFlowForecastService(db).treasury_plan(
+        ctx,
+        company_id=company_id,
+        as_of=as_of,
+        horizon_weeks=horizon_weeks,
+        operating_buffer=(
+            Decimal(str(operating_buffer)) if operating_buffer is not None else None
+        ),
+    )
+    return APIResponse(
+        message="Treasury suggestions generated",
+        data=TreasuryPlanResponse(
+            as_of=plan.as_of,
+            deployable_amount=float(plan.deployable_amount),
+            deployable_days=plan.deployable_days,
+            operating_buffer=float(plan.operating_buffer),
+            lowest_forecast_balance=float(plan.lowest_forecast_balance),
+            total_opportunity=float(plan.total_opportunity),
+            suggestions=[
+                TreasurySuggestionResponse(**s.to_json()) for s in plan.suggestions
+            ],
+            warnings=list(plan.warnings),
+        ),
+    )
 
 
 @reports_router.get("/journal-register", response_model=APIResponse[JournalRegisterReportResponse])

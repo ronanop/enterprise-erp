@@ -1388,6 +1388,19 @@ class ScmHandoffService:
                 _, order = self._order_service.replace_draft_lines(
                     ctx, order.id, line_payloads
                 )
+                # Re-priced draft → the negotiated price must be approved again.
+                order.negotiation_status = "not_required"
+                order.negotiated_savings_amount = 0
+                order.negotiation_decided_at = None
+                order.negotiation_decided_by = None
+                order.negotiation_decided_by_name = None
+                self._db.flush()
+
+            if not float(getattr(order, "baseline_amount", 0) or 0):
+                order.baseline_amount = sum(
+                    float(ln.get("line_total") or 0) for ln in (handoff.get("vendor_lines") or [])
+                )
+                self._db.flush()
 
             if not order.company_po_number or entity_changed:
                 order.company_po_number = peek_next_company_po_number(
@@ -1480,6 +1493,12 @@ class ScmHandoffService:
         if not created_lines:
             raise ConflictException("Failed to create purchase order lines from OVF")
 
+        # Price handed over by Sales on the OVF - anything SCM negotiates below
+        # this is the supply-chain saving.
+        order.baseline_amount = float(order.total_amount or 0)
+        order.negotiation_status = "not_required"
+        self._db.flush()
+
         if hold:
             updated = self._orders.update_order(
                 ctx, order.id, status=OrderStatus.CANCELLED.value
@@ -1507,6 +1526,151 @@ class ScmHandoffService:
         )
         return order
 
+    def _is_ovf_sourced(self, order: ProcOrderHeader) -> bool:
+        return (
+            getattr(order, "source_module", None) == self.SOURCE_MODULE
+            and getattr(order, "source_document_type", None) == self.SOURCE_DOC_TYPE
+        )
+
+    def _negotiation_savings(self, order: ProcOrderHeader) -> float:
+        """Savings SCM negotiated off the OVF vendor price on this PO."""
+        baseline = float(getattr(order, "baseline_amount", 0) or 0)
+        if baseline <= 0:
+            return 0.0
+        return max(round(baseline - float(order.total_amount or 0), 4), 0.0)
+
+    def negotiation_summary(self, ctx: TenantContext, order_id: UUID) -> dict:
+        """Baseline vs negotiated price and the Management approval state."""
+        order = self._order_service.get_order(ctx, order_id)
+        if not self._is_scm_finalizable(order):
+            raise InvalidDocumentState(
+                "Negotiation approval only applies to CRM OVF or inventory-initiated POs"
+            )
+        baseline = float(getattr(order, "baseline_amount", 0) or 0)
+        negotiated = float(order.total_amount or 0)
+        savings = self._negotiation_savings(order)
+        return {
+            "order_id": order.id,
+            "document_number": order.document_number,
+            "company_po_number": order.company_po_number,
+            "status": order.status,
+            "baseline_amount": baseline,
+            "negotiated_amount": negotiated,
+            "savings_amount": savings,
+            "savings_pct": round(savings / baseline * 100.0, 3) if baseline else 0.0,
+            "negotiation_status": getattr(order, "negotiation_status", "not_required"),
+            "negotiation_remark": getattr(order, "negotiation_remark", None),
+            "negotiation_submitted_at": getattr(order, "negotiation_submitted_at", None),
+            "negotiation_decided_at": getattr(order, "negotiation_decided_at", None),
+            "negotiation_decided_by_name": getattr(order, "negotiation_decided_by_name", None),
+            "can_issue": getattr(order, "negotiation_status", "not_required") == "approved",
+        }
+
+    def submit_negotiation(
+        self,
+        ctx: TenantContext,
+        order_id: UUID,
+        *,
+        remark: str | None = None,
+    ) -> dict:
+        """Send the post-negotiation price to Management before issuing the PO."""
+        order = self._order_service.get_order(ctx, order_id)
+        if not self._is_scm_finalizable(order):
+            raise InvalidDocumentState(
+                "Negotiation approval only applies to CRM OVF or inventory-initiated POs"
+            )
+        if order.status != OrderStatus.DRAFT.value:
+            raise InvalidDocumentState("Only draft POs can be sent for negotiation approval")
+        if getattr(order, "negotiation_status", "not_required") == "pending":
+            raise ConflictException("This PO is already awaiting Management approval")
+        active_lines = [ln for ln in (order.lines or []) if not getattr(ln, "is_deleted", False)]
+        if not active_lines:
+            raise InvalidDocumentState("Cannot send a PO with no lines for approval")
+
+        savings = self._negotiation_savings(order)
+        order.negotiated_savings_amount = savings
+        order.negotiation_status = "pending"
+        order.negotiation_remark = (remark or "").strip() or None
+        order.negotiation_submitted_at = utcnow()
+        order.negotiation_submitted_by = ctx.user_id
+        order.negotiation_decided_at = None
+        order.negotiation_decided_by = None
+        order.negotiation_decided_by_name = None
+        self._db.flush()
+
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="proc_order_header",
+            entity_id=order.id,
+            operation="negotiation_submit",
+            performed_by=ctx.user_id,
+            new_value={
+                "baseline_amount": float(getattr(order, "baseline_amount", 0) or 0),
+                "negotiated_amount": float(order.total_amount or 0),
+                "savings_amount": savings,
+            },
+        )
+        return self.negotiation_summary(ctx, order_id)
+
+    def decide_negotiation(
+        self,
+        ctx: TenantContext,
+        order_id: UUID,
+        *,
+        decision: str,
+        remark: str | None = None,
+    ) -> dict:
+        """Management approves/rejects the negotiated price before the PO is issued."""
+        if decision not in {"approved", "rejected"}:
+            raise ConflictException("decision must be 'approved' or 'rejected'")
+        order = self._order_service.get_order(ctx, order_id)
+        if not self._is_scm_finalizable(order):
+            raise InvalidDocumentState(
+                "Negotiation approval only applies to CRM OVF or inventory-initiated POs"
+            )
+        if getattr(order, "negotiation_status", "not_required") != "pending":
+            raise ConflictException("This PO is not awaiting negotiation approval")
+
+        decided_by_name = None
+        if ctx.user_id is not None:
+            decided_by_name = self._resolve_user_names(ctx.tenant_id, {ctx.user_id}).get(ctx.user_id)
+
+        order.negotiation_status = decision
+        order.negotiation_decided_at = utcnow()
+        order.negotiation_decided_by = ctx.user_id
+        order.negotiation_decided_by_name = decided_by_name
+        if remark and remark.strip():
+            order.negotiation_remark = remark.strip()
+        self._db.flush()
+
+        # Credit the approved saving to Supply Chain on the CRM OVF. Sales never
+        # sees this figure - it feeds the SCM incentive pool, not the sales one.
+        if (
+            decision == "approved"
+            and order.source_module == self.SOURCE_MODULE
+            and order.source_document_type == self.SOURCE_DOC_TYPE
+            and order.source_document_id is not None
+        ):
+            self._crm.record_scm_savings(
+                ctx,
+                order.source_document_id,
+                savings_amount=float(order.negotiated_savings_amount or 0),
+                negotiated_vendor_total=float(order.total_amount or 0),
+            )
+
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="proc_order_header",
+            entity_id=order.id,
+            operation=f"negotiation_{decision}",
+            performed_by=ctx.user_id,
+            new_value={
+                "savings_amount": float(order.negotiated_savings_amount or 0),
+                "remark": order.negotiation_remark,
+            },
+        )
+        return self.negotiation_summary(ctx, order_id)
+
     def _is_scm_finalizable(self, order: ProcOrderHeader) -> bool:
         """CRM OVF handoff POs and inventory/manual draft POs share SCM finalize."""
         module = (getattr(order, "source_module", None) or "").strip().lower()
@@ -1533,6 +1697,19 @@ class ScmHandoffService:
         active_lines = [ln for ln in (order.lines or []) if not getattr(ln, "is_deleted", False)]
         if not active_lines:
             raise InvalidDocumentState("Cannot finalize a PO with no lines")
+        # No CRM OVF order reaches the distributor before Management signs off
+        # on the post-negotiation price.
+        if self._is_ovf_sourced(order):
+            negotiation_status = getattr(order, "negotiation_status", "not_required")
+            if negotiation_status == "pending":
+                raise InvalidDocumentState(
+                    "This PO is still awaiting Management approval of the negotiated price."
+                )
+            if negotiation_status != "approved":
+                raise InvalidDocumentState(
+                    "Management approval of the negotiated price is required before this PO "
+                    "can be issued to the distributor. Send it for approval from Negotiation."
+                )
         if not order.entity_code:
             raise InvalidDocumentState("Entity code is required to assign company PO number")
         if not order.company_po_number:
@@ -1627,6 +1804,14 @@ class ScmHandoffService:
                     "customer_total": customer_total,
                     "margin_amount": margin_amount,
                     "grn_status": grn,
+                    "baseline_amount": float(getattr(order, "baseline_amount", 0) or 0),
+                    "negotiated_savings_amount": float(
+                        getattr(order, "negotiated_savings_amount", 0) or 0
+                    ),
+                    "negotiation_status": getattr(order, "negotiation_status", "not_required"),
+                    "negotiation_decided_by_name": getattr(
+                        order, "negotiation_decided_by_name", None
+                    ),
                     "receipt_saved_at": receipt_saved_at,
                     "current_receipt_batch_id": order.current_receipt_batch_id,
                     "current_grn_number": getattr(order, "current_grn_number", None),

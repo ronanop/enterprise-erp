@@ -16,6 +16,7 @@ import {
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
 import { CrmEntityRejectionAlert } from "@/components/crm/sales/crm-approval-inbox-listener";
 import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
+import { PoValidationChain } from "@/components/crm/sales/po-validation-chain";
 import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
 import { CrmRecordActionsMenu } from "@/components/crm/sales/crm-record-actions-menu";
@@ -445,6 +446,10 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
             onAction={onBlueprintAction}
             disabled={busy}
           />
+
+          {blueprint.po_validation ? (
+            <PoValidationChain validation={blueprint.po_validation} />
+          ) : null}
 
           {showQuotes ? (
             <CrmListPanel>

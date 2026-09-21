@@ -34,6 +34,33 @@ class VendorType(str, Enum):
     SERVICE = "service"
 
 
+class PartyType(str, Enum):
+    CUSTOMER = "customer"
+    VENDOR = "vendor"
+
+
+class PartyRegistrationStatus(str, Enum):
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    UNDER_REVIEW = "under_review"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    CONVERTED = "converted"
+
+
+class KycStatus(str, Enum):
+    PENDING = "pending"
+    VERIFIED = "verified"
+    REJECTED = "rejected"
+
+
+class CreditRiskBand(str, Enum):
+    LOW = "low"
+    MODERATE = "moderate"
+    HIGH = "high"
+    UNACCEPTABLE = "unacceptable"
+
+
 class ProductType(str, Enum):
     GOODS = "goods"
     SERVICE = "service"
@@ -65,6 +92,8 @@ class MasterEntityType(str, Enum):
     TAX = "tax"
     ASSET = "asset"
     WAREHOUSE = "warehouse"
+    CUSTOMER_REGISTRATION = "customer_registration"
+    VENDOR_REGISTRATION = "vendor_registration"
 
 
 CODE_PREFIXES: dict[MasterEntityType, tuple[str, int]] = {
@@ -76,6 +105,13 @@ CODE_PREFIXES: dict[MasterEntityType, tuple[str, int]] = {
     MasterEntityType.TAX: ("TAX-", 5),
     MasterEntityType.ASSET: ("AST-", 6),
     MasterEntityType.WAREHOUSE: ("WH-", 6),
+    MasterEntityType.CUSTOMER_REGISTRATION: ("CRF-", 5),
+    MasterEntityType.VENDOR_REGISTRATION: ("VRF-", 5),
+}
+
+REGISTRATION_CODE_ENTITY_TYPES: dict[str, MasterEntityType] = {
+    PartyType.CUSTOMER.value: MasterEntityType.CUSTOMER_REGISTRATION,
+    PartyType.VENDOR.value: MasterEntityType.VENDOR_REGISTRATION,
 }
 
 WORKFLOW_CODES: dict[str, str] = {

@@ -235,6 +235,7 @@ class HrEntityType(str, Enum):
     TRAINING_ROOM = "training_room"
     TRAINING_REQUEST = "training_request"
     SEPARATION = "separation"
+    EXIT_AGREEMENT = "exit_agreement"
     DESIGNATION = "designation"
     SHIFT = "shift"
     LEAVE_TYPE = "leave_type"
@@ -251,6 +252,7 @@ CODE_PREFIXES: dict[HrEntityType, tuple[str, int]] = {
     HrEntityType.TRAINING_ROOM: ("ROOM-", 4),
     HrEntityType.TRAINING_REQUEST: ("MTG-", 6),
     HrEntityType.SEPARATION: ("SEP-", 6),
+    HrEntityType.EXIT_AGREEMENT: ("EXA-", 6),
     HrEntityType.DESIGNATION: ("DES-", 6),
     HrEntityType.SHIFT: ("SFT-", 6),
     HrEntityType.LEAVE_TYPE: ("LT-", 6),
