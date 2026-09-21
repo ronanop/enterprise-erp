@@ -345,8 +345,12 @@ class SiteInstallationService:
         updated = self._repo.update(ctx, row_id, **fields)
         if updated is None:
             raise NotFoundException("Site installation not found")
+        # Isolate alert side-effects so a flush failure cannot poison this UoW.
         try:
-            self._notify_admins_stage_saved(ctx, project, row, updated, fields, stage_key)
+            with self._db.begin_nested():
+                self._notify_admins_stage_saved(
+                    ctx, project, row, updated, fields, stage_key
+                )
         except Exception:  # noqa: BLE001 - alerts must not roll back the save
             pass
         return updated
