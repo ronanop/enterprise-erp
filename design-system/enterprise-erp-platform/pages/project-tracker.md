@@ -1,24 +1,24 @@
 # Project Tracker Page Overrides
 
 > **PROJECT:** iConnect Plus  
-> **Page Type:** Admin upload and version-history workspace
+> **Page Type:** Admin in-app spreadsheet workspace
 
 ## Page-Specific Rules
 
 ### Layout
 - Use the light authenticated ERP shell with the standard Projects page maximum width.
-- Keep the main page as a compact, horizontally scrollable history table only.
-- Open upload as a modal (`ConfirmDialog`) from a header **New Tracker** action - do not embed the form as a permanent panel above the table.
+- Primary flow is an **in-app Excel-like table editor** (not file upload).
+- Keep a compact, horizontally scrollable **Tracker history** table of versioned sheets.
+- Open the editor as an inline panel from **New Tracker** or **Open** (revise → new version).
 
 ### Density and states
-- Use dense controls and ~36px table rows.
-- Make the upload state explicit and disable dialog controls while the file is being sent.
-- Reset project, file, and remarks when the dialog closes.
-- Show a concise empty state and preserve every uploaded version.
+- Dense grid cells (~32px row height), editable column headers, add/remove column and row.
+- Disable editor controls while saving; reset project/title/remarks/grid when closed.
+- Preserve every saved version. Revising always creates the next version.
 
 ### Components
 - Header actions: outline Refresh + primary New Tracker (Plus icon).
-- Dialog: project select, Choose-file control (hidden native input), optional remarks, Cancel / Upload tracker.
-- Use Lucide file/upload/download icons only.
-- Use standard muted panels, borders, visible focus rings, and 150-300ms hover transitions.
-- Keep the primary upload action navy/blue; do not use dark mode, gradients, marketing imagery, or oversized headings.
+- Editor: project select, sheet title, optional remarks, spreadsheet toolbar, Save version.
+- History: Project, Version, Sheet (col×row), Remarks, Saved, Open + Download.
+- Lucide icons only. Muted panels, borders, visible focus, 150–300ms hover transitions.
+- No dark mode, gradients, marketing imagery, or oversized headings.

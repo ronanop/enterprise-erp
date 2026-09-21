@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { ResourceListView } from "@/components/module/resource-list-view";
+import { CorrespondenceListPage } from "@/components/procurement/correspondence-list-page";
 import { DeliveryChallanListPage } from "@/components/procurement/delivery-challan-list-page";
 import { DeliveryStatusPage } from "@/components/procurement/delivery-status-page";
 import { GrnsListPage } from "@/components/procurement/grns-list-page";
@@ -29,6 +30,7 @@ export default async function ProcurementResourcePage({ params }: PageProps) {
   if (resourceKey === "grns") return <GrnsListPage />;
   if (resourceKey === "delivery-challan") return <DeliveryChallanListPage />;
   if (resourceKey === "delivery-status") return <DeliveryStatusPage />;
+  if (resourceKey === "correspondence") return <CorrespondenceListPage />;
   if (resourceKey === "installation") return <InstallationPage />;
   if (resourceKey === "vendors") return <VendorsListPage />;
   if (resourceKey === "inventory") return <ProcurementInventoryListPage />;

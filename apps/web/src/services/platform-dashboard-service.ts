@@ -127,7 +127,13 @@ function classifyModuleHealth(
       m.includes("temporarily unavailable") ||
       m.includes("queuepool") ||
       m.includes("connection timed out") ||
-      m.includes("too many clients")
+      m.includes("too many clients") ||
+      m.includes("too many requests") ||
+      m.includes("rate limit") ||
+      m.includes("cannot reach the api") ||
+      m.includes("invalid api response") ||
+      m.includes("failed to fetch") ||
+      m.includes("networkerror")
     );
   };
 
@@ -154,13 +160,17 @@ function classifyModuleHealth(
     if (message && isDeniedMessage(message)) {
       continue;
     }
-    // Pool pressure / brief DB unavailability - treat as partial when some data loaded,
-    // otherwise surface once without marking the whole module permanently offline.
-    if (code === 503 || (message && isTransientMessage(message))) {
+    // Pool pressure / rate limit / brief unavailability - treat as partial when some
+    // data loaded, otherwise surface once without marking the module permanently offline.
+    if (
+      code === 503 ||
+      code === 429 ||
+      (message && isTransientMessage(message))
+    ) {
       if (recordCount > 0) {
         continue;
       }
-      hardCodes.push(503);
+      hardCodes.push(typeof code === "number" ? code : 503);
       if (message) hardErrors.push(message);
       continue;
     }
@@ -185,7 +195,10 @@ function classifyModuleHealth(
   }
 
   // Pure transient unavailability with no data → partial (retryable), not offline.
-  if (hardCodes.length > 0 && hardCodes.every((c) => c === 503)) {
+  if (
+    hardCodes.length > 0 &&
+    hardCodes.every((c) => c === 503 || c === 429)
+  ) {
     return {
       status: recordCount > 0 ? "ok" : "partial",
       errors: hardErrors.slice(0, 3),
@@ -847,7 +860,7 @@ function buildExecutive(results: ModuleLoaderResult[]): PlatformKpi[] {
 }
 
 /** Cap parallel module overview loads so the API DB pool is not exhausted. */
-const MODULE_LOAD_CONCURRENCY = 2;
+const MODULE_LOAD_CONCURRENCY = 6;
 
 async function mapWithConcurrency<T, R>(
   items: T[],
@@ -917,14 +930,21 @@ export async function loadPlatformDashboard(
   });
 
   const statusCodes: number[] = [];
-  let partial = false;
+  let offlineCount = 0;
+  let softPartialCount = 0;
 
   for (const row of results) {
-    if (row.analytics.status !== "ok") partial = true;
+    if (row.analytics.status === "error") offlineCount += 1;
+    if (row.analytics.status === "partial") softPartialCount += 1;
     if (row.statusCodes?.length) {
       statusCodes.push(...row.statusCodes);
     }
   }
+
+  // Banner only when something is actually offline, or most modules are soft-partial.
+  const tracked = results.length || 1;
+  const partial =
+    offlineCount > 0 || softPartialCount >= Math.max(2, Math.ceil(tracked * 0.35));
 
   const modules: ModuleAnalytics[] = results
     .map((row) => ({

@@ -30,13 +30,13 @@ class CodeSequenceRepository:
         existing = list(self.db.scalars(stmt).all())
         seq = 1
         if existing:
-            nums = []
+            nums: list[int] = []
             for code in existing:
                 try:
                     nums.append(int(str(code).rsplit("-", 1)[-1]))
                 except ValueError:
                     continue
-        if nums:
+            if nums:
                 seq = max(nums) + 1
         seq_part = f"{seq:0{width}d}" if width > 0 else str(seq)
         return f"{full_prefix}{seq_part}"

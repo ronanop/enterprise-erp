@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { ApiClientError } from "@/services/api-client";
+import { formatApiError } from "@/services/api-client";
 import {
   getPurchaseOrder,
   getScmOvfPreview,
@@ -313,9 +313,7 @@ export function InstallationDetailPage({ challanId }: { challanId: string }) {
       });
       setBanner("Shared to Projects PO Queue. Open Projects → PO Queue when ready to create the project.");
     } catch (err) {
-      setError(
-        err instanceof ApiClientError ? err.message : "Failed to share to Project module",
-      );
+      setError(formatApiError(err, "Failed to share to Project module"));
     } finally {
       setSharing(false);
     }

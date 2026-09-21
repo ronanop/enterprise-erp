@@ -200,3 +200,45 @@ def test_item_plan_stock_short_and_together():
     assert plan["lines"][0]["action"] == "stock_short"
     assert plan["lines"][0]["book_qty"] == 1
     assert plan["lines"][0]["po_qty"] == 3
+
+
+def test_ovf_vendor_baseline_uses_crm_totals_with_tax_not_negotiated_rates():
+    svc = ScmHandoffService.__new__(ScmHandoffService)
+    handoff = {
+        "vendor_lines": [
+            {
+                "product_name": "Adapter",
+                "qty": 10,
+                "unit_price": 100,
+                "line_total": 1000,
+                "gst_pct": 18,
+                "gst_amount": 180,
+                "total_with_gst": 1180,
+                "distributor_name": "Ingram Micro India",
+            },
+            {
+                "product_name": "Stock Item",
+                "qty": 2,
+                "unit_price": 50,
+                "line_total": 100,
+                "total_with_gst": 118,
+                "distributor_name": "IN STOCK",
+                "fulfillment_source": "inventory",
+            },
+            {
+                "product_name": "Other Dist Line",
+                "qty": 1,
+                "unit_price": 500,
+                "line_total": 500,
+                "total_with_gst": 590,
+                "distributor_name": "Redington India",
+            },
+        ]
+    }
+    # Full OVF vendor baseline excludes IN STOCK.
+    assert svc._ovf_vendor_baseline_amount(handoff) == 1770.0
+    # Distributor-scoped baseline for the PO vendor.
+    assert (
+        svc._ovf_vendor_baseline_amount(handoff, distributor_name="Ingram Micro India")
+        == 1180.0
+    )

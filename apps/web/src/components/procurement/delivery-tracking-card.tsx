@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { CalendarClock, MailCheck, Send, TriangleAlert } from "lucide-react";
 
+import { DeliveryCorrespondencePanel } from "@/components/procurement/delivery-correspondence-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,6 +36,7 @@ export function DeliveryTrackingCard({ order, isAdmin, onSaved }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [correspondenceKey, setCorrespondenceKey] = useState(0);
 
   async function saveEtd() {
     setBusy(true);
@@ -50,6 +52,7 @@ export function DeliveryTrackingCard({ order, isAdmin, onSaved }: Props) {
           ? "Delivery date saved and shared with the customer."
           : "Delivery date saved.",
       );
+      setCorrespondenceKey((k) => k + 1);
       onSaved();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to save delivery date");
@@ -66,8 +69,9 @@ export function DeliveryTrackingCard({ order, isAdmin, onSaved }: Props) {
       const counts = await runScmDeliveryNotifications();
       setNotice(
         `Sent ${counts.acknowledged} order acknowledgement(s), ${counts.etd_chased} ETD ` +
-        `reminder(s), ${counts.delivery_dates_shared} delivery update(s).`,
+          `reminder(s), ${counts.delivery_dates_shared} delivery update(s).`,
       );
+      setCorrespondenceKey((k) => k + 1);
       onSaved();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to run notifications");
@@ -182,6 +186,13 @@ export function DeliveryTrackingCard({ order, isAdmin, onSaved }: Props) {
           </Button>
         ) : null}
       </div>
+
+      <DeliveryCorrespondencePanel
+        orderId={order.id}
+        customerName={order.customer_name}
+        refreshKey={correspondenceKey}
+        canEditTemplates={isAdmin}
+      />
     </section>
   );
 }

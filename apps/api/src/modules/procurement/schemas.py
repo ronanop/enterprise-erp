@@ -740,6 +740,45 @@ class ScmDeliveryNotificationRunResponse(BaseModel):
     delivery_dates_shared: int = 0
 
 
+class ScmCorrespondenceDeliveryResponse(BaseModel):
+    id: str
+    event_id: str
+    channel: str
+    attempt_no: int
+    status: str
+    provider_response: str | None = None
+    delivered_at: str | None = None
+    event_type: str | None = None
+    recipient_address: str | None = None
+    event_status: str | None = None
+    created_at: str | None = None
+    subject: str | None = None
+    order_id: str | None = None
+    company_po_number: str | None = None
+    kind: str | None = None
+
+
+class ScmCorrespondenceTemplateResponse(BaseModel):
+    kind: str
+    scope: str
+    company_account_id: str | None = None
+    audience: str
+    template_code: str
+    template_name: str
+    subject_template: str | None = None
+    body_template: str
+    is_override: bool = False
+    inherits_default: bool = False
+    placeholders: list[str] = Field(default_factory=list)
+
+
+class ScmCorrespondenceTemplateUpsertRequest(BaseModel):
+    kind: str = Field(min_length=1, max_length=50)
+    subject_template: str = Field(min_length=1)
+    body_template: str = Field(min_length=1)
+    company_account_id: UUID | None = None
+
+
 class ScmItemPlanVendorUpdateRequest(BaseModel):
     """Update distributor_name on a CRM OVF vendor line from SCM item plan."""
 

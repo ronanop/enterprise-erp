@@ -36,7 +36,7 @@ export const procurementWorkspaceGroups: ProcurementWorkspaceGroup[] = [
     title: "SCM Workflow",
     description: "OVF queue, vendor POs, and goods receipt",
     icon: Truck,
-    resourceKeys: ["scm", "orders", "grns", "delivery-challan", "delivery-status", "installation", "inventory"],
+    resourceKeys: ["scm", "orders", "grns", "delivery-challan", "delivery-status", "correspondence", "installation", "inventory"],
   },
   {
     key: "fulfillment",

@@ -453,6 +453,12 @@ export const erpModules: ErpModule[] = [
         apiPath: "/procurement/delivery-status",
       },
       {
+        key: "correspondence",
+        title: "Mails",
+        description: "Order and delivery reminder mails across POs",
+        apiPath: "/procurement/scm/correspondence",
+      },
+      {
         key: "invoices",
         title: "Vendor Invoices",
         description: "AP invoices and balances",

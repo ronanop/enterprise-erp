@@ -755,6 +755,36 @@ class CustomerTrackerCreate(BaseModel):
     remarks: str | None = None
 
 
+class CustomerTrackerColumn(BaseModel):
+    id: str = Field(min_length=1, max_length=64)
+    label: str = Field(min_length=1, max_length=255)
+
+
+class CustomerTrackerGridPayload(BaseModel):
+    """In-app Excel-like tracker sheet."""
+
+    columns: list[CustomerTrackerColumn] = Field(min_length=1, max_length=50)
+    rows: list[dict[str, str]] = Field(default_factory=list, max_length=2000)
+
+
+class CustomerTrackerGridCreate(BaseModel):
+    company_id: UUID | None = None
+    project_id: UUID
+    grid: CustomerTrackerGridPayload
+    remarks: str | None = None
+    title: str | None = Field(default=None, max_length=200)
+
+
+class CustomerTrackerGridResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    version_no: int
+    title: str
+    remarks: str | None = None
+    grid: CustomerTrackerGridPayload
+    created_at: datetime | None = None
+
+
 class CustomerTrackerResponse(OrmModel):
     id: UUID
     project_id: UUID
@@ -768,6 +798,9 @@ class CustomerTrackerResponse(OrmModel):
     branch_id: UUID | None
     created_at: datetime | None = None
     created_by: UUID | None = None
+    is_grid: bool = False
+    column_count: int | None = None
+    row_count: int | None = None
 
 
 class ProjectCommentCreate(BaseModel):

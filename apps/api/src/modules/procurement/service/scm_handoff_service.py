@@ -525,6 +525,46 @@ class ScmHandoffService:
             ]
         return vendor_lines
 
+    def _ovf_vendor_baseline_amount(
+        self,
+        handoff: dict,
+        *,
+        distributor_name: str | None = None,
+    ) -> float:
+        """Original CRM OVF vendor total (incl. tax) for negotiation baseline.
+
+        Uses handoff vendor lines as Sales handed them over - never the
+        negotiated rates SCM may already have put on the draft PO.
+        """
+        vendor_lines = [
+            ln
+            for ln in (handoff.get("vendor_lines") or [])
+            if not self._is_in_stock_line(ln)
+        ]
+        needle = " ".join((distributor_name or "").strip().lower().split())
+        if needle:
+            vendor_lines = [
+                ln for ln in vendor_lines if self._distributor_group_key(ln) == needle
+            ]
+        total = 0.0
+        for ln in vendor_lines:
+            with_tax = ln.get("total_with_gst")
+            if with_tax is not None:
+                total += float(with_tax or 0)
+                continue
+            line_total = float(ln.get("line_total") or 0)
+            if line_total <= 0:
+                qty = float(ln.get("qty") or 0)
+                unit = float(ln.get("unit_price") or 0)
+                line_total = qty * unit
+            gst_amount = ln.get("gst_amount")
+            if gst_amount is not None:
+                total += line_total + float(gst_amount or 0)
+                continue
+            gst_pct = float(ln.get("gst_pct") or 0)
+            total += line_total * (1.0 + gst_pct / 100.0) if gst_pct > 0 else line_total
+        return round(total, 4)
+
     def _serialize_allocations(self, rows: list[ProcOvfStockAllocation]) -> list[dict]:
         return [
             {
@@ -1389,6 +1429,7 @@ class ScmHandoffService:
                     ctx, order.id, line_payloads
                 )
                 # Re-priced draft → the negotiated price must be approved again.
+                # Keep baseline_amount locked to the original CRM OVF vendor total.
                 order.negotiation_status = "not_required"
                 order.negotiated_savings_amount = 0
                 order.negotiation_decided_at = None
@@ -1397,8 +1438,8 @@ class ScmHandoffService:
                 self._db.flush()
 
             if not float(getattr(order, "baseline_amount", 0) or 0):
-                order.baseline_amount = sum(
-                    float(ln.get("line_total") or 0) for ln in (handoff.get("vendor_lines") or [])
+                order.baseline_amount = self._ovf_vendor_baseline_amount(
+                    handoff, distributor_name=distributor_name
                 )
                 self._db.flush()
 
@@ -1493,9 +1534,11 @@ class ScmHandoffService:
         if not created_lines:
             raise ConflictException("Failed to create purchase order lines from OVF")
 
-        # Price handed over by Sales on the OVF - anything SCM negotiates below
-        # this is the supply-chain saving.
-        order.baseline_amount = float(order.total_amount or 0)
+        # Lock baseline to the original CRM OVF vendor total (Sales handover),
+        # not the PO total - SCM may already have negotiated rates on create.
+        order.baseline_amount = self._ovf_vendor_baseline_amount(
+            handoff, distributor_name=distributor_name
+        )
         order.negotiation_status = "not_required"
         self._db.flush()
 
@@ -1539,6 +1582,40 @@ class ScmHandoffService:
             return 0.0
         return max(round(baseline - float(order.total_amount or 0), 4), 0.0)
 
+    def _sync_draft_baseline_from_ovf(self, ctx: TenantContext, order: ProcOrderHeader) -> None:
+        """Keep OVF Price locked to CRM handoff totals for draft OVF POs."""
+        if not self._is_ovf_sourced(order):
+            return
+        if order.status != OrderStatus.DRAFT.value:
+            return
+        ovf_id = getattr(order, "source_document_id", None)
+        if ovf_id is None:
+            return
+        try:
+            handoff = self._crm.get_handoff(ctx, ovf_id)
+        except Exception:
+            return
+        # Prefer distributor scope from order line product match when possible.
+        baseline = self._ovf_vendor_baseline_amount(handoff, distributor_name=None)
+        order_products = {
+            (getattr(ln, "product_name", None) or "").strip().lower()
+            for ln in (order.lines or [])
+            if not getattr(ln, "is_deleted", False)
+        }
+        if order_products:
+            matched = [
+                ln
+                for ln in (handoff.get("vendor_lines") or [])
+                if not self._is_in_stock_line(ln)
+                and (ln.get("product_name") or "").strip().lower() in order_products
+            ]
+            if matched:
+                scoped = {**handoff, "vendor_lines": matched}
+                baseline = self._ovf_vendor_baseline_amount(scoped)
+        if baseline > 0 and float(getattr(order, "baseline_amount", 0) or 0) != baseline:
+            order.baseline_amount = baseline
+            self._db.flush()
+
     def negotiation_summary(self, ctx: TenantContext, order_id: UUID) -> dict:
         """Baseline vs negotiated price and the Management approval state."""
         order = self._order_service.get_order(ctx, order_id)
@@ -1546,6 +1623,7 @@ class ScmHandoffService:
             raise InvalidDocumentState(
                 "Negotiation approval only applies to CRM OVF or inventory-initiated POs"
             )
+        self._sync_draft_baseline_from_ovf(ctx, order)
         baseline = float(getattr(order, "baseline_amount", 0) or 0)
         negotiated = float(order.total_amount or 0)
         savings = self._negotiation_savings(order)
@@ -1581,6 +1659,7 @@ class ScmHandoffService:
             )
         if order.status != OrderStatus.DRAFT.value:
             raise InvalidDocumentState("Only draft POs can be sent for negotiation approval")
+        self._sync_draft_baseline_from_ovf(ctx, order)
         if getattr(order, "negotiation_status", "not_required") == "pending":
             raise ConflictException("This PO is already awaiting Management approval")
         active_lines = [ln for ln in (order.lines or []) if not getattr(ln, "is_deleted", False)]

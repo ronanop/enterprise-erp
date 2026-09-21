@@ -591,6 +591,7 @@ export function BlueprintActions({
         </div>
       ) : null}
       {showTransitions ? (
+      <div className="space-y-1.5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
           Transitions
@@ -622,7 +623,7 @@ export function BlueprintActions({
                 size="sm"
                 variant={variant}
                 className={["cursor-pointer", colorClass].filter(Boolean).join(" ")}
-                disabled={disabled || (locked && action !== "lost")}
+                disabled={disabled || busy || (locked && action !== "lost")}
                 onClick={() => openAction(action)}
               >
                 {label}
@@ -630,6 +631,12 @@ export function BlueprintActions({
             </Fragment>
           );
         })}
+      </div>
+      {error && !activeAction ? (
+        <p className="text-xs text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
       </div>
       ) : null}
 

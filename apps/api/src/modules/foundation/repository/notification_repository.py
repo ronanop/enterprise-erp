@@ -203,6 +203,144 @@ class NotificationRepository(TenantScopedRepository):
             )
         return result
 
+    def list_deliveries_for_order(
+        self,
+        tenant_id: UUID,
+        *,
+        order_id: UUID,
+        event_type_prefix: str = "procurement.",
+        limit: int = 100,
+    ) -> list[dict]:
+        """Deliveries whose event payload references this purchase order."""
+        order_key = str(order_id)
+        stmt = (
+            select(NtfDelivery)
+            .options(joinedload(NtfDelivery.event))
+            .join(NtfEvent, NtfEvent.id == NtfDelivery.event_id)
+            .where(
+                NtfDelivery.tenant_id == tenant_id,
+                NtfEvent.event_type.like(f"{event_type_prefix}%"),
+                NtfEvent.payload_json.contains({"order_id": order_key}),
+            )
+            .order_by(NtfDelivery.id.desc())
+            .limit(limit)
+        )
+        rows = list(self.db.scalars(stmt).unique().all())
+        result: list[dict] = []
+        for d in rows:
+            event = d.event
+            payload = event.payload_json if event and isinstance(event.payload_json, dict) else {}
+            result.append(
+                {
+                    "id": str(d.id),
+                    "event_id": str(d.event_id),
+                    "channel": d.channel,
+                    "attempt_no": d.attempt_no,
+                    "status": d.status,
+                    "provider_response": d.provider_response,
+                    "delivered_at": d.delivered_at.isoformat() if d.delivered_at else None,
+                    "event_type": event.event_type if event else None,
+                    "recipient_address": event.recipient_address if event else None,
+                    "event_status": event.status if event else None,
+                    "created_at": event.created_at.isoformat() if event and event.created_at else None,
+                    "subject": payload.get("_subject"),
+                    "order_id": payload.get("order_id"),
+                    "company_po_number": payload.get("company_po_number"),
+                    "kind": payload.get("kind"),
+                }
+            )
+        return result
+
+    def list_scm_deliveries(
+        self,
+        tenant_id: UUID,
+        *,
+        event_types: list[str] | None = None,
+        limit: int = 100,
+    ) -> list[dict]:
+        """Recent SCM / delivery correspondence across all orders."""
+        types = event_types or [
+            "procurement.order_acknowledged",
+            "procurement.etd_reminder",
+            "procurement.delivery_date_shared",
+        ]
+        stmt = (
+            select(NtfDelivery)
+            .options(joinedload(NtfDelivery.event))
+            .join(NtfEvent, NtfEvent.id == NtfDelivery.event_id)
+            .where(
+                NtfDelivery.tenant_id == tenant_id,
+                NtfEvent.event_type.in_(types),
+            )
+            .order_by(NtfDelivery.id.desc())
+            .limit(limit)
+        )
+        rows = list(self.db.scalars(stmt).unique().all())
+        result: list[dict] = []
+        for d in rows:
+            event = d.event
+            payload = event.payload_json if event and isinstance(event.payload_json, dict) else {}
+            result.append(
+                {
+                    "id": str(d.id),
+                    "event_id": str(d.event_id),
+                    "channel": d.channel,
+                    "attempt_no": d.attempt_no,
+                    "status": d.status,
+                    "provider_response": d.provider_response,
+                    "delivered_at": d.delivered_at.isoformat() if d.delivered_at else None,
+                    "event_type": event.event_type if event else None,
+                    "recipient_address": event.recipient_address if event else None,
+                    "event_status": event.status if event else None,
+                    "created_at": event.created_at.isoformat() if event and event.created_at else None,
+                    "subject": payload.get("_subject"),
+                    "order_id": payload.get("order_id"),
+                    "company_po_number": payload.get("company_po_number"),
+                    "kind": payload.get("kind"),
+                }
+            )
+        return result
+
+    def get_template_by_code(
+        self, tenant_id: UUID, *, template_code: str, channel: str = "email"
+    ) -> NtfTemplate | None:
+        stmt = select(NtfTemplate).where(
+            NtfTemplate.tenant_id == tenant_id,
+            NtfTemplate.template_code == template_code,
+            NtfTemplate.channel == channel,
+            NtfTemplate.is_deleted.is_(False),
+        )
+        return self.db.scalars(stmt).first()
+
+    def upsert_template(
+        self,
+        *,
+        tenant_id: UUID,
+        template_code: str,
+        template_name: str,
+        channel: str,
+        body_template: str,
+        subject_template: str | None = None,
+        updated_by: UUID | None = None,
+    ) -> NotificationTemplateEntity:
+        existing = self.get_template_by_code(tenant_id, template_code=template_code, channel=channel)
+        if existing is None:
+            return self.create_template(
+                tenant_id=tenant_id,
+                template_code=template_code,
+                template_name=template_name,
+                channel=channel,
+                body_template=body_template,
+                subject_template=subject_template,
+                created_by=updated_by,
+            )
+        existing.template_name = template_name
+        existing.body_template = body_template
+        existing.subject_template = subject_template
+        existing.updated_by = updated_by
+        existing.is_active = True
+        self.db.flush()
+        return self._tpl_to_entity(existing)
 
     def list_inbox(self, *, tenant_id: UUID, user_id: UUID, limit: int = 50) -> list[NtfEvent]:
         stmt = (

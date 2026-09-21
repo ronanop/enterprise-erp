@@ -70,6 +70,7 @@ class ProcurementCrmAdapter:
         if ovf is None:
             return {}
         email = None
+        account = None
         if ovf.company_account_id is not None:
             account = CompanyRepository(self._db).get(ctx, ovf.company_account_id)
             email = (getattr(account, "customer_email", None) or "").strip() or None
@@ -78,6 +79,12 @@ class ProcurementCrmAdapter:
             "customer_name": ovf.customer_name,
             "po_number": ovf.po_number,
             "ovf_no": ovf.ovf_no,
+            "company_account_id": (
+                str(ovf.company_account_id) if ovf.company_account_id else None
+            ),
+            "account_name": (
+                getattr(account, "customer_name", None) if account is not None else ovf.customer_name
+            ),
         }
 
     def find_ovf_by_customer_po(self, *, order_number: str, email: str) -> Any | None:

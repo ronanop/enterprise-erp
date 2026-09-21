@@ -77,6 +77,10 @@ export function prefetchProcurementTab(href: string): void {
     prefetchQuiet(listVendorOptions());
     return;
   }
+  if (path === "/procurement/correspondence") {
+    prefetchQuiet(listScmCorrespondence());
+    return;
+  }
   if (path === "/procurement/vendors") {
     prefetchQuiet(listVendorOptions());
     prefetchQuiet(listPurchaseOrders());
@@ -879,6 +883,87 @@ export async function runScmDeliveryNotifications(): Promise<ScmDeliveryNotifica
     await apiClient<ScmDeliveryNotificationRun>(`${SCM_API}/delivery-notifications/run`, {
       method: "POST",
       body: {},
+    }),
+  );
+}
+
+export type ScmCorrespondenceDelivery = {
+  id: string;
+  event_id: string;
+  channel: string;
+  attempt_no: number;
+  status: string;
+  provider_response: string | null;
+  delivered_at: string | null;
+  event_type: string | null;
+  recipient_address: string | null;
+  event_status: string | null;
+  created_at: string | null;
+  subject: string | null;
+  order_id: string | null;
+  company_po_number: string | null;
+  kind: string | null;
+};
+
+export type ScmCorrespondenceTemplate = {
+  kind: string;
+  scope: "default" | "customer" | string;
+  company_account_id: string | null;
+  audience: string;
+  template_code: string;
+  template_name: string;
+  subject_template: string | null;
+  body_template: string;
+  is_override: boolean;
+  inherits_default: boolean;
+  placeholders: string[];
+};
+
+export async function listOrderCorrespondence(
+  orderId: string,
+): Promise<ScmCorrespondenceDelivery[]> {
+  return unwrapData(
+    await apiClient<ScmCorrespondenceDelivery[]>(
+      `${SCM_API}/orders/${orderId}/correspondence`,
+    ),
+  );
+}
+
+export async function listScmCorrespondence(
+  limit = 200,
+): Promise<ScmCorrespondenceDelivery[]> {
+  return unwrapData(
+    await apiClient<ScmCorrespondenceDelivery[]>(
+      `${SCM_API}/correspondence?limit=${limit}`,
+    ),
+  );
+}
+
+export async function listCorrespondenceTemplates(params?: {
+  orderId?: string;
+  companyAccountId?: string;
+}): Promise<ScmCorrespondenceTemplate[]> {
+  const qs = new URLSearchParams();
+  if (params?.orderId) qs.set("order_id", params.orderId);
+  if (params?.companyAccountId) qs.set("company_account_id", params.companyAccountId);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return unwrapData(
+    await apiClient<ScmCorrespondenceTemplate[]>(
+      `${SCM_API}/correspondence/templates${suffix}`,
+    ),
+  );
+}
+
+export async function upsertCorrespondenceTemplate(body: {
+  kind: string;
+  subject_template: string;
+  body_template: string;
+  company_account_id?: string | null;
+}): Promise<ScmCorrespondenceTemplate> {
+  return unwrapData(
+    await apiClient<ScmCorrespondenceTemplate>(`${SCM_API}/correspondence/templates`, {
+      method: "PUT",
+      body,
     }),
   );
 }

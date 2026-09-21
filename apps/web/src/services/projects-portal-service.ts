@@ -41,6 +41,29 @@ export type CustomerTracker = {
   branch_id: string | null;
   created_at: string | null;
   created_by: string | null;
+  is_grid?: boolean;
+  column_count?: number | null;
+  row_count?: number | null;
+};
+
+export type TrackerGridColumn = {
+  id: string;
+  label: string;
+};
+
+export type TrackerGrid = {
+  columns: TrackerGridColumn[];
+  rows: Record<string, string>[];
+};
+
+export type CustomerTrackerGridDetail = {
+  id: string;
+  project_id: string;
+  version_no: number;
+  title: string;
+  remarks: string | null;
+  grid: TrackerGrid;
+  created_at: string | null;
 };
 
 export async function listCustomerTrackers(): Promise<CustomerTracker[]> {
@@ -55,6 +78,28 @@ export async function createCustomerTracker(body: {
   remarks?: string;
 }): Promise<CustomerTracker> {
   return unwrap(await apiClient<CustomerTracker>(CUSTOMER_TRACKERS_API, { method: "POST", body }));
+}
+
+export async function createCustomerTrackerGrid(body: {
+  project_id: string;
+  title?: string;
+  remarks?: string;
+  grid: TrackerGrid;
+}): Promise<CustomerTracker> {
+  return unwrap(
+    await apiClient<CustomerTracker>(`${CUSTOMER_TRACKERS_API}/grid`, {
+      method: "POST",
+      body,
+    }),
+  );
+}
+
+export async function getCustomerTrackerGrid(
+  trackerId: string,
+): Promise<CustomerTrackerGridDetail> {
+  return unwrap(
+    await apiClient<CustomerTrackerGridDetail>(`${CUSTOMER_TRACKERS_API}/${trackerId}/grid`),
+  );
 }
 
 export async function downloadCustomerTracker(tracker: CustomerTracker): Promise<void> {
@@ -319,7 +364,7 @@ export async function shareProjectPoQueue(
   return unwrap(
     await apiClient<ProjectPoQueueHandoff>(`${PROJECT_PO_QUEUE_API}/queue/share`, {
       method: "POST",
-      body: JSON.stringify(input),
+      body: input,
     }),
   );
 }

@@ -15,6 +15,7 @@ import {
   History,
   LayoutDashboard,
   MapPinned,
+  Mail,
   Package,
   PackageCheck,
   ShoppingCart,
@@ -57,6 +58,7 @@ export const PROCUREMENT_NAV = [
 ] as const satisfies ReadonlyArray<ProcurementNavItem>;
 
 export const PROCUREMENT_INSIGHT_NAV = [
+  { title: "Mails", href: "/procurement/correspondence", icon: Mail },
   { title: "Reports", href: "/procurement/reports", icon: FileBarChart },
   { title: "Analytics", href: "/procurement/analytics", icon: BarChart3 },
   { title: "Timeline", href: "/procurement/timeline", icon: History },

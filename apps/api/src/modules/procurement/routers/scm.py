@@ -18,6 +18,9 @@ from modules.procurement.schemas import (
     ScmCommercialAttachmentSummary,
     ScmCreateInventoryPoRequest,
     ScmCreatePoFromOvfRequest,
+    ScmCorrespondenceDeliveryResponse,
+    ScmCorrespondenceTemplateResponse,
+    ScmCorrespondenceTemplateUpsertRequest,
     ScmDeliveryNotificationRunResponse,
     ScmEtdUpdateRequest,
     ScmEtdUpdateResponse,
@@ -482,6 +485,83 @@ def run_scm_delivery_notifications(
     return APIResponse(
         message="Delivery notifications processed",
         data=ScmDeliveryNotificationRunResponse.model_validate(counts),
+    )
+
+
+@scm_router.get(
+    "/orders/{order_id}/correspondence",
+    response_model=APIResponse[list[ScmCorrespondenceDeliveryResponse]],
+)
+def list_order_correspondence(
+    order_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:read"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[list[ScmCorrespondenceDeliveryResponse]]:
+    rows = ScmDeliveryNotificationService(db).list_order_correspondence(ctx, order_id)
+    return APIResponse(
+        message="Order correspondence retrieved",
+        data=[ScmCorrespondenceDeliveryResponse.model_validate(r) for r in rows],
+    )
+
+
+@scm_router.get(
+    "/correspondence",
+    response_model=APIResponse[list[ScmCorrespondenceDeliveryResponse]],
+)
+def list_all_correspondence(
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    limit: int = Query(default=200, ge=1, le=500),
+) -> APIResponse[list[ScmCorrespondenceDeliveryResponse]]:
+    rows = ScmDeliveryNotificationService(db).list_recent_correspondence(ctx, limit=limit)
+    return APIResponse(
+        message="Correspondence retrieved",
+        data=[ScmCorrespondenceDeliveryResponse.model_validate(r) for r in rows],
+    )
+
+
+@scm_router.get(
+    "/correspondence/templates",
+    response_model=APIResponse[list[ScmCorrespondenceTemplateResponse]],
+)
+def list_correspondence_templates(
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    order_id: UUID | None = Query(default=None),
+    company_account_id: UUID | None = Query(default=None),
+) -> APIResponse[list[ScmCorrespondenceTemplateResponse]]:
+    svc = ScmDeliveryNotificationService(db)
+    if order_id is not None:
+        rows = svc.list_templates_for_order(ctx, order_id)
+    else:
+        rows = svc.list_templates(ctx, company_account_id=company_account_id)
+    db.commit()
+    return APIResponse(
+        message="Correspondence templates retrieved",
+        data=[ScmCorrespondenceTemplateResponse.model_validate(r) for r in rows],
+    )
+
+
+@scm_router.put(
+    "/correspondence/templates",
+    response_model=APIResponse[ScmCorrespondenceTemplateResponse],
+)
+def upsert_correspondence_template(
+    body: ScmCorrespondenceTemplateUpsertRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("procurement.order:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[ScmCorrespondenceTemplateResponse]:
+    row = ScmDeliveryNotificationService(db).upsert_template(
+        ctx,
+        kind=body.kind,
+        subject_template=body.subject_template,
+        body_template=body.body_template,
+        company_account_id=body.company_account_id,
+    )
+    db.commit()
+    return APIResponse(
+        message="Correspondence template saved",
+        data=ScmCorrespondenceTemplateResponse.model_validate(row),
     )
 
 

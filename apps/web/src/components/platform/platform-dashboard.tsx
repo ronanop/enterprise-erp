@@ -567,7 +567,7 @@ export function PlatformDashboard() {
           style={{ animationDelay: "60ms" }}
           role="status"
         >
-          Some module endpoints were slow or unavailable. Showing available analytics — refresh or check module health.
+          Some module KPIs could not be loaded. Showing what is available — refresh to retry.
         </div>
       ) : null}
 
