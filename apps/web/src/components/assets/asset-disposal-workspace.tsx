@@ -159,8 +159,9 @@ export function formatAssetOptionLabel(asset: DisposalAssetOption): string {
 
 export function disposalRecordStatusLabel(status: string): string {
   const key = String(status || "").toLowerCase();
-  if (key === "draft" || key === "submitted") return "Sent to Disposal";
+  // Simplified Send to Disposal creates posted records immediately.
   if (key === "posted") return "Disposed";
+  if (key === "draft" || key === "submitted") return "Sent to Disposal";
   if (key === "approved") return "Approved";
   if (key === "cancelled") return "Cancelled";
   return status || "—";
@@ -388,7 +389,7 @@ export function AssetDisposalWorkspace() {
         disposal_type: "scrap",
         remarks: remarks.trim(),
       });
-      setSuccess("Asset sent to disposal successfully.");
+      setSuccess("Asset disposed successfully.");
       setSelectedAssetId("");
       setSelectedDetail(null);
       setRemarks("");

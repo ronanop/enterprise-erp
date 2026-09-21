@@ -641,6 +641,19 @@ def update_assets(
 ):
     return APIResponse(message="Updated", data=AssetService(db).update(ctx, row_id, **extract_update_fields(body)))
 
+
+@assets_router.delete("/{row_id}", response_model=APIResponse[AssetResponse])
+def delete_assets(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Soft-delete (deactivate) an asset. Never physically DELETEs the row."""
+    row = AssetService(db).soft_delete(ctx, row_id)
+    type_names = _asset_type_name_map(db, ctx, [row])
+    return APIResponse(message="Deleted", data=_to_asset_response(row, type_names))
+
+
 @assets_router.post("/{row_id}/submit", response_model=APIResponse[AssetResponse])
 def submit_assets(
     row_id: UUID,

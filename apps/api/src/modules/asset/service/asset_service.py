@@ -18,6 +18,7 @@ from modules.asset.models import AstAsset
 from modules.asset.repository.asset_category_repository import AssetCategoryRepository
 from modules.asset.repository.asset_repository import AssetListFilters, AssetRepository
 from modules.asset.repository.asset_type_repository import AssetTypeRepository
+from modules.asset.service.asset_charger_service import AssetChargerService
 from modules.asset.service.asset_dashboard_summary_service import AssetDashboardSummaryService
 from modules.asset.service.asset_operational_status_service import AssetOperationalStatusService
 from modules.asset.service.asset_scope_validator import AssetScopeValidator
@@ -47,6 +48,7 @@ class AssetService:
         self._procurement = ProcurementReadPort(db)
         self._db = db
         self._operational = AssetOperationalStatusService(db)
+        self._charger = AssetChargerService(db)
 
     def search(
         self,
@@ -220,6 +222,8 @@ class AssetService:
         self._scope.validate_branch_access(ctx, branch_id)
         fields.pop("asset_code", None)
         fields.pop("document_number", None)
+        charger_available = fields.pop("charger_available", None)
+        charger_code = fields.pop("charger_code", None)
         incoming_unit_id = fields.pop("incoming_unit_id", None)
         incoming_line_id = fields.pop("incoming_line_id", None)
         self._normalize_optional_text_fields(fields)
@@ -282,6 +286,12 @@ class AssetService:
             IncomingRegistrationService(self._db).link_unit_after_create(
                 ctx, incoming_unit_id=incoming_unit_id, asset_id=row.id
             )
+        self._charger.sync(
+            ctx,
+            row,
+            charger_available=charger_available,
+            charger_code=charger_code,
+        )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name=ENTITY_AST_ASSET,
@@ -359,10 +369,13 @@ class AssetService:
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
         row = self.get(ctx, row_id)
+        sync_charger = "charger_available" in fields
+        charger_available = fields.pop("charger_available", None)
+        charger_code = fields.pop("charger_code", None)
         self._normalize_optional_text_fields(fields)
         location_label = fields.pop("location_label", None)
         self._validator.validate_update_fields(ctx, row, fields)
-        updated = self._repo.update(ctx, row_id, **fields)
+        updated = self._repo.update(ctx, row_id, **fields) if fields else row
         if updated is None:
             raise NotFoundException("Asset not found")
         if location_label:
@@ -375,6 +388,13 @@ class AssetService:
             )
             if persisted:
                 object.__setattr__(updated, "current_location_label", persisted)
+        if sync_charger:
+            self._charger.sync(
+                ctx,
+                updated,
+                charger_available=charger_available,
+                charger_code=charger_code,
+            )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name=ENTITY_AST_ASSET,
@@ -383,6 +403,65 @@ class AssetService:
             performed_by=ctx.user_id,
         )
         return updated
+
+    def soft_delete(self, ctx: TenantContext, row_id: UUID) -> AstAsset:
+        """Deactivate an asset (soft delete). Never physically DELETEs the row."""
+        from modules.asset.domain.exceptions import RegistrationValidationError
+        from modules.asset.repository.asset_assignment_repository import (
+            AssetAssignmentRepository,
+        )
+        from modules.asset.repository.asset_maintenance_repository import (
+            AssetMaintenanceRepository,
+        )
+        from modules.asset.repository.asset_transfer_repository import AssetTransferRepository
+
+        row = self.get(ctx, row_id)
+        if row.status in {
+            AssetStatus.DISPOSED.value,
+            AssetStatus.WRITTEN_OFF.value,
+        }:
+            raise RegistrationValidationError(
+                "Disposed or written-off assets cannot be deleted"
+            )
+
+        ops = str(getattr(row, "operational_status", None) or "").strip().upper()
+        if ops in {"ASSIGNED", "IN_USE_AS_COMPONENT", "PENDING_DISPOSAL", "IN_MAINTENANCE"}:
+            raise RegistrationValidationError(
+                f"Cannot delete asset while operational status is {ops}"
+            )
+
+        blocking_asn = AssetAssignmentRepository(self._db).find_pending_or_active_for_asset(
+            ctx, row_id
+        )
+        if blocking_asn is not None:
+            raise RegistrationValidationError(
+                "Cannot delete asset with an active or pending assignment"
+            )
+
+        blocking_xfer = AssetTransferRepository(self._db).find_pending_for_asset(ctx, row_id)
+        if blocking_xfer is not None:
+            raise RegistrationValidationError(
+                "Cannot delete asset with an open transfer"
+            )
+
+        blocking_mnt = AssetMaintenanceRepository(self._db).find_open_for_asset(ctx, row_id)
+        if blocking_mnt is not None:
+            raise RegistrationValidationError(
+                "Cannot delete asset with open maintenance"
+            )
+
+        deleted = self._repo.soft_delete(ctx, row_id)
+        if deleted is None:
+            raise NotFoundException("Asset not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name=ENTITY_AST_ASSET,
+            entity_id=row_id,
+            operation="soft_delete",
+            performed_by=ctx.user_id,
+            new_value={"is_deleted": True, "asset_code": row.asset_code},
+        )
+        return deleted
 
     def apply_discovery_profile(
         self,

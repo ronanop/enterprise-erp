@@ -2,6 +2,8 @@
 
 export type InventoryMenuActionId =
   | "viewDetails"
+  | "edit"
+  | "delete"
   | "assign"
   | "return"
   | "portal"
@@ -15,6 +17,8 @@ export type InventoryMenuActionId =
 
 export type InventoryActionPermissions = {
   viewDetails: boolean;
+  edit: boolean;
+  delete: boolean;
   assign: boolean;
   return: boolean;
   portal: boolean;
@@ -29,6 +33,8 @@ export type InventoryActionPermissions = {
 
 export const DEFAULT_INVENTORY_ACTION_PERMISSIONS: InventoryActionPermissions = {
   viewDetails: true,
+  edit: true,
+  delete: true,
   assign: true,
   return: true,
   portal: true,
@@ -130,6 +136,8 @@ export const INVENTORY_MENU_ITEMS: Array<{
   permissionKey: keyof InventoryActionPermissions;
 }> = [
   { id: "viewDetails", label: "View Details", permissionKey: "viewDetails" },
+  // Edit is shown in the overflow menu (not as a direct row button).
+  { id: "edit", label: "Edit", permissionKey: "edit" },
   { id: "assign", label: "Assign Asset", permissionKey: "assign" },
   { id: "return", label: "Return Asset", permissionKey: "return" },
   // History + Discovery live inside Information Portal — single menu entry.
@@ -139,4 +147,6 @@ export const INVENTORY_MENU_ITEMS: Array<{
   { id: "maintenance", label: "Maintenance", permissionKey: "maintenance" },
   { id: "startDisposal", label: "Start Disposal", permissionKey: "startDisposal" },
   { id: "reinstate", label: "Reinstate", permissionKey: "reinstate" },
+  // Destructive action — always last in the overflow menu.
+  { id: "delete", label: "Delete", permissionKey: "delete" },
 ];

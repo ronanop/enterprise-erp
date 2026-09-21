@@ -17,7 +17,7 @@ export const OPERATIONAL_STATUS_LABELS: Record<OperationalStatusValue, string> =
   ASSIGNED: "Assigned",
   IN_MAINTENANCE: "In Maintenance",
   RETIRED: "Retired",
-  PENDING_DISPOSAL: "Disposal",
+  PENDING_DISPOSAL: "Pending Disposal",
   DISPOSED: "Disposed",
   IN_USE_AS_COMPONENT: "In Use as Component",
 };
@@ -164,6 +164,55 @@ export function formatLifecycleStatusLabel(status: string): string {
     .join(" ");
 }
 
+const WORKFLOW_LIFECYCLE_VALUES = new Set([
+  "draft",
+  "submitted",
+  "approved",
+  "cancelled",
+]);
+
+/**
+ * Information Portal / Self-Service Overview Status label.
+ * Prefers operational custody status; never surfaces raw workflow values
+ * (draft / submitted / approved) to end users.
+ */
+export function formatPortalOverviewStatus(input: {
+  operational_status?: string | null;
+  status?: string | null;
+}): string {
+  const opsRaw = String(input.operational_status ?? "").trim();
+  if (opsRaw) {
+    const opsKey = opsRaw.replace(/-/g, "_").toUpperCase();
+    if (isOperationalStatus(opsKey)) {
+      return OPERATIONAL_STATUS_LABELS[opsKey];
+    }
+  }
+
+  const life = String(input.status ?? "").trim();
+  if (!life) return "—";
+  const lifeKey = life.replace(/-/g, "_").toLowerCase();
+
+  // Lifecycle values that match an operational concept (legacy / mis-mapped payloads).
+  const asOps = lifeKey.toUpperCase();
+  if (isOperationalStatus(asOps)) {
+    return OPERATIONAL_STATUS_LABELS[asOps];
+  }
+
+  if (WORKFLOW_LIFECYCLE_VALUES.has(lifeKey)) {
+    if (lifeKey === "submitted" || lifeKey === "approved") return "Registered";
+    if (lifeKey === "draft") return "Registered";
+    return "—";
+  }
+
+  if (lifeKey === "active") return "Active";
+  if (lifeKey === "in_maintenance") return "In Maintenance";
+  if (lifeKey === "disposed") return "Disposed";
+  if (lifeKey === "transferred") return "Transferred";
+  if (lifeKey === "written_off") return "Written Off";
+
+  return formatLifecycleStatusLabel(life);
+}
+
 /** Assignment eligibility: operational READY_TO_MOVE + lifecycle active only. */
 export function isAssignmentEligibleAsset(row: {
   operational_status?: string | null;
@@ -227,7 +276,7 @@ export function operationalStatusHelpText(
     return "Retired — not available for assignment.";
   }
   if (ops === "PENDING_DISPOSAL") {
-    return "Disposal — disposal workflow in progress.";
+    return "Pending Disposal — disposal workflow in progress.";
   }
   if (ops === "DISPOSED") {
     return "Disposed — asset has completed the disposal workflow.";

@@ -95,148 +95,131 @@ def _grant(conn, now, tenant_id, role_id, perm_id):
     )
 
 
+def _column_names(insp, table: str) -> set[str]:
+    return {c["name"] for c in insp.get_columns(table, schema="asset")}
+
+
+def _index_names(insp, table: str) -> set[str]:
+    return {i["name"] for i in insp.get_indexes(table, schema="asset") if i["name"]}
+
+
+def _check_names(insp, table: str) -> set[str]:
+    return {c["name"] for c in insp.get_check_constraints(table, schema="asset") if c["name"]}
+
+
 def upgrade() -> None:
-    op.add_column(
-        "ast_incoming_asset_line",
-        sa.Column(
-            "accepted_quantity",
-            sa.Numeric(18, 4),
-            nullable=False,
-            server_default="0",
-        ),
-        schema="asset",
-    )
-    op.add_column(
-        "ast_incoming_asset_line",
-        sa.Column(
-            "rejected_quantity",
-            sa.Numeric(18, 4),
-            nullable=False,
-            server_default="0",
-        ),
-        schema="asset",
-    )
-    op.add_column(
-        "ast_incoming_asset_line",
-        sa.Column(
-            "qc_status",
-            sa.String(30),
-            nullable=False,
-            server_default="PENDING",
-        ),
-        schema="asset",
-    )
-    op.add_column(
-        "ast_incoming_asset_line",
-        sa.Column("qc_started_at", sa.DateTime(timezone=True), nullable=True),
-        schema="asset",
-    )
-    op.add_column(
-        "ast_incoming_asset_line",
-        sa.Column("qc_started_by", sa.Uuid(), nullable=True),
-        schema="asset",
-    )
-    op.add_column(
-        "ast_incoming_asset_line",
-        sa.Column("qc_notes", sa.Text(), nullable=True),
-        schema="asset",
-    )
-    op.add_column(
-        "ast_incoming_asset_line",
-        sa.Column("quality_inspection_id", sa.Uuid(), nullable=True),
-        schema="asset",
-    )
-    op.create_index(
-        "ix_ast_incoming_line_qc_status",
-        "ast_incoming_asset_line",
-        ["qc_status"],
-        schema="asset",
-    )
-    op.create_index(
-        "ix_ast_incoming_line_quality_inspection_id",
-        "ast_incoming_asset_line",
-        ["quality_inspection_id"],
-        schema="asset",
-    )
-    op.create_check_constraint(
-        "ck_ast_incoming_line_accepted_nonneg",
-        "ast_incoming_asset_line",
-        "accepted_quantity >= 0",
-        schema="asset",
-    )
-    op.create_check_constraint(
-        "ck_ast_incoming_line_rejected_nonneg",
-        "ast_incoming_asset_line",
-        "rejected_quantity >= 0",
-        schema="asset",
-    )
-    op.create_check_constraint(
-        "ck_ast_incoming_line_qc_lte_arrived",
-        "ast_incoming_asset_line",
-        "accepted_quantity + rejected_quantity <= arrived_quantity",
-        schema="asset",
-    )
-    op.create_check_constraint(
-        "ck_ast_incoming_line_qc_status",
-        "ast_incoming_asset_line",
-        "qc_status IN ('PENDING','IN_PROGRESS','ACCEPTED','REJECTED')",
-        schema="asset",
-    )
-
-    op.add_column(
-        "ast_incoming_asset_unit",
-        sa.Column(
-            "qc_status",
-            sa.String(30),
-            nullable=False,
-            server_default="PENDING_QC",
-        ),
-        schema="asset",
-    )
-    op.add_column(
-        "ast_incoming_asset_unit",
-        sa.Column("tested_at", sa.DateTime(timezone=True), nullable=True),
-        schema="asset",
-    )
-    op.add_column(
-        "ast_incoming_asset_unit",
-        sa.Column("tested_by", sa.Uuid(), nullable=True),
-        schema="asset",
-    )
-    op.add_column(
-        "ast_incoming_asset_unit",
-        sa.Column("qc_notes", sa.Text(), nullable=True),
-        schema="asset",
-    )
-    op.add_column(
-        "ast_incoming_asset_unit",
-        sa.Column("rejection_reason", sa.String(500), nullable=True),
-        schema="asset",
-    )
-    op.add_column(
-        "ast_incoming_asset_unit",
-        sa.Column("evidence_uri", sa.String(500), nullable=True),
-        schema="asset",
-    )
-    op.add_column(
-        "ast_incoming_asset_unit",
-        sa.Column("quality_inspection_id", sa.Uuid(), nullable=True),
-        schema="asset",
-    )
-    op.create_index(
-        "ix_ast_incoming_unit_qc_status",
-        "ast_incoming_asset_unit",
-        ["qc_status"],
-        schema="asset",
-    )
-    op.create_check_constraint(
-        "ck_ast_incoming_unit_qc_status",
-        "ast_incoming_asset_unit",
-        "qc_status IN ('PENDING_QC','ACCEPTED','REJECTED')",
-        schema="asset",
-    )
-
     bind = op.get_bind()
+    insp = sa.inspect(bind)
+    line_cols = _column_names(insp, "ast_incoming_asset_line")
+    line_idxs = _index_names(insp, "ast_incoming_asset_line")
+    line_cks = _check_names(insp, "ast_incoming_asset_line")
+    unit_cols = _column_names(insp, "ast_incoming_asset_unit")
+    unit_idxs = _index_names(insp, "ast_incoming_asset_unit")
+    unit_cks = _check_names(insp, "ast_incoming_asset_unit")
+
+    line_columns = [
+        (
+            "accepted_quantity",
+            sa.Column(
+                "accepted_quantity",
+                sa.Numeric(18, 4),
+                nullable=False,
+                server_default="0",
+            ),
+        ),
+        (
+            "rejected_quantity",
+            sa.Column(
+                "rejected_quantity",
+                sa.Numeric(18, 4),
+                nullable=False,
+                server_default="0",
+            ),
+        ),
+        (
+            "qc_status",
+            sa.Column(
+                "qc_status",
+                sa.String(30),
+                nullable=False,
+                server_default="PENDING",
+            ),
+        ),
+        ("qc_started_at", sa.Column("qc_started_at", sa.DateTime(timezone=True), nullable=True)),
+        ("qc_started_by", sa.Column("qc_started_by", sa.Uuid(), nullable=True)),
+        ("qc_notes", sa.Column("qc_notes", sa.Text(), nullable=True)),
+        ("quality_inspection_id", sa.Column("quality_inspection_id", sa.Uuid(), nullable=True)),
+    ]
+    for name, col in line_columns:
+        if name not in line_cols:
+            op.add_column("ast_incoming_asset_line", col, schema="asset")
+
+    if "ix_ast_incoming_line_qc_status" not in line_idxs:
+        op.create_index(
+            "ix_ast_incoming_line_qc_status",
+            "ast_incoming_asset_line",
+            ["qc_status"],
+            schema="asset",
+        )
+    if "ix_ast_incoming_line_quality_inspection_id" not in line_idxs:
+        op.create_index(
+            "ix_ast_incoming_line_quality_inspection_id",
+            "ast_incoming_asset_line",
+            ["quality_inspection_id"],
+            schema="asset",
+        )
+    line_checks = [
+        ("ck_ast_incoming_line_accepted_nonneg", "accepted_quantity >= 0"),
+        ("ck_ast_incoming_line_rejected_nonneg", "rejected_quantity >= 0"),
+        (
+            "ck_ast_incoming_line_qc_lte_arrived",
+            "accepted_quantity + rejected_quantity <= arrived_quantity",
+        ),
+        (
+            "ck_ast_incoming_line_qc_status",
+            "qc_status IN ('PENDING','IN_PROGRESS','ACCEPTED','REJECTED')",
+        ),
+    ]
+    for name, expr in line_checks:
+        if name not in line_cks:
+            op.create_check_constraint(name, "ast_incoming_asset_line", expr, schema="asset")
+
+    unit_columns = [
+        (
+            "qc_status",
+            sa.Column(
+                "qc_status",
+                sa.String(30),
+                nullable=False,
+                server_default="PENDING_QC",
+            ),
+        ),
+        ("tested_at", sa.Column("tested_at", sa.DateTime(timezone=True), nullable=True)),
+        ("tested_by", sa.Column("tested_by", sa.Uuid(), nullable=True)),
+        ("qc_notes", sa.Column("qc_notes", sa.Text(), nullable=True)),
+        ("rejection_reason", sa.Column("rejection_reason", sa.String(500), nullable=True)),
+        ("evidence_uri", sa.Column("evidence_uri", sa.String(500), nullable=True)),
+        ("quality_inspection_id", sa.Column("quality_inspection_id", sa.Uuid(), nullable=True)),
+    ]
+    for name, col in unit_columns:
+        if name not in unit_cols:
+            op.add_column("ast_incoming_asset_unit", col, schema="asset")
+
+    if "ix_ast_incoming_unit_qc_status" not in unit_idxs:
+        op.create_index(
+            "ix_ast_incoming_unit_qc_status",
+            "ast_incoming_asset_unit",
+            ["qc_status"],
+            schema="asset",
+        )
+    if "ck_ast_incoming_unit_qc_status" not in unit_cks:
+        op.create_check_constraint(
+            "ck_ast_incoming_unit_qc_status",
+            "ast_incoming_asset_unit",
+            "qc_status IN ('PENDING_QC','ACCEPTED','REJECTED')",
+            schema="asset",
+        )
+
     AstIncomingQcEvent.__table__.create(bind=bind, checkfirst=True)
 
     conn = bind

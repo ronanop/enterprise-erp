@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssetInventoryContainer } from "@/components/assets/asset-inventory-container";
 import { createAssetNavigation } from "@/components/assets/navigation/asset-navigation";
-import { assetOperationsService } from "@/services/assets-service";
+import { assetOperationsService, assetRegisterService } from "@/services/assets-service";
 
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
 
@@ -90,6 +90,7 @@ beforeEach(() => {
       page_size: 200,
     }),
   );
+  vi.spyOn(assetRegisterService, "softDelete").mockResolvedValue(assetItem as never);
 });
 
 describe("AssetInventoryContainer navigation", () => {
@@ -110,9 +111,10 @@ describe("AssetInventoryContainer navigation", () => {
 
   async function tableRowForAssetCode(assetCode: string) {
     await waitForInventoryReady(assetCode);
-    const cell = screen.getAllByText(assetCode).find((el) => el.closest("tr"));
-    expect(cell).toBeTruthy();
-    return cell!.closest("tr")!;
+    // Desktop table rows use data-testid; asset tag is only shown on mobile cards.
+    const row = screen.getByTestId(`inventory-row-${assetItem.id}`);
+    expect(row).toBeTruthy();
+    return row;
   }
 
   it("opens drawer on View without routing", async () => {
@@ -135,6 +137,31 @@ describe("AssetInventoryContainer navigation", () => {
         expect.stringContaining("/assets/asset-assignments/new?assetId=asset-99"),
       );
     });
+  });
+
+  it("navigates to existing edit route when Edit is chosen from the menu", async () => {
+    const user = userEvent.setup();
+    render(<AssetInventoryContainer />);
+    const row = await tableRowForAssetCode("AST-99");
+    expect(within(row).getByTestId("inventory-action-view")).toBeInTheDocument();
+    expect(within(row).queryByTestId("inventory-action-edit")).not.toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Edit" }));
+    expect(push).toHaveBeenCalledWith("/assets/assets/asset-99/edit");
+  });
+
+  it("opens DeleteAssetConfirmDialog from 3-dot menu; cancel does not soft-delete", async () => {
+    const user = userEvent.setup();
+    render(<AssetInventoryContainer />);
+    const row = await tableRowForAssetCode("AST-99");
+    await user.click(within(row).getByRole("button", { name: "More actions" }));
+    expect(await screen.findByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(screen.getByTestId("delete-asset-confirm-dialog")).toBeInTheDocument();
+    expect(screen.getByTestId("delete-asset-code")).toHaveTextContent("AST-99");
+    await user.click(screen.getByTestId("delete-asset-cancel-button"));
+    expect(screen.queryByTestId("delete-asset-confirm-dialog")).not.toBeInTheDocument();
+    expect(assetRegisterService.softDelete).not.toHaveBeenCalled();
   });
 
   it("navigates on portal quick link from drawer", async () => {

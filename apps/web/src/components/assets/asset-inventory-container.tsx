@@ -28,6 +28,7 @@ import {
   handleInventoryMenuWorkflow,
 } from "@/components/assets/inventory/inventory-workflow";
 import { openMaintenanceForAsset } from "@/components/assets/asset-maintenance-workspace";
+import { DeleteAssetConfirmDialog } from "@/components/assets/delete-asset-confirm-dialog";
 import { StartDisposalConfirmDialog } from "@/components/assets/start-disposal-confirm-dialog";
 import { ReinstateConfirmDialog } from "@/components/assets/reinstate-confirm-dialog";
 import {
@@ -172,7 +173,9 @@ export async function fetchInventoryPage(input: {
           typeLabel: row.linked_asset_code
             ? `${componentTypeLabel(row.component_type)} · ${row.linked_asset_code}`
             : componentTypeLabel(row.component_type),
-          serialDisplay: row.serial_number?.trim() || "—",
+          // Prefer component_code (charger code) then serial — same as Edit Asset.
+          serialDisplay:
+            row.component_code?.trim() || row.serial_number?.trim() || "—",
           componentName:
             row.linked_asset_name?.trim() ||
             row.linked_asset_code?.trim() ||
@@ -233,6 +236,9 @@ export function AssetInventoryContainer({
   const [maintenanceError, setMaintenanceError] = useState<string | null>(null);
   const [reinstateSubmitting, setReinstateSubmitting] = useState(false);
   const [reinstateError, setReinstateError] = useState<string | null>(null);
+  const [deleteRow, setDeleteRow] = useState<InventoryRowViewModel | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [branches, setBranches] = useState<Array<{ id: string; label: string }>>([]);
   const [departments, setDepartments] = useState<Array<{ id: string; label: string }>>([]);
@@ -462,6 +468,12 @@ export function AssetInventoryContainer({
 
   const onMenuAction = useCallback(
     (action: InventoryMenuActionId, row: InventoryRowViewModel) => {
+      if (action === "delete") {
+        closeDrawer();
+        setDeleteError(null);
+        setDeleteRow(row);
+        return;
+      }
       if (action === "startDisposal") {
         closeDrawer();
         setStartDisposalError(null);
@@ -536,6 +548,27 @@ export function AssetInventoryContainer({
       setReinstateSubmitting(false);
     }
   }, [reinstateRow]);
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteRow) return;
+    setDeleteSubmitting(true);
+    setDeleteError(null);
+    try {
+      await assetRegisterService.softDelete(deleteRow.id);
+      setDeleteRow(null);
+      setExportSuccess(`Asset ${deleteRow.assetTag || deleteRow.laptopName} deleted.`);
+      setReloadToken((t) => t + 1);
+      if (drawerRow?.id === deleteRow.id) {
+        closeDrawer();
+      }
+    } catch (err) {
+      setDeleteError(
+        err instanceof ApiClientError ? err.message : "Could not delete asset",
+      );
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  }, [closeDrawer, deleteRow, drawerRow]);
 
   const onDrawerQuickLink = useCallback(
     (link: InventoryQuickLinkId, row: InventoryRowViewModel) => {
@@ -701,6 +734,26 @@ export function AssetInventoryContainer({
           setReinstateError(null);
         }}
         onConfirm={() => void confirmReinstate()}
+      />
+      <DeleteAssetConfirmDialog
+        open={deleteRow != null}
+        asset={
+          deleteRow
+            ? {
+                id: deleteRow.id,
+                assetCode: deleteRow.assetTag,
+                assetName: deleteRow.laptopName,
+              }
+            : null
+        }
+        submitting={deleteSubmitting}
+        error={deleteError}
+        onCancel={() => {
+          if (deleteSubmitting) return;
+          setDeleteRow(null);
+          setDeleteError(null);
+        }}
+        onConfirm={() => void confirmDelete()}
       />
     </>
   );

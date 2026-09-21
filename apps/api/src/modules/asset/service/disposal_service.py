@@ -101,7 +101,10 @@ class DisposalService:
         return row
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
-        """Send to Disposal: create draft record + set PENDING_DISPOSAL atomically."""
+        """Send to Disposal: create posted record + set operational DISPOSED atomically.
+
+        Simplified scrap flow — no pending-disposal stage, no approval workflow on create.
+        """
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
         self._validator.validate_create_fields(ctx, company_id=cid, fields=fields)
@@ -118,10 +121,15 @@ class DisposalService:
 
         remarks = str(fields.get("remarks") or "").strip()
         previous_ops = str(getattr(asset, "operational_status", "") or "").strip().upper() or None
-        asset = self._ensure_pending_disposal_ops(
+        disposal_type = fields["disposal_type"]
+        disposal_date = fields.get("disposal_date") or date.today()
+
+        # Ready/Assigned/Retired → PENDING_DISPOSAL, then immediately → DISPOSED.
+        asset = self._ensure_disposed_ops(
             ctx,
             asset,
             remarks=remarks,
+            disposal_type=disposal_type,
         )
 
         doc = self._numbers.generate(
@@ -131,19 +139,22 @@ class DisposalService:
             "document_number",
             ctx=ctx,
         )
+        now = utcnow()
         row = self._repo.create(
             ctx,
             company_id=cid,
             branch_id=branch_id,
             document_number=doc,
             asset_id=asset.id,
-            disposal_type=fields["disposal_type"],
-            disposal_date=fields.get("disposal_date"),
+            disposal_type=disposal_type,
+            disposal_date=disposal_date,
             proceeds_amount=fields.get("proceeds_amount"),
             book_value_at_disposal=fields.get("book_value_at_disposal"),
             remarks=remarks,
             previous_operational_status=previous_ops,
-            status=AssetDisposalStatus.DRAFT.value,
+            status=AssetDisposalStatus.POSTED.value,
+            completed_at=now,
+            completed_by=ctx.user_id,
         )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
@@ -158,43 +169,75 @@ class DisposalService:
                 "remarks": remarks,
                 "previous_operational_status": previous_ops,
                 "operational_status": getattr(asset, "operational_status", None),
+                "status": AssetDisposalStatus.POSTED.value,
             },
         )
         return row
 
-    def _ensure_pending_disposal_ops(
+    def _ensure_disposed_ops(
         self,
         ctx: TenantContext,
         asset,
         *,
         remarks: str,
+        disposal_type: str,
     ):
-        """Atomically move Ready/Assigned/Retired → PENDING_DISPOSAL before draft create."""
-        from modules.asset.domain.enums import AssetOperationalStatus
+        """Atomically move Ready/Assigned/Retired/Pending → DISPOSED for Send to Disposal.
 
+        Uses the existing PENDING → DISPOSED transition path (no schema/rule rewrite for
+        direct Ready→Disposed). Does not physically delete the asset.
+        """
+        disposed = AssetOperationalStatus.DISPOSED.value
         pending = AssetOperationalStatus.PENDING_DISPOSAL.value
         ops = str(getattr(asset, "operational_status", "") or "").strip().upper()
-        if ops == pending:
-            return asset
+        if ops == disposed:
+            raise DisposalValidationError("Disposed assets cannot be disposed again")
 
-        if ops == AssetOperationalStatus.RETIRED.value:
-            action = "start_disposal"
-        elif ops in {
-            AssetOperationalStatus.READY_TO_MOVE.value,
-            AssetOperationalStatus.ASSIGNED.value,
-        }:
-            action = "mark_pending_disposal"
-        else:
-            raise DisposalValidationError(
-                "Asset operational status cannot be sent to disposal from "
-                f"{ops or 'unknown'}"
+        if ops != pending:
+            if ops == AssetOperationalStatus.RETIRED.value:
+                action = "start_disposal"
+            elif ops in {
+                AssetOperationalStatus.READY_TO_MOVE.value,
+                AssetOperationalStatus.ASSIGNED.value,
+            }:
+                action = "mark_pending_disposal"
+            else:
+                raise DisposalValidationError(
+                    "Asset operational status cannot be sent to disposal from "
+                    f"{ops or 'unknown'}"
+                )
+
+            self._operational.apply_action(
+                ctx,
+                asset.id,
+                action=action,
+                expected_version=int(asset.version or 1),
+                reason="send_to_disposal",
+                remarks=remarks or None,
+                source_entity=ENTITY_AST_DISPOSAL,
+                source_entity_id=asset.id,
             )
+            asset = self._assets.lock_for_update(ctx, asset.id)
+            if asset is None:
+                raise NotFoundException("Asset not found")
+            if str(getattr(asset, "operational_status", "") or "").upper() != pending:
+                raise DisposalValidationError(
+                    "Failed to move asset through pending disposal before finalize"
+                )
 
-        updated_status = self._operational.apply_action(
+        # Lifecycle terminal status (disposed / written_off) — not a physical delete.
+        self._asset_engine.dispose(asset, disposal_type=disposal_type)
+        updated_asset = self._assets.update(ctx, asset.id, status=asset.status)
+        asset_version = int((updated_asset or asset).version or 1)
+
+        if asset.master_asset_id is not None:
+            self._master.mark_master_disposed(ctx, asset.master_asset_id)
+
+        final_ops = self._operational.apply_action(
             ctx,
             asset.id,
-            action=action,
-            expected_version=int(asset.version or 1),
+            action="complete_disposal",
+            expected_version=asset_version,
             reason="send_to_disposal",
             remarks=remarks or None,
             source_entity=ENTITY_AST_DISPOSAL,
@@ -203,9 +246,9 @@ class DisposalService:
         fresh = self._assets.get(ctx, asset.id)
         if fresh is None:
             raise NotFoundException("Asset not found")
-        if str(getattr(fresh, "operational_status", "") or "").upper() != pending:
+        if str(getattr(fresh, "operational_status", "") or "").upper() != disposed:
             raise DisposalValidationError(
-                f"Failed to set asset to pending disposal (got {updated_status})"
+                f"Failed to set asset to disposed (got {final_ops})"
             )
         return fresh
 

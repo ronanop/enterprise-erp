@@ -12,6 +12,10 @@ describe("assetNavigationPaths", () => {
     expect(assetNavigationPaths.details("abc-123")).toBe("/assets/assets/abc-123");
   });
 
+  it("builds encoded asset edit path", () => {
+    expect(assetNavigationPaths.edit("abc-123")).toBe("/assets/assets/abc-123/edit");
+  });
+
   it("builds assignment wizard prefill path", () => {
     expect(assetNavigationPaths.assignment("x")).toContain("assetId=x");
     expect(assetNavigationPaths.assignment("x")).toContain("/assets/asset-assignments/new");
@@ -32,6 +36,9 @@ describe("createAssetNavigation", () => {
 
     nav.openDetails("a1");
     expect(push).toHaveBeenCalledWith("/assets/assets/a1");
+
+    nav.openEdit("a1");
+    expect(push).toHaveBeenCalledWith("/assets/assets/a1/edit");
 
     nav.openAssignment("a1");
     expect(push).toHaveBeenCalledWith(expect.stringContaining("/assets/asset-assignments/new"));
@@ -78,6 +85,20 @@ describe("dispatchInventoryMenuAction", () => {
     const spy = vi.spyOn(nav, "openAssignment");
     dispatchInventoryMenuAction(nav, "assign", "asset-1");
     expect(spy).toHaveBeenCalledWith("asset-1");
+  });
+
+  it("routes edit action to openEdit", () => {
+    const nav = createAssetNavigation(vi.fn());
+    const spy = vi.spyOn(nav, "openEdit");
+    dispatchInventoryMenuAction(nav, "edit", "asset-1");
+    expect(spy).toHaveBeenCalledWith("asset-1");
+  });
+
+  it("does not navigate for delete (container owns confirm dialog)", () => {
+    const push = vi.fn();
+    const nav = createAssetNavigation(push);
+    dispatchInventoryMenuAction(nav, "delete", "asset-1");
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("routes portal action to openPortal", () => {

@@ -111,11 +111,12 @@ export type AssetInventoryWorkspaceProps = {
 };
 
 const TABLE_COLUMNS = [
-  "Asset Code",
   "Asset Name",
   "S/N",
   "Make",
   "Model",
+  "Configuration",
+  "Charger",
   "Assignee",
   "Employee ID",
   "Operational Status",
@@ -488,6 +489,8 @@ function InventoryTableRow({
   const rowPermissions = applyOperationalGatesToInventoryPermissions(
     {
       viewDetails: true,
+      edit: true,
+      delete: true,
       assign: true,
       return: true,
       portal: true,
@@ -509,14 +512,32 @@ function InventoryTableRow({
   );
 
   return (
-    <tr className="border-t border-border/50 transition-colors duration-200 hover:bg-muted/20 motion-reduce:transition-none">
+    <tr
+      className="border-t border-border/50 transition-colors duration-200 hover:bg-muted/20 motion-reduce:transition-none"
+      data-testid={`inventory-row-${row.id}`}
+    >
       <td className={tableSerialCellClassName()}>{serial}</td>
-      <td className="px-3 py-2.5 font-mono text-xs">{row.assetTag}</td>
-      <td className="px-3 py-2.5 font-medium">{row.laptopName}</td>
+      <td className="px-3 py-2.5 font-medium" data-testid="inventory-asset-name-cell">
+        {row.laptopName}
+      </td>
       <td className="px-3 py-2.5 font-mono text-xs">{row.serialNumber}</td>
       <td className="px-3 py-2.5">{row.manufacturer}</td>
       <td className="px-3 py-2.5">{row.model}</td>
-      <td className="px-3 py-2.5">{row.currentHolder}</td>
+      <td
+        className="px-3 py-2.5 whitespace-pre-line text-xs leading-snug"
+        data-testid="inventory-configuration-cell"
+      >
+        {row.configuration}
+      </td>
+      <td
+        className="px-3 py-2.5 font-mono text-xs"
+        data-testid="inventory-charger-cell"
+      >
+        {row.chargerCode}
+      </td>
+      <td className="px-3 py-2.5" data-testid="inventory-assignee-cell">
+        {row.currentHolder}
+      </td>
       <td className="px-3 py-2.5 font-mono text-xs">{row.employeeId}</td>
       <td className="px-3 py-2.5 text-center">{opsBadge}</td>
       <td className="px-3 py-2.5">{row.location}</td>
@@ -548,6 +569,8 @@ function InventoryMobileCard({
   const rowPermissions = applyOperationalGatesToInventoryPermissions(
     {
       viewDetails: true,
+      edit: true,
+      delete: true,
       assign: true,
       return: true,
       portal: true,

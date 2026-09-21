@@ -8,8 +8,11 @@ import {
 export function buildInventoryActionPermissions(
   can: (permission: string) => boolean,
 ): InventoryActionPermissions {
+  const canUpdate = can("asset.asset:update");
   return {
     viewDetails: can("asset.asset:read"),
+    edit: canUpdate,
+    delete: canUpdate,
     assign: can("asset.assignment:create"),
     return: can("asset.assignment:return"),
     portal: can("asset.asset:read"),
@@ -26,6 +29,7 @@ export function buildInventoryActionPermissions(
 /**
  * Gate inventory actions by operational status (UI; backend remains authoritative).
  * Transfer (user-transfer) is ASSIGNED-only; Assign is READY_TO_MOVE-only.
+ * Edit/Delete stay RBAC-only — soft-delete validators remain authoritative on the API.
  */
 export function applyOperationalGatesToInventoryPermissions(
   base: InventoryActionPermissions,

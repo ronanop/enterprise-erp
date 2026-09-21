@@ -39,6 +39,7 @@ function sampleRow(overrides: Partial<InventoryRowViewModel> = {}): InventoryRow
     manufacturer: "Lenovo",
     model: "T14",
     configuration: "i7 · 16GB",
+    chargerCode: "",
     currentHolder: "Asha Nair",
     employeeId: "emp-1",
     department: "IT",

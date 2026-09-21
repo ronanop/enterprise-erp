@@ -401,10 +401,28 @@ export const documentService = {
     }
   },
 
-  async upload(assetId: string, file: File): Promise<DocumentRow> {
+  async upload(
+    assetId: string,
+    file: File,
+    options?: {
+      documentType?: string;
+      documentName?: string;
+    },
+  ): Promise<DocumentRow> {
     const form = new FormData();
-    form.append("file", file);
+    const desiredName = options?.documentName?.trim();
+    const uploadFile =
+      desiredName && desiredName !== file.name
+        ? new File([file], desiredName, {
+            type: file.type,
+            lastModified: file.lastModified,
+          })
+        : file;
+    form.append("file", uploadFile);
     form.append("asset_id", assetId);
+    if (options?.documentType?.trim()) {
+      form.append("document_type", options.documentType.trim());
+    }
     const res = await apiUpload<DocumentRow>(`${ASSET_DOCUMENTS_PATH}/upload`, form);
     return res.data as DocumentRow;
   },
@@ -1244,6 +1262,8 @@ export type AssetLocationRow = {
   asset_id: string;
   location_label: string;
   org_location_id?: string | null;
+  location_id?: string | null;
+  building_id?: string | null;
   effective_from?: string | null;
   effective_to?: string | null;
   is_current: boolean;
@@ -1584,6 +1604,8 @@ export type AssetInformationPortal = {
   serial_number?: string | null;
   asset_type: string;
   status: string;
+  /** Custody / ops status for UI display (preferred over lifecycle workflow status). */
+  operational_status?: string | null;
   assignment?: AssetPortalAssignmentSummary | null;
   warranty?: AssetPortalWarrantySummary | null;
   insurance?: AssetPortalInsuranceSummary | null;
@@ -2166,6 +2188,11 @@ export const assetRegisterService = {
     return res.data as AssetsRow;
   },
 
+  async softDelete(id: string): Promise<AssetsRow> {
+    const res = await resourceService.delete<AssetsRow>(ASSETS_REGISTER_PATH, id);
+    return res.data as AssetsRow;
+  },
+
   async action(id: string, actionName: string, body?: unknown): Promise<AssetsRow> {
     const res = await resourceService.action<AssetsRow>(
       ASSETS_REGISTER_PATH,
@@ -2247,7 +2274,12 @@ export type UserTransferVerificationResult = {
 
 export type UserTransferAssignPayload = {
   verification_id: string;
-  employee_id: string;
+  employee_source?: "MASTER_DATA" | "MANUAL_ENTRY";
+  employee_id?: string | null;
+  manual_employee_name?: string | null;
+  manual_employee_phone?: string | null;
+  manual_employee_email?: string | null;
+  manual_employee_deployed_to?: string | null;
   department_id?: string | null;
   to_location_id: string;
   to_building_id: string;

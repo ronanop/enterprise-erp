@@ -108,6 +108,9 @@ vi.mock("@/services/assets-service", () => ({
   assetRegistrationQueueService: {
     prefillFromIncoming: vi.fn(),
   },
+  componentService: {
+    search: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+  },
   assetRegisterService: {
     create: (...args: unknown[]) => create(...args),
     update: (...args: unknown[]) => update(...args),
@@ -147,6 +150,7 @@ async function fillMinimalLaptopForm(user: ReturnType<typeof userEvent.setup>) {
     expect(screen.getByRole("combobox", { name: /Building/i })).not.toBeDisabled();
   });
   await selectByLabel(user, /Building/i, "bld-crc1");
+  await selectByLabel(user, /Charger Available/i, "no");
 }
 
 describe("AssetAddForm single-page registration", () => {
@@ -263,7 +267,7 @@ describe("AssetAddForm single-page registration", () => {
     render(<AssetAddForm />);
     await fillMinimalLaptopForm(user);
 
-    const make = screen.getByLabelText(/Manufacturer/i);
+    const make = screen.getByLabelText(/^Make$/i);
     await user.type(make, "Dell");
     const model = screen.getByLabelText(/^Model/i);
     await user.type(model, "Latitude 5440");
@@ -285,6 +289,8 @@ describe("AssetAddForm single-page registration", () => {
     expect(body.model).toBe("Latitude 5440");
     expect(body.location_id).toBe("loc-mumbai");
     expect(body.building_id).toBe("bld-crc1");
+    expect(body.charger_available).toBe(false);
+    expect(body.charger_code).toBeUndefined();
     expect(String(body.configuration)).toContain("Processor: Intel i5");
     expect(String(body.configuration)).toContain("Generation: 12th");
     expect(String(body.configuration)).toContain("RAM: 16 GB");

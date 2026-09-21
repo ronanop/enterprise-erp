@@ -363,13 +363,65 @@ def test_user_transfer_assign_requires_good_physical_condition() -> None:
         validator.validate_user_transfer_assign_request(
             ctx,
             company_id=ctx.company_id,
+            employee_source="MASTER_DATA",
             employee_id=uuid4(),
+            manual_employee_name=None,
+            manual_employee_phone=None,
+            manual_employee_email=None,
+            manual_employee_deployed_to=None,
             department_id=uuid4(),
             to_location_id=uuid4(),
             to_building_id=uuid4(),
             physical_condition="dead",
             previous_employee_id=uuid4(),
         )
+
+
+def test_user_transfer_assign_manual_entry_requires_manual_fields() -> None:
+    validator = TransferValidator(MagicMock())
+    validator._org = MagicMock()
+    validator._org.get_department.return_value = SimpleNamespace(company_id=None)
+    ctx = _ctx()
+    with pytest.raises(TransferValidationError, match="manual_employee"):
+        validator.validate_user_transfer_assign_request(
+            ctx,
+            company_id=ctx.company_id,
+            employee_source="MANUAL_ENTRY",
+            employee_id=None,
+            manual_employee_name="Shreya",
+            manual_employee_phone=None,
+            manual_employee_email=None,
+            manual_employee_deployed_to="Site",
+            department_id=uuid4(),
+            to_location_id=uuid4(),
+            to_building_id=uuid4(),
+            physical_condition="good",
+            previous_employee_id=None,
+        )
+
+
+def test_user_transfer_assign_manual_entry_accepts_valid_payload() -> None:
+    validator = TransferValidator(MagicMock())
+    dept_id = uuid4()
+    validator._org = MagicMock()
+    validator._org.get_department.return_value = SimpleNamespace(company_id=None)
+    ctx = _ctx()
+    resolved = validator.validate_user_transfer_assign_request(
+        ctx,
+        company_id=ctx.company_id,
+        employee_source="MANUAL_ENTRY",
+        employee_id=None,
+        manual_employee_name="Shreya Saxena",
+        manual_employee_phone="9876543210",
+        manual_employee_email=None,
+        manual_employee_deployed_to="Client site",
+        department_id=dept_id,
+        to_location_id=uuid4(),
+        to_building_id=uuid4(),
+        physical_condition="good",
+        previous_employee_id=None,
+    )
+    assert resolved == dept_id
 
 
 def test_user_transfer_return_requires_reason() -> None:

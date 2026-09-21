@@ -30,6 +30,29 @@ describe("buildInventoryActionPermissions", () => {
     const perms = buildInventoryActionPermissions((p) => p === "asset.disposal:create");
     expect(perms.startDisposal).toBe(true);
   });
+
+  it("enables edit and delete with asset.asset:update", () => {
+    const perms = buildInventoryActionPermissions((p) => p === "asset.asset:update");
+    expect(perms.edit).toBe(true);
+    expect(perms.delete).toBe(true);
+    expect(perms.viewDetails).toBe(false);
+  });
+
+  it("disables edit and delete without asset.asset:update", () => {
+    const perms = buildInventoryActionPermissions((p) => p === "asset.asset:read");
+    expect(perms.edit).toBe(false);
+    expect(perms.delete).toBe(false);
+  });
+});
+
+describe("applyOperationalGatesToInventoryPermissions edit/delete", () => {
+  const allTrue = buildInventoryActionPermissions(() => true);
+
+  it("does not gate edit/delete by operational status", () => {
+    const gated = applyOperationalGatesToInventoryPermissions(allTrue, "ASSIGNED");
+    expect(gated.edit).toBe(true);
+    expect(gated.delete).toBe(true);
+  });
 });
 
 describe("applyOperationalGatesToInventoryPermissions", () => {

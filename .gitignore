@@ -56,3 +56,7 @@ alembic/versions/*.pyc
 # Asset-module local file storage (never commit uploaded blobs)
 var/asset-storage/
 **/var/asset-storage/
+.env
+.env1
+.env.*
+!.env.example

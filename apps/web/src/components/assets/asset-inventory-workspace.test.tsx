@@ -27,9 +27,10 @@ const sampleRow = {
   serialNumber: "SN-1",
   manufacturer: "Dell",
   model: "XPS",
-  configuration: "i7 · 16GB",
-  currentHolder: "—",
-  employeeId: "—",
+  configuration: "Processor: Intel Core i7\nRAM: 16 GB\nStorage: 512 GB SSD",
+  chargerCode: "CHG-001",
+  currentHolder: "Rohan Mehta",
+  employeeId: "EMP-002",
   department: "IT",
   branch: "Noida",
   operationalStatus: "READY_TO_MOVE",
@@ -44,7 +45,7 @@ const sampleRow = {
     remarks: "—",
     assignmentRemarks: "—",
     returnRemarks: "—",
-    accessories: [],
+    accessories: [{ typeLabel: "Charger", serialDisplay: "CHG-001" }],
   },
   assignmentHistory: [],
 };
@@ -94,10 +95,53 @@ describe("AssetInventoryWorkspace", () => {
     expect(screen.queryByTestId("inventory-filters-trigger")).not.toBeInTheDocument();
   });
 
-  it("shows table row on desktop", () => {
+  it("shows table row on desktop without Asset Code column", () => {
     renderWorkspace();
     const table = screen.getByTestId("inventory-table");
-    expect(within(table).getByText("AST-1")).toBeInTheDocument();
+    expect(within(table).queryByRole("columnheader", { name: "Asset Code" })).not.toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "Configuration" })).toBeInTheDocument();
+    expect(within(table).getByRole("columnheader", { name: "Charger" })).toBeInTheDocument();
+    expect(within(table).getByText("Laptop")).toBeInTheDocument();
+    expect(within(table).queryByText("AST-1")).not.toBeInTheDocument();
+  });
+
+  it("renders Configuration with Processor/RAM/Storage and separate Charger code", () => {
+    renderWorkspace();
+    const table = screen.getByTestId("inventory-table");
+    const config = within(table).getByTestId("inventory-configuration-cell");
+    expect(config).toHaveTextContent("Processor: Intel Core i7");
+    expect(config).toHaveTextContent("RAM: 16 GB");
+    expect(config).toHaveTextContent("Storage: 512 GB SSD");
+    expect(config).not.toHaveTextContent("CHG-001");
+
+    const charger = within(table).getByTestId("inventory-charger-cell");
+    expect(charger).toHaveTextContent("CHG-001");
+    expect(charger.textContent).toBe("CHG-001");
+  });
+
+  it("keeps Charger cell completely blank when no charger code", () => {
+    renderWorkspace({
+      rows: [
+        {
+          ...sampleRow,
+          id: "2",
+          chargerCode: "",
+          expandable: { ...sampleRow.expandable, accessories: [] },
+        },
+      ],
+    });
+    const charger = screen.getByTestId("inventory-charger-cell");
+    expect(charger.textContent).toBe("");
+    expect(charger).not.toHaveTextContent("—");
+    expect(charger).not.toHaveTextContent("No");
+    expect(charger).not.toHaveTextContent("N/A");
+  });
+
+  it("shows the actual employee name in Assignee", () => {
+    renderWorkspace();
+    const assignee = screen.getByTestId("inventory-assignee-cell");
+    expect(assignee).toHaveTextContent("Rohan Mehta");
+    expect(assignee).not.toHaveTextContent("Assigned");
   });
 
   it("renders action menu in table", () => {

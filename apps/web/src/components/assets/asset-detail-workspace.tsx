@@ -2,12 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Loader2, QrCode, Trash2, UserPlus, Wrench } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Loader2, Pencil, QrCode, Trash2, UserPlus, Wrench } from "lucide-react";
 
 import { openMaintenanceForAsset } from "@/components/assets/asset-maintenance-workspace";
 
 import { AssetDiscoveryPanel } from "@/components/assets/asset-discovery-panel";
+import { DeleteAssetConfirmDialog } from "@/components/assets/delete-asset-confirm-dialog";
 import { StartDisposalConfirmDialog } from "@/components/assets/start-disposal-confirm-dialog";
 import { ReinstateConfirmDialog } from "@/components/assets/reinstate-confirm-dialog";
 import { buildReturnWizardHref } from "@/components/assets/navigation/assignment-navigation";
@@ -38,6 +39,7 @@ import {
   parseDiscoveryProfile,
   prdStatusLabel,
 } from "@/domain/asset-prd";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { isAuthenticated } from "@/lib/auth";
 import {
   employeeDirectoryById,
@@ -77,6 +79,9 @@ function displayText(value: unknown): string {
 
 export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { can } = useUserPermissions();
+  const canEditAsset = can("asset.asset:update");
   const [tab, setTab] = useState<Tab>("overview");
   const [asset, setAsset] = useState<AssetsRow | null>(null);
   const [assignments, setAssignments] = useState<AssetsRow[]>([]);
@@ -91,11 +96,21 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
   const [reinstateOpen, setReinstateOpen] = useState(false);
   const [reinstateSubmitting, setReinstateSubmitting] = useState(false);
   const [reinstateError, setReinstateError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [employeeLookup, setEmployeeLookup] = useState<EmployeeLookup>({});
   const [currentLocationLabel, setCurrentLocationLabel] = useState<string | null>(null);
   const [branchLabel, setBranchLabel] = useState<string>("—");
   const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("saved") === "1") {
+      setActionSuccess("Asset updated successfully.");
+      router.replace(`/assets/assets/${assetId}`, { scroll: false });
+    }
+  }, [assetId, router, searchParams]);
 
   const load = useCallback(async () => {
     if (!isAuthenticated()) return;
@@ -203,6 +218,22 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
     }
   }
 
+  async function confirmDelete() {
+    setDeleteSubmitting(true);
+    setDeleteError(null);
+    try {
+      await assetRegisterService.softDelete(assetId);
+      setDeleteOpen(false);
+      router.push("/assets/assets");
+    } catch (err) {
+      setDeleteError(
+        err instanceof ApiClientError ? err.message : "Could not delete asset",
+      );
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  }
+
   const activity = useMemo(
     () =>
       buildRecentActivity(
@@ -276,6 +307,35 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
         description={`${asset.asset_code ?? ""} · ${prdStatusLabel(prdStatus)}`}
         actions={
           <div className="flex flex-wrap gap-2">
+            {canEditAsset ? (
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="cursor-pointer transition-colors duration-200"
+                data-testid="asset-detail-edit"
+              >
+                <Link href={`/assets/assets/${assetId}/edit`}>
+                  <Pencil className="mr-1 size-4" aria-hidden />
+                  Edit Asset
+                </Link>
+              </Button>
+            ) : null}
+            {canEditAsset ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="cursor-pointer transition-colors duration-200"
+                data-testid="asset-detail-delete"
+                onClick={() => {
+                  setDeleteError(null);
+                  setDeleteOpen(true);
+                }}
+              >
+                <Trash2 className="mr-1 size-4" aria-hidden />
+                Delete Asset
+              </Button>
+            ) : null}
             {!opsBlocked && opsStatus.toUpperCase() === "READY_TO_MOVE" ? (
               <Button variant="outline" size="sm" asChild className="cursor-pointer">
                 <Link href={`/assets/asset-assignments/new?assetId=${assetId}`}>
@@ -541,34 +601,37 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
               {components.length === 0 ? (
                 <p className="text-muted-foreground">No accessories assigned</p>
               ) : (
-                <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
-                  {components.map((c) => (
-                    <li
-                      key={c.id}
-                      className="rounded-md border border-border px-3 py-2 transition-colors duration-200"
-                    >
-                      <div className="font-medium">
-                        {c.linked_asset_code
-                          ? `${componentTypeLabel(c.component_type)} · ${c.linked_asset_code}`
-                          : componentTypeLabel(c.component_type)}
-                      </div>
-                      <div className="text-muted-foreground">
-                        {c.linked_asset_name || c.component_name}
-                      </div>
-                      {c.linked_asset_operational_status ? (
-                        <div className="text-xs text-muted-foreground">
-                          Ops: {c.linked_asset_operational_status}
-                        </div>
-                      ) : null}
-                      <div className="text-xs text-muted-foreground">
-                        S/N: {c.serial_number?.trim() || "—"}
-                      </div>
-                      <Badge variant="secondary" className="mt-1">
-                        {c.status}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[280px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-xs text-muted-foreground">
+                        <th className="px-2 py-1.5 font-medium">Type</th>
+                        <th className="px-2 py-1.5 font-medium">Code</th>
+                        <th className="px-2 py-1.5 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {components.map((c) => (
+                        <tr key={c.id} className="border-b border-border/60 last:border-0">
+                          <td className="px-2 py-2 font-medium">
+                            {c.linked_asset_code
+                              ? `${componentTypeLabel(c.component_type)} · ${c.linked_asset_code}`
+                              : componentTypeLabel(c.component_type)}
+                          </td>
+                          <td className="px-2 py-2 font-mono text-xs text-muted-foreground">
+                            {c.component_code?.trim() ||
+                              c.serial_number?.trim() ||
+                              c.linked_asset_code ||
+                              "—"}
+                          </td>
+                          <td className="px-2 py-2">
+                            <Badge variant="secondary">{c.status}</Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -722,6 +785,22 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
           setReinstateError(null);
         }}
         onConfirm={() => void confirmReinstate()}
+      />
+      <DeleteAssetConfirmDialog
+        open={deleteOpen}
+        asset={{
+          id: assetId,
+          assetCode: String(asset.asset_code ?? ""),
+          assetName: String(asset.asset_name ?? ""),
+        }}
+        submitting={deleteSubmitting}
+        error={deleteError}
+        onCancel={() => {
+          if (deleteSubmitting) return;
+          setDeleteOpen(false);
+          setDeleteError(null);
+        }}
+        onConfirm={() => void confirmDelete()}
       />
     </div>
   );

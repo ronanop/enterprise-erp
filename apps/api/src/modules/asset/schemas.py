@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 
 class OrmModel(BaseModel):
@@ -103,6 +103,22 @@ class AssetCreate(BaseModel):
     location_label: str | None = None
     location_id: UUID | None = None
     building_id: UUID | None = None
+    # Convenience inputs — persisted as AstAssetComponent (CHARGER), not asset columns.
+    charger_available: bool | None = None
+    charger_code: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_charger_fields(self):
+        if self.charger_available is True:
+            code = (self.charger_code or "").strip()
+            if not code:
+                raise ValueError("Charger Code is required when Charger Available is Yes")
+            self.charger_code = code
+        elif self.charger_available is False:
+            self.charger_code = None
+        elif self.charger_code is not None and (self.charger_code or "").strip():
+            raise ValueError("Charger Code cannot be set when Charger Available is not Yes")
+        return self
 
 
 AssetRegistrationCreate = AssetCreate
@@ -142,6 +158,19 @@ class AssetUpdate(BaseModel):
     is_shared: bool | None = None
     location_label: str | None = None
     version: int | None = None
+    charger_available: bool | None = None
+    charger_code: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_charger_fields(self):
+        if self.charger_available is True:
+            code = (self.charger_code or "").strip()
+            if not code:
+                raise ValueError("Charger Code is required when Charger Available is Yes")
+            self.charger_code = code
+        elif self.charger_available is False:
+            self.charger_code = None
+        return self
 
 
 AssetRegistrationUpdate = AssetUpdate
@@ -289,6 +318,8 @@ class AssetInformationPortalResponse(BaseModel):
     serial_number: str | None = None
     asset_type: str
     status: str
+    # Custody / ops label for UI (not lifecycle workflow: draft/submitted/approved).
+    operational_status: str | None = None
     assignment: AssetPortalAssignmentSummary | None = None
     warranty: AssetPortalWarrantySummary | None = None
     insurance: AssetPortalInsuranceSummary | None = None
@@ -729,7 +760,12 @@ class UserTransferAssignRequest(BaseModel):
     """Step 3 — transfer custody to a new employee (requires prior verification)."""
 
     verification_id: UUID
-    employee_id: UUID
+    employee_source: str = "MASTER_DATA"
+    employee_id: UUID | None = None
+    manual_employee_name: str | None = Field(default=None, max_length=255)
+    manual_employee_phone: str | None = Field(default=None, max_length=30)
+    manual_employee_email: str | None = Field(default=None, max_length=255)
+    manual_employee_deployed_to: str | None = Field(default=None, max_length=255)
     department_id: UUID | None = None
     to_location_id: UUID
     to_building_id: UUID

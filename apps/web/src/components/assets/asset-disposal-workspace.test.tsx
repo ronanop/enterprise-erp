@@ -85,8 +85,8 @@ describe("disposal helpers", () => {
   });
 
   it("maps record status labels", () => {
-    expect(disposalRecordStatusLabel("draft")).toBe("Sent to Disposal");
     expect(disposalRecordStatusLabel("posted")).toBe("Disposed");
+    expect(disposalRecordStatusLabel("draft")).toBe("Sent to Disposal");
   });
 
   it("builds rich labels and remarks gate message", () => {
@@ -163,23 +163,29 @@ describe("AssetDisposalWorkspace", () => {
     expect(createMock).not.toHaveBeenCalled();
   });
 
-  it("creates scrap disposal with remarks and shows success", async () => {
+  it("creates scrap disposal with remarks and shows Disposed status", async () => {
     const user = userEvent.setup();
+    let disposals: unknown[] = [];
     listMock.mockImplementation(async (path: string) => {
       if (String(path).includes("asset-disposals")) {
-        return { data: { items: [], total: 0, page: 1, page_size: 25 } };
+        return { data: { items: disposals, total: disposals.length, page: 1, page_size: 25 } };
       }
       return { data: { items: [readyAsset()], total: 1, page: 1, page_size: 200 } };
     });
-    createMock.mockResolvedValue({
-      data: {
-        id: "d1",
-        document_number: "ADISP-1",
-        status: "draft",
-        disposal_type: "scrap",
-        remarks: "Broken beyond repair",
-        asset_id: "asset-1",
-      },
+    createMock.mockImplementation(async () => {
+      disposals = [
+        {
+          id: "d1",
+          document_number: "ADISP-1",
+          asset_id: "asset-1",
+          disposal_type: "scrap",
+          remarks: "Broken beyond repair",
+          status: "posted",
+          version: 1,
+          branch_id: "branch-1",
+        },
+      ];
+      return { data: disposals[0] };
     });
     render(<AssetDisposalWorkspace />);
     const select = await screen.findByTestId("disposal-asset-select");
@@ -194,8 +200,9 @@ describe("AssetDisposalWorkspace", () => {
       branch_id: "branch-1",
     });
     expect(await screen.findByTestId("disposal-success")).toHaveTextContent(
-      /Asset sent to disposal successfully/i,
+      /Asset disposed successfully/i,
     );
+    expect(await screen.findByText("Disposed")).toBeInTheDocument();
   });
 
   it("shows existing disposal records with remarks", async () => {

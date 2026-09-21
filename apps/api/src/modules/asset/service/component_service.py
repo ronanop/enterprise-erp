@@ -358,6 +358,70 @@ class AssetComponentService:
         )
         return self._enrich_row(ctx, updated)
 
+    def update_charger_identity(
+        self, ctx: TenantContext, row_id: UUID, *, charger_code: str
+    ):
+        """Update an active CHARGER accessory code (component_code + serial_number).
+
+        Preserves the same component row id (no parallel charger record). Enforces
+        company-wide serial uniqueness and blocks updates while issued.
+        """
+        from modules.asset.domain.enums import AssetComponentType
+        from modules.asset.domain.exceptions import ComponentValidationError
+        from modules.asset.repository.assignment_component_repository import (
+            AssignmentComponentRepository,
+        )
+
+        row = self.get_model(ctx, row_id)
+        if str(row.component_type or "").upper() != AssetComponentType.CHARGER.value:
+            raise ComponentValidationError("Only CHARGER components can use charger identity update")
+        code = str(charger_code or "").strip()
+        if not code:
+            raise ComponentValidationError("Charger Code is required")
+        if len(code) > 100:
+            raise ComponentValidationError("Charger Code exceeds maximum length")
+
+        blocking = AssignmentComponentRepository(self._db).find_active_issue(
+            ctx, component_id=row.id
+        )
+        if blocking:
+            raise ComponentValidationError(
+                "Cannot change charger code while the charger is issued on an assignment"
+            )
+
+        if self._repo.find_active_by_code(
+            ctx, asset_id=row.asset_id, component_code=code, exclude_id=row.id
+        ):
+            raise ComponentValidationError(
+                "An active component with this component_code already exists on the asset"
+            )
+        if self._repo.find_active_by_serial(
+            ctx, company_id=row.company_id, serial_number=code, exclude_id=row.id
+        ):
+            raise ComponentValidationError(
+                "An active component with this serial_number already exists in the company"
+            )
+
+        updated = self._repo.update(
+            ctx,
+            row_id,
+            component_code=code,
+            serial_number=code,
+            component_name="Charger",
+            version=int(row.version or 1),
+        )
+        if updated is None:
+            raise NotFoundException("Component not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name=ENTITY_AST_COMPONENT,
+            entity_id=row_id,
+            operation="update",
+            performed_by=ctx.user_id,
+            new_value={"component_code": code, "serial_number": code, "reason": "charger_code"},
+        )
+        return self._enrich_row(ctx, updated)
+
     def replace(self, ctx: TenantContext, row_id: UUID, **successor_fields):
         row = self.get_model(ctx, row_id)
         self._validator.validate_replace_readiness(ctx, row)

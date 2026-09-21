@@ -24,6 +24,9 @@ import {
   tableRowSerialFromIndex,
   tableSerialCellClassName,
   tableSerialHeaderClassName,
+  StatusBadge,
+  formatPortalOverviewStatus,
+  isOperationalStatus,
 } from "@/components/assets/shared";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +49,39 @@ import {
 
 function dash(value?: string | null): string {
   return value && String(value).trim() ? String(value) : "—";
+}
+
+function PortalOverviewStatus({
+  operationalStatus,
+  lifecycleStatus,
+}: {
+  operationalStatus?: string | null;
+  lifecycleStatus?: string | null;
+}) {
+  const label = formatPortalOverviewStatus({
+    operational_status: operationalStatus,
+    status: lifecycleStatus,
+  });
+  const opsKey = String(operationalStatus ?? "")
+    .trim()
+    .replace(/-/g, "_")
+    .toUpperCase();
+  return (
+    <div data-testid="portal-overview-status">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">Status</div>
+      {label === "—" ? (
+        <div className="mt-0.5">—</div>
+      ) : isOperationalStatus(opsKey) ? (
+        <div className="mt-1">
+          <StatusBadge kind="operational" status={opsKey} />
+        </div>
+      ) : (
+        <Badge variant="secondary" className="mt-1 text-xs">
+          {label}
+        </Badge>
+      )}
+    </div>
+  );
 }
 
 type PortalTab =
@@ -308,7 +344,10 @@ export function AssetInformationPortalView({ assetId }: Props) {
                 </CardHeader>
                 <CardContent className="grid gap-3 sm:grid-cols-2 text-sm">
                   <Field label="Asset code" value={portal.asset_code} mono />
-                  <Field label="Status" value={portal.status} badge />
+                  <PortalOverviewStatus
+                    operationalStatus={portal.operational_status}
+                    lifecycleStatus={portal.status}
+                  />
                   <Field label="Asset name" value={portal.asset_name} />
                   <Field label="Type" value={portal.asset_type} />
                   <Field

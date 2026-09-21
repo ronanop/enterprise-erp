@@ -12,12 +12,14 @@ import { createAssetNavigation } from "@/components/assets/navigation/asset-navi
 import { BRANCH_ALL_VALUE, EMPTY_INVENTORY_FILTERS } from "@/components/assets/shared";
 import { assetOperationsService } from "@/services/assets-service";
 
+const push = vi.fn();
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn() }),
+  useRouter: () => ({ push, replace: vi.fn(), prefetch: vi.fn() }),
 }));
 
 vi.mock("@/components/assets/navigation/use-asset-navigation", () => ({
-  useAssetNavigation: () => createAssetNavigation(vi.fn()),
+  useAssetNavigation: () => createAssetNavigation(push),
 }));
 
 vi.mock("@/hooks/use-user-permissions", () => ({
@@ -89,6 +91,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  push.mockReset();
   vi.spyOn(assetOperationsService, "listAssets").mockImplementation(() =>
     Promise.resolve({
       items: [assetItem],

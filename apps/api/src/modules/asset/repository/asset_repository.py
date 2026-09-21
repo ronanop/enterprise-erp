@@ -656,3 +656,16 @@ class AssetRepository(AstScopedRepository):
             row.version = int(row.version or 1) + 1
         self.db.flush()
         return row
+
+    def soft_delete(self, ctx: TenantContext, row_id: UUID) -> AstAsset | None:
+        """Lifecycle deactivation — sets is_deleted; never physically DELETEs."""
+        row = self.get(ctx, row_id)
+        if row is None:
+            return None
+        row.is_deleted = True
+        row.updated_at = utcnow()
+        row.updated_by = ctx.user_id
+        if hasattr(row, "version"):
+            row.version = int(row.version or 1) + 1
+        self.db.flush()
+        return row

@@ -162,9 +162,19 @@ export function UserTransferContainer({ assetId }: UserTransferContainerProps) {
     setFinalizeBusy(true);
     setFinalizeError(null);
     try {
+      const isManual = assignForm.employeeSource === "MANUAL_ENTRY";
       const result = await userTransferService.assignToNewUser(assetId.trim(), {
         verification_id: verificationResult.verification_id,
-        employee_id: assignForm.employeeId,
+        employee_source: assignForm.employeeSource,
+        employee_id: isManual ? null : assignForm.employeeId,
+        manual_employee_name: isManual ? assignForm.manualEmployeeName.trim() || null : null,
+        manual_employee_phone: isManual ? assignForm.manualEmployeePhone.trim() || null : null,
+        manual_employee_email: isManual
+          ? assignForm.manualEmployeeEmail.trim() || null
+          : null,
+        manual_employee_deployed_to: isManual
+          ? assignForm.manualEmployeeDeployedTo.trim() || null
+          : null,
         department_id: assignForm.departmentId || null,
         to_location_id: assignForm.toLocationId,
         to_building_id: assignForm.toBuildingId,

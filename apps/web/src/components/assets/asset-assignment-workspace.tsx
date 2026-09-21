@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetState
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   CheckCircle2,
-  Eye,
   FileText,
   Loader2,
   Plus,
@@ -12,6 +11,7 @@ import {
   Send,
   ShieldCheck,
   SquarePen,
+  Trash2,
   Undo2,
   X,
 } from "lucide-react";
@@ -21,7 +21,21 @@ import {
   tableSerialCellClassName,
   tableSerialHeaderClassName,
 } from "@/components/assets/shared";
-
+import {
+  formatAssignmentDate,
+  formatAssignmentRegisterDcColumn,
+  formatAssignmentStatus,
+  isReturnedAssignment,
+  resolveRegisterAssetCode,
+  resolveRegisterAssetName,
+  resolveRegisterAssignee,
+  resolveRegisterBuilding,
+  resolveRegisterDepartment,
+  resolveRegisterEmployeeId,
+  resolveRegisterLocation,
+} from "@/components/assets/assignment-register-display";
+import type { EmployeeLookup } from "@/components/assets/inventory/register-parity";
+import { pickLinkedDcChallan } from "@/components/assets/dc-challan/dc-challan-document";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -39,7 +53,9 @@ import {
 import { getAccessTokenUserId, isAuthenticated } from "@/lib/auth";
 import {
   listDepartmentOptions,
+  listEmployeeDirectory,
   listEmployeeOptions,
+  type EmployeeDirectoryEntry,
   type OrgOption,
 } from "@/lib/org-options";
 import { cn } from "@/lib/utils";
@@ -54,8 +70,16 @@ import {
   canLaunchDcFromAssignment,
   isOpenDcChallanStatus,
 } from "@/components/assets/navigation/dc-challan-navigation";
-import { formatDeliveryChallanSummary } from "@/components/assets/inventory/register-parity";
-import { dcChallanService } from "@/services/assets-service";
+import {
+  assetLocationService,
+  dcChallanService,
+  type AssetLocationRow,
+  type DcChallanRow,
+} from "@/services/assets-service";
+import {
+  listSiteBuildings,
+  listSiteLocations,
+} from "@/services/asset-site-location-service";
 
 type AssetRow = {
   id: string;
@@ -64,6 +88,7 @@ type AssetRow = {
   branch_id: string;
   department_id?: string | null;
   custodian_employee_id?: string | null;
+  current_location_label?: string | null;
   status: string;
 };
 
@@ -73,6 +98,8 @@ type AssignmentRow = {
   asset_id: string;
   allocation_type: string;
   employee_id?: string | null;
+  employee_source?: string | null;
+  manual_employee_name?: string | null;
   department_id?: string | null;
   project_id?: string | null;
   expected_return_at?: string | null;
@@ -106,8 +133,24 @@ type AssignmentFormState = {
   project_id: string;
 };
 
-const STATUS_OPTIONS = ["", "draft", "submitted", "approved", "active", "returned", "cancelled"] as const;
+/** Register filter — lifecycle assignment status only (never workflow labels). */
+const STATUS_OPTIONS = [
+  { value: "", label: "All statuses" },
+  { value: "active", label: "Active" },
+  { value: "returned", label: "Returned" },
+  { value: "cancelled", label: "Cancelled" },
+] as const;
 const ALLOCATION_TYPES = ["employee", "department", "project", "branch", "warehouse"] as const;
+
+/**
+ * STATUS column label for the assignment register table.
+ * Uses assignment lifecycle `status` only — never `workflow_status`.
+ * If a composite sneaks into `status` (e.g. "active / approved"), take the lifecycle token only.
+ */
+function registerStatusLabel(status: string | null | undefined): string {
+  const lifecycle = (status ?? "").split("/")[0]?.trim() ?? "";
+  return formatAssignmentStatus(lifecycle);
+}
 
 const EMPTY_FORM: AssignmentFormState = {
   asset_id: "",
@@ -127,18 +170,78 @@ function parseListItems<T>(data: unknown): T[] {
   return [];
 }
 
-function optionLabel(map: Map<string, OrgOption>, id?: string | null): string {
-  if (!id) return "—";
-  return map.get(id)?.label ?? `${id.slice(0, 8)}…`;
+function formatDcCell(
+  row: AssignmentRow,
+  dc: DcChallanRow | null | undefined,
+): string {
+  return formatAssignmentRegisterDcColumn({
+    delivery_reference_number: row.delivery_reference_number,
+    delivery_reference_status: row.delivery_reference_status,
+    delivery_challan_signature_status: row.delivery_challan_signature_status,
+    hasDcRecord: Boolean(dc),
+    dcChallanStatus: dc?.status,
+  });
 }
 
-function formatDcCell(row: AssignmentRow): string {
-  return formatDeliveryChallanSummary(
-    row.delivery_reference_number,
-    row.delivery_reference_status,
-    row.delivery_challan_signature_status,
+async function fetchLinkedDcByAssignmentId(
+  items: AssignmentRow[],
+): Promise<Record<string, DcChallanRow | null>> {
+  const map: Record<string, DcChallanRow | null> = {};
+  await Promise.all(
+    items.map(async (row) => {
+      try {
+        const res = await dcChallanService.search({
+          assignment_id: row.id,
+          page: 1,
+          page_size: 10,
+        });
+        map[row.id] = pickLinkedDcChallan(res.items ?? []);
+      } catch {
+        map[row.id] = null;
+      }
+    }),
   );
+  return map;
 }
+
+async function fetchCurrentAssetLocations(): Promise<Record<string, AssetLocationRow>> {
+  const byAsset: Record<string, AssetLocationRow> = {};
+  let pageNum = 1;
+  let totalCount = 0;
+  const pageSize = 200;
+  do {
+    const res = await assetLocationService.search({
+      page: pageNum,
+      page_size: pageSize,
+      is_current: true,
+      status: "active",
+    });
+    totalCount = res.total;
+    for (const loc of res.items) {
+      if (loc.asset_id) byAsset[String(loc.asset_id)] = loc;
+    }
+    if (res.items.length === 0) break;
+    pageNum += 1;
+  } while ((pageNum - 1) * pageSize < totalCount);
+  return byAsset;
+}
+
+function directoryToEmployeeLookup(
+  directory: EmployeeDirectoryEntry[],
+): EmployeeLookup {
+  const out: EmployeeLookup = {};
+  for (const entry of directory) {
+    out[entry.id] = {
+      label: entry.label,
+      displayName: entry.displayName,
+      employeeCode: entry.employeeCode,
+      mobile: entry.mobile,
+    };
+  }
+  return out;
+}
+
+const REGISTER_COL_COUNT = 10;
 
 export function AssetAssignmentWorkspace() {
   const searchParams = useSearchParams();
@@ -151,8 +254,15 @@ export function AssetAssignmentWorkspace() {
   const [rows, setRows] = useState<AssignmentRow[]>([]);
   const [assetOptions, setAssetOptions] = useState<AssetRow[]>([]);
   const [employees, setEmployees] = useState<OrgOption[]>([]);
+  const [employeeDirectory, setEmployeeDirectory] = useState<EmployeeDirectoryEntry[]>([]);
   const [departments, setDepartments] = useState<OrgOption[]>([]);
   const [projects, setProjects] = useState<OrgOption[]>([]);
+  const [locationByAssetId, setLocationByAssetId] = useState<Record<string, AssetLocationRow>>({});
+  const [siteLocationLabels, setSiteLocationLabels] = useState<Record<string, string>>({});
+  const [buildingLabels, setBuildingLabels] = useState<Record<string, string>>({});
+  const [dcByAssignmentId, setDcByAssignmentId] = useState<Record<string, DcChallanRow | null>>(
+    {},
+  );
   const [modalMode, setModalMode] = useState<ModalMode | null>(null);
   const [modalRow, setModalRow] = useState<AssignmentRow | null>(null);
   const [total, setTotal] = useState(0);
@@ -167,10 +277,27 @@ export function AssetAssignmentWorkspace() {
   const [workflowComments, setWorkflowComments] = useState("");
   const [form, setForm] = useState<AssignmentFormState>(EMPTY_FORM);
   const [hasOpenDc, setHasOpenDc] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
-  const employeeMap = useMemo(() => new Map(employees.map((e) => [e.id, e])), [employees]);
-  const departmentMap = useMemo(() => new Map(departments.map((d) => [d.id, d])), [departments]);
-  const projectMap = useMemo(() => new Map(projects.map((p) => [p.id, p])), [projects]);
+  const departmentLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const d of departments) labels[d.id] = d.label;
+    return labels;
+  }, [departments]);
+  const projectLabels = useMemo(() => {
+    const labels: Record<string, string> = {};
+    for (const p of projects) labels[p.id] = p.label;
+    return labels;
+  }, [projects]);
+  const employeeLookup = useMemo(
+    () => directoryToEmployeeLookup(employeeDirectory),
+    [employeeDirectory],
+  );
+  const employeeDeptById = useMemo(() => {
+    const map: Record<string, string | null> = {};
+    for (const e of employeeDirectory) map[e.id] = e.departmentId;
+    return map;
+  }, [employeeDirectory]);
 
   const assetMap = useMemo(
     () => new Map(assetOptions.map((asset) => [asset.id, asset])),
@@ -195,14 +322,34 @@ export function AssetAssignmentWorkspace() {
 
   const loadLookups = useCallback(async () => {
     if (!isAuthenticated()) return;
-    const [emp, dept, proj] = await Promise.all([
+    const [emp, directory, dept, proj, locations, buildings] = await Promise.all([
       listEmployeeOptions(),
+      listEmployeeDirectory().catch(() => [] as EmployeeDirectoryEntry[]),
       listDepartmentOptions(),
       listProjectOptions().catch(() => [] as OrgOption[]),
+      listSiteLocations().catch(() => []),
+      listSiteBuildings().catch(() => []),
     ]);
     setEmployees(emp);
+    setEmployeeDirectory(directory);
     setDepartments(dept);
     setProjects(proj);
+    const siteLabels: Record<string, string> = {};
+    for (const loc of locations) siteLabels[loc.id] = loc.name;
+    setSiteLocationLabels(siteLabels);
+    const bldLabels: Record<string, string> = {};
+    for (const b of buildings) bldLabels[b.id] = b.name;
+    setBuildingLabels(bldLabels);
+  }, []);
+
+  // Locations loaded separately so Promise.all typing stays clear
+  const loadLocations = useCallback(async () => {
+    if (!isAuthenticated()) return;
+    try {
+      setLocationByAssetId(await fetchCurrentAssetLocations());
+    } catch {
+      setLocationByAssetId({});
+    }
   }, []);
 
   const loadAssets = useCallback(async () => {
@@ -228,6 +375,49 @@ export function AssetAssignmentWorkspace() {
     }
   }, [assetsPath]);
 
+  const ensureAssetsForRows = useCallback(
+    async (items: AssignmentRow[]) => {
+      const ids = [
+        ...new Set(items.map((row) => row.asset_id).filter((id): id is string => Boolean(id))),
+      ];
+      if (ids.length === 0) return;
+
+      let known = new Set<string>();
+      setAssetOptions((prev) => {
+        known = new Set(prev.map((a) => a.id));
+        return prev;
+      });
+
+      const missing = ids.filter((id) => !known.has(id));
+      if (missing.length === 0) return;
+
+      const fetched: AssetRow[] = [];
+      await Promise.all(
+        missing.map(async (id) => {
+          try {
+            const res = await resourceService.get<AssetRow>(assetsPath, id);
+            if (res.data) fetched.push(res.data as AssetRow);
+          } catch {
+            /* leave unresolved */
+          }
+        }),
+      );
+      if (fetched.length === 0) return;
+      setAssetOptions((prev) => {
+        const seen = new Set(prev.map((a) => a.id));
+        const next = [...prev];
+        for (const asset of fetched) {
+          if (!seen.has(asset.id)) {
+            seen.add(asset.id);
+            next.push(asset);
+          }
+        }
+        return next;
+      });
+    },
+    [assetsPath],
+  );
+
   const load = useCallback(async () => {
     if (!isAuthenticated()) return;
     setLoading(true);
@@ -244,45 +434,55 @@ export function AssetAssignmentWorkspace() {
         `${apiPath}?${query.toString()}`,
       );
       const payload = res.data as ListPayload<AssignmentRow> | AssignmentRow[];
+      let items: AssignmentRow[] = [];
       if (payload && typeof payload === "object" && "items" in payload) {
-        setRows(payload.items ?? []);
+        items = payload.items ?? [];
+        setRows(items);
         setTotal(payload.total ?? 0);
       } else if (Array.isArray(payload)) {
+        items = payload;
         setRows(payload);
         setTotal(payload.length);
       } else {
         setRows([]);
         setTotal(0);
       }
+      void ensureAssetsForRows(items);
+      try {
+        setDcByAssignmentId(await fetchLinkedDcByAssignmentId(items));
+      } catch {
+        setDcByAssignmentId({});
+      }
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load assignments");
       setRows([]);
       setTotal(0);
+      setDcByAssignmentId({});
     } finally {
       setLoading(false);
     }
-  }, [allocationTypeFilter, apiPath, page, pageSize, search, statusFilter]);
+  }, [
+    allocationTypeFilter,
+    apiPath,
+    ensureAssetsForRows,
+    page,
+    pageSize,
+    search,
+    statusFilter,
+  ]);
 
   useEffect(() => {
     void loadLookups();
     void loadAssets();
-  }, [loadAssets, loadLookups]);
+    void loadLocations();
+  }, [loadAssets, loadLocations, loadLookups]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   function assigneeSummary(row: AssignmentRow): string {
-    if (row.allocation_type === "employee") {
-      return optionLabel(employeeMap, row.employee_id);
-    }
-    if (row.allocation_type === "department") {
-      return optionLabel(departmentMap, row.department_id);
-    }
-    if (row.allocation_type === "project") {
-      return optionLabel(projectMap, row.project_id);
-    }
-    return row.allocation_type;
+    return resolveRegisterAssignee(row, employeeLookup, departmentLabels, projectLabels);
   }
 
   function openCreate(preset?: Partial<AssignmentFormState>) {
@@ -301,6 +501,9 @@ export function AssetAssignmentWorkspace() {
     setModalMode("create");
   }
 
+  // Retained for create-modal path (legacy); primary create uses the wizard.
+  void openCreate;
+
   useEffect(() => {
     if (!prefillAssetId) return;
     if (returnIntent) {
@@ -312,6 +515,7 @@ export function AssetAssignmentWorkspace() {
 
   function openView(row: AssignmentRow) {
     setError(null);
+    setDeleteConfirmOpen(false);
     setModalRow(row);
     setWorkflowComments("");
     setModalMode("view");
@@ -343,16 +547,8 @@ export function AssetAssignmentWorkspace() {
       return;
     }
     setError(null);
-    setModalRow(row);
-    setForm({
-      asset_id: row.asset_id,
-      branch_id: row.branch_id,
-      allocation_type: row.allocation_type,
-      employee_id: row.employee_id ?? "",
-      department_id: row.department_id ?? "",
-      project_id: row.project_id ?? "",
-    });
-    setModalMode("edit");
+    // Existing assignment edit flow: resume draft in the assignment wizard
+    router.push(buildAssignmentWizardHref({ draftId: row.id, assetId: row.asset_id }));
   }
 
   function closeModal() {
@@ -361,6 +557,26 @@ export function AssetAssignmentWorkspace() {
     setModalRow(null);
     setError(null);
     setForm(EMPTY_FORM);
+    setDeleteConfirmOpen(false);
+  }
+
+  async function confirmDeleteAssignment() {
+    if (!modalRow) return;
+    setActionLoading(true);
+    setError(null);
+    try {
+      // Existing assignment cancel — does not soft-delete or touch the asset.
+      await resourceService.action(apiPath, modalRow.id, "cancel");
+      setDeleteConfirmOpen(false);
+      setModalMode(null);
+      setModalRow(null);
+      setForm(EMPTY_FORM);
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Failed to delete assignment");
+    } finally {
+      setActionLoading(false);
+    }
   }
 
   function onFormAssetChange(assetId: string) {
@@ -471,12 +687,21 @@ export function AssetAssignmentWorkspace() {
     }
   }
 
-  const statusBadge = (row: AssignmentRow) => (
-    <Badge variant="secondary" className="font-mono text-xs">
-      {row.status}
-      {row.workflow_status ? ` / ${row.workflow_status}` : ""}
-    </Badge>
-  );
+  const statusBadge = (row: AssignmentRow) => {
+    const label = registerStatusLabel(row.status);
+    return (
+      <Badge
+        variant="secondary"
+        className="text-xs"
+        data-testid="assignment-status-badge"
+        data-render-source="AssetAssignmentWorkspace"
+        data-status-display={label}
+        data-raw-status={row.status ?? ""}
+      >
+        {label}
+      </Badge>
+    );
+  };
 
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
@@ -493,7 +718,7 @@ export function AssetAssignmentWorkspace() {
     <div className="space-y-4">
       <PageHeader
         title="Asset assignments"
-        description="Allocate assets to employees, departments, projects, or branches with workflow approval and return."
+        description="Register of assigned assets — assignee, location, status, and DC Challan."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -528,7 +753,7 @@ export function AssetAssignmentWorkspace() {
 
       <Card>
         <CardHeader className="space-y-3 pb-3">
-          <CardTitle className="text-base">Assignments</CardTitle>
+          <CardTitle className="text-base">Assigned assets</CardTitle>
           <div className="flex flex-wrap gap-2">
             <Input
               aria-label="Search assignments"
@@ -551,12 +776,13 @@ export function AssetAssignmentWorkspace() {
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__all" className="cursor-pointer">
-                  All statuses
-                </SelectItem>
-                {STATUS_OPTIONS.filter(Boolean).map((status) => (
-                  <SelectItem key={status} value={status} className="cursor-pointer">
-                    {status}
+                {STATUS_OPTIONS.map((opt) => (
+                  <SelectItem
+                    key={opt.value || "__all"}
+                    value={opt.value || "__all"}
+                    className="cursor-pointer"
+                  >
+                    {opt.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -586,14 +812,15 @@ export function AssetAssignmentWorkspace() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="overflow-x-auto rounded-md border">
-            <table className="min-w-full text-sm">
+            <table
+              className="min-w-[68rem] w-full text-sm"
+              data-testid="assignment-register-table"
+              data-render-source="AssetAssignmentWorkspace"
+            >
               <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
-                    <th className={tableSerialHeaderClassName()} scope="col">
-                      {TABLE_SERIAL_HEADER_LABEL}
-                    </th>
-                    <th scope="col" className="px-3 py-2 font-medium">
-                    Document
+                  <th className={tableSerialHeaderClassName()} scope="col">
+                    {TABLE_SERIAL_HEADER_LABEL}
                   </th>
                   <th scope="col" className="px-3 py-2 font-medium">
                     Asset
@@ -602,102 +829,192 @@ export function AssetAssignmentWorkspace() {
                     Assignee
                   </th>
                   <th scope="col" className="px-3 py-2 font-medium">
-                    Type
+                    Employee ID
+                  </th>
+                  <th scope="col" className="px-3 py-2 font-medium">
+                    Department
+                  </th>
+                  <th scope="col" className="px-3 py-2 font-medium">
+                    Location
+                  </th>
+                  <th scope="col" className="px-3 py-2 font-medium">
+                    Building
+                  </th>
+                  <th scope="col" className="px-3 py-2 font-medium">
+                    Assignment Date
                   </th>
                   <th scope="col" className="px-3 py-2 font-medium">
                     Status
                   </th>
-                  <th scope="col" className="px-3 py-2 font-medium">
-                    Delivery Challan
-                  </th>
-                  <th scope="col" className="px-3 py-2 font-medium text-right">
-                    Actions
+                  <th
+                    scope="col"
+                    className="min-w-[13.5rem] whitespace-nowrap px-4 py-2 font-medium"
+                  >
+                    DC Challan
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={8}>
+                    <td
+                      className="px-3 py-8 text-center text-muted-foreground"
+                      colSpan={REGISTER_COL_COUNT}
+                    >
                       <Loader2 className="mx-auto size-5 animate-spin" />
                     </td>
                   </tr>
                 ) : rows.length === 0 ? (
                   <tr>
-                    <td className="px-3 py-8 text-center text-muted-foreground" colSpan={8}>
+                    <td
+                      className="px-3 py-8 text-center text-muted-foreground"
+                      colSpan={REGISTER_COL_COUNT}
+                    >
                       No assignments found.
                     </td>
                   </tr>
                 ) : (
                   rows.map((row, index) => {
                     const asset = assetMap.get(row.asset_id);
+                    const location = locationByAssetId[row.asset_id];
+                    const empDept =
+                      row.employee_id != null
+                        ? employeeDeptById[String(row.employee_id)]
+                        : null;
+                    const assignee = assigneeSummary(row);
+                    const returned = isReturnedAssignment(row);
                     return (
-                      <tr key={row.id} className="border-t transition-colors duration-150 hover:bg-muted/40">
-                        <td className={tableSerialCellClassName()}>{tableRowSerial(page, pageSize, index)}</td>
-                          <td className="px-3 py-2 font-mono text-xs">{row.document_number}</td>
-                        <td className="px-3 py-2">
-                          <div className="font-medium">{asset?.asset_name ?? row.asset_id}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {asset?.asset_code ?? "Unresolved asset"}
+                      <tr
+                        key={row.id}
+                        className="cursor-pointer border-t transition-colors duration-150 hover:bg-muted/40"
+                        data-testid={`assignment-row-${row.id}`}
+                        data-assignment-status={row.status}
+                        data-returned={returned ? "true" : "false"}
+                        onClick={() => openView(row)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            openView(row);
+                          }
+                        }}
+                        tabIndex={0}
+                      >
+                        <td className={tableSerialCellClassName()}>
+                          {tableRowSerial(page, pageSize, index)}
+                        </td>
+                        <td className="px-3 py-2" data-testid="assignment-asset-cell">
+                          <div className="font-medium">
+                            {resolveRegisterAssetName(asset, row.asset_id)}
+                          </div>
+                          <div className="font-mono text-xs text-muted-foreground">
+                            {resolveRegisterAssetCode(asset)}
                           </div>
                         </td>
-                        <td className="px-3 py-2 text-muted-foreground">{assigneeSummary(row)}</td>
-                        <td className="px-3 py-2 text-xs capitalize">{row.allocation_type}</td>
-                        <td className="px-3 py-2">{statusBadge(row)}</td>
-                        <td className="px-3 py-2" data-testid="assignment-dc-cell">
-                          <div className="text-xs leading-snug text-muted-foreground">
-                            {formatDcCell(row)}
-                          </div>
+                        <td
+                          className="px-3 py-2"
+                          data-testid="assignment-assignee-cell"
+                          data-historical={returned ? "true" : undefined}
+                        >
+                          {assignee}
                         </td>
-                        <td className="px-3 py-2">
-                          <div className="flex justify-end gap-1">
-                            <button
-                              type="button"
-                              title="View"
-                              aria-label={`View ${row.document_number}`}
-                              className={cn(
-                                buttonVariants({ variant: "ghost", size: "icon" }),
-                                "cursor-pointer",
-                              )}
-                              onClick={() => openView(row)}
-                            >
-                              <Eye className="size-4" />
-                            </button>
-                            {canLaunchDcFromAssignment(row) ? (
-                              <button
-                                type="button"
-                                title="Create DC Challan"
-                                aria-label={`Create DC Challan for ${row.document_number}`}
-                                className={cn(
-                                  buttonVariants({ variant: "ghost", size: "icon" }),
-                                  "cursor-pointer",
-                                )}
-                                onClick={() =>
-                                  router.push(
-                                    buildDcChallanHref({
-                                      assetId: row.asset_id,
-                                      assignmentId: row.id,
-                                    }),
-                                  )
-                                }
-                              >
-                                <FileText className="size-4" />
-                              </button>
-                            ) : null}
-                            <button
-                              type="button"
-                              title="Edit"
-                              aria-label={`Edit ${row.document_number}`}
-                              disabled={row.status !== "draft"}
-                              className={cn(
-                                buttonVariants({ variant: "ghost", size: "icon" }),
-                                "cursor-pointer disabled:cursor-not-allowed disabled:opacity-40",
-                              )}
-                              onClick={() => openEdit(row)}
-                            >
-                              <SquarePen className="size-4" />
-                            </button>
-                          </div>
+                        <td
+                          className="px-3 py-2 font-mono text-xs"
+                          data-testid="assignment-employee-id-cell"
+                        >
+                          {resolveRegisterEmployeeId(row, employeeLookup)}
+                        </td>
+                        <td className="px-3 py-2" data-testid="assignment-department-cell">
+                          {resolveRegisterDepartment(
+                            row,
+                            asset,
+                            empDept,
+                            departmentLabels,
+                          )}
+                        </td>
+                        <td className="px-3 py-2" data-testid="assignment-location-cell">
+                          {resolveRegisterLocation(asset, location, siteLocationLabels)}
+                        </td>
+                        <td className="px-3 py-2" data-testid="assignment-building-cell">
+                          {resolveRegisterBuilding(location, buildingLabels)}
+                        </td>
+                        <td
+                          className="px-3 py-2 font-mono text-xs"
+                          data-testid="assignment-date-cell"
+                        >
+                          {formatAssignmentDate(row.allocated_at)}
+                        </td>
+                        <td className="px-3 py-2" data-testid="assignment-status-cell">
+                          {statusBadge(row)}
+                        </td>
+                        <td
+                          className="min-w-[13.5rem] px-4 py-2 pr-5"
+                          data-testid="assignment-dc-cell"
+                        >
+                          {(() => {
+                            const linkedDc = dcByAssignmentId[row.id] ?? null;
+                            const hasDc = Boolean(linkedDc);
+                            const canLaunch = canLaunchDcFromAssignment(row);
+                            const statusText = formatDcCell(row, linkedDc);
+                            return (
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                                <div
+                                  className="shrink-0 text-xs leading-snug text-muted-foreground"
+                                  data-testid="assignment-dc-status"
+                                >
+                                  {statusText}
+                                </div>
+                                {!hasDc && canLaunch ? (
+                                  <button
+                                    type="button"
+                                    data-testid="assignment-dc-create"
+                                    aria-label={`Create DC Challan for ${row.document_number}`}
+                                    className={cn(
+                                      buttonVariants({ variant: "outline", size: "sm" }),
+                                      "h-7 shrink-0 cursor-pointer gap-1 px-2.5 text-xs transition-colors duration-200",
+                                    )}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      router.push(
+                                        buildDcChallanHref({
+                                          assetId: row.asset_id,
+                                          assignmentId: row.id,
+                                        }),
+                                      );
+                                    }}
+                                  >
+                                    <FileText className="size-3.5" aria-hidden />
+                                    Create
+                                  </button>
+                                ) : null}
+                                {hasDc && linkedDc ? (
+                                  <button
+                                    type="button"
+                                    data-testid="assignment-dc-open"
+                                    aria-label={`${
+                                      isOpenDcChallanStatus(linkedDc.status) ? "Edit" : "View"
+                                    } DC Challan for ${row.document_number}`}
+                                    className={cn(
+                                      buttonVariants({ variant: "ghost", size: "sm" }),
+                                      "h-7 shrink-0 cursor-pointer gap-1 px-2.5 text-xs transition-colors duration-200",
+                                    )}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      router.push(
+                                        buildDcChallanHref({
+                                          challanId: linkedDc.id,
+                                          assetId: row.asset_id,
+                                          assignmentId: row.id,
+                                        }),
+                                      );
+                                    }}
+                                  >
+                                    <FileText className="size-3.5" aria-hidden />
+                                    {isOpenDcChallanStatus(linkedDc.status) ? "Edit" : "View"}
+                                  </button>
+                                ) : null}
+                              </div>
+                            );
+                          })()}
                         </td>
                       </tr>
                     );
@@ -774,30 +1091,96 @@ export function AssetAssignmentWorkspace() {
             ) : null}
 
             {modalMode === "view" && modalRow ? (
-              <div className="mt-4 space-y-4">
+              <div className="mt-4 space-y-4" data-testid="assignment-detail-panel">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="font-mono text-xs text-muted-foreground">{modalRow.document_number}</p>
-                    <p className="text-base font-semibold">
-                      {assetMap.get(modalRow.asset_id)?.asset_name ?? modalRow.asset_id}
+                    <p className="font-mono text-xs text-muted-foreground">
+                      {modalRow.document_number}
                     </p>
+                    <p className="text-base font-semibold">Assignment details</p>
                   </div>
                   {statusBadge(modalRow)}
                 </div>
-                <dl className="grid gap-2 text-sm sm:grid-cols-2">
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Assignee</dt>
-                    <dd>{assigneeSummary(modalRow)}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Allocation type</dt>
-                    <dd className="capitalize">{modalRow.allocation_type}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-xs text-muted-foreground">Allocated</dt>
-                    <dd>{modalRow.allocated_at?.slice(0, 10) ?? "—"}</dd>
-                  </div>
-                </dl>
+                {(() => {
+                  const asset = assetMap.get(modalRow.asset_id);
+                  const location = locationByAssetId[modalRow.asset_id];
+                  const empDept =
+                    modalRow.employee_id != null
+                      ? employeeDeptById[String(modalRow.employee_id)]
+                      : null;
+                  const linkedDc = dcByAssignmentId[modalRow.id] ?? null;
+                  return (
+                    <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Asset</dt>
+                        <dd data-testid="assignment-detail-asset">
+                          {resolveRegisterAssetName(asset, modalRow.asset_id)}
+                          {resolveRegisterAssetCode(asset) !== "—" ? (
+                            <span className="mt-0.5 block font-mono text-xs text-muted-foreground">
+                              {resolveRegisterAssetCode(asset)}
+                            </span>
+                          ) : null}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Assignee</dt>
+                        <dd data-testid="assignment-detail-assignee">
+                          {assigneeSummary(modalRow)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Employee ID</dt>
+                        <dd
+                          className="font-mono text-xs"
+                          data-testid="assignment-detail-employee-id"
+                        >
+                          {resolveRegisterEmployeeId(modalRow, employeeLookup)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Department</dt>
+                        <dd data-testid="assignment-detail-department">
+                          {resolveRegisterDepartment(
+                            modalRow,
+                            asset,
+                            empDept,
+                            departmentLabels,
+                          )}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Location</dt>
+                        <dd data-testid="assignment-detail-location">
+                          {resolveRegisterLocation(asset, location, siteLocationLabels)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Building</dt>
+                        <dd data-testid="assignment-detail-building">
+                          {resolveRegisterBuilding(location, buildingLabels)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Assignment Date</dt>
+                        <dd data-testid="assignment-detail-date">
+                          {formatAssignmentDate(modalRow.allocated_at)}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-xs text-muted-foreground">Status</dt>
+                        <dd data-testid="assignment-detail-status">
+                          {registerStatusLabel(modalRow.status)}
+                        </dd>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <dt className="text-xs text-muted-foreground">DC Challan</dt>
+                        <dd data-testid="assignment-detail-dc-status">
+                          {formatDcCell(modalRow, linkedDc)}
+                        </dd>
+                      </div>
+                    </dl>
+                  );
+                })()}
                 <div
                   className="rounded-md border border-border/70 bg-muted/20 px-3 py-3"
                   data-testid="assignment-detail-dc"
@@ -845,16 +1228,6 @@ export function AssetAssignmentWorkspace() {
                   >
                     <Send className="mr-1 size-4" />
                     Submit
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="cursor-pointer"
-                    disabled={actionLoading || modalRow.status !== "draft"}
-                    onClick={() => void runAction("cancel")}
-                  >
-                    Cancel draft
                   </Button>
                   {canLaunchDcFromAssignment(modalRow) && !hasOpenDc ? (
                     <Button
@@ -910,18 +1283,38 @@ export function AssetAssignmentWorkspace() {
                     Return
                   </Button>
                 </div>
-                {modalRow.status === "draft" ? (
+                <div
+                  className="flex flex-wrap gap-2 border-t border-border/70 pt-3"
+                  data-testid="assignment-detail-actions"
+                >
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
-                    className="cursor-pointer"
+                    className="cursor-pointer transition-colors duration-200"
+                    data-testid="assignment-detail-edit"
+                    disabled={actionLoading}
                     onClick={() => openEdit(modalRow)}
                   >
                     <SquarePen className="mr-1 size-4" />
-                    Edit draft
+                    Edit
                   </Button>
-                ) : null}
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="cursor-pointer transition-colors duration-200"
+                    data-testid="assignment-detail-delete"
+                    disabled={actionLoading}
+                    onClick={() => {
+                      setError(null);
+                      setDeleteConfirmOpen(true);
+                    }}
+                  >
+                    <Trash2 className="mr-1 size-4" />
+                    Delete
+                  </Button>
+                </div>
               </div>
             ) : null}
 
@@ -972,6 +1365,67 @@ export function AssetAssignmentWorkspace() {
                 </Button>
               </div>
             ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {deleteConfirmOpen && modalRow ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          role="presentation"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget && !actionLoading) setDeleteConfirmOpen(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-assignment-title"
+            aria-describedby="delete-assignment-desc"
+            data-testid="delete-assignment-confirm-dialog"
+            className="w-full max-w-md rounded-md border border-border bg-background p-4 shadow-lg"
+            onKeyDown={(e) => {
+              if (e.key === "Escape" && !actionLoading) setDeleteConfirmOpen(false);
+            }}
+          >
+            <h2 id="delete-assignment-title" className="text-base font-semibold text-foreground">
+              Delete assignment?
+            </h2>
+            <p
+              id="delete-assignment-desc"
+              className="mt-3 text-sm text-foreground"
+              data-testid="delete-assignment-confirm-message"
+            >
+              Are you sure you want to delete this assignment?
+            </p>
+            {error ? (
+              <p className="mt-2 text-sm text-destructive" role="alert">
+                {error}
+              </p>
+            ) : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="cursor-pointer transition-colors duration-200"
+                data-testid="delete-assignment-cancel"
+                disabled={actionLoading}
+                onClick={() => setDeleteConfirmOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                className="cursor-pointer transition-colors duration-200"
+                data-testid="delete-assignment-confirm"
+                disabled={actionLoading}
+                onClick={() => void confirmDeleteAssignment()}
+              >
+                {actionLoading ? <Loader2 className="mr-1 size-4 animate-spin" /> : null}
+                Delete
+              </Button>
+            </div>
           </div>
         </div>
       ) : null}

@@ -149,7 +149,12 @@ class TransferValidator:
         ctx: TenantContext,
         *,
         company_id: UUID,
-        employee_id: UUID,
+        employee_source: str | None,
+        employee_id: UUID | None,
+        manual_employee_name: str | None,
+        manual_employee_phone: str | None,
+        manual_employee_email: str | None,
+        manual_employee_deployed_to: str | None,
         department_id: UUID | None,
         to_location_id: UUID,
         to_building_id: UUID,
@@ -157,25 +162,67 @@ class TransferValidator:
         previous_employee_id: UUID | None,
     ) -> UUID:
         """Validate Step 3 assign fields; returns resolved department_id."""
+        from modules.asset.domain.enums import AssignmentEmployeeSource
+
         condition = (physical_condition or "").strip().lower()
         if condition != RETURN_CONDITION_GOOD:
             raise TransferValidationError(
                 "Assign to new user requires physical condition Good from verification"
             )
-        if previous_employee_id is not None and employee_id == previous_employee_id:
-            raise TransferValidationError("New user must differ from the current holder")
-        emp = self._master.get_employee(ctx, employee_id)
+        if to_location_id is None or to_building_id is None:
+            raise TransferValidationError("Location and building are required")
+
+        source = (employee_source or AssignmentEmployeeSource.MASTER_DATA.value).strip().upper()
+        if source not in {
+            AssignmentEmployeeSource.MASTER_DATA.value,
+            AssignmentEmployeeSource.MANUAL_ENTRY.value,
+        }:
+            raise TransferValidationError("employee_source is invalid")
+
         resolved_dept = department_id
-        emp_dept = getattr(emp, "department_id", None)
-        if resolved_dept is None and emp_dept is not None:
-            resolved_dept = emp_dept
-        if resolved_dept is None:
-            raise TransferValidationError("Department is required for the new assignment")
+
+        if source == AssignmentEmployeeSource.MANUAL_ENTRY.value:
+            name = (manual_employee_name or "").strip()
+            phone = (manual_employee_phone or "").strip()
+            deployed = (manual_employee_deployed_to or "").strip()
+            if employee_id is not None:
+                raise TransferValidationError(
+                    "employee_id must be empty for manual employee entry"
+                )
+            if not name or not phone or not deployed:
+                raise TransferValidationError(
+                    "manual_employee_name, manual_employee_phone, and "
+                    "manual_employee_deployed_to are required for manual employee entry"
+                )
+            if resolved_dept is None:
+                raise TransferValidationError("Department is required for the new assignment")
+        else:
+            if employee_id is None:
+                raise TransferValidationError("employee_id is required for employee allocation")
+            if previous_employee_id is not None and employee_id == previous_employee_id:
+                raise TransferValidationError("New user must differ from the current holder")
+            if any(
+                (v or "").strip()
+                for v in (
+                    manual_employee_name,
+                    manual_employee_phone,
+                    manual_employee_email,
+                    manual_employee_deployed_to,
+                )
+            ):
+                raise TransferValidationError(
+                    "Manual employee fields must be empty when selecting from the directory"
+                )
+            emp = self._master.get_employee(ctx, employee_id)
+            emp_dept = getattr(emp, "department_id", None)
+            if resolved_dept is None and emp_dept is not None:
+                resolved_dept = emp_dept
+            if resolved_dept is None:
+                raise TransferValidationError("Department is required for the new assignment")
+
         department = self._org.get_department(ctx, resolved_dept)
         if getattr(department, "company_id", None) not in (None, company_id):
             raise TransferValidationError("Department does not belong to this company")
-        if to_location_id is None or to_building_id is None:
-            raise TransferValidationError("Location and building are required")
         return resolved_dept
 
     @staticmethod

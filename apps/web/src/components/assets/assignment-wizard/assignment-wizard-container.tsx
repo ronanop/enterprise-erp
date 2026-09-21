@@ -156,6 +156,9 @@ export function AssignmentWizardContainer({
         if (match) {
           components = await service.listComponents(next.assetId);
           next.branchId = match.branchId || next.branchId;
+          if (next.issuedItemIds.length === 0) {
+            next.issuedItemIds = components.filter((i) => !i.disabled).map((i) => i.id);
+          }
           setBranchLabel(match.branchLabel);
           setUnavailableAssetMessage(null);
         } else {
@@ -190,18 +193,28 @@ export function AssignmentWizardContainer({
       void (async () => {
         if (!assetId) {
           setIssuedItems([]);
+          setWizardState((prev) => ({ ...prev, assetId: "", issuedItemIds: [] }));
           return;
         }
         try {
           const list = await service.listComponents(assetId);
           setIssuedItems(list);
           const match = assets.find((a) => a.id === assetId);
+          // Pre-select available accessories (including CHARGER) so they follow the asset.
+          const availableIds = list.filter((i) => !i.disabled).map((i) => i.id);
           if (match) {
             setBranchLabel(match.branchLabel);
             setWizardState((prev) => ({
               ...prev,
               assetId,
               branchId: match.branchId || prev.branchId,
+              issuedItemIds: availableIds,
+            }));
+          } else {
+            setWizardState((prev) => ({
+              ...prev,
+              assetId,
+              issuedItemIds: availableIds,
             }));
           }
         } catch {

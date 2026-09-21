@@ -27,7 +27,8 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description=APP_DESCRIPTION,
-        debug=settings.debug,
+        # Never serve Starlette HTML tracebacks — the SPA can only parse JSON.
+        debug=False,
         lifespan=lifespan,
     )
 

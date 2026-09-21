@@ -33,6 +33,62 @@ function buildUrl(path: string, query?: RequestOptions["query"]): string {
   return qs ? `${base}?${qs}` : base;
 }
 
+function fallbackMessage(status: number): string {
+  if (status === 401) return "Please sign in again.";
+  if (status === 403) return "You do not have permission to view this.";
+  if (status === 404) return "API resource not found.";
+  if (status >= 500) return "The API had an internal error. Check the backend terminal.";
+  if (status === 0) return "Cannot reach the API. Confirm the backend is running on port 8000.";
+  return "API request failed";
+}
+
+function messageFromPayload(payload: unknown, status: number): string {
+  if (!payload || typeof payload !== "object") return fallbackMessage(status);
+  const body = payload as Record<string, unknown>;
+  if (typeof body.message === "string" && body.message.trim()) return body.message;
+  if (typeof body.detail === "string" && body.detail.trim()) return body.detail;
+  if (Array.isArray(body.detail)) {
+    const parts = body.detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "msg" in item) {
+          return String((item as { msg: unknown }).msg);
+        }
+        return "";
+      })
+      .filter(Boolean);
+    if (parts.length) return parts.join("; ");
+  }
+  return fallbackMessage(status);
+}
+
+function errorsFromPayload(payload: unknown): string[] {
+  if (!payload || typeof payload !== "object") return [];
+  const errors = (payload as ErrorResponse).errors;
+  return Array.isArray(errors) ? errors : [];
+}
+
+async function parseResponsePayload<T>(
+  response: Response,
+): Promise<ApiResponse<T> | ErrorResponse> {
+  const text = await response.text();
+  if (!text.trim()) {
+    return { success: false, message: fallbackMessage(response.status), errors: [] };
+  }
+  try {
+    return JSON.parse(text) as ApiResponse<T> | ErrorResponse;
+  } catch {
+    const looksHtml = /<!DOCTYPE|<html/i.test(text);
+    return {
+      success: false,
+      message: looksHtml
+        ? fallbackMessage(response.status >= 400 ? response.status : 500)
+        : text.replace(/\s+/g, " ").slice(0, 180),
+      errors: [],
+    };
+  }
+}
+
 let refreshInFlight: Promise<boolean> | null = null;
 
 async function tryRefreshAccessToken(): Promise<boolean> {
@@ -51,7 +107,7 @@ async function tryRefreshAccessToken(): Promise<boolean> {
           body: JSON.stringify({ refresh_token: refreshToken }),
           cache: "no-store",
         });
-        const payload = (await response.json()) as ApiResponse<TokenData> | ErrorResponse;
+        const payload = await parseResponsePayload<TokenData>(response);
         if (!response.ok || payload.success === false || !payload.data?.access_token) {
           return false;
         }
@@ -99,18 +155,13 @@ export async function apiClient<T>(
     );
   }
 
-  let payload: ApiResponse<T> | ErrorResponse;
-  try {
-    payload = (await response.json()) as ApiResponse<T> | ErrorResponse;
-  } catch {
-    throw new ApiClientError("Invalid API response", response.status);
-  }
+  const payload = await parseResponsePayload<T>(response);
 
   if (
     auth &&
     !_retried &&
     response.status === 401 &&
-    (payload as ErrorResponse).message
+    messageFromPayload(payload, response.status)
   ) {
     const refreshed = await tryRefreshAccessToken();
     if (refreshed) {
@@ -119,14 +170,13 @@ export async function apiClient<T>(
   }
 
   if (!response.ok || payload.success === false) {
-    const errorPayload = payload as ErrorResponse;
     if (auth && response.status === 401) {
       clearTokens();
     }
     throw new ApiClientError(
-      errorPayload.message ?? "API request failed",
+      messageFromPayload(payload, response.status),
       response.status,
-      errorPayload.errors ?? [],
+      errorsFromPayload(payload),
     );
   }
 
@@ -134,12 +184,8 @@ export async function apiClient<T>(
 }
 
 async function parseErrorMessage(response: Response): Promise<string> {
-  try {
-    const payload = (await response.json()) as ErrorResponse;
-    return payload.message ?? "API request failed";
-  } catch {
-    return "API request failed";
-  }
+  const payload = await parseResponsePayload(response);
+  return messageFromPayload(payload, response.status);
 }
 
 /** Multipart upload. Do not set Content-Type — the browser must supply the boundary. */
@@ -175,19 +221,13 @@ export async function apiUpload<T>(
     clearTokens();
   }
 
-  let payload: ApiResponse<T> | ErrorResponse;
-  try {
-    payload = (await response.json()) as ApiResponse<T> | ErrorResponse;
-  } catch {
-    throw new ApiClientError("Invalid API response", response.status);
-  }
+  const payload = await parseResponsePayload<T>(response);
 
   if (!response.ok || payload.success === false) {
-    const errorPayload = payload as ErrorResponse;
     throw new ApiClientError(
-      errorPayload.message ?? "API request failed",
+      messageFromPayload(payload, response.status),
       response.status,
-      errorPayload.errors ?? [],
+      errorsFromPayload(payload),
     );
   }
   return payload as ApiResponse<T>;

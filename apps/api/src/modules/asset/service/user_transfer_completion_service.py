@@ -78,7 +78,12 @@ class UserTransferCompletionService:
         department_id = self._validator.validate_user_transfer_assign_request(
             ctx,
             company_id=asset.company_id,
+            employee_source=body.employee_source,
             employee_id=body.employee_id,
+            manual_employee_name=body.manual_employee_name,
+            manual_employee_phone=body.manual_employee_phone,
+            manual_employee_email=body.manual_employee_email,
+            manual_employee_deployed_to=body.manual_employee_deployed_to,
             department_id=body.department_id,
             to_location_id=body.to_location_id,
             to_building_id=body.to_building_id,
@@ -162,18 +167,40 @@ class UserTransferCompletionService:
         # Employee allocation forbids department_id/project_id on ast_asset_assignment
         # (AssignmentValidator). Department remains request-validated above for
         # master-data integrity; it is not written on the assignment identity row.
-        new_assignment = self._assignment_svc.create(
-            ctx,
-            branch_id=asset.branch_id,
-            company_id=asset.company_id,
-            asset_id=asset.id,
-            allocation_type="employee",
-            employee_id=body.employee_id,
-            employee_source="MASTER_DATA",
-            delivery_reference_status=AssignmentDeliveryReferenceStatus.PENDING.value,
-            delivery_challan_signature_status="not_signed",
-            assignment_remarks=body.assignment_remarks,
-        )
+        source = (body.employee_source or "MASTER_DATA").strip().upper()
+        if source == "MANUAL_ENTRY":
+            new_assignment = self._assignment_svc.create(
+                ctx,
+                branch_id=asset.branch_id,
+                company_id=asset.company_id,
+                asset_id=asset.id,
+                allocation_type="employee",
+                employee_id=None,
+                employee_source="MANUAL_ENTRY",
+                manual_employee_name=(body.manual_employee_name or "").strip() or None,
+                manual_employee_phone=(body.manual_employee_phone or "").strip() or None,
+                manual_employee_email=(body.manual_employee_email or "").strip() or None,
+                manual_employee_deployed_to=(body.manual_employee_deployed_to or "").strip()
+                or None,
+                delivery_reference_status=AssignmentDeliveryReferenceStatus.PENDING.value,
+                delivery_challan_signature_status="not_signed",
+                assignment_remarks=body.assignment_remarks,
+            )
+            to_employee_id = None
+        else:
+            new_assignment = self._assignment_svc.create(
+                ctx,
+                branch_id=asset.branch_id,
+                company_id=asset.company_id,
+                asset_id=asset.id,
+                allocation_type="employee",
+                employee_id=body.employee_id,
+                employee_source="MASTER_DATA",
+                delivery_reference_status=AssignmentDeliveryReferenceStatus.PENDING.value,
+                delivery_challan_signature_status="not_signed",
+                assignment_remarks=body.assignment_remarks,
+            )
+            to_employee_id = body.employee_id
         if verification.verified_component_ids:
             self._assignment_svc.set_components(
                 ctx, new_assignment.id, list(verification.verified_component_ids)
@@ -199,7 +226,7 @@ class UserTransferCompletionService:
             asset=asset,
             verification=verification,
             from_employee_id=assignment.employee_id,
-            to_employee_id=body.employee_id,
+            to_employee_id=to_employee_id,
             from_location_label=from_location_label,
             to_location_label=to_label,
             to_org_location_id=org_location_id,
@@ -221,7 +248,11 @@ class UserTransferCompletionService:
             "previous_employee_id": str(assignment.employee_id)
             if assignment.employee_id
             else None,
-            "new_employee_id": str(body.employee_id),
+            "new_employee_id": str(to_employee_id) if to_employee_id else None,
+            "employee_source": source,
+            "manual_employee_name": (body.manual_employee_name or "").strip() or None
+            if source == "MANUAL_ENTRY"
+            else None,
             "department_id": str(department_id) if department_id else None,
             "verified_component_ids": [str(c) for c in verification.verified_component_ids],
         }

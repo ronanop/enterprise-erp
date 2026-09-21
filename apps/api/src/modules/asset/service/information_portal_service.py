@@ -62,6 +62,7 @@ class AssetInformationPortalService:
             serial_number=asset.serial_number,
             asset_type=asset.asset_type,
             status=asset.status,
+            operational_status=getattr(asset, "operational_status", None),
             assignment=self._active_assignment(ctx, company_id=asset.company_id, asset_id=asset.id),
             warranty=self._warranty_summary(ctx, company_id=asset.company_id, asset_id=asset.id),
             insurance=self._insurance_summary(

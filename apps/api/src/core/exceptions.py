@@ -3,6 +3,7 @@
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from shared.schemas import ErrorResponse
 
@@ -54,6 +55,14 @@ def register_exception_handlers(app: FastAPI) -> None:
             content=ErrorResponse(message=exc.message).model_dump(),
         )
 
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(_: Request, exc: StarletteHTTPException) -> JSONResponse:
+        message = exc.detail if isinstance(exc.detail, str) else "Request failed"
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=ErrorResponse(message=message).model_dump(),
+        )
+
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(
         _: Request,
@@ -71,7 +80,13 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(Exception)
-    async def unhandled_exception_handler(_: Request, exc: Exception) -> JSONResponse:
+    async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        from core.logging import get_logger
+
+        get_logger(__name__).exception(
+            "unhandled API error",
+            extra={"path": str(request.url.path), "method": request.method},
+        )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=ErrorResponse(message="Internal server error").model_dump(),

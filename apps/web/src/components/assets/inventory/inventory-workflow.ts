@@ -10,6 +10,8 @@ import { assignmentNavigationPaths } from "@/components/assets/navigation/assign
 
 export function isInventoryWorkflowAction(action: InventoryMenuActionId): boolean {
   return (
+    action === "edit" ||
+    action === "delete" ||
     action === "assign" ||
     action === "return" ||
     action === "startDisposal" ||

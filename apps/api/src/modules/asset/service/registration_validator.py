@@ -66,31 +66,98 @@ class RegistrationValidator:
                 )
         self._validate_common(ctx, company_id=company_id, fields=fields, exclude_id=None)
 
+    # Fields admins may edit on registered (non-draft) assets from Asset Details.
+    ACTIVE_EDITABLE_FIELDS = frozenset(
+        {
+            "asset_name",
+            "make",
+            "model",
+            "configuration",
+            "serial_number",
+            "barcode",
+            "qr_code",
+            "rfid_tag",
+            "location_label",
+            "department_id",
+            "custodian_employee_id",
+            "version",
+        }
+    )
+
     def validate_update_fields(
         self,
         ctx: TenantContext,
         row: AstAsset,
         fields: dict,
     ) -> None:
-        if row.status != AssetStatus.DRAFT.value:
-            raise RegistrationValidationError("Only draft registrations can be updated")
         if "asset_code" in fields or "document_number" in fields:
             raise RegistrationValidationError("Asset code cannot be changed")
+
+        if row.status == AssetStatus.DRAFT.value:
+            merged = {
+                "asset_name": fields.get("asset_name", row.asset_name),
+                "asset_category_id": fields.get("asset_category_id", row.asset_category_id),
+                "asset_type_id": fields.get("asset_type_id", row.asset_type_id),
+                "asset_type": fields.get("asset_type", row.asset_type),
+                "purchase_date": fields.get("purchase_date", row.purchase_date),
+                "purchase_cost": fields.get("purchase_cost", row.purchase_cost),
+                "currency_code": fields.get("currency_code", row.currency_code),
+                "supplier_vendor_id": fields.get("supplier_vendor_id", row.supplier_vendor_id),
+                "department_id": fields.get("department_id", row.department_id),
+                "custodian_employee_id": fields.get(
+                    "custodian_employee_id", row.custodian_employee_id
+                ),
+                "serial_number": fields.get("serial_number", row.serial_number),
+                "barcode": fields.get("barcode", row.barcode),
+                "purchase_order_id": fields.get("purchase_order_id", row.purchase_order_id),
+                "grn_id": fields.get("grn_id", row.grn_id),
+            }
+            self._validate_common(
+                ctx,
+                company_id=row.company_id,
+                fields=merged,
+                exclude_id=row.id,
+                partial=True,
+            )
+            return
+
+        if row.status in {
+            AssetStatus.DISPOSED.value,
+            AssetStatus.WRITTEN_OFF.value,
+            AssetStatus.CANCELLED.value,
+        }:
+            raise RegistrationValidationError(
+                "Disposed, written-off, or cancelled assets cannot be updated"
+            )
+
+        disallowed = [
+            key
+            for key in fields
+            if key not in self.ACTIVE_EDITABLE_FIELDS
+            and key not in {"charger_available", "charger_code"}
+        ]
+        if disallowed:
+            raise RegistrationValidationError(
+                "Only draft registrations can change: " + ", ".join(sorted(disallowed))
+            )
+
         merged = {
             "asset_name": fields.get("asset_name", row.asset_name),
-            "asset_category_id": fields.get("asset_category_id", row.asset_category_id),
-            "asset_type_id": fields.get("asset_type_id", row.asset_type_id),
-            "asset_type": fields.get("asset_type", row.asset_type),
-            "purchase_date": fields.get("purchase_date", row.purchase_date),
-            "purchase_cost": fields.get("purchase_cost", row.purchase_cost),
-            "currency_code": fields.get("currency_code", row.currency_code),
-            "supplier_vendor_id": fields.get("supplier_vendor_id", row.supplier_vendor_id),
+            "asset_category_id": row.asset_category_id,
+            "asset_type_id": row.asset_type_id,
+            "asset_type": row.asset_type,
+            "purchase_date": row.purchase_date,
+            "purchase_cost": row.purchase_cost,
+            "currency_code": row.currency_code,
+            "supplier_vendor_id": row.supplier_vendor_id,
             "department_id": fields.get("department_id", row.department_id),
-            "custodian_employee_id": fields.get("custodian_employee_id", row.custodian_employee_id),
+            "custodian_employee_id": fields.get(
+                "custodian_employee_id", row.custodian_employee_id
+            ),
             "serial_number": fields.get("serial_number", row.serial_number),
             "barcode": fields.get("barcode", row.barcode),
-            "purchase_order_id": fields.get("purchase_order_id", row.purchase_order_id),
-            "grn_id": fields.get("grn_id", row.grn_id),
+            "purchase_order_id": row.purchase_order_id,
+            "grn_id": row.grn_id,
         }
         self._validate_common(
             ctx,

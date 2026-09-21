@@ -46,6 +46,8 @@ export {
   statusColorMap,
   isOperationalStatus,
   isNonItAssetStatus,
+  formatLifecycleStatusLabel,
+  formatPortalOverviewStatus,
   type OperationalStatusValue,
   type NonItAssetStatusValue,
 } from "./asset-status";

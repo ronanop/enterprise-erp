@@ -67,6 +67,8 @@ export type InventoryRowViewModel = {
   manufacturer: string;
   model: string;
   configuration: string;
+  /** Charger component code only; empty string when absent (no placeholder). */
+  chargerCode: string;
   currentHolder: string;
   employeeId: string;
   department: string;
@@ -171,6 +173,68 @@ export function configurationSummary(asset: AssetsRow): string {
   return parts.length ? parts.join(" · ") : "—";
 }
 
+const CONFIG_COLUMN_LABELS = ["Processor", "RAM", "Storage"] as const;
+
+/**
+ * All Assets Configuration column: Processor / RAM / Storage only.
+ * Excludes Generation, Charger, and other labels. Does not invent values.
+ */
+export function formatConfigurationColumn(raw: string | null | undefined): string {
+  if (!raw?.trim() || raw.trim() === "—") return "—";
+  const text = raw.trim();
+  const parts = text
+    .split(";")
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  const byLabel = new Map<string, string>();
+  let sawLabeled = false;
+  for (const part of parts) {
+    const m = /^(Processor|Generation|RAM|Storage|Charger)\s*:\s*(.+)$/i.exec(part);
+    if (!m) continue;
+    sawLabeled = true;
+    const key = m[1]!.toLowerCase();
+    const value = m[2]!.trim();
+    if (!value) continue;
+    if (key === "processor") byLabel.set("Processor", value);
+    else if (key === "ram") byLabel.set("RAM", value);
+    else if (key === "storage") byLabel.set("Storage", value);
+    // Generation / Charger intentionally omitted
+  }
+
+  if (sawLabeled) {
+    const lines = CONFIG_COLUMN_LABELS.filter((label) => byLabel.has(label)).map(
+      (label) => `${label}: ${byLabel.get(label)}`,
+    );
+    return lines.length > 0 ? lines.join("\n") : "—";
+  }
+
+  // Legacy unlabelled strings (e.g. discovery "i7 · 16GB") — show as-is, never inject Charger.
+  return text;
+}
+
+/**
+ * Charger column: code only when a charger accessory exists with a real code.
+ * Returns "" (blank cell) — never "—", "No", or "N/A".
+ */
+export function resolveInventoryChargerCode(
+  accessories: InventoryAccessoryLine[] | undefined | null,
+): string {
+  if (!accessories?.length) return "";
+  const charger = accessories.find((a) => {
+    const label = (a.typeLabel ?? "").trim().toLowerCase();
+    return label === "charger" || label.startsWith("charger ·") || label.startsWith("charger ");
+  });
+  if (!charger) return "";
+  const code = (charger.serialDisplay ?? "").trim();
+  if (!code) return "";
+  const lower = code.toLowerCase();
+  if (lower === "—" || lower === "-" || lower === "n/a" || lower === "na" || lower === "no") {
+    return "";
+  }
+  return code;
+}
+
 export function mapAssetToInventoryRow(
   asset: AssetsRow,
   ctx: InventoryLookupContext,
@@ -181,9 +245,10 @@ export function mapAssetToInventoryRow(
     ctx.assignmentHistoryByAssetId?.get(id) ??
     (assignment ? [assignment as RegisterAssignmentLike] : []);
   const employeeLookup: EmployeeLookup = ctx.employeeLookup ?? ctx.employeeLabels ?? {};
+  const accessories = ctx.accessoriesByAssetId?.get(id) ?? [];
   const expandable = {
     ...buildRegisterParityExpandable(history, employeeLookup),
-    accessories: ctx.accessoriesByAssetId?.get(id) ?? [],
+    accessories,
   };
   const branchKey = String(asset.branch_id ?? "");
   // Prefer active assignment department (custody); fall back to asset home dept.
@@ -219,8 +284,9 @@ export function mapAssetToInventoryRow(
         : "—",
     manufacturer: it.make,
     model: it.model,
-    configuration: it.configuration,
-    currentHolder: holderLabel === "—" && assignment ? "Assigned" : holderLabel,
+    configuration: formatConfigurationColumn(it.configuration),
+    chargerCode: resolveInventoryChargerCode(accessories),
+    currentHolder: holderLabel,
     // Prefer employee_code; do not show raw UUID when code is unavailable.
     employeeId: employeeCode,
     department: ctx.departmentLabels[deptKey] ?? (deptKey ? deptKey.slice(0, 8) : "—"),

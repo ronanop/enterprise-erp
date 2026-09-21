@@ -175,6 +175,36 @@ class AssetComponentRepository(AstScopedRepository):
         stmt = self.apply_ast_filter(stmt, AstAssetComponent, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
+    def find_active_by_type(
+        self,
+        ctx: TenantContext,
+        *,
+        asset_id: UUID,
+        component_type: str,
+    ) -> AstAssetComponent | None:
+        rows = self.list_active_by_type(
+            ctx, asset_id=asset_id, component_type=component_type
+        )
+        return rows[0] if rows else None
+
+    def list_active_by_type(
+        self,
+        ctx: TenantContext,
+        *,
+        asset_id: UUID,
+        component_type: str,
+    ) -> list[AstAssetComponent]:
+        stmt = select(AstAssetComponent).where(
+            AstAssetComponent.asset_id == asset_id,
+            AstAssetComponent.component_type == component_type,
+            AstAssetComponent.status == AssetComponentStatus.ACTIVE.value,
+            AstAssetComponent.is_deleted.is_(False),
+        )
+        stmt = self.apply_ast_filter(stmt, AstAssetComponent, ctx, branch_scoped=False)
+        return list(
+            self.db.scalars(stmt.order_by(AstAssetComponent.created_at.asc())).all()
+        )
+
     def list_code_history(
         self, ctx: TenantContext, *, asset_id: UUID, component_code: str
     ) -> list[AstAssetComponent]:

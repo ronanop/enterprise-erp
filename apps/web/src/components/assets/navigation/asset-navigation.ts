@@ -13,6 +13,7 @@ import type {
 export const assetNavigationPaths = {
   inventory: assignmentNavigationPaths.inventory,
   details: (assetId: string) => `/assets/assets/${encodeURIComponent(assetId)}`,
+  edit: (assetId: string) => `/assets/assets/${encodeURIComponent(assetId)}/edit`,
   assignment: (assetId: string) => buildAssignmentWizardHref({ assetId }),
   returnAsset: (assetId: string) => buildReturnWizardHref({ assetId }),
   informationPortal: (assetId: string) =>
@@ -41,6 +42,7 @@ export type AssetNavigateFn = (href: string) => void;
 export type AssetNavigation = {
   openInventory: () => void;
   openDetails: (assetId: string) => void;
+  openEdit: (assetId: string) => void;
   openAssignment: (assetId: string) => void;
   openReturn: (assetId: string) => void;
   openPortal: (assetId: string) => void;
@@ -57,6 +59,7 @@ export function createAssetNavigation(push: AssetNavigateFn): AssetNavigation {
   return {
     openInventory: () => push(assetNavigationPaths.inventory),
     openDetails: (assetId) => push(assetNavigationPaths.details(assetId)),
+    openEdit: (assetId) => push(assetNavigationPaths.edit(assetId)),
     openAssignment: (assetId) => push(assetNavigationPaths.assignment(assetId)),
     openReturn: (assetId) => push(assetNavigationPaths.returnAsset(assetId)),
     openPortal: (assetId) => push(assetNavigationPaths.informationPortal(assetId)),
@@ -79,6 +82,12 @@ export function dispatchInventoryMenuAction(
   switch (action) {
     case "viewDetails":
       navigation.openDetails(assetId);
+      break;
+    case "edit":
+      navigation.openEdit(assetId);
+      break;
+    case "delete":
+      // Handled by inventory container (confirm + soft-delete API).
       break;
     case "assign":
       navigation.openAssignment(assetId);

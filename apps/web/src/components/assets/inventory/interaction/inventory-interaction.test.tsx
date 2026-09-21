@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -75,11 +75,27 @@ describe("InventoryActionMenu", () => {
   it("renders View when viewDetails permitted", () => {
     render(<InventoryActionMenu asset={testAsset} onView={vi.fn()} />);
     expect(screen.getByRole("button", { name: /View/ })).toBeInTheDocument();
+    expect(screen.getByTestId("inventory-action-view")).toBeInTheDocument();
+  });
+
+  it("does not render a direct Edit button when edit is permitted", () => {
+    render(<InventoryActionMenu asset={testAsset} onMenuAction={vi.fn()} />);
+    expect(screen.queryByTestId("inventory-action-edit")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Edit$/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "More actions" })).toBeInTheDocument();
   });
 
   it("hides View when viewDetails false", () => {
     render(<InventoryActionMenu asset={testAsset} permissions={{ viewDetails: false }} />);
     expect(screen.queryByRole("button", { name: /View/ })).not.toBeInTheDocument();
+  });
+
+  it("hides Edit menu item when edit false", async () => {
+    const user = userEvent.setup();
+    render(<InventoryActionMenu asset={testAsset} permissions={{ edit: false }} />);
+    expect(screen.queryByTestId("inventory-action-edit")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    expect(screen.queryByRole("menuitem", { name: "Edit" })).not.toBeInTheDocument();
   });
 
   it("calls onView when View clicked", async () => {
@@ -90,19 +106,78 @@ describe("InventoryActionMenu", () => {
     expect(onView).toHaveBeenCalledWith(testAsset);
   });
 
-  it("opens more menu with Assign and Transfer when permitted", async () => {
+  it("fires onMenuAction edit from the overflow menu", async () => {
+    const user = userEvent.setup();
+    const onMenuAction = vi.fn();
+    render(<InventoryActionMenu asset={testAsset} onMenuAction={onMenuAction} />);
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Edit" }));
+    expect(onMenuAction).toHaveBeenCalledWith("edit", testAsset);
+  });
+
+  it("opens more menu with Edit first; Delete is last with separator", async () => {
     const user = userEvent.setup();
     render(<InventoryActionMenu asset={testAsset} onMenuAction={vi.fn()} />);
+    expect(screen.queryByTestId("inventory-action-edit")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Assign$/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Transfer$/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Delete$/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "More actions" }));
     expect(screen.getByRole("menu")).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Return Asset" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Edit" })).toBeInTheDocument();
+
+    const items = screen.getAllByRole("menuitem").map((el) => el.textContent);
+    expect(items).toEqual([
+      "Edit",
+      "Assign Asset",
+      "Return Asset",
+      "Information Portal",
+      "QR Code",
+      "User Transfer",
+      "Maintenance",
+      "Start Disposal",
+      "Reinstate",
+      "Delete",
+    ]);
+    expect(items[0]).toBe("Edit");
+    expect(items[items.length - 1]).toBe("Delete");
+    expect(screen.getByTestId("inventory-menu-delete-separator")).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Assign Asset" })).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "User Transfer" })).toBeInTheDocument();
     expect(screen.getByRole("menuitem", { name: "Information Portal" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "QR Code" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Maintenance" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Discovery" })).not.toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "History" })).not.toBeInTheDocument();
+  });
+
+  it("places Edit inside the dropdown when edit permission is true", async () => {
+    const user = userEvent.setup();
+    render(
+      <InventoryActionMenu
+        asset={testAsset}
+        permissions={{ edit: true }}
+        onMenuAction={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("inventory-action-edit")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    expect(screen.getByRole("menuitem", { name: "Edit" })).toBeInTheDocument();
+  });
+
+  it("hides Edit and Delete menu items when permissions false", async () => {
+    const user = userEvent.setup();
+    render(
+      <InventoryActionMenu
+        asset={testAsset}
+        permissions={{ edit: false, delete: false }}
+        onMenuAction={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId("inventory-action-edit")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    expect(screen.queryByRole("menuitem", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Delete" })).not.toBeInTheDocument();
   });
 
   it("hides assign when permission false", async () => {
@@ -134,6 +209,15 @@ describe("InventoryActionMenu", () => {
     expect(onMenuAction).toHaveBeenCalledWith("transfer", testAsset);
   });
 
+  it("fires onMenuAction delete from the 3-dot menu", async () => {
+    const user = userEvent.setup();
+    const onMenuAction = vi.fn();
+    render(<InventoryActionMenu asset={testAsset} onMenuAction={onMenuAction} />);
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(onMenuAction).toHaveBeenCalledWith("delete", testAsset);
+  });
+
   it("fires onMenuAction for menu item", async () => {
     const user = userEvent.setup();
     const onMenuAction = vi.fn();
@@ -148,6 +232,8 @@ describe("InventoryActionMenu", () => {
       <InventoryActionMenu
         asset={testAsset}
         permissions={{
+          edit: false,
+          delete: false,
           assign: false,
           return: false,
           portal: false,
@@ -363,6 +449,7 @@ describe("mapInventoryRowToDrawerData", () => {
       manufacturer: "Apple",
       model: "M3",
       configuration: "16GB",
+      chargerCode: "",
       currentHolder: "Bob",
       employeeId: "e1",
       department: "IT",

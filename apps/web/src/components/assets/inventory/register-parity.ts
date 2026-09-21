@@ -13,6 +13,8 @@ export type RegisterAssignmentLike = {
   status?: string | null;
   employee_id?: string | null;
   assignee_label?: string | null;
+  /** Manual / non-directory assignee name when employee_id is absent. */
+  manual_employee_name?: string | null;
   allocated_at?: string | null;
   returned_at?: string | null;
   created_at?: string | null;
@@ -278,18 +280,43 @@ export function groupAssignmentsByAssetId(
   return map;
 }
 
+/**
+ * Resolve the Assignee column display name (real person name).
+ * Prefer: assignee_label → displayName → label (code suffix stripped) → manual name.
+ * Never returns UUID / employee id / the word "Assigned".
+ */
 export function resolveAssigneeLabel(
   row: RegisterAssignmentLike | null | undefined,
   employeeLabels: Record<string, string> | EmployeeLookup = {},
 ): string {
   if (!row) return EMPTY;
+
   const fromApi = row.assignee_label?.trim();
   if (fromApi) return fromApi;
+
   const employeeId = row.employee_id ? String(row.employee_id) : "";
-  const labels = employeeLabelsFromLookup(asEmployeeLookup(employeeLabels));
-  if (employeeId && labels[employeeId]) return labels[employeeId];
-  if (employeeId) return employeeId;
+  if (employeeId) {
+    const entry = normalizeEmployeeLookup(asEmployeeLookup(employeeLabels))[employeeId];
+    if (entry) {
+      const display = entry.displayName?.trim();
+      if (display) return display;
+      const label = entry.label?.trim();
+      if (label) return stripEmployeeCodeSuffix(label);
+    }
+    const labels = employeeLabelsFromLookup(asEmployeeLookup(employeeLabels));
+    if (labels[employeeId]) return stripEmployeeCodeSuffix(labels[employeeId]!);
+  }
+
+  const manual = row.manual_employee_name?.trim();
+  if (manual) return manual;
+
   return EMPTY;
+}
+
+/** Remove trailing " (EMP-001)" / similar from directory labels for Assignee display. */
+function stripEmployeeCodeSuffix(label: string): string {
+  const stripped = label.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  return stripped || label;
 }
 
 /**

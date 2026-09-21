@@ -35,6 +35,7 @@ def test_get_portal_uses_asset_service_and_redacts_finance() -> None:
         serial_number="SN-1",
         asset_type="fixed",
         status="active",
+        operational_status="READY_TO_MOVE",
         company_id=ctx.company_id,
         purchase_cost=9999,
         current_book_value=5000,
@@ -57,11 +58,45 @@ def test_get_portal_uses_asset_service_and_redacts_finance() -> None:
     assert portal.category_code == "IT"
     assert portal.version == 3
     assert portal.self_service_path == f"/assets/self-service/{asset_id}"
+    assert portal.operational_status == "READY_TO_MOVE"
+    assert portal.status == "active"
     payload = portal.model_dump()
     assert "purchase_cost" not in payload
     assert "current_book_value" not in payload
     assert "workflow_status" not in payload
     assert "workflow_instance_id" not in payload
+    assert "operational_status" in payload
+
+
+def test_get_portal_includes_operational_status_when_set() -> None:
+    svc = AssetInformationPortalService(MagicMock())
+    ctx = _ctx()
+    asset_id = uuid4()
+    asset = SimpleNamespace(
+        id=asset_id,
+        asset_code="AST-2",
+        asset_name="Laptop",
+        asset_category_id=uuid4(),
+        supplier_vendor_id=None,
+        product_id=None,
+        serial_number=None,
+        asset_type="fixed",
+        status="submitted",
+        operational_status="READY_TO_MOVE",
+        company_id=ctx.company_id,
+        discovery_profile_json=None,
+        version=1,
+    )
+    with (
+        patch.object(svc._assets, "get", return_value=asset),
+        patch.object(svc._categories, "get", return_value=None),
+        patch.object(svc, "_active_assignment", return_value=None),
+        patch.object(svc, "_warranty_summary", return_value=None),
+        patch.object(svc, "_insurance_summary", return_value=None),
+    ):
+        portal = svc.get_portal(ctx, asset_id)
+    assert portal.status == "submitted"
+    assert portal.operational_status == "READY_TO_MOVE"
 
 
 def test_get_self_service_aliases_portal() -> None:
