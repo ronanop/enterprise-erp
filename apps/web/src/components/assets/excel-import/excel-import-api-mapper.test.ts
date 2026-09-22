@@ -95,7 +95,7 @@ describe("buildImportPayloadRows", () => {
     expect(rows[0].assignment_remarks).toBe("note");
   });
 
-  it("persists make model configuration and location", () => {
+  it("persists make model configuration charger and location", () => {
     const rows = buildImportPayloadRows(
       [
         preview({
@@ -104,6 +104,7 @@ describe("buildImportPayloadRows", () => {
             manufacturer: "Dell",
             model: "XPS 15",
             configuration: "i7 · 32GB",
+            chargerSerial: "CHG12345",
             location: "Rack B-2",
           },
         }),
@@ -114,6 +115,7 @@ describe("buildImportPayloadRows", () => {
     expect(rows[0].make).toBe("Dell");
     expect(rows[0].model).toBe("XPS 15");
     expect(rows[0].configuration).toBe("i7 · 32GB");
+    expect(rows[0].charger_serial).toBe("CHG12345");
     expect(rows[0].location_label).toBe("Rack B-2");
   });
 

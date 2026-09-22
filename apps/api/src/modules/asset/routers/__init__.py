@@ -421,6 +421,7 @@ def import_assets_from_excel(
             make=r.make,
             model=r.model,
             configuration=r.configuration,
+            charger_serial=r.charger_serial,
             location_label=r.location_label,
             location_id=r.location_id,
             issue_date=r.issue_date,

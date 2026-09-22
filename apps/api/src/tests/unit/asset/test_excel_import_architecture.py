@@ -43,6 +43,7 @@ def test_engine_imports_business_services_only() -> None:
     assert "AssetService" in src
     assert "AssignmentService" in src
     assert "AssetOperationalStatusService" in src
+    assert "AssetComponentService" in src
 
 
 def test_service_does_not_import_repositories() -> None:

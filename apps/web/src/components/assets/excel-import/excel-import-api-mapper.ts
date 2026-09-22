@@ -27,6 +27,7 @@ export type AssetExcelImportApiRow = {
   make?: string | null;
   model?: string | null;
   configuration?: string | null;
+  charger_serial?: string | null;
   location_label?: string | null;
   issue_date?: string | null;
   delivery_reference_number?: string | null;
@@ -117,6 +118,7 @@ export function buildImportPayloadRows(
       make: (row.values.manufacturer ?? "").trim() || null,
       model: (row.values.model ?? "").trim() || null,
       configuration: (row.values.configuration ?? "").trim() || null,
+      charger_serial: (row.values.chargerSerial ?? "").trim() || null,
       location_label: (row.values.location ?? "").trim() || null,
       issue_date: issue.ok && issue.iso ? issue.iso : null,
       delivery_reference_number: (row.values.deliveryReference ?? "").trim() || null,

@@ -139,6 +139,12 @@ export const EXCEL_IMPORT_TARGET_FIELDS = [
     aliases: ["configuration", "config", "specs"],
   },
   {
+    key: "chargerSerial",
+    label: "Charger",
+    required: false,
+    aliases: ["charger", "charger serial", "charger_serial", "charger sn"],
+  },
+  {
     key: "serialNumber",
     label: "Serial Number",
     required: false,

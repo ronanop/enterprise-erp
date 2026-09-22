@@ -49,6 +49,23 @@ def test_import_row_schema_allows_blank_tag() -> None:
         asset_type_id=uuid4(),
     )
     assert row.asset_tag is None
+    assert row.configuration is None
+    assert row.charger_serial is None
+
+
+def test_import_row_schema_accepts_configuration_and_charger() -> None:
+    row = AssetExcelImportRow(
+        row_number=1,
+        preview_status="valid",
+        asset_name="Laptop",
+        branch_id=uuid4(),
+        operational_status="READY_TO_MOVE",
+        asset_type_id=uuid4(),
+        configuration="Intel Core i5 / Gen 11 / 512 GB",
+        charger_serial="CHG12345",
+    )
+    assert row.configuration == "Intel Core i5 / Gen 11 / 512 GB"
+    assert row.charger_serial == "CHG12345"
 
 
 def test_import_request_defaults() -> None:

@@ -62,6 +62,7 @@ class ExcelImportRowInput:
     make: str | None = None
     model: str | None = None
     configuration: str | None = None
+    charger_serial: str | None = None
     location_label: str | None = None
     location_id: UUID | None = None
     issue_date: date | None = None

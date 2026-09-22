@@ -34,6 +34,8 @@ type ParsedImportRow = {
   serial_number: string | null;
   make: string | null;
   model: string | null;
+  configuration: string | null;
+  charger_serial: string | null;
   asset_type: string;
   assignee_name: string | null;
   employee_code: string | null;
@@ -74,6 +76,8 @@ const TEMPLATE_HEADERS = [
   "S/N",
   "Make",
   "Model",
+  "Configuration",
+  "Charger",
   "Asset Type",
   "Assignee",
   "Employee ID",
@@ -91,6 +95,8 @@ function buildSampleRows(types: ItAssetType[]) {
       "S/N": "SN-1001",
       Make: "Apple",
       Model: "M4 14",
+      Configuration: "Apple M4 / 16 GB / 512 GB",
+      Charger: "CHG12345",
       "Asset Type": laptop,
       Assignee: "Asha Nair",
       "Employee ID": "EMP-001",
@@ -103,6 +109,8 @@ function buildSampleRows(types: ItAssetType[]) {
       "S/N": "SN-1002",
       Make: "Dell",
       Model: "U2720Q",
+      Configuration: "",
+      Charger: "",
       "Asset Type": monitor,
       Assignee: "",
       "Employee ID": "",
@@ -194,6 +202,10 @@ function parseExcelRows(json: Record<string, unknown>[]): ParsedImportRow[] {
       serial_number: pickField(mapped, ["s_n", "sn", "serial_number", "serial"]) || null,
       make: pickField(mapped, ["make", "manufacturer", "brand"]) || null,
       model: pickField(mapped, ["model"]) || null,
+      configuration:
+        pickField(mapped, ["configuration", "config", "specs", "hardware_configuration"]) || null,
+      charger_serial:
+        pickField(mapped, ["charger", "charger_serial", "charger_sn", "charger_s_n"]) || null,
       asset_type,
       assignee_name,
       employee_code,
@@ -273,6 +285,8 @@ export function downloadItAssetImportTemplate(types: ItAssetType[]): void {
     { wch: 14 },
     { wch: 12 },
     { wch: 16 },
+    { wch: 28 },
+    { wch: 14 },
     { wch: 14 },
     { wch: 20 },
     { wch: 14 },
@@ -302,6 +316,8 @@ export function downloadItAssetImportTemplate(types: ItAssetType[]): void {
     ["Location must match IT Locations master (e.g. Mumbai, New Delhi)."],
     ["Assignee = employee name; Employee ID = code (e.g. EMP-001). Both required when Assigned."],
     ["Asset Type must match Configuration → Asset Types (see Available types sheet)."],
+    ["Configuration is free text (e.g. Intel Core i5 / Gen 11 / 512 GB) and saved on the asset."],
+    ["Charger = charger serial number (e.g. CHG12345). Creates and links a CHARGER component."],
   ]);
 
   const wb = XLSX.utils.book_new();
@@ -471,6 +487,8 @@ export function ItAssetImportDialog({
           serial_number: row.serial_number,
           make: row.make,
           model: row.model,
+          configuration: row.configuration,
+          charger_serial: row.charger_serial,
           location_label: row.location,
           ...(matchedLoc ? { location_id: matchedLoc.id } : {}),
           issue_date: row.issue_date,
@@ -622,6 +640,8 @@ export function ItAssetImportDialog({
                     <th className="px-2 py-2">#</th>
                     <th className="px-2 py-2">Asset name</th>
                     <th className="px-2 py-2">Type</th>
+                    <th className="px-2 py-2">Configuration</th>
+                    <th className="px-2 py-2">Charger</th>
                     <th className="px-2 py-2">Status</th>
                     <th className="px-2 py-2">Assignee</th>
                     <th className="px-2 py-2">Employee ID</th>
@@ -635,6 +655,10 @@ export function ItAssetImportDialog({
                       <td className="px-2 py-1.5 text-muted-foreground">{row.row_number}</td>
                       <td className="px-2 py-1.5 font-medium">{row.asset_name}</td>
                       <td className="px-2 py-1.5 text-xs">{row.asset_type || "-"}</td>
+                      <td className="max-w-[10rem] truncate px-2 py-1.5 text-xs" title={row.configuration ?? undefined}>
+                        {row.configuration ?? "-"}
+                      </td>
+                      <td className="px-2 py-1.5 font-mono text-xs">{row.charger_serial ?? "-"}</td>
                       <td className="px-2 py-1.5 text-xs">{row.operational_status}</td>
                       <td className="px-2 py-1.5 text-xs">{row.assignee_name ?? "-"}</td>
                       <td className="px-2 py-1.5 font-mono text-xs">

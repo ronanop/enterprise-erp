@@ -1427,6 +1427,11 @@ class AssetExcelImportRow(BaseModel):
     make: str | None = Field(default=None, max_length=100)
     model: str | None = Field(default=None, max_length=100)
     configuration: str | None = Field(default=None, max_length=500)
+    charger_serial: str | None = Field(
+        default=None,
+        max_length=100,
+        description="Optional charger S/N — installs a type-only CHARGER component on the new asset",
+    )
     location_label: str | None = Field(default=None, max_length=255)
     location_id: UUID | None = None
     issue_date: date | None = None

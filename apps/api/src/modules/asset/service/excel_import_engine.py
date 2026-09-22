@@ -1,7 +1,8 @@
 """Excel import engine - one validated row → existing business services (CR-004 Phase 8B).
 
 Never writes via repository/ORM directly. Reuses AssetService, AssignmentService,
-and AssetOperationalStatusService workflows (including audit embedded in those services).
+AssetOperationalStatusService, and AssetComponentService workflows (including audit
+embedded in those services).
 """
 
 from __future__ import annotations
@@ -12,7 +13,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from modules.asset.domain.enums import AssetOperationalStatus
+from modules.asset.domain.enums import AssetComponentType, AssetOperationalStatus
 from modules.asset.domain.excel_import import (
     ExcelImportDefaults,
     ExcelImportRowInput,
@@ -27,6 +28,7 @@ from modules.asset.service.asset_operational_status_service import AssetOperatio
 from modules.asset.service.asset_scope_validator import AssetScopeValidator
 from modules.asset.service.asset_service import AssetService
 from modules.asset.service.assignment_service import AssignmentService
+from modules.asset.service.component_service import AssetComponentService
 from modules.foundation.domain.value_objects import TenantContext
 
 Ready = AssetOperationalStatus.READY_TO_MOVE.value
@@ -46,11 +48,13 @@ class AssetExcelImportEngine:
         assets: AssetService | None = None,
         assignments: AssignmentService | None = None,
         operational: AssetOperationalStatusService | None = None,
+        components: AssetComponentService | None = None,
     ) -> None:
         self._db = db
         self._assets = assets or AssetService(db)
         self._assignments = assignments or AssignmentService(db)
         self._operational = operational or AssetOperationalStatusService(db)
+        self._components = components or AssetComponentService(db)
 
     def import_row(
         self,
@@ -110,6 +114,7 @@ class AssetExcelImportEngine:
                 return dup
 
             asset = self._create_and_activate_asset(ctx, row=row, defaults=defaults, company_id=cid)
+            self._install_charger_if_present(ctx, asset_id=asset.id, row=row, company_id=cid)
             assignment_id: UUID | None = None
             final_ops = Ready
 
@@ -230,6 +235,27 @@ class AssetExcelImportEngine:
         )
         self._assets.submit(ctx, asset.id)
         return self._assets.approve(ctx, asset.id)
+
+    def _install_charger_if_present(
+        self,
+        ctx: TenantContext,
+        *,
+        asset_id: UUID,
+        row: ExcelImportRowInput,
+        company_id: UUID | None,
+    ) -> None:
+        """Type-only CHARGER row via Install Component (no separate charger asset)."""
+        serial = (row.charger_serial or "").strip()
+        if not serial:
+            return
+        self._components.install(
+            ctx,
+            company_id=company_id,
+            asset_id=asset_id,
+            branch_id=row.branch_id,
+            component_type=AssetComponentType.CHARGER.value,
+            serial_number=serial,
+        )
 
     def _assign_to_employee(
         self,
