@@ -26,6 +26,7 @@ import {
   isIntelProcessor,
 } from "@/config/asset-hardware-options";
 import { isAuthenticated } from "@/lib/auth";
+import { getStoredOrgContext } from "@/lib/org-context-storage";
 import { listBranchOptions, type OrgOption } from "@/lib/org-options";
 import { buildSelfServiceUrl } from "@/services/assets-service";
 import {
@@ -424,7 +425,10 @@ export function AssetAddForm({
         assetTypes={assetTypes}
         siteLocations={siteLocations}
         fallbackBranchId={form.branch_id || undefined}
-        companyId={siteLocations.find((l) => l.company_id)?.company_id}
+        companyId={
+          siteLocations.find((l) => l.company_id)?.company_id ||
+          getStoredOrgContext()?.companyId
+        }
         currencyCode={form.currency_code}
         onImported={() => {
           /* summary shown in dialog */

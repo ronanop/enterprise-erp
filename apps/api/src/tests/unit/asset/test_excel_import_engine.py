@@ -491,7 +491,7 @@ def test_case_insensitive_preview_status() -> None:
     assets.create_for_import.assert_not_called()
 
 
-def test_location_resolved_from_session_company_id() -> None:
+def test_location_label_resolves_using_session_company_id() -> None:
     """Excel Location name matches Locations master using session company_id."""
     from unittest.mock import patch
 
@@ -525,7 +525,12 @@ def test_location_resolved_from_session_company_id() -> None:
     assert kwargs["location_label"] == "Mumbai"
 
 
-def test_missing_location_name_gives_clear_error_not_company_id() -> None:
+def test_location_resolved_from_session_company_id() -> None:
+    """Alias kept for older callers / discovery."""
+    test_location_label_resolves_using_session_company_id()
+
+
+def test_location_label_unknown_fails_clearly() -> None:
     from unittest.mock import patch
 
     engine, assets, _, _ = _engine()
@@ -547,5 +552,42 @@ def test_missing_location_name_gives_clear_error_not_company_id() -> None:
 
     assert result.outcome == ExcelImportRowOutcome.FAILED.value
     assert "Location 'Nowhere' not found" in (result.reason or "")
-    assert "company_id" not in (result.reason or "").lower()
+    assert "Assets → Locations" in (result.reason or "")
+    assert "company_id is required" not in (result.reason or "").lower()
+    assets.create_for_import.assert_not_called()
+
+
+def test_missing_location_name_gives_clear_error_not_company_id() -> None:
+    test_location_label_unknown_fails_clearly()
+
+
+def test_company_context_error_is_rewritten() -> None:
+    from core.exceptions import ForbiddenException
+    from unittest.mock import patch
+
+    engine, assets, _, _ = _engine()
+    ctx = TenantContext(
+        tenant_id=uuid4(),
+        user_id=uuid4(),
+        user_type="employee",
+        company_id=None,
+        branch_id=uuid4(),
+    )
+    with patch(
+        "modules.asset.service.excel_import_engine.AssetScopeValidator"
+    ) as scope_cls:
+        scope_cls.return_value.resolve_company_id.side_effect = ForbiddenException(
+            "Company context required"
+        )
+        result = engine.import_row(
+            ctx,
+            _row(location_label="Mumbai"),
+            defaults=_defaults(),
+            confirm_warnings=False,
+            company_id=None,
+        )
+
+    assert result.outcome == ExcelImportRowOutcome.FAILED.value
+    assert "Company context is required for import" in (result.reason or "")
+    assert "company_id is required" not in (result.reason or "").lower()
     assets.create_for_import.assert_not_called()

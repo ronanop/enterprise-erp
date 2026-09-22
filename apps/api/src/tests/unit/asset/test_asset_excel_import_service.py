@@ -225,7 +225,7 @@ def test_company_id_forwarded() -> None:
     assert eng.import_row.call_args.kwargs["company_id"] == ctx.company_id
 
 
-def test_company_id_resolved_from_session_when_omitted() -> None:
+def test_resolves_company_id_from_session_when_body_omits_it() -> None:
     svc, _, eng, _ = _service_with_engine()
     ctx = _ctx()
     eng.import_row.return_value = ExcelImportRowResult(
@@ -233,6 +233,10 @@ def test_company_id_resolved_from_session_when_omitted() -> None:
     )
     svc.import_rows(ctx, [_row(1)], defaults=_defaults(), company_id=None)
     assert eng.import_row.call_args.kwargs["company_id"] == ctx.company_id
+
+
+def test_company_id_resolved_from_session_when_omitted() -> None:
+    test_resolves_company_id_from_session_when_body_omits_it()
 
 
 def test_partial_failures_across_batches() -> None:

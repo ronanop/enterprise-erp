@@ -15,10 +15,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
+  employeeDirectoryPermissionMessage,
+  isMissingPermissionError,
   listEmployeeDirectory,
   normalizeEmployeeCodeKey,
   type EmployeeDirectoryEntry,
 } from "@/lib/org-options";
+import { getStoredOrgContext } from "@/lib/org-context-storage";
+import { ensureSessionBranch } from "@/lib/ensure-session-branch";
 import { ApiClientError } from "@/services/api-client";
 import type { SiteLocation } from "@/services/asset-site-location-service";
 import type { ItAssetType } from "@/services/asset-type-service";
@@ -207,6 +211,7 @@ function validateRows(
   employees: EmployeeDirectoryEntry[],
   locations: SiteLocation[],
   assetTypes: ItAssetType[],
+  options: { skipEmployeeLookup?: boolean } = {},
 ): ParsedImportRow[] {
   const empByCode = new Map<string, EmployeeDirectoryEntry>();
   for (const e of employees) {
@@ -232,7 +237,7 @@ function validateRows(
     if (row.operational_status === "ASSIGNED" && !row.employee_code) {
       errors.push("Assigned status requires Employee ID");
     }
-    if (row.employee_code) {
+    if (row.employee_code && !options.skipEmployeeLookup) {
       const emp =
         empByCode.get(row.employee_code.toLowerCase()) ??
         empByCode.get(normalizeEmployeeCodeKey(row.employee_code));
@@ -246,7 +251,11 @@ function validateRows(
     }
     if (row.location) {
       const loc = locByName.get(row.location.toLowerCase());
-      if (!loc) errors.push(`Location '${row.location}' not found in Locations master`);
+      if (!loc) {
+        errors.push(
+          `Location '${row.location}' not found. Please add it under Assets → Locations first.`,
+        );
+      }
     }
     const allowed = ["READY_TO_MOVE", "ASSIGNED", "RETIRED", "PENDING_DISPOSAL"];
     if (!allowed.includes(row.operational_status)) {
@@ -326,6 +335,7 @@ export function ItAssetImportDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<ParsedImportRow[]>([]);
   const [employees, setEmployees] = useState<EmployeeDirectoryEntry[]>([]);
+  const [employeesLoadFailed, setEmployeesLoadFailed] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -335,18 +345,41 @@ export function ItAssetImportDialog({
   if (!open) return null;
 
   const resolvedCompanyId =
-    companyId || siteLocations.find((l) => l.company_id)?.company_id || undefined;
+    companyId ||
+    siteLocations.find((l) => l.company_id)?.company_id ||
+    getStoredOrgContext()?.companyId ||
+    undefined;
 
-  const validated = validateRows(preview, employees, siteLocations, assetTypes);
+  const needsEmployeeDirectory = preview.some((r) => Boolean(r.employee_code));
+  const validated = validateRows(preview, employees, siteLocations, assetTypes, {
+    skipEmployeeLookup: employeesLoadFailed,
+  });
   const invalidCount = validated.filter((r) => r.errors.length > 0).length;
   const canImport =
-    !busy && !parsing && validated.length > 0 && invalidCount === 0 && !summary;
+    !busy &&
+    !parsing &&
+    validated.length > 0 &&
+    invalidCount === 0 &&
+    !summary &&
+    !(employeesLoadFailed && needsEmployeeDirectory);
 
   async function loadEmployees() {
     try {
-      setEmployees(await listEmployeeDirectory());
-    } catch {
+      setEmployees(await listEmployeeDirectory({ throwOnError: true }));
+      setEmployeesLoadFailed(false);
+    } catch (err) {
       setEmployees([]);
+      setEmployeesLoadFailed(true);
+      if (isMissingPermissionError(err, "master.employee:read")) {
+        setError(employeeDirectoryPermissionMessage(err));
+      } else {
+        setError(
+          err instanceof ApiClientError
+            ? err.message
+            : "Could not load employee directory for import validation.",
+        );
+      }
+      throw err;
     }
   }
 
@@ -355,8 +388,8 @@ export function ItAssetImportDialog({
     setSummary(null);
     setFileName(file.name);
     setParsing(true);
+    setEmployeesLoadFailed(false);
     try {
-      await loadEmployees();
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: "array" });
       const sheet = wb.Sheets[wb.SheetNames[0]!];
@@ -368,6 +401,17 @@ export function ItAssetImportDialog({
         return;
       }
       setPreview(rows);
+
+      const fileNeedsEmployees = rows.some((r) => Boolean(r.employee_code));
+      try {
+        await loadEmployees();
+      } catch {
+        // Permission / load failure already set dialog error.
+        // Keep preview for READY_TO_MOVE rows that do not need employees.
+        if (!fileNeedsEmployees) {
+          setError(null);
+        }
+      }
     } catch {
       setPreview([]);
       setError("Could not parse Excel file.");
@@ -381,6 +425,19 @@ export function ItAssetImportDialog({
     setBusy(true);
     setError(null);
     try {
+      const sessionScope = await ensureSessionBranch();
+      const companyForImport =
+        resolvedCompanyId || sessionScope?.company_id || undefined;
+      const branchForImport =
+        fallbackBranchId || sessionScope?.branch_id || undefined;
+
+      if (!companyForImport) {
+        setError(
+          "Company context is required for import. Select a company in the header, then retry.",
+        );
+        return;
+      }
+
       const empByCode = new Map<string, string>();
       for (const e of employees) {
         if (!e.employeeCode) continue;
@@ -402,8 +459,8 @@ export function ItAssetImportDialog({
           row_number: row.row_number,
           preview_status: "valid",
           asset_name: row.asset_name,
-          ...(fallbackBranchId ? { branch_id: fallbackBranchId } : {}),
-          ...(resolvedCompanyId ? { company_id: resolvedCompanyId } : {}),
+          ...(branchForImport ? { branch_id: branchForImport } : {}),
+          company_id: companyForImport,
           operational_status: row.operational_status,
           employee_id: row.employee_code
             ? (empByCode.get(row.employee_code.toLowerCase()) ??
@@ -421,7 +478,7 @@ export function ItAssetImportDialog({
       });
 
       const result = await assetOperationsService.importExcelRegister({
-        ...(resolvedCompanyId ? { company_id: resolvedCompanyId } : {}),
+        company_id: companyForImport,
         confirm_warnings: true,
         defaults: {
           asset_type: "fixed",

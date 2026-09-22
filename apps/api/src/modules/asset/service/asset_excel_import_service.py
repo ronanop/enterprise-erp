@@ -54,9 +54,23 @@ class AssetExcelImportService:
 
         # Resolve once from request body or login session so every row (and location
         # lookups) has a company_id — Excel never supplies company_id.
-        resolved_company_id = AssetScopeValidator(self._db).resolve_company_id(
-            ctx, company_id
-        )
+        try:
+            resolved_company_id = AssetScopeValidator(self._db).resolve_company_id(
+                ctx, company_id
+            )
+        except Exception as exc:  # noqa: BLE001 - fail all rows with one clear reason
+            reason = AssetExcelImportEngine._row_failure_reason(exc)
+            summary.failed = len(rows)
+            summary.rows = [
+                ExcelImportRowResult(
+                    row_number=row.row_number,
+                    outcome=ExcelImportRowOutcome.FAILED.value,
+                    reason=reason,
+                )
+                for row in rows
+            ]
+            summary.duration_ms = int((time.perf_counter() - started) * 1000)
+            return summary
         resolved_defaults = self._resolve_defaults(ctx, defaults, resolved_company_id)
         resolved_rows = [self._resolve_row_branch(ctx, row) for row in rows]
 

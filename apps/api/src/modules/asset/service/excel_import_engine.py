@@ -146,7 +146,7 @@ class AssetExcelImportEngine:
             return ExcelImportRowResult(
                 row_number=row.row_number,
                 outcome=ExcelImportRowOutcome.FAILED.value,
-                reason=str(exc) or exc.__class__.__name__,
+                reason=self._row_failure_reason(exc),
                 warning=preview == "warning",
             )
 
@@ -196,13 +196,16 @@ class AssetExcelImportEngine:
             raise RegistrationValidationError("asset_type_id is required for Excel import")
         location_label = (row.location_label or "").strip() or None
         location_id = row.location_id
-        cid = AssetScopeValidator(self._db).resolve_company_id(
-            ctx, company_id or row.company_id
+        cid = company_id or AssetScopeValidator(self._db).resolve_company_id(
+            ctx, row.company_id
         )
         if location_label and location_id is None:
             site_loc = SiteLocationRepository(self._db).get_by_name(ctx, cid, location_label)
             if site_loc is None:
-                raise ValueError(f"Location '{location_label}' not found in Locations master")
+                raise ValueError(
+                    f"Location '{location_label}' not found. "
+                    "Please add it under Assets → Locations first."
+                )
             location_id = site_loc.id
             location_label = site_loc.name
         asset = self._assets.create_for_import(
@@ -323,3 +326,18 @@ class AssetExcelImportEngine:
         self._assignments.submit(ctx, assignment.id)
         activated = self._assignments.approve(ctx, assignment.id)
         return activated.id
+
+    @staticmethod
+    def _row_failure_reason(exc: BaseException) -> str:
+        """Map scope errors to actionable import reasons (never opaque company_id blanks)."""
+        raw = (str(exc) or exc.__class__.__name__).strip()
+        lowered = raw.lower()
+        if (
+            "company context required" in lowered
+            or "company_id is required" in lowered
+        ):
+            return (
+                "Company context is required for import. "
+                "Select a company in the header (or pass company_id), then retry."
+            )
+        return raw or exc.__class__.__name__
