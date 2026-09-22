@@ -1,13 +1,9 @@
-import { CompanyWorkspaceShell } from "@/components/crm/company-workspace-shell";
-import { LeadFormPage } from "@/components/crm/sales/lead-form-page";
+import { redirect } from "next/navigation";
 
 type PageProps = { params: Promise<{ row_id: string; lead_id: string }> };
 
-export default async function CrmEditLeadRoute({ params }: PageProps) {
+/** Compat redirect — nested path 404s under Turbopack; canonical is `/edit-lead/[lead_id]`. */
+export default async function CrmEditLeadLegacyRedirect({ params }: PageProps) {
   const { row_id, lead_id } = await params;
-  return (
-    <CompanyWorkspaceShell companyAccountId={row_id}>
-      <LeadFormPage companyAccountId={row_id} leadId={lead_id} />
-    </CompanyWorkspaceShell>
-  );
+  redirect(`/crm/companies/${row_id}/edit-lead/${lead_id}`);
 }

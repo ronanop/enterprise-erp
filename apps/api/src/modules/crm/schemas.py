@@ -769,6 +769,7 @@ class CompanyCreate(BaseModel):
     other_industries: str | None = None
     portal_id: str | None = None
     source: str
+    partner_names: str | None = None
     rating: str | None = None
     first_name: str
     last_name: str
@@ -800,6 +801,7 @@ class CompanyUpdate(BaseModel):
     other_industries: str | None = None
     portal_id: str | None = None
     source: str | None = None
+    partner_names: str | None = None
     rating: str | None = None
     first_name: str | None = None
     last_name: str | None = None
@@ -836,6 +838,7 @@ class CompanyResponse(OrmModel):
     other_industries: str | None
     portal_id: str | None
     source: str
+    partner_names: str | None
     rating: str | None
     first_name: str | None
     last_name: str | None

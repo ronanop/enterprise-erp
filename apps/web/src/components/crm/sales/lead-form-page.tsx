@@ -18,6 +18,7 @@ import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
 import { KycContactDesignationField } from "@/components/crm/sales/kyc-contact-designation-field";
 import { LeadDistributorMultiSelect } from "@/components/crm/sales/lead-distributor-multi-select";
 import { LeadOemMultiSelect } from "@/components/crm/sales/lead-oem-multi-select";
+import { LeadProductTypeMultiSelect } from "@/components/crm/sales/lead-product-type-multi-select";
 import {
   RequiredFieldsDialog,
   missingRequiredMessage,
@@ -30,14 +31,19 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatLeadDistributorNames, parseLeadDistributorNames } from "@/lib/crm/lead-distributor-options";
+import {
+  companySourceToLeadMatchKey,
+  normalizeSourceMatchKey,
+  sortLeadSourcesByCompanyOrder,
+} from "@/lib/crm/company-lead-sources";
 import { isCrmModuleAdmin } from "@/lib/crm/crm-module-access";
 import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { formatLeadOemNames, parseLeadOemNames } from "@/lib/crm/lead-oem-options";
 import {
+  formatLeadProductTypes,
   isCloudLeadProductType,
-  LEAD_PRODUCT_TYPES,
-  normalizeLeadProductType,
-  subProductOptionsForType,
+  parseLeadProductTypes,
+  subProductOptionsForTypes,
 } from "@/lib/crm/lead-product-options";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { ApiClientError, authService } from "@/services/api-client";
@@ -205,7 +211,7 @@ export function LeadFormPage({
                 member.email?.trim().toLowerCase() === meUser?.email?.trim().toLowerCase(),
             )?.id ?? "";
       setCompany(companyRow);
-      setLeadSources(sources);
+      setLeadSources(sortLeadSourcesByCompanyOrder(sources));
       setEntityCatalog(entities);
       const rawIndustry = companyRow.industry ?? "";
       if (rawIndustry && !INDUSTRIES.includes(rawIndustry)) {
@@ -213,9 +219,9 @@ export function LeadFormPage({
       } else {
         setIndustryOther("");
       }
-      const sourceLabel = companyRow.source.replaceAll("_", " ").toLowerCase();
+      const companySourceKey = companySourceToLeadMatchKey(companyRow.source ?? "");
       const inheritedSource = sources.find(
-        (source) => source.label.trim().toLowerCase() === sourceLabel,
+        (source) => normalizeSourceMatchKey(source.label) === companySourceKey,
       );
       setForm((f) => {
         if (leadRow) {
@@ -306,26 +312,26 @@ export function LeadFormPage({
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function onProductTypeChange(value: string) {
+  function onProductTypesChange(types: string[]) {
     setForm((f) => {
-      const normalized = normalizeLeadProductType(value);
-      const options = subProductOptionsForType(normalized ?? value);
+      const options = subProductOptionsForTypes(types);
       const keepCategory =
         f.sub_product_category && options.includes(f.sub_product_category)
           ? f.sub_product_category
           : "";
+      const cloudSelected = types.includes("Cloud");
       return {
         ...f,
-        product_type: normalized ?? value,
+        product_type: formatLeadProductTypes(types),
         sub_product_category: keepCategory,
-        sub_product: normalized === "Cloud" ? "" : f.sub_product,
-        sub_product_other: normalized === "Cloud" ? "" : f.sub_product_other,
+        sub_product: cloudSelected ? "" : f.sub_product,
+        sub_product_other: cloudSelected ? "" : f.sub_product_other,
       };
     });
   }
 
-  const normalizedProductType = normalizeLeadProductType(form.product_type);
-  const subProductCategoryOptions = subProductOptionsForType(form.product_type);
+  const selectedProductTypes = parseLeadProductTypes(form.product_type);
+  const subProductCategoryOptions = subProductOptionsForTypes(selectedProductTypes);
   const isCloudProduct = isCloudLeadProductType(form.product_type);
 
   function onOemNamesChange(names: string[]) {
@@ -391,7 +397,9 @@ export function LeadFormPage({
     if (!form.email?.trim()) missing.push("Email");
     if (!form.first_name?.trim()) missing.push("First Name");
     if (!form.last_name?.trim()) missing.push("Last Name");
-    if (!form.product_type) missing.push("Product Type");
+    if (!form.product_type?.trim() || selectedProductTypes.length === 0) {
+      missing.push("Product Type");
+    }
     if (!form.mobile?.trim()) missing.push("Mobile");
     if (!form.designation?.trim()) missing.push("Designation");
     if (!form.lead_source_id) missing.push("Lead Source");
@@ -572,17 +580,10 @@ export function LeadFormPage({
           </FinanceField>
 
           <FinanceField label="Product Type *">
-            <FinanceSelect
-              value={form.product_type ?? ""}
-              onChange={(e) => onProductTypeChange(e.target.value)}
-            >
-              <option value="">None</option>
-              {LEAD_PRODUCT_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </FinanceSelect>
+            <LeadProductTypeMultiSelect
+              value={selectedProductTypes}
+              onChange={onProductTypesChange}
+            />
           </FinanceField>
 
           <FinanceField label={isCloudProduct ? "Sub Product *" : "Sub Product Category *"}>
@@ -597,11 +598,11 @@ export function LeadFormPage({
                   sub_product_other: isCloudProduct ? "" : f.sub_product_other,
                 }));
               }}
-              disabled={!normalizedProductType}
+              disabled={selectedProductTypes.length === 0}
               required
             >
               <option value="">
-                {normalizedProductType ? "None" : "Select product type first"}
+                {selectedProductTypes.length > 0 ? "None" : "Select product type first"}
               </option>
               {subProductCategoryOptions.map((category) => (
                 <option key={category} value={category}>

@@ -133,7 +133,7 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
           <div className="flex flex-wrap items-center gap-2">
             {lead.company_account_id ? (
               <CrmDetailEditLink
-                href={`/crm/companies/${lead.company_account_id}/leads/${lead.id}/edit`}
+                href={`/crm/companies/${lead.company_account_id}/edit-lead/${lead.id}`}
               />
             ) : null}
             {converted && lead.converted_opportunity_id ? (

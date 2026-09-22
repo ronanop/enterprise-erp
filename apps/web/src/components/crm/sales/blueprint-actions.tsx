@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
-import { fileToBase64, listCrmApprovalUsers, type BlueprintActionPayload } from "@/services/sales-crm-service";
+import { fileToBase64, getNextDealRegNumber, listCrmApprovalUsers, type BlueprintActionPayload } from "@/services/sales-crm-service";
 
 type FieldType =
   | "text"
@@ -46,6 +46,7 @@ type FieldConfig = {
   label: string;
   type: FieldType;
   required?: boolean;
+  readOnly?: boolean;
   stage?: PoStage;
 };
 
@@ -122,7 +123,7 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
     description: "Converts immediately using lead defaults.",
   },
   lost: {
-    label: "Lost Deal",
+    label: "Deal Lost",
     tone: "destructive",
     fields: [{ key: "reason", label: "Lost reason", type: "textarea", required: true }],
     description: "Available until the deal is Won.",
@@ -176,7 +177,16 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
   skip_sow: { label: "Skip SOW", fields: [] },
   deal_reg: {
     label: "Deal Registration",
-    fields: [{ key: "deal_reg_number", label: "Deal Reg Number", type: "text", required: true }],
+    fields: [
+      {
+        key: "deal_reg_number",
+        label: "DR Number",
+        type: "text",
+        required: true,
+        readOnly: true,
+      },
+    ],
+    description: "DR Number is auto-generated in series. Confirm to register this deal.",
   },
   oem_received: { label: "OEM Quotation Received", fields: [] },
   attach_oem_quote: {
@@ -317,6 +327,8 @@ type Props = {
   locked?: boolean;
   /** Human-readable current blueprint stage (28-stage sales flow). */
   currentStageLabel?: string | null;
+  /** Opportunity id — used to auto-generate Deal Registration (DR) numbers. */
+  opportunityId?: string;
   /** Actions rendered elsewhere by the parent (e.g. gated Create Quote / Create OVF CTAs). */
   excludeActions?: string[];
   actionLabelOverrides?: Partial<Record<string, string>>;
@@ -330,6 +342,7 @@ export function BlueprintActions({
   allowedActions,
   locked,
   currentStageLabel,
+  opportunityId,
   excludeActions,
   actionLabelOverrides,
   actionDispatchOverrides,
@@ -441,6 +454,22 @@ export function BlueprintActions({
     setFile(null);
     setFiles([]);
     setError(null);
+
+    if (action === "deal_reg" && opportunityId) {
+      setBusy(true);
+      void getNextDealRegNumber(opportunityId)
+        .then((number) => {
+          setValues((prev) => ({ ...prev, deal_reg_number: number }));
+        })
+        .catch((err) => {
+          setError(
+            err instanceof ApiClientError
+              ? err.message
+              : "Failed to generate DR Number",
+          );
+        })
+        .finally(() => setBusy(false));
+    }
   }
 
   function close() {
@@ -758,8 +787,17 @@ export function BlueprintActions({
                   <Input
                     type={field.type}
                     value={values[field.key] ?? ""}
-                    onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
-                    className="h-10 rounded-lg border-slate-200 bg-white text-sm shadow-none focus-visible:border-sky-400 focus-visible:ring-2 focus-visible:ring-sky-200/80"
+                    readOnly={field.readOnly}
+                    onChange={(e) => {
+                      if (field.readOnly) return;
+                      setValues((v) => ({ ...v, [field.key]: e.target.value }));
+                    }}
+                    className={[
+                      "h-10 rounded-lg border-slate-200 bg-white text-sm shadow-none focus-visible:border-sky-400 focus-visible:ring-2 focus-visible:ring-sky-200/80",
+                      field.readOnly ? "cursor-default bg-slate-50 text-slate-700" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
                   />
                 )}
               </FinanceField>

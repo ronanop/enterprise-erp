@@ -28,6 +28,7 @@ class CrmCompany(Base, *CrmTransactionMixin):
     other_industries: Mapped[str | None] = mapped_column(String(255), nullable=True)
     portal_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False)
+    partner_names: Mapped[str | None] = mapped_column(Text, nullable=True)
     rating: Mapped[str | None] = mapped_column(String(30), nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)

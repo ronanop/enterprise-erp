@@ -376,7 +376,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
               <div className="flex flex-wrap items-center gap-2">
                 {opp.lead_id && opp.company_account_id ? (
                   <CrmDetailEditLink
-                    href={`/crm/companies/${opp.company_account_id}/leads/${opp.lead_id}/edit`}
+                    href={`/crm/companies/${opp.company_account_id}/edit-lead/${opp.lead_id}`}
                   />
                 ) : null}
                 <CrmRecordActionsMenu
@@ -431,6 +431,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
           <BlueprintActions
             allowedActions={blueprintActions}
             locked={blueprint.locked}
+            opportunityId={opp.id}
             currentStageLabel={resolveSalesStageLabel({
               entityType: "opportunity",
               blueprintState: blueprint.state,
@@ -554,6 +555,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
               employees={employees}
               leadSources={leadSources}
               title="Opportunity Information"
+              mergeFullName
             />
           ) : opp.lead_id ? (
             <CrmSection title="Source Lead" icon={Handshake}>

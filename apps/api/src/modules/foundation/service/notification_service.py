@@ -337,6 +337,21 @@ class NotificationService:
             digest_key=digest_key,
         )
 
+    def find_digest(
+        self,
+        *,
+        tenant_id: UUID,
+        user_id: UUID,
+        event_type: str,
+        digest_key: str,
+    ) -> NtfEvent | None:
+        return self._repo.find_digest(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            event_type=event_type,
+            digest_key=digest_key,
+        )
+
     @staticmethod
     def _to_inbox_item(row: NtfEvent) -> NotificationInboxItem:
         payload = row.payload_json if isinstance(row.payload_json, dict) else {}

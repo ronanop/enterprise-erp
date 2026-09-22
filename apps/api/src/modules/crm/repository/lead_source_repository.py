@@ -20,9 +20,14 @@ class LeadSourceRepository(CrmScopedRepository):
         return self.db.scalar(stmt)
 
     def list_sources(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(CrmLeadSource).where(
-            CrmLeadSource.company_id == company_id,
-            CrmLeadSource.is_deleted.is_(False),
+        stmt = (
+            select(CrmLeadSource)
+            .where(
+                CrmLeadSource.company_id == company_id,
+                CrmLeadSource.is_deleted.is_(False),
+                CrmLeadSource.status == "active",
+            )
+            .order_by(CrmLeadSource.source_name.asc())
         )
         stmt = self.apply_crm_filter(stmt, CrmLeadSource, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())

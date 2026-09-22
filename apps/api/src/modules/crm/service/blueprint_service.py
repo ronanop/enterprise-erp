@@ -85,6 +85,68 @@ def log_state_history(
         performed_by=ctx.user_id,
         performed_at=utcnow(),
     )
+    if entity_type == "opportunity":
+        _notify_admins_opportunity_stage(
+            db,
+            ctx,
+            opportunity_id=entity_id,
+            from_state=from_state,
+            to_state=to_state,
+            action=action,
+        )
+
+
+def _notify_admins_opportunity_stage(
+    db: Session,
+    ctx: TenantContext,
+    *,
+    opportunity_id: UUID,
+    from_state: str | None,
+    to_state: str,
+    action: str,
+) -> None:
+    """Alert CRM admins when an opportunity milestone/stage completes."""
+    from modules.crm.service.crm_notification_service import (
+        notify_opportunity_stage_completed,
+        should_notify_opportunity_stage,
+    )
+
+    if not should_notify_opportunity_stage(
+        from_state=from_state, to_state=to_state, action=action
+    ):
+        return
+
+    opp = db.get(CrmOpportunity, opportunity_id)
+    if opp is None or getattr(opp, "is_deleted", False):
+        return
+
+    actor_name: str | None = None
+    if ctx.user_id is not None:
+        from sqlalchemy import select
+
+        from modules.foundation.models.security import SecUser
+
+        user = db.scalar(
+            select(SecUser).where(
+                SecUser.id == ctx.user_id,
+                SecUser.tenant_id == ctx.tenant_id,
+                SecUser.is_deleted.is_(False),
+            )
+        )
+        if user is not None:
+            actor_name = user.display_name or user.email
+
+    notify_opportunity_stage_completed(
+        db,
+        tenant_id=ctx.tenant_id,
+        opportunity_id=opportunity_id,
+        opportunity_name=opp.opportunity_name or "Opportunity",
+        from_state=from_state,
+        to_state=to_state,
+        action=action,
+        actor_user_id=ctx.user_id,
+        actor_name=actor_name,
+    )
 
 
 # Opportunity actions that are UI affordances only - driven by Quote/OVF services.
@@ -157,6 +219,17 @@ class OpportunityBlueprintService:
         self._visibility.ensure_opportunity_access(ctx, row)
         return row
 
+    def next_deal_reg_number(self, ctx: TenantContext, opportunity_id: UUID) -> str:
+        """Preview the next series DR number for Deal Registration (does not persist)."""
+        opp = self.get(ctx, opportunity_id)
+        if opp.deal_reg_number:
+            return opp.deal_reg_number
+        from modules.crm.domain.enums import CrmEntityType
+        from modules.crm.service.document_number_service import DocumentNumberService
+
+        return DocumentNumberService(self._db).generate(
+            CrmEntityType.DEAL_REG, opp.company_id, CrmOpportunity, "deal_reg_number"
+        )
     def _require_blueprint(self, opp: CrmOpportunity) -> str:
         if not opp.blueprint_state:
             raise ConflictException(
@@ -442,9 +515,14 @@ class OpportunityBlueprintService:
                 raise ConflictException(
                     "Approve a BOQ or SOW before Deal Registration"
                 )
-            reg_no = payload.get("deal_reg_number")
+            reg_no = (payload.get("deal_reg_number") or "").strip()
             if not reg_no:
-                raise ConflictException("deal_reg_number is required")
+                from modules.crm.domain.enums import CrmEntityType
+                from modules.crm.service.document_number_service import DocumentNumberService
+
+                reg_no = DocumentNumberService(self._db).generate(
+                    CrmEntityType.DEAL_REG, opp.company_id, CrmOpportunity, "deal_reg_number"
+                )
             updates["deal_reg_number"] = reg_no
         elif action == "oem_received":
             updates["oem_quotation_received"] = True

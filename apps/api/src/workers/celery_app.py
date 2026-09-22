@@ -38,6 +38,11 @@ celery_app.conf.update(
             "task": "procurement.delivery_notifications",
             "schedule": 86400.0,
         },
+        # Unconverted idle leads → owner in-app reminder every 5 days.
+        "crm.stale_lead_alerts": {
+            "task": "crm.stale_lead_alerts",
+            "schedule": 86400.0,
+        },
     },
 )
 

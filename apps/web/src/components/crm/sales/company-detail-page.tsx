@@ -39,6 +39,11 @@ import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCrmCode } from "@/lib/crm/format-crm-code";
+import {
+  COMPANY_LEAD_SOURCES,
+  companyLeadSourceLabel,
+  normalizeCompanyLeadSource,
+} from "@/lib/crm/company-lead-sources";
 import { ApiClientError } from "@/services/api-client";
 import {
   fullName,
@@ -63,16 +68,6 @@ import {
   type SalesLead,
 } from "@/services/sales-crm-service";
 
-const COMPANY_SOURCES = [
-  "referral",
-  "website",
-  "cold_call",
-  "partner",
-  "event",
-  "advertisement",
-  "other",
-] as const;
-
 function textOrDash(value: string | null | undefined): string {
   return value?.trim() || "-";
 }
@@ -95,8 +90,9 @@ function CompanyReadOnlyField({ label, value }: { label: string; value: string }
 
 function formatSourceLabel(source: string): string {
   if (!source.trim()) return "-";
-  if ((COMPANY_SOURCES as readonly string[]).includes(source)) {
-    return source === "other" ? "other" : source.replaceAll("_", " ");
+  const normalized = normalizeCompanyLeadSource(source);
+  if ((COMPANY_LEAD_SOURCES as readonly string[]).includes(normalized)) {
+    return companyLeadSourceLabel(normalized);
   }
   return source;
 }
@@ -134,8 +130,9 @@ function CompanyProfileReadOnly({
   company: Company;
   employeeName: (id: string | null) => string;
 }) {
-  const knownSource = (COMPANY_SOURCES as readonly string[]).includes(company.source);
-  const sourceSelectValue = knownSource ? company.source : "other";
+  const normalizedSource = normalizeCompanyLeadSource(company.source);
+  const knownSource = (COMPANY_LEAD_SOURCES as readonly string[]).includes(normalizedSource);
+  const sourceSelectValue = knownSource ? normalizedSource : "other";
   const otherSourceValue = knownSource ? "" : company.source;
 
   return (
@@ -150,6 +147,9 @@ function CompanyProfileReadOnly({
             <CompanyReadOnlyField label="Industry *" value={textOrDash(company.industry)} />
             <CompanyReadOnlyField label="Other Industries" value={textOrDash(company.other_industries)} />
             <CompanyReadOnlyField label="Source *" value={formatSourceLabel(sourceSelectValue)} />
+            {sourceSelectValue === "multi_tier" ? (
+              <CompanyReadOnlyField label="Partner Names *" value={textOrDash(company.partner_names)} />
+            ) : null}
             {sourceSelectValue === "other" ? (
               <CompanyReadOnlyField label="Other Source *" value={textOrDash(otherSourceValue)} />
             ) : null}
@@ -160,7 +160,7 @@ function CompanyProfileReadOnly({
             <CompanyReadOnlyField label="Last Name *" value={textOrDash(company.last_name)} />
             <CompanyReadOnlyField label="Customer Email *" value={textOrDash(company.customer_email)} />
             <CompanyReadOnlyField label="Phone *" value={textOrDash(company.phone)} />
-            <CompanyReadOnlyField label="Website" value={textOrDash(company.website)} />
+            <CompanyReadOnlyField label="Website *" value={textOrDash(company.website)} />
             <CompanyReadOnlyField
               label="Assigned Ownership"
               value={company.account_ownership_id ? employeeName(company.account_ownership_id) : "None"}

@@ -12,7 +12,13 @@ import {
 
 import { CrmSection } from "@/components/crm/crm-ui";
 import { FinanceField } from "@/components/finance/journals/finance-form-field";
-import { formatInr, type Company, type Option, type SalesLead } from "@/services/sales-crm-service";
+import {
+  formatInr,
+  fullName,
+  type Company,
+  type Option,
+  type SalesLead,
+} from "@/services/sales-crm-service";
 
 function textOrDash(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "-";
@@ -55,6 +61,8 @@ type Props = {
   leadSources?: Option[];
   /** Section heading - use Opportunity Information on converted deals. */
   title?: string;
+  /** Merge first/last into one Full Name field (opportunity view). */
+  mergeFullName?: boolean;
 };
 
 export function LeadDetailsCard({
@@ -63,6 +71,7 @@ export function LeadDetailsCard({
   employees = [],
   leadSources = [],
   title = "Lead Information",
+  mergeFullName = false,
 }: Props) {
   const employeeName = (id: string | null | undefined) => {
     if (!id) return "None";
@@ -75,7 +84,11 @@ export function LeadDetailsCard({
   };
 
   const companyName = company?.customer_name ?? "-";
-  const salutation = lead.salutation?.trim() || "-";
+  const salutation = lead.salutation?.trim() || "";
+  const displayFullName = [salutation, fullName(lead) === "-" ? null : fullName(lead)]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
 
   return (
     <div className="space-y-5">
@@ -87,17 +100,26 @@ export function LeadDetailsCard({
             value={textOrDash(lead.project_title)}
           />
 
-          <FinanceField label="First Name *">
-            <div className="flex gap-2">
-              <div className="w-14 shrink-0">
-                <ReadOnlyValue value={salutation} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <ReadOnlyValue value={textOrDash(lead.first_name)} />
-              </div>
-            </div>
-          </FinanceField>
-          <LeadReadOnlyField label="Last Name *" value={textOrDash(lead.last_name)} />
+          {mergeFullName ? (
+            <LeadReadOnlyField
+              label="Full Name *"
+              value={textOrDash(displayFullName)}
+            />
+          ) : (
+            <>
+              <FinanceField label="First Name *">
+                <div className="flex gap-2">
+                  <div className="w-14 shrink-0">
+                    <ReadOnlyValue value={salutation || "-"} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <ReadOnlyValue value={textOrDash(lead.first_name)} />
+                  </div>
+                </div>
+              </FinanceField>
+              <LeadReadOnlyField label="Last Name *" value={textOrDash(lead.last_name)} />
+            </>
+          )}
 
           <LeadReadOnlyField label="Email *" value={textOrDash(lead.email)} />
           <LeadReadOnlyField label="Mobile *" value={textOrDash(lead.mobile)} />

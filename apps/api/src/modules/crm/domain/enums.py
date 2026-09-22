@@ -152,6 +152,7 @@ class CrmEntityType(str, Enum):
     SELLING_ENTITY = "selling_entity"
     APPROVAL_TASK = "approval_task"
     KYC = "kyc"
+    DEAL_REG = "deal_reg"
 
 
 CODE_PREFIXES: dict[CrmEntityType, tuple[str, int]] = {
@@ -173,6 +174,7 @@ CODE_PREFIXES: dict[CrmEntityType, tuple[str, int]] = {
     CrmEntityType.SELLING_ENTITY: ("ENT-", 0),
     CrmEntityType.APPROVAL_TASK: ("JOB-", 0),
     CrmEntityType.KYC: ("KYC-", 0),
+    CrmEntityType.DEAL_REG: ("DR-", 0),
 }
 
 # Team roles that can receive a "My Jobs" approval task. ``legal`` validates

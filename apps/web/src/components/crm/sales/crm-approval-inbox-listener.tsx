@@ -18,6 +18,7 @@ import {
 } from "@/lib/crm-notification-state";
 
 function entityHref(entityType: string, entityId: string): string {
+  if (entityType === "lead") return `/crm/leads/${entityId}`;
   if (entityType === "opportunity") return `/crm/opportunities/${entityId}`;
   if (entityType === "quote") return `/crm/quotes/${entityId}`;
   if (entityType === "ovf") return `/crm/ovf/${entityId}`;
@@ -25,6 +26,8 @@ function entityHref(entityType: string, entityId: string): string {
 }
 
 function parseOpenEntity(pathname: string): { type: string; id: string } | null {
+  const lead = pathname.match(/^\/crm\/leads\/([^/]+)/);
+  if (lead?.[1]) return { type: "lead", id: lead[1] };
   const opp = pathname.match(/^\/crm\/opportunities\/([^/]+)/);
   if (opp?.[1]) return { type: "opportunity", id: opp[1] };
   const quote = pathname.match(/^\/crm\/quotes\/([^/]+)/);
@@ -206,13 +209,28 @@ export function CrmApprovalInboxListener() {
       const rows = await listCrmApprovalInbox();
       inboxRef.current = rows;
       const open = parseOpenEntity(window.location.pathname);
-      const rejections = rows.filter((row) => {
-        if (row.event_type !== "crm.approval.rejected" || row.read_at) return false;
+      const popupEvents = new Set([
+        "crm.approval.rejected",
+        "crm.opportunity.stage_completed",
+        "crm.lead.stale_reminder",
+      ]);
+      const candidates = rows.filter((row) => {
+        if (!popupEvents.has(row.event_type) || row.read_at) return false;
         if (isCrmApprovalSurfaceDismissed(row)) return false;
         if (isSameEntity(row, open)) return false;
         return true;
       });
-      setAlerts(dedupeCrmRejectionsByEntity(rejections).slice(0, 3));
+      const rejections = dedupeCrmRejectionsByEntity(
+        candidates.filter((row) => row.event_type === "crm.approval.rejected"),
+      );
+      const stages = candidates.filter(
+        (row) => row.event_type === "crm.opportunity.stage_completed",
+      );
+      const staleLeads = candidates.filter(
+        (row) => row.event_type === "crm.lead.stale_reminder",
+      );
+      // Approvals on top, then stage completions, then lead reminders.
+      setAlerts([...rejections, ...stages, ...staleLeads].slice(0, 3));
     } catch {
       /* ignore polling errors */
     }
@@ -254,8 +272,24 @@ export function CrmApprovalInboxListener() {
       )}
     >
       {alerts.map((row) => {
-        const title = normalizeNotificationText(String(row.payload_json?.title ?? "Approval rejected"));
-        const body = normalizeNotificationText(String(row.payload_json?.body ?? "Please review and re-attach the document."));
+        const isStaleLead = row.event_type === "crm.lead.stale_reminder";
+        const isStage = row.event_type === "crm.opportunity.stage_completed";
+        const title = normalizeNotificationText(
+          String(
+            row.payload_json?.title ??
+              (isStaleLead ? "Lead reminder" : isStage ? "Stage completed" : "Approval rejected"),
+          ),
+        );
+        const body = normalizeNotificationText(
+          String(
+            row.payload_json?.body ??
+              (isStaleLead
+                ? "This lead has not been worked on and is still not converted."
+                : isStage
+                  ? "An opportunity stage was completed."
+                  : "Please review and re-attach the document."),
+          ),
+        );
         const entity = alertEntity(row);
         const href = entityHref(entity.type, entity.id);
         return (

@@ -355,6 +355,6 @@ class ApprovalTaskService:
         return NotificationRepository(self._db).list_events_for_recipient(
             ctx.tenant_id,
             ctx.user_id,
-            event_type_prefix="crm.approval.",
+            event_type_prefix="crm.",
             limit=limit,
         )

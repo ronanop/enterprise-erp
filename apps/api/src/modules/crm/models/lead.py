@@ -107,7 +107,7 @@ class CrmLead(Base, *CrmTransactionMixin):
     committed_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     expected_closure_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     salutation: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    product_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    product_type: Mapped[str | None] = mapped_column(Text, nullable=True)
     sub_product_category: Mapped[str | None] = mapped_column(String(100), nullable=True)
     sub_product: Mapped[str | None] = mapped_column(String(100), nullable=True)
     sub_product_other: Mapped[str | None] = mapped_column(String(100), nullable=True)

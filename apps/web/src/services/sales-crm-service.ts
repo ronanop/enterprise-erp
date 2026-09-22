@@ -135,6 +135,7 @@ export type Company = {
   other_industries: string | null;
   portal_id: string | null;
   source: string;
+  partner_names: string | null;
   rating: string | null;
   first_name: string | null;
   last_name: string | null;
@@ -172,6 +173,7 @@ export type CompanyFormInput = {
   other_industries?: string | null;
   portal_id?: string | null;
   source: string;
+  partner_names?: string | null;
   rating?: string | null;
   first_name?: string | null;
   last_name?: string | null;
@@ -233,7 +235,8 @@ export function companyToFormInput(company: Company, customerName?: string): Com
     industry: company.industry,
     other_industries: company.other_industries,
     portal_id: company.portal_id,
-    source: company.source,
+    source: company.source === "partner" ? "multi_tier" : company.source,
+    partner_names: company.partner_names,
     rating: company.rating,
     first_name: company.first_name?.trim() || name,
     last_name: company.last_name?.trim() || "-",
@@ -745,6 +748,15 @@ export async function deleteOpportunity(id: string): Promise<void> {
 
 export async function getOpportunityBlueprint(id: string): Promise<BlueprintState> {
   return unwrap(await apiClient<BlueprintState>(`${CRM_OPPORTUNITIES_API}/${id}/blueprint`));
+}
+
+export async function getNextDealRegNumber(opportunityId: string): Promise<string> {
+  const data = await unwrap(
+    await apiClient<{ deal_reg_number: string }>(
+      `${CRM_OPPORTUNITIES_API}/${opportunityId}/next-deal-reg-number`,
+    ),
+  );
+  return data.deal_reg_number;
 }
 
 export type OpportunityTimelineEvent = {

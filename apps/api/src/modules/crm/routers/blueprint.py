@@ -65,6 +65,19 @@ def get_opportunity_blueprint(
     return APIResponse(message="OK", data=OpportunityBlueprintService(db).state(ctx, opportunity_id))
 
 
+@blueprint_router.get(
+    "/opportunities/{opportunity_id}/next-deal-reg-number",
+    response_model=APIResponse[dict],
+)
+def get_next_deal_reg_number(
+    opportunity_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.blueprint:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    number = OpportunityBlueprintService(db).next_deal_reg_number(ctx, opportunity_id)
+    return APIResponse(message="OK", data={"deal_reg_number": number})
+
+
 @blueprint_router.post("/opportunities/{opportunity_id}/actions/{action}", response_model=APIResponse[dict])
 def perform_opportunity_action(
     opportunity_id: UUID,

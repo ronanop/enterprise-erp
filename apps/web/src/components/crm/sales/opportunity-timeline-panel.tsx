@@ -102,7 +102,7 @@ const CURRENT_STATE_TITLES = new Set([
   "OVF Approved",
   "OVF Shared to SCM",
   "Deal Won",
-  "Lost Deal",
+  "Deal Lost",
 ]);
 
 const STAGE_ENTITIES = new Set<string>(["lead", "opportunity", "quote", "ovf"]);

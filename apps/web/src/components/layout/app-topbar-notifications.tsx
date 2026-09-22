@@ -87,6 +87,7 @@ function formatSavedAt(value: string | null | undefined): string {
 }
 
 function crmEntityHref(entityType: string, entityId: string): string {
+  if (entityType === "lead") return `/crm/leads/${entityId}`;
   if (entityType === "opportunity") return `/crm/opportunities/${entityId}`;
   if (entityType === "quote") return `/crm/quotes/${entityId}`;
   if (entityType === "ovf") return `/crm/ovf/${entityId}`;
@@ -97,17 +98,47 @@ function mapCrmInboxItem(row: CrmApprovalInboxItem): CrmBellItem {
   const payload = row.payload_json ?? {};
   const entityType = String(payload.entity_type ?? "");
   const entityId = String(payload.entity_id ?? "");
+  const isStaleLead = row.event_type === "crm.lead.stale_reminder";
+  const isStage = row.event_type === "crm.opportunity.stage_completed";
+  const defaultTitle = isStaleLead
+    ? "Lead reminder"
+    : isStage
+      ? "Stage completed"
+      : "CRM approval update";
+  const defaultBody = isStaleLead
+    ? "This lead has not been worked on and is still not converted."
+    : isStage
+      ? "An opportunity stage was completed."
+      : "Open the related record to review.";
   return {
     id: row.id,
     event_type: row.event_type,
     entity_type: entityType,
     entity_id: entityId,
-    title: normalizeNotificationText(String(payload.title ?? "CRM approval update")),
-    body: normalizeNotificationText(String(payload.body ?? "Open the related record to review.")),
+    title: normalizeNotificationText(String(payload.title ?? defaultTitle)),
+    body: normalizeNotificationText(String(payload.body ?? defaultBody)),
     href: crmEntityHref(entityType, entityId),
     created_at: row.created_at,
     unread: !row.read_at,
   };
+}
+
+/** Approvals first, then stage completions, then lead reminders, then other. */
+function crmInboxSortPriority(eventType: string): number {
+  if (eventType.startsWith("crm.approval.")) return 0;
+  if (eventType === "crm.opportunity.stage_completed") return 1;
+  if (eventType === "crm.lead.stale_reminder") return 2;
+  return 3;
+}
+
+function sortCrmInboxItems(items: CrmBellItem[]): CrmBellItem[] {
+  return [...items].sort((a, b) => {
+    const byType = crmInboxSortPriority(a.event_type) - crmInboxSortPriority(b.event_type);
+    if (byType !== 0) return byType;
+    const aTime = a.created_at ? Date.parse(a.created_at) : 0;
+    const bTime = b.created_at ? Date.parse(b.created_at) : 0;
+    return bTime - aTime;
+  });
 }
 
 function anchorBelowBell(trigger: HTMLElement | null): { top: number; left: number } | null {
@@ -249,7 +280,7 @@ export function AppTopbarNotifications() {
     try {
       const rows = await listCrmApprovalInbox();
       crmInboxRef.current = rows;
-      const mapped = rows.slice(0, 40).map(mapCrmInboxItem);
+      const mapped = sortCrmInboxItems(rows.slice(0, 40).map(mapCrmInboxItem));
       setCrmAlerts(mapped);
       setCrmPopups((prev) =>
         prev.filter((row) => {
@@ -259,17 +290,24 @@ export function AppTopbarNotifications() {
       );
 
       const popupSeen = readCrmApprovalPopupSeenIds();
-      const rejectionRows = dedupeCrmRejectionsByEntity(
-        rows.filter(
-          (row) =>
-            row.event_type === "crm.approval.rejected" &&
-            !row.read_at &&
-            !isCrmApprovalSurfaceDismissed(row),
-        ),
+      const popupEventTypes = new Set([
+        "crm.approval.rejected",
+        "crm.opportunity.stage_completed",
+        "crm.lead.stale_reminder",
+      ]);
+      const candidates = rows.filter(
+        (row) =>
+          popupEventTypes.has(row.event_type) &&
+          !row.read_at &&
+          !isCrmApprovalSurfaceDismissed(row),
       );
-      const fresh = rejectionRows
-        .map(mapCrmInboxItem)
-        .filter((row) => !popupSeen.has(`crm:${row.id}`));
+      const rejections = dedupeCrmRejectionsByEntity(
+        candidates.filter((row) => row.event_type === "crm.approval.rejected"),
+      );
+      const others = candidates.filter((row) => row.event_type !== "crm.approval.rejected");
+      const fresh = sortCrmInboxItems([...rejections, ...others].map(mapCrmInboxItem)).filter(
+        (row) => !popupSeen.has(`crm:${row.id}`),
+      );
       if (fresh.length > 0) {
         markCrmApprovalPopupSeen(fresh.map((row) => `crm:${row.id}`));
         setCrmPopups((prev) => {
@@ -277,7 +315,7 @@ export function AppTopbarNotifications() {
           const kept = prev.filter((row) => !surfaceDismissed.has(row.id));
           const seenIds = new Set(kept.map((row) => row.id));
           const added = fresh.filter((row) => !seenIds.has(row.id));
-          return [...kept, ...added].slice(0, 3);
+          return sortCrmInboxItems([...kept, ...added]).slice(0, 3);
         });
       }
     } catch {
@@ -451,7 +489,9 @@ export function AppTopbarNotifications() {
 
   const inboxTitle = mode === "crm" ? "CRM updates" : "Stage updates";
   const inboxEmpty =
-    mode === "crm" ? "No CRM approval alerts yet." : "No stage save alerts yet.";
+    mode === "crm"
+      ? "No CRM notifications yet."
+      : "No stage save alerts yet.";
   const dialogLabel = mode === "crm" ? "CRM notifications" : "Stage save notifications";
 
   const inbox =

@@ -9,6 +9,17 @@ from modules.crm.models.lead import CrmLead
 
 CLOUD_PRODUCT_TYPE = "cloud"
 
+
+def _lead_product_types(lead: CrmLead) -> set[str]:
+    raw = (lead.product_type or "").strip().lower()
+    if not raw:
+        return set()
+    return {part.strip() for part in raw.split(",") if part.strip()}
+
+
+def is_cloud_lead_product(lead: CrmLead) -> bool:
+    return CLOUD_PRODUCT_TYPE in _lead_product_types(lead)
+
 VARIANT_BILLING_SHIFT = "billing_shift"
 VARIANT_MIGRATION = "migration"
 VARIANT_POC_ASSESSMENT = "poc_assessment"
@@ -55,7 +66,7 @@ def _normalize_sub(lead: CrmLead) -> str:
 
 
 def cloud_variant_from_lead(lead: CrmLead) -> str | None:
-    if (lead.product_type or "").strip().lower() != CLOUD_PRODUCT_TYPE:
+    if not is_cloud_lead_product(lead):
         return None
     category = (lead.sub_product_category or "").strip().lower()
 

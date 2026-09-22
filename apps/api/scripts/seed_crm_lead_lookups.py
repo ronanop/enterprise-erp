@@ -11,15 +11,15 @@ from database.session import SessionLocal
 
 NIL = UUID("00000000-0000-0000-0000-000000000000")
 
+# Keep in sync with company Source dropdown (apps/web company-form-page SOURCES).
 LEAD_SOURCES = (
+    ("REFERRAL", "Referral"),
     ("WEB", "Website"),
-    ("PHONE", "Phone"),
-    ("EMAIL", "Email"),
-    ("VERBAL", "Verbal Communication"),
-    ("REF", "Reference"),
-    ("PARTNER", "Partner"),
+    ("COLD_CALL", "Cold Call"),
+    ("MULTI_TIER", "Multi-Tier"),
     ("EVENT", "Event"),
-    ("SOCIAL", "Social Media"),
+    ("ADVERTISEMENT", "Advertisement"),
+    ("OTHER", "Other"),
 )
 
 SELLING_ENTITIES = (

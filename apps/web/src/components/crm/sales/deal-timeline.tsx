@@ -91,7 +91,7 @@ export function resolveDealTimelineStatusLabel(options: {
   lost?: boolean;
   timelineEvents?: OpportunityTimelineEvent[] | null;
 }): string {
-  if (options.lost) return "Lost Deal";
+  if (options.lost) return "Deal Lost";
   const events = options.timelineEvents ?? [];
   const latest = events.length > 0 ? events[events.length - 1] : null;
   if (latest?.to_state?.trim() && ["lead", "opportunity", "quote", "ovf"].includes(latest.entity_type)) {

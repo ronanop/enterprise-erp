@@ -315,11 +315,11 @@ export function CompanyWorkspaceNav({
       return;
     }
     if (kind === "kyc") {
-      router.push(`${base}/kyc/new`);
+      router.push(`${base}/new-kyc`);
       return;
     }
     if (kind === "lead") {
-      router.push(`${base}/leads/new`);
+      router.push(`${base}/new-lead`);
     }
   }
   function isActive(segment: string): boolean {

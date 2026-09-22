@@ -73,7 +73,7 @@ export function CompanyWorkspaceShell({
   }, [companyAccountId, pathname]);
 
   const isSection = isCompanyWorkspaceSectionPath(pathname);
-  const hideWorkspaceNav = /\/leads\/new\/?$/.test(pathname);
+  const hideWorkspaceNav = /\/(leads\/new|new-lead)\/?$/.test(pathname);
   const backToOpportunity = Boolean(fromOpportunityId);
   const backHref = backToOpportunity
     ? `/crm/opportunities/${fromOpportunityId}`

@@ -29,7 +29,7 @@ function resolveQuoteStageLabel(quoteStage: string, locked?: boolean): string {
     case "accepted":
       return "Quote Accepted";
     case "lost":
-      return "Lost Deal";
+      return "Deal Lost";
     default:
       return quoteStage.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "-";
   }
@@ -81,7 +81,7 @@ function resolveOpportunityBlueprintState(
   opp: Opportunity,
   locked?: boolean,
 ): string {
-  if (state === "lost") return "Lost Deal";
+  if (state === "lost") return "Deal Lost";
   if (state === "won") return "Deal Won";
 
   switch (state) {
@@ -118,7 +118,7 @@ function resolveUnifiedOpportunityStage(ctx: SalesStageContext): string {
   const opp = ctx.opportunity!;
   const state = ctx.blueprintState || opp.blueprint_state || "open";
 
-  if (state === "lost" || opp.status === "lost") return "Lost Deal";
+  if (state === "lost" || opp.status === "lost") return "Deal Lost";
   if (state === "won" || opp.status === "won") return "Deal Won";
 
   const ovf = ctx.ovf ?? ctx.ovfs?.[0];
@@ -163,7 +163,7 @@ export function resolveSalesStageLabel(ctx: SalesStageContext): string {
   switch (ctx.entityType) {
     case "lead": {
       if (state === "converted") return "Converted to Opportunity";
-      if (state === "lost") return "Lost Deal";
+      if (state === "lost") return "Deal Lost";
       return ctx.lead?.created_at ? "Lead Open" : "Lead Open";
     }
     case "quote":

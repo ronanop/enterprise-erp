@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from uuid import UUID
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -49,3 +51,21 @@ class CrmModuleAdminService:
     def ensure_admin(self, ctx: TenantContext) -> None:
         if not self.is_admin(ctx):
             raise ForbiddenException("CRM module admin access required")
+
+    def list_admin_user_ids(self, tenant_id: UUID) -> list[UUID]:
+        """CRM module admins + ERP admins (by user_type).
+
+        Same fan-out set used for My Jobs admin copies — not TENANT_ADMIN role
+        codes, which are widely assigned.
+        """
+        ids: set[UUID] = set(
+            self._modules.list_admin_user_ids_for_module(tenant_id, CRM_MODULE_KEY)
+        )
+        erp_admin_stmt = select(SecUser.id).where(
+            SecUser.tenant_id == tenant_id,
+            SecUser.is_deleted.is_(False),
+            SecUser.status == "active",
+            SecUser.user_type.in_(tuple(ADMIN_USER_TYPES)),
+        )
+        ids.update(self._db.scalars(erp_admin_stmt).all())
+        return list(ids)

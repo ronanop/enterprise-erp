@@ -1,15 +1,11 @@
-import { CompanyWorkspaceShell } from "@/components/crm/company-workspace-shell";
-import { KycFormPageDynamic } from "@/components/crm/sales/kyc-form-page-dynamic";
+import { redirect } from "next/navigation";
 
 interface PageProps {
   params: Promise<{ row_id: string }>;
 }
 
-export default async function CompanyCreateKycPage({ params }: PageProps) {
+/** Compat redirect — nested path 404s under Turbopack; canonical is `/new-kyc`. */
+export default async function CompanyCreateKycLegacyRedirect({ params }: PageProps) {
   const { row_id } = await params;
-  return (
-    <CompanyWorkspaceShell companyAccountId={row_id}>
-      <KycFormPageDynamic companyAccountId={row_id} />
-    </CompanyWorkspaceShell>
-  );
+  redirect(`/crm/companies/${row_id}/new-kyc`);
 }

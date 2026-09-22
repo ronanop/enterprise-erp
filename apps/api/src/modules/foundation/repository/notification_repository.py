@@ -407,6 +407,28 @@ class NotificationRepository(TenantScopedRepository):
         )
         return self.db.scalar(stmt)
 
+    def find_digest(
+        self,
+        *,
+        tenant_id: UUID,
+        user_id: UUID,
+        event_type: str,
+        digest_key: str,
+    ) -> NtfEvent | None:
+        """Any prior event with this digest (read or unread) — for one-shot periodic reminders."""
+        stmt = (
+            select(NtfEvent)
+            .where(
+                NtfEvent.tenant_id == tenant_id,
+                NtfEvent.recipient_user_id == user_id,
+                NtfEvent.event_type == event_type,
+                NtfEvent.payload_json.contains({"digest_key": digest_key}),
+            )
+            .order_by(NtfEvent.created_at.desc())
+            .limit(1)
+        )
+        return self.db.scalar(stmt)
+
     @staticmethod
     def _tpl_to_entity(row: NtfTemplate) -> NotificationTemplateEntity:
         return NotificationTemplateEntity(

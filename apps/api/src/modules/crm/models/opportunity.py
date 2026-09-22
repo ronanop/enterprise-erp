@@ -159,7 +159,7 @@ class CrmOpportunity(Base, *CrmTransactionMixin):
 
     # Cloud-specific sales path (billing shift, migration, POC/assessment).
     cloud_blueprint_variant: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
-    product_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    product_type: Mapped[str | None] = mapped_column(Text, nullable=True)
     cloud_sub_product: Mapped[str | None] = mapped_column(String(100), nullable=True)
     customer_mrr: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     customer_arr: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)

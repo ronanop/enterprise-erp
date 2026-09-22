@@ -99,7 +99,7 @@ export function KycAccountMappingPage({
   );
 
   const createKycHref = companyAccountId
-    ? `/crm/companies/${companyAccountId}/kyc/new`
+    ? `/crm/companies/${companyAccountId}/new-kyc`
     : "/crm/kyc/new";
 
   const actions = (
