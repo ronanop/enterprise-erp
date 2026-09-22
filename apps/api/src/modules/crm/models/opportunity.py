@@ -15,7 +15,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -37,6 +37,14 @@ class CrmOpportunity(Base, *CrmTransactionMixin):
         CheckConstraint(
             "probability_percent >= 0 AND probability_percent <= 100",
             name="ck_crm_opp_prob",
+        ),
+        CheckConstraint(
+            "po_finance_status IN ('not_required','pending','approved','rejected')",
+            name="ck_crm_opp_po_finance_status",
+        ),
+        CheckConstraint(
+            "po_terms_status IN ('not_required','pending','approved','rejected')",
+            name="ck_crm_opp_po_terms_status",
         ),
         {"schema": "crm"},
     )
@@ -123,9 +131,52 @@ class CrmOpportunity(Base, *CrmTransactionMixin):
     customer_po_approved: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+
+    # Customer PO is validated by Finance (tax/GST) and Legal (terms &
+    # conditions) before Management gives the final go-ahead. Sales never
+    # validates terms. ``po_approval_chain`` stores the approvers chosen for
+    # each stage when the PO is first sent for approval.
+    po_finance_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="not_required", server_default="not_required"
+    )
+    po_finance_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    po_finance_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    po_finance_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    po_terms_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="not_required", server_default="not_required"
+    )
+    po_terms_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+    po_terms_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    po_terms_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    po_approval_chain: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
     deal_won_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
 
     project_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     has_hardware: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     has_software: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     has_services: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
+    # Cloud-specific sales path (billing shift, migration, POC/assessment).
+    cloud_blueprint_variant: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
+    product_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    cloud_sub_product: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    customer_mrr: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    customer_arr: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    customer_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    distributor_discount_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    profitability_percent: Mapped[Decimal | None] = mapped_column(Numeric(5, 2), nullable=True)
+    distributor_discount_locked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    assessment_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    migration_credit_phase1: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    migration_credit_phase2: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    migration_credit_phase3: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    contract_attached: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    onboarding_done: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    onboarding_date: Mapped[date | None] = mapped_column(Date, nullable=True)

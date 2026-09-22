@@ -1,5 +1,5 @@
 /**
- * Manufacturing workspace config — aligned with FRD-13 screen inventory
+ * Manufacturing workspace config - aligned with FRD-13 screen inventory
  * and apps/api manufacturing routers (BOM → Order → Issue → WIP → Receipt).
  */
 

@@ -45,6 +45,7 @@ class CrmLead(Base, *CrmTransactionMixin):
     document_date: Mapped[date] = mapped_column(Date, nullable=False)
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    designation: Mapped[str | None] = mapped_column(String(100), nullable=True)
     company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     mobile: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -103,6 +104,7 @@ class CrmLead(Base, *CrmTransactionMixin):
     )
     assigned_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     expected_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
+    committed_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
     expected_closure_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     salutation: Mapped[str | None] = mapped_column(String(20), nullable=True)
     product_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
@@ -112,6 +114,12 @@ class CrmLead(Base, *CrmTransactionMixin):
     engagement_score: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     portal_link: Mapped[str | None] = mapped_column(String(500), nullable=True)
     assign_to_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    presales_owner_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("master.master_employee.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     project_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
     requirement_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     purchase_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -123,11 +131,11 @@ class CrmLead(Base, *CrmTransactionMixin):
     state: Mapped[str | None] = mapped_column(String(100), nullable=True)
     zip: Mapped[str | None] = mapped_column(String(30), nullable=True)
     country: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    oem_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    oem_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     oem_contact_person: Mapped[str | None] = mapped_column(String(150), nullable=True)
     oem_contact_number: Mapped[str | None] = mapped_column(String(30), nullable=True)
     oem_contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    distributor_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    distributor_name: Mapped[str | None] = mapped_column(Text, nullable=True)
     distributor_contact: Mapped[str | None] = mapped_column(String(150), nullable=True)
     distributor_contact_person: Mapped[str | None] = mapped_column(String(150), nullable=True)
     distributor_contact_email: Mapped[str | None] = mapped_column(String(255), nullable=True)

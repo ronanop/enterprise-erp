@@ -23,7 +23,10 @@ class SiteInstallationNestedCreate(BaseModel):
     rfai_request_done: bool = False
     rfai_number: str | None = Field(default=None, max_length=100)
     fabric_partner: str | None = Field(default=None, max_length=255)
+    # Used to carry SCM installation "server type" into Projects intake.
     application: str | None = Field(default=None, max_length=255)
+    server_qty: int | None = Field(default=None, ge=0)
+    rack_qty: int | None = Field(default=None, ge=0)
     remarks: str | None = None
 
 
@@ -51,14 +54,17 @@ class ProjectCreate(BaseModel):
     billing_type: str | None = None
     crm_opportunity_id: UUID | None = None
     crm_customer_id: UUID | None = None
+    proc_order_id: UUID | None = None
     health_status: str | None = None
     description: str | None = None
     status: str | None = None
     site_installation: SiteInstallationNestedCreate | None = None
 
 class ProjectUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     project_name: str | None = Field(default=None, min_length=1, max_length=255)
-    project_type: str | None = None
+    project_type: str | None = Field(default=None, max_length=40)
     customer_id: UUID | None = None
     department_id: UUID | None = None
     project_manager_employee_id: UUID | None = None
@@ -68,11 +74,11 @@ class ProjectUpdate(BaseModel):
     actual_start_date: date | None = None
     actual_end_date: date | None = None
     budget_amount: Decimal | None = None
-    currency_code: str | None = None
-    billing_type: str | None = None
-    health_status: str | None = None
-    description: str | None = None
-    status: str | None = None
+    currency_code: str | None = Field(default=None, max_length=10)
+    billing_type: str | None = Field(default=None, max_length=40)
+    health_status: str | None = Field(default=None, max_length=40)
+    description: str | None = Field(default=None, max_length=5000)
+    status: str | None = Field(default=None, max_length=40)
     version: int | None = None
 
 class ProjectResponse(OrmModel):
@@ -81,6 +87,7 @@ class ProjectResponse(OrmModel):
     project_name: str
     project_type: str
     customer_id: UUID | None
+    customer_name: str | None = None
     department_id: UUID | None
     project_manager_employee_id: UUID
     sponsor_employee_id: UUID | None
@@ -93,6 +100,7 @@ class ProjectResponse(OrmModel):
     billing_type: str | None
     crm_opportunity_id: UUID | None
     crm_customer_id: UUID | None
+    proc_order_id: UUID | None
     health_status: str | None
     description: str | None
     status: str
@@ -102,6 +110,88 @@ class ProjectResponse(OrmModel):
     branch_id: UUID
     created_at: datetime | None = None
     version: int
+    # Site workflow enrichment for portfolio list
+    current_stage: str | None = None
+    current_stage_label: str | None = None
+    current_stage_owner_name: str | None = None
+
+
+class ProjectPoQueueItem(BaseModel):
+    """Finalized SCM purchase order awaiting project creation."""
+
+    order_id: UUID
+    company_po_number: str | None = None
+    document_number: str
+    document_date: date
+    customer_name: str | None = None
+    customer_po_number: str | None = None
+    vendor_id: UUID
+    total_amount: float
+    customer_total: float = 0
+    status: str
+    ovf_id: UUID | None = None
+    branch_id: UUID
+    company_id: UUID
+    created_at: datetime | None = None
+    shared_at: datetime | None = None
+
+
+class ProjectPoQueueShareCreate(BaseModel):
+    """Share a delivered installation PO to the Projects PO Queue."""
+
+    order_id: UUID
+    challan_id: str | None = Field(default=None, max_length=64)
+    project_name: str = Field(min_length=1, max_length=255)
+    circle_name: str = Field(min_length=1, max_length=255)
+    site_name: str = Field(min_length=1, max_length=255)
+    contact_person: str = Field(min_length=1, max_length=255)
+    contact_number: str = Field(min_length=1, max_length=64)
+    rack_quantity: str = Field(min_length=1, max_length=32)
+    server_quantity: str = Field(min_length=1, max_length=32)
+    server_type: str = Field(min_length=1, max_length=255)
+    remarks: str | None = None
+
+
+class ProjectPoQueueHandoffResponse(BaseModel):
+    """Stored installation handoff metadata for a PO queue entry."""
+
+    order_id: UUID
+    challan_id: str | None = None
+    shared_at: datetime
+    project_name: str | None = None
+    circle_name: str | None = None
+    site_name: str | None = None
+    contact_person: str | None = None
+    contact_number: str | None = None
+    rack_quantity: str | None = None
+    server_quantity: str | None = None
+    server_type: str | None = None
+    remarks: str | None = None
+    customer_name: str | None = None
+    customer_po_number: str | None = None
+    company_po_number: str | None = None
+
+
+class ProjectPoPrefillResponse(BaseModel):
+    """Suggested project intake values from a procurement PO."""
+
+    order_id: UUID
+    branch_id: UUID
+    company_id: UUID
+    company_po_number: str | None = None
+    customer_po_number: str | None = None
+    customer_name: str | None = None
+    customer_id: UUID | None = None
+    budget_amount: Decimal | None = None
+    currency_code: str = "INR"
+    site_name: str | None = None
+    description: str | None = None
+    ovf_id: UUID | None = None
+    crm_opportunity_id: UUID | None = None
+    circle_name: str | None = None
+    entity_state: str | None = None
+    project_title: str | None = None
+
 
 class ProjectPhaseCreate(BaseModel):
     company_id: UUID | None = None
@@ -655,6 +745,64 @@ class ProjectDocumentResponse(OrmModel):
     created_at: datetime | None = None
     version: int
 
+
+class CustomerTrackerCreate(BaseModel):
+    company_id: UUID | None = None
+    project_id: UUID
+    file_name: str = Field(min_length=1, max_length=255)
+    content_base64: str = Field(min_length=1)
+    content_type: str | None = Field(default=None, max_length=255)
+    remarks: str | None = None
+
+
+class CustomerTrackerColumn(BaseModel):
+    id: str = Field(min_length=1, max_length=64)
+    label: str = Field(min_length=1, max_length=255)
+
+
+class CustomerTrackerGridPayload(BaseModel):
+    """In-app Excel-like tracker sheet."""
+
+    columns: list[CustomerTrackerColumn] = Field(min_length=1, max_length=50)
+    rows: list[dict[str, str]] = Field(default_factory=list, max_length=2000)
+
+
+class CustomerTrackerGridCreate(BaseModel):
+    company_id: UUID | None = None
+    project_id: UUID
+    grid: CustomerTrackerGridPayload
+    remarks: str | None = None
+    title: str | None = Field(default=None, max_length=200)
+
+
+class CustomerTrackerGridResponse(BaseModel):
+    id: UUID
+    project_id: UUID
+    version_no: int
+    title: str
+    remarks: str | None = None
+    grid: CustomerTrackerGridPayload
+    created_at: datetime | None = None
+
+
+class CustomerTrackerResponse(OrmModel):
+    id: UUID
+    project_id: UUID
+    version_no: int
+    file_name: str
+    content_type: str | None
+    file_size: int
+    content_hash: str
+    remarks: str | None
+    company_id: UUID
+    branch_id: UUID | None
+    created_at: datetime | None = None
+    created_by: UUID | None = None
+    is_grid: bool = False
+    column_count: int | None = None
+    row_count: int | None = None
+
+
 class ProjectCommentCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID | None = None
@@ -838,16 +986,79 @@ class SiteInstallationCreate(BaseModel):
     material_handover_done: bool | None = None
     material_handover_date: date | None = None
     rack_server_stacking_done: bool | None = None
+    rack_server_stacking_date: date | None = None
     rack_server_power_on_done: bool | None = None
+    rack_server_power_on_date: date | None = None
     dac_ilo_cabling_done: bool | None = None
+    dac_ilo_cabling_date: date | None = None
     bios_configuration_done: bool | None = None
-    firmware_nw_config_done: bool | None = None
+    bios_configuration_date: date | None = None
+    firmware_config_done: bool | None = None
+    firmware_config_date: date | None = None
     lld_done: bool | None = None
+    lld_date: date | None = None
     os_installation_done: bool | None = None
+    os_installation_date: date | None = None
+    vm_installation_done: bool | None = None
+    vm_installation_date: date | None = None
+    nw_config_done: bool | None = None
+    nw_config_date: date | None = None
+    tools_integration_done: bool | None = None
+    tools_integration_date: date | None = None
     mbss_done: bool | None = None
+    mbss_date: date | None = None
+    vascan_done: bool | None = None
+    vascan_date: date | None = None
     handover_to_cloud_done: bool | None = None
+    handover_to_cloud_date: date | None = None
     hwat_request_done: bool | None = None
+    hwat_request_date: date | None = None
     hwat_signoff_received: bool | None = None
+    hwat_signoff_date: date | None = None
+    survey_assignee_employee_id: UUID | None = None
+    scm_assignee_employee_id: UUID | None = None
+    onsite_assignee_employee_id: UUID | None = None
+    onsite_delivery_assignee_employee_id: UUID | None = None
+    material_handover_assignee_employee_id: UUID | None = None
+    installation_assignee_employee_id: UUID | None = None
+    configuration_assignee_employee_id: UUID | None = None
+    acceptance_assignee_employee_id: UUID | None = None
+    survey_assigned_date: date | None = None
+    survey_finished_date: date | None = None
+    scm_assigned_date: date | None = None
+    scm_finished_date: date | None = None
+    onsite_assigned_date: date | None = None
+    onsite_finished_date: date | None = None
+    onsite_delivery_assigned_date: date | None = None
+    onsite_delivery_finished_date: date | None = None
+    material_handover_assigned_date: date | None = None
+    material_handover_finished_date: date | None = None
+    installation_assigned_date: date | None = None
+    installation_finished_date: date | None = None
+    acceptance_assigned_date: date | None = None
+    acceptance_finished_date: date | None = None
+    survey_attachment_name: str | None = Field(default=None, max_length=255)
+    scm_attachment_name: str | None = Field(default=None, max_length=255)
+    onsite_attachment_name: str | None = Field(default=None, max_length=255)
+    onsite_delivery_attachment_name: str | None = Field(default=None, max_length=255)
+    material_handover_attachment_name: str | None = Field(default=None, max_length=255)
+    installation_attachment_name: str | None = Field(default=None, max_length=255)
+    acceptance_attachment_name: str | None = Field(default=None, max_length=255)
+    survey_progress_status: str | None = Field(default=None, max_length=40)
+    scm_progress_status: str | None = Field(default=None, max_length=40)
+    onsite_progress_status: str | None = Field(default=None, max_length=40)
+    onsite_delivery_progress_status: str | None = Field(default=None, max_length=40)
+    material_handover_progress_status: str | None = Field(default=None, max_length=40)
+    installation_progress_status: str | None = Field(default=None, max_length=40)
+    acceptance_progress_status: str | None = Field(default=None, max_length=40)
+    survey_remarks: str | None = None
+    scm_remarks: str | None = None
+    onsite_remarks: str | None = None
+    onsite_delivery_remarks: str | None = None
+    material_handover_remarks: str | None = None
+    installation_remarks: str | None = None
+    acceptance_remarks: str | None = None
+    material_handover_to_name: str | None = Field(default=None, max_length=255)
     remarks: str | None = None
 
 
@@ -892,16 +1103,79 @@ class SiteInstallationUpdate(BaseModel):
     material_handover_done: bool | None = None
     material_handover_date: date | None = None
     rack_server_stacking_done: bool | None = None
+    rack_server_stacking_date: date | None = None
     rack_server_power_on_done: bool | None = None
+    rack_server_power_on_date: date | None = None
     dac_ilo_cabling_done: bool | None = None
+    dac_ilo_cabling_date: date | None = None
     bios_configuration_done: bool | None = None
-    firmware_nw_config_done: bool | None = None
+    bios_configuration_date: date | None = None
+    firmware_config_done: bool | None = None
+    firmware_config_date: date | None = None
     lld_done: bool | None = None
+    lld_date: date | None = None
     os_installation_done: bool | None = None
+    os_installation_date: date | None = None
+    vm_installation_done: bool | None = None
+    vm_installation_date: date | None = None
+    nw_config_done: bool | None = None
+    nw_config_date: date | None = None
+    tools_integration_done: bool | None = None
+    tools_integration_date: date | None = None
     mbss_done: bool | None = None
+    mbss_date: date | None = None
+    vascan_done: bool | None = None
+    vascan_date: date | None = None
     handover_to_cloud_done: bool | None = None
+    handover_to_cloud_date: date | None = None
     hwat_request_done: bool | None = None
+    hwat_request_date: date | None = None
     hwat_signoff_received: bool | None = None
+    hwat_signoff_date: date | None = None
+    survey_assignee_employee_id: UUID | None = None
+    scm_assignee_employee_id: UUID | None = None
+    onsite_assignee_employee_id: UUID | None = None
+    onsite_delivery_assignee_employee_id: UUID | None = None
+    material_handover_assignee_employee_id: UUID | None = None
+    installation_assignee_employee_id: UUID | None = None
+    configuration_assignee_employee_id: UUID | None = None
+    acceptance_assignee_employee_id: UUID | None = None
+    survey_assigned_date: date | None = None
+    survey_finished_date: date | None = None
+    scm_assigned_date: date | None = None
+    scm_finished_date: date | None = None
+    onsite_assigned_date: date | None = None
+    onsite_finished_date: date | None = None
+    onsite_delivery_assigned_date: date | None = None
+    onsite_delivery_finished_date: date | None = None
+    material_handover_assigned_date: date | None = None
+    material_handover_finished_date: date | None = None
+    installation_assigned_date: date | None = None
+    installation_finished_date: date | None = None
+    acceptance_assigned_date: date | None = None
+    acceptance_finished_date: date | None = None
+    survey_attachment_name: str | None = Field(default=None, max_length=255)
+    scm_attachment_name: str | None = Field(default=None, max_length=255)
+    onsite_attachment_name: str | None = Field(default=None, max_length=255)
+    onsite_delivery_attachment_name: str | None = Field(default=None, max_length=255)
+    material_handover_attachment_name: str | None = Field(default=None, max_length=255)
+    installation_attachment_name: str | None = Field(default=None, max_length=255)
+    acceptance_attachment_name: str | None = Field(default=None, max_length=255)
+    survey_progress_status: str | None = Field(default=None, max_length=40)
+    scm_progress_status: str | None = Field(default=None, max_length=40)
+    onsite_progress_status: str | None = Field(default=None, max_length=40)
+    onsite_delivery_progress_status: str | None = Field(default=None, max_length=40)
+    material_handover_progress_status: str | None = Field(default=None, max_length=40)
+    installation_progress_status: str | None = Field(default=None, max_length=40)
+    acceptance_progress_status: str | None = Field(default=None, max_length=40)
+    survey_remarks: str | None = None
+    scm_remarks: str | None = None
+    onsite_remarks: str | None = None
+    onsite_delivery_remarks: str | None = None
+    material_handover_remarks: str | None = None
+    installation_remarks: str | None = None
+    acceptance_remarks: str | None = None
+    material_handover_to_name: str | None = Field(default=None, max_length=255)
     remarks: str | None = None
     version: int | None = None
 
@@ -952,21 +1226,101 @@ class SiteInstallationResponse(OrmModel):
     material_handover_done: bool
     material_handover_date: date | None = None
     rack_server_stacking_done: bool
+    rack_server_stacking_date: date | None = None
     rack_server_power_on_done: bool
+    rack_server_power_on_date: date | None = None
     dac_ilo_cabling_done: bool
+    dac_ilo_cabling_date: date | None = None
     bios_configuration_done: bool
-    firmware_nw_config_done: bool
+    bios_configuration_date: date | None = None
+    firmware_config_done: bool
+    firmware_config_date: date | None = None
     lld_done: bool
+    lld_date: date | None = None
     os_installation_done: bool
+    os_installation_date: date | None = None
+    vm_installation_done: bool
+    vm_installation_date: date | None = None
+    nw_config_done: bool
+    nw_config_date: date | None = None
+    tools_integration_done: bool
+    tools_integration_date: date | None = None
     mbss_done: bool
+    mbss_date: date | None = None
+    vascan_done: bool
+    vascan_date: date | None = None
     handover_to_cloud_done: bool
+    handover_to_cloud_date: date | None = None
     hwat_request_done: bool
+    hwat_request_date: date | None = None
     hwat_signoff_received: bool
+    hwat_signoff_date: date | None = None
+    survey_assignee_employee_id: UUID | None = None
+    scm_assignee_employee_id: UUID | None = None
+    onsite_assignee_employee_id: UUID | None = None
+    onsite_delivery_assignee_employee_id: UUID | None = None
+    material_handover_assignee_employee_id: UUID | None = None
+    installation_assignee_employee_id: UUID | None = None
+    configuration_assignee_employee_id: UUID | None = None
+    acceptance_assignee_employee_id: UUID | None = None
+    survey_assigned_date: date | None = None
+    survey_finished_date: date | None = None
+    scm_assigned_date: date | None = None
+    scm_finished_date: date | None = None
+    onsite_assigned_date: date | None = None
+    onsite_finished_date: date | None = None
+    onsite_delivery_assigned_date: date | None = None
+    onsite_delivery_finished_date: date | None = None
+    material_handover_assigned_date: date | None = None
+    material_handover_finished_date: date | None = None
+    installation_assigned_date: date | None = None
+    installation_finished_date: date | None = None
+    acceptance_assigned_date: date | None = None
+    acceptance_finished_date: date | None = None
+    survey_attachment_name: str | None = None
+    scm_attachment_name: str | None = None
+    onsite_attachment_name: str | None = None
+    onsite_delivery_attachment_name: str | None = None
+    material_handover_attachment_name: str | None = None
+    installation_attachment_name: str | None = None
+    acceptance_attachment_name: str | None = None
+    survey_progress_status: str | None = None
+    scm_progress_status: str | None = None
+    onsite_progress_status: str | None = None
+    onsite_delivery_progress_status: str | None = None
+    material_handover_progress_status: str | None = None
+    installation_progress_status: str | None = None
+    acceptance_progress_status: str | None = None
+    survey_remarks: str | None = None
+    scm_remarks: str | None = None
+    onsite_remarks: str | None = None
+    onsite_delivery_remarks: str | None = None
+    material_handover_remarks: str | None = None
+    installation_remarks: str | None = None
+    acceptance_remarks: str | None = None
+    material_handover_to_name: str | None = None
     remarks: str | None
+    completion_certificate_number: str | None = None
+    completion_certificate_issued_at: datetime | None = None
+    completion_certificate_signed: bool = False
+    completion_certificate_signed_date: date | None = None
+    completion_certificate_signatory: str | None = None
+    completion_certificate_attachment_name: str | None = None
     status: str
     company_id: UUID
     created_at: datetime | None = None
     version: int
+
+
+class SiteStageAssignmentBlueprint(BaseModel):
+    stage: str
+    label: str
+    assignee_employee_id: UUID | None = None
+    work_status: str
+    progress_status: str | None = None
+    remarks: str | None = None
+    assigned_date: date | None = None
+    completed_date: date | None = None
 
 
 class SiteInstallationBlueprintResponse(BaseModel):
@@ -976,8 +1330,137 @@ class SiteInstallationBlueprintResponse(BaseModel):
     allowed_actions: list[str]
     action_labels: dict[str, str]
     stages: list[dict[str, str]]
+    stage_assignments: list[SiteStageAssignmentBlueprint] = Field(default_factory=list)
     terminal: bool
+    includes_os: bool | None = None
+    includes_bios: bool | None = None
+    includes_server: bool | None = None
+    is_rack_only: bool | None = None
+    needs_hwat: bool | None = None
 
 
 class SiteInstallationAdvanceRequest(BaseModel):
     action: str = Field(min_length=1, max_length=80)
+
+
+class CompletionCertificateResponse(BaseModel):
+    """Customer work completion certificate for a site delivery."""
+
+    project_id: UUID
+    project_name: str
+    site_name: str | None = None
+    document_number: str
+    certificate_number: str | None = None
+    issued_at: datetime | None = None
+    signed: bool = False
+    signed_date: date | None = None
+    signatory_name: str | None = None
+    attachment_name: str | None = None
+    declaration: str
+
+
+class CompletionCertificateSignoffRequest(BaseModel):
+    signatory_name: str = Field(min_length=1, max_length=255)
+    signed_date: date | None = None
+    attachment_name: str | None = Field(default=None, max_length=255)
+
+
+class SiteInstallationFollowUpRequest(BaseModel):
+    stage: str = Field(min_length=1, max_length=40)
+    note: str | None = Field(default=None, max_length=1000)
+
+
+class SiteInstallationNoAnswerItem(BaseModel):
+    field: str = Field(min_length=1, max_length=80)
+    label: str = Field(min_length=1, max_length=200)
+
+
+class SiteInstallationNoAnswerNotifyRequest(BaseModel):
+    stage: str = Field(min_length=1, max_length=40)
+    items: list[SiteInstallationNoAnswerItem] = Field(min_length=1)
+
+
+class SiteInstallationFollowUpResponse(BaseModel):
+    stage: str
+    stage_label: str
+    recipient_employee_id: UUID
+    notification_id: UUID
+    message: str
+
+
+class SiteStageFollowUpReplyItem(BaseModel):
+    id: UUID
+    body: str
+    created_at: datetime
+    employee_id: UUID
+
+
+class SiteInstallationFollowUpReplyRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
+
+
+class SiteStageFollowUpItem(BaseModel):
+    id: UUID
+    stage: str
+    stage_label: str
+    recipient_employee_id: UUID | None = None
+    message: str
+    note: str | None = None
+    site_name: str | None = None
+    document_number: str | None = None
+    delivery_status: str | None = None
+    status: str | None = None
+    created_at: datetime | None = None
+    sent_at: datetime | None = None
+    replies: list[SiteStageFollowUpReplyItem] = Field(default_factory=list)
+    has_reply: bool = False
+    latest_reply: str | None = None
+    latest_reply_at: datetime | None = None
+
+
+class ProjectPortfolioFollowUpItem(SiteStageFollowUpItem):
+    project_id: UUID
+    project_name: str
+
+
+class ProjectStageSaveAlertItem(BaseModel):
+    """Admin inbox item for an assignee stage save."""
+
+    id: UUID
+    project_id: UUID
+    project_name: str
+    stage: str
+    stage_label: str
+    progress_status: str | None = None
+    progress_status_label: str
+    message: str
+    remarks: str | None = None
+    yes_answers: list[str] = Field(default_factory=list)
+    no_answers: list[str] = Field(default_factory=list)
+    site_name: str | None = None
+    document_number: str | None = None
+    form_path: str
+    actor_name: str
+    saved_at: datetime | None = None
+    delivery_status: str | None = None
+    unread: bool = True
+    created_at: datetime | None = None
+    sent_at: datetime | None = None
+
+
+class ProjectMyJobItem(BaseModel):
+    """Delivery step assigned to the signed-in user (one row per stage ownership)."""
+
+    site_installation_id: UUID
+    project_id: UUID
+    project_name: str
+    document_number: str
+    site_name: str | None = None
+    assigned_stage: str
+    workflow_stage: str
+    stage_label: str
+    delivery_type: str
+    form_path: str
+    work_status: str = "pending"
+    can_open_form: bool = True
+    created_at: datetime | None = None

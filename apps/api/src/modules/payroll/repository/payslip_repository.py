@@ -27,6 +27,14 @@ class PayslipRepository(PayScopedRepository):
         stmt = self.apply_pay_filter(stmt, PayPayslip, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 
+    def get_by_run_line(self, ctx: TenantContext, run_line_id: UUID) -> PayPayslip | None:
+        stmt = select(PayPayslip).where(
+            PayPayslip.payroll_run_line_id == run_line_id,
+            PayPayslip.is_deleted.is_(False),
+        )
+        stmt = self.apply_pay_filter(stmt, PayPayslip, ctx, branch_scoped=True)
+        return self.db.scalar(stmt)
+
     def create(self, ctx: TenantContext, **fields) -> PayPayslip:
         row = PayPayslip(
             id=uuid4(),

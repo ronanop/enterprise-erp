@@ -8,7 +8,22 @@ import { ArrowUpRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-/** Page vertical rhythm — matches CRM dashboard. */
+/** CRM data table column header row - high contrast, readable at a glance. */
+export const CRM_TABLE_HEAD_ROW = cn(
+  "border-b border-border/80 bg-muted/60 text-xs font-extrabold tracking-wide text-foreground uppercase sm:text-[13px]",
+);
+
+/** Use on plain `<th>` cells (non-sortable columns). */
+export const CRM_TABLE_HEAD_CELL = cn(
+  "px-4 py-2.5 text-xs font-extrabold text-foreground sm:text-[13px]",
+);
+
+/** Section / panel titles across CRM (forms, lists, detail cards). */
+export const CRM_SECTION_TITLE = cn(
+  "text-base font-extrabold tracking-tight text-foreground break-words",
+);
+
+/** Page vertical rhythm - matches CRM dashboard. */
 export function CrmPage({
   children,
   className,
@@ -66,7 +81,6 @@ export function CrmIconBadge({
 /** Section card with dashboard-style icon header. */
 export function CrmSection({
   title,
-  subtitle,
   icon,
   badge,
   actions,
@@ -75,7 +89,6 @@ export function CrmSection({
   bodyClassName,
 }: {
   title: string;
-  subtitle?: string;
   icon?: LucideIcon;
   badge?: ReactNode;
   actions?: ReactNode;
@@ -84,13 +97,12 @@ export function CrmSection({
   bodyClassName?: string;
 }) {
   return (
-    <section className={cn("rounded-xl border border-border/80 bg-card p-4 shadow-sm", className)}>
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2.5">
+    <section className={cn("rounded-2xl border border-border/70 bg-card/95 p-4 shadow-[0_1px_3px_0_rgba(0,0,0,0.03),0_1px_2px_-1px_rgba(0,0,0,0.02)] transition-all duration-200 backdrop-blur-xs sm:p-5", className)}>
+      <div className="mb-4 flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-start gap-2.5">
           {icon ? <CrmIconBadge icon={icon} /> : null}
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-medium tracking-tight">{title}</h2>
-            {subtitle ? <p className="text-[11px] text-muted-foreground">{subtitle}</p> : null}
+            <h2 className={CRM_SECTION_TITLE}>{title}</h2>
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -98,12 +110,12 @@ export function CrmSection({
           {actions}
         </div>
       </div>
-      <div className={bodyClassName}>{children}</div>
+      <div className={cn("min-w-0", bodyClassName)}>{children}</div>
     </section>
   );
 }
 
-/** Card shell for list tables — border + shadow only; toolbar is separate. */
+/** Card shell for list tables - border + shadow only; toolbar is separate. */
 export function CrmListPanel({
   children,
   className,
@@ -114,7 +126,7 @@ export function CrmListPanel({
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm",
+        "overflow-hidden rounded-2xl border border-border/70 bg-card/95 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] transition-all duration-200",
         className,
       )}
     >
@@ -134,7 +146,7 @@ export function CrmHeadlineBand({
   return (
     <section
       className={cn(
-        "overflow-hidden rounded-xl border border-border/80 bg-primary shadow-sm",
+        "relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary via-primary/95 to-primary/90 text-primary-foreground shadow-md before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/25 before:to-transparent",
         className,
       )}
     >
@@ -162,7 +174,7 @@ export function CrmHeadlineStat({
       {loading ? (
         <div className="mt-2 h-8 w-32 animate-pulse rounded bg-white/15" />
       ) : (
-        <p className="mt-1.5 truncate text-2xl font-semibold tracking-tight text-white tabular-nums">
+        <p className="mt-1.5 truncate text-2xl sm:text-3xl font-semibold tracking-tight text-white tabular-nums">
           {value}
         </p>
       )}
@@ -199,13 +211,13 @@ export function CrmKpiCard({
 }) {
   const styles = KPI_TONE[tone];
   const body = (
-    <div className="group relative overflow-hidden rounded-xl border border-border/80 bg-card p-3.5 shadow-sm transition-[box-shadow,border-color] duration-200 hover:border-border hover:shadow-md">
+    <div className="group relative overflow-hidden rounded-2xl border border-border/70 bg-card/95 p-4 shadow-[0_1px_3px_0_rgba(0,0,0,0.03)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.99]">
       <span className={cn("absolute inset-y-0 left-0 w-1", styles.bar)} aria-hidden />
       <div className="flex items-start justify-between gap-2 pl-1.5">
         <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
           {label}
         </p>
-        <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg", styles.icon)}>
+        <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-105", styles.icon)}>
           <Icon className="size-4" aria-hidden />
         </span>
       </div>

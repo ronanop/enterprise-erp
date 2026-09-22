@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Report Asset Issue</title>
+<!-- Google Fonts: Inter for the professional, tech-forward HR look -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols for the literal icon transcription -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-surface": "#0b1c30",
+                    "error-container": "#ffdad6",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "inverse-surface": "#213145",
+                    "on-secondary-fixed-variant": "#5a00c6",
+                    "secondary": "#712ae2",
+                    "error": "#ba1a1a",
+                    "on-background": "#0b1c30",
+                    "on-secondary-fixed": "#25005a",
+                    "on-tertiary-fixed": "#002113",
+                    "tertiary-container": "#007d55",
+                    "secondary-fixed-dim": "#d2bbff",
+                    "on-primary-fixed": "#00174b",
+                    "inverse-on-surface": "#eaf1ff",
+                    "primary": "#004ac6",
+                    "on-primary-fixed-variant": "#003ea8",
+                    "secondary-fixed": "#eaddff",
+                    "on-secondary-container": "#fffbff",
+                    "surface-container-highest": "#d3e4fe",
+                    "primary-fixed": "#dbe1ff",
+                    "outline": "#737686",
+                    "surface-container-low": "#eff4ff",
+                    "surface-tint": "#0053db",
+                    "on-surface-variant": "#434655",
+                    "primary-container": "#2563eb",
+                    "surface-container": "#e5eeff",
+                    "on-tertiary": "#ffffff",
+                    "surface-dim": "#cbdbf5",
+                    "surface": "#f8f9ff",
+                    "surface-bright": "#f8f9ff",
+                    "on-error": "#ffffff",
+                    "on-tertiary-container": "#bdffdb",
+                    "surface-container-lowest": "#ffffff",
+                    "outline-variant": "#c3c6d7",
+                    "on-primary-container": "#eeefff",
+                    "background": "#f8f9ff",
+                    "on-error-container": "#93000a",
+                    "tertiary-fixed": "#6ffbbe",
+                    "tertiary": "#006242",
+                    "on-primary": "#ffffff",
+                    "surface-container-high": "#dce9ff",
+                    "on-tertiary-fixed-variant": "#005236",
+                    "secondary-container": "#8a4cfc",
+                    "surface-variant": "#d3e4fe",
+                    "on-secondary": "#ffffff",
+                    "primary-fixed-dim": "#b4c5ff",
+                    "inverse-primary": "#b4c5ff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "stack-gap-md": "16px",
+                    "container-padding": "20px",
+                    "unit": "4px",
+                    "stack-gap-lg": "24px",
+                    "stack-gap-sm": "8px",
+                    "section-margin": "32px"
+            },
+            "fontFamily": {
+                    "label-md": ["Inter"],
+                    "headline-sm": ["Inter"],
+                    "label-sm": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "display-lg-mobile": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "title-lg": ["Inter"],
+                    "display-md": ["Inter"],
+                    "body-md": ["Inter"]
+            },
+            "fontSize": {
+                    "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "display-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                    "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "title-lg": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "display-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9ff; /* background token */
+            -webkit-tap-highlight-color: transparent;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            user-select: none;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #c3c6d7;
+            border-radius: 10px;
+        }
+        .tab-active::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 4px;
+            border-radius: 50%;
+            background-color: #004ac6; /* primary */
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="flex flex-col min-h-screen text-on-surface antialiased">
+<!-- TopAppBar - Execution from JSON -->
+<header class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl shadow-sm flex items-center justify-between px-container-padding h-16 w-full">
+<div class="flex items-center gap-3">
+<button class="transition-all duration-200 active:scale-95 hover:opacity-80">
+<span class="material-symbols-outlined text-primary">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-headline-sm-mobile text-primary">Report Issue</h1>
+</div>
+<div class="flex items-center gap-4">
+<button class="material-symbols-outlined text-on-surface-variant transition-all duration-200 active:scale-95 hover:opacity-80">notifications</button>
+<div class="w-8 h-8 rounded-full bg-surface-container-highest flex items-center justify-center overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a Hispanic male product designer with short dark hair and a friendly expression. He is wearing a minimalist navy blue sweater. The lighting is soft and studio-quality, set against a clean, light-mode background that aligns with a high-end enterprise HR application aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAU6FOkvKunqvp9FEbxUfk3dAS-7-Gg_HV0aymEv9RRpUGmbYwIYRehdXnmp0rl-LaYRiLCUf_Ms_EGPnKYjFkDi7KRnpEPEDjnO2cC5cVO2o9ERf7LIx39NKX9EA5WvzW8-2_8-lpYdNoPb89KlmsSwOzPhZ0P6O4Uq-c3xOiqRRCHbI_9rytRseuHQEbd5deBz69DPRyQrV9tQ7YCev3vMowLicHOKef__9_DJtibzxxiPg1ixAOZLaEBKHzTQxjUSx74RHZai20"/>
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-grow pt-24 pb-32 px-container-padding max-w-lg mx-auto w-full">
+<!-- Form Section -->
+<section class="space-y-section-margin">
+<div class="space-y-stack-gap-md">
+<label class="block font-title-lg text-title-lg text-on-surface px-1">Asset Details</label>
+<!-- Problem Category Dropdown -->
+<div class="relative group">
+<label class="absolute -top-2.5 left-3 px-1 bg-background text-label-sm font-label-sm text-outline group-focus-within:text-primary transition-colors">Problem Category</label>
+<select class="w-full h-14 pl-4 pr-10 appearance-none bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all outline-none">
+<option disabled="" selected="" value="">Select a category</option>
+<option value="hardware">Hardware Malfunction</option>
+<option value="software">Software / OS Issue</option>
+<option value="physical">Physical Damage</option>
+<option value="connectivity">Connectivity Problems</option>
+<option value="other">Other</option>
+</select>
+<span class="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">expand_more</span>
+</div>
+<!-- Priority Selector -->
+<div class="space-y-stack-gap-sm">
+<p class="text-label-md font-label-md text-on-surface-variant px-1">Urgency Level</p>
+<div class="grid grid-cols-3 gap-stack-gap-sm">
+<button class="priority-btn flex flex-col items-center justify-center py-3 px-2 border border-outline-variant rounded-xl bg-surface-container-lowest transition-all hover:bg-surface-container-low active:scale-95" data-priority="low" onclick="selectPriority(this)">
+<span class="material-symbols-outlined text-tertiary-container mb-1">low_priority</span>
+<span class="font-label-sm text-label-sm">Low</span>
+</button>
+<button class="priority-btn flex flex-col items-center justify-center py-3 px-2 border-2 border-primary bg-primary-container/10 rounded-xl transition-all active:scale-95" data-priority="med" onclick="selectPriority(this)">
+<span class="material-symbols-outlined text-primary mb-1">priority_high</span>
+<span class="font-label-sm text-label-sm text-primary">Medium</span>
+</button>
+<button class="priority-btn flex flex-col items-center justify-center py-3 px-2 border border-outline-variant rounded-xl bg-surface-container-lowest transition-all hover:bg-surface-container-low active:scale-95" data-priority="high" onclick="selectPriority(this)">
+<span class="material-symbols-outlined text-error mb-1">report</span>
+<span class="font-label-sm text-label-sm">Critical</span>
+</button>
+</div>
+</div>
+<!-- Photo Upload Area -->
+<div class="space-y-stack-gap-sm">
+<p class="text-label-md font-label-md text-on-surface-variant px-1">Damage Evidence</p>
+<div class="relative w-full aspect-video border-2 border-dashed border-outline-variant rounded-xl bg-surface-container-low flex flex-col items-center justify-center cursor-pointer hover:bg-surface-container transition-colors group overflow-hidden">
+<input class="absolute inset-0 opacity-0 cursor-pointer" type="file"/>
+<div class="flex flex-col items-center group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-display-md text-primary mb-2" style="font-variation-settings: 'FILL' 1;">add_a_photo</span>
+<span class="font-label-md text-label-md text-on-surface-variant">Tap to upload photos</span>
+</div>
+</div>
+</div>
+<!-- Description Text Area -->
+<div class="relative group">
+<label class="absolute -top-2.5 left-3 px-1 bg-background text-label-sm font-label-sm text-outline group-focus-within:text-primary transition-colors">Issue Description</label>
+<textarea class="w-full p-4 bg-surface-container-lowest border border-outline-variant rounded-xl font-body-md text-body-md focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all outline-none resize-none" placeholder="Describe the issue in detail..." rows="4"></textarea>
+</div>
+</div>
+<!-- Status Timeline for Previous Issues -->
+<div class="pt-4 space-y-stack-gap-md">
+<div class="flex items-center justify-between px-1">
+<h2 class="font-title-lg text-title-lg text-on-surface">Recent Reports</h2>
+<button class="text-primary font-label-md text-label-md hover:underline">View All</button>
+</div>
+<!-- Previous Issue Card -->
+<div class="glass-card border border-outline-variant rounded-xl p-stack-gap-md shadow-sm relative overflow-hidden">
+<!-- Subtle accent for state -->
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-tertiary-container"></div>
+<div class="flex justify-between items-start mb-stack-gap-sm">
+<div>
+<p class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">REF: #ASSET-4029</p>
+<h3 class="font-body-md text-body-md font-bold">MacBook Pro Screen Flicker</h3>
+</div>
+<span class="px-3 py-1 bg-tertiary-container/10 text-on-tertiary-fixed-variant rounded-full font-label-sm text-label-sm">In Progress</span>
+</div>
+<div class="space-y-4">
+<!-- Timeline Mini -->
+<div class="flex items-start gap-3 relative">
+<div class="flex flex-col items-center mt-1">
+<div class="w-2 h-2 rounded-full bg-tertiary"></div>
+<div class="w-0.5 h-8 bg-outline-variant my-1"></div>
+<div class="w-2 h-2 rounded-full bg-outline-variant"></div>
+</div>
+<div class="flex-grow space-y-4">
+<div>
+<p class="font-label-sm text-label-sm font-bold text-on-surface">Replacement unit dispatched</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Today, 10:45 AM • IT Ops</p>
+</div>
+<div>
+<p class="font-label-sm text-label-sm text-outline">Issue reported &amp; verified</p>
+<p class="font-body-sm text-body-sm text-outline">Oct 12, 02:15 PM</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Submit Button (Stickyish) -->
+<div class="pt-4">
+<button class="w-full h-14 bg-primary text-on-primary rounded-full font-title-lg text-title-lg flex items-center justify-center gap-2 shadow-lg active:scale-[0.98] transition-all hover:opacity-90">
+<span class="material-symbols-outlined">send</span>
+                    Submit Report
+                </button>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Bar - Execution from JSON -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 pb-safe h-20 bg-surface/80 dark:bg-on-surface/80 border-t border-outline-variant backdrop-blur-xl shadow-lg">
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90 hover:bg-surface-container-low p-2 rounded-xl" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-sm text-label-sm">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90 hover:bg-surface-container-low p-2 rounded-xl" href="#">
+<span class="material-symbols-outlined">fingerprint</span>
+<span class="font-label-sm text-label-sm">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90 hover:bg-surface-container-low p-2 rounded-xl" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="font-label-sm text-label-sm">Leave</span>
+</a>
+<!-- Active Tab: Mimicking Assets/Office category might fall under Salary or customized as 'Assets' here -->
+<a class="flex flex-col items-center justify-center text-primary font-bold transition-transform duration-200 active:scale-90 hover:bg-surface-container-low p-2 rounded-xl relative after:content-[''] after:w-1 after:h-1 after:bg-primary after:rounded-full after:mt-1" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">payments</span>
+<span class="font-label-sm text-label-sm">Salary</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90 hover:bg-surface-container-low p-2 rounded-xl" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-sm text-label-sm">Profile</span>
+</a>
+</nav>
+<!-- AI Assistant Floating Button -->
+<button class="fixed bottom-24 right-6 w-14 h-14 bg-gradient-to-br from-secondary to-primary rounded-2xl flex items-center justify-center text-white shadow-2xl backdrop-blur-md transition-all active:scale-90 z-40">
+<span class="material-symbols-outlined text-display-md" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</button>
+<script>
+        function selectPriority(btn) {
+            // Remove active classes from all
+            document.querySelectorAll('.priority-btn').forEach(b => {
+                b.classList.remove('border-2', 'border-primary', 'bg-primary-container/10');
+                b.classList.add('border', 'border-outline-variant', 'bg-surface-container-lowest');
+                // Reset internal colors
+                const icon = b.querySelector('.material-symbols-outlined');
+                const label = b.querySelector('.font-label-sm');
+                label.classList.remove('text-primary');
+            });
+
+            // Add active classes to selected
+            btn.classList.add('border-2', 'border-primary', 'bg-primary-container/10');
+            btn.classList.remove('border', 'border-outline-variant', 'bg-surface-container-lowest');
+            btn.querySelector('.font-label-sm').classList.add('text-primary');
+        }
+
+        // Handle visual feedback for file input
+        const fileInput = document.querySelector('input[type="file"]');
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                const parent = fileInput.closest('.cursor-pointer');
+                parent.querySelector('.font-label-md').textContent = `${e.target.files.length} photo(s) selected`;
+                parent.classList.add('border-primary', 'bg-primary-container/5');
+            }
+        });
+    </script>
+</body></html>

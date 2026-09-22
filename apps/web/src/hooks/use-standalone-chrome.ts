@@ -1,71 +1,53 @@
 "use client";
 
-import { useLayoutEffect, useSyncExternalStore } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
+
+import { erpModules } from "@/config/modules";
 
 const STANDALONE_KEY = "erp-standalone";
 
-let sessionVersion = 0;
-const sessionListeners = new Set<() => void>();
+/** Extra in-app routes that still use the ERP shell (not module workspace chrome). */
+const EXTRA_IN_APP_ROOTS = ["/organization/users"] as const;
 
-function emitSessionStandaloneChange() {
-  sessionVersion += 1;
-  sessionListeners.forEach((listener) => listener());
-}
+const IN_APP_MODULE_ROOTS: readonly string[] = [
+  ...erpModules
+    .filter((m) => m.group === "foundation" || m.group === "organization" || m.group === "master-data")
+    .map((m) => m.href),
+  ...EXTRA_IN_APP_ROOTS,
+];
 
-function subscribeSessionStandalone(onStoreChange: () => void) {
-  sessionListeners.add(onStoreChange);
-  return () => {
-    sessionListeners.delete(onStoreChange);
-  };
-}
+const STANDALONE_MODULE_ROOTS: readonly string[] = erpModules
+  .filter((m) => m.group === "operations")
+  .map((m) => m.href);
 
-function readSessionStandalone(): boolean {
-  void sessionVersion;
-  try {
-    return sessionStorage.getItem(STANDALONE_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function getServerSessionStandalone(): boolean {
-  return false;
-}
-
-function isAssetsPath(pathname: string): boolean {
-  return pathname === "/assets" || pathname.startsWith("/assets/");
+function matchesRoot(pathname: string, root: string) {
+  return pathname === root || pathname.startsWith(`${root}/`);
 }
 
 /**
- * True when this browser tab should use module content chrome (no main ERP sidebar).
- *
- * Asset Management (`/assets/*`) always uses AssetsModuleSidebar so dashboard and
- * sub-routes stay consistent whether opened with or without `?standalone=1`.
- * Other modules still rely on `?standalone=1` and sessionStorage.
+ * True for operations module workspace paths opened outside the ERP shell.
+ * Foundation, organization, and master data keep the ERP sidebar and topbar.
+ */
+export function isModuleStandalonePath(pathname: string) {
+  if (!pathname || pathname === "/") return false;
+  if (IN_APP_MODULE_ROOTS.some((root) => matchesRoot(pathname, root))) return false;
+  return STANDALONE_MODULE_ROOTS.some((root) => matchesRoot(pathname, root));
+}
+
+/** @deprecated Use isModuleStandalonePath - kept for existing imports. */
+export function isCrmStandalonePath(pathname: string) {
+  return isModuleStandalonePath(pathname);
+}
+
+/**
+ * True when this route uses module workspace chrome (no ERP module-picker sidebar).
+ * Operations modules are standalone; foundation/org/master-data stay in the ERP shell.
  */
 export function useStandaloneChrome() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const fromQuery = searchParams.get("standalone") === "1";
-  const assetsRoute = isAssetsPath(pathname);
-  const sessionStandalone = useSyncExternalStore(
-    subscribeSessionStandalone,
-    readSessionStandalone,
-    getServerSessionStandalone,
-  );
-
-  useLayoutEffect(() => {
-    if (!fromQuery) return;
-    try {
-      sessionStorage.setItem(STANDALONE_KEY, "1");
-      emitSessionStandaloneChange();
-    } catch {
-      /* private mode / quota */
-    }
-  }, [fromQuery]);
-
-  return assetsRoute || fromQuery || sessionStandalone;
+  return isModuleStandalonePath(pathname) || fromQuery;
 }
 
 export { STANDALONE_KEY };

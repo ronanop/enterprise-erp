@@ -1,6 +1,6 @@
 # Project Site Installation Page Overrides
 
-> **PROJECT:** Enterprise ERP Platform
+> **PROJECT:** iConnect Plus
 > **Generated:** 2026-07-27 14:35:37
 > **Page Type:** General
 
@@ -17,11 +17,11 @@
 
 ### Spacing Overrides
 
-- No overrides — use Master spacing
+- No overrides - use Master spacing
 
 ### Typography Overrides
 
-- No overrides — use Master typography
+- No overrides - use Master typography
 
 ### Color Overrides
 

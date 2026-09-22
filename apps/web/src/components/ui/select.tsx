@@ -109,9 +109,9 @@ function Select({ value, defaultValue, onValueChange, children, disabled }: Sele
       defaultValue={defaultValue}
       onChange={(event) => onValueChange?.(event.target.value)}
       className={cn(
-        "flex h-8 w-full min-w-0 cursor-pointer rounded-lg border border-input bg-transparent px-2.5 py-1 text-sm outline-none transition-colors duration-200",
-        "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-        "disabled:pointer-events-none disabled:opacity-50",
+        "flex h-8.5 w-full min-w-0 cursor-pointer rounded-lg border border-input/80 bg-background/60 px-3 py-1.5 text-sm outline-none transition-all duration-150",
+        "focus-visible:border-primary/60 focus-visible:ring-3 focus-visible:ring-primary/15",
+        "shadow-[0_1px_2px_0_rgba(0,0,0,0.02)] backdrop-blur-xs disabled:pointer-events-none disabled:opacity-50",
         className,
       )}
       {...rest}

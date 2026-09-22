@@ -26,7 +26,7 @@ InvTransactionMixin = (
     VersionMixin,
 )
 
-# Ledger is append-only — no soft delete / version.
+# Ledger is append-only - no soft delete / version.
 InvLedgerMixin = (
     AuditMixin,
     TenantMixin,

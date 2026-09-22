@@ -1,0 +1,44 @@
+---
+description: GitHub is primary; sync GitLab only when explicitly asked
+alwaysApply: true
+---
+
+# Git remotes — GitHub primary, GitLab on demand
+
+## Remotes
+
+| Remote | URL | Role |
+|--------|-----|------|
+| `origin` | `https://github.com/ronanop/enterprise-erp.git` | **Primary** — default push target |
+| `gitlab` | `https://172.16.200.77/cachedigitech/cache-erp-vapt-31-aug.git` | Mirror — update only on explicit request |
+
+GitHub is the source of truth. GitLab must be updated to match GitHub when syncing.
+
+## When the user asks to push / push to git
+
+1. Push to **GitHub only** (`origin`).
+2. Do **not** push or sync GitLab unless they also asked to sync GitLab.
+
+```bash
+git push -u origin HEAD
+```
+
+## When the user asks to sync gitlab
+
+1. Ensure local branch matches what should be on GitHub (push to `origin` first if there are unpushed commits).
+2. Push the same refs to GitLab so it matches GitHub.
+
+```bash
+git push origin HEAD
+git push gitlab HEAD:<branch> --force-with-lease
+```
+
+Prefer matching the current branch name on both remotes. Use `--force-with-lease` only when histories diverged and the user intends GitHub to overwrite GitLab.
+
+This GitLab host uses a self-signed cert. Local repo already has `http.https://172.16.200.77/.sslVerify=false`. Auth requires a GitLab username + PAT (or SSH key); do not prompt for passwords in non-interactive sessions — ask the user for a token/URL with credentials if push fails.
+
+## Do not
+
+- Auto-sync GitLab on every GitHub push
+- Treat GitLab as primary or push-only-to-GitLab when the user said "push to git"
+- Sync the other direction (GitLab → GitHub) unless the user explicitly asks

@@ -1,4 +1,4 @@
-"""Inventory port — Manufacturing never writes inv_* tables."""
+"""Inventory port - Manufacturing never writes inv_* tables."""
 
 from decimal import Decimal
 from uuid import UUID

@@ -2,7 +2,7 @@
  * Projects domain option lists.
  *
  * Values mirror the CHECK constraints on the `project.prj_*` tables
- * (ERD_14 §6) — labels are the FRD-11 display names.
+ * (ERD_14 §6) - labels are the FRD-11 display names.
  */
 
 export type Choice = { value: string; label: string };
@@ -206,10 +206,13 @@ export function deliveryIncludesRack(v: string | null | undefined): boolean {
 }
 
 /** Survey material types when delivery includes Rack Installation. */
+export const MATERIAL_TYPE_OTHERS = "others";
+
 export const CABLE_TYPES: Choice[] = [
   choice("5cr 10sqmm", "5cr 10sqmm"),
   choice("5 cr 6 sqmm", "5 cr 6 sqmm"),
-  choice("25 cr Green", "25 cr Green"),
+  choice("25sqmm Green", "25sqmm Green"),
+  choice(MATERIAL_TYPE_OTHERS, "Others"),
 ];
 
 export const LUG_TYPES: Choice[] = [
@@ -219,15 +222,21 @@ export const LUG_TYPES: Choice[] = [
   choice("ring type 6 sqmm", "Ring type 6 sqmm"),
   choice("ring type 10 sqmm", "Ring type 10 sqmm"),
   choice("ring type 25 sqmm", "Ring type 25 sqmm"),
+  choice(MATERIAL_TYPE_OTHERS, "Others"),
 ];
 
 export const INDUSTRIAL_SOCKET_TYPES: Choice[] = [
   choice("male", "Male"),
   choice("female", "Female"),
+  choice(MATERIAL_TYPE_OTHERS, "Others"),
 ];
 
 export function deliveryIsRackOnly(v: string | null | undefined): boolean {
   return v === "rack_only";
+}
+
+export function deliveryNeedsConfiguration(v: string | null | undefined): boolean {
+  return !deliveryIsRackOnly(v);
 }
 
 export function deliveryIncludesOs(v: string | null | undefined): boolean {
@@ -260,14 +269,15 @@ export const SITE_WORKFLOW_STAGES: Choice[] = [
   choice("intake", "Intake & RFAI"),
   choice("survey", "Survey"),
   choice("scm", "SCM / Logistics"),
-  choice("installation", "Installation"),
-  choice("configuration", "Configuration"),
+  choice("onsite_delivery", "Onsite Delivery"),
+  choice("material_handover", "Material Handover"),
+  choice("installation", "Installation & Configuration"),
   choice("acceptance", "Acceptance"),
   choice("completed", "Completed"),
 ];
 
 function labelFrom(choices: Choice[], value: string | null | undefined): string {
-  if (!value) return "—";
+  if (!value) return "-";
   return choices.find((c) => c.value === value)?.label ?? value;
 }
 
@@ -282,5 +292,12 @@ export const resourceTypeLabel = (v: string | null | undefined) => labelFrom(RES
 export const documentTypeLabel = (v: string | null | undefined) => labelFrom(DOCUMENT_TYPES, v);
 export const siteDeliveryTypeLabel = (v: string | null | undefined) =>
   labelFrom(SITE_DELIVERY_TYPES, v);
-export const siteWorkflowStageLabel = (v: string | null | undefined) =>
-  labelFrom(SITE_WORKFLOW_STAGES, v);
+export const siteWorkflowStageLabel = (v: string | null | undefined) => {
+  // Legacy stage before install+config merge
+  if (v === "configuration") return "Installation & Configuration";
+  // Removed dedicated assign step - owners assigned from Project Tracking
+  if (v === "assignment") return "Survey";
+  // Historic combined on-site stage
+  if (v === "onsite") return "Onsite Delivery";
+  return labelFrom(SITE_WORKFLOW_STAGES, v);
+};

@@ -23,14 +23,16 @@ import { ApiClientError } from "@/services/api-client";
 import { cn } from "@/lib/utils";
 
 export type RecordColumn<T> = {
-  /** Sort key — must be unique within the table. */
+  /** Sort key - must be unique within the table. */
   key: string;
   label: string;
   cell: (row: T) => ReactNode;
   sort: (row: T) => SortValue;
+  /** When false, render a plain header (no sort control). Default true. */
+  sortable?: boolean;
   /** Extra classes for the body cell. */
   className?: string;
-  align?: "left" | "right";
+  align?: "left" | "center" | "right";
 };
 
 export function ProjectsRecordList<T extends { id: string }>({
@@ -61,7 +63,7 @@ export function ProjectsRecordList<T extends { id: string }>({
   icon?: LucideIcon;
   newHref?: string;
   newLabel?: string;
-  headerActions?: ReactNode;
+  headerActions?: ReactNode | ((ctx: { rows: T[]; loading: boolean }) => ReactNode);
   searchPlaceholder?: string;
   emptyMessage: string;
   loadingMessage?: string;
@@ -105,7 +107,10 @@ export function ProjectsRecordList<T extends { id: string }>({
 
   const accessors = useMemo(() => {
     const map: Record<string, (row: T) => SortValue> = {};
-    for (const col of columns) map[col.key] = col.sort;
+    for (const col of columns) {
+      if (col.sortable === false) continue;
+      map[col.key] = col.sort;
+    }
     return map;
   }, [columns]);
 
@@ -114,6 +119,11 @@ export function ProjectsRecordList<T extends { id: string }>({
     [filtered, sortBy, sortDir, accessors],
   );
 
+  const resolvedHeaderActions =
+    typeof headerActions === "function"
+      ? headerActions({ rows: sorted, loading })
+      : headerActions;
+
   return (
     <ProjectsPage>
       <PageHeader
@@ -121,7 +131,7 @@ export function ProjectsRecordList<T extends { id: string }>({
         description={description}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {headerActions}
+            {resolvedHeaderActions}
             <Button
               type="button"
               variant="outline"
@@ -166,17 +176,34 @@ export function ProjectsRecordList<T extends { id: string }>({
           <table className="w-full text-left text-sm" style={{ minWidth: `${minWidth}px` }}>
             <thead>
               <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
-                {columns.map((col) => (
-                  <ProjectsSortableTh
-                    key={col.key}
-                    label={col.label}
-                    sortKey={col.key}
-                    activeKey={sortBy}
-                    dir={sortDir}
-                    onSort={onSort}
-                    align={col.align}
-                  />
-                ))}
+                {columns.map((col) =>
+                  col.sortable === false ? (
+                    <th
+                      key={col.key}
+                      className={cn(
+                        "px-4 py-2.5",
+                        col.align === "right" && "text-right",
+                        col.align === "center" && "text-center",
+                      )}
+                    >
+                      {col.label ? (
+                        <span className="text-xs font-extrabold tracking-wide text-foreground uppercase sm:text-[13px]">
+                          {col.label}
+                        </span>
+                      ) : null}
+                    </th>
+                  ) : (
+                    <ProjectsSortableTh
+                      key={col.key}
+                      label={col.label}
+                      sortKey={col.key}
+                      activeKey={sortBy}
+                      dir={sortDir}
+                      onSort={onSort}
+                      align={col.align}
+                    />
+                  ),
+                )}
               </tr>
             </thead>
             <tbody>
@@ -210,6 +237,7 @@ export function ProjectsRecordList<T extends { id: string }>({
                         className={cn(
                           "px-4 py-2.5",
                           col.align === "right" && "text-right",
+                          col.align === "center" && "text-center",
                           col.className ?? "text-muted-foreground",
                         )}
                       >

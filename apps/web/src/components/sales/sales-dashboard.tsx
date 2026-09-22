@@ -112,7 +112,7 @@ export function SalesDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="Sales"
-        description="Order-to-cash workspace — quotations, orders, deliveries, invoices, returns, pricing, and customer credit."
+        description="Order-to-cash workspace - quotations, orders, deliveries, invoices, returns, pricing, and customer credit."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -159,28 +159,28 @@ export function SalesDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Open quotations"
-          value={loading ? "—" : String(kpis.openQuotes)}
+          value={loading ? "-" : String(kpis.openQuotes)}
           hint={`${formatInr(kpis.quoteValue)} total quote value`}
           icon={FileText}
           tone={kpis.openQuotes > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Open orders"
-          value={loading ? "—" : String(kpis.openOrders)}
+          value={loading ? "-" : String(kpis.openOrders)}
           hint={`${formatInr(kpis.orderValue)} order book`}
           icon={ShoppingCart}
           tone="default"
         />
         <FinanceKpiCard
           label="Invoice outstanding"
-          value={loading ? "—" : formatInr(kpis.invoiceOutstanding)}
+          value={loading ? "-" : formatInr(kpis.invoiceOutstanding)}
           hint={`${data?.invoices.length ?? 0} invoices · ${countByStatus(data?.invoices ?? [], ["posted", "approved", "paid"])} posted/paid`}
           icon={Receipt}
           tone={kpis.invoiceOutstanding > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Credit holds"
-          value={loading ? "—" : String(kpis.creditHolds)}
+          value={loading ? "-" : String(kpis.creditHolds)}
           hint={`${data?.customerCredit.length ?? 0} credit accounts`}
           icon={WalletCards}
           tone={kpis.creditHolds > 0 ? "danger" : "success"}
@@ -215,7 +215,7 @@ export function SalesDashboard() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium tracking-tight">Workspace</h2>
+          <h2 className="text-base font-extrabold tracking-tight">Workspace</h2>
           <Badge variant="secondary">{salesWorkspaceGroups.length} areas</Badge>
         </div>
         <div className="grid gap-3 lg:grid-cols-3">
@@ -232,7 +232,7 @@ export function SalesDashboard() {
                     <Icon className="size-4" />
                   </span>
                   <div className="min-w-0">
-                    <h3 className="text-sm font-medium tracking-tight">{group.title}</h3>
+                    <h3 className="text-base font-extrabold tracking-tight">{group.title}</h3>
                     <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                       {group.description}
                     </p>
@@ -280,7 +280,7 @@ export function SalesDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Credit watch</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Credit watch</h2>
               <p className="text-[11px] text-muted-foreground">Holds and utilization</p>
             </div>
             <Link
@@ -361,7 +361,7 @@ function DocTable({
     <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
       <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
         <div>
-          <h2 className="text-sm font-medium tracking-tight">{title}</h2>
+          <h2 className="text-base font-extrabold tracking-tight">{title}</h2>
           <p className="text-[11px] text-muted-foreground">{subtitle}</p>
         </div>
         <Link
@@ -402,7 +402,7 @@ function DocTable({
                 >
                   <td className="max-w-[180px] truncate px-4 py-2.5">
                     <p className="font-medium text-foreground">
-                      {String(row.document_number ?? "—")}
+                      {String(row.document_number ?? "-")}
                     </p>
                     {showCustomer ? (
                       <p className="truncate text-[11px] text-muted-foreground">
@@ -411,7 +411,7 @@ function DocTable({
                     ) : null}
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">
-                    {String(row.document_date ?? "—")}
+                    {String(row.document_date ?? "-")}
                   </td>
                   <td className="px-4 py-2.5 font-mono text-xs tabular-nums text-foreground">
                     {formatInr(asNumber(row.total_amount))}

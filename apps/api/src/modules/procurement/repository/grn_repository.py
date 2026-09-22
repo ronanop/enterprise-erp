@@ -14,11 +14,9 @@ class GrnRepository(ProcScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
-    def list_grns(self, ctx: TenantContext, company_id: UUID) -> list[ProcGrnHeader]:
-        stmt = select(ProcGrnHeader).where(
-            ProcGrnHeader.company_id == company_id,
-            ProcGrnHeader.is_deleted.is_(False),
-        )
+    def list_grns(self, ctx: TenantContext, company_id: UUID | None) -> list[ProcGrnHeader]:
+        stmt = select(ProcGrnHeader).where(ProcGrnHeader.is_deleted.is_(False))
+        stmt = self.apply_optional_company_filter(stmt, ProcGrnHeader, company_id)
         stmt = self.apply_proc_filter(stmt, ProcGrnHeader, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt.order_by(ProcGrnHeader.document_date.desc())).all())
 

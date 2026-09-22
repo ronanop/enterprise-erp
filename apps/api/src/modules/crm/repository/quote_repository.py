@@ -25,6 +25,8 @@ class QuoteRepository(CrmScopedRepository):
         company_id: UUID,
         *,
         opportunity_id: UUID | None = None,
+        opportunity_ids: list[UUID] | None = None,
+        created_by: UUID | None = None,
     ):
         stmt = select(CrmQuote).where(
             CrmQuote.company_id == company_id,
@@ -32,6 +34,12 @@ class QuoteRepository(CrmScopedRepository):
         )
         if opportunity_id is not None:
             stmt = stmt.where(CrmQuote.opportunity_id == opportunity_id)
+        if opportunity_ids is not None:
+            if not opportunity_ids:
+                return []
+            stmt = stmt.where(CrmQuote.opportunity_id.in_(opportunity_ids))
+        if created_by is not None:
+            stmt = stmt.where(CrmQuote.created_by == created_by)
         stmt = self.apply_crm_filter(stmt, CrmQuote, ctx, branch_scoped=True)
         stmt = stmt.order_by(CrmQuote.created_at.desc())
         return list(self.db.scalars(stmt).all())
@@ -60,6 +68,18 @@ class QuoteRepository(CrmScopedRepository):
         row.version = int(row.version or 1) + 1
         self.db.flush()
         return row
+
+    def soft_delete(self, ctx: TenantContext, row_id: UUID) -> bool:
+        row = self.get(ctx, row_id)
+        if row is None:
+            return False
+        row.is_deleted = True
+        row.deleted_at = utcnow()
+        row.deleted_by = ctx.user_id
+        row.updated_at = utcnow()
+        row.updated_by = ctx.user_id
+        self.db.flush()
+        return True
 
 
 class QuoteLineRepository(CrmScopedRepository):

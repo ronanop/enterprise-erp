@@ -7,25 +7,33 @@ Product rules enforced here:
      lock the record.
 """
 
-from datetime import datetime, timezone
+from __future__ import annotations
+
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Sequence
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from core.exceptions import ConflictException, ForbiddenException, NotFoundException
 from modules.crm.domain.enums import CrmEntityType
+from modules.crm.domain.tax_codes import classify_hsn_sac
 from modules.crm.models import CrmOpportunity, CrmOvf, CrmOvfLine, CrmQuote
 from modules.crm.repository.company_repository import CompanyRepository
+from modules.crm.repository.lead_repository import LeadRepository
 from modules.crm.repository.opportunity_repository import OpportunityRepository
+from modules.crm.repository.attachment_repository import AttachmentRepository
 from modules.crm.repository.ovf_repository import OvfLineRepository, OvfRepository
 from modules.crm.repository.quote_repository import QuoteLineRepository, QuoteRepository
 from modules.crm.service.blueprint_service import log_state_history
+from modules.crm.service.crm_module_admin import CrmModuleAdminService
+from modules.crm.service.crm_record_visibility import CrmRecordVisibility
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import margin_engine, sales_blueprint_engine
 from modules.foundation.domain.value_objects import TenantContext
+from modules.foundation.service.audit_service import AuditService
 from modules.master_data.service.employee_service import EmployeeService
 
 
@@ -39,6 +47,75 @@ def _first(*values: Any) -> Any:
     return None
 
 
+def _aggregate_distributor_names(vendor_dtos: list[dict[str, Any]]) -> str | None:
+    """Unique distributor labels from OVF vendor charge lines (comma-separated)."""
+    names: list[str] = []
+    seen: set[str] = set()
+    for dto in vendor_dtos:
+        raw = (dto.get("distributor_name") or "").strip()
+        if not raw:
+            continue
+        for part in raw.replace(";", ",").split(","):
+            name = part.strip()
+            if not name:
+                continue
+            key = name.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            names.append(name)
+    return ", ".join(names) if names else None
+
+
+def resolve_scm_hold_started_at(ovf: CrmOvf) -> datetime | None:
+    """When hold started; falls back to updated_at for legacy rows without scm_on_hold_at."""
+    if not bool(getattr(ovf, "scm_on_hold", False)):
+        return None
+    explicit = getattr(ovf, "scm_on_hold_at", None)
+    if explicit is not None:
+        return explicit
+    return getattr(ovf, "updated_at", None)
+
+
+def _scm_hold_event_payload(
+    started: datetime,
+    released: datetime,
+    remark: str | None = None,
+) -> dict[str, str]:
+    payload: dict[str, str] = {
+        "started_at": started.isoformat(),
+        "released_at": released.isoformat(),
+    }
+    text = (remark or "").strip()
+    if text:
+        payload["remark"] = text
+    return payload
+
+
+def serialize_scm_hold_history(ovf: CrmOvf) -> list[dict[str, Any]]:
+    """Completed SCM hold cycles for SCM OVF preview."""
+    events: list[dict[str, Any]] = []
+    raw = getattr(ovf, "scm_hold_history", None) or []
+    if isinstance(raw, list):
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            started = item.get("started_at")
+            released = item.get("released_at")
+            if started and released:
+                entry: dict[str, Any] = {"started_at": started, "released_at": released}
+                remark = item.get("remark")
+                if isinstance(remark, str) and remark.strip():
+                    entry["remark"] = remark.strip()
+                events.append(entry)
+    if not events:
+        since = getattr(ovf, "scm_last_hold_since", None)
+        released = getattr(ovf, "scm_last_hold_released_at", None)
+        if since and released:
+            events.append({"started_at": since, "released_at": released})
+    return events
+
+
 class OvfService:
     def __init__(self, db: Session) -> None:
         self._db = db
@@ -46,25 +123,95 @@ class OvfService:
         self._lines = OvfLineRepository(db)
         self._companies = CompanyRepository(db)
         self._opportunities = OpportunityRepository(db)
+        self._leads = LeadRepository(db)
         self._quotes = QuoteRepository(db)
         self._quote_lines = QuoteLineRepository(db)
         self._employees = EmployeeService(db)
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
+        self._attachments = AttachmentRepository(db)
+        self._crm_admin = CrmModuleAdminService(db)
+        self._visibility = CrmRecordVisibility(db)
+        self._audit = AuditService(db)
+
+    def resolve_customer_po_display_date(self, ctx: TenantContext, ovf: CrmOvf) -> date | None:
+        """PO date on the OVF, or when the customer PO file was attached on the opportunity."""
+        return self._resolve_customer_po_display_date(ctx, ovf)
+
+    def _resolve_customer_po_display_date(self, ctx: TenantContext, ovf: CrmOvf) -> date | None:
+        """PO date on the OVF, or when the customer PO file was attached on the opportunity."""
+        if ovf.po_date is not None:
+            return ovf.po_date
+        attachments = self._attachments.list_for_entity(ctx, "opportunity", ovf.opportunity_id)
+        po_files = [
+            row
+            for row in attachments
+            if row.category == "customer_po" and getattr(row, "created_at", None) is not None
+        ]
+        if not po_files:
+            return None
+        latest = max(po_files, key=lambda row: row.created_at)
+        created = latest.created_at
+        if isinstance(created, datetime):
+            return created.date()
+        return None
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None, opportunity_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_ovfs(ctx, cid, opportunity_id=opportunity_id)
+        if opportunity_id is not None:
+            opp = self._opportunities.get(ctx, opportunity_id)
+            if opp is None:
+                raise NotFoundException("Opportunity not found")
+            self._visibility.ensure_opportunity_access(ctx, opp)
+            return self._repo.list_ovfs(ctx, cid, opportunity_id=opportunity_id)
+
+        opp_ids, created_by, approval_ids = self._visibility.filter_ovf_scope(ctx, cid)
+        if opp_ids is None:
+            return self._repo.list_ovfs(ctx, cid)
+
+        by_id: dict = {}
+        if opp_ids:
+            for row in self._repo.list_ovfs(ctx, cid, opportunity_ids=opp_ids):
+                by_id[row.id] = row
+        if created_by is not None:
+            for row in self._repo.list_ovfs(ctx, cid, created_by=created_by):
+                by_id[row.id] = row
+        for oid in approval_ids:
+            if oid in by_id:
+                continue
+            row = self._repo.get(ctx, oid)
+            if row is not None and row.company_id == cid:
+                by_id[row.id] = row
+        return sorted(by_id.values(), key=lambda r: r.created_at or r.id, reverse=True)
 
     def list_shared_for_scm(self, ctx: TenantContext, company_id: UUID | None = None):
         """OVFs shared to SCM after Finance/management commercial lock."""
         cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_shared_to_scm(ctx, cid)
 
+    def list_display_meta_by_ids(
+        self, ctx: TenantContext, ovf_ids: Sequence[UUID]
+    ) -> dict[UUID, dict[str, str | date | None]]:
+        """Lightweight OVF fields for Procurement list enrichment (no ORM leak)."""
+        rows = self._repo.list_by_ids(ctx, list(ovf_ids))
+        return {
+            row.id: {
+                "ovf_no": row.ovf_no,
+                "po_number": row.po_number,
+                "customer_name": row.customer_name,
+                "po_date": self._resolve_customer_po_display_date(ctx, row),
+            }
+            for row in rows
+        }
+
     def get(self, ctx: TenantContext, ovf_id: UUID) -> CrmOvf:
         row = self._repo.get(ctx, ovf_id)
         if row is None:
             raise NotFoundException("OVF not found")
+        # Procurement/SCM module-wide access still uses list_shared_for_scm;
+        # CRM users are creator-scoped unless admin or approval assignee.
+        if not self._visibility.is_admin(ctx):
+            self._visibility.ensure_ovf_access(ctx, row)
         self._ensure_display_snapshot(ctx, row)
         return row
 
@@ -72,13 +219,151 @@ class OvfService:
         self.get(ctx, ovf_id)
         return self._lines.list_for_ovf(ctx, ovf_id)
 
+    def delete(self, ctx: TenantContext, ovf_id: UUID) -> None:
+        self._crm_admin.ensure_admin(ctx)
+        ovf = self.get(ctx, ovf_id)
+        if ovf.locked:
+            raise ConflictException("OVF is locked pending approval")
+        if not self._repo.soft_delete(ctx, ovf_id):
+            raise NotFoundException("OVF not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="crm_ovf",
+            entity_id=ovf_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
+
     def get_scm_handoff(self, ctx: TenantContext, ovf_id: UUID) -> dict[str, Any]:
-        """DTO for Procurement SCM — no ORM leak across module boundary."""
+        """Full CRM OVF DTO for SCM - queue preview, Create PO, and View OVF."""
         ovf = self.get(ctx, ovf_id)
         if not ovf.shared_to_scm:
             raise ConflictException("OVF has not been shared to SCM")
         lines = self.list_lines(ctx, ovf_id)
+        customer_lines = [ln for ln in lines if ln.side == "customer_po"]
         vendor_lines = [ln for ln in lines if ln.side == "vendor"]
+        quote = self._get_quote(ctx, ovf.quote_id)
+        quote_lines = self._quote_lines.list_for_quote(ctx, quote.id)
+        quote_by_name = {
+            (ql.product_name or "").strip().lower(): ql
+            for ql in quote_lines
+            if (ql.product_name or "").strip()
+        }
+        gst_values = [float(ln.gst_pct or 0) for ln in quote_lines if float(ln.gst_pct or 0) > 0]
+        tax_pct = (sum(gst_values) / len(gst_values)) if gst_values else 18.0
+        if tax_pct <= 0:
+            tax_pct = 18.0
+
+        oem = self._resolve_lead_scm_context(ctx, ovf.opportunity_id)
+
+        def charge_dto(ln: Any) -> dict[str, Any]:
+            key = (ln.product_name or "").strip().lower()
+            ql = quote_by_name.get(key)
+            stored_desc = (getattr(ln, "description", None) or "").strip()
+            quote_desc = (getattr(ql, "description", None) if ql else None) or None
+            desc = stored_desc or quote_desc or ln.product_name
+            line_gst = float(getattr(ln, "gst_pct", 0) or 0)
+            if line_gst <= 0:
+                quote_gst = float(getattr(ql, "gst_pct", 0) or 0) if ql else 0.0
+                gst_pct = quote_gst if quote_gst > 0 else tax_pct
+            else:
+                gst_pct = line_gst
+            qty = float(ln.qty)
+            unit = float(ln.unit_price)
+            total = float(ln.line_total) if ln.line_total is not None else qty * unit
+            gst_amount = (total * gst_pct / 100.0)
+            return {
+                "line_id": ln.id,
+                "line_no": ln.line_no,
+                "product_name": ln.product_name,
+                "description": desc,
+                "distributor_name": getattr(ln, "distributor_name", None),
+                "contact_person": getattr(ln, "contact_person", None),
+                "contact_number": getattr(ln, "contact_number", None),
+                "qty": qty,
+                "unit_price": unit,
+                "line_total": total,
+                "gst_pct": gst_pct,
+                "gst_amount": round(gst_amount, 4),
+                "total_with_gst": round(total + gst_amount, 4),
+            }
+
+        customer_dtos = [charge_dto(ln) for ln in customer_lines]
+        vendor_dtos = [charge_dto(ln) for ln in vendor_lines]
+
+        quote_rank = {
+            (ql.product_name or "").strip().lower(): i
+            for i, ql in enumerate(quote_lines)
+            if (ql.product_name or "").strip()
+        }
+
+        def _crm_line_sort_key(
+            dto: dict[str, Any],
+            *,
+            follow: dict[str, int] | None = None,
+        ) -> tuple[int, int, int]:
+            name = (dto.get("product_name") or "").strip().lower()
+            follow_pos = follow.get(name, 10_000) if follow is not None else 0
+            return (
+                follow_pos,
+                quote_rank.get(name, 10_000),
+                int(dto.get("line_no") or 0),
+            )
+
+        # Same sequence as CRM Order Lines (quote / customer charges, then extras).
+        customer_dtos.sort(key=lambda d: _crm_line_sort_key(d))
+        customer_rank = {
+            (c.get("product_name") or "").strip().lower(): i
+            for i, c in enumerate(customer_dtos)
+            if (c.get("product_name") or "").strip() and c["product_name"] != "-"
+        }
+        vendor_dtos.sort(key=lambda d: _crm_line_sort_key(d, follow=customer_rank))
+
+        vendor_by_no = {int(v["line_no"]): v for v in vendor_dtos}
+        vendor_by_name = {(v["product_name"] or "").strip().lower(): v for v in vendor_dtos}
+        margin_lines: list[dict[str, Any]] = []
+        products_margin = 0.0
+        customer_sell_total = 0.0
+        for cust in customer_dtos:
+            # OVF line_no is not globally unique across sides, so use product name first
+            # to avoid mismatching asus↔macbook.
+            cust_key = (cust["product_name"] or "").strip().lower()
+            vend = vendor_by_name.get(cust_key) or vendor_by_no.get(int(cust["line_no"]))
+            cust_total = float(cust["line_total"])
+            vend_total = float(vend["line_total"]) if vend else 0.0
+            margin_amt = cust_total - vend_total
+            margin_pct = (margin_amt / cust_total * 100.0) if cust_total else 0.0
+            products_margin += margin_amt
+            customer_sell_total += cust_total
+            margin_lines.append(
+                {
+                    "line_no": cust["line_no"],
+                    "product_name": cust["product_name"],
+                    "description": cust["description"],
+                    "qty": cust["qty"],
+                    "margin_amount": round(margin_amt, 4),
+                    "margin_pct": round(margin_pct, 3),
+                }
+            )
+
+        freight = float(ovf.freight or 0)
+        additional = float(ovf.additional_charges or 0)
+        finance_pct = float(ovf.finance_cost_pct or 0)
+        vendor_sell_total = sum(float(v["line_total"]) for v in vendor_dtos)
+        finance_amount = vendor_sell_total * finance_pct / 100.0
+        margin_net = products_margin - freight - additional - finance_amount
+        margin_pct_header = float(ovf.total_margin_pct or 0)
+        if not margin_pct_header and customer_sell_total:
+            display_margin = float(ovf.total_margin_amount or margin_net)
+            margin_pct_header = round(display_margin / customer_sell_total * 100.0, 3)
+
+        billing_parts = [ovf.billing_address, ovf.billing_state, ovf.billing_country]
+        shipping_parts = [ovf.shipping_address, ovf.shipping_state, ovf.shipping_country]
+
+        distributor_name = (oem.get("distributor_name") or "").strip() or None
+        if not distributor_name:
+            distributor_name = _aggregate_distributor_names(vendor_dtos)
+
         return {
             "ovf_id": ovf.id,
             "ovf_no": ovf.ovf_no,
@@ -86,28 +371,168 @@ class OvfService:
             "branch_id": ovf.branch_id,
             "quote_id": ovf.quote_id,
             "opportunity_id": ovf.opportunity_id,
+            "quote_no": getattr(quote, "quote_no", None),
             "po_number": ovf.po_number,
+            "po_date": self._resolve_customer_po_display_date(ctx, ovf),
+            "delivery_period": ovf.delivery_period,
             "customer_name": ovf.customer_name,
             "quote_name": ovf.quote_name,
             "account_name": ovf.account_name,
             "owner_name": ovf.owner_name,
+            "oem_name": oem.get("oem_name"),
+            "oem_contact_person": oem.get("oem_contact_person"),
+            "oem_contact_email": oem.get("oem_contact_email"),
+            "oem_contact_number": oem.get("oem_contact_number"),
+            "distributor_name": distributor_name,
+            "project_title": oem.get("project_title"),
             "blueprint_state": ovf.blueprint_state,
-            "freight": float(ovf.freight or 0),
+            "approval_status": ovf.approval_status,
+            "scm_on_hold": bool(getattr(ovf, "scm_on_hold", False)),
+            "scm_on_hold_at": resolve_scm_hold_started_at(ovf),
+            "scm_hold_blocked": False,
+            "scm_last_hold_since": getattr(ovf, "scm_last_hold_since", None),
+            "scm_last_hold_released_at": getattr(ovf, "scm_last_hold_released_at", None),
+            "scm_hold_history": serialize_scm_hold_history(ovf),
+            "scm_on_hold_remark": getattr(ovf, "scm_on_hold_remark", None),
+            "freight": freight,
             "additional_charges": float(ovf.additional_charges or 0),
             "vendor_payment_days": int(ovf.vendor_payment_days or 0),
-            "total_margin_amount": float(ovf.total_margin_amount or 0),
-            "vendor_lines": [
-                {
-                    "line_id": ln.id,
-                    "line_no": ln.line_no,
-                    "product_name": ln.product_name,
-                    "qty": float(ln.qty),
-                    "unit_price": float(ln.unit_price),
-                    "line_total": float(ln.line_total),
-                }
-                for ln in vendor_lines
-            ],
+            "customer_payment_days": int(ovf.customer_payment_days or 0),
+            "finance_cost_pct": float(ovf.finance_cost_pct or 0),
+            "total_margin_amount": float(ovf.total_margin_amount or margin_net),
+            "total_margin_pct": margin_pct_header,
+            "products_margin_amount": round(products_margin, 4),
+            "billing_address": ", ".join(str(p) for p in billing_parts if p) or None,
+            "shipping_address": ", ".join(str(p) for p in shipping_parts if p) or None,
+            "billing_state": ovf.billing_state,
+            "shipping_state": ovf.shipping_state,
+            "billing_contact_person": ovf.billing_contact_person,
+            "shipping_contact_person": ovf.shipping_contact_person,
+            "customer_gst": getattr(quote, "entity_gst", None),
+            "tax_percentage": tax_pct,
+            "ovf_approver": ovf.owner_name,
+            "vendor_lines": vendor_dtos,
+            "customer_lines": customer_dtos,
+            "margin_lines": margin_lines,
         }
+
+    def get_scm_commercial_totals(self, ctx: TenantContext, ovf_id: UUID) -> dict[str, float]:
+        """Lightweight vendor/customer/margin totals for PO & GRN lists (no quote/handoff DTO)."""
+        ovf = self.get(ctx, ovf_id)
+
+        def _line_total(ln: Any) -> float:
+            if ln.line_total is not None:
+                return float(ln.line_total)
+            return float(ln.qty or 0) * float(ln.unit_price or 0)
+
+        lines = self.list_lines(ctx, ovf_id)
+        vendor_lines = [ln for ln in lines if ln.side == "vendor"]
+        customer_lines = [ln for ln in lines if ln.side == "customer_po"]
+        vendor_total = sum(_line_total(ln) for ln in vendor_lines)
+        customer_total = sum(_line_total(ln) for ln in customer_lines)
+        vendor_by_name = {
+            (ln.product_name or "").strip().lower(): _line_total(ln) for ln in vendor_lines
+        }
+        products_margin = 0.0
+        for ln in customer_lines:
+            key = (ln.product_name or "").strip().lower()
+            cust = _line_total(ln)
+            vend = vendor_by_name.get(key, 0.0)
+            products_margin += cust - vend
+        freight = float(ovf.freight or 0)
+        additional = float(ovf.additional_charges or 0)
+        finance_pct = float(ovf.finance_cost_pct or 0)
+        margin_amount = (
+            products_margin
+            - freight
+            - additional
+            - (vendor_total * finance_pct / 100.0)
+        )
+        return {
+            "vendor_total": vendor_total,
+            "customer_total": customer_total,
+            "products_margin_amount": round(products_margin, 4),
+            "total_margin_amount": round(margin_amount, 4),
+            "freight": freight,
+            "additional_charges": additional,
+            "finance_cost_pct": finance_pct,
+        }
+
+    def get_scm_commercial_export(self, ctx: TenantContext, ovf_id: UUID) -> dict[str, Any]:
+        """Tax-aware commercial snapshot for procurement PO Excel export."""
+        handoff = self.get_scm_handoff(ctx, ovf_id)
+        customer_lines = handoff.get("customer_lines") or []
+        vendor_lines = handoff.get("vendor_lines") or []
+        customer_sub = sum(float(ln["line_total"]) for ln in customer_lines)
+        customer_tax = sum(float(ln["gst_amount"]) for ln in customer_lines)
+        customer_with_tax = sum(float(ln["total_with_gst"]) for ln in customer_lines)
+        vendor_sub = sum(float(ln["line_total"]) for ln in vendor_lines)
+        vendor_tax = sum(float(ln["gst_amount"]) for ln in vendor_lines)
+        vendor_with_tax = sum(float(ln["total_with_gst"]) for ln in vendor_lines)
+        desc_parts: list[str] = []
+        for ln in customer_lines:
+            label = (ln.get("description") or ln.get("product_name") or "").strip()
+            if label and label not in desc_parts:
+                desc_parts.append(label)
+        ovf = self.get(ctx, ovf_id)
+        customer_total = customer_sub
+        margin_amount = float(handoff.get("total_margin_amount") or 0)
+        margin_pct = (margin_amount / customer_total * 100.0) if customer_total else 0.0
+        return {
+            "vendor_total": vendor_sub,
+            "customer_total": customer_sub,
+            "customer_tax_amount": round(customer_tax, 4),
+            "customer_total_with_tax": round(customer_with_tax, 4),
+            "vendor_tax_amount": round(vendor_tax, 4),
+            "vendor_total_with_tax": round(vendor_with_tax, 4),
+            "total_margin_amount": margin_amount,
+            "margin_pct": round(margin_pct, 3),
+            "description": "; ".join(desc_parts) if desc_parts else None,
+            "customer_po_number": ovf.po_number,
+            "customer_po_date": self._resolve_customer_po_display_date(ctx, ovf),
+        }
+
+    def _resolve_lead_scm_context(self, ctx: TenantContext, opportunity_id: UUID) -> dict[str, str | None]:
+        """Lead fields surfaced to SCM (OEM, distributor, project title)."""
+        empty: dict[str, str | None] = {
+            "oem_name": None,
+            "oem_contact_person": None,
+            "oem_contact_email": None,
+            "oem_contact_number": None,
+            "distributor_name": None,
+            "project_title": None,
+        }
+        opp = self._opportunities.get(ctx, opportunity_id)
+        if opp is None:
+            return empty
+        project_title = (opp.project_title or "").strip() or None
+        if opp.lead_id is None:
+            return {**empty, "project_title": project_title}
+        lead = self._leads.get(ctx, opp.lead_id)
+        if lead is None:
+            return {**empty, "project_title": project_title}
+        return {
+            "oem_name": (lead.oem_name or "").strip() or None,
+            "oem_contact_person": (lead.oem_contact_person or "").strip() or None,
+            "oem_contact_email": (lead.oem_contact_email or "").strip() or None,
+            "oem_contact_number": (lead.oem_contact_number or "").strip() or None,
+            "distributor_name": (lead.distributor_name or "").strip() or None,
+            "project_title": _first(project_title, lead.project_title),
+        }
+
+    def _resolve_oem_context(self, ctx: TenantContext, opportunity_id: UUID) -> dict[str, str | None]:
+        """OEM + contact from the originating lead (for SCM vendor context)."""
+        lead_ctx = self._resolve_lead_scm_context(ctx, opportunity_id)
+        return {
+            "oem_name": lead_ctx["oem_name"],
+            "oem_contact_person": lead_ctx["oem_contact_person"],
+            "oem_contact_email": lead_ctx["oem_contact_email"],
+            "oem_contact_number": lead_ctx["oem_contact_number"],
+        }
+
+    def _resolve_oem_name(self, ctx: TenantContext, opportunity_id: UUID) -> str | None:
+        """OEM is captured on the lead; surface it for SCM vendor matching."""
+        return self._resolve_oem_context(ctx, opportunity_id).get("oem_name")
 
     def _get_quote(self, ctx: TenantContext, quote_id: UUID) -> CrmQuote:
         quote = self._quotes.get(ctx, quote_id)
@@ -330,8 +755,10 @@ class OvfService:
                     side=side,
                     line_no=quote_line.line_no,
                     product_name=quote_line.product_name,
+                    description=(quote_line.description or None),
                     qty=quote_line.qty,
                     unit_price=unit_price,
+                    gst_pct=Decimal(str(quote_line.gst_pct or 18)),
                     line_total=(quote_line.qty * unit_price).quantize(Decimal("0.0001")),
                 )
 
@@ -385,9 +812,16 @@ class OvfService:
         existing = self._lines.list_for_ovf(ctx, ovf_id)
         side = fields.get("side", "customer_po")
         fields.setdefault("line_no", len([ln for ln in existing if ln.side == side]) + 1)
-        fields["line_total"] = (Decimal(str(fields.get("qty", 1))) * Decimal(str(fields.get("unit_price", 0)))).quantize(
-            Decimal("0.0001")
-        )
+        qty = Decimal(str(fields.get("qty", 1)))
+        unit_price = Decimal(str(fields.get("unit_price", 0)))
+        if fields.get("line_total") is None:
+            fields["line_total"] = (qty * unit_price).quantize(Decimal("0.0001"))
+        else:
+            fields["line_total"] = Decimal(str(fields["line_total"])).quantize(Decimal("0.0001"))
+        if fields.get("gst_pct") is None:
+            fields["gst_pct"] = Decimal("18")
+        else:
+            fields["gst_pct"] = Decimal(str(fields["gst_pct"]))
         line = self._lines.create(ctx, company_id=ovf.company_id, branch_id=ovf.branch_id, ovf_id=ovf_id, **fields)
         self._recompute_margin(ctx, ovf_id)
         return line
@@ -400,7 +834,12 @@ class OvfService:
         sales_blueprint_engine.assert_not_locked(ovf)
         qty = Decimal(str(fields.get("qty", line.qty)))
         unit_price = Decimal(str(fields.get("unit_price", line.unit_price)))
-        fields["line_total"] = (qty * unit_price).quantize(Decimal("0.0001"))
+        if "line_total" in fields and fields["line_total"] is not None:
+            fields["line_total"] = Decimal(str(fields["line_total"])).quantize(Decimal("0.0001"))
+        else:
+            fields["line_total"] = (qty * unit_price).quantize(Decimal("0.0001"))
+        if "gst_pct" in fields and fields["gst_pct"] is not None:
+            fields["gst_pct"] = Decimal(str(fields["gst_pct"]))
         row = self._lines.update(ctx, line_id, **fields)
         if row is None:
             raise NotFoundException("OVF line not found")
@@ -413,9 +852,12 @@ class OvfService:
         customer_total = sum((Decimal(str(ln.line_total)) for ln in lines if ln.side == "customer_po"), Decimal("0"))
         vendor_total = sum((Decimal(str(ln.line_total)) for ln in lines if ln.side == "vendor"), Decimal("0"))
         freight = Decimal(str(ovf.freight or 0))
+        additional = Decimal(str(ovf.additional_charges or 0))
         finance_pct = Decimal(str(ovf.finance_cost_pct or 0))
         finance_amount = (vendor_total * finance_pct / Decimal("100")).quantize(Decimal("0.0001"))
-        margin_amount = (customer_total - vendor_total - freight - finance_amount).quantize(Decimal("0.0001"))
+        margin_amount = (
+            customer_total - vendor_total - freight - additional - finance_amount
+        ).quantize(Decimal("0.0001"))
         margin_pct = (
             (margin_amount / customer_total * Decimal("100")).quantize(Decimal("0.001"))
             if customer_total
@@ -424,14 +866,23 @@ class OvfService:
         self._repo.update(ctx, ovf_id, total_margin_amount=margin_amount, total_margin_pct=margin_pct)
 
     # -- blueprint / approval workflow ------------------------------------
-    def send_for_approval(self, ctx: TenantContext, ovf_id: UUID, *, team_role: str = "management", remarks: str | None = None) -> CrmOvf:
+    def send_for_approval(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        team_role: str = "management",
+        remarks: str | None = None,
+        assigned_user_id: UUID | None = None,
+        assigned_user_ids: list[UUID] | None = None,
+    ) -> CrmOvf:
         ovf = self.get(ctx, ovf_id)
         sales_blueprint_engine.assert_not_locked(ovf)
         next_state = sales_blueprint_engine.transition("ovf", ovf.blueprint_state, "send_for_approval")
 
         from modules.crm.service.approval_task_service import ApprovalTaskService
 
-        ApprovalTaskService(self._db).create_task(
+        ApprovalTaskService(self._db).route_approval(
             ctx,
             title=f"Approve OVF {ovf.ovf_no}",
             entity_type="ovf",
@@ -441,6 +892,8 @@ class OvfService:
             company_id=ovf.company_id,
             branch_id=ovf.branch_id,
             remarks=remarks,
+            assigned_user_id=assigned_user_id,
+            assigned_user_ids=assigned_user_ids,
         )
         row = self._repo.update(ctx, ovf_id, blueprint_state=next_state, approval_status="pending", locked=True)
         self._log(ctx, ovf, ovf.blueprint_state, next_state, "send_for_approval", remarks)
@@ -476,8 +929,394 @@ class OvfService:
         ovf = self.get(ctx, ovf_id)
         sales_blueprint_engine.assert_not_locked(ovf)
         next_state = sales_blueprint_engine.transition("ovf", ovf.blueprint_state, "share_to_scm")
-        row = self._repo.update(ctx, ovf_id, blueprint_state=next_state, shared_to_scm=True)
+        row = self._repo.update(
+            ctx,
+            ovf_id,
+            blueprint_state=next_state,
+            shared_to_scm=True,
+            shared_to_scm_at=datetime.now(timezone.utc),
+        )
         self._log(ctx, ovf, ovf.blueprint_state, next_state, "share_to_scm", None)
+        return row
+
+    def set_scm_on_hold(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        on_hold: bool,
+        remark: str | None = None,
+    ) -> CrmOvf:
+        """SCM may park an OVF without creating a vendor PO (no vendor required)."""
+        ovf = self.get(ctx, ovf_id)
+        if not ovf.shared_to_scm:
+            raise ConflictException("OVF has not been shared to SCM")
+        now = datetime.now(timezone.utc)
+        if on_hold:
+            if bool(ovf.scm_on_hold):
+                raise ConflictException("OVF is already on SCM hold")
+            remark_text = (remark or "").strip()
+            if not remark_text:
+                raise ConflictException("Hold remark is required")
+            hold_at = now
+            row = self._repo.update(
+                ctx,
+                ovf_id,
+                scm_on_hold=True,
+                scm_on_hold_at=hold_at,
+                scm_on_hold_remark=remark_text,
+            )
+        else:
+            was_on_hold = bool(ovf.scm_on_hold)
+            update_fields: dict[str, Any] = {
+                "scm_on_hold": False,
+                "scm_on_hold_at": None,
+                "scm_on_hold_remark": None,
+            }
+            if was_on_hold:
+                hold_since = resolve_scm_hold_started_at(ovf) or now
+                hold_remark = getattr(ovf, "scm_on_hold_remark", None)
+                history = list(getattr(ovf, "scm_hold_history", None) or [])
+                history.append(_scm_hold_event_payload(hold_since, now, hold_remark))
+                update_fields["scm_hold_history"] = history
+                update_fields["scm_last_hold_since"] = hold_since
+                update_fields["scm_last_hold_released_at"] = now
+            row = self._repo.update(ctx, ovf_id, **update_fields)
+        self._log(
+            ctx,
+            ovf,
+            ovf.blueprint_state,
+            ovf.blueprint_state,
+            "scm_hold" if on_hold else "scm_release_hold",
+            None,
+        )
+        return row
+
+    def update_scm_charges(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        freight: Decimal | float | str | None = None,
+        additional_charges: Decimal | float | str | None = None,
+        finance_cost_pct: Decimal | float | str | None = None,
+    ) -> CrmOvf:
+        """SCM may adjust freight / finance / additional charges after share-to-SCM.
+
+        Values are stored on the CRM OVF so Sales sees the updated figures on detail.
+        """
+        ovf = self.get(ctx, ovf_id)
+        if not ovf.shared_to_scm:
+            raise ConflictException("OVF has not been shared to SCM")
+        if bool(getattr(ovf, "scm_on_hold", False)):
+            raise ConflictException(
+                "Freight and finance cannot be changed while the OVF is on SCM hold. Unhold first."
+            )
+
+        fields: dict[str, Decimal] = {}
+        if freight is not None:
+            value = Decimal(str(freight))
+            if value < 0:
+                raise ConflictException("Freight cannot be negative")
+            fields["freight"] = value.quantize(Decimal("0.0001"))
+        if additional_charges is not None:
+            value = Decimal(str(additional_charges))
+            if value < 0:
+                raise ConflictException("Additional charges cannot be negative")
+            fields["additional_charges"] = value.quantize(Decimal("0.0001"))
+        if finance_cost_pct is not None:
+            value = Decimal(str(finance_cost_pct))
+            if value < 0:
+                raise ConflictException("Finance cost % cannot be negative")
+            fields["finance_cost_pct"] = value.quantize(Decimal("0.001"))
+
+        if not fields:
+            return ovf
+
+        row = self._repo.update(ctx, ovf_id, **fields)
+        if row is None:
+            raise NotFoundException("OVF not found")
+        self._recompute_margin(ctx, ovf_id)
+        row = self.get(ctx, ovf_id)
+        self._log(
+            ctx,
+            ovf,
+            ovf.blueprint_state,
+            ovf.blueprint_state,
+            "scm_update_charges",
+            (
+                f"freight={fields.get('freight', ovf.freight)}, "
+                f"additional_charges={fields.get('additional_charges', ovf.additional_charges)}, "
+                f"finance_cost_pct={fields.get('finance_cost_pct', ovf.finance_cost_pct)}"
+            ),
+        )
+        return row
+
+    # -- SCM savings visibility -------------------------------------------
+    def can_view_scm_savings(self, ctx: TenantContext) -> bool:
+        """Supply-chain savings are visible to Management/SCM, never to Sales."""
+        from modules.foundation.repository.user_module_repository import UserModuleRepository
+
+        if self._crm_admin.is_admin(ctx):
+            return True
+        if ctx.user_id is None:
+            return False
+        return ctx.user_id in UserModuleRepository(self._db).list_user_ids_for_module(
+            ctx.tenant_id, "procurement"
+        )
+
+    def get_scm_savings(self, ctx: TenantContext, ovf_id: UUID) -> dict[str, Any]:
+        if not self.can_view_scm_savings(ctx):
+            raise ForbiddenException(
+                "Supply-chain negotiation savings are visible to Management and Supply Chain only"
+            )
+        ovf = self.get(ctx, ovf_id)
+        return {
+            "ovf_id": ovf.id,
+            "ovf_no": ovf.ovf_no,
+            "scm_savings_amount": Decimal(str(ovf.scm_savings_amount or 0)),
+            "scm_negotiated_vendor_total": ovf.scm_negotiated_vendor_total,
+        }
+
+    # -- invoice routing + AR follow-up -----------------------------------
+    def _invoice_line_mix(self, ctx: TenantContext, ovf: CrmOvf) -> tuple[int, int]:
+        """(hsn_line_count, sac_line_count) from the source quote lines."""
+        hsn = sac = 0
+        for line in self._quote_lines.list_for_quote(ctx, ovf.quote_id):
+            kind = classify_hsn_sac(getattr(line, "hsn_sac", None))
+            if kind == "sac":
+                sac += 1
+            elif kind == "hsn":
+                hsn += 1
+        return hsn, sac
+
+    @staticmethod
+    def _invoice_channel(hsn_count: int, sac_count: int) -> str | None:
+        if hsn_count and sac_count:
+            return "mixed"
+        if sac_count:
+            return "portal"
+        if hsn_count:
+            return "physical"
+        return None
+
+    def get_invoice_status(self, ctx: TenantContext, ovf_id: UUID) -> dict[str, Any]:
+        """Invoice routing (HSN vs SAC) plus the payment follow-up state."""
+        ovf = self.get(ctx, ovf_id)
+        hsn_count, sac_count = self._invoice_line_mix(ctx, ovf)
+        channel = ovf.invoice_channel or self._invoice_channel(hsn_count, sac_count)
+
+        today = date.today()
+        delay_days = 0
+        if ovf.payment_received_date and ovf.payment_due_date:
+            delay_days = max((ovf.payment_received_date - ovf.payment_due_date).days, 0)
+        elif ovf.payment_due_date and ovf.payment_received_date is None:
+            delay_days = max((today - ovf.payment_due_date).days, 0)
+
+        if ovf.payment_received_date is not None:
+            payment_status = "delayed" if delay_days else "received"
+        elif not ovf.invoice_submitted_at:
+            payment_status = "not_invoiced"
+        elif ovf.payment_due_date and today > ovf.payment_due_date:
+            payment_status = "overdue"
+        else:
+            payment_status = "awaiting_payment"
+
+        return {
+            "ovf_id": ovf.id,
+            "ovf_no": ovf.ovf_no,
+            "customer_name": ovf.customer_name,
+            "invoice_channel": channel,
+            "portal_submission_required": channel in {"portal", "mixed"},
+            "physical_delivery_invoice": channel in {"physical", "mixed"},
+            "hsn_line_count": hsn_count,
+            "sac_line_count": sac_count,
+            "invoice_submitted_portal": bool(ovf.invoice_submitted_portal),
+            "invoice_submitted_at": ovf.invoice_submitted_at,
+            "invoice_reference": ovf.invoice_reference,
+            "payment_due_date": ovf.payment_due_date,
+            "payment_received_date": ovf.payment_received_date,
+            "payment_delay_reason": ovf.payment_delay_reason,
+            "payment_delay_days": delay_days,
+            "payment_status": payment_status,
+        }
+
+    def record_invoice_submission(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        invoice_reference: str | None = None,
+        submitted_on_portal: bool = True,
+        payment_due_date: date | None = None,
+    ) -> dict[str, Any]:
+        """Log who submitted the customer invoice and when (portal or physical)."""
+        ovf = self.get(ctx, ovf_id)
+        hsn_count, sac_count = self._invoice_line_mix(ctx, ovf)
+        channel = self._invoice_channel(hsn_count, sac_count)
+
+        due = payment_due_date
+        if due is None and ovf.payment_due_date is None:
+            terms_days = int(ovf.customer_payment_days or 0)
+            if terms_days > 0:
+                due = date.today() + timedelta(days=terms_days)
+
+        fields: dict[str, Any] = {
+            "invoice_submitted_portal": bool(submitted_on_portal),
+            "invoice_submitted_at": datetime.now(timezone.utc),
+            "invoice_submitted_by": ctx.user_id,
+        }
+        if channel is not None:
+            fields["invoice_channel"] = channel
+        if invoice_reference is not None:
+            fields["invoice_reference"] = invoice_reference.strip() or None
+        if due is not None:
+            fields["payment_due_date"] = due
+
+        if self._repo.update(ctx, ovf_id, **fields) is None:
+            raise NotFoundException("OVF not found")
+        self._log(
+            ctx,
+            ovf,
+            ovf.blueprint_state,
+            ovf.blueprint_state,
+            "invoice_submitted",
+            f"channel={channel or 'unknown'}, portal={bool(submitted_on_portal)}",
+        )
+        return self.get_invoice_status(ctx, ovf_id)
+
+    def update_payment(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        payment_received_date: date | None = None,
+        payment_due_date: date | None = None,
+        payment_delay_reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Accounts Receivable follow-up. A late payment needs a reason on record."""
+        ovf = self.get(ctx, ovf_id)
+        fields: dict[str, Any] = {}
+        if payment_due_date is not None:
+            fields["payment_due_date"] = payment_due_date
+        if payment_received_date is not None:
+            fields["payment_received_date"] = payment_received_date
+        if payment_delay_reason is not None:
+            fields["payment_delay_reason"] = payment_delay_reason.strip() or None
+
+        due = fields.get("payment_due_date", ovf.payment_due_date)
+        received = fields.get("payment_received_date", ovf.payment_received_date)
+        reason = fields.get("payment_delay_reason", ovf.payment_delay_reason)
+        if received is not None and due is not None and received > due and not reason:
+            raise ConflictException(
+                "Payment landed after the due date - record why before closing it off"
+            )
+
+        if not fields:
+            return self.get_invoice_status(ctx, ovf_id)
+        if self._repo.update(ctx, ovf_id, **fields) is None:
+            raise NotFoundException("OVF not found")
+        return self.get_invoice_status(ctx, ovf_id)
+
+    def record_scm_savings(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        savings_amount: Decimal | float | str,
+        negotiated_vendor_total: Decimal | float | str | None = None,
+    ) -> CrmOvf:
+        """Store the supply-chain negotiation savings against the OVF.
+
+        The saving belongs to Supply Chain, not to the sales incentive, so it is
+        stripped from every Sales-facing OVF payload (see ``can_view_scm_savings``).
+        """
+        ovf = self.get(ctx, ovf_id)
+        if not ovf.shared_to_scm:
+            raise ConflictException("OVF has not been shared to SCM")
+        amount = Decimal(str(savings_amount)).quantize(Decimal("0.0001"))
+        if amount < 0:
+            raise ConflictException("Negotiation savings cannot be negative")
+        fields: dict[str, Any] = {"scm_savings_amount": amount}
+        if negotiated_vendor_total is not None:
+            fields["scm_negotiated_vendor_total"] = Decimal(
+                str(negotiated_vendor_total)
+            ).quantize(Decimal("0.0001"))
+        row = self._repo.update(ctx, ovf_id, **fields)
+        if row is None:
+            raise NotFoundException("OVF not found")
+        self._log(
+            ctx,
+            ovf,
+            ovf.blueprint_state,
+            ovf.blueprint_state,
+            "scm_record_savings",
+            f"scm_savings_amount={amount}",
+        )
+        return row
+
+    def update_scm_item_plan_vendor(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        product_name: str,
+        line_index: int,
+        distributor_name: str,
+    ) -> CrmOvfLine:
+        """SCM item-plan vendor selection - updates CRM vendor line distributor_name.
+
+        Allowed after share-to-SCM even when the OVF blueprint is locked.
+        """
+        ovf = self.get(ctx, ovf_id)
+        if not ovf.shared_to_scm:
+            raise ConflictException("OVF has not been shared to SCM")
+        if bool(getattr(ovf, "scm_on_hold", False)):
+            raise ConflictException(
+                "Distributor cannot be changed while the OVF is on SCM hold. Unhold first."
+            )
+
+        handoff = self.get_scm_handoff(ctx, ovf_id)
+        vendor_lines = list(handoff.get("vendor_lines") or [])
+        if line_index < 0 or line_index >= len(vendor_lines):
+            raise NotFoundException("OVF vendor line not found for item plan index")
+
+        matched = vendor_lines[line_index]
+        needle = " ".join((product_name or "").strip().lower().split())
+        matched_name = " ".join(str(matched.get("product_name") or "").strip().lower().split())
+        if needle and matched_name and needle != matched_name:
+            # Prefer exact product+index; fall back to first matching product name.
+            fallback = next(
+                (
+                    ln
+                    for ln in vendor_lines
+                    if " ".join(str(ln.get("product_name") or "").strip().lower().split()) == needle
+                ),
+                None,
+            )
+            if fallback is None:
+                raise ConflictException(
+                    f"Item plan line product '{product_name}' does not match vendor line at index {line_index}"
+                )
+            matched = fallback
+
+        line_id = matched.get("line_id")
+        if line_id is None:
+            raise NotFoundException("OVF vendor line id missing")
+
+        dist = (distributor_name or "").strip() or None
+        row = self._lines.update(ctx, UUID(str(line_id)), distributor_name=dist)
+        if row is None:
+            raise NotFoundException("OVF line not found")
+        self._recompute_margin(ctx, ovf_id)
+        self._log(
+            ctx,
+            ovf,
+            ovf.blueprint_state,
+            ovf.blueprint_state,
+            "scm_update_item_plan_vendor",
+            f"line_id={line_id}, product={product_name}, distributor_name={dist}",
+        )
         return row
 
     def mark_deal_won(self, ctx: TenantContext, ovf_id: UUID, *, deal_won_amount: Decimal | float | str | None) -> CrmOvf:

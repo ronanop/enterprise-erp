@@ -19,9 +19,16 @@ class ShiftAssignmentRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrShiftAssignment, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrShiftAssignment).where(HrShiftAssignment.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrShiftAssignment.company_id == company_id)
+        stmt = self.apply_hr_filter(stmt, HrShiftAssignment, ctx, branch_scoped=True)
+        return list(self.db.scalars(stmt).all())
+
+    def list_for_employee(self, ctx: TenantContext, employee_id: UUID) -> list[HrShiftAssignment]:
         stmt = select(HrShiftAssignment).where(
-            HrShiftAssignment.company_id == company_id,
+            HrShiftAssignment.employee_id == employee_id,
             HrShiftAssignment.is_deleted.is_(False),
         )
         stmt = self.apply_hr_filter(stmt, HrShiftAssignment, ctx, branch_scoped=True)
@@ -52,3 +59,17 @@ class ShiftAssignmentRepository(HrScopedRepository):
             row.version = int(row.version or 1) + 1
         self.db.flush()
         return row
+
+    def soft_delete(self, ctx: TenantContext, row_id: UUID) -> bool:
+        row = self.get(ctx, row_id)
+        if row is None:
+            return False
+        row.is_deleted = True
+        row.deleted_at = utcnow()
+        row.deleted_by = ctx.user_id
+        row.updated_at = utcnow()
+        row.updated_by = ctx.user_id
+        if hasattr(row, "version"):
+            row.version = int(row.version or 1) + 1
+        self.db.flush()
+        return True

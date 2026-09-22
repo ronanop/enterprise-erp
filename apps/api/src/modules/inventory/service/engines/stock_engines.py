@@ -1,4 +1,4 @@
-"""Inventory engines — domain stock math and state machines."""
+"""Inventory engines - domain stock math and state machines."""
 
 from decimal import Decimal
 

@@ -11,8 +11,10 @@ export type EmployeeDirectoryEntry = {
   displayName: string;
   employeeCode: string | null;
   mobile: string | null;
-  departmentId: string | null;
 };
+
+const DIRECTORY_PAGE_SIZE = 200;
+const DIRECTORY_MAX_PAGES = 50;
 
 function asArray(data: unknown): Record<string, unknown>[] {
   if (Array.isArray(data)) return data as Record<string, unknown>[];
@@ -31,10 +33,29 @@ function trimOrNull(value: unknown): string | null {
   return t || null;
 }
 
+/** Collapse separators so CT-5337 / CT 5337 match CT5337. */
+export function normalizeEmployeeCodeKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s\-_./]/g, "");
+}
+
+async function listAllResourcePages(apiPath: string): Promise<Record<string, unknown>[]> {
+  const out: Record<string, unknown>[] = [];
+  const base = apiPath.includes("?") ? `${apiPath}&` : `${apiPath}?`;
+  for (let page = 1; page <= DIRECTORY_MAX_PAGES; page += 1) {
+    const res = await resourceService.list(
+      `${base}page=${page}&page_size=${DIRECTORY_PAGE_SIZE}`,
+    );
+    const batch = asArray(res.data);
+    out.push(...batch);
+    if (batch.length < DIRECTORY_PAGE_SIZE) break;
+  }
+  return out;
+}
+
 export async function listBranchOptions(): Promise<OrgOption[]> {
   try {
-    const res = await resourceService.list("/branches?page=1&page_size=100");
-    return asArray(res.data).map((r) => ({
+    const rows = await listAllResourcePages("/branches");
+    return rows.map((r) => ({
       id: String(r.id),
       label: String(r.branch_name ?? r.name ?? r.branch_code ?? r.id),
     }));
@@ -46,8 +67,8 @@ export async function listBranchOptions(): Promise<OrgOption[]> {
 /** Full employee directory from GET /employees (id, code, name, mobile). */
 export async function listEmployeeDirectory(): Promise<EmployeeDirectoryEntry[]> {
   try {
-    const res = await resourceService.list("/employees?page=1&page_size=200");
-    return asArray(res.data).map((r) => {
+    const rows = await listAllResourcePages("/employees");
+    return rows.map((r) => {
       const displayName = [r.first_name, r.last_name].filter(Boolean).join(" ").trim();
       const employeeCode = trimOrNull(r.employee_code);
       const codeSuffix = employeeCode ? ` (${employeeCode})` : "";
@@ -56,14 +77,12 @@ export async function listEmployeeDirectory(): Promise<EmployeeDirectoryEntry[]>
           ? ` · ${r.designation}`
           : "";
       const id = String(r.id);
-      const departmentId = r.department_id != null ? String(r.department_id) : null;
       return {
         id,
         displayName: displayName || id,
         label: `${displayName || id}${codeSuffix}${dept}`,
         employeeCode,
         mobile: trimOrNull(r.mobile),
-        departmentId,
       };
     });
   } catch {
@@ -90,8 +109,8 @@ export async function listEmployeeOptions(): Promise<OrgOption[]> {
 
 export async function listDepartmentOptions(): Promise<OrgOption[]> {
   try {
-    const res = await resourceService.list("/departments?page=1&page_size=200");
-    return asArray(res.data).map((r) => ({
+    const rows = await listAllResourcePages("/departments");
+    return rows.map((r) => ({
       id: String(r.id),
       label: String(r.department_name ?? r.name ?? r.department_code ?? r.id),
     }));
@@ -106,8 +125,8 @@ export async function listLocationOptions(branchId?: string): Promise<OrgOption[
     const path = branchId
       ? `/locations?branch_id=${encodeURIComponent(branchId)}`
       : "/locations";
-    const res = await resourceService.list(path);
-    return asArray(res.data).map((r) => ({
+    const rows = await listAllResourcePages(path);
+    return rows.map((r) => ({
       id: String(r.id),
       label: String(r.location_name ?? r.name ?? r.location_code ?? r.id),
     }));

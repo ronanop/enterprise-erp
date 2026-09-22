@@ -10,15 +10,26 @@ from modules.recruitment.domain.exceptions import (
 
 class ApplicationEngine:
     def advance(self, row, *, stage: str) -> None:
-        allowed = {
-            ApplicationStatus.APPLIED.value: ApplicationStatus.SCREENING.value,
-            ApplicationStatus.SCREENING.value: ApplicationStatus.INTERVIEW.value,
-            ApplicationStatus.INTERVIEW.value: ApplicationStatus.SELECTED.value,
-            ApplicationStatus.SELECTED.value: ApplicationStatus.OFFER.value,
-            ApplicationStatus.OFFER.value: ApplicationStatus.HIRED.value,
+        # ATS may jump across UI stages; map onto API pipeline statuses.
+        aliases = {
+            "resume_screening": "screening",
+            "hr_screening": "screening",
+            "technical_interview": "interview",
+            "manager_interview": "interview",
+            "final_interview": "interview",
+            "selected": "selected",
         }
-        if row.status not in allowed or allowed[row.status] != stage:
-            raise InvalidApplicationState("Invalid application stage transition")
+        stage = aliases.get(stage, stage)
+        allowed = {
+            ApplicationStatus.APPLIED.value,
+            ApplicationStatus.SCREENING.value,
+            ApplicationStatus.INTERVIEW.value,
+            ApplicationStatus.SELECTED.value,
+            ApplicationStatus.OFFER.value,
+            ApplicationStatus.HIRED.value,
+        }
+        if stage not in allowed:
+            raise InvalidApplicationState(f"Invalid application stage '{stage}'")
         row.status = stage
         row.current_stage_code = stage
 

@@ -1,10 +1,10 @@
 # MASTER FUNCTIONAL REQUIREMENTS DOCUMENT (FRD)
-## Enterprise ERP Platform — Consolidated Master FRD
+## iConnect Plus - Consolidated Master FRD
 
 **Version:** 1.0
 **Status:** Architecture Approved (All 22 Domains Locked)
 
-This Master FRD consolidates all 22 domain-level Functional Requirements Documents (FRD-01 through FRD-22) covering the complete Enterprise ERP architecture. Content within each domain section is preserved exactly as approved in the corresponding standalone module FRD file. Each module is also available as a separate file in the `modules/` folder, cross-referenced below.
+This Master FRD consolidates all 22 domain-level Functional Requirements Documents (FRD-01 through FRD-22) covering the complete iConnect Plus architecture. Content within each domain section is preserved exactly as approved in the corresponding standalone module FRD file. Each module is also available as a separate file in the `modules/` folder, cross-referenced below.
 
 ---
 
@@ -59,7 +59,7 @@ Finance(04)                 Manufacturing(13) Projects(11)
                                              ↓
                                              Finance(04)
 
-Cross-Cutting Layers: BI & Analytics (18), DMS (19), GRC (20) — consume/serve all domains above.
+Cross-Cutting Layers: BI & Analytics (18), DMS (19), GRC (20) - consume/serve all domains above.
 ```
 
 ---
@@ -3912,7 +3912,7 @@ Invoice Posting:
 
 Scale:
 
-0 – 100
+0 - 100
 
 ### 14. SCREEN INVENTORY
 
@@ -10897,10 +10897,10 @@ Compliance-driven storage.
 
 Examples:
 
-- HR Records — 7 Years
-- Financial Records — 10 Years
-- Audit Records — 10 Years
-- Contracts — Contract End + 7 Years
+- HR Records - 7 Years
+- Financial Records - 10 Years
+- Audit Records - 10 Years
+- Contracts - Contract End + 7 Years
 
 #### Actions After Expiry
 

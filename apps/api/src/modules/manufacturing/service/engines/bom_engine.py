@@ -1,4 +1,4 @@
-"""BOM engine — activation rules and explosion."""
+"""BOM engine - activation rules and explosion."""
 
 from decimal import Decimal
 

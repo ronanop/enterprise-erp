@@ -1,1 +1,1 @@
-"""Enterprise Integration Hub module — Sprint 21."""
+"""Enterprise Integration Hub module - Sprint 21."""

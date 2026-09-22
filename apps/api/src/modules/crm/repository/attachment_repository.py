@@ -57,6 +57,17 @@ class AttachmentRepository(CrmScopedRepository):
         self.db.flush()
         return row
 
+    def update(self, ctx: TenantContext, row_id: UUID, **fields) -> CrmAttachment | None:
+        row = self.get(ctx, row_id)
+        if row is None:
+            return None
+        for key, value in fields.items():
+            if hasattr(row, key):
+                setattr(row, key, value)
+        row.updated_by = ctx.user_id
+        self.db.flush()
+        return row
+
     def delete(self, ctx: TenantContext, row_id: UUID) -> bool:
         row = self.get(ctx, row_id)
         if row is None:

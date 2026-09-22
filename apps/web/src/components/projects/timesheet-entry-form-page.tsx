@@ -136,7 +136,6 @@ export function TimesheetEntryFormPage({ entryId }: { entryId?: string }) {
             step: "0.25",
             min: "0.25",
             max: "24",
-            hint: "Total hours per employee per day cannot exceed 24.",
           },
           {
             name: "status",

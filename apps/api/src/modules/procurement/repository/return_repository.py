@@ -14,11 +14,9 @@ class ReturnRepository(ProcScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
-    def list_returns(self, ctx: TenantContext, company_id: UUID) -> list[ProcReturnHeader]:
-        stmt = select(ProcReturnHeader).where(
-            ProcReturnHeader.company_id == company_id,
-            ProcReturnHeader.is_deleted.is_(False),
-        )
+    def list_returns(self, ctx: TenantContext, company_id: UUID | None) -> list[ProcReturnHeader]:
+        stmt = select(ProcReturnHeader).where(ProcReturnHeader.is_deleted.is_(False))
+        stmt = self.apply_optional_company_filter(stmt, ProcReturnHeader, company_id)
         stmt = self.apply_proc_filter(stmt, ProcReturnHeader, ctx, branch_scoped=True)
         return list(
             self.db.scalars(stmt.order_by(ProcReturnHeader.document_date.desc())).all()

@@ -1,6 +1,6 @@
 # Procurement SCM Page Overrides
 
-> **PROJECT:** Enterprise ERP Platform
+> **PROJECT:** iConnect Plus
 > **Page Type:** SCM workspace (OVF queue → vendor PO → GRN)
 > Rules override `MASTER.md` and extend `procurement.md`.
 
@@ -12,7 +12,7 @@
 
 - **Structure:** App shell + procurement workspace nav → SCM pages
 - **Screens:** SCM Queue · Create PO from OVF · Vendor POs · Order detail + GRN
-- **Density:** High (9/10) — dense tables, compact KPI strip
+- **Density:** High (9/10) - dense tables, compact KPI strip
 - Sky accent `#0369A1` for SCM primary actions (matches MASTER accent)
 
 ### Color Overrides

@@ -1,20 +1,20 @@
-# ERD_08 — Manufacturing & Production Domain
+# ERD_08 - Manufacturing & Production Domain
 
-**Document:** Enterprise ERD — Manufacturing & Production Domain  
+**Document:** Enterprise ERD - Manufacturing & Production Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 8 Implementation Planning  
+**Status:** Locked - Ready for Sprint 8 Implementation Planning  
 **Schema:** `manufacturing`  
 **Table Prefix:** `mfg_`  
 **Aligned To:** BRD v1.0 · FRD-13 · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-13 Manufacturing Domain](../02_FRD/FRD-13-Manufacturing-Domain.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.2-beta](../07_RELEASES/ERP_Core_v1.2-beta.md)  
 
 ---
 
 ## 1. Module Overview
 
-The Manufacturing & Production Domain converts **raw materials into finished goods** through BOM, routing, work centers, machines, production orders, shop-floor operations, material issue/return, production receipt, WIP, scrap, and production variance. It does **not** write `inv_*` stock tables — all material movements go through the **Inventory Service** (`source_module = manufacturing`). Valued WIP / scrap / FG postings go through **Finance** system journals.
+The Manufacturing & Production Domain converts **raw materials into finished goods** through BOM, routing, work centers, machines, production orders, shop-floor operations, material issue/return, production receipt, WIP, scrap, and production variance. It does **not** write `inv_*` stock tables - all material movements go through the **Inventory Service** (`source_module = manufacturing`). Valued WIP / scrap / FG postings go through **Finance** system journals.
 
 **Business Tables: 17**  
 **Schema: `manufacturing`**
@@ -58,27 +58,27 @@ Quality (FRD-14) · BI (future)
 ## 2. Scope
 
 ### In Scope
-- BOM with revision / version control; one **active** BOM per product (FRD-13 §4–5)
+- BOM with revision / version control; one **active** BOM per product (FRD-13 §4-5)
 - BOM component lines: qty, UOM, scrap %, optional alternate product
 - Routing and routing operations with work center, setup/run time (FRD-13 §6)
 - Work centers and machines; machine shop-floor status (FRD-13 §7, §13)
 - Production order (work order) lifecycle (FRD-13 §10)
-- Production order operations for shop-floor execution (FRD-13 §12–13)
+- Production order operations for shop-floor execution (FRD-13 §12-13)
 - Material issue to production and material return from production (FRD-13 §11)
 - Finished goods / production receipt into inventory (FRD-13 §15)
-- WIP cost accumulation and production variance (FRD-13 §18–19)
+- WIP cost accumulation and production variance (FRD-13 §18-19)
 - Scrap recording with approval and finance impact (FRD-13 §16)
 - Inventory Service integration only (no direct `inv_*` ORM writes)
 - Finance system-journal hooks: WIP Dr / RM Cr; FG Dr / WIP Cr; Scrap Expense Dr / Inventory or WIP Cr
 - Workflow, audit, RBAC, Celery (capacity alerts, WIP reconcile, posting retry)
 
 ### Out of Scope (Phase 2 / Separate ERD)
-- **Full MRP run tables** (`mfg_mrp_run`, `mfg_mrp_requirement`) — FRD-13 §9; shortage → PR via service + UUID refs only in Sprint 8
-- **Production plan schedule tables** (`mfg_production_plan`) — FRD-13 §8 deferred; demand refs optional on production order
-- **Rework order tables** — FRD-13 §17; Phase 2 (defect → rework WO via source refs)
-- **Quality Management tables** (`qm_*`) — FRD-14; optional `quality_status` / `quality_reference` on receipt/scrap only
-- **Advanced APS / finite capacity optimizer** — utilization fields and Celery alerts only
-- **Duplicate product/warehouse masters** — C-01; use `master_*`
+- **Full MRP run tables** (`mfg_mrp_run`, `mfg_mrp_requirement`) - FRD-13 §9; shortage → PR via service + UUID refs only in Sprint 8
+- **Production plan schedule tables** (`mfg_production_plan`) - FRD-13 §8 deferred; demand refs optional on production order
+- **Rework order tables** - FRD-13 §17; Phase 2 (defect → rework WO via source refs)
+- **Quality Management tables** (`qm_*`) - FRD-14; optional `quality_status` / `quality_reference` on receipt/scrap only
+- **Advanced APS / finite capacity optimizer** - utilization fields and Celery alerts only
+- **Duplicate product/warehouse masters** - C-01; use `master_*`
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 - Analytics cubes / `ana_fact_production`
 
@@ -104,8 +104,8 @@ Quality (FRD-14) · BI (future)
 | ERD_02 Organization | `org_company`, `org_branch`, `org_cost_center` |
 | ERD_03 Master Data | `master_product`, `master_uom`, `master_warehouse`, `master_employee` |
 | ERD_04 Finance | `fin_fiscal_year`, `fin_period`, `fin_journal_header`, `fin_chart_of_account` |
-| ERD_06 Procurement | Logical UUID refs only (PR from shortage — Phase 2) |
-| ERD_07 Inventory | Inventory Service API only — no FK to `inv_*` |
+| ERD_06 Procurement | Logical UUID refs only (PR from shortage - Phase 2) |
+| ERD_07 Inventory | Inventory Service API only - no FK to `inv_*` |
 
 ---
 
@@ -114,22 +114,22 @@ Quality (FRD-14) · BI (future)
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
 | 1 | `mfg_bom` | Engineering Master | ✅ | ✅ | optional | ✅ | ✅ | ✅ |
-| 2 | `mfg_bom_line` | Engineering Detail | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 3 | `mfg_routing` | Engineering Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 4 | `mfg_routing_operation` | Engineering Detail | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 5 | `mfg_work_center` | Resource Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 6 | `mfg_machine` | Resource Master | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 2 | `mfg_bom_line` | Engineering Detail | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 3 | `mfg_routing` | Engineering Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 4 | `mfg_routing_operation` | Engineering Detail | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 5 | `mfg_work_center` | Resource Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 6 | `mfg_machine` | Resource Master | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 7 | `mfg_production_order` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 8 | `mfg_production_operation` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 9 | `mfg_material_issue` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 10 | `mfg_material_issue_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 11 | `mfg_material_return` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 12 | `mfg_material_return_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 13 | `mfg_production_receipt` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 14 | `mfg_production_receipt_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 15 | `mfg_wip` | Cost Balance | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 8 | `mfg_production_operation` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 9 | `mfg_material_issue` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 10 | `mfg_material_issue_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 11 | `mfg_material_return` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 12 | `mfg_material_return_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 13 | `mfg_production_receipt` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 14 | `mfg_production_receipt_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 15 | `mfg_wip` | Cost Balance | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 16 | `mfg_scrap` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 17 | `mfg_variance` | Cost Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 17 | `mfg_variance` | Cost Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 
 > **Note:** Routing uses status lifecycle (`draft` / `active` / `obsolete`) without a dedicated workflow seed in Sprint 8. FRD-13 §21 approval paths covered: BOM, WO release, scrap.
 
@@ -226,21 +226,21 @@ mfg_production_order → bom_id, routing_id, warehouse_id
 ### 6.1 `mfg_bom`
 
 #### Purpose
-Finished-good structure header with revision control (FRD-13 §4–5).
+Finished-good structure header with revision control (FRD-13 §4-5).
 
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
 | `tenant_id` / `company_id` | UUID | NO | Scope |
 | `branch_id` | UUID | YES | Optional |
-| `bom_number` | VARCHAR(50) | NO | UK per company — `BOM-YYYY-NNNNNN` |
+| `bom_number` | VARCHAR(50) | NO | UK per company - `BOM-YYYY-NNNNNN` |
 | `product_id` | UUID | NO | FK → `master_product` (finished good) |
-| `revision` | VARCHAR(30) | NO | Version label — e.g. `A`, `1.0` |
-| `effective_from` | DATE | NO | — |
-| `effective_to` | DATE | YES | — |
+| `revision` | VARCHAR(30) | NO | Version label - e.g. `A`, `1.0` |
+| `effective_from` | DATE | NO | - |
+| `effective_to` | DATE | YES | - |
 | `status` | VARCHAR(30) | NO | draft, active, obsolete |
 | `workflow_status` / `workflow_instance_id` | mixed | YES | BOM approval |
-| `notes` | TEXT | YES | — |
+| `notes` | TEXT | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
 
 **UK:** `(company_id, bom_number)` where not deleted.  
@@ -276,11 +276,11 @@ Finished-good structure header with revision control (FRD-13 §4–5).
 | `id` | UUID | NO | PK |
 | Scope | UUID | NO | tenant/company |
 | `branch_id` | UUID | YES | Optional |
-| `routing_code` | VARCHAR(50) | NO | UK per company — `RTG-YYYY-NNNNNN` |
-| `routing_name` | VARCHAR(255) | YES | — |
+| `routing_code` | VARCHAR(50) | NO | UK per company - `RTG-YYYY-NNNNNN` |
+| `routing_name` | VARCHAR(255) | YES | - |
 | `product_id` | UUID | YES | Optional default FG link |
 | `status` | VARCHAR(30) | NO | draft, active, obsolete |
-| `notes` | TEXT | YES | — |
+| `notes` | TEXT | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
 
 **UK:** `(company_id, routing_code)` where not deleted.
@@ -292,11 +292,11 @@ Finished-good structure header with revision control (FRD-13 §4–5).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope | UUID | NO | — |
+| Scope | UUID | NO | - |
 | `routing_id` | UUID | NO | FK → `mfg_routing` |
 | `operation_seq` | SMALLINT | NO | UK with routing_id |
-| `operation_code` | VARCHAR(50) | NO | — |
-| `operation_name` | VARCHAR(255) | YES | — |
+| `operation_code` | VARCHAR(50) | NO | - |
+| `operation_name` | VARCHAR(255) | YES | - |
 | `work_center_id` | UUID | NO | FK → `mfg_work_center` |
 | `setup_time_minutes` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `run_time_minutes` | NUMERIC(18,4) | NO | Per unit |
@@ -312,12 +312,12 @@ Finished-good structure header with revision control (FRD-13 §4–5).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope | UUID | NO | — |
+| Scope | UUID | NO | - |
 | `branch_id` | UUID | YES | Optional |
 | `work_center_code` | VARCHAR(50) | NO | UK per company |
-| `work_center_name` | VARCHAR(255) | YES | — |
+| `work_center_name` | VARCHAR(255) | YES | - |
 | `work_center_type` | VARCHAR(30) | NO | machine, assembly_line, packaging_line, inspection_station |
-| `capacity_per_shift` | NUMERIC(18,4) | YES | — |
+| `capacity_per_shift` | NUMERIC(18,4) | YES | - |
 | `shift_count` | SMALLINT | NO | DEFAULT 1 |
 | `status` | VARCHAR(30) | NO | active, inactive, maintenance |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
@@ -331,13 +331,13 @@ Finished-good structure header with revision control (FRD-13 §4–5).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope | UUID | NO | — |
+| Scope | UUID | NO | - |
 | `branch_id` | UUID | YES | Optional |
 | `machine_code` | VARCHAR(50) | NO | UK per company |
-| `machine_name` | VARCHAR(255) | YES | — |
+| `machine_name` | VARCHAR(255) | YES | - |
 | `work_center_id` | UUID | NO | FK → `mfg_work_center` |
 | `status` | VARCHAR(30) | NO | idle, running, maintenance, breakdown |
-| `last_status_at` | TIMESTAMPTZ | YES | — |
+| `last_status_at` | TIMESTAMPTZ | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
 
 **UK:** `(company_id, machine_code)` where not deleted.
@@ -354,17 +354,17 @@ Work order / production job (FRD-13 §10).
 | `id` | UUID | NO | PK |
 | Scope | UUID | NO | tenant/company/branch |
 | `document_number` | VARCHAR(50) | NO | `WO-YYYY-NNNNNN` |
-| `document_date` | DATE | NO | — |
+| `document_date` | DATE | NO | - |
 | `product_id` | UUID | NO | FG |
 | `bom_id` | UUID | NO | FK → exploded BOM |
 | `routing_id` | UUID | YES | FK → `mfg_routing` |
 | `warehouse_id` | UUID | NO | FK → `master_warehouse` |
-| `planned_qty` | NUMERIC(18,4) | NO | — |
+| `planned_qty` | NUMERIC(18,4) | NO | - |
 | `completed_qty` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `scrapped_qty` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `uom_id` | UUID | NO | FG UOM |
-| `planned_start` / `planned_end` | TIMESTAMPTZ | YES | — |
-| `actual_start` / `actual_end` | TIMESTAMPTZ | YES | — |
+| `planned_start` / `planned_end` | TIMESTAMPTZ | YES | - |
+| `actual_start` / `actual_end` | TIMESTAMPTZ | YES | - |
 | `status` | VARCHAR(30) | NO | draft, released, in_progress, completed, closed, cancelled |
 | `workflow_status` / `workflow_instance_id` | mixed | YES | Release approval |
 | `cost_center_id` | UUID | YES | FK → `org_cost_center` |
@@ -385,7 +385,7 @@ Shop-floor step instance copied/derived from routing.
 | `id` | UUID | NO | PK |
 | Scope | UUID | NO | tenant/company/branch |
 | `production_order_id` | UUID | NO | FK → `mfg_production_order` |
-| `operation_seq` | SMALLINT | NO | — |
+| `operation_seq` | SMALLINT | NO | - |
 | `routing_operation_id` | UUID | YES | FK → `mfg_routing_operation` |
 | `work_center_id` | UUID | YES | FK → `mfg_work_center` |
 | `machine_id` | UUID | YES | FK → `mfg_machine` |
@@ -437,13 +437,13 @@ Mirror of issue; `MR-YYYY-NNNNNN`. Confirm → Inventory `receive_goods` / retur
 ### 6.15 `mfg_wip`
 
 #### Purpose
-Open WIP cost balance per production order (FRD-13 §18–19).
+Open WIP cost balance per production order (FRD-13 §18-19).
 
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
 | Scope | UUID | NO | tenant/company/branch |
-| `production_order_id` | UUID | NO | UK — one open WIP row per order |
+| `production_order_id` | UUID | NO | UK - one open WIP row per order |
 | `material_cost` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `labor_cost` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `overhead_cost` | NUMERIC(18,4) | NO | DEFAULT 0 |
@@ -464,7 +464,7 @@ Open WIP cost balance per production order (FRD-13 §18–19).
 | `document_date` | DATE |
 | `production_order_id` | FK |
 | `scrap_type` | material, process, damaged |
-| `product_id` / `quantity` / `uom_id` | — |
+| `product_id` / `quantity` / `uom_id` | - |
 | `reason_code` | VARCHAR(50) |
 | `unit_cost` / `total_cost` | Cost impact |
 | `status` | draft, submitted, approved, posted, cancelled |
@@ -525,7 +525,7 @@ Open WIP cost balance per production order (FRD-13 §18–19).
 | Finance | `period_id`, `finance_journal_id` | `finance.*` |
 | Org | `tenant_id`, `company_id`, `branch_id`, `cost_center_id` | foundation / organization |
 
-**No FK to:** `inv_*`, `proc_*`, `sales_*`, `qm_*` — UUID + `source_module` only.
+**No FK to:** `inv_*`, `proc_*`, `sales_*`, `qm_*` - UUID + `source_module` only.
 
 All `mfg_*` tables: `tenant_id` → `sec_tenant`, `company_id` → `org_company`. Transactional tables: `branch_id` → `org_branch`.
 
@@ -592,7 +592,7 @@ All `mfg_*` tables: `tenant_id` → `sec_tenant`, `company_id` → `org_company`
 | Material return confirm | `receive_goods` (RM) | reverse / Dr Inventory Cr WIP | material_cost ↓ |
 | Production receipt confirm | `receive_goods` (FG) | Dr FG Inventory / Cr WIP | relieve proportional cost |
 | Scrap post | issue or write-off path | Dr Scrap Expense / Cr WIP or Inventory | adjust |
-| Order close | — | variance journals | status closed |
+| Order close | - | variance journals | status closed |
 
 **Idempotency:** `(source_module, source_document_type, source_document_id[, line_id])` on Inventory side.  
 **Concurrency:** optimistic `version` on `mfg_wip` and production order qty fields.
@@ -612,7 +612,7 @@ All `mfg_*` tables: `tenant_id` → `sec_tenant`, `company_id` → `org_company`
 - Store `finance_journal_id` on scrap, variance, and optionally WIP relief docs
 
 ### 13.3 Procurement (ERD_06)
-- Phase 2 MRP: create PR via Procurement Service when shortages detected — UUID refs only on production order / future MRP tables
+- Phase 2 MRP: create PR via Procurement Service when shortages detected - UUID refs only on production order / future MRP tables
 
 ### 13.4 Foundation / Organization / Master Data
 - Workflow, audit, RBAC, notifications
@@ -715,7 +715,7 @@ Prior Alembic head: **`0094_seed_inv_workflows`**.
 |--------|-----|----------|---------|
 | Foundation | FRD-01 | tenant, user, workflow, audit, RBAC | Direct FK |
 | Organization | FRD-02 | company, branch, cost center | Direct FK |
-| Master Data | FRD-03 | product, uom, warehouse, employee | Direct FK — C-01 |
+| Master Data | FRD-03 | product, uom, warehouse, employee | Direct FK - C-01 |
 | Finance | FRD-04 | period, journal posting API | FK + posting service |
 | Inventory | FRD-08 | stock issue/receipt/reserve | Application service only |
 | Procurement | FRD-07 | optional PR creation (Phase 2) | Service + UUID |
@@ -772,19 +772,19 @@ Normalize FRD loose paths under `/manufacturing/*` (modular monolith style).
 | 3 | Aligned to FRD-13; BOM version + WO + shop floor covered | ✅ |
 | 4 | Inventory-only stock writes; Finance system journals | ✅ |
 | 5 | MRP / plan / rework deferred without blocking Sprint 8 | ✅ |
-| 6 | Migration order `0095`–`0114`, revision IDs ≤ 32 chars | ✅ |
+| 6 | Migration order `0095`-`0114`, revision IDs ≤ 32 chars | ✅ |
 | 7 | Workflows + RBAC + Celery documented | ✅ |
 | 8 | Cross-module dependencies documented | ✅ |
 | 9 | Routing workflow flag consistent with §14 seeds (no phantom workflow) | ✅ |
 
-### ERD Phase Gate — Manufacturing Summary
+### ERD Phase Gate - Manufacturing Summary
 
 | Metric | Value |
 |--------|-------|
 | Business Tables | **17** |
 | Schema | **`manufacturing`** |
 | Prefix | `mfg_` |
-| Migration range | `0095` – `0114` |
+| Migration range | `0095` - `0114` |
 | Prior head | `0094_seed_inv_workflows` |
 | Planned head | `0114_seed_mfg_workflows` |
 

@@ -36,7 +36,7 @@ export function CoaCommentsPanel({ items, resolveUser, onSubmit, readOnly }: Pro
     const comment = text.trim();
     if (!comment) return;
     if (!onSubmit) {
-      setHint("Comments API is ready for wiring — endpoint not available for COA yet.");
+      setHint("Comments API is ready for wiring - endpoint not available for COA yet.");
       return;
     }
     setBusy(true);
@@ -54,7 +54,7 @@ export function CoaCommentsPanel({ items, resolveUser, onSubmit, readOnly }: Pro
 
   return (
     <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-      <h3 className="text-sm font-medium tracking-tight">Comments</h3>
+      <h3 className="text-base font-extrabold tracking-tight">Comments</h3>
       <div className="mt-3 space-y-2">
         {sorted.length === 0 ? (
           <p className="text-xs text-muted-foreground">No comments yet.</p>
@@ -63,7 +63,7 @@ export function CoaCommentsPanel({ items, resolveUser, onSubmit, readOnly }: Pro
             <div key={item.id} className="rounded-lg border border-border/60 bg-muted/20 px-2.5 py-2">
               <p className="text-sm">{item.body}</p>
               <p className="mt-1 text-[10px] text-muted-foreground">
-                {resolveUser(item.created_by)} · {item.created_at?.slice(0, 19) ?? "—"} · {item.source}
+                {resolveUser(item.created_by)} · {item.created_at?.slice(0, 19) ?? "-"} · {item.source}
               </p>
             </div>
           ))

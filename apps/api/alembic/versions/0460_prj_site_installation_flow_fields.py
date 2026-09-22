@@ -1,13 +1,15 @@
 """Add remaining site-installation flow fields from delivery notes."""
 
+import sys
 from collections.abc import Sequence
 from pathlib import Path
-import sys
 
 import sqlalchemy as sa
+from alembic import op
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from helpers import add_column_if_missing
+
+from helpers import add_column_if_missing  # noqa: E402
 
 revision: str = "0460_prj_site_flow_fields"
 down_revision: str | None = "0459_seed_demo_telecom_customers"
@@ -116,10 +118,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    from alembic import op
-    from helpers import column_exists
-
-    bind = op.get_bind()
     for col in (
         "mbss_done",
         "os_installation_done",
@@ -132,5 +130,4 @@ def downgrade() -> None:
         "rfai_request_done",
         "power_requirements",
     ):
-        if column_exists(bind, TABLE, col, schema=SCHEMA):
-            op.drop_column(TABLE, col, schema=SCHEMA)
+        op.drop_column(TABLE, col, schema=SCHEMA)

@@ -1,4 +1,4 @@
-"""Procurement inventory adapters — real stock updates."""
+"""Procurement inventory adapters - real stock updates."""
 
 from decimal import Decimal
 from uuid import UUID

@@ -206,8 +206,13 @@ def delivery_needs_hwat(delivery_type: str) -> bool:
 
 class SiteWorkflowStage(str, Enum):
     INTAKE = "intake"
+    ASSIGNMENT = "assignment"
     SURVEY = "survey"
     SCM = "scm"
+    # Historic combined stage - kept for legacy rows / soft alias
+    ONSITE = "onsite"
+    ONSITE_DELIVERY = "onsite_delivery"
+    MATERIAL_HANDOVER = "material_handover"
     INSTALLATION = "installation"
     CONFIGURATION = "configuration"
     ACCEPTANCE = "acceptance"

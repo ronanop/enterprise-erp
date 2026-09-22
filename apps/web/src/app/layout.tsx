@@ -6,7 +6,7 @@ import "./globals.css";
 const jakartaSans = Plus_Jakarta_Sans({
   variable: "--font-jakarta-sans",
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
+  weight: ["300", "400", "500", "600", "700", "800"],
   display: "swap",
 });
 
@@ -17,8 +17,16 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Enterprise ERP",
-  description: "Multi-Industry Enterprise ERP Platform",
+  title: "iConnect Plus",
+  description: "Multi-Industry, Multi-Company ERP Platform",
+  icons: {
+    icon: [
+      { url: "/favicon.png", type: "image/png", sizes: "32x32" },
+      { url: "/brand/iconnect-plus-logo.png", type: "image/png", sizes: "512x512" },
+    ],
+    apple: [{ url: "/brand/iconnect-plus-logo.png", sizes: "180x180" }],
+    shortcut: ["/favicon.png"],
+  },
 };
 
 export default function RootLayout({
@@ -31,11 +39,11 @@ export default function RootLayout({
       lang="en"
       className={`${jakartaSans.variable} ${geistMono.variable} h-full antialiased`}
       suppressHydrationWarning
-      data-scroll-behavior="smooth"
     >
+      {/* suppressHydrationWarning: browser extensions (e.g. QuillBot) inject attrs like data-qb-installed */}
       <body
-        suppressHydrationWarning
         className="flex min-h-full min-w-0 flex-col overflow-x-clip font-sans"
+        suppressHydrationWarning
       >
         {children}
       </body>

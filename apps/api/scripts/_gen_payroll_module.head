@@ -89,13 +89,13 @@ MIGRATIONS: list[tuple[str, str | list[str], str]] = [
 
 
 def gen_scaffold() -> None:
-    w(PAY / "__init__.py", '"""Payroll Management module — Sprint 12."""\n')
+    w(PAY / "__init__.py", '"""Payroll Management module - Sprint 12."""\n')
     w(PAY / "domain" / "__init__.py", '"""Payroll domain layer."""\n')
     w(PAY / "adapters" / "__init__.py", '"""Payroll cross-module adapters."""\n')
-    w(PAY / "service" / "__init__.py", '"""Payroll services — populated after generation."""\n')
-    w(PAY / "service" / "engines" / "__init__.py", '"""Payroll engines — populated after generation."""\n')
+    w(PAY / "service" / "__init__.py", '"""Payroll services - populated after generation."""\n')
+    w(PAY / "service" / "engines" / "__init__.py", '"""Payroll engines - populated after generation."""\n')
     w(PAY / "repository" / "__init__.py", '"""Payroll repositories."""\n')
-    w(PAY / "models" / "__init__.py", '"""Payroll models — populated after generation."""\n')
+    w(PAY / "models" / "__init__.py", '"""Payroll models - populated after generation."""\n')
 
     w(
         PAY / "models" / "mixins.py",

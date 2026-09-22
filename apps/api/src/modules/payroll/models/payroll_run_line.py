@@ -51,6 +51,14 @@ class PayPayrollRunLine(Base, *PayTransactionMixin):
     paid_days: Mapped[Decimal] = mapped_column(Numeric(9, 2), nullable=False, default=0)
     lop_days: Mapped[Decimal] = mapped_column(Numeric(9, 2), nullable=False, default=0)
     leave_days: Mapped[Decimal] = mapped_column(Numeric(9, 2), nullable=False, default=0)
+    period_days: Mapped[Decimal] = mapped_column(Numeric(9, 2), nullable=False, default=0)
+    primary_shift_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("hr.hr_shift.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    day_summary_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     gross_earnings: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
     total_deductions: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)
     net_pay: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=0)

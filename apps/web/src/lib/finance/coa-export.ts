@@ -1,16 +1,6 @@
-import * as XLSX from "xlsx";
-
 import type { ChartOfAccount } from "@/services/coa-service";
 import { accountTypeLabel } from "@/services/coa-service";
-
-function downloadBlob(filename: string, blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
+import { downloadCsv, downloadXlsx } from "@/lib/spreadsheet";
 
 function rowsForExport(
   rows: ChartOfAccount[],
@@ -38,34 +28,24 @@ export function exportCoaCsv(
   rows: ChartOfAccount[],
   resolveUser: (id?: string | null) => string = () => "",
 ) {
-  const data = rowsForExport(rows, resolveUser);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const csv = XLSX.utils.sheet_to_csv(ws);
-  downloadBlob(
+  downloadCsv(
     `chart-of-accounts-${new Date().toISOString().slice(0, 10)}.csv`,
-    new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
+    rowsForExport(rows, resolveUser),
   );
 }
 
-export function exportCoaXlsx(
+export async function exportCoaXlsx(
   rows: ChartOfAccount[],
   resolveUser: (id?: string | null) => string = () => "",
 ) {
-  const data = rowsForExport(rows, resolveUser);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Chart of Accounts");
-  const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  downloadBlob(
+  await downloadXlsx(
     `chart-of-accounts-${new Date().toISOString().slice(0, 10)}.xlsx`,
-    new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }),
+    [{ name: "Chart of Accounts", rows: rowsForExport(rows, resolveUser) }],
   );
 }
 
 export function downloadCoaImportTemplate() {
-  const sample = [
+  downloadCsv("coa-import-template.csv", [
     {
       account_group_code: "ASSET",
       account_code: "1000",
@@ -79,11 +59,5 @@ export function downloadCoaImportTemplate() {
       description: "",
       status: "draft",
     },
-  ];
-  const ws = XLSX.utils.json_to_sheet(sample);
-  const csv = XLSX.utils.sheet_to_csv(ws);
-  downloadBlob(
-    "coa-import-template.csv",
-    new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
-  );
+  ]);
 }

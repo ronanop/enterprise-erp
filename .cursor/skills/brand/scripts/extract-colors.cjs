@@ -20,6 +20,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { resolveWithinRoot, readFileWithinRoot, extractSection } = require("../../shared/safe-fs.cjs");
 
 // Default brand guidelines path
 const DEFAULT_GUIDELINES_PATH = "docs/brand-guidelines.md";
@@ -36,15 +37,12 @@ function extractHexColors(text) {
  * Parse brand guidelines for color palette
  */
 function parseBrandColors(guidelinesPath) {
-  const resolvedPath = path.isAbsolute(guidelinesPath)
-    ? guidelinesPath
-    : path.join(process.cwd(), guidelinesPath);
-
-  if (!fs.existsSync(resolvedPath)) {
+  let content;
+  try {
+    content = readFileWithinRoot(process.cwd(), guidelinesPath);
+  } catch {
     return null;
   }
-
-  const content = fs.readFileSync(resolvedPath, "utf-8");
 
   const palette = {
     primary: [],
@@ -269,9 +267,13 @@ function main() {
   }
 
   // Resolve image path
-  const resolvedPath = path.isAbsolute(imagePath)
-    ? imagePath
-    : path.join(process.cwd(), imagePath);
+  let resolvedPath;
+  try {
+    resolvedPath = resolveWithinRoot(process.cwd(), imagePath);
+  } catch {
+    console.error(`Image path is not allowed: ${imagePath}`);
+    process.exit(1);
+  }
 
   if (!fs.existsSync(resolvedPath)) {
     console.error(`Image not found: ${resolvedPath}`);

@@ -1,13 +1,13 @@
-# ERD_05 — Sales Management Domain
+# ERD_05 - Sales Management Domain
 
-**Document:** Enterprise ERD — Sales Management Domain  
+**Document:** Enterprise ERD - Sales Management Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 5 Implementation Planning  
+**Status:** Locked - Ready for Sprint 5 Implementation Planning  
 **Schema:** `sales`  
 **Table Prefix:** `sales_`  
 **Aligned To:** BRD v1.0 · FRD-06 · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-06 Sales Domain](../02_FRD/FRD-06-Sales-Domain.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 
 ---
 
@@ -49,24 +49,24 @@ Inventory (FRD-08) · BI · E-commerce (future)
 
 ### In Scope
 - Company-scoped price lists, price list items, and discount rules (FRD-06 §8)
-- Customer credit limits and exposure tracking (FRD-06 §6–7)
-- Quotation lifecycle: draft through accepted/rejected/expired (FRD-06 §4–5)
-- Sales order lifecycle: draft through confirmed/delivered/closed/cancelled (FRD-06 §6–7)
+- Customer credit limits and exposure tracking (FRD-06 §6-7)
+- Quotation lifecycle: draft through accepted/rejected/expired (FRD-06 §4-5)
+- Sales order lifecycle: draft through confirmed/delivered/closed/cancelled (FRD-06 §6-7)
 - Delivery documents linked to sales orders (FRD-06 §10)
 - Sales invoice generation with tax breakdown and finance posting hooks (FRD-06 §11)
-- Sales returns and credit-note source documents (FRD-06 §13–14)
+- Sales returns and credit-note source documents (FRD-06 §13-14)
 - Workflow approval for quotations, discounts, orders, invoices, returns (FRD-06 §16)
 - Full audit trail on all sales transactional changes (FRD-06 §18)
 - Multi-currency support via `master_currency` and Finance exchange rates
 
 ### Out of Scope (Phase 2 / Separate ERD)
-- **Payment collection tables** — customer payments tracked in Finance `fin_customer_ledger` (FRD-06 §12)
-- **Contract management tables** — contract pricing modeled via `sales_price_list` with `price_list_type = 'contract'`; dedicated contract ERD deferred
-- **CRM tables** (`crm_*`) — leads, opportunities, activities (FRD-05); optional `opportunity_reference` UUID on quotation header for future CRM integration
-- **Inventory reservation/issue tables** (`inv_*`) — FRD-08; Sales emits reservation/release events via service API only
+- **Payment collection tables** - customer payments tracked in Finance `fin_customer_ledger` (FRD-06 §12)
+- **Contract management tables** - contract pricing modeled via `sales_price_list` with `price_list_type = 'contract'`; dedicated contract ERD deferred
+- **CRM tables** (`crm_*`) - leads, opportunities, activities (FRD-05); optional `opportunity_reference` UUID on quotation header for future CRM integration
+- **Inventory reservation/issue tables** (`inv_*`) - FRD-08; Sales emits reservation/release events via service API only
 - **Procurement, manufacturing, payroll, banking** schemas and tables
 - SQLAlchemy models, Alembic migrations, application code
-- History tables (`hist_*`) — SCD Type 2 for price list changes
+- History tables (`hist_*`) - SCD Type 2 for price list changes
 - Sales analytics cubes / materialized reporting views
 
 ### Future Integration Notes (Not Aligned FRD)
@@ -76,9 +76,9 @@ Inventory (FRD-08) · BI · E-commerce (future)
 
 ### Assumptions
 - Every sales document is company-scoped; `branch_id` mandatory on all transactional headers/lines per DBS multi-tenancy
-- `master_customer`, `master_product`, `master_uom`, `master_tax`, `master_currency` are authoritative — no duplicate party/product masters (C-01)
+- `master_customer`, `master_product`, `master_uom`, `master_tax`, `master_currency` are authoritative - no duplicate party/product masters (C-01)
 - Physical DELETE prohibited on all sales business tables
-- Posted invoices are immutable — corrections via return/credit note documents
+- Posted invoices are immutable - corrections via return/credit note documents
 - Document numbers auto-generated per company; immutable after submit
 - Pricing resolution follows FRD-06 hierarchy: contract → customer → volume → standard
 
@@ -97,22 +97,22 @@ Inventory (FRD-08) · BI · E-commerce (future)
 
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
-| 1 | `sales_price_list` | Sales Master | ✅ | ✅ | — | ✅ | ✅ | — |
-| 2 | `sales_price_list_item` | Sales Master Detail | ✅ | ✅ | — | ✅ | ✅ | — |
+| 1 | `sales_price_list` | Sales Master | ✅ | ✅ | - | ✅ | ✅ | - |
+| 2 | `sales_price_list_item` | Sales Master Detail | ✅ | ✅ | - | ✅ | ✅ | - |
 | 3 | `sales_discount_rule` | Sales Master | ✅ | ✅ | optional | ✅ | ✅ | ✅ |
-| 4 | `sales_customer_credit` | Sales Master | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 4 | `sales_customer_credit` | Sales Master | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 5 | `sales_quotation_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 6 | `sales_quotation_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 6 | `sales_quotation_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 7 | `sales_order_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 8 | `sales_order_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 8 | `sales_order_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 9 | `sales_delivery_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 10 | `sales_delivery_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 10 | `sales_delivery_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 11 | `sales_invoice_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 12 | `sales_invoice_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 12 | `sales_invoice_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 13 | `sales_return_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 14 | `sales_return_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 14 | `sales_return_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 
-> **Note:** Posted `sales_invoice_header` rows (`status = 'posted'`) are **immutable** — no soft delete; corrections via `sales_return_header` only.
+> **Note:** Posted `sales_invoice_header` rows (`status = 'posted'`) are **immutable** - no soft delete; corrections via `sales_return_header` only.
 
 ---
 
@@ -241,23 +241,23 @@ Per DBS §29 Transaction Table Standards:
 ### 6.1 `sales_price_list`
 
 #### 6.1.1 Purpose
-Centralized price list registry supporting standard, customer-specific, volume, promotional, and contract pricing per FRD-06 §8–9.
+Centralized price list registry supporting standard, customer-specific, volume, promotional, and contract pricing per FRD-06 §8-9.
 
 #### 6.1.2 Columns
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | UUID | NO | app-generated | PK |
-| `tenant_id` | UUID | NO | — | FK → `foundation.sec_tenant` |
-| `company_id` | UUID | NO | — | FK → `organization.org_company` |
-| `price_list_code` | VARCHAR(50) | NO | — | UK per company |
-| `price_list_name` | VARCHAR(255) | NO | — | Display name |
+| `tenant_id` | UUID | NO | - | FK → `foundation.sec_tenant` |
+| `company_id` | UUID | NO | - | FK → `organization.org_company` |
+| `price_list_code` | VARCHAR(50) | NO | - | UK per company |
+| `price_list_name` | VARCHAR(255) | NO | - | Display name |
 | `price_list_type` | VARCHAR(30) | NO | `'standard'` | standard, customer, volume, promotional, contract |
-| `customer_id` | UUID | YES | — | FK → `master_customer` — required when type = customer/contract |
-| `currency_code` | VARCHAR(3) | NO | — | FK ref → `master_currency` |
+| `customer_id` | UUID | YES | - | FK → `master_customer` - required when type = customer/contract |
+| `currency_code` | VARCHAR(3) | NO | - | FK ref → `master_currency` |
 | `priority` | SMALLINT | NO | `100` | Lower = higher priority in resolution |
-| `effective_from` | DATE | NO | — | — |
-| `effective_to` | DATE | YES | — | NULL = open-ended |
+| `effective_from` | DATE | NO | - | - |
+| `effective_to` | DATE | YES | - | NULL = open-ended |
 | `status` | VARCHAR(30) | NO | `'active'` | draft, active, inactive, expired |
 | AUDIT_STD + SOFT_DELETE_OPT | | | | |
 
@@ -284,8 +284,8 @@ Product-level unit prices within a price list. Supports volume break pricing via
 | `line_number` | SMALLINT | NO | 1, 2, 3… |
 | `product_id` | UUID | NO | FK → `master_product` |
 | `product_code` | VARCHAR(50) | NO | Denormalized |
-| `min_quantity` | NUMERIC(18,4) | NO | DEFAULT 1 — volume break threshold |
-| `unit_price` | NUMERIC(18,4) | NO | — |
+| `min_quantity` | NUMERIC(18,4) | NO | DEFAULT 1 - volume break threshold |
+| `unit_price` | NUMERIC(18,4) | NO | - |
 | `uom_id` | UUID | YES | FK → `master_uom` |
 | `status` | VARCHAR(30) | NO | active, inactive |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
@@ -293,7 +293,7 @@ Product-level unit prices within a price list. Supports volume break pricing via
 #### 6.2.3 Business Rules
 - `unit_price` >= 0 (FRD-06 §5)
 - Unique (`price_list_id`, `product_id`, `min_quantity`) for active rows
-- Product must be sales-eligible (`master_product.is_sales_item = true`) — service layer
+- Product must be sales-eligible (`master_product.is_sales_item = true`) - service layer
 
 ---
 
@@ -309,18 +309,18 @@ Configurable discount rules requiring workflow approval when threshold exceeded 
 | `id` | UUID | NO | PK |
 | `tenant_id` | UUID | NO | FK → `sec_tenant` |
 | `company_id` | UUID | NO | FK → `org_company` |
-| `branch_id` | UUID | YES | FK → `org_branch` — NULL = company-wide |
+| `branch_id` | UUID | YES | FK → `org_branch` - NULL = company-wide |
 | `discount_code` | VARCHAR(50) | NO | UK per company |
-| `discount_name` | VARCHAR(255) | NO | — |
+| `discount_name` | VARCHAR(255) | NO | - |
 | `discount_type` | VARCHAR(30) | NO | percent, fixed_amount, buy_x_get_y |
 | `discount_value` | NUMERIC(18,4) | NO | Percent or fixed amount |
 | `max_discount_percent` | NUMERIC(8,4) | YES | Cap for line-level discount |
 | `customer_id` | UUID | YES | FK → `master_customer` |
 | `product_id` | UUID | YES | FK → `master_product` |
 | `price_list_id` | UUID | YES | FK → `sales_price_list` |
-| `min_order_amount` | NUMERIC(18,4) | YES | — |
-| `effective_from` | DATE | NO | — |
-| `effective_to` | DATE | YES | — |
+| `min_order_amount` | NUMERIC(18,4) | YES | - |
+| `effective_from` | DATE | NO | - |
+| `effective_to` | DATE | YES | - |
 | `requires_approval` | BOOLEAN | NO | DEFAULT FALSE |
 | `status` | VARCHAR(30) | NO | draft, active, inactive |
 | `workflow_instance_id` | UUID | YES | FK → `wf_instance` |
@@ -328,14 +328,14 @@ Configurable discount rules requiring workflow approval when threshold exceeded 
 
 #### 6.3.3 Business Rules
 - Discounts exceeding `max_discount_percent` or company policy trigger `SALES_DISCOUNT_APPROVAL` workflow
-- Cannot stack discounts unless `discount_type` explicitly allows — service layer
+- Cannot stack discounts unless `discount_type` explicitly allows - service layer
 
 ---
 
 ### 6.4 `sales_customer_credit`
 
 #### 6.4.1 Purpose
-Customer credit limit and exposure tracking for order confirmation gating (FRD-06 §6–7).
+Customer credit limit and exposure tracking for order confirmation gating (FRD-06 §6-7).
 
 #### 6.4.2 Columns
 
@@ -347,18 +347,18 @@ Customer credit limit and exposure tracking for order confirmation gating (FRD-0
 | `branch_id` | UUID | YES | FK → `org_branch` |
 | `customer_id` | UUID | NO | FK → `master_customer` |
 | `credit_limit` | NUMERIC(18,4) | NO | DEFAULT 0 |
-| `credit_used` | NUMERIC(18,4) | NO | DEFAULT 0 — denormalized exposure |
-| `credit_available` | NUMERIC(18,4) | NO | GENERATED or maintained: limit − used |
+| `credit_used` | NUMERIC(18,4) | NO | DEFAULT 0 - denormalized exposure |
+| `credit_available` | NUMERIC(18,4) | NO | GENERATED or maintained: limit - used |
 | `currency_code` | VARCHAR(3) | NO | Credit limit currency |
 | `payment_terms_days` | SMALLINT | YES | Default payment terms |
-| `credit_hold` | BOOLEAN | NO | DEFAULT FALSE — blocks new orders |
-| `credit_hold_reason` | VARCHAR(500) | YES | — |
-| `last_review_date` | DATE | YES | — |
+| `credit_hold` | BOOLEAN | NO | DEFAULT FALSE - blocks new orders |
+| `credit_hold_reason` | VARCHAR(500) | YES | - |
+| `last_review_date` | DATE | YES | - |
 | `status` | VARCHAR(30) | NO | active, suspended, closed |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 #### 6.4.3 Business Rules
-- One active credit record per (`company_id`, `customer_id`, `branch_id`) — UK
+- One active credit record per (`company_id`, `customer_id`, `branch_id`) - UK
 - Order confirmation blocked when `credit_hold = true` or `order_total > credit_available`
 - `credit_used` updated on invoice post; reduced on payment (Finance event) or return
 
@@ -377,14 +377,14 @@ Customer quotation/proposal document (FRD-06 §4). Accepted quotations may conve
 | `tenant_id` | UUID | NO | FK → `sec_tenant` |
 | `company_id` | UUID | NO | FK → `org_company` |
 | `branch_id` | UUID | NO | FK → `org_branch` |
-| `document_number` | VARCHAR(50) | NO | UK per company — `QT-YYYY-NNNNNN` |
+| `document_number` | VARCHAR(50) | NO | UK per company - `QT-YYYY-NNNNNN` |
 | `document_date` | DATE | NO | Quotation date |
 | `valid_until` | DATE | NO | Expiry date |
 | `customer_id` | UUID | NO | FK → `master_customer` |
 | `customer_name` | VARCHAR(255) | NO | Denormalized |
-| `currency_code` | VARCHAR(3) | NO | — |
+| `currency_code` | VARCHAR(3) | NO | - |
 | `exchange_rate` | NUMERIC(18,8) | NO | DEFAULT 1.00000000 |
-| `payment_terms` | VARCHAR(100) | YES | — |
+| `payment_terms` | VARCHAR(100) | YES | - |
 | `opportunity_reference` | UUID | YES | External CRM opportunity ref (no FK) |
 | `price_list_id` | UUID | YES | FK → `sales_price_list` |
 | `subtotal_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
@@ -394,13 +394,13 @@ Customer quotation/proposal document (FRD-06 §4). Accepted quotations may conve
 | `status` | VARCHAR(30) | NO | draft, submitted, sent, accepted, rejected, expired, cancelled |
 | `workflow_status` | VARCHAR(30) | NO | pending, in_progress, approved, rejected |
 | `workflow_instance_id` | UUID | YES | FK → `wf_instance` |
-| `notes` | TEXT | YES | — |
+| `notes` | TEXT | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 #### 6.5.3 Business Rules
 - Accepted quotation → eligible for sales order creation (FRD-06 §4)
 - Rejected/expired quotations cannot create orders
-- Auto-expire when `valid_until` < current date — scheduled job
+- Auto-expire when `valid_until` < current date - scheduled job
 
 ---
 
@@ -414,15 +414,15 @@ Quotation line items with product, quantity, pricing, discount, and tax (FRD-06 
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | NO | — |
-| `company_id` | UUID | NO | — |
-| `branch_id` | UUID | NO | — |
+| `tenant_id` | UUID | NO | - |
+| `company_id` | UUID | NO | - |
+| `branch_id` | UUID | NO | - |
 | `quotation_header_id` | UUID | NO | FK → `sales_quotation_header` |
-| `line_number` | SMALLINT | NO | — |
+| `line_number` | SMALLINT | NO | - |
 | `product_id` | UUID | NO | FK → `master_product` |
 | `product_code` | VARCHAR(50) | NO | Denormalized |
-| `product_name` | VARCHAR(255) | NO | — |
-| `description` | VARCHAR(500) | YES | — |
+| `product_name` | VARCHAR(255) | NO | - |
+| `description` | VARCHAR(500) | YES | - |
 | `quantity` | NUMERIC(18,4) | NO | Must be > 0 |
 | `uom_id` | UUID | NO | FK → `master_uom` |
 | `unit_price` | NUMERIC(18,4) | NO | >= 0 |
@@ -431,12 +431,12 @@ Quotation line items with product, quantity, pricing, discount, and tax (FRD-06 
 | `tax_id` | UUID | YES | FK → `master_tax` |
 | `tax_rate` | NUMERIC(8,4) | NO | DEFAULT 0 |
 | `tax_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
-| `line_total` | NUMERIC(18,4) | NO | — |
+| `line_total` | NUMERIC(18,4) | NO | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 #### 6.6.3 Business Rules
 - `quantity` > 0, `unit_price` >= 0 (FRD-06 §5)
-- Header totals = SUM(line totals) — recalculated on line change
+- Header totals = SUM(line totals) - recalculated on line change
 
 ---
 
@@ -450,29 +450,29 @@ Executable customer sales order converted from quotation or created directly (FR
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | NO | — |
-| `company_id` | UUID | NO | — |
-| `branch_id` | UUID | NO | — |
-| `document_number` | VARCHAR(50) | NO | UK — `SO-YYYY-NNNNNN` |
+| `tenant_id` | UUID | NO | - |
+| `company_id` | UUID | NO | - |
+| `branch_id` | UUID | NO | - |
+| `document_number` | VARCHAR(50) | NO | UK - `SO-YYYY-NNNNNN` |
 | `document_date` | DATE | NO | Order date |
-| `requested_delivery_date` | DATE | YES | — |
+| `requested_delivery_date` | DATE | YES | - |
 | `customer_id` | UUID | NO | FK → `master_customer` |
 | `quotation_header_id` | UUID | YES | FK → `sales_quotation_header` |
 | `price_list_id` | UUID | YES | FK → `sales_price_list` |
-| `currency_code` | VARCHAR(3) | NO | — |
-| `exchange_rate` | NUMERIC(18,8) | NO | — |
+| `currency_code` | VARCHAR(3) | NO | - |
+| `exchange_rate` | NUMERIC(18,8) | NO | - |
 | `subtotal_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `discount_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `tax_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `total_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
-| `delivered_amount` | NUMERIC(18,4) | NO | DEFAULT 0 — denormalized |
-| `invoiced_amount` | NUMERIC(18,4) | NO | DEFAULT 0 — denormalized |
+| `delivered_amount` | NUMERIC(18,4) | NO | DEFAULT 0 - denormalized |
+| `invoiced_amount` | NUMERIC(18,4) | NO | DEFAULT 0 - denormalized |
 | `status` | VARCHAR(30) | NO | draft, confirmed, processing, partially_delivered, delivered, closed, cancelled |
-| `workflow_status` | VARCHAR(30) | NO | — |
+| `workflow_status` | VARCHAR(30) | NO | - |
 | `workflow_instance_id` | UUID | YES | FK → `wf_instance` |
-| `reservation_status` | VARCHAR(30) | YES | pending, reserved, released — Inventory API |
+| `reservation_status` | VARCHAR(30) | YES | pending, reserved, released - Inventory API |
 | `source_module` | VARCHAR(50) | YES | ecommerce, manual |
-| `source_document_id` | UUID | YES | — |
+| `source_document_id` | UUID | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 #### 6.7.3 Business Rules
@@ -493,27 +493,27 @@ Sales order line items with fulfillment tracking quantities.
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | NO | — |
-| `company_id` | UUID | NO | — |
-| `branch_id` | UUID | NO | — |
+| `tenant_id` | UUID | NO | - |
+| `company_id` | UUID | NO | - |
+| `branch_id` | UUID | NO | - |
 | `order_header_id` | UUID | NO | FK → `sales_order_header` |
-| `line_number` | SMALLINT | NO | — |
+| `line_number` | SMALLINT | NO | - |
 | `quotation_line_id` | UUID | YES | FK → `sales_quotation_line` |
 | `product_id` | UUID | NO | FK → `master_product` |
-| `product_code` | VARCHAR(50) | NO | — |
-| `product_name` | VARCHAR(255) | NO | — |
+| `product_code` | VARCHAR(50) | NO | - |
+| `product_name` | VARCHAR(255) | NO | - |
 | `quantity` | NUMERIC(18,4) | NO | Ordered qty |
 | `quantity_delivered` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `quantity_invoiced` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `quantity_returned` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `uom_id` | UUID | NO | FK → `master_uom` |
-| `unit_price` | NUMERIC(18,4) | NO | — |
+| `unit_price` | NUMERIC(18,4) | NO | - |
 | `discount_percent` | NUMERIC(8,4) | NO | DEFAULT 0 |
 | `discount_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `tax_id` | UUID | YES | FK → `master_tax` |
 | `tax_rate` | NUMERIC(8,4) | NO | DEFAULT 0 |
 | `tax_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
-| `line_total` | NUMERIC(18,4) | NO | — |
+| `line_total` | NUMERIC(18,4) | NO | - |
 | `status` | VARCHAR(30) | NO | open, partially_delivered, delivered, cancelled |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
@@ -533,20 +533,20 @@ Delivery/shipment document for order fulfillment tracking (FRD-06 §10).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | NO | — |
-| `company_id` | UUID | NO | — |
-| `branch_id` | UUID | NO | — |
-| `document_number` | VARCHAR(50) | NO | UK — `DLV-YYYY-NNNNNN` |
+| `tenant_id` | UUID | NO | - |
+| `company_id` | UUID | NO | - |
+| `branch_id` | UUID | NO | - |
+| `document_number` | VARCHAR(50) | NO | UK - `DLV-YYYY-NNNNNN` |
 | `document_date` | DATE | NO | Delivery date |
 | `order_header_id` | UUID | NO | FK → `sales_order_header` |
 | `customer_id` | UUID | NO | FK → `master_customer` |
-| `ship_to_address` | TEXT | YES | — |
+| `ship_to_address` | TEXT | YES | - |
 | `warehouse_reference` | UUID | YES | External Inventory warehouse ref (no FK) |
 | `subtotal_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `status` | VARCHAR(30) | NO | draft, pending, in_progress, partially_delivered, delivered, cancelled |
-| `workflow_status` | VARCHAR(30) | YES | — |
+| `workflow_status` | VARCHAR(30) | YES | - |
 | `workflow_instance_id` | UUID | YES | FK → `wf_instance` |
-| `shipped_at` | TIMESTAMPTZ | YES | — |
+| `shipped_at` | TIMESTAMPTZ | YES | - |
 | `shipped_by` | UUID | YES | FK → `sec_user` |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
@@ -566,12 +566,12 @@ Delivery line items linking shipped quantities to order lines.
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | NO | — |
-| `company_id` | UUID | NO | — |
-| `branch_id` | UUID | NO | — |
+| `tenant_id` | UUID | NO | - |
+| `company_id` | UUID | NO | - |
+| `branch_id` | UUID | NO | - |
 | `delivery_header_id` | UUID | NO | FK → `sales_delivery_header` |
 | `order_line_id` | UUID | NO | FK → `sales_order_line` |
-| `line_number` | SMALLINT | NO | — |
+| `line_number` | SMALLINT | NO | - |
 | `product_id` | UUID | NO | FK → `master_product` |
 | `quantity` | NUMERIC(18,4) | NO | Shipped qty |
 | `uom_id` | UUID | NO | FK → `master_uom` |
@@ -584,17 +584,17 @@ Delivery line items linking shipped quantities to order lines.
 ### 6.11 `sales_invoice_header`
 
 #### 6.11.1 Purpose
-Customer sales invoice — financial document posting to Finance AR/Revenue (FRD-06 §11).
+Customer sales invoice - financial document posting to Finance AR/Revenue (FRD-06 §11).
 
 #### 6.11.2 Columns
 
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | NO | — |
-| `company_id` | UUID | NO | — |
-| `branch_id` | UUID | NO | — |
-| `document_number` | VARCHAR(50) | NO | UK — `INV-YYYY-NNNNNN` |
+| `tenant_id` | UUID | NO | - |
+| `company_id` | UUID | NO | - |
+| `branch_id` | UUID | NO | - |
+| `document_number` | VARCHAR(50) | NO | UK - `INV-YYYY-NNNNNN` |
 | `document_date` | DATE | NO | Invoice date |
 | `due_date` | DATE | NO | Payment due date |
 | `customer_id` | UUID | NO | FK → `master_customer` |
@@ -602,18 +602,18 @@ Customer sales invoice — financial document posting to Finance AR/Revenue (FRD
 | `delivery_header_id` | UUID | YES | FK → `sales_delivery_header` |
 | `fiscal_year_id` | UUID | NO | FK → `fin_fiscal_year` |
 | `period_id` | UUID | NO | FK → `fin_period` |
-| `currency_code` | VARCHAR(3) | NO | — |
-| `exchange_rate` | NUMERIC(18,8) | NO | — |
+| `currency_code` | VARCHAR(3) | NO | - |
+| `exchange_rate` | NUMERIC(18,8) | NO | - |
 | `subtotal_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `discount_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `tax_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `total_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
-| `amount_paid` | NUMERIC(18,4) | NO | DEFAULT 0 — updated by Finance |
+| `amount_paid` | NUMERIC(18,4) | NO | DEFAULT 0 - updated by Finance |
 | `balance_due` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `status` | VARCHAR(30) | NO | draft, submitted, posted, partially_paid, paid, cancelled |
-| `workflow_status` | VARCHAR(30) | NO | — |
+| `workflow_status` | VARCHAR(30) | NO | - |
 | `workflow_instance_id` | UUID | YES | FK → `wf_instance` |
-| `posted_at` | TIMESTAMPTZ | YES | — |
+| `posted_at` | TIMESTAMPTZ | YES | - |
 | `posted_by` | UUID | YES | FK → `sec_user` |
 | `finance_ledger_id` | UUID | YES | FK → `fin_customer_ledger` |
 | `finance_journal_id` | UUID | YES | FK → `fin_journal_header` |
@@ -621,7 +621,7 @@ Customer sales invoice — financial document posting to Finance AR/Revenue (FRD
 
 #### 6.11.3 Business Rules
 - Posting creates `fin_customer_ledger` + balanced `fin_journal_header` (AR Dr, Revenue Cr) per FRD-06 §11
-- Posted invoices immutable — no soft delete
+- Posted invoices immutable - no soft delete
 - Period must be `open` or `soft_closed` with adjust permission at post time
 
 ---
@@ -636,25 +636,25 @@ Invoice line items with revenue account mapping for finance posting.
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | NO | — |
-| `company_id` | UUID | NO | — |
-| `branch_id` | UUID | NO | — |
+| `tenant_id` | UUID | NO | - |
+| `company_id` | UUID | NO | - |
+| `branch_id` | UUID | NO | - |
 | `invoice_header_id` | UUID | NO | FK → `sales_invoice_header` |
 | `order_line_id` | UUID | YES | FK → `sales_order_line` |
 | `delivery_line_id` | UUID | YES | FK → `sales_delivery_line` |
-| `line_number` | SMALLINT | NO | — |
+| `line_number` | SMALLINT | NO | - |
 | `product_id` | UUID | NO | FK → `master_product` |
-| `product_code` | VARCHAR(50) | NO | — |
-| `description` | VARCHAR(500) | YES | — |
-| `quantity` | NUMERIC(18,4) | NO | — |
+| `product_code` | VARCHAR(50) | NO | - |
+| `description` | VARCHAR(500) | YES | - |
+| `quantity` | NUMERIC(18,4) | NO | - |
 | `uom_id` | UUID | NO | FK → `master_uom` |
-| `unit_price` | NUMERIC(18,4) | NO | — |
+| `unit_price` | NUMERIC(18,4) | NO | - |
 | `discount_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `tax_id` | UUID | YES | FK → `master_tax` |
 | `tax_rate` | NUMERIC(8,4) | NO | DEFAULT 0 |
 | `tax_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
-| `line_total` | NUMERIC(18,4) | NO | — |
-| `revenue_account_id` | UUID | YES | FK → `fin_chart_of_account` — resolved at post |
+| `line_total` | NUMERIC(18,4) | NO | - |
+| `revenue_account_id` | UUID | YES | FK → `fin_chart_of_account` - resolved at post |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 ---
@@ -662,17 +662,17 @@ Invoice line items with revenue account mapping for finance posting.
 ### 6.13 `sales_return_header`
 
 #### 6.13.1 Purpose
-Customer return / credit note source document (FRD-06 §13–14).
+Customer return / credit note source document (FRD-06 §13-14).
 
 #### 6.13.2 Columns
 
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | NO | — |
-| `company_id` | UUID | NO | — |
-| `branch_id` | UUID | NO | — |
-| `document_number` | VARCHAR(50) | NO | UK — `RET-YYYY-NNNNNN` |
+| `tenant_id` | UUID | NO | - |
+| `company_id` | UUID | NO | - |
+| `branch_id` | UUID | NO | - |
+| `document_number` | VARCHAR(50) | NO | UK - `RET-YYYY-NNNNNN` |
 | `document_date` | DATE | NO | Return date |
 | `customer_id` | UUID | NO | FK → `master_customer` |
 | `invoice_header_id` | UUID | YES | FK → `sales_invoice_header` |
@@ -680,17 +680,17 @@ Customer return / credit note source document (FRD-06 §13–14).
 | `fiscal_year_id` | UUID | NO | FK → `fin_fiscal_year` |
 | `period_id` | UUID | NO | FK → `fin_period` |
 | `return_type` | VARCHAR(30) | NO | damaged, wrong_item, excess_qty, quality_issue |
-| `currency_code` | VARCHAR(3) | NO | — |
-| `exchange_rate` | NUMERIC(18,8) | NO | — |
+| `currency_code` | VARCHAR(3) | NO | - |
+| `exchange_rate` | NUMERIC(18,8) | NO | - |
 | `subtotal_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `tax_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `total_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `status` | VARCHAR(30) | NO | draft, requested, approved, received, posted, closed, cancelled |
-| `workflow_status` | VARCHAR(30) | NO | — |
+| `workflow_status` | VARCHAR(30) | NO | - |
 | `workflow_instance_id` | UUID | YES | FK → `wf_instance` |
-| `posted_at` | TIMESTAMPTZ | YES | — |
+| `posted_at` | TIMESTAMPTZ | YES | - |
 | `finance_journal_id` | UUID | YES | FK → `fin_journal_header` |
-| `reason` | VARCHAR(500) | YES | — |
+| `reason` | VARCHAR(500) | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 #### 6.13.3 Business Rules
@@ -709,20 +709,20 @@ Return line items referencing original invoice lines.
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | NO | — |
-| `company_id` | UUID | NO | — |
-| `branch_id` | UUID | NO | — |
+| `tenant_id` | UUID | NO | - |
+| `company_id` | UUID | NO | - |
+| `branch_id` | UUID | NO | - |
 | `return_header_id` | UUID | NO | FK → `sales_return_header` |
 | `invoice_line_id` | UUID | YES | FK → `sales_invoice_line` |
 | `order_line_id` | UUID | YES | FK → `sales_order_line` |
-| `line_number` | SMALLINT | NO | — |
+| `line_number` | SMALLINT | NO | - |
 | `product_id` | UUID | NO | FK → `master_product` |
 | `quantity` | NUMERIC(18,4) | NO | Returned qty |
 | `uom_id` | UUID | NO | FK → `master_uom` |
-| `unit_price` | NUMERIC(18,4) | NO | — |
+| `unit_price` | NUMERIC(18,4) | NO | - |
 | `tax_id` | UUID | YES | FK → `master_tax` |
 | `tax_amount` | NUMERIC(18,4) | NO | DEFAULT 0 |
-| `line_total` | NUMERIC(18,4) | NO | — |
+| `line_total` | NUMERIC(18,4) | NO | - |
 | `status` | VARCHAR(30) | NO | requested, received, posted |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
@@ -838,8 +838,8 @@ Return line items referencing original invoice lines.
 - List APIs: composite (`company_id`, `document_date DESC`) for pagination
 
 ### 9.3 Partition Candidates (Phase 2)
-- `sales_invoice_header` — range partition by `document_date` (yearly) at 10M+ rows
-- `sales_order_header` — range partition by `document_date` (yearly) at scale
+- `sales_invoice_header` - range partition by `document_date` (yearly) at 10M+ rows
+- `sales_order_header` - range partition by `document_date` (yearly) at scale
 
 ---
 
@@ -913,9 +913,9 @@ any (pre-posted) → cancelled
 ```
 
 ### 10.4 Immutability Rules
-- Posted invoices: no UPDATE on amounts, customer, or lines — return document required
+- Posted invoices: no UPDATE on amounts, customer, or lines - return document required
 - Document numbers immutable after `submitted` status
-- Physical DELETE prohibited — soft delete in `draft` only
+- Physical DELETE prohibited - soft delete in `draft` only
 
 ---
 
@@ -933,7 +933,7 @@ any (pre-posted) → cancelled
 - `workflow_instance_id` → `foundation.wf_instance.id`
 - Rejected workflow sets document `status` to prior state or `cancelled`
 - Segregation of duties: quotation creator ≠ approver (configurable per tenant)
-- High-value orders/invoices may require elevated approval tier — policy table in Foundation
+- High-value orders/invoices may require elevated approval tier - policy table in Foundation
 
 ---
 
@@ -943,7 +943,7 @@ any (pre-posted) → cancelled
 
 | Step | Action | Finance Artifact |
 |------|--------|------------------|
-| 1 | Validate period open, customer active, totals balanced | — |
+| 1 | Validate period open, customer active, totals balanced | - |
 | 2 | Create `fin_customer_ledger` (document_type = `sales_invoice`) | AR sub-ledger |
 | 3 | Create `fin_journal_header` (source_module = `sales`, journal_type = `system`) | Journal |
 | 4 | Journal lines: AR account Dr, Revenue account Cr per line | `fin_journal_line` |
@@ -962,14 +962,14 @@ Accounts Receivable (Dr)  ── total_amount
 
 | Step | Action | Finance Artifact |
 |------|--------|------------------|
-| 1 | Validate against original posted invoice | — |
+| 1 | Validate against original posted invoice | - |
 | 2 | Create reversal `fin_journal_header` | Journal (system) |
 | 3 | Sales Return Dr, AR Cr | Balanced entry |
 | 4 | Tax reversal in `fin_tax_register` | Output tax adjustment |
 | 5 | Reduce `sales_customer_credit.credit_used` | Credit exposure |
 
 ### 12.3 Payment Status (Finance-Owned)
-- `sales_invoice_header.amount_paid` and `balance_due` updated via Finance payment events — no payment tables in Sales schema
+- `sales_invoice_header.amount_paid` and `balance_due` updated via Finance payment events - no payment tables in Sales schema
 - Invoice status `partially_paid` / `paid` driven by Finance AR allocation callbacks
 
 ### 12.4 Period Control
@@ -995,7 +995,7 @@ Accounts Receivable (Dr)  ── total_amount
 - All status transitions logged with `old_value` / `new_value` JSON per DBS §28
 - Posted invoice `post` operation includes `finance_journal_id` in audit payload
 - Financial document retention: **7 years minimum** aligned with Finance (FRD-06 §18)
-- Audit logs append-only — no purge without GRC approval
+- Audit logs append-only - no purge without GRC approval
 
 ---
 
@@ -1013,7 +1013,7 @@ Accounts Receivable (Dr)  ── total_amount
 | `sales_invoice_*` | **Confidential** | Revenue, customer financials |
 | `sales_return_*` | **Confidential** | Revenue adjustments |
 
-### 14.2 Sales RBAC Permissions (Planned — Sprint 5)
+### 14.2 Sales RBAC Permissions (Planned - Sprint 5)
 
 | Resource | Permissions |
 |----------|-------------|
@@ -1035,13 +1035,13 @@ Accounts Receivable (Dr)  ── total_amount
 | Company | User must have company scope via `sec_user_org_scope` |
 | Branch | Branch-scoped users see branch documents; company admins see all |
 | Credit Hold | Orders blocked for users without `sales.order:confirm` + credit override |
-| Posted Documents | Edit blocked regardless of permission — return/credit only |
+| Posted Documents | Edit blocked regardless of permission - return/credit only |
 
 ---
 
 ## 15. Migration Order
 
-> **Alembic revision IDs must be ≤ 32 characters.** Use numeric prefix + short slug pattern established in ERD_01–ERD_04.
+> **Alembic revision IDs must be ≤ 32 characters.** Use numeric prefix + short slug pattern established in ERD_01-ERD_04.
 
 | Order | Revision ID | Migration | Tables / Actions |
 |-------|-------------|-----------|----------------|
@@ -1080,7 +1080,7 @@ Accounts Receivable (Dr)  ── total_amount
 |--------|-----|----------|---------------------|
 | Foundation | FRD-01 | tenant, user, workflow, audit, RBAC | Direct FK |
 | Organization | FRD-02 | company, branch, cost/profit centers | Direct FK |
-| Master Data | FRD-03 | customer, product, uom, currency, tax | Direct FK — C-01 |
+| Master Data | FRD-03 | customer, product, uom, currency, tax | Direct FK - C-01 |
 | Finance | FRD-04 | fiscal year, period, COA, AR ledger | FK on invoice/return; posting API |
 
 ### 16.2 Downstream (Sales Provides)
@@ -1097,11 +1097,11 @@ Accounts Receivable (Dr)  ── total_amount
 |--------|-----|-------|
 | CRM | FRD-05 | Opportunity → quotation via `opportunity_reference` UUID; no CRM tables in Sprint 5 |
 | E-commerce | FRD-22 | Channel orders via `source_module` / `source_document_id` |
-| Procurement | FRD-07 | No cross-FK — drop-ship references future phase |
+| Procurement | FRD-07 | No cross-FK - drop-ship references future phase |
 | Manufacturing | FRD-09 | MTO orders via `source_module` only |
-| Payroll / Banking | — | Not in Sales scope |
+| Payroll / Banking | - | Not in Sales scope |
 
-**Rule (C-01):** Sales consumes customer/product masters via service APIs — no duplicate master tables in `sales` schema.
+**Rule (C-01):** Sales consumes customer/product masters via service APIs - no duplicate master tables in `sales` schema.
 
 ---
 
@@ -1109,18 +1109,18 @@ Accounts Receivable (Dr)  ── total_amount
 
 | # | Gate Criterion | Status |
 |---|----------------|--------|
-| 1 | Table count = **14** (not 15) — approved list only | ✅ |
+| 1 | Table count = **14** (not 15) - approved list only | ✅ |
 | 2 | Schema `sales`, prefix `sales_` defined | ✅ |
 | 3 | Aligned to FRD-06 only (not FRD-05) | ✅ |
 | 4 | All 14 tables have PK, FK, index, and status lifecycle | ✅ |
 | 5 | Finance posting integration documented (invoice + return) | ✅ |
 | 6 | Workflow codes defined for approval documents | ✅ |
-| 7 | Migration order 0039–0055 with revision IDs ≤ 32 chars | ✅ |
+| 7 | Migration order 0039-0055 with revision IDs ≤ 32 chars | ✅ |
 | 8 | CRM, inventory, procurement, banking excluded from schema | ✅ |
 | 9 | Cross-module dependencies documented | ✅ |
 | 10 | RBAC permissions and data classification defined | ✅ |
 
-### ERD Phase Gate — Sales Summary
+### ERD Phase Gate - Sales Summary
 
 | Metric | Value |
 |--------|-------|
@@ -1131,7 +1131,7 @@ Accounts Receivable (Dr)  ── total_amount
 | FK dependencies | ERD_01, ERD_02, ERD_03, ERD_04 |
 | Immutable after post | `sales_invoice_header` (posted) |
 | Workflow-enabled documents | Quotation, Discount, Order, Invoice, Return |
-| Migration range | `0039` – `0055` |
+| Migration range | `0039` - `0055` |
 
 ---
 
@@ -1141,4 +1141,4 @@ ERD_05_Sales locked and ready for Sprint 5 implementation planning.
 
 ---
 
-*End of ERD_05 — Sales Management Domain*
+*End of ERD_05 - Sales Management Domain*

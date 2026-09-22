@@ -76,7 +76,7 @@ export function PeriodEnterpriseTable({
                 <td className="px-2 py-1.5 font-mono text-xs">{row.start_date}</td>
                 <td className="px-2 py-1.5 font-mono text-xs">{row.end_date}</td>
                 <td className="px-2 py-1.5 text-xs">{row.gl_closed || row.status === "hard_closed" ? "Yes" : "No"}</td>
-                <td className="px-2 py-1.5 font-mono text-xs">{row.fiscal_year_code ?? "—"}</td>
+                <td className="px-2 py-1.5 font-mono text-xs">{row.fiscal_year_code ?? "-"}</td>
                 <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{row.journal_count ?? 0}</td>
               </tr>
             )) : null}

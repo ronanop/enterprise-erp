@@ -131,7 +131,7 @@ export function ManufacturingDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="Manufacturing"
-        description="Production workspace — BOMs, routings, work orders, material issues, FG receipts, WIP, scrap, and variances."
+        description="Production workspace - BOMs, routings, work orders, material issues, FG receipts, WIP, scrap, and variances."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -178,28 +178,28 @@ export function ManufacturingDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Open production orders"
-          value={loading ? "—" : String(kpis.openOrders)}
+          value={loading ? "-" : String(kpis.openOrders)}
           hint={`${formatQty(kpis.plannedQty)} planned qty · ${data?.orders.length ?? 0} total`}
           icon={Factory}
           tone={kpis.openOrders > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Open WIP value"
-          value={loading ? "—" : formatInr(kpis.wipValue)}
+          value={loading ? "-" : formatInr(kpis.wipValue)}
           hint={`${countByStatus(data?.wip ?? [], ["open"])} open · ${data?.wip.length ?? 0} balances`}
           icon={Layers}
           tone={kpis.wipValue > 0 ? "default" : "success"}
         />
         <FinanceKpiCard
           label="Scrap quantity"
-          value={loading ? "—" : formatQty(kpis.scrapQty)}
+          value={loading ? "-" : formatQty(kpis.scrapQty)}
           hint={`${data?.scrap.length ?? 0} scrap docs · ${countByStatus(data?.variances ?? [], ["open"])} open variances`}
           icon={Trash2}
           tone={kpis.scrapQty > 0 ? "danger" : "success"}
         />
         <FinanceKpiCard
           label="Idle machines"
-          value={loading ? "—" : String(kpis.idleMachines)}
+          value={loading ? "-" : String(kpis.idleMachines)}
           hint={`${kpis.runningMachines} running · ${data?.machines.length ?? 0} machines`}
           icon={Cog}
           tone={kpis.idleMachines > 0 ? "warning" : "success"}
@@ -234,7 +234,7 @@ export function ManufacturingDashboard() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium tracking-tight">Workspace</h2>
+          <h2 className="text-base font-extrabold tracking-tight">Workspace</h2>
           <Badge variant="secondary">{manufacturingWorkspaceGroups.length} areas</Badge>
         </div>
         <div className="grid gap-3 lg:grid-cols-3">
@@ -251,7 +251,7 @@ export function ManufacturingDashboard() {
                     <Icon className="size-4" />
                   </span>
                   <div className="min-w-0">
-                    <h3 className="text-sm font-medium tracking-tight">{group.title}</h3>
+                    <h3 className="text-base font-extrabold tracking-tight">{group.title}</h3>
                     <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                       {group.description}
                     </p>
@@ -282,7 +282,7 @@ export function ManufacturingDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Recent production orders</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Recent production orders</h2>
               <p className="text-[11px] text-muted-foreground">Work order book</p>
             </div>
             <Link
@@ -323,7 +323,7 @@ export function ManufacturingDashboard() {
                     >
                       <td className="max-w-[180px] truncate px-4 py-2.5">
                         <p className="font-medium text-foreground">
-                          {String(row.document_number ?? "—")}
+                          {String(row.document_number ?? "-")}
                         </p>
                       </td>
                       <td className="px-4 py-2.5 font-mono text-xs tabular-nums text-foreground">
@@ -348,7 +348,7 @@ export function ManufacturingDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Scrap watch</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Scrap watch</h2>
               <p className="text-[11px] text-muted-foreground">Highest scrap quantities</p>
             </div>
             <Link
@@ -373,7 +373,7 @@ export function ManufacturingDashboard() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-medium">
-                      {String(row.document_number ?? "—")}
+                      {String(row.document_number ?? "-")}
                     </p>
                     <FinanceStatusBadge status={String(row.status ?? "draft")} />
                   </div>
@@ -390,7 +390,7 @@ export function ManufacturingDashboard() {
 
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
           <div className="mb-3">
-            <h2 className="text-sm font-medium tracking-tight">WIP cost mix</h2>
+            <h2 className="text-base font-extrabold tracking-tight">WIP cost mix</h2>
             <p className="text-[11px] text-muted-foreground">Material / labor / overhead</p>
           </div>
           {loading ? (

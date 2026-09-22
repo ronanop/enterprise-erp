@@ -1,0 +1,22 @@
+fastapi==0.115.6
+# Pin FastAPI's Starlette range so mcp's loose sse-starlette pin does not
+# backtrack through dozens of releases (slow / flaky Coolify builds).
+starlette==0.41.3
+sse-starlette==3.0.3
+uvicorn[standard]==0.32.1
+sqlalchemy==2.0.36
+alembic==1.14.0
+pydantic==2.11.7
+pydantic-settings==2.6.1
+psycopg[binary]==3.2.3
+celery==5.4.0
+redis==5.2.1
+python-json-logger==3.2.1
+PyJWT[crypto]==2.13.0
+bcrypt==4.2.1
+email-validator==2.2.0
+pyotp==2.9.0
+httpx==0.28.1
+mcp==1.28.1
+boto3==1.35.99
+botocore==1.35.99

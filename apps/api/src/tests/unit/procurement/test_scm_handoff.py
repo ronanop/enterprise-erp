@@ -36,6 +36,9 @@ class _FakeOrdersRepo:
     def find_by_source(self, *_a, **_k):
         return self.by_source
 
+    def list_by_source(self, *_a, **_k):
+        return [self.by_source] if self.by_source is not None else []
+
     def update_order(self, _ctx, order_id, **fields):
         self.updated[order_id] = fields
         if self.by_source and self.by_source.id == order_id:
@@ -56,7 +59,7 @@ class _FakeOrderService:
         return self.order
 
 
-def test_finalize_rejects_non_crm_source():
+def test_finalize_rejects_non_scm_source():
     order = SimpleNamespace(
         id=uuid4(),
         source_module="procurement",
@@ -71,9 +74,40 @@ def test_finalize_rejects_non_crm_source():
         svc.finalize_scm_po(SimpleNamespace(), order.id)
 
 
+def test_finalize_allows_inventory_initiated(monkeypatch):
+    order = SimpleNamespace(
+        id=uuid4(),
+        source_module="procurement",
+        source_document_type="inventory_initiated",
+        status=OrderStatus.DRAFT.value,
+        lines=[SimpleNamespace(is_deleted=False)],
+        entity_code="CDT",
+        company_po_number="PO/CDT/001",
+        company_id=uuid4(),
+        version=1,
+    )
+    svc = ScmHandoffService.__new__(ScmHandoffService)
+    svc._order_service = _FakeOrderService(order)
+    svc._orders = _FakeOrdersRepo()
+    svc._db = SimpleNamespace(flush=lambda: None)
+    svc._audit = SimpleNamespace(log_entity_change=lambda **_k: None)
+    monkeypatch.setattr(
+        "modules.procurement.service.scm_handoff_service.utcnow",
+        lambda: date.today(),
+    )
+    result = svc.finalize_scm_po(SimpleNamespace(user_id=uuid4(), tenant_id=uuid4()), order.id)
+    assert result.status == OrderStatus.SENT.value
+
+
 def test_create_po_blocks_duplicate(monkeypatch):
     ovf_id = uuid4()
-    existing = SimpleNamespace(id=uuid4(), document_number="PO-000001")
+    vendor_id = uuid4()
+    existing = SimpleNamespace(
+        id=uuid4(),
+        document_number="PO-000001",
+        vendor_id=vendor_id,
+        status=OrderStatus.SENT.value,
+    )
     svc = ScmHandoffService.__new__(ScmHandoffService)
     svc._crm = SimpleNamespace(
         get_handoff=lambda *_a, **_k: {
@@ -90,6 +124,121 @@ def test_create_po_blocks_duplicate(monkeypatch):
         svc.create_po_from_ovf(
             SimpleNamespace(),
             ovf_id=ovf_id,
-            vendor_id=uuid4(),
+            vendor_id=vendor_id,
             document_date=date.today(),
+            entity_code="CT",
         )
+
+
+def test_inventory_stock_lots_excludes_billed_and_dc():
+    bl = SimpleNamespace(
+        quantity=5,
+        billing_quantity=2,
+        delivery_challan_quantity=0,
+        serial_numbers=["S1", "S2", "S3", "S4", "S5"],
+    )
+    lots = ScmHandoffService._inventory_stock_lots_from_batch_line(bl)
+    assert len(lots) == 3
+    assert lots[0] == (3, "S3", 1.0)
+    assert lots[2] == (5, "S5", 1.0)
+
+
+def test_inventory_stock_lots_dc_not_in_warehouse():
+    bl = SimpleNamespace(
+        quantity=5,
+        billing_quantity=2,
+        delivery_challan_quantity=3,
+        serial_numbers=["S1", "S2", "S3", "S4", "S5"],
+    )
+    assert ScmHandoffService._inventory_stock_lots_from_batch_line(bl) == []
+
+
+def test_inventory_stock_lots_all_billed_empty():
+    bl = SimpleNamespace(quantity=5, billing_quantity=5, delivery_challan_quantity=0, serial_numbers=["S1"])
+    assert ScmHandoffService._inventory_stock_lots_from_batch_line(bl) == []
+
+
+def test_item_plan_stock_and_vendor_separate():
+    plan = ScmHandoffService._item_plan(
+        [
+            {
+                "product_name": "Switch",
+                "qty": 2,
+                "distributor_name": "IN STOCK",
+                "fulfillment_source": "inventory",
+            },
+            {
+                "product_name": "Firewall",
+                "qty": 1,
+                "distributor_name": "Acme Dist",
+                "fulfillment_source": "purchase_order",
+            },
+        ],
+        [{"product_name": "Switch", "on_hand_qty": 5, "allocated_qty": 0}],
+    )
+    assert plan["delivery"] == "separate"
+    assert "stock" in plan["delivery_note"].lower()
+    assert plan["lines"][0]["action"] == "book_stock"
+    assert plan["lines"][0]["in_stock"] is True
+    assert plan["lines"][1]["action"] == "create_po"
+    assert plan["lines"][1]["distributor_name"] == "Acme Dist"
+
+
+def test_item_plan_stock_short_and_together():
+    plan = ScmHandoffService._item_plan(
+        [
+            {
+                "product_name": "AP",
+                "qty": 4,
+                "distributor_name": "IN STOCK",
+                "fulfillment_source": "inventory",
+            },
+        ],
+        [{"product_name": "AP", "on_hand_qty": 1, "allocated_qty": 0}],
+    )
+    assert plan["delivery"] == "together"
+    assert plan["lines"][0]["action"] == "stock_short"
+    assert plan["lines"][0]["book_qty"] == 1
+    assert plan["lines"][0]["po_qty"] == 3
+
+
+def test_ovf_vendor_baseline_uses_crm_totals_with_tax_not_negotiated_rates():
+    svc = ScmHandoffService.__new__(ScmHandoffService)
+    handoff = {
+        "vendor_lines": [
+            {
+                "product_name": "Adapter",
+                "qty": 10,
+                "unit_price": 100,
+                "line_total": 1000,
+                "gst_pct": 18,
+                "gst_amount": 180,
+                "total_with_gst": 1180,
+                "distributor_name": "Ingram Micro India",
+            },
+            {
+                "product_name": "Stock Item",
+                "qty": 2,
+                "unit_price": 50,
+                "line_total": 100,
+                "total_with_gst": 118,
+                "distributor_name": "IN STOCK",
+                "fulfillment_source": "inventory",
+            },
+            {
+                "product_name": "Other Dist Line",
+                "qty": 1,
+                "unit_price": 500,
+                "line_total": 500,
+                "total_with_gst": 590,
+                "distributor_name": "Redington India",
+            },
+        ]
+    }
+    # Full OVF vendor baseline excludes IN STOCK.
+    assert svc._ovf_vendor_baseline_amount(handoff) == 1770.0
+    # Distributor-scoped baseline for the PO vendor.
+    assert (
+        svc._ovf_vendor_baseline_amount(handoff, distributor_name="Ingram Micro India")
+        == 1180.0
+    )

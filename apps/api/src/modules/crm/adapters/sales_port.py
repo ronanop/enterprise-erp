@@ -1,4 +1,4 @@
-"""Sales port — CRM never writes sales_* tables."""
+"""Sales port - CRM never writes sales_* tables."""
 
 from datetime import date, timedelta
 from uuid import UUID

@@ -99,6 +99,86 @@ export type CashFlowReport = {
   to_date?: string | null;
 };
 
+export type CashFlowForecastWeek = {
+  week_number: number;
+  week_start: string;
+  week_end: string;
+  inflow: number;
+  outflow: number;
+  net: number;
+  closing_balance: number;
+  item_count: number;
+};
+
+export type StuckStockItem = {
+  reference: string;
+  product_name: string;
+  quantity: number;
+  value: number;
+  received_on?: string | null;
+  days_held: number;
+  on_hold: boolean;
+};
+
+export type StuckStockSummary = {
+  total_value: number;
+  unit_count: number;
+  oldest_days_held: number;
+  monthly_carry_cost: number;
+  carry_cost_to_date: number;
+  on_hold_value: number;
+  items: StuckStockItem[];
+};
+
+export type WorkingCapitalLeverage = {
+  collection_days: number;
+  payment_days: number;
+  leverage_days: number;
+  average_monthly_outflow: number;
+  leverage_value: number;
+  narrative: string;
+};
+
+export type CashFlowForecast = {
+  as_of: string;
+  horizon_weeks: number;
+  opening_balance: number;
+  closing_balance: number;
+  total_inflow: number;
+  total_outflow: number;
+  overdue_inflow: number;
+  overdue_outflow: number;
+  lowest_balance: number;
+  lowest_balance_week?: number | null;
+  shortfall_weeks: number[];
+  weeks: CashFlowForecastWeek[];
+  stuck_stock: StuckStockSummary;
+  leverage?: WorkingCapitalLeverage | null;
+};
+
+export type TreasurySuggestion = {
+  rank: number;
+  kind: string;
+  title: string;
+  amount: number;
+  days: number;
+  annual_rate_pct: number;
+  expected_return: number;
+  liquidity: string;
+  rationale: string;
+};
+
+export type TreasuryPlan = {
+  as_of: string;
+  deployable_amount: number;
+  deployable_days: number;
+  operating_buffer: number;
+  lowest_forecast_balance: number;
+  total_opportunity: number;
+  suggestions: TreasurySuggestion[];
+  warnings: string[];
+};
+
 export type JournalRegisterLine = {
   id: string;
   journal_number: string;
@@ -247,6 +327,14 @@ export function getProfitLossReport(query?: ReportQuery) {
 
 export function getCashFlowReport(query?: ReportQuery) {
   return fetchReport<CashFlowReport>("/cash-flow", query);
+}
+
+export function getCashFlowForecast(query?: ReportQuery) {
+  return fetchReport<CashFlowForecast>("/cash-flow-forecast", query);
+}
+
+export function getTreasurySuggestions(query?: ReportQuery) {
+  return fetchReport<TreasuryPlan>("/treasury-suggestions", query);
 }
 
 export function getJournalRegisterReport(query?: ReportQuery) {

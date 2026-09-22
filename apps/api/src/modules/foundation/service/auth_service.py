@@ -1,6 +1,6 @@
 """Authentication service."""
 
-import secrets
+import base64
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
@@ -10,14 +10,20 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.exceptions import UnauthorizedException
 from core.redis import SessionStore
-from modules.foundation.domain.exceptions import AccountLockedException, InvalidCredentialsException
-from modules.foundation.models.security import SecTenant, SecUser
-from modules.foundation.repository.role_repository import RoleRepository
+from modules.foundation.adapters.graph_directory_adapter import GraphDirectoryAdapter
+from modules.foundation.domain.exceptions import (
+    AccountLockedException,
+    InvalidCredentialsException,
+)
+from modules.foundation.domain.erp_modules import resolve_session_user_type
+from modules.foundation.models.security import SecRole, SecUser, SecUserRole
 from modules.foundation.repository.session_repository import SessionRepository
 from modules.foundation.repository.user_repository import UserRepository
 from modules.foundation.service.audit_service import AuditService
-from modules.foundation.service.microsoft_oauth_service import MicrosoftOAuthService
-from modules.foundation.service.user_service import UserService
+from modules.foundation.service.microsoft_oauth_service import (
+    MicrosoftOAuthService,
+    resolve_frontend_base,
+)
 from security.jwt import JWTService
 from security.password import PasswordHasher
 
@@ -86,19 +92,12 @@ class AuthService:
         self,
         *,
         email: str,
-        display_name: str | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> dict:
-        domain = settings.microsoft_user_email_domain.strip().lower().lstrip("@")
-        if domain and not email.endswith(f"@{domain}"):
-            raise InvalidCredentialsException(
-                f"Microsoft sign-in is limited to @{domain} accounts"
-            )
-
         user = self._users.get_active_by_email(email)
         if user is None:
-            user = self._provision_microsoft_user(email=email, display_name=display_name or email)
+            raise InvalidCredentialsException("No ERP account is linked to this Microsoft identity")
 
         if user.locked_until and user.locked_until > datetime.now(timezone.utc):
             raise AccountLockedException()
@@ -112,72 +111,96 @@ class AuthService:
         state: str,
         ip_address: str | None = None,
         user_agent: str | None = None,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, str]:
         oauth = MicrosoftOAuthService()
         stored = self._store.pop_oauth_state(state)
         if stored is None:
             raise InvalidCredentialsException("Microsoft sign-in session expired. Try again.")
 
-        return_to = stored.get("return_to") if isinstance(stored.get("return_to"), str) else "/"
-        claims = oauth.exchange_authorization_code(code)
+        return_to = (
+            stored.get("return_to") if isinstance(stored.get("return_to"), str) else "/"
+        )
+        frontend_origin = stored.get("frontend_origin")
+        frontend_base = resolve_frontend_base(
+            frontend_origin if isinstance(frontend_origin, str) else None
+        )
+        claims_bundle = oauth.exchange_authorization_code(code)
+        claims = claims_bundle.get("claims")
+        if not isinstance(claims, dict):
+            raise InvalidCredentialsException("Microsoft sign-in did not return identity claims")
+        ms_access_token = claims_bundle.get("access_token")
         email = MicrosoftOAuthService.email_from_claims(claims)
         if not email:
             raise InvalidCredentialsException("Microsoft account did not include an email address")
 
         tokens = self.login_with_microsoft(
             email=email,
-            display_name=MicrosoftOAuthService.display_name_from_claims(claims, email),
             ip_address=ip_address,
             user_agent=user_agent,
         )
+        user = self._users.get_active_by_email(email)
+        if user is not None and isinstance(ms_access_token, str) and ms_access_token:
+            self._cache_microsoft_avatar(user.id, ms_access_token)
+
         exchange_code = oauth.create_exchange_code()
-        self._store.set_oauth_exchange(exchange_code, {**tokens, "return_to": return_to})
-        return exchange_code, return_to
+        self._store.set_oauth_exchange(
+            exchange_code,
+            {**tokens, "return_to": return_to, "frontend_base": frontend_base},
+        )
+        return exchange_code, return_to, frontend_base
+
+    def resolve_user_avatar(self, *, user_id: UUID, email: str) -> tuple[bytes, str] | None:
+        """Return cached Microsoft profile photo, refreshing from Graph when needed."""
+        cached = self._store.get_user_avatar(user_id)
+        if cached is not None:
+            try:
+                return base64.b64decode(cached["data_b64"]), cached["content_type"]
+            except Exception:
+                pass
+
+        if self._store.has_user_avatar_miss(user_id):
+            return None
+
+        adapter = GraphDirectoryAdapter()
+        if not adapter.configured:
+            self._store.set_user_avatar_miss(user_id)
+            return None
+
+        try:
+            photo = adapter.fetch_user_photo(email)
+        except Exception:
+            self._store.set_user_avatar_miss(user_id)
+            return None
+
+        if photo is None:
+            self._store.set_user_avatar_miss(user_id)
+            return None
+
+        content, content_type = photo
+        self._store.set_user_avatar(
+            user_id,
+            content_type=content_type,
+            data_b64=base64.b64encode(content).decode("ascii"),
+        )
+        return content, content_type
+
+    def _cache_microsoft_avatar(self, user_id: UUID, ms_access_token: str) -> None:
+        photo = MicrosoftOAuthService.fetch_profile_photo(ms_access_token)
+        if photo is None:
+            self._store.set_user_avatar_miss(user_id)
+            return
+        content, content_type = photo
+        self._store.set_user_avatar(
+            user_id,
+            content_type=content_type,
+            data_b64=base64.b64encode(content).decode("ascii"),
+        )
 
     def redeem_microsoft_exchange(self, exchange_code: str) -> dict:
         payload = self._store.pop_oauth_exchange(exchange_code)
         if payload is None:
             raise InvalidCredentialsException("Sign-in code expired or already used")
         return payload
-
-    def _provision_microsoft_user(self, *, email: str, display_name: str) -> SecUser:
-        tenant = self._db.scalars(
-            select(SecTenant).where(
-                SecTenant.is_deleted.is_(False),
-                SecTenant.status == "active",
-            )
-        ).first()
-        if tenant is None:
-            raise InvalidCredentialsException(
-                "No ERP tenant is available to link this Microsoft account"
-            )
-
-        is_platform_admin = email in settings.microsoft_platform_admin_email_set()
-        user_type = "super_admin" if is_platform_admin else "employee"
-        users = UserService(self._db)
-        created = users.create_user(
-            tenant_id=tenant.id,
-            email=email,
-            password=secrets.token_urlsafe(32) + "Aa1!",
-            display_name=display_name,
-            user_type=user_type,
-            created_by=None,
-        )
-        role_code = "SUPER_ADMIN" if is_platform_admin else "TENANT_ADMIN"
-        role = RoleRepository(self._db).get_by_code(tenant.id, role_code)
-        if role is None and role_code != "SUPER_ADMIN":
-            role = RoleRepository(self._db).get_by_code(tenant.id, "SUPER_ADMIN")
-        if role is not None:
-            users.assign_role(
-                tenant_id=tenant.id,
-                user_id=created.id,
-                role_id=role.id,
-                assigned_by=None,
-            )
-        user = self._db.get(SecUser, created.id)
-        if user is None:
-            raise InvalidCredentialsException("Failed to provision Microsoft account")
-        return user
 
     def refresh(self, refresh_token: str) -> dict:
         payload = self._jwt.decode_token(refresh_token, expected_type="refresh")
@@ -195,6 +218,7 @@ class AuthService:
         if user_model is None:
             raise UnauthorizedException("User not found")
 
+        session_user_type = self._session_user_type(user_model)
         new_refresh, _ = self._jwt.create_refresh_token(user_id=user_id, session_id=session_id)
         refresh_days = settings.jwt_refresh_token_expire_days
         new_row = self._sessions.store_refresh_token(
@@ -209,7 +233,7 @@ class AuthService:
         access = self._jwt.create_access_token(
             user_id=user_id,
             tenant_id=session.tenant_id,
-            user_type=user_model.user_type,
+            user_type=session_user_type,
             session_id=session_id,
         )
         # Keep Redis session alive alongside refreshed tokens.
@@ -229,6 +253,26 @@ class AuthService:
             user_id=user_id,
         )
 
+    def _role_codes_for_user(self, user_id: UUID) -> list[str]:
+        stmt = (
+            select(SecRole.role_code)
+            .join(SecUserRole, SecUserRole.role_id == SecRole.id)
+            .where(SecUserRole.user_id == user_id, SecRole.is_deleted.is_(False))
+        )
+        return list(self._db.scalars(stmt).all())
+
+    def _session_user_type(self, user: SecUser) -> str:
+        resolved = resolve_session_user_type(
+            user.user_type,
+            user.email,
+            self._role_codes_for_user(user.id),
+            platform_admin_emails=settings.microsoft_platform_admin_email_set(),
+        )
+        if resolved != user.user_type:
+            user.user_type = resolved
+            self._db.flush()
+        return resolved
+
     def _issue_tokens(
         self,
         user: SecUser,
@@ -236,6 +280,7 @@ class AuthService:
         ip_address: str | None,
         user_agent: str | None,
     ) -> dict:
+        user_type = self._session_user_type(user)
         expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.session_ttl_seconds)
         provisional_session_id = uuid4()
         session = self._sessions.create_session(
@@ -249,7 +294,7 @@ class AuthService:
         access = self._jwt.create_access_token(
             user_id=user.id,
             tenant_id=user.tenant_id,
-            user_type=user.user_type,
+            user_type=user_type,
             session_id=session.id,
         )
         refresh, _ = self._jwt.create_refresh_token(user_id=user.id, session_id=session.id)
@@ -261,15 +306,24 @@ class AuthService:
             token=refresh,
             expires_at=datetime.now(timezone.utc) + timedelta(days=refresh_days),
         )
-        self._store.set_session(
-            session.id,
-            {
-                "user_id": str(user.id),
-                "tenant_id": str(user.tenant_id),
-                "ip": ip_address,
-                "user_agent": user_agent,
-            },
+        from modules.foundation.service.org_context_service import OrgContextService
+
+        company_id, branch_id = OrgContextService(self._db).resolve_company_and_branch(
+            user_id=user.id,
+            tenant_id=user.tenant_id,
+            user_type=user.user_type,
         )
+        session_payload: dict[str, str | None] = {
+            "user_id": str(user.id),
+            "tenant_id": str(user.tenant_id),
+            "ip": ip_address,
+            "user_agent": user_agent,
+        }
+        if company_id:
+            session_payload["company_id"] = str(company_id)
+        if branch_id:
+            session_payload["branch_id"] = str(branch_id)
+        self._store.set_session(session.id, session_payload)
         self._users.record_successful_login(user)
         self._audit.log_security_event(
             tenant_id=user.tenant_id,

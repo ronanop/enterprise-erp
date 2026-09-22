@@ -37,7 +37,19 @@ class ReimbursementService:
         doc = self._numbers.generate(PayEntityType.REIMBURSEMENT, cid, PayReimbursement, "document_number")
         return self._repo.create(ctx, company_id=cid, branch_id=branch_id, document_number=doc, **fields)
 
+    def update(self, ctx: TenantContext, row_id: UUID, **fields):
+        self.get(ctx, row_id)
+        return self._repo.update(ctx, row_id, **fields)
+
     def submit(self, ctx: TenantContext, row_id: UUID):
         row = self.get(ctx, row_id)
         self._engine.submit(row)
+        return self._repo.update(ctx, row_id, status=row.status)
+
+    def approve(self, ctx: TenantContext, row_id: UUID):
+        row = self.get(ctx, row_id)
+        if row.status == "submitted":
+            self._engine.manager_approve(row)
+        if row.status == "manager_approved":
+            self._engine.finance_approve(row)
         return self._repo.update(ctx, row_id, status=row.status)

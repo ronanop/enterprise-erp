@@ -20,7 +20,7 @@ export function AssetsPipelineFunnel({ counts, loading }: AssetsPipelineFunnelPr
   return (
     <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-baseline justify-between gap-2">
-        <h2 className="text-sm font-medium tracking-tight">Asset lifecycle</h2>
+        <h2 className="text-base font-extrabold tracking-tight">Asset lifecycle</h2>
         <p className="text-[11px] text-muted-foreground">Category → Disposal (FRD-12)</p>
       </div>
       <ol className="grid gap-2 sm:grid-cols-3 xl:grid-cols-6">
@@ -39,7 +39,7 @@ export function AssetsPipelineFunnel({ counts, loading }: AssetsPipelineFunnelPr
                   {String(index + 1).padStart(2, "0")} · {stage.title}
                 </p>
                 <p className="mt-1 font-mono text-lg font-medium tabular-nums text-foreground">
-                  {loading ? "—" : stage.count}
+                  {loading ? "-" : stage.count}
                 </p>
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
                   <div

@@ -132,7 +132,7 @@ export function IntegrationDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="Integration"
-        description="Integration hub — external systems, connectors, webhooks, events, queues, sync jobs, and rate limits."
+        description="Integration hub - external systems, connectors, webhooks, events, queues, sync jobs, and rate limits."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -179,28 +179,28 @@ export function IntegrationDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Active systems"
-          value={loading ? "—" : String(kpis.activeSystems)}
+          value={loading ? "-" : String(kpis.activeSystems)}
           hint={`${data?.systems.length ?? 0} systems · ${data?.credentials.length ?? 0} credentials`}
           icon={Server}
           tone={kpis.activeSystems > 0 ? "success" : "default"}
         />
         <FinanceKpiCard
           label="Active connectors"
-          value={loading ? "—" : String(kpis.activeConnectors)}
+          value={loading ? "-" : String(kpis.activeConnectors)}
           hint={`${data?.connectors.length ?? 0} connectors · ${data?.oauthClients.length ?? 0} OAuth`}
           icon={Cable}
           tone={kpis.activeConnectors > 0 ? "success" : "default"}
         />
         <FinanceKpiCard
           label="Active webhooks"
-          value={loading ? "—" : String(kpis.activeWebhooks)}
+          value={loading ? "-" : String(kpis.activeWebhooks)}
           hint={`${data?.webhooks.length ?? 0} webhooks · ${data?.events.length ?? 0} events`}
           icon={Webhook}
           tone={kpis.activeWebhooks > 0 ? "default" : "success"}
         />
         <FinanceKpiCard
           label="Sync jobs"
-          value={loading ? "—" : String(kpis.syncJobs)}
+          value={loading ? "-" : String(kpis.syncJobs)}
           hint={`${countByStatus(data?.syncJobs ?? [], ["succeeded"])} succeeded · ${data?.deadLetters.length ?? 0} DLQ`}
           icon={RefreshCw}
           tone={
@@ -243,7 +243,7 @@ export function IntegrationDashboard() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium tracking-tight">Workspace</h2>
+          <h2 className="text-base font-extrabold tracking-tight">Workspace</h2>
           <Badge variant="secondary">{integrationWorkspaceGroups.length} areas</Badge>
         </div>
         <div className="grid gap-3 lg:grid-cols-3">
@@ -260,7 +260,7 @@ export function IntegrationDashboard() {
                     <Icon className="size-4" />
                   </span>
                   <div className="min-w-0">
-                    <h3 className="text-sm font-medium tracking-tight">{group.title}</h3>
+                    <h3 className="text-base font-extrabold tracking-tight">{group.title}</h3>
                     <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                       {group.description}
                     </p>
@@ -291,7 +291,7 @@ export function IntegrationDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">External systems</h2>
+              <h2 className="text-base font-extrabold tracking-tight">External systems</h2>
               <p className="text-[11px] text-muted-foreground">Connected endpoints</p>
             </div>
             <Link
@@ -332,17 +332,17 @@ export function IntegrationDashboard() {
                     >
                       <td className="max-w-[220px] truncate px-4 py-2.5">
                         <p className="font-medium text-foreground">
-                          {String(row.system_name ?? row.system_number ?? "—")}
+                          {String(row.system_name ?? row.system_number ?? "-")}
                         </p>
                         <p className="truncate text-[11px] text-muted-foreground">
                           {String(row.system_number ?? "")}
                         </p>
                       </td>
                       <td className="px-4 py-2.5 text-xs capitalize text-muted-foreground">
-                        {String(row.system_type ?? "—").replaceAll("_", " ")}
+                        {String(row.system_type ?? "-").replaceAll("_", " ")}
                       </td>
                       <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                        {String(row.system_code ?? "—")}
+                        {String(row.system_code ?? "-")}
                       </td>
                       <td className="px-4 py-2.5">
                         <FinanceStatusBadge
@@ -360,7 +360,7 @@ export function IntegrationDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Sync watch</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Sync watch</h2>
               <p className="text-[11px] text-muted-foreground">Recent sync jobs</p>
             </div>
             <Link
@@ -385,7 +385,7 @@ export function IntegrationDashboard() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-medium">
-                      {String(row.sync_number ?? "—")}
+                      {String(row.sync_number ?? "-")}
                     </p>
                     <FinanceStatusBadge
                       status={asStatus(row.status) || String(row.status ?? "")}
@@ -393,7 +393,7 @@ export function IntegrationDashboard() {
                   </div>
                   <p className="mt-1 text-[11px] text-muted-foreground">
                     {String(row.sync_mode ?? "sync").replaceAll("_", " ")} ·{" "}
-                    {String(row.direction ?? "—")} · {String(row.rows_processed ?? 0)} rows
+                    {String(row.direction ?? "-")} · {String(row.rows_processed ?? 0)} rows
                   </p>
                 </li>
               ))
@@ -403,7 +403,7 @@ export function IntegrationDashboard() {
 
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
           <div className="mb-3">
-            <h2 className="text-sm font-medium tracking-tight">System type mix</h2>
+            <h2 className="text-base font-extrabold tracking-tight">System type mix</h2>
             <p className="text-[11px] text-muted-foreground">FRD-21 §5 integrations</p>
           </div>
           {loading ? (

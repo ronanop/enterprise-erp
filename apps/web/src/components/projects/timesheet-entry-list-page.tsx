@@ -87,7 +87,7 @@ export function TimesheetEntryListPage() {
         key: "description",
         label: "Description",
         sort: (r) => r.description,
-        cell: (r) => r.description ?? "—",
+        cell: (r) => r.description ?? "-",
       },
       {
         key: "status",

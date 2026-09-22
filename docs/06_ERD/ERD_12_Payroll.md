@@ -1,13 +1,13 @@
-# ERD_12 — Payroll Management Domain
+# ERD_12 - Payroll Management Domain
 
-**Document:** Enterprise ERD — Payroll Management Domain  
+**Document:** Enterprise ERD - Payroll Management Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 12 Implementation Planning  
+**Status:** Locked - Ready for Sprint 12 Implementation Planning  
 **Schema:** `payroll`  
 **Table Prefix:** `pay_`  
 **Aligned To:** BRD v1.0 · FRD-10 · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-10 Payroll Domain](../02_FRD/FRD-10-Payroll-Domain.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.6-beta](../07_RELEASES/ERP_Core_v1.6-beta.md)  
 
 ---
@@ -16,11 +16,11 @@
 
 The Payroll Management Domain manages **employee compensation computation, statutory compliance, payslip generation, and accounting event export** for a multi-company ERP. Payroll executes the compensation lifecycle after HR has established employment / attendance / leave facts and Master Data has established employee identity.
 
-Payroll **depends on** Foundation, Organization, Master Data, Finance, and HR. For operational payroll inputs it **consumes HR only** for employment, attendance, and leave — it **must never duplicate** employee, department, attendance, or leave masters/tables. Authoritative employee identity remains **`master_employee` (C-01)**. Department structure remains **`org_department`**.
+Payroll **depends on** Foundation, Organization, Master Data, Finance, and HR. For operational payroll inputs it **consumes HR only** for employment, attendance, and leave - it **must never duplicate** employee, department, attendance, or leave masters/tables. Authoritative employee identity remains **`master_employee` (C-01)**. Department structure remains **`org_department`**.
 
 **Finance remains the only accounting system.** Payroll never ORM-writes `fin_*` tables. GL posting occurs **only** through `PostingService.post_system_journal()`. Payroll stores accounting cross-refs (`finance_journal_id`) and posting intent rows in `pay_payroll_posting`.
 
-Inventory, Manufacturing, Procurement, CRM, and Quality remain **isolated** — no `inv_*` / `mfg_*` / `proc_*` / `crm_*` / `qm_*` FKs or writes.
+Inventory, Manufacturing, Procurement, CRM, and Quality remain **isolated** - no `inv_*` / `mfg_*` / `proc_*` / `crm_*` / `qm_*` FKs or writes.
 
 **Business Tables: 20**  
 **Schema: `payroll`**
@@ -61,25 +61,25 @@ Bank file export (Phase 1 meta) · BI (future)
 ## 2. Scope
 
 ### In Scope
-- **Payroll periods** (open → processing → approved → closed) — FRD-10 §6
-- **Salary structures** with structure lines linked to catalog components — FRD-10 §4
-- **Salary / earning / deduction component catalogs** — FRD-10 §5, §8, §9
-- **Employee salary assignment** (effective dating) + component overrides — FRD-10 §4
-- **Payroll run** generation from HR employment / attendance / leave + salary + loans + reimbursements + bonuses + adjustments — FRD-10 §7
-- **Payslip** generation and issuance metadata — FRD-10 §13
-- **Tax configuration** (slabs / professional tax / income tax parameters as structured JSONB Phase 1) — FRD-10 §12
-- **Statutory contributions** (PF / ESI / similar employer+employee rates) — FRD-10 §5, §12
-- **Bonus**, **reimbursement**, **payroll adjustment** with workflow where required — FRD-10 §8, §11
-- **Loans / advances** and **installment** recovery schedule — FRD-10 §10
-- **Payroll posting** orchestration row calling Finance `PostingService` — FRD-10 §15
-- **Payroll summary** aggregates per run / period / department for reports — FRD-10 §23
+- **Payroll periods** (open → processing → approved → closed) - FRD-10 §6
+- **Salary structures** with structure lines linked to catalog components - FRD-10 §4
+- **Salary / earning / deduction component catalogs** - FRD-10 §5, §8, §9
+- **Employee salary assignment** (effective dating) + component overrides - FRD-10 §4
+- **Payroll run** generation from HR employment / attendance / leave + salary + loans + reimbursements + bonuses + adjustments - FRD-10 §7
+- **Payslip** generation and issuance metadata - FRD-10 §13
+- **Tax configuration** (slabs / professional tax / income tax parameters as structured JSONB Phase 1) - FRD-10 §12
+- **Statutory contributions** (PF / ESI / similar employer+employee rates) - FRD-10 §5, §12
+- **Bonus**, **reimbursement**, **payroll adjustment** with workflow where required - FRD-10 §8, §11
+- **Loans / advances** and **installment** recovery schedule - FRD-10 §10
+- **Payroll posting** orchestration row calling Finance `PostingService` - FRD-10 §15
+- **Payroll summary** aggregates per run / period / department for reports - FRD-10 §23
 - Workflow, audit, RBAC, notifications, Celery stubs (planning)
 
 ### Out of Scope (Phase 2 / Separate)
-- Full **bank transfer / payment file** registry tables (`pay_bank_transfer`) — Phase 1: payment status / export URI on payslip
-- Full **tax declaration / Form-16 annual pack** document suite — Phase 1: `pay_tax_configuration` only
+- Full **bank transfer / payment file** registry tables (`pay_bank_transfer`) - Phase 1: payment status / export URI on payslip
+- Full **tax declaration / Form-16 annual pack** document suite - Phase 1: `pay_tax_configuration` only
 - Country-specific statutory engines beyond configurable rates (India PF/ESI/PT baseline)
-- Duplicate `pay_employee` / `pay_department` / `pay_attendance` / `pay_leave` — **forbidden (C-01 / HR ownership)**
+- Duplicate `pay_employee` / `pay_department` / `pay_attendance` / `pay_leave` - **forbidden (C-01 / HR ownership)**
 - Direct writes to `fin_*`, `hr_*` (except read), `inv_*`, `mfg_*`, `proc_*`, `crm_*`, `qm_*`, `sales_*`
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 - Analytics cubes / `ana_fact_payroll`
@@ -91,7 +91,7 @@ Bank file export (Phase 1 meta) · BI (future)
 - One open / processing run per `(company_id, payroll_period_id)` (service-enforced)
 - Branch mandatory on transactional documents; catalogs company-scoped
 - Document numbers company-scoped
-- Period close blocked until posting succeeded (or explicitly waived by Finance role — service rule)
+- Period close blocked until posting succeeded (or explicitly waived by Finance role - service rule)
 
 ### Dependencies
 
@@ -100,7 +100,7 @@ Bank file export (Phase 1 meta) · BI (future)
 | ERD_01 Foundation | `sec_tenant`, `sec_user`, `wf_definition`, `wf_instance` |
 | ERD_02 Organization | `org_company`, `org_branch`, `org_department` |
 | ERD_03 Master Data | **`master_employee`** (C-01) via FK |
-| ERD_04 Finance | `PostingService.post_system_journal()`; optional FK refs to `fin_journal_header`, `fin_period`, `fin_chart_of_account` for mapping — **no direct fin writes** |
+| ERD_04 Finance | `PostingService.post_system_journal()`; optional FK refs to `fin_journal_header`, `fin_period`, `fin_chart_of_account` for mapping - **no direct fin writes** |
 | ERD_11 HR | Read employment / attendance / leave facts via **HR application services / integration read ports** |
 
 ---
@@ -109,26 +109,26 @@ Bank file export (Phase 1 meta) · BI (future)
 
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
-| 1 | `pay_payroll_period` | Calendar Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 2 | `pay_salary_structure` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 3 | `pay_salary_component` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 4 | `pay_salary_structure_line` | Catalog Detail | ✅ | ✅ | — | ✅ | ✅ | — |
-| 5 | `pay_employee_salary` | Assignment | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 6 | `pay_employee_salary_component` | Assignment Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 7 | `pay_earning_type` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 8 | `pay_deduction_type` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 1 | `pay_payroll_period` | Calendar Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 2 | `pay_salary_structure` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 3 | `pay_salary_component` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 4 | `pay_salary_structure_line` | Catalog Detail | ✅ | ✅ | - | ✅ | ✅ | - |
+| 5 | `pay_employee_salary` | Assignment | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 6 | `pay_employee_salary_component` | Assignment Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 7 | `pay_earning_type` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 8 | `pay_deduction_type` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 9 | `pay_payroll_run` | Transaction Header | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 10 | `pay_payroll_run_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 11 | `pay_payslip` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 12 | `pay_tax_configuration` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 13 | `pay_statutory_contribution` | Catalog / Rate | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 10 | `pay_payroll_run_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 11 | `pay_payslip` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 12 | `pay_tax_configuration` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 13 | `pay_statutory_contribution` | Catalog / Rate | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 14 | `pay_bonus` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 15 | `pay_reimbursement` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 16 | `pay_loan` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 17 | `pay_loan_installment` | Schedule Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 18 | `pay_payroll_adjustment` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 17 | `pay_loan_installment` | Schedule Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 18 | `pay_payroll_adjustment` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 19 | `pay_payroll_posting` | Integration | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 20 | `pay_payroll_summary` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 20 | `pay_payroll_summary` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | - |
 
 **Business Tables: 20**  
 **Schema: `payroll`**
@@ -235,10 +235,10 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 | `id` | UUID | NO | PK |
 | `tenant_id` / `company_id` | UUID | NO | Scope |
 | `branch_id` | UUID | YES | Optional |
-| `period_code` | VARCHAR(50) | NO | UK — `PP-YYYY-MM` |
-| `period_name` | VARCHAR(255) | NO | — |
+| `period_code` | VARCHAR(50) | NO | UK - `PP-YYYY-MM` |
+| `period_name` | VARCHAR(255) | NO | - |
 | `payroll_year` | SMALLINT | NO | Calendar / fiscal pay year |
-| `payroll_month` | SMALLINT | NO | 1–12 |
+| `payroll_month` | SMALLINT | NO | 1-12 |
 | `start_date` / `end_date` | DATE | NO | Attendance cut-off window |
 | `payment_date` | DATE | YES | Planned credit date |
 | `status` | VARCHAR(30) | NO | open, processing, approved, closed, cancelled |
@@ -253,8 +253,8 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 
 | Column | Notes |
 |--------|-------|
-| `structure_code` | UK — `SAL-…` — FRD-10 §4 |
-| `structure_name` | — |
+| `structure_code` | UK - `SAL-…` - FRD-10 §4 |
+| `structure_name` | - |
 | `effective_from` / `effective_to` | DATE |
 | `currency_code` | VARCHAR(10) |
 | `status` | draft, active, inactive |
@@ -265,8 +265,8 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 
 | Column | Notes |
 |--------|-------|
-| `component_code` | UK — BASIC, HRA, PF, … |
-| `component_name` | — |
+| `component_code` | UK - BASIC, HRA, PF, … |
+| `component_name` | - |
 | `component_class` | earning, deduction, employer_contribution |
 | `earning_type_id` / `deduction_type_id` | FK optional (XOR by class) |
 | `calculation_method` | fixed, percentage, formula |
@@ -298,7 +298,7 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 | `document_number` | `ESAL-YYYY-NNNNNN` optional |
 | `employee_id` | FK → `master_employee` |
 | `salary_structure_id` | FK |
-| `employment_id` | UUID — HR `hr_employment.id` **UUID ref (prefer FK if Sprint policy allows peer FK)** |
+| `employment_id` | UUID - HR `hr_employment.id` **UUID ref (prefer FK if Sprint policy allows peer FK)** |
 | `department_id` | FK → `org_department` optional snapshot |
 | `effective_from` / `effective_to` | DATE |
 | `ctc_amount` / `gross_amount` | NUMERIC |
@@ -318,7 +318,7 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 | `employee_id` | FK (denormalized) |
 | `salary_component_id` | FK |
 | `amount` / `percent` | NUMERIC |
-| `override_flag` | BOOLEAN — employee-level override of structure default |
+| `override_flag` | BOOLEAN - employee-level override of structure default |
 | `status` | active, inactive |
 | **UK:** `(employee_salary_id, salary_component_id)` |
 
@@ -328,8 +328,8 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 
 | Column | Notes |
 |--------|-------|
-| `earning_type_code` | UK — FIXED, VARIABLE, OVERTIME, BONUS, … |
-| `earning_type_name` | — |
+| `earning_type_code` | UK - FIXED, VARIABLE, OVERTIME, BONUS, … |
+| `earning_type_name` | - |
 | `is_recurring` | BOOLEAN |
 | `status` | active, inactive |
 
@@ -339,8 +339,8 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 
 | Column | Notes |
 |--------|-------|
-| `deduction_type_code` | UK — STATUTORY, VOLUNTARY, RECOVERY, … |
-| `deduction_type_name` | — |
+| `deduction_type_code` | UK - STATUTORY, VOLUNTARY, RECOVERY, … |
+| `deduction_type_name` | - |
 | `is_statutory` | BOOLEAN |
 | `status` | active, inactive |
 
@@ -358,7 +358,7 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 | `total_gross` / `total_deduction` / `total_net` / `total_employer_cost` | NUMERIC |
 | `currency_code` | VARCHAR(10) |
 | `status` | draft, calculated, submitted, approved, posted, paid, cancelled |
-| `workflow_*` | Payroll approval — FRD-10 §17 |
+| `workflow_*` | Payroll approval - FRD-10 §17 |
 | On calculate: read HR attendance / leave / employment via HR services; snapshot LOP / paid days on lines |
 
 ---
@@ -372,7 +372,7 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 | `employee_salary_id` | FK optional |
 | `department_id` | FK → `org_department` optional |
 | `employment_id` | UUID HR ref |
-| `paid_days` / `lop_days` / `leave_days` | NUMERIC(9,2) — from HR facts |
+| `paid_days` / `lop_days` / `leave_days` | NUMERIC(9,2) - from HR facts |
 | `gross_earnings` / `total_deductions` / `net_pay` / `employer_contribution` | NUMERIC |
 | `component_breakdown_json` | JSONB Phase 1 component amounts |
 | `status` | calculated, adjusted, locked, cancelled |
@@ -383,7 +383,7 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 
 | Column | Notes |
 |--------|-------|
-| `document_number` | `PS-YYYY-NNNNNN` — FRD-10 §13 |
+| `document_number` | `PS-YYYY-NNNNNN` - FRD-10 §13 |
 | `payroll_run_id` / `payroll_run_line_id` | FKs |
 | `employee_id` | FK |
 | `payroll_period_id` | FK |
@@ -401,11 +401,11 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 
 | Column | Notes |
 |--------|-------|
-| `tax_config_code` | UK — `TAX-IN-YYYY` |
-| `tax_config_name` | — |
+| `tax_config_code` | UK - `TAX-IN-YYYY` |
+| `tax_config_name` | - |
 | `tax_type` | income_tax, professional_tax, other |
 | `effective_from` / `effective_to` | DATE |
-| `slabs_json` | JSONB array `{from,to,rate}` Phase 1 — FRD-10 §12 |
+| `slabs_json` | JSONB array `{from,to,rate}` Phase 1 - FRD-10 §12 |
 | `status` | draft, active, archived |
 
 ---
@@ -414,8 +414,8 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 
 | Column | Notes |
 |--------|-------|
-| `contribution_code` | UK — PF, ESI, … |
-| `contribution_name` | — |
+| `contribution_code` | UK - PF, ESI, … |
+| `contribution_name` | - |
 | `employee_rate_percent` / `employer_rate_percent` | NUMERIC(9,4) |
 | `wage_ceiling_amount` | NUMERIC optional |
 | `effective_from` / `effective_to` | DATE |
@@ -445,10 +445,10 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 | `document_number` | `REIM-YYYY-NNNNNN` |
 | `employee_id` | FK |
 | `payroll_period_id` | FK optional |
-| `reimbursement_type` | travel, internet, medical, training, mobile, other — FRD-10 §11 |
+| `reimbursement_type` | travel, internet, medical, training, mobile, other - FRD-10 §11 |
 | `claim_amount` / `approved_amount` | NUMERIC |
 | `status` | draft, submitted, manager_approved, finance_approved, paid, rejected, cancelled |
-| `workflow_*` | Reimbursement path (Employee → Manager → Finance) — may share bonus-style seed or dedicated WF in Phase 1.5 |
+| `workflow_*` | Reimbursement path (Employee → Manager → Finance) - may share bonus-style seed or dedicated WF in Phase 1.5 |
 
 > Phase 1 workflow seed focuses on Payroll / Posting / Bonus / Loan per ERD gate; reimbursement may use `PAY_BONUS_APPROVAL`-equivalent or `PAY_REIMBURSEMENT_APPROVAL` if revision budget allows (document as optional seed extension).
 
@@ -460,13 +460,13 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 |--------|-------|
 | `document_number` | `LOAN-YYYY-NNNNNN` |
 | `employee_id` | FK |
-| `loan_type` | personal, salary_advance, emergency — FRD-10 §10 |
+| `loan_type` | personal, salary_advance, emergency - FRD-10 §10 |
 | `principal_amount` / `emi_amount` / `interest_rate` | NUMERIC |
 | `installment_count` | SMALLINT |
 | `start_date` / `end_date` | DATE |
 | `outstanding_amount` | NUMERIC |
 | `status` | draft, submitted, approved, active, closed, rejected, cancelled |
-| `workflow_*` | Loan approval — FRD-10 §17 |
+| `workflow_*` | Loan approval - FRD-10 §17 |
 
 ---
 
@@ -512,7 +512,7 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 | `posting_type` | salary_expense, salary_payment |
 | `debit_total` / `credit_total` | NUMERIC |
 | `finance_journal_id` | UUID FK → `fin_journal_header` **after** successful PostingService call |
-| `idempotency_key` | VARCHAR(100) — `(source_module=payroll, source_document_type, source_document_id)` |
+| `idempotency_key` | VARCHAR(100) - `(source_module=payroll, source_document_type, source_document_id)` |
 | `status` | draft, submitted, posted, failed, reversed |
 | `workflow_*` | Payroll posting approval |
 | `error_message` | TEXT optional |
@@ -581,7 +581,7 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 | Org scope | `tenant_id`, `company_id`, `branch_id` | foundation / organization |
 
 **No FK to:** `inv_*`, `mfg_*`, `proc_*`, `crm_*`, `qm_*`, `sales_*`.  
-**HR:** `employment_id` stored as UUID referencing `hr.hr_employment` — prefer **UUID without FK** (application integrity via HR service) to keep HR read-adapter pattern clean; optional FK allowed if implementation sprint locks peer-schema FKs.
+**HR:** `employment_id` stored as UUID referencing `hr.hr_employment` - prefer **UUID without FK** (application integrity via HR service) to keep HR read-adapter pattern clean; optional FK allowed if implementation sprint locks peer-schema FKs.
 
 **No Payroll duplicates of:** `master_employee`, `org_department`, `hr_attendance`, `hr_leave_*`, `hr_employment` as master tables.
 
@@ -668,7 +668,7 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 |-------|-----------|
 | Row audit | Standard columns on all mutable pay tables |
 | Business audit | `AuditService` on run calculate/approve, posting success/fail, loan approve, bonus approve, salary structure activate |
-| Notifications | Payroll processed, payslip generated, loan approved, reimbursement approved, salary paid — FRD-10 §18 |
+| Notifications | Payroll processed, payslip generated, loan approved, reimbursement approved, salary paid - FRD-10 §18 |
 
 ---
 
@@ -702,7 +702,7 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 |------|--------|
 | `PAYROLL_EXECUTIVE` | Calculate runs, maintain structures, ESS support ops |
 | `PAYROLL_MANAGER` | Approve runs, bonuses, loans; submit posting |
-| `HR_PAYROLL_ADMIN` | Cross HR–Payroll admin (structures, loans, bonus) |
+| `HR_PAYROLL_ADMIN` | Cross HR-Payroll admin (structures, loans, bonus) |
 | `FINANCE_PAYROLL_REVIEWER` | Approve / execute payroll posting; period financial review |
 
 ---
@@ -711,7 +711,7 @@ Finance (write via PostingService only): fin_journal_header (ref stored)
 
 Prior Alembic head: **`0178_seed_hr_workflows`**.
 
-Revision budget **`0179`–`0200` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`pay_earning_type` and `pay_deduction_type` share one migration**.
+Revision budget **`0179`-`0200` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`pay_earning_type` and `pay_deduction_type` share one migration**.
 
 | Order | Revision ID (≤32 chars) | Migration | Tables / Actions |
 |-------|-------------------------|-----------|------------------|
@@ -753,7 +753,7 @@ Revision budget **`0179`–`0200` (22 revisions)**. Schema + 20 tables + permiss
 | Foundation | tenant, user, workflow, audit, RBAC, notification | Direct FK / services |
 | Organization | company, branch, **department** | Direct FK |
 | Master Data | **`master_employee`** | Direct FK (C-01) |
-| HR | employment, attendance, leave **facts** | **HR services / integration read ports only** — no HR table duplication; no HR writes |
+| HR | employment, attendance, leave **facts** | **HR services / integration read ports only** - no HR table duplication; no HR writes |
 | Finance | COA / period validation; **`PostingService.post_system_journal()`** | Adapter only; store `finance_journal_id` |
 
 ### 16.2 Downstream
@@ -779,25 +779,25 @@ Revision budget **`0179`–`0200` (22 revisions)**. Schema + 20 tables + permiss
 
 | # | Gate Criterion | Status |
 |---|----------------|--------|
-| 1 | Business tables = **20** (within 18–20); schema = **`payroll`** | ✅ |
+| 1 | Business tables = **20** (within 18-20); schema = **`payroll`** | ✅ |
 | 2 | Prefix `pay_` defined | ✅ |
 | 3 | Aligned to FRD-10 (structures, runs, payslips, loans, tax/statutory, posting) | ✅ |
 | 4 | No duplicate employee / department / attendance / leave masters | ✅ |
 | 5 | Consumes HR for operational facts; Master Data for identity | ✅ |
 | 6 | Finance posting only via PostingService | ✅ |
-| 7 | Migration order `0179`–`0200`, revision IDs ≤ 32 chars | ✅ |
+| 7 | Migration order `0179`-`0200`, revision IDs ≤ 32 chars | ✅ |
 | 8 | Workflows + RBAC + audit documented | ✅ |
 | 9 | Bank transfer registry / full tax declaration deferred without blocking Sprint 12 | ✅ |
 | 10 | No Architecture Lock changes; Architecture Lock v1.1 preserved | ✅ |
 
-### ERD Phase Gate — Payroll Summary
+### ERD Phase Gate - Payroll Summary
 
 | Metric | Value |
 |--------|-------|
 | Business Tables | **20** |
 | Schema | **`payroll`** |
 | Prefix | `pay_` |
-| Migration range | `0179` – `0200` |
+| Migration range | `0179` - `0200` |
 | Prior head | `0178_seed_hr_workflows` |
 | Planned head | `0200_seed_payroll_workflows` |
 

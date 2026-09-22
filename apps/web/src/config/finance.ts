@@ -1,5 +1,5 @@
 /**
- * Finance workspace config — aligned with FRD-04 screen inventory
+ * Finance workspace config - aligned with FRD-04 screen inventory
  * and apps/api finance routers.
  */
 
@@ -105,6 +105,20 @@ export const financeReportTabs: FinanceReportTab[] = [
     href: "/finance/reports/cash-flow",
   },
   {
+    key: "cash-flow-forecast",
+    title: "Cash Flow Forecast",
+    description: "Rolling weekly cash position from receivables, payables and committed POs",
+    apiPath: "/finance/reports/cash-flow-forecast",
+    href: "/finance/reports/cash-flow-forecast",
+  },
+  {
+    key: "treasury-suggestions",
+    title: "Surplus Cash Suggestions",
+    description: "Where to deploy spare cash, ranked by return",
+    apiPath: "/finance/reports/treasury-suggestions",
+    href: "/finance/reports/treasury-suggestions",
+  },
+  {
     key: "general-ledger",
     title: "General Ledger Report",
     description: "Printable GL with account and date filters",
@@ -202,6 +216,18 @@ export const financeQuickLinks = [
     title: "Cash Flow",
     href: "/finance/reports/cash-flow",
     description: "Cash movements",
+    icon: Wallet,
+  },
+  {
+    title: "Cash Flow Forecast",
+    href: "/finance/reports/cash-flow-forecast",
+    description: "Rolling weekly position",
+    icon: Wallet,
+  },
+  {
+    title: "Surplus Cash Suggestions",
+    href: "/finance/reports/treasury-suggestions",
+    description: "Where to deploy spare cash",
     icon: Wallet,
   },
   {

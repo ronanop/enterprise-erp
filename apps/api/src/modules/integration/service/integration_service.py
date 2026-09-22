@@ -1,4 +1,4 @@
-"""Integration Hub peer port — C-01 masters + org; Finance event-ref ONLY.
+"""Integration Hub peer port - C-01 masters + org; Finance event-ref ONLY.
 
 NEVER uses PostingService. NEVER writes fin_* or peer operational tables.
 Peers communicate via events / REST / webhooks / UUID only.

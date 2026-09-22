@@ -1,4 +1,4 @@
-"""Document integration — cross-module reads / UUID stubs; no peer ORM writes."""
+"""Document integration - cross-module reads / UUID stubs; no peer ORM writes."""
 
 from uuid import UUID
 

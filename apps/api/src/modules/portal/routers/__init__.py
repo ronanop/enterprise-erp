@@ -101,7 +101,7 @@ from modules.portal.service import (
 )
 from shared.schemas import APIResponse
 
-portal_accounts_router = APIRouter(prefix="/portal-accounts", tags=["Portal — PortalAccount"])
+portal_accounts_router = APIRouter(prefix="/portal-accounts", tags=["Portal - PortalAccount"])
 
 @portal_accounts_router.get("", response_model=APIResponse[list[PortalAccountResponse]])
 def list_portal_accounts(
@@ -154,7 +154,7 @@ def approve_portal_accounts(
 ):
     return APIResponse(message="approve", data=PortalAccountService(db).approve(ctx, row_id))
 
-customer_profiles_router = APIRouter(prefix="/customer-profiles", tags=["Portal — CustomerProfile"])
+customer_profiles_router = APIRouter(prefix="/customer-profiles", tags=["Portal - CustomerProfile"])
 
 @customer_profiles_router.get("", response_model=APIResponse[list[CustomerProfileResponse]])
 def list_customer_profiles(
@@ -207,7 +207,7 @@ def approve_customer_profiles(
 ):
     return APIResponse(message="approve", data=CustomerProfileService(db).approve(ctx, row_id))
 
-portal_sessions_router = APIRouter(prefix="/portal-sessions", tags=["Portal — PortalSession"])
+portal_sessions_router = APIRouter(prefix="/portal-sessions", tags=["Portal - PortalSession"])
 
 @portal_sessions_router.get("", response_model=APIResponse[list[PortalSessionResponse]])
 def list_portal_sessions(
@@ -244,7 +244,7 @@ def update_portal_sessions(
 ):
     return APIResponse(message="Updated", data=PortalSessionService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-dashboards_router = APIRouter(prefix="/dashboards", tags=["Portal — Dashboard"])
+dashboards_router = APIRouter(prefix="/dashboards", tags=["Portal - Dashboard"])
 
 @dashboards_router.get("", response_model=APIResponse[list[DashboardResponse]])
 def list_dashboards(
@@ -281,7 +281,7 @@ def update_dashboards(
 ):
     return APIResponse(message="Updated", data=DashboardService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-dashboard_widgets_router = APIRouter(prefix="/dashboard-widgets", tags=["Portal — DashboardWidget"])
+dashboard_widgets_router = APIRouter(prefix="/dashboard-widgets", tags=["Portal - DashboardWidget"])
 
 @dashboard_widgets_router.get("", response_model=APIResponse[list[DashboardWidgetResponse]])
 def list_dashboard_widgets(
@@ -318,7 +318,7 @@ def update_dashboard_widgets(
 ):
     return APIResponse(message="Updated", data=DashboardWidgetService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-notifications_router = APIRouter(prefix="/notifications", tags=["Portal — Notification"])
+notifications_router = APIRouter(prefix="/notifications", tags=["Portal - Notification"])
 
 @notifications_router.get("", response_model=APIResponse[list[NotificationResponse]])
 def list_notifications(
@@ -363,7 +363,7 @@ def acknowledge_notifications(
 ):
     return APIResponse(message="acknowledge", data=NotificationService(db).acknowledge(ctx, row_id))
 
-message_threads_router = APIRouter(prefix="/message-threads", tags=["Portal — MessageThread"])
+message_threads_router = APIRouter(prefix="/message-threads", tags=["Portal - MessageThread"])
 
 @message_threads_router.get("", response_model=APIResponse[list[MessageThreadResponse]])
 def list_message_threads(
@@ -400,7 +400,7 @@ def update_message_threads(
 ):
     return APIResponse(message="Updated", data=MessageThreadService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-messages_router = APIRouter(prefix="/messages", tags=["Portal — Message"])
+messages_router = APIRouter(prefix="/messages", tags=["Portal - Message"])
 
 @messages_router.get("", response_model=APIResponse[list[MessageResponse]])
 def list_messages(
@@ -437,7 +437,7 @@ def update_messages(
 ):
     return APIResponse(message="Updated", data=MessageService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-order_views_router = APIRouter(prefix="/order-views", tags=["Portal — OrderView"])
+order_views_router = APIRouter(prefix="/order-views", tags=["Portal - OrderView"])
 
 @order_views_router.get("", response_model=APIResponse[list[OrderViewResponse]])
 def list_order_views(
@@ -474,7 +474,7 @@ def update_order_views(
 ):
     return APIResponse(message="Updated", data=OrderViewService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-invoice_views_router = APIRouter(prefix="/invoice-views", tags=["Portal — InvoiceView"])
+invoice_views_router = APIRouter(prefix="/invoice-views", tags=["Portal - InvoiceView"])
 
 @invoice_views_router.get("", response_model=APIResponse[list[InvoiceViewResponse]])
 def list_invoice_views(
@@ -511,7 +511,7 @@ def update_invoice_views(
 ):
     return APIResponse(message="Updated", data=InvoiceViewService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-document_accesses_router = APIRouter(prefix="/document-accesses", tags=["Portal — DocumentAccess"])
+document_accesses_router = APIRouter(prefix="/document-accesses", tags=["Portal - DocumentAccess"])
 
 @document_accesses_router.get("", response_model=APIResponse[list[DocumentAccessResponse]])
 def list_document_accesses(
@@ -564,7 +564,7 @@ def approve_document_accesses(
 ):
     return APIResponse(message="approve", data=DocumentAccessService(db).approve(ctx, row_id))
 
-support_tickets_router = APIRouter(prefix="/support-tickets", tags=["Portal — SupportTicket"])
+support_tickets_router = APIRouter(prefix="/support-tickets", tags=["Portal - SupportTicket"])
 
 @support_tickets_router.get("", response_model=APIResponse[list[SupportTicketResponse]])
 def list_support_tickets(
@@ -609,7 +609,7 @@ def submit_support_tickets(
 ):
     return APIResponse(message="submit", data=SupportTicketService(db).submit(ctx, row_id))
 
-service_requests_router = APIRouter(prefix="/service-requests", tags=["Portal — ServiceRequest"])
+service_requests_router = APIRouter(prefix="/service-requests", tags=["Portal - ServiceRequest"])
 
 @service_requests_router.get("", response_model=APIResponse[list[ServiceRequestResponse]])
 def list_service_requests(
@@ -654,7 +654,7 @@ def submit_service_requests(
 ):
     return APIResponse(message="submit", data=ServiceRequestService(db).submit(ctx, row_id))
 
-download_histories_router = APIRouter(prefix="/download-histories", tags=["Portal — DownloadHistory"])
+download_histories_router = APIRouter(prefix="/download-histories", tags=["Portal - DownloadHistory"])
 
 @download_histories_router.get("", response_model=APIResponse[list[DownloadHistoryResponse]])
 def list_download_histories(
@@ -691,7 +691,7 @@ def update_download_histories(
 ):
     return APIResponse(message="Updated", data=DownloadHistoryService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-saved_reports_router = APIRouter(prefix="/saved-reports", tags=["Portal — SavedReport"])
+saved_reports_router = APIRouter(prefix="/saved-reports", tags=["Portal - SavedReport"])
 
 @saved_reports_router.get("", response_model=APIResponse[list[SavedReportResponse]])
 def list_saved_reports(
@@ -728,7 +728,7 @@ def update_saved_reports(
 ):
     return APIResponse(message="Updated", data=SavedReportService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-saved_searches_router = APIRouter(prefix="/saved-searches", tags=["Portal — SavedSearch"])
+saved_searches_router = APIRouter(prefix="/saved-searches", tags=["Portal - SavedSearch"])
 
 @saved_searches_router.get("", response_model=APIResponse[list[SavedSearchResponse]])
 def list_saved_searches(
@@ -765,7 +765,7 @@ def update_saved_searches(
 ):
     return APIResponse(message="Updated", data=SavedSearchService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-preferences_router = APIRouter(prefix="/preferences", tags=["Portal — Preference"])
+preferences_router = APIRouter(prefix="/preferences", tags=["Portal - Preference"])
 
 @preferences_router.get("", response_model=APIResponse[list[PreferenceResponse]])
 def list_preferences(
@@ -802,7 +802,7 @@ def update_preferences(
 ):
     return APIResponse(message="Updated", data=PreferenceService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-devices_router = APIRouter(prefix="/devices", tags=["Portal — Device"])
+devices_router = APIRouter(prefix="/devices", tags=["Portal - Device"])
 
 @devices_router.get("", response_model=APIResponse[list[DeviceResponse]])
 def list_devices(
@@ -839,7 +839,7 @@ def update_devices(
 ):
     return APIResponse(message="Updated", data=DeviceService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-login_audits_router = APIRouter(prefix="/login-audits", tags=["Portal — LoginAudit"])
+login_audits_router = APIRouter(prefix="/login-audits", tags=["Portal - LoginAudit"])
 
 @login_audits_router.get("", response_model=APIResponse[list[LoginAuditResponse]])
 def list_login_audits(
@@ -876,7 +876,7 @@ def update_login_audits(
 ):
     return APIResponse(message="Updated", data=LoginAuditService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-reports_router = APIRouter(prefix="/reports", tags=["Portal — PortalReport"])
+reports_router = APIRouter(prefix="/reports", tags=["Portal - PortalReport"])
 
 @reports_router.get("", response_model=APIResponse[list[PortalReportResponse]])
 def list_reports(

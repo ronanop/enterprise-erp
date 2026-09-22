@@ -1,1 +1,1 @@
-"""Organization domain module — Sprint 2."""
+"""Organization domain module - Sprint 2."""

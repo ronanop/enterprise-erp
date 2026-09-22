@@ -1,7 +1,7 @@
 """Master Data domain entities."""
 
-from dataclasses import dataclass
-from datetime import date
+from dataclasses import dataclass, field
+from datetime import date, datetime
 from uuid import UUID
 
 
@@ -57,6 +57,47 @@ class VendorEntity(MasterRecordEntity):
     mobile: str | None = None
     payment_terms: str | None = None
     address_json: dict | None = None
+
+
+@dataclass(kw_only=True)
+class PartyRegistrationEntity(MasterRecordEntity):
+    branch_id: UUID
+    registration_code: str
+    party_type: str
+    legal_name: str
+    kyc_status: str
+    kyc_documents_json: list = field(default_factory=list)
+    trade_name: str | None = None
+    party_subtype: str | None = None
+    tax_number: str | None = None
+    pan_number: str | None = None
+    cin_number: str | None = None
+    contact_person: str | None = None
+    email: str | None = None
+    mobile: str | None = None
+    address_json: dict | None = None
+    bank_details_json: dict | None = None
+    kyc_verified_at: datetime | None = None
+    kyc_verified_by: UUID | None = None
+    declared_annual_turnover: float | None = None
+    requested_credit_limit: float | None = None
+    requested_credit_days: int | None = None
+    expected_monthly_spend: float | None = None
+    early_payment_discount_pct: float | None = None
+    currency_code: str | None = None
+    evaluation_json: dict | None = None
+    assessed_credit_limit: float | None = None
+    assessed_credit_days: int | None = None
+    risk_band: str | None = None
+    evaluated_at: datetime | None = None
+    evaluated_by: UUID | None = None
+    decision_reason: str | None = None
+    decided_at: datetime | None = None
+    decided_by: UUID | None = None
+    source_crm_company_id: UUID | None = None
+    source_kyc_record_id: UUID | None = None
+    customer_id: UUID | None = None
+    vendor_id: UUID | None = None
 
 
 @dataclass(kw_only=True)

@@ -1,4 +1,4 @@
-"""Finance port — PostingService.post_system_journal only; store finance_journal_id."""
+"""Finance port - PostingService.post_system_journal only; store finance_journal_id."""
 
 from datetime import date
 from decimal import Decimal

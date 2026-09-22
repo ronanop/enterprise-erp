@@ -1,1 +1,1 @@
-"""E-Commerce / External Channel module — Sprint 22."""
+"""E-Commerce / External Channel module - Sprint 22."""

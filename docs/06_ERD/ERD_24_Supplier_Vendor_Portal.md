@@ -1,16 +1,16 @@
-# ERD_24 — Supplier / Vendor Portal
+# ERD_24 - Supplier / Vendor Portal
 
-**Document:** Enterprise ERD — Supplier / Vendor Portal Domain  
+**Document:** Enterprise ERD - Supplier / Vendor Portal Domain  
 **Version:** 1.1  
-**Status:** Locked — Ready for Sprint 24 Implementation Planning  
+**Status:** Locked - Ready for Sprint 24 Implementation Planning  
 **Schema:** `vendor_portal`  
 **Table Prefix:** `vp_`  
 **Aligned To:** BRD v1.0 · FRD Supplier / Vendor Portal (planning) · Procurement · Inventory · Finance · Quality · Document · Analytics · Integration Hub · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** Supplier / Vendor Portal (enterprise supplier self-service layer; aligned to Procurement / Inventory / Finance / Quality / Document consumption patterns)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core Customer Portal ERD_23](./ERD_23_Customer_Portal.md)  
 
-> **C-01 note:** Party / item identity remains **`master.master_vendor`**, **`master.master_employee`**, and **`master.master_product`**. Vendor Portal **never** invents parallel masters. This module provides **secure self-service access** for external suppliers / vendors — it **consumes** Procurement · Inventory · Finance · Quality · Document · Analytics · Integration Hub · Organization and **never becomes the system of record**. Peers communicate via **services · events · UUID refs** — **never** via peer ORM writes.
+> **C-01 note:** Party / item identity remains **`master.master_vendor`**, **`master.master_employee`**, and **`master.master_product`**. Vendor Portal **never** invents parallel masters. This module provides **secure self-service access** for external suppliers / vendors - it **consumes** Procurement · Inventory · Finance · Quality · Document · Analytics · Integration Hub · Organization and **never becomes the system of record**. Peers communicate via **services · events · UUID refs** - **never** via peer ORM writes.
 
 ---
 
@@ -20,7 +20,7 @@ The Supplier / Vendor Portal domain provides the **enterprise external supplier 
 
 This module **consumes existing ERP modules**. It **never** becomes RFQ, quotation, purchase-order, receipt, invoice, payment, quality, document, or vendor-master authority. **`master_vendor` remains party identity (C-01)**, **Procurement remains RFQ / PO / quote / AP-invoice authority**, **Inventory remains receipt authority**, **Finance remains payment / accounting authority**, **Quality remains quality authority**, and **Document remains document authority**.
 
-Portal **depends on** Foundation, Organization, and Master Data. It **consumes existing masters only (C-01)** — **`master_vendor`**, **`master_employee`**, **`master_product`**, and **`org_department`**.
+Portal **depends on** Foundation, Organization, and Master Data. It **consumes existing masters only (C-01)** - **`master_vendor`**, **`master_employee`**, **`master_product`**, and **`org_department`**.
 
 **Finance remains the only accounting system.** Portal **never** ORM-writes `fin_*`. Any portal-initiated fee / access charge (if configured) uses **`finance_journal_id`** after **`PostingService.post_system_journal()`** only.
 
@@ -62,7 +62,7 @@ External suppliers / vendors (web / mobile self-service)
 
 ### API Mount (planned)
 
-**`/api/v1/vendor-portal`** — routers for all aggregates (portal-accounts, supplier-profiles, portal-sessions, dashboards, dashboard-widgets, rfq-views, quote-submissions, purchase-order-views, po-acknowledgements, delivery-schedules, asns, invoice-submissions, payment-statuses, document-accesses, notifications, message-threads, messages, preferences, login-audits, reports).
+**`/api/v1/vendor-portal`** - routers for all aggregates (portal-accounts, supplier-profiles, portal-sessions, dashboards, dashboard-widgets, rfq-views, quote-submissions, purchase-order-views, po-acknowledgements, delivery-schedules, asns, invoice-submissions, payment-statuses, document-accesses, notifications, message-threads, messages, preferences, login-audits, reports).
 
 ---
 
@@ -85,33 +85,33 @@ External suppliers / vendors (web / mobile self-service)
 - Workflow, RBAC, Celery stubs (planning)
 
 ### Out of Scope (Phase 2 / Separate)
-- Replacing **Procurement** RFQ / quote / PO / invoice ledgers — Portal envelopes / views only
-- Replacing **Inventory** receipts / stock — ASN is notice envelope; Inventory remains receipt SoR
+- Replacing **Procurement** RFQ / quote / PO / invoice ledgers - Portal envelopes / views only
+- Replacing **Inventory** receipts / stock - ASN is notice envelope; Inventory remains receipt SoR
 - Replacing **Finance** payment / AP / journals
 - Replacing **Quality** NCR / inspection / CAPA systems of record
-- Full **IdP / SSO product** — Phase 1: account + session shells; Federation via Foundation / Hub later
-- Duplicate `vp_vendor` / `vp_employee` / `vp_product` / `vp_department` masters — **forbidden (C-01)**
+- Full **IdP / SSO product** - Phase 1: account + session shells; Federation via Foundation / Hub later
+- Duplicate `vp_vendor` / `vp_employee` / `vp_product` / `vp_department` masters - **forbidden (C-01)**
 - Direct ORM writes to any peer business schema
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 
 ### Business Rules
-1. **Portal consumes data only** — never system of record for RFQ, quote, PO, receipt, invoice, payment, quality, documents, or vendor master
+1. **Portal consumes data only** - never system of record for RFQ, quote, PO, receipt, invoice, payment, quality, documents, or vendor master
 2. **C-01:** vendor / employee / product / department resolve via Master Data / Organization only
-3. **Procurement** remains RFQ / PO / quote / purchase-invoice authority — portal stores Procurement UUIDs; **no `proc_*` ORM writes**
-4. **Inventory** remains receipt authority — `vp_asn` stores inventory / GRN UUID refs after accept; **no `inv_*` ORM writes**
-5. **Finance** remains payment authority — `vp_payment_status` stores finance payment / AP UUID; journals **only** via `PostingService.post_system_journal()`
-6. **Quality** remains quality authority — quality-issue responses via message / service APIs with `qm_*` UUID; **no `qm_*` ORM writes**
-7. **Document** remains document authority — access stores `document_id` UUID only
+3. **Procurement** remains RFQ / PO / quote / purchase-invoice authority - portal stores Procurement UUIDs; **no `proc_*` ORM writes**
+4. **Inventory** remains receipt authority - `vp_asn` stores inventory / GRN UUID refs after accept; **no `inv_*` ORM writes**
+5. **Finance** remains payment authority - `vp_payment_status` stores finance payment / AP UUID; journals **only** via `PostingService.post_system_journal()`
+6. **Quality** remains quality authority - quality-issue responses via message / service APIs with `qm_*` UUID; **no `qm_*` ORM writes**
+7. **Document** remains document authority - access stores `document_id` UUID only
 8. Soft delete + version on mutable `vp_*` tables
 9. Numbers company-scoped (`ACC-` / `PRF-` / `SES-` / `DSH-` / `RFQ-` / `QTE-` / `POV-` / `ACK-` / `DLS-` / `ASN-` / `INV-` / `PAY-` / `DOC-` / `NTF-` / `THR-` / `MSG-` / `AUD-` / `RPT-`)
-10. Passwords / secrets are **vault / hash refs** — never plaintext credentials in DB
-11. Analytics / Integration Hub / peers — UUID / events only — **no peer ORM writes**
+10. Passwords / secrets are **vault / hash refs** - never plaintext credentials in DB
+11. Analytics / Integration Hub / peers - UUID / events only - **no peer ORM writes**
 
 ### Assumptions
 - One `master_vendor` may have one primary `vp_supplier_profile` and one or more `vp_portal_account` users (delegates)
-- `vp_rfq_view` / `vp_purchase_order_view` / `vp_payment_status` are **projections / bookmarks**, refreshed from authoritative modules — not operational ledgers
+- `vp_rfq_view` / `vp_purchase_order_view` / `vp_payment_status` are **projections / bookmarks**, refreshed from authoritative modules - not operational ledgers
 - Quote / PO ack / ASN / invoice submission invoke Procurement / Inventory services and store returned UUIDs
-- Quality issue responses use `vp_message_thread` / `vp_message` (and optional document access) linked to Quality UUIDs — no separate quality SoR table in this 20-table set
+- Quality issue responses use `vp_message_thread` / `vp_message` (and optional document access) linked to Quality UUIDs - no separate quality SoR table in this 20-table set
 - Message thread is parent of messages; migration dual-creates both safely
 
 ### Dependencies
@@ -124,8 +124,8 @@ External suppliers / vendors (web / mobile self-service)
 | Procurement | RFQ / quote / PO / purchase-invoice authority via **service / UUID** |
 | Inventory | Receipt authority via **service / UUID** |
 | Finance | Payment UUID + **`PostingService.post_system_journal()`** only |
-| Quality | NCR / inspection UUID via service — **no Quality ORM writes** |
-| Document | Document UUID — **no Document ORM writes** |
+| Quality | NCR / inspection UUID via service - **no Quality ORM writes** |
+| Document | Document UUID - **no Document ORM writes** |
 | Analytics | Read-only |
 | Integration Hub | External IdP / API transport UUID refs |
 
@@ -137,24 +137,24 @@ External suppliers / vendors (web / mobile self-service)
 |---|-------|----------------|-----------|------------|-------------|---------|----------|
 | 1 | `vp_portal_account` | Identity | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 2 | `vp_supplier_profile` | Profile | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 3 | `vp_portal_session` | Session | ✅ | ✅ | ✅ | ✅ | — |
-| 4 | `vp_dashboard` | Config | ✅ | ✅ | ✅ | ✅ | — |
-| 5 | `vp_dashboard_widget` | Config Detail | ✅ | ✅ | ✅ | ✅ | — |
-| 6 | `vp_rfq_view` | Projection | ✅ | ✅ | ✅ | ✅ | — |
+| 3 | `vp_portal_session` | Session | ✅ | ✅ | ✅ | ✅ | - |
+| 4 | `vp_dashboard` | Config | ✅ | ✅ | ✅ | ✅ | - |
+| 5 | `vp_dashboard_widget` | Config Detail | ✅ | ✅ | ✅ | ✅ | - |
+| 6 | `vp_rfq_view` | Projection | ✅ | ✅ | ✅ | ✅ | - |
 | 7 | `vp_quote_submission` | Portal Envelope | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 8 | `vp_purchase_order_view` | Projection | ✅ | ✅ | ✅ | ✅ | — |
+| 8 | `vp_purchase_order_view` | Projection | ✅ | ✅ | ✅ | ✅ | - |
 | 9 | `vp_po_acknowledgement` | Portal Envelope | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 10 | `vp_delivery_schedule` | Schedule | ✅ | ✅ | ✅ | ✅ | — |
+| 10 | `vp_delivery_schedule` | Schedule | ✅ | ✅ | ✅ | ✅ | - |
 | 11 | `vp_asn` | Portal Envelope | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 12 | `vp_invoice_submission` | Portal Envelope | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 13 | `vp_payment_status` | Projection | ✅ | ✅ | ✅ | ✅ | — |
+| 13 | `vp_payment_status` | Projection | ✅ | ✅ | ✅ | ✅ | - |
 | 14 | `vp_document_access` | Entitlement | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 15 | `vp_notification` | Notification | ✅ | ✅ | ✅ | ✅ | — |
-| 16 | `vp_message_thread` | Conversation | ✅ | ✅ | ✅ | ✅ | — |
-| 17 | `vp_message` | Message | ✅ | ✅ | ✅ | ✅ | — |
-| 18 | `vp_preference` | Preference | ✅ | ✅ | ✅ | ✅ | — |
-| 19 | `vp_login_audit` | Security Log | ✅ | ✅ | ✅ | ✅ | — |
-| 20 | `vp_report` | Snapshot | ✅ | ✅ | ✅ | ✅ | — |
+| 15 | `vp_notification` | Notification | ✅ | ✅ | ✅ | ✅ | - |
+| 16 | `vp_message_thread` | Conversation | ✅ | ✅ | ✅ | ✅ | - |
+| 17 | `vp_message` | Message | ✅ | ✅ | ✅ | ✅ | - |
+| 18 | `vp_preference` | Preference | ✅ | ✅ | ✅ | ✅ | - |
+| 19 | `vp_login_audit` | Security Log | ✅ | ✅ | ✅ | ✅ | - |
+| 20 | `vp_report` | Snapshot | ✅ | ✅ | ✅ | ✅ | - |
 
 **Business Tables: 20** · **Schema: `vendor_portal`**
 
@@ -234,21 +234,21 @@ master_vendor / master_employee / master_product (C-01)
                     │      └── vp_report
                     ├── vp_notification
                     │      └── vp_dashboard
-                    ├── vp_rfq_view ── proc_rfq_header_id (UUID — Procurement SoR)
-                    │       └── vp_quote_submission ── proc_vendor_quotation_id (UUID — Procurement SoR)
-                    ├── vp_purchase_order_view ── proc_order_header_id (UUID — Procurement SoR)
+                    ├── vp_rfq_view ── proc_rfq_header_id (UUID - Procurement SoR)
+                    │       └── vp_quote_submission ── proc_vendor_quotation_id (UUID - Procurement SoR)
+                    ├── vp_purchase_order_view ── proc_order_header_id (UUID - Procurement SoR)
                     │      ├── vp_po_acknowledgement
                     │      ├── vp_delivery_schedule
                     │      │      ├── vp_asn
-                    │      │      └── vp_invoice_submission ── proc_invoice_header_id (UUID — Procurement SoR)
-                    │      │             └── vp_payment_status ── finance_payment_id (UUID — Finance SoR)
+                    │      │      └── vp_invoice_submission ── proc_invoice_header_id (UUID - Procurement SoR)
+                    │      │             └── vp_payment_status ── finance_payment_id (UUID - Finance SoR)
                     │      │                       └── finance_journal_id (PostingService only, if fee posted)
-                    ├── vp_document_access ── document_id (UUID — Document SoR)
+                    ├── vp_document_access ── document_id (UUID - Document SoR)
                     └── vp_report
 
 Quality responses (no dedicated SoR table):
     vp_message_thread.related_entity_type = quality_issue
-      + qm_ncr_id / qm_incoming_inspection_id (UUID — Quality SoR; no FK)
+      + qm_ncr_id / qm_incoming_inspection_id (UUID - Quality SoR; no FK)
 
 Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_quotation_id,
   proc_order_header_id, proc_order_line_id, proc_grn_header_id, proc_invoice_header_id,
@@ -270,7 +270,7 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 | `vendor_id` | FK → `master_vendor` |
 | `supplier_profile_id` | FK → `vp_supplier_profile` |
 | `display_name` | VARCHAR |
-| `credential_vault_ref` | VARCHAR — hash / vault path only |
+| `credential_vault_ref` | VARCHAR - hash / vault path only |
 | `status` | draft, submitted, approved, active, locked, suspended, retired |
 | `owner_employee_id` | FK optional → `master_employee` (internal admin) |
 | `department_id` | FK optional → `org_department` |
@@ -284,10 +284,10 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 | Column | Notes |
 |--------|-------|
 | `profile_number` | `PRF-YYYY-NNNNNN` |
-| `vendor_id` | FK → `master_vendor` — **C-01** |
-| `display_name` / `preferred_language` / `timezone` | — |
+| `vendor_id` | FK → `master_vendor` - **C-01** |
+| `display_name` / `preferred_language` / `timezone` | - |
 | `primary_contact_json` / `remittance_contact_json` | JSONB (non-authoritative contact prefs) |
-| `capabilities_json` | JSONB optional (categories / certifications hints — not master) |
+| `capabilities_json` | JSONB optional (categories / certifications hints - not master) |
 | `status` | draft, submitted, approved, active, inactive |
 | `workflow_*` | Profile approval (may share account path or admin update) |
 | **UK:** `(company_id, profile_number)` · soft UK `(company_id, vendor_id)` when active |
@@ -314,7 +314,7 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 |--------|-------|
 | `dashboard_number` | `DSH-YYYY-NNNNNN` |
 | `portal_account_id` | FK → `vp_portal_account` |
-| `dashboard_code` / `dashboard_name` | — |
+| `dashboard_code` / `dashboard_name` | - |
 | `layout_json` | JSONB |
 | `is_default` | BOOLEAN |
 | `status` | draft, active, archived |
@@ -329,7 +329,7 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 | `dashboard_id` | FK → `vp_dashboard` |
 | `widget_type` | rfq_open, quote_status, po_open, delivery_due, asn_status, invoice_status, payment_status, quality_open, document_list, notification_feed, custom |
 | `title` | VARCHAR |
-| `config_json` | JSONB — query keys / UUID filters only |
+| `config_json` | JSONB - query keys / UUID filters only |
 | `sequence_no` | INT |
 | `status` | active, hidden |
 | **UK soft:** `(dashboard_id, sequence_no)` |
@@ -343,15 +343,15 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 | `view_number` | `RFQ-YYYY-NNNNNN` |
 | `portal_account_id` | FK → `vp_portal_account` |
 | `vendor_id` | FK → `master_vendor` |
-| `proc_rfq_header_id` | UUID — **Procurement SoR; no FK** |
-| `proc_rfq_vendor_id` | UUID optional — invitation link |
+| `proc_rfq_header_id` | UUID - **Procurement SoR; no FK** |
+| `proc_rfq_vendor_id` | UUID optional - invitation link |
 | `rfq_ref` / `rfq_status_text` | VARCHAR snapshots |
 | `product_id` | FK optional → `master_product` (primary line hint) |
 | `response_due_at` | TIMESTAMPTZ |
 | `last_synced_at` | TIMESTAMPTZ |
 | `status` | visible, hidden, stale, closed |
 | **UK:** `(company_id, view_number)` · soft UK `(portal_account_id, proc_rfq_header_id)` |
-| **Rule:** Projection only — never mutates Procurement RFQ |
+| **Rule:** Projection only - never mutates Procurement RFQ |
 
 ---
 
@@ -363,11 +363,11 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 | `portal_account_id` | FK → `vp_portal_account` |
 | `vendor_id` | FK → `master_vendor` |
 | `rfq_view_id` | FK optional → `vp_rfq_view` |
-| `proc_rfq_header_id` | UUID — Procurement RFQ ref |
-| `proc_vendor_quotation_id` | UUID — **Procurement SoR after accept; no FK** |
+| `proc_rfq_header_id` | UUID - Procurement RFQ ref |
+| `proc_vendor_quotation_id` | UUID - **Procurement SoR after accept; no FK** |
 | `vendor_quote_reference` | VARCHAR |
 | `currency_code` / `total_amount` | snapshot fields |
-| `payload_json` | JSONB — line proposals for service handoff |
+| `payload_json` | JSONB - line proposals for service handoff |
 | `reviewed_by_employee_id` | FK optional → `master_employee` |
 | `status` | draft, submitted, under_review, accepted, rejected, withdrawn |
 | `workflow_*` | Quote submission approval |
@@ -383,14 +383,14 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 | `view_number` | `POV-YYYY-NNNNNN` |
 | `portal_account_id` | FK → `vp_portal_account` |
 | `vendor_id` | FK → `master_vendor` |
-| `proc_order_header_id` | UUID — **Procurement SoR; no FK** |
+| `proc_order_header_id` | UUID - **Procurement SoR; no FK** |
 | `po_ref` / `po_status_text` | VARCHAR snapshots |
 | `product_id` | FK optional → `master_product` |
 | `ordered_at` / `required_at` | TIMESTAMPTZ |
 | `last_synced_at` | TIMESTAMPTZ |
 | `status` | visible, hidden, stale, closed |
 | **UK:** `(company_id, view_number)` · soft UK `(portal_account_id, proc_order_header_id)` |
-| **Rule:** Projection only — never mutates Procurement PO |
+| **Rule:** Projection only - never mutates Procurement PO |
 
 ---
 
@@ -401,7 +401,7 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 | `ack_number` | `ACK-YYYY-NNNNNN` |
 | `portal_account_id` | FK → `vp_portal_account` |
 | `purchase_order_view_id` | FK → `vp_purchase_order_view` |
-| `proc_order_header_id` | UUID — Procurement PO ref |
+| `proc_order_header_id` | UUID - Procurement PO ref |
 | `ack_type` | accept, accept_with_changes, reject |
 | `confirmed_delivery_date` | DATE optional |
 | `change_notes` | TEXT |
@@ -409,7 +409,7 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 | `status` | draft, submitted, acknowledged, disputed, cancelled |
 | `workflow_*` | PO acknowledgement |
 | **UK:** `(company_id, ack_number)` |
-| **Rule:** Acknowledgement envelope only — PO authority remains Procurement |
+| **Rule:** Acknowledgement envelope only - PO authority remains Procurement |
 
 ---
 
@@ -420,7 +420,7 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 | `schedule_number` | `DLS-YYYY-NNNNNN` |
 | `portal_account_id` | FK → `vp_portal_account` |
 | `purchase_order_view_id` | FK → `vp_purchase_order_view` |
-| `proc_order_header_id` | UUID — Procurement PO ref |
+| `proc_order_header_id` | UUID - Procurement PO ref |
 | `proc_order_line_id` | UUID optional |
 | `product_id` | FK optional → `master_product` |
 | `promised_qty` | NUMERIC |
@@ -428,7 +428,7 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 | `ship_from_json` | JSONB optional |
 | `status` | planned, confirmed, partially_shipped, completed, cancelled |
 | **UK:** `(company_id, schedule_number)` |
-| **Rule:** Supplier commitment surface — does not create Inventory receipts |
+| **Rule:** Supplier commitment surface - does not create Inventory receipts |
 
 ---
 
@@ -440,19 +440,19 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 | `portal_account_id` | FK → `vp_portal_account` |
 | `purchase_order_view_id` | FK → `vp_purchase_order_view` |
 | `delivery_schedule_id` | FK optional → `vp_delivery_schedule` |
-| `proc_order_header_id` | UUID — Procurement PO ref |
+| `proc_order_header_id` | UUID - Procurement PO ref |
 | `product_id` | FK optional → `master_product` |
 | `ship_qty` / `pack_count` | NUMERIC / INT |
 | `carrier_name` / `tracking_number` | VARCHAR |
 | `shipped_at` / `eta_at` | TIMESTAMPTZ |
-| `lines_json` | JSONB — ASN line payload for service handoff |
-| `proc_grn_header_id` | UUID optional — after GRN created |
-| `inventory_receipt_id` | UUID optional — **Inventory SoR; no FK** |
+| `lines_json` | JSONB - ASN line payload for service handoff |
+| `proc_grn_header_id` | UUID optional - after GRN created |
+| `inventory_receipt_id` | UUID optional - **Inventory SoR; no FK** |
 | `reviewed_by_employee_id` | FK optional → `master_employee` |
 | `status` | draft, submitted, approved, in_transit, received_snapshot, cancelled, rejected |
 | `workflow_*` | ASN approval |
 | **UK:** `(company_id, asn_number)` |
-| **Rule:** Advance notice envelope — Inventory remains receipt authority |
+| **Rule:** Advance notice envelope - Inventory remains receipt authority |
 
 ---
 
@@ -468,15 +468,15 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 | `vendor_invoice_reference` | VARCHAR |
 | `invoice_date` | DATE |
 | `currency_code` / `total_amount` / `tax_amount` | snapshot fields |
-| `payload_json` | JSONB — lines / attachments metadata for service handoff |
-| `proc_invoice_header_id` | UUID — **Procurement SoR after accept; no FK** |
-| `finance_ap_invoice_id` | UUID optional — Finance AP ref |
-| `document_id` | UUID optional — supporting PDF via Document |
+| `payload_json` | JSONB - lines / attachments metadata for service handoff |
+| `proc_invoice_header_id` | UUID - **Procurement SoR after accept; no FK** |
+| `finance_ap_invoice_id` | UUID optional - Finance AP ref |
+| `document_id` | UUID optional - supporting PDF via Document |
 | `reviewed_by_employee_id` | FK optional → `master_employee` |
 | `status` | draft, submitted, under_review, accepted, rejected, withdrawn |
 | `workflow_*` | Invoice submission approval |
 | **UK:** `(company_id, submission_number)` |
-| **Rule:** Envelope only — Procurement / Finance remain invoice authorities |
+| **Rule:** Envelope only - Procurement / Finance remain invoice authorities |
 
 ---
 
@@ -490,14 +490,14 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 | `invoice_submission_id` | FK optional → `vp_invoice_submission` |
 | `proc_invoice_header_id` | UUID optional |
 | `finance_ap_invoice_id` | UUID optional |
-| `finance_payment_id` | UUID — **Finance SoR; no FK** |
+| `finance_payment_id` | UUID - **Finance SoR; no FK** |
 | `payment_ref` / `amount_paid` / `currency_code` | snapshot fields |
 | `paid_at` / `due_at` | TIMESTAMPTZ |
-| `finance_journal_id` | UUID optional — after **PostingService** (e.g. portal fee) |
+| `finance_journal_id` | UUID optional - after **PostingService** (e.g. portal fee) |
 | `last_synced_at` | TIMESTAMPTZ |
 | `status` | visible, pending_snapshot, paid_snapshot, partial_snapshot, overdue_snapshot, stale, hidden |
 | **UK:** `(company_id, status_number)` |
-| **Rule:** Projection only — never mutates Finance payments via ORM |
+| **Rule:** Projection only - never mutates Finance payments via ORM |
 
 ---
 
@@ -507,7 +507,7 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 |--------|-------|
 | `access_number` | `DOC-YYYY-NNNNNN` |
 | `portal_account_id` | FK → `vp_portal_account` |
-| `document_id` | UUID — **Document SoR; no FK** |
+| `document_id` | UUID - **Document SoR; no FK** |
 | `access_level` | view, download |
 | `related_entity_type` | rfq, quote, po, asn, invoice, quality_issue, general |
 | `related_entity_id` | UUID optional |
@@ -526,7 +526,7 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 | `notification_number` | `NTF-YYYY-NNNNNN` optional if numbered |
 | `portal_account_id` | FK → `vp_portal_account` |
 | `notification_type` | rfq_invite, quote_decision, po_issued, po_ack_required, delivery_reminder, asn_update, invoice_decision, payment_update, quality_issue, document_shared, message, system |
-| `title` / `body` | — |
+| `title` / `body` | - |
 | `related_entity_type` / `related_entity_id` | VARCHAR / UUID |
 | `read_at` | TIMESTAMPTZ |
 | `delivery_status` | pending, sent, failed, read |
@@ -544,11 +544,11 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 | `subject` | VARCHAR |
 | `related_entity_type` | quote_submission, po_acknowledgement, asn, invoice_submission, document_access, quality_issue, rfq_view, purchase_order_view, general |
 | `related_entity_id` | UUID optional |
-| `qm_ncr_id` | UUID optional — **Quality SoR; no FK** |
+| `qm_ncr_id` | UUID optional - **Quality SoR; no FK** |
 | `qm_incoming_inspection_id` | UUID optional |
 | `status` | open, waiting, closed |
 | **UK:** `(company_id, thread_number)` |
-| **Rule:** Quality issue **responses** live here as supplier replies — Quality module remains SoR |
+| **Rule:** Quality issue **responses** live here as supplier replies - Quality module remains SoR |
 
 ---
 
@@ -619,7 +619,7 @@ Optional UUID-only (no FK): proc_rfq_header_id, proc_rfq_vendor_id, proc_vendor_
 
 **No FK to:** `proc_*`, `inv_*`, `fin_*`, `qm_*`, `doc_*`, `bi_*`, `int_*`, …  
 **Finance:** `finance_journal_id` UUID only; writes **only** via `PostingService.post_system_journal()`.  
-**Peers:** UUID refs only — **no peer ORM writes**.
+**Peers:** UUID refs only - **no peer ORM writes**.
 
 ---
 
@@ -710,7 +710,7 @@ Seed only; instances on Foundation `wf_instance`. `is_parallel` on **`wf_step`**
 
 Prior Alembic head: **`0442_seed_portal_workflows`**.
 
-Revision budget **`0443`–`0464` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`vp_message_thread` and `vp_message` share one migration** (parent thread created with messages).
+Revision budget **`0443`-`0464` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`vp_message_thread` and `vp_message` share one migration** (parent thread created with messages).
 
 | Order | Revision ID (≤32 chars) | Tables / Actions |
 |-------|-------------------------|------------------|
@@ -765,14 +765,14 @@ Revision budget **`0443`–`0464` (22 revisions)**. Schema + 20 tables + permiss
 | Foundation | tenant, user, workflow, audit, notification |
 | Organization | company, branch, **department** FK |
 | Master Data | **vendor · employee · product** (C-01) |
-| Procurement | **RFQ / Quote / PO / purchase-invoice authority** — UUID + services — **no `proc_*` ORM writes** |
-| Inventory | **Receipt authority** — ASN → receipt / GRN UUID — **no Inventory ORM writes** |
-| Finance | **Payment authority** + **`PostingService.post_system_journal()`** — **no `fin_*` ORM writes** |
-| Quality | **Quality authority** — NCR / inspection UUID + response messages — **no `qm_*` ORM writes** |
-| Document | **Document authority** — document UUID — **no Document ORM writes** |
+| Procurement | **RFQ / Quote / PO / purchase-invoice authority** - UUID + services - **no `proc_*` ORM writes** |
+| Inventory | **Receipt authority** - ASN → receipt / GRN UUID - **no Inventory ORM writes** |
+| Finance | **Payment authority** + **`PostingService.post_system_journal()`** - **no `fin_*` ORM writes** |
+| Quality | **Quality authority** - NCR / inspection UUID + response messages - **no `qm_*` ORM writes** |
+| Document | **Document authority** - document UUID - **no Document ORM writes** |
 | Analytics | **Read-only** report / widget refs |
-| Integration Hub | External IdP / API transport — UUID only |
-| Sales / CRM / HR / Payroll / Project / Asset / Manufacturing / Customer Portal | UUID / event only if needed — **no peer ORM writes** |
+| Integration Hub | External IdP / API transport - UUID only |
+| Sales / CRM / HR / Payroll / Project / Asset / Manufacturing / Customer Portal | UUID / event only if needed - **no peer ORM writes** |
 
 ### Downstream
 
@@ -808,7 +808,7 @@ Revision budget **`0443`–`0464` (22 revisions)**. Schema + 20 tables + permiss
 | 5 | Finance only via PostingService; no fin_* ORM writes | ✅ |
 | 6 | Portal consumes only; Procurement/Inventory/Finance/Quality/Document remain authorities | ✅ |
 | 7 | Analytics read-only; Integration Hub transport; UUID-only peers; no peer ORM writes | ✅ |
-| 8 | Migration order `0443`–`0464`, revision IDs ≤ 32 chars; planned head `0464_seed_vendor_portal_workflows` | ✅ |
+| 8 | Migration order `0443`-`0464`, revision IDs ≤ 32 chars; planned head `0464_seed_vendor_portal_workflows` | ✅ |
 | 9 | Workflows (`VP_*`) + RBAC (`vendor_portal.*`) + API mount + Celery stubs documented | ✅ |
 | 10 | Architecture Lock v1.1 preserved; no prior module redesign | ✅ |
 
@@ -817,7 +817,7 @@ Revision budget **`0443`–`0464` (22 revisions)**. Schema + 20 tables + permiss
 | Check | Result |
 |-------|--------|
 | Exactly 20 business tables listed | ✅ |
-| Required table names match 1–20 | ✅ |
+| Required table names match 1-20 | ✅ |
 | Mermaid ER includes all relationships + master refs | ✅ |
 | ASCII relationship overview present | ✅ |
 | Cross-module integrations documented | ✅ |
@@ -825,7 +825,7 @@ Revision budget **`0443`–`0464` (22 revisions)**. Schema + 20 tables + permiss
 | Workflow seeds: Account / Quote / PO Ack / Invoice / ASN | ✅ |
 | No implementation / migrations / code in this ERD | ✅ |
 
-### ERD Phase Gate — Supplier / Vendor Portal Summary
+### ERD Phase Gate - Supplier / Vendor Portal Summary
 
 | Metric | Value |
 |--------|-------|
@@ -833,10 +833,10 @@ Revision budget **`0443`–`0464` (22 revisions)**. Schema + 20 tables + permiss
 | Schema | **`vendor_portal`** |
 | Prefix | `vp_` |
 | API mount | `/api/v1/vendor-portal` |
-| Migration range | `0443` – `0464` |
+| Migration range | `0443` - `0464` |
 | Prior head | `0442_seed_portal_workflows` |
 | Planned head | `0464_seed_vendor_portal_workflows` |
-| Document Status | **Locked — Ready for Sprint 24 Implementation Planning** |
+| Document Status | **Locked - Ready for Sprint 24 Implementation Planning** |
 
 ---
 

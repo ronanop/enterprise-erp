@@ -1,5 +1,5 @@
 /**
- * Quality workspace config — aligned with FRD-14 screen inventory
+ * Quality workspace config - aligned with FRD-14 screen inventory
  * and apps/api quality routers (Incoming → In-Process → Final → NCR → CAPA).
  */
 

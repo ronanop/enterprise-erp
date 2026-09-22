@@ -9,6 +9,7 @@ from core.exceptions import NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.hr.adapters.master_data_port import HrMasterDataAdapter
+from modules.hr.domain.kyc_validators import normalize_kyc_fields
 from modules.hr.repository.employee_profile_repository import EmployeeProfileRepository
 from modules.hr.schemas import EmployeeProfileResponse
 from modules.hr.service.engines import EmployeeProfileEngine
@@ -52,6 +53,18 @@ class EmployeeProfileService:
             raise NotFoundException("Employee profile not found")
         return self._enrich(row)
 
+    def get_by_employee_id(self, ctx: TenantContext, employee_id: UUID):
+        row = self._repo.get_by_employee_id(ctx, employee_id)
+        if row is None:
+            raise NotFoundException("Employee profile not found")
+        return self._enrich(row)
+
+    def get_orm_by_employee_id(self, ctx: TenantContext, employee_id: UUID):
+        row = self._repo.get_by_employee_id(ctx, employee_id)
+        if row is None:
+            raise NotFoundException("Employee profile not found")
+        return row
+
     def create(
         self,
         ctx: TenantContext,
@@ -64,6 +77,7 @@ class EmployeeProfileService:
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
         self._master.get_employee(ctx, employee_id)
+        fields = normalize_kyc_fields(fields)
         row = self._repo.create(
             ctx,
             company_id=cid,
@@ -85,6 +99,7 @@ class EmployeeProfileService:
         if orm is None:
             raise NotFoundException("Employee profile not found")
         self._engine.validate_writable(orm)
+        fields = normalize_kyc_fields(fields)
         updated = self._repo.update(ctx, row_id, **fields)
         if updated is None:
             raise NotFoundException("Employee profile not found")

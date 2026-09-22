@@ -34,6 +34,8 @@ class LoanService:
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
+        if fields.get("outstanding_amount") is None and fields.get("principal_amount") is not None:
+            fields["outstanding_amount"] = fields["principal_amount"]
         doc = self._numbers.generate(PayEntityType.LOAN, cid, PayLoan, "document_number")
         return self._repo.create(ctx, company_id=cid, branch_id=branch_id, document_number=doc, **fields)
 

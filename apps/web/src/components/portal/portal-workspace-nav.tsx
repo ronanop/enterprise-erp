@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { ModuleUsersNavTab } from "@/components/organization/module-users-nav-tab";
 import { cn } from "@/lib/utils";
 
 /** Primary portal screens from ERD_23 */
@@ -47,6 +48,7 @@ export function PortalWorkspaceNav() {
             </li>
           );
         })}
+        <ModuleUsersNavTab moduleKey="portal" />
       </ul>
     </nav>
   );

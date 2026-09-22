@@ -26,7 +26,7 @@ class HrLeaveRequest(Base, *HrTransactionMixin):
     __table_args__ = (
         UniqueConstraint("company_id", "document_number", name="uk_hr_lve_company_doc"),
         CheckConstraint(
-            "status IN ('draft','submitted','approved','rejected','cancelled')",
+            "status IN ('draft','submitted','manager_approved','approved','rejected','cancelled')",
             name="ck_hr_lve_status",
         ),
         CheckConstraint("end_date >= start_date", name="ck_hr_lve_dates"),
@@ -64,4 +64,6 @@ class HrLeaveRequest(Base, *HrTransactionMixin):
         ForeignKey("master.master_employee.id", ondelete="RESTRICT"),
         nullable=True,
     )
+    manager_approver_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+    hr_approver_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

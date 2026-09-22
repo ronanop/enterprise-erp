@@ -13,6 +13,13 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      // Next/React Compiler rule flags normal mount loaders (void load() in useEffect).
+      // Keep as warning until pages migrate to data libraries / Suspense patterns.
+      "react-hooks/set-state-in-effect": "warn",
+    },
+  },
 ]);
 
 export default eslintConfig;

@@ -1,4 +1,4 @@
-"""Asset port — UUID-only stubs; no ast_* FK or ORM writes."""
+"""Asset port - UUID-only stubs; no ast_* FK or ORM writes."""
 
 from uuid import UUID
 

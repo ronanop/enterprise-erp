@@ -14,6 +14,7 @@ from modules.organization.domain.entities import (
     LocationEntity,
     ProfitCenterEntity,
 )
+from modules.organization.models.branch import OrgBranch
 from modules.organization.models.hierarchy import (
     OrgBusinessUnit,
     OrgCostCenter,
@@ -21,7 +22,10 @@ from modules.organization.models.hierarchy import (
     OrgLocation,
     OrgProfitCenter,
 )
+from modules.foundation.domain.org_data_scope import apply_company_scope, effective_company_ids
 from modules.organization.repository.base import OrgScopedRepository, utcnow
+
+ORGANIZATION_MODULE_KEY = "organization"
 
 
 class DepartmentRepository(OrgScopedRepository):
@@ -37,6 +41,10 @@ class DepartmentRepository(OrgScopedRepository):
         )
         if company_id:
             stmt = stmt.where(OrgDepartment.company_id == company_id)
+        elif hasattr(OrgDepartment, "company_id"):
+            stmt = apply_company_scope(
+                stmt, OrgDepartment, ctx, module_key=ORGANIZATION_MODULE_KEY
+            )
         if branch_id:
             stmt = stmt.where(OrgDepartment.branch_id == branch_id)
         return [self._to_entity(r) for r in self.db.scalars(stmt).all()]
@@ -59,7 +67,9 @@ class DepartmentRepository(OrgScopedRepository):
         department_code: str,
         department_name: str,
         parent_department_id: UUID | None = None,
+        head_employee_id: UUID | None = None,
     ) -> DepartmentEntity:
+        now = utcnow()
         row = OrgDepartment(
             id=uuid4(),
             tenant_id=ctx.tenant_id,
@@ -68,7 +78,10 @@ class DepartmentRepository(OrgScopedRepository):
             department_code=department_code,
             department_name=department_name,
             parent_department_id=parent_department_id,
-            status="draft",
+            head_employee_id=head_employee_id,
+            status="active",
+            created_at=now,
+            updated_at=now,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
         )
@@ -120,7 +133,12 @@ class DepartmentRepository(OrgScopedRepository):
             department_name=row.department_name,
             status=row.status,
             parent_department_id=row.parent_department_id,
+            head_employee_id=row.head_employee_id,
             version=row.version,
+            created_at=row.created_at,
+            created_by=row.created_by,
+            updated_at=row.updated_at,
+            updated_by=row.updated_by,
         )
 
 
@@ -191,13 +209,30 @@ class LocationRepository(OrgScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
-    def list_locations(self, ctx: TenantContext, *, branch_id: UUID | None = None):
-        stmt = select(OrgLocation).where(
-            OrgLocation.tenant_id == ctx.tenant_id,
-            OrgLocation.is_deleted.is_(False),
+    def list_locations(
+        self, ctx: TenantContext, *, branch_id: UUID | None = None, company_id: UUID | None = None
+    ):
+        stmt = (
+            select(OrgLocation, OrgBranch.branch_name)
+            .outerjoin(OrgBranch, OrgBranch.id == OrgLocation.branch_id)
+            .where(
+                OrgLocation.tenant_id == ctx.tenant_id,
+                OrgLocation.is_deleted.is_(False),
+            )
         )
         if branch_id:
             stmt = stmt.where(OrgLocation.branch_id == branch_id)
+        elif company_id:
+            stmt = stmt.where(OrgLocation.company_id == company_id)
+        else:
+            allowed = effective_company_ids(ctx, module_key=ORGANIZATION_MODULE_KEY)
+            if allowed is not None:
+                if not allowed:
+                    stmt = stmt.where(OrgLocation.id.is_(None))
+                elif len(allowed) == 1:
+                    stmt = stmt.where(OrgLocation.company_id == allowed[0])
+                else:
+                    stmt = stmt.where(OrgLocation.company_id.in_(allowed))
         return [
             LocationEntity(
                 id=r.id,
@@ -209,8 +244,12 @@ class LocationRepository(OrgScopedRepository):
                 location_type=r.location_type,
                 status=r.status,
                 version=r.version,
+                branch_name=branch_name,
+                latitude=float(r.latitude) if r.latitude is not None else None,
+                longitude=float(r.longitude) if r.longitude is not None else None,
+                geofence_radius_meters=r.geofence_radius_meters,
             )
-            for r in self.db.scalars(stmt).all()
+            for r, branch_name in self.db.execute(stmt).all()
         ]
 
     def create(
@@ -222,6 +261,10 @@ class LocationRepository(OrgScopedRepository):
         location_code: str,
         location_name: str,
         location_type: str = "office",
+        latitude: float | None = None,
+        longitude: float | None = None,
+        geofence_radius_meters: int | None = None,
+        status: str = "active",
     ) -> LocationEntity:
         row = OrgLocation(
             id=uuid4(),
@@ -231,7 +274,10 @@ class LocationRepository(OrgScopedRepository):
             location_code=location_code,
             location_name=location_name,
             location_type=location_type,
-            status="draft",
+            latitude=latitude,
+            longitude=longitude,
+            geofence_radius_meters=geofence_radius_meters,
+            status=status if status in {"draft", "active", "inactive"} else "active",
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
         )
@@ -247,7 +293,56 @@ class LocationRepository(OrgScopedRepository):
             location_type=row.location_type,
             status=row.status,
             version=row.version,
+            latitude=float(row.latitude) if row.latitude is not None else None,
+            longitude=float(row.longitude) if row.longitude is not None else None,
+            geofence_radius_meters=row.geofence_radius_meters,
         )
+
+    def update(self, ctx: TenantContext, location_id: UUID, **fields) -> LocationEntity | None:
+        row = self.db.scalar(
+            select(OrgLocation).where(
+                OrgLocation.id == location_id,
+                OrgLocation.tenant_id == ctx.tenant_id,
+                OrgLocation.is_deleted.is_(False),
+            )
+        )
+        if row is None:
+            return None
+        for k, v in fields.items():
+            if v is not None:
+                setattr(row, k, v)
+        row.updated_by = ctx.user_id
+        row.version = int(row.version or 1) + 1
+        self.db.flush()
+        return LocationEntity(
+            id=row.id,
+            tenant_id=row.tenant_id,
+            company_id=row.company_id,
+            branch_id=row.branch_id,
+            location_code=row.location_code,
+            location_name=row.location_name,
+            location_type=row.location_type,
+            status=row.status,
+            version=row.version,
+            latitude=float(row.latitude) if row.latitude is not None else None,
+            longitude=float(row.longitude) if row.longitude is not None else None,
+            geofence_radius_meters=row.geofence_radius_meters,
+        )
+
+    def soft_delete(self, ctx: TenantContext, location_id: UUID) -> bool:
+        row = self.db.scalar(
+            select(OrgLocation).where(
+                OrgLocation.id == location_id,
+                OrgLocation.tenant_id == ctx.tenant_id,
+            )
+        )
+        if row is None or row.is_deleted:
+            return False
+        row.is_deleted = True
+        row.deleted_at = utcnow()
+        row.deleted_by = ctx.user_id
+        self.db.flush()
+        return True
 
 
 class CostCenterRepository(OrgScopedRepository):

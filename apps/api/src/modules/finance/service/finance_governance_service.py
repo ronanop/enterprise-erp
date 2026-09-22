@@ -1,4 +1,4 @@
-"""Finance governance — workflow, audit, notifications."""
+"""Finance governance - workflow, audit, notifications."""
 
 from uuid import UUID
 

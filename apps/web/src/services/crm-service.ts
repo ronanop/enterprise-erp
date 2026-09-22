@@ -102,7 +102,7 @@ export function leadDisplayName(row: CrmRow): string {
   const first = typeof row.first_name === "string" ? row.first_name : "";
   const last = typeof row.last_name === "string" ? row.last_name : "";
   const name = `${first} ${last}`.trim();
-  return name || String(row.lead_code ?? "—");
+  return name || String(row.lead_code ?? "-");
 }
 
 export async function loadCrmOverview(): Promise<CrmOverview> {

@@ -93,7 +93,6 @@ export function ResourcePlanFormPage({ planId }: { planId?: string }) {
             label: "Planned To",
             type: "date",
             required: true,
-            hint: "Must be on or after the planned from date.",
           },
           {
             name: "status",

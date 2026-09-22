@@ -17,6 +17,7 @@ from modules.recruitment.service.recruitment_scope_validator import RecruitmentS
 
 class JobRequisitionService:
     def __init__(self, db: Session) -> None:
+        self._db = db
         self._repo = JobRequisitionRepository(db)
         self._scope = RecruitmentScopeValidator(db)
         self._numbers = DocumentNumberService(db)
@@ -39,6 +40,27 @@ class JobRequisitionService:
         doc = self._numbers.generate(RecEntityType.JOB_REQUISITION, cid, RecJobRequisition, "document_number")
         return self._repo.create(ctx, company_id=cid, branch_id=branch_id, document_number=doc, **fields)
 
+    def _notify_requisition(self, ctx: TenantContext, row: RecJobRequisition, *, title: str, body: str) -> None:
+        try:
+            from modules.hr.service.hr_notify import notify_users_with_permission
+
+            exclude = {ctx.user_id} if ctx.user_id else set()
+            notify_users_with_permission(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                permission_code="recruitment.requisition:read",
+                template_code="rec.requisition",
+                template_name="Job Requisition",
+                event_type="rec.requisition",
+                title=title,
+                body=body,
+                kind="interview",
+                extra={"href": "/hr/recruitment", "requisition_id": str(row.id)},
+                exclude_user_ids=exclude,
+            )
+        except Exception:
+            pass
+
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
         self.get(ctx, row_id)
         row = self._repo.update(ctx, row_id, **fields)
@@ -49,9 +71,25 @@ class JobRequisitionService:
     def submit(self, ctx: TenantContext, row_id: UUID):
         row = self.get(ctx, row_id)
         self._engine.submit(row)
-        return self._repo.update(ctx, row_id, status=row.status)
+        updated = self._repo.update(ctx, row_id, status=row.status)
+        if updated is not None:
+            self._notify_requisition(
+                ctx,
+                updated,
+                title="Open Requisitions",
+                body=f"Requisition {updated.document_number} was submitted and is awaiting approval.",
+            )
+        return updated
 
     def approve(self, ctx: TenantContext, row_id: UUID):
         row = self.get(ctx, row_id)
         self._engine.approve(row)
-        return self._repo.update(ctx, row_id, status=row.status)
+        updated = self._repo.update(ctx, row_id, status=row.status)
+        if updated is not None:
+            self._notify_requisition(
+                ctx,
+                updated,
+                title="Open Requisitions",
+                body=f"Requisition {updated.document_number} is approved and open.",
+            )
+        return updated

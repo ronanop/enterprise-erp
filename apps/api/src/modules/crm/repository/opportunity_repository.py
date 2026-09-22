@@ -14,16 +14,26 @@ class OpportunityRepository(CrmScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
-    def get(self, ctx: TenantContext, row_id: UUID) -> CrmOpportunity | None:
+    def get(self, ctx: TenantContext, row_id: UUID, *, branch_scoped: bool = True) -> CrmOpportunity | None:
         stmt = select(CrmOpportunity).where(CrmOpportunity.id == row_id, CrmOpportunity.is_deleted.is_(False))
-        stmt = self.apply_crm_filter(stmt, CrmOpportunity, ctx, branch_scoped=True)
+        stmt = self.apply_crm_filter(stmt, CrmOpportunity, ctx, branch_scoped=branch_scoped)
         return self.db.scalar(stmt)
 
-    def list_opportunities(self, ctx: TenantContext, company_id: UUID):
+    def list_opportunities(
+        self,
+        ctx: TenantContext,
+        company_id: UUID,
+        *,
+        opportunity_ids: list[UUID] | None = None,
+    ):
         stmt = select(CrmOpportunity).where(
             CrmOpportunity.company_id == company_id,
             CrmOpportunity.is_deleted.is_(False),
         )
+        if opportunity_ids is not None:
+            if not opportunity_ids:
+                return []
+            stmt = stmt.where(CrmOpportunity.id.in_(opportunity_ids))
         stmt = self.apply_crm_filter(stmt, CrmOpportunity, ctx, branch_scoped=True)
         stmt = stmt.order_by(CrmOpportunity.created_at.desc())
         return list(self.db.scalars(stmt).all())
@@ -53,3 +63,15 @@ class OpportunityRepository(CrmScopedRepository):
             row.version = int(row.version or 1) + 1
         self.db.flush()
         return row
+
+    def soft_delete(self, ctx: TenantContext, row_id: UUID) -> bool:
+        row = self.get(ctx, row_id)
+        if row is None:
+            return False
+        row.is_deleted = True
+        row.deleted_at = utcnow()
+        row.deleted_by = ctx.user_id
+        row.updated_at = utcnow()
+        row.updated_by = ctx.user_id
+        self.db.flush()
+        return True

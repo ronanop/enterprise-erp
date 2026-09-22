@@ -40,6 +40,18 @@ class SiteInstallationRepository(PrjScopedRepository):
         stmt = self.apply_prj_filter(stmt, PrjSiteInstallation, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 
+    def list_by_project_ids(
+        self, ctx: TenantContext, project_ids: list[UUID]
+    ) -> list[PrjSiteInstallation]:
+        if not project_ids:
+            return []
+        stmt = select(PrjSiteInstallation).where(
+            PrjSiteInstallation.project_id.in_(project_ids),
+            PrjSiteInstallation.is_deleted.is_(False),
+        )
+        stmt = self.apply_prj_filter(stmt, PrjSiteInstallation, ctx, branch_scoped=False)
+        return list(self.db.scalars(stmt).all())
+
     def create(self, ctx: TenantContext, **fields) -> PrjSiteInstallation:
         row = PrjSiteInstallation(
             id=uuid4(),
@@ -79,6 +91,65 @@ class SiteInstallationRepository(PrjScopedRepository):
                 "mo_request_date",
                 "im_material_date",
                 "material_handover_date",
+                "rack_server_stacking_date",
+                "rack_server_power_on_date",
+                "dac_ilo_cabling_date",
+                "bios_configuration_date",
+                "firmware_config_date",
+                "lld_date",
+                "os_installation_date",
+                "vm_installation_date",
+                "nw_config_date",
+                "tools_integration_date",
+                "mbss_date",
+                "vascan_date",
+                "handover_to_cloud_date",
+                "hwat_request_date",
+                "hwat_signoff_date",
+                "survey_assignee_employee_id",
+                "scm_assignee_employee_id",
+                "installation_assignee_employee_id",
+                "configuration_assignee_employee_id",
+                "acceptance_assignee_employee_id",
+                "survey_assigned_date",
+                "survey_finished_date",
+                "scm_assigned_date",
+                "scm_finished_date",
+                "installation_assigned_date",
+                "installation_finished_date",
+                "acceptance_assigned_date",
+                "acceptance_finished_date",
+                "survey_attachment_name",
+                "scm_attachment_name",
+                "onsite_attachment_name",
+                "onsite_delivery_attachment_name",
+                "material_handover_attachment_name",
+                "installation_attachment_name",
+                "acceptance_attachment_name",
+                "survey_progress_status",
+                "scm_progress_status",
+                "onsite_progress_status",
+                "onsite_delivery_progress_status",
+                "material_handover_progress_status",
+                "installation_progress_status",
+                "acceptance_progress_status",
+                "survey_remarks",
+                "scm_remarks",
+                "onsite_remarks",
+                "onsite_delivery_remarks",
+                "material_handover_remarks",
+                "installation_remarks",
+                "acceptance_remarks",
+                "material_handover_to_name",
+                "onsite_assignee_employee_id",
+                "onsite_assigned_date",
+                "onsite_finished_date",
+                "onsite_delivery_assignee_employee_id",
+                "onsite_delivery_assigned_date",
+                "onsite_delivery_finished_date",
+                "material_handover_assignee_employee_id",
+                "material_handover_assigned_date",
+                "material_handover_finished_date",
                 "server_qty",
                 "rack_qty",
                 "server_wh_delivery_date",

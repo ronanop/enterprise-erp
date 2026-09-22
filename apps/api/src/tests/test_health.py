@@ -8,6 +8,5 @@ def test_health_endpoint_returns_response(client: TestClient) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["success"] is True
-    assert body["message"] == "Service health check"
-    assert "data" in body
-    assert body["data"]["version"] == "0.1.0"
+    assert body["message"] == "OK"
+    assert body["data"]["status"] == "ok"

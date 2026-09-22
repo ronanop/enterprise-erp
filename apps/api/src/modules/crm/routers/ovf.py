@@ -10,10 +10,14 @@ from modules.crm.dependencies import PaginationParams, extract_update_fields, ge
 from modules.crm.schemas import (
     OvfCreate,
     OvfDealWonRequest,
+    OvfInvoiceStatusResponse,
+    OvfInvoiceSubmissionRequest,
     OvfLineCreate,
     OvfLineResponse,
     OvfLineUpdate,
+    OvfPaymentUpdateRequest,
     OvfResponse,
+    OvfScmSavingsResponse,
     OvfSendForApprovalRequest,
     OvfUpdate,
 )
@@ -52,7 +56,14 @@ def get_ovf(
     ctx: Annotated[TenantContext, Depends(require_permission("crm.ovf:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=OvfService(db).get(ctx, ovf_id))
+    svc = OvfService(db)
+    ovf = svc.get(ctx, ovf_id)
+    resp = OvfResponse.model_validate(ovf)
+    if resp.po_date is None:
+        resolved = svc.resolve_customer_po_display_date(ctx, ovf)
+        if resolved is not None:
+            resp = resp.model_copy(update={"po_date": resolved})
+    return APIResponse(message="OK", data=resp)
 
 
 @ovf_router.patch("/{ovf_id}", response_model=APIResponse[OvfResponse])
@@ -63,6 +74,16 @@ def update_ovf(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=OvfService(db).update(ctx, ovf_id, **extract_update_fields(body)))
+
+
+@ovf_router.delete("/{ovf_id}", response_model=APIResponse[dict[str, str]])
+def delete_ovf(
+    ovf_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.ovf:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    OvfService(db).delete(ctx, ovf_id)
+    return APIResponse(message="OK", data={"id": str(ovf_id)})
 
 
 @ovf_router.get("/{ovf_id}/lines", response_model=APIResponse[list[OvfLineResponse]])
@@ -94,6 +115,54 @@ def update_ovf_line(
     return APIResponse(
         message="OK",
         data=OvfService(db).update_line(ctx, line_id, **extract_update_fields(body)),
+    )
+
+
+@ovf_router.get("/{ovf_id}/scm-savings", response_model=APIResponse[OvfScmSavingsResponse])
+def get_ovf_scm_savings(
+    ovf_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.ovf:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Management / SCM only - the saving never reaches the sales incentive."""
+    return APIResponse(message="OK", data=OvfService(db).get_scm_savings(ctx, ovf_id))
+
+
+@ovf_router.get("/{ovf_id}/invoice-status", response_model=APIResponse[OvfInvoiceStatusResponse])
+def get_ovf_invoice_status(
+    ovf_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.ovf:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=OvfService(db).get_invoice_status(ctx, ovf_id))
+
+
+@ovf_router.post(
+    "/{ovf_id}/invoice-submission",
+    response_model=APIResponse[OvfInvoiceStatusResponse],
+)
+def record_ovf_invoice_submission(
+    ovf_id: UUID,
+    body: OvfInvoiceSubmissionRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.ovf:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Invoice submission recorded",
+        data=OvfService(db).record_invoice_submission(ctx, ovf_id, **body.model_dump()),
+    )
+
+
+@ovf_router.patch("/{ovf_id}/payment", response_model=APIResponse[OvfInvoiceStatusResponse])
+def update_ovf_payment(
+    ovf_id: UUID,
+    body: OvfPaymentUpdateRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.ovf:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Payment tracking updated",
+        data=OvfService(db).update_payment(ctx, ovf_id, **body.model_dump()),
     )
 
 

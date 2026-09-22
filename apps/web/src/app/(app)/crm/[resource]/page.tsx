@@ -13,6 +13,7 @@ import { OpportunityListPage } from "@/components/crm/sales/opportunity-list-pag
 import { OvfListPage } from "@/components/crm/sales/ovf-list-page";
 import { ProductsListPage } from "@/components/crm/sales/products-list-page";
 import { QuoteListPage } from "@/components/crm/sales/quote-list-page";
+import { ReportsListPage } from "@/components/crm/sales/reports-list-page";
 import { ResourceListView } from "@/components/module/resource-list-view";
 import { getModule, getResource } from "@/config/modules";
 
@@ -26,6 +27,8 @@ export default async function CrmResourcePage({ params }: PageProps) {
   switch (resourceKey) {
     case "my-jobs":
       return <MyJobsPage />;
+    case "reports":
+      return <ReportsListPage />;
     case "companies":
       return <CompanyListPage />;
     case "leads":
@@ -76,7 +79,7 @@ export default async function CrmResourcePage({ params }: PageProps) {
       moduleKey={mod.key}
       moduleTitle={mod.title}
       title={resource.title}
-      description={resource.description}
+      description=""
       apiPath={resource.apiPath}
     />
   );

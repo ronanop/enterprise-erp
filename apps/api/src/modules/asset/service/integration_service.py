@@ -1,4 +1,4 @@
-"""Asset integration service — cross-module reads / master create only."""
+"""Asset integration service - cross-module reads / master create only."""
 
 from uuid import UUID
 

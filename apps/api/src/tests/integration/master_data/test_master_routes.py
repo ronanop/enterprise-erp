@@ -22,3 +22,10 @@ def test_master_data_routes_registered() -> None:
     assert "/api/v1/assets" in paths
     assert "/api/v1/warehouses" in paths
     assert "/api/v1/warehouses/default" in paths
+
+
+def test_party_registration_routes_registered() -> None:
+    paths = app.openapi().get("paths", {})
+    assert "/api/v1/party-registrations" in paths
+    for action in ("verify-kyc", "evaluate", "submit", "approve", "reject"):
+        assert f"/api/v1/party-registrations/{{registration_id}}/{action}" in paths

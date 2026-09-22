@@ -1,13 +1,13 @@
-# ERD_11 — Human Resource Management (HRMS) Domain
+# ERD_11 - Human Resource Management (HRMS) Domain
 
-**Document:** Enterprise ERD — Human Resource Management Domain  
+**Document:** Enterprise ERD - Human Resource Management Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 11 Implementation Planning  
+**Status:** Locked - Ready for Sprint 11 Implementation Planning  
 **Schema:** `hr`  
 **Table Prefix:** `hr_`  
 **Aligned To:** BRD v1.0 · FRD-09 · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-09 HR Domain](../02_FRD/FRD-09-HR-Domain.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.5-beta](../07_RELEASES/ERP_Core_v1.5-beta.md)  
 
 ---
@@ -16,9 +16,9 @@
 
 The Human Resource Management (HRMS) Domain manages the **employee lifecycle after identity is established in Master Data**: HR profile extension, employment terms, department / designation assignment history, attendance, leave types / balances / requests, shifts and shift assignment, holiday calendars, employee documents, performance reviews (goals · appraisal), training and training attendance, and separation / exit clearance.
 
-HRMS **consumes only** Foundation, Organization, and Master Data. HRMS **must never duplicate employee master** — authoritative employee identity remains **`master_employee` (C-01)**. HR tables reference `master_employee.id` via FK. Department structure remains **`org_department`** (no `hr_department` master). Designation becomes a structured HR catalog (`hr_designation`) with assignment history; `master_employee.designation` may continue as a denormalized label updated via Master Data service on assignment change (optional orchestration — HR never ORM-writes `master_*` except through Master Data services when identity updates are required).
+HRMS **consumes only** Foundation, Organization, and Master Data. HRMS **must never duplicate employee master** - authoritative employee identity remains **`master_employee` (C-01)**. HR tables reference `master_employee.id` via FK. Department structure remains **`org_department`** (no `hr_department` master). Designation becomes a structured HR catalog (`hr_designation`) with assignment history; `master_employee.designation` may continue as a denormalized label updated via Master Data service on assignment change (optional orchestration - HR never ORM-writes `master_*` except through Master Data services when identity updates are required).
 
-Payroll **runs / payslips / GL postings** belong to FRD-10 Payroll and are **out of scope** for Sprint 11 Phase 1 — employment may store contractual pay band / CTC metadata only as HR foundation fields.
+Payroll **runs / payslips / GL postings** belong to FRD-10 Payroll and are **out of scope** for Sprint 11 Phase 1 - employment may store contractual pay band / CTC metadata only as HR foundation fields.
 
 **Business Tables: 19**  
 **Schema: `hr`**
@@ -60,27 +60,27 @@ Payroll (FRD-10, future) · BI (future)
 ## 2. Scope
 
 ### In Scope
-- Structured **designation** catalog and assignment history — FRD-09 §9
-- **HR employee profile** 1:1 with `master_employee` (emergency contact, blood group, nationality, etc.) — FRD-09 §9 / ESS
-- **Employment** records (type: permanent / contract / intern / consultant; joining / probation / confirmation / end) — FRD-09 §9
-- **Department assignment** history against `org_department` — no duplicate department master
+- Structured **designation** catalog and assignment history - FRD-09 §9
+- **HR employee profile** 1:1 with `master_employee` (emergency contact, blood group, nationality, etc.) - FRD-09 §9 / ESS
+- **Employment** records (type: permanent / contract / intern / consultant; joining / probation / confirmation / end) - FRD-09 §9
+- **Department assignment** history against `org_department` - no duplicate department master
 - **Designation assignment** history against `hr_designation`
-- **Attendance** daily records (present / absent / half_day / wfh / holiday) with check-in / check-out / hours — FRD-09 §10
-- **Leave types**, **balances**, **requests** with manager approval workflow — FRD-09 §11, §18
-- **Shifts** and **shift assignments** — FRD-09 §12
-- **Holiday calendar** (company/year; holiday date list as structured JSONB Phase 1) — Sprint 11 roadmap
-- **Employee documents** metadata (URI / type / expiry) — no blob store duplication
-- **Performance review** cycles, **goals**, **appraisal** ratings — FRD-09 §13 (foundation)
-- **Training** programs and **training attendance** — FRD-09 §14
-- **Separation** requests (resignation / termination / retirement) with clearance workflow — FRD-09 §16, §18
+- **Attendance** daily records (present / absent / half_day / wfh / holiday) with check-in / check-out / hours - FRD-09 §10
+- **Leave types**, **balances**, **requests** with manager approval workflow - FRD-09 §11, §18
+- **Shifts** and **shift assignments** - FRD-09 §12
+- **Holiday calendar** (company/year; holiday date list as structured JSONB Phase 1) - Sprint 11 roadmap
+- **Employee documents** metadata (URI / type / expiry) - no blob store duplication
+- **Performance review** cycles, **goals**, **appraisal** ratings - FRD-09 §13 (foundation)
+- **Training** programs and **training attendance** - FRD-09 §14
+- **Separation** requests (resignation / termination / retirement) with clearance workflow - FRD-09 §16, §18
 - Workflow, audit, RBAC, notifications, Celery stubs
 
 ### Out of Scope (Phase 2 / Separate ERD)
-- **Full recruitment suite** (`hr_job_requisition`, `hr_candidate`, `hr_interview`, `hr_offer`, onboarding checklist tables) — FRD-09 §4–§8; Phase 2
-- **Full Payroll domain** (payslip, earnings/deductions, statutory, GL) — FRD-10
-- **Biometric device registry / raw punch tables** — attendance stores source enum only
-- **Duplicate `hr_employee` / `hr_department` masters** — C-01 / Org ownership forbidden
-- **Duplicate `sec_user` creation tables** — onboarding may call Foundation user service; no HR user table
+- **Full recruitment suite** (`hr_job_requisition`, `hr_candidate`, `hr_interview`, `hr_offer`, onboarding checklist tables) - FRD-09 §4-§8; Phase 2
+- **Full Payroll domain** (payslip, earnings/deductions, statutory, GL) - FRD-10
+- **Biometric device registry / raw punch tables** - attendance stores source enum only
+- **Duplicate `hr_employee` / `hr_department` masters** - C-01 / Org ownership forbidden
+- **Duplicate `sec_user` creation tables** - onboarding may call Foundation user service; no HR user table
 - Direct writes to `crm_*`, `sales_*`, `fin_*`, `qm_*`, `inv_*`, `mfg_*`, `proc_*`
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 - Analytics cubes / `ana_fact_hr`
@@ -107,24 +107,24 @@ Payroll (FRD-10, future) · BI (future)
 
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
-| 1 | `hr_designation` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 2 | `hr_employee_profile` | Profile Extension | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 3 | `hr_employment` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 4 | `hr_department_assignment` | History | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 5 | `hr_designation_assignment` | History | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 6 | `hr_shift` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 1 | `hr_designation` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 2 | `hr_employee_profile` | Profile Extension | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 3 | `hr_employment` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 4 | `hr_department_assignment` | History | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 5 | `hr_designation_assignment` | History | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 6 | `hr_shift` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 7 | `hr_shift_assignment` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 8 | `hr_holiday_calendar` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 9 | `hr_leave_type` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 10 | `hr_leave_balance` | Balance Snapshot | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 8 | `hr_holiday_calendar` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 9 | `hr_leave_type` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 10 | `hr_leave_balance` | Balance Snapshot | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 11 | `hr_leave_request` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 12 | `hr_attendance` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 13 | `hr_employee_document` | Document Meta | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 12 | `hr_attendance` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 13 | `hr_employee_document` | Document Meta | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 14 | `hr_performance_review` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 15 | `hr_goal` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 16 | `hr_appraisal` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 17 | `hr_training` | Catalog / Event | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 18 | `hr_training_attendance` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 15 | `hr_goal` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 16 | `hr_appraisal` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 17 | `hr_training` | Catalog / Event | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 18 | `hr_training_attendance` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 19 | `hr_separation` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 **Business Tables: 19**  
@@ -221,8 +221,8 @@ hr_holiday_calendar (company / year)
 | `id` | UUID | NO | PK |
 | `tenant_id` / `company_id` | UUID | NO | Scope |
 | `branch_id` | UUID | YES | Optional |
-| `designation_code` | VARCHAR(50) | NO | UK — `DES-…` |
-| `designation_name` | VARCHAR(255) | NO | — |
+| `designation_code` | VARCHAR(50) | NO | UK - `DES-…` |
+| `designation_name` | VARCHAR(255) | NO | - |
 | `job_level` | VARCHAR(30) | YES | junior, mid, senior, lead, exec |
 | `status` | VARCHAR(30) | NO | active, inactive |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
@@ -235,7 +235,7 @@ hr_holiday_calendar (company / year)
 
 | Column | Notes |
 |--------|-------|
-| `employee_id` | FK → `master_employee` — **UK 1:1** per company/tenant |
+| `employee_id` | FK → `master_employee` - **UK 1:1** per company/tenant |
 | Scope | tenant / company / **branch mandatory** |
 | `date_of_birth` | DATE optional |
 | `gender` | VARCHAR optional |
@@ -255,7 +255,7 @@ hr_holiday_calendar (company / year)
 |--------|-------|
 | `document_number` | `EMPL-YYYY-NNNNNN` optional employment contract ref |
 | `employee_id` | FK → `master_employee` |
-| `employment_type` | permanent, contract, intern, consultant — FRD-09 §9 |
+| `employment_type` | permanent, contract, intern, consultant - FRD-09 §9 |
 | `date_of_joining` | DATE |
 | `probation_end_date` | DATE optional |
 | `confirmation_date` | DATE optional |
@@ -278,7 +278,7 @@ hr_holiday_calendar (company / year)
 | `is_primary` | BOOLEAN |
 | `assigned_by_employee_id` | FK optional |
 | `status` | active, ended |
-| **Rule:** does not create departments — Org owns `org_department` |
+| **Rule:** does not create departments - Org owns `org_department` |
 
 ---
 
@@ -299,8 +299,8 @@ hr_holiday_calendar (company / year)
 
 | Column | Notes |
 |--------|-------|
-| `shift_code` | UK — `SFT-…` |
-| `shift_name` | General, Morning, Evening, Night, Rotational — FRD-09 §12 |
+| `shift_code` | UK - `SFT-…` |
+| `shift_name` | General, Morning, Evening, Night, Rotational - FRD-09 §12 |
 | `shift_type` | general, morning, evening, night, rotational |
 | `start_time` / `end_time` | TIME |
 | `grace_minutes` | SMALLINT DEFAULT 0 |
@@ -318,7 +318,7 @@ hr_holiday_calendar (company / year)
 | `employee_id`, `shift_id` | FKs |
 | `effective_from` / `effective_to` | DATE |
 | `status` | draft, submitted, approved, active, ended, cancelled |
-| `workflow_*` | Shift change approval — FRD-09 §18 |
+| `workflow_*` | Shift change approval - FRD-09 §18 |
 
 ---
 
@@ -326,8 +326,8 @@ hr_holiday_calendar (company / year)
 
 | Column | Notes |
 |--------|-------|
-| `calendar_code` | UK — `HOL-YYYY` or code |
-| `calendar_name` | — |
+| `calendar_code` | UK - `HOL-YYYY` or code |
+| `calendar_name` | - |
 | `calendar_year` | SMALLINT |
 | `holidays_json` | JSONB array `{date,name,type}` Phase 1 |
 | `status` | draft, published, archived |
@@ -339,7 +339,7 @@ hr_holiday_calendar (company / year)
 
 | Column | Notes |
 |--------|-------|
-| `leave_type_code` | UK — CL, SL, EL, ML, PL, UL … |
+| `leave_type_code` | UK - CL, SL, EL, ML, PL, UL … |
 | `leave_type_name` | Casual, Sick, Earned, Maternity, Paternity, Unpaid |
 | `is_paid` | BOOLEAN |
 | `max_days_per_year` | NUMERIC(9,2) optional |
@@ -369,7 +369,7 @@ hr_holiday_calendar (company / year)
 | `start_date` / `end_date` | DATE |
 | `days_count` | NUMERIC(9,2) |
 | `reason` | TEXT |
-| `status` | draft, submitted, approved, rejected, cancelled — FRD-09 §11 |
+| `status` | draft, submitted, approved, rejected, cancelled - FRD-09 §11 |
 | `workflow_*` | Employee → Reporting Manager |
 | `approver_employee_id` | optional |
 | `decided_at` | TIMESTAMPTZ |
@@ -386,7 +386,7 @@ hr_holiday_calendar (company / year)
 | `attendance_date` | DATE |
 | `check_in_at` / `check_out_at` | TIMESTAMPTZ optional |
 | `total_hours` | NUMERIC(9,2) optional |
-| `attendance_status` | present, absent, half_day, work_from_home, holiday — FRD-09 §10 |
+| `attendance_status` | present, absent, half_day, work_from_home, holiday - FRD-09 §10 |
 | `source` | manual, biometric, mobile, web, device |
 | `shift_id` | FK optional |
 | `status` | recorded, adjusted, locked |
@@ -402,7 +402,7 @@ hr_holiday_calendar (company / year)
 | `employee_id` | FK |
 | `document_type` | id_proof, address_proof, contract, certificate, other |
 | `document_name` | VARCHAR |
-| `storage_uri` | VARCHAR — external / foundation attachment URI |
+| `storage_uri` | VARCHAR - external / foundation attachment URI |
 | `issued_on` / `expires_on` | DATE optional |
 | `verification_status` | pending, verified, rejected |
 | `status` | active, archived |
@@ -416,11 +416,11 @@ hr_holiday_calendar (company / year)
 | `document_number` | `PRF-YYYY-NNNNNN` |
 | `employee_id` | FK subject |
 | `reviewer_employee_id` | FK |
-| `review_cycle` | monthly, quarterly, half_yearly, yearly — FRD-09 §13 |
+| `review_cycle` | monthly, quarterly, half_yearly, yearly - FRD-09 §13 |
 | `period_start` / `period_end` | DATE |
 | `status` | draft, in_progress, submitted, approved, closed, cancelled |
 | `workflow_*` | optional manager → HR |
-| `overall_rating` | SMALLINT 1–5 optional |
+| `overall_rating` | SMALLINT 1-5 optional |
 
 ---
 
@@ -445,8 +445,8 @@ hr_holiday_calendar (company / year)
 | `performance_review_id` | FK |
 | `employee_id` | FK |
 | `sequence_no` | SMALLINT |
-| `appraisal_area` | goals, kpi, competency, behavior, attendance — FRD-09 §13 |
-| `rating` | SMALLINT 1–5 |
+| `appraisal_area` | goals, kpi, competency, behavior, attendance - FRD-09 §13 |
+| `rating` | SMALLINT 1-5 |
 | `comments` | TEXT |
 | `status` | draft, final |
 
@@ -458,7 +458,7 @@ hr_holiday_calendar (company / year)
 |--------|-------|
 | `training_code` | `TRN-YYYY-NNNNNN` |
 | `training_name` | |
-| `training_type` | technical, compliance, soft_skills, leadership — FRD-09 §14 |
+| `training_type` | technical, compliance, soft_skills, leadership - FRD-09 §14 |
 | `trainer_name` / `trainer_employee_id` | optional |
 | `start_date` / `end_date` | DATE |
 | `status` | planned, in_progress, completed, cancelled |
@@ -484,11 +484,11 @@ hr_holiday_calendar (company / year)
 |--------|-------|
 | `document_number` | `SEP-YYYY-NNNNNN` |
 | `employee_id` | FK |
-| `separation_type` | resignation, termination, retirement — FRD-09 §16 |
+| `separation_type` | resignation, termination, retirement - FRD-09 §16 |
 | `requested_last_working_date` / `approved_last_working_date` | DATE |
 | `reason` | TEXT |
 | `status` | draft, submitted, manager_approved, hr_approved, completed, cancelled |
-| `workflow_*` | Employee → Manager → HR — FRD-09 §18 |
+| `workflow_*` | Employee → Manager → HR - FRD-09 §18 |
 | `clearance_json` | JSONB Phase 1 checklist (asset return, KT, clearance) |
 | On complete: Master Data service sets `master_employee.status` + `date_of_leaving` |
 
@@ -550,7 +550,7 @@ hr_holiday_calendar (company / year)
 - Document / leave / review / separation headers: `(company_id, document_number)`
 
 ### Check
-- Ratings 1–5; leave days > 0; `end_date >= start_date`
+- Ratings 1-5; leave days > 0; `end_date >= start_date`
 - Employment / leave / separation / attendance status enums
 - `closing_balance = opening + accrued - used` (service; optional DB check)
 
@@ -617,7 +617,7 @@ hr_holiday_calendar (company / year)
 |-------|-----------|
 | Row audit | Standard columns on all mutable HR tables |
 | Business audit | `AuditService` on leave approve, attendance adjust, employment end, separation complete, performance approve |
-| Notifications | Leave approved, training assigned, performance review due, separation status — FRD-09 §19 |
+| Notifications | Leave approved, training assigned, performance review due, separation status - FRD-09 §19 |
 
 ---
 
@@ -710,25 +710,25 @@ Prior Alembic head: **`0156_seed_crm_workflows`**.
 
 | # | Gate Criterion | Status |
 |---|----------------|--------|
-| 1 | Business tables = **19** (within 18–22); schema = **`hr`** | ✅ |
+| 1 | Business tables = **19** (within 18-22); schema = **`hr`** | ✅ |
 | 2 | Prefix `hr_` defined | ✅ |
 | 3 | Aligned to FRD-09 Sprint 11 scope (attendance, leave, shift, performance foundation, training, separation) | ✅ |
 | 4 | No duplicate employee master; C-01 `master_employee` only | ✅ |
 | 5 | No duplicate department master; uses `org_department` | ✅ |
 | 6 | Consumes Foundation · Organization · Master Data only | ✅ |
-| 7 | Migration order `0157`–`0178`, revision IDs ≤ 32 chars | ✅ |
+| 7 | Migration order `0157`-`0178`, revision IDs ≤ 32 chars | ✅ |
 | 8 | Workflows + RBAC + audit documented | ✅ |
 | 9 | Recruitment + full Payroll deferred without blocking Sprint 11 | ✅ |
 | 10 | No Architecture Lock changes; Architecture Lock v1.1 preserved | ✅ |
 
-### ERD Phase Gate — HR Summary
+### ERD Phase Gate - HR Summary
 
 | Metric | Value |
 |--------|-------|
 | Business Tables | **19** |
 | Schema | **`hr`** |
 | Prefix | `hr_` |
-| Migration range | `0157` – `0178` |
+| Migration range | `0157` - `0178` |
 | Prior head | `0156_seed_crm_workflows` |
 | Planned head | `0178_seed_hr_workflows` |
 

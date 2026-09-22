@@ -4,7 +4,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 
 class OrmModel(BaseModel):
@@ -95,6 +95,60 @@ class LeadUpdate(BaseModel):
     version: int | None = None
 
 
+class SalesLeadUpdate(BaseModel):
+    """Full sales-process lead update (company-account scoped leads only)."""
+
+    version: int
+    salutation: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    designation: str | None = None
+    mobile: str | None = None
+    email: str | None = None
+    lead_source_id: UUID | None = None
+    expected_amount: Decimal | None = None
+    committed_amount: Decimal | None = None
+    expected_closure_date: date | None = None
+    product_type: str | None = None
+    sub_product_category: str | None = None
+    sub_product: str | None = None
+    sub_product_other: str | None = None
+    engagement_score: int | None = None
+    portal_link: str | None = None
+    project_title: str | None = None
+    requirement_type: str | None = None
+    purchase_model: str | None = None
+    dr_number: str | None = None
+    new_dr_number: str | None = None
+    deal_type: str | None = None
+    industry: str | None = None
+    territory: str | None = None
+    region: str | None = None
+    street: str | None = None
+    city: str | None = None
+    state: str | None = None
+    zip: str | None = None
+    country: str | None = None
+    oem_name: str | None = None
+    oem_contact_person: str | None = None
+    oem_contact_number: str | None = None
+    oem_contact_email: str | None = None
+    distributor_name: str | None = None
+    distributor_contact: str | None = None
+    distributor_contact_person: str | None = None
+    distributor_contact_email: str | None = None
+    distributor_department: str | None = None
+    end_customer_name: str | None = None
+    end_customer_location: str | None = None
+    entity_name: str | None = None
+    entity_email: str | None = None
+    entity_address: str | None = None
+    entity_gst: str | None = None
+    entity_contact: str | None = None
+    notes: str | None = None
+    presales_owner_id: UUID | None = None
+
+
 class LeadAssignRequest(BaseModel):
     to_employee_id: UUID
     assignment_type: str = "manual"
@@ -102,9 +156,11 @@ class LeadAssignRequest(BaseModel):
 
 
 class LeadConvertRequest(BaseModel):
-    pipeline_id: UUID
-    opportunity_name: str
-    expected_revenue: Decimal = Decimal("0")
+    """Convert uses lead defaults when pipeline / name / revenue are omitted."""
+
+    pipeline_id: UUID | None = None
+    opportunity_name: str | None = None
+    expected_revenue: Decimal | None = None
     existing_customer_id: UUID | None = None
     create_customer: bool = True
     remark: str | None = None
@@ -118,8 +174,10 @@ class LeadResponse(OrmModel):
     first_name: str
     last_name: str | None
     salutation: str | None = None
+    designation: str | None = None
     mobile: str
     email: str | None
+    lead_source_id: UUID
     status: str
     blueprint_state: str
     locked: bool
@@ -128,6 +186,7 @@ class LeadResponse(OrmModel):
     assign_to_id: UUID | None
     assigned_date: date | None = None
     expected_amount: Decimal | None
+    committed_amount: Decimal | None = None
     expected_closure_date: date | None
     project_title: str | None
     product_type: str | None
@@ -170,6 +229,7 @@ class LeadResponse(OrmModel):
     lost_reason: str | None = None
     customer_id: UUID | None
     converted_opportunity_id: UUID | None
+    presales_owner_id: UUID | None = None
     version: int
 
 
@@ -194,6 +254,14 @@ class OpportunityUpdate(BaseModel):
     probability_percent: Decimal | None = None
     expected_close_date: date | None = None
     customer_id: UUID | None = None
+    customer_mrr: Decimal | None = None
+    customer_arr: Decimal | None = None
+    customer_discount_percent: Decimal | None = None
+    distributor_discount_percent: Decimal | None = None
+    assessment_type: str | None = None
+    migration_credit_phase1: Decimal | None = None
+    migration_credit_phase2: Decimal | None = None
+    migration_credit_phase3: Decimal | None = None
     version: int | None = None
 
 
@@ -228,9 +296,33 @@ class OpportunityResponse(OrmModel):
     locked: bool = False
     boq_attached: bool = False
     sow_attached: bool = False
+    boq_approved: bool = False
+    sow_approved: bool = False
     oem_quote_attached: bool = False
     customer_po_attached: bool = False
     customer_po_approved: bool = False
+    po_finance_status: str = "not_required"
+    po_finance_remark: str | None = None
+    po_finance_at: datetime | None = None
+    po_terms_status: str = "not_required"
+    po_terms_remark: str | None = None
+    po_terms_at: datetime | None = None
+    cloud_blueprint_variant: str | None = None
+    product_type: str | None = None
+    cloud_sub_product: str | None = None
+    customer_mrr: Decimal | None = None
+    customer_arr: Decimal | None = None
+    customer_discount_percent: Decimal | None = None
+    distributor_discount_percent: Decimal | None = None
+    profitability_percent: Decimal | None = None
+    distributor_discount_locked: bool = False
+    assessment_type: str | None = None
+    migration_credit_phase1: Decimal | None = None
+    migration_credit_phase2: Decimal | None = None
+    migration_credit_phase3: Decimal | None = None
+    contract_attached: bool = False
+    onboarding_done: bool = False
+    onboarding_date: date | None = None
     version: int
     created_at: datetime | None = None
 
@@ -662,7 +754,7 @@ class CampaignMemberResponse(OrmModel):
 
 
 # ---------------------------------------------------------------------------
-# Sales CRM (Zoho-replacement) — Company / Contact / Product / Quote / OVF /
+# Sales CRM (Zoho-replacement) - Company / Contact / Product / Quote / OVF /
 # My Jobs / Attachments / Blueprint schemas.
 # ---------------------------------------------------------------------------
 
@@ -814,22 +906,24 @@ class ContactResponse(OrmModel):
 
 
 class LeadCreateFromCompany(BaseModel):
-    """Body for POST /crm/companies/{id}/leads — the only sales-lead entry point."""
+    """Body for POST /crm/companies/{id}/leads - the only sales-lead entry point."""
 
     branch_id: UUID
     first_name: str | None = None
     last_name: str | None = None
     salutation: str | None = None
+    designation: str = Field(min_length=1)
     mobile: str | None = None
     email: str | None = None
     lead_source_id: UUID
-    owner_employee_id: UUID
+    owner_employee_id: UUID | None = None
     assign_to_id: UUID | None = None
     assigned_date: date | None = None
     expected_amount: Decimal | None = None
+    committed_amount: Decimal | None = None
     expected_closure_date: date | None = None
     product_type: str | None = None
-    sub_product_category: str | None = None
+    sub_product_category: str = Field(min_length=1)
     sub_product: str | None = None
     sub_product_other: str | None = None
     engagement_score: int | None = None
@@ -848,7 +942,7 @@ class LeadCreateFromCompany(BaseModel):
     state: str | None = None
     zip: str | None = None
     country: str | None = None
-    oem_name: str = Field(min_length=1, max_length=150)
+    oem_name: str | None = None
     oem_contact_person: str | None = None
     oem_contact_number: str | None = None
     oem_contact_email: str | None = None
@@ -865,6 +959,7 @@ class LeadCreateFromCompany(BaseModel):
     entity_gst: str | None = None
     entity_contact: str | None = None
     notes: str | None = None
+    presales_owner_id: UUID | None = None
 
 
 class LeadLostRequest(BaseModel):
@@ -880,6 +975,7 @@ class SalesLeadResponse(OrmModel):
     last_name: str | None
     mobile: str
     email: str | None
+    designation: str | None = None
     status: str
     blueprint_state: str
     locked: bool
@@ -887,6 +983,7 @@ class SalesLeadResponse(OrmModel):
     owner_employee_id: UUID
     assign_to_id: UUID | None
     expected_amount: Decimal | None
+    committed_amount: Decimal | None = None
     expected_closure_date: date | None
     project_title: str | None = None
     product_type: str | None = None
@@ -911,24 +1008,29 @@ class SalesLeadResponse(OrmModel):
     end_customer_location: str | None = None
     notes: str | None = None
     converted_opportunity_id: UUID | None
+    presales_owner_id: UUID | None = None
     version: int
 
 
 class ProductCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     company_id: UUID | None = None
-    product_code: str | None = None
-    product_name: str
-    product_type: str
-    hsn_sac: str | None = None
-    unit_price: Decimal = Decimal("0")
-    status: str = "active"
+    product_code: str | None = Field(default=None, max_length=50, pattern=r"^[^<>]{0,50}$")
+    product_name: str = Field(min_length=1, max_length=255, pattern=r"^[^<>]{1,255}$")
+    product_type: str = Field(min_length=1, max_length=20, pattern="^(hardware|software|services)$")
+    hsn_sac: str | None = Field(default=None, max_length=20, pattern=r"^[A-Za-z0-9./\-]{0,20}$")
+    unit_price: Decimal = Field(default=Decimal("0"), ge=0, le=Decimal("99999999999999.9999"))
+    status: str = Field(default="active", max_length=30, pattern="^(active|inactive)$")
 
 
 class ProductUpdate(BaseModel):
-    product_name: str | None = None
-    hsn_sac: str | None = None
-    unit_price: Decimal | None = None
-    status: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    product_name: str | None = Field(default=None, min_length=1, max_length=255)
+    hsn_sac: str | None = Field(default=None, max_length=20)
+    unit_price: Decimal | None = Field(default=None, ge=0, le=Decimal("99999999999999.9999"))
+    status: str | None = Field(default=None, max_length=30, pattern="^(active|inactive)$")
     version: int | None = None
 
 
@@ -975,6 +1077,40 @@ class OemResponse(OrmModel):
     version: int
 
 
+class SellingEntityCreate(BaseModel):
+    company_id: UUID | None = None
+    entity_code: str | None = None
+    entity_name: str
+    entity_email: str | None = None
+    entity_contact: str | None = None
+    entity_gst: str | None = None
+    entity_address: str | None = None
+    status: str = "active"
+
+
+class SellingEntityUpdate(BaseModel):
+    entity_name: str | None = None
+    entity_email: str | None = None
+    entity_contact: str | None = None
+    entity_gst: str | None = None
+    entity_address: str | None = None
+    status: str | None = None
+    version: int | None = None
+
+
+class SellingEntityResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    entity_code: str
+    entity_name: str
+    entity_email: str | None
+    entity_contact: str | None
+    entity_gst: str | None
+    entity_address: str | None
+    status: str
+    version: int
+
+
 class QuoteCreate(BaseModel):
     opportunity_id: UUID
     branch_id: UUID
@@ -990,7 +1126,18 @@ class QuoteCreate(BaseModel):
     entity_address: str | None = None
     entity_gst: str | None = None
     entity_contact: str | None = None
+    amc_warranty: str | None = None
+    amc_start_date: date | None = None
+    amc_end_date: date | None = None
+    billing_street: str | None = None
+    billing_city: str | None = None
+    billing_state: str | None = None
+    billing_zip: str | None = None
     billing_country: str | None = None
+    shipping_street: str | None = None
+    shipping_city: str | None = None
+    shipping_state: str | None = None
+    shipping_zip: str | None = None
     shipping_country: str | None = None
     freight: Decimal = Decimal("0")
     terms: str | None = None
@@ -1011,7 +1158,18 @@ class QuoteUpdate(BaseModel):
     entity_address: str | None = None
     entity_gst: str | None = None
     entity_contact: str | None = None
+    amc_warranty: str | None = None
+    amc_start_date: date | None = None
+    amc_end_date: date | None = None
+    billing_street: str | None = None
+    billing_city: str | None = None
+    billing_state: str | None = None
+    billing_zip: str | None = None
     billing_country: str | None = None
+    shipping_street: str | None = None
+    shipping_city: str | None = None
+    shipping_state: str | None = None
+    shipping_zip: str | None = None
     shipping_country: str | None = None
     freight: Decimal | None = None
     terms: str | None = None
@@ -1037,7 +1195,18 @@ class QuoteResponse(OrmModel):
     entity_address: str | None
     entity_gst: str | None
     entity_contact: str | None
+    amc_warranty: str | None = None
+    amc_start_date: date | None = None
+    amc_end_date: date | None = None
+    billing_street: str | None = None
+    billing_city: str | None = None
+    billing_state: str | None = None
+    billing_zip: str | None = None
     billing_country: str | None
+    shipping_street: str | None = None
+    shipping_city: str | None = None
+    shipping_state: str | None = None
+    shipping_zip: str | None = None
     shipping_country: str | None
     quote_no: str
     quote_revision: int
@@ -1113,6 +1282,8 @@ class QuoteMarginSummaryResponse(BaseModel):
 
 class QuoteSendForApprovalRequest(BaseModel):
     team_role: str = "management"
+    assigned_user_id: UUID | None = None
+    assigned_user_ids: list[UUID] | None = None
     remarks: str | None = None
 
 
@@ -1125,6 +1296,7 @@ class OvfCreate(BaseModel):
     quote_id: UUID
     branch_id: UUID
     po_number: str | None = None
+    po_date: date | None = None
     delivery_period: str | None = None
     customer_name: str | None = None
     quote_name: str | None = None
@@ -1153,6 +1325,7 @@ class OvfCreate(BaseModel):
 
 class OvfUpdate(BaseModel):
     po_number: str | None = None
+    po_date: date | None = None
     delivery_period: str | None = None
     customer_name: str | None = None
     quote_name: str | None = None
@@ -1189,6 +1362,7 @@ class OvfResponse(OrmModel):
     opportunity_id: UUID
     company_account_id: UUID | None
     po_number: str | None
+    po_date: date | None = None
     delivery_period: str | None
     customer_name: str | None
     quote_name: str | None
@@ -1209,6 +1383,7 @@ class OvfResponse(OrmModel):
     blueprint_state: str
     locked: bool
     shared_to_scm: bool
+    shared_to_scm_at: datetime | None = None
     deal_won: bool
     deal_won_amount: Decimal | None
     vendor_payment_days: int
@@ -1218,22 +1393,86 @@ class OvfResponse(OrmModel):
     freight: Decimal
     total_margin_pct: Decimal
     total_margin_amount: Decimal
+    # Invoice routing + AR follow-up. Supply-chain negotiation savings are
+    # deliberately absent here: Sales must never see them (see OvfScmSavingsResponse).
+    invoice_channel: str | None = None
+    invoice_submitted_portal: bool = False
+    invoice_submitted_at: datetime | None = None
+    invoice_reference: str | None = None
+    payment_due_date: date | None = None
+    payment_received_date: date | None = None
+    payment_delay_reason: str | None = None
     version: int
     created_at: datetime | None = None
-    updated_at: datetime | None = None
+
+
+class OvfScmSavingsResponse(BaseModel):
+    """Supply-chain negotiation savings - Management / SCM only, never Sales."""
+
+    ovf_id: UUID
+    ovf_no: str
+    scm_savings_amount: Decimal
+    scm_negotiated_vendor_total: Decimal | None = None
+
+
+class OvfInvoiceSubmissionRequest(BaseModel):
+    """Record the customer invoice submission (portal for SAC, physical for HSN)."""
+
+    invoice_reference: str | None = Field(default=None, max_length=100)
+    submitted_on_portal: bool = True
+    payment_due_date: date | None = None
+
+
+class OvfPaymentUpdateRequest(BaseModel):
+    payment_received_date: date | None = None
+    payment_due_date: date | None = None
+    payment_delay_reason: str | None = None
+
+
+class OvfInvoiceStatusResponse(BaseModel):
+    """HSN vs SAC invoice routing and the AR follow-up state for one OVF."""
+
+    ovf_id: UUID
+    ovf_no: str
+    customer_name: str | None = None
+    invoice_channel: str | None = None
+    portal_submission_required: bool = False
+    physical_delivery_invoice: bool = False
+    hsn_line_count: int = 0
+    sac_line_count: int = 0
+    invoice_submitted_portal: bool = False
+    invoice_submitted_at: datetime | None = None
+    invoice_reference: str | None = None
+    payment_due_date: date | None = None
+    payment_received_date: date | None = None
+    payment_delay_reason: str | None = None
+    payment_delay_days: int = 0
+    payment_status: str = "not_invoiced"
 
 
 class OvfLineCreate(BaseModel):
     side: str = "customer_po"
     product_name: str
+    description: str | None = None
+    distributor_name: str | None = None
+    contact_person: str | None = None
+    contact_number: str | None = None
     qty: Decimal = Decimal("1")
     unit_price: Decimal = Decimal("0")
+    gst_pct: Decimal | None = None
+    line_total: Decimal | None = None
 
 
 class OvfLineUpdate(BaseModel):
     product_name: str | None = None
+    description: str | None = None
+    distributor_name: str | None = None
+    contact_person: str | None = None
+    contact_number: str | None = None
     qty: Decimal | None = None
     unit_price: Decimal | None = None
+    gst_pct: Decimal | None = None
+    line_total: Decimal | None = None
     version: int | None = None
 
 
@@ -1243,14 +1482,21 @@ class OvfLineResponse(OrmModel):
     side: str
     line_no: int
     product_name: str
+    description: str | None = None
+    distributor_name: str | None = None
+    contact_person: str | None = None
+    contact_number: str | None = None
     qty: Decimal
     unit_price: Decimal
+    gst_pct: Decimal = Decimal("18")
     line_total: Decimal
     version: int
 
 
 class OvfSendForApprovalRequest(BaseModel):
     team_role: str = "management"
+    assigned_user_id: UUID | None = None
+    assigned_user_ids: list[UUID] | None = None
     remarks: str | None = None
 
 
@@ -1259,16 +1505,18 @@ class OvfDealWonRequest(BaseModel):
 
 
 class AttachmentCreate(BaseModel):
-    entity_type: str
+    model_config = ConfigDict(extra="forbid")
+
+    entity_type: str = Field(min_length=1, max_length=50)
     entity_id: UUID
     branch_id: UUID
     company_id: UUID | None = None
-    file_name: str
-    category: str = "other"
+    file_name: str = Field(min_length=1, max_length=255)
+    category: str = Field(default="other", max_length=50)
     source: str = Field(default="upload", pattern="^(upload|link|google_drive|onedrive|dropbox|box)$")
-    file_path: str | None = None
+    file_path: str | None = Field(default=None, max_length=1000)
     content_base64: str | None = None
-    content_type: str | None = None
+    content_type: str | None = Field(default=None, max_length=255)
 
 
 class AttachmentResponse(OrmModel):
@@ -1284,6 +1532,17 @@ class AttachmentResponse(OrmModel):
     uploaded_by: UUID | None
     company_id: UUID
     branch_id: UUID
+
+    @field_serializer("file_path")
+    def _safe_file_path(self, value: str) -> str:
+        """Never expose absolute filesystem paths (AppScan path disclosure)."""
+        text = (value or "").strip()
+        if not text:
+            return ""
+        lower = text.lower()
+        if lower.startswith(("http://", "https://", "db://")):
+            return text
+        return ""
 
 
 class ApprovalTaskResponse(OrmModel):
@@ -1309,9 +1568,38 @@ class ApprovalTaskResponse(OrmModel):
     branch_id: UUID
 
 
+class CrmApprovalUserOption(BaseModel):
+    id: UUID
+    display_name: str
+    email: str
+
+
+class CrmMemberOption(BaseModel):
+    """Selectable CRM team member (master_employee id for owner/assignee fields)."""
+
+    id: UUID
+    label: str
+    email: str
+    user_id: UUID
+
+
 class ApprovalTaskDecisionRequest(BaseModel):
     decision: str = Field(pattern="^(approved|rejected)$")
     remark: str | None = None
+
+
+class PoValidationStageResponse(BaseModel):
+    status: str = "not_required"
+    remark: str | None = None
+    decided_at: datetime | None = None
+
+
+class PoValidationResponse(BaseModel):
+    """Finance → Legal (terms) → Management validation of the customer PO."""
+
+    finance: PoValidationStageResponse
+    legal: PoValidationStageResponse
+    management: PoValidationStageResponse
 
 
 class BlueprintStateResponse(BaseModel):
@@ -1321,6 +1609,7 @@ class BlueprintStateResponse(BaseModel):
     locked: bool
     allowed_actions: list[str]
     is_sales_blueprint: bool | None = None
+    po_validation: PoValidationResponse | None = None
 
 
 class OpportunityTimelineEventResponse(BaseModel):
@@ -1341,6 +1630,8 @@ class OpportunityTimelineEventResponse(BaseModel):
     requested_by_name: str | None = None
     decided_by_id: UUID | None = None
     decided_by_name: str | None = None
+    # Selected My Jobs recipients for "Sent for Approval" milestones.
+    assignee_names: list[str] = []
     decision: str | None = None
     team_role: str | None = None
     remark: str | None = None
@@ -1355,7 +1646,7 @@ class OpportunityTimelineResponse(BaseModel):
 
 
 class BlueprintActionRequest(BaseModel):
-    """Generic action payload — fields are action-specific and all optional.
+    """Generic action payload - fields are action-specific and all optional.
 
     e.g. ``file_name``/``file_path``/``content_base64`` for attach_* actions,
     ``team_role``/``remarks`` for send_*_approval, ``deal_reg_number`` for
@@ -1374,6 +1665,101 @@ class BlueprintActionRequest(BaseModel):
     deal_reg_number: str | None = None
     valid_until: date | None = None
     deal_won_amount: Decimal | None = None
+    onboarding_date: date | None = None
+    assigned_user_id: UUID | None = None
+    assigned_user_ids: list[UUID] | None = None
+    # Per-stage approvers for the customer PO chain (send_po_approval). When
+    # omitted, ``assigned_user_ids`` is used for every stage.
+    finance_user_ids: list[UUID] | None = None
+    legal_user_ids: list[UUID] | None = None
+    management_user_ids: list[UUID] | None = None
+    # Operations owners notified of the services/installation scope as soon as
+    # the customer PO is approved (optional - only used when the PO has SAC lines).
+    operations_user_ids: list[UUID] | None = None
 
     def to_payload(self) -> dict:
         return self.model_dump(exclude_none=True)
+
+
+class KycRecordCreate(BaseModel):
+    company_id: UUID | None = None
+    branch_id: UUID
+    company_account_id: UUID
+    owner_employee_id: UUID
+    quote_id: UUID | None = None
+    form_data: dict = Field(default_factory=dict)
+
+
+class KycRecordUpdate(BaseModel):
+    owner_employee_id: UUID | None = None
+    quote_id: UUID | None = None
+    form_data: dict | None = None
+    status: str | None = None
+
+
+class KycRecordResponse(OrmModel):
+    id: UUID
+    kyc_code: str
+    company_account_id: UUID
+    owner_employee_id: UUID
+    quote_id: UUID | None
+    form_data: dict
+    status: str
+    company_id: UUID
+    branch_id: UUID
+    version: int
+
+
+# --- Custom / saved reports ---
+
+
+class SavedReportCreate(BaseModel):
+    report_name: str
+    primary_module: str
+    columns: list[str]
+    folder_name: str | None = None
+    description: str | None = None
+    company_id: UUID | None = None
+
+
+class SavedReportUpdate(BaseModel):
+    report_name: str | None = None
+    columns: list[str] | None = None
+    folder_name: str | None = None
+    description: str | None = None
+    version: int | None = None
+
+
+class SavedReportCloneRequest(BaseModel):
+    report_name: str | None = None
+
+
+class SavedReportResponse(OrmModel):
+    id: UUID
+    report_code: str
+    report_name: str
+    primary_module: str
+    folder_name: str | None
+    description: str | None
+    definition_json: dict
+    owner_user_id: UUID
+    status: str
+    company_id: UUID
+    version: int
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ReportRunRequest(BaseModel):
+    primary_module: str
+    columns: list[str]
+    company_id: UUID | None = None
+    preview_limit: int | None = None
+
+
+class ReportRunResponse(BaseModel):
+    columns: list[dict]
+    rows: list[dict]
+    record_count: int
+    primary_module: str
+    module_label: str

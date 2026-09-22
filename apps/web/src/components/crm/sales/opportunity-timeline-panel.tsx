@@ -14,10 +14,12 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
 import {
   getOpportunityTimeline,
+  type BlueprintEntity,
   type OpportunityTimeline,
   type OpportunityTimelineEvent,
 } from "@/services/sales-crm-service";
@@ -68,8 +70,83 @@ function eventTone(event: OpportunityTimelineEvent): string {
   return "border-border bg-muted text-muted-foreground";
 }
 
+/** Exact Current State tags shown on the deal path (Timeline). */
+const CURRENT_STATE_TITLES = new Set([
+  "Lead Open",
+  "Converted to Opportunity",
+  "Opportunity Open",
+  "BOQ Attached",
+  "SOW Attached",
+  "BOQ/SOW Attached",
+  "BOQ Sent for Approval",
+  "SOW Sent for Approval",
+  "BOQ Studied",
+  "SOW Studied",
+  "BOQ/SOW Studied",
+  "Deal Registration",
+  "Deal Registration Submitted",
+  "OEM Quotation Received",
+  "OEM Quote Attached",
+  "Quote Created",
+  "Quote Sent for Approval",
+  "Quote Approved",
+  "Quote Sent",
+  "Quote Accepted",
+  "Customer PO Attached",
+  "Customer PO Sent for Approval",
+  "Customer PO Approved",
+  "OVF Ready",
+  "Customer PO Approved / OVF Ready",
+  "OVF Created",
+  "OVF Sent for Approval",
+  "OVF Approved",
+  "OVF Shared to SCM",
+  "Deal Won",
+  "Lost Deal",
+]);
+
+const STAGE_ENTITIES = new Set<string>(["lead", "opportunity", "quote", "ovf"]);
+
+/** Prefer API Current State titles; only remap unknown history titles. */
+function resolveTimelineEventTitle(event: OpportunityTimelineEvent): string {
+  const title = (event.title || "").trim();
+  if (title && CURRENT_STATE_TITLES.has(title)) {
+    return title;
+  }
+  const entity = event.entity_type;
+  const state = (event.to_state || "").trim();
+  if (
+    state &&
+    STAGE_ENTITIES.has(entity) &&
+    (event.event_type === "created" ||
+      event.event_type === "state_transition" ||
+      event.event_type === "stage_change")
+  ) {
+    return resolveSalesStageLabel({
+      entityType: entity as BlueprintEntity,
+      blueprintState: state,
+    });
+  }
+  return title || event.title;
+}
+
 function EventCard({ event }: { event: OpportunityTimelineEvent }) {
   const Icon = eventIcon(event);
+  const title = resolveTimelineEventTitle(event);
+  const assignees = (event.assignee_names ?? []).filter(Boolean);
+  const isSentForApproval = /sent for approval/i.test(title) || assignees.length > 0;
+  const approverLabel =
+    event.decided_by_name ||
+    (event.decision === "approved" ? event.actor_name : null) ||
+    null;
+  const actorLabel =
+    event.actor_name ||
+    event.decided_by_name ||
+    event.requested_by_name ||
+    null;
+  const isApprovedStep =
+    /approved|studied/i.test(title) && !/sent for approval/i.test(title);
+
   return (
     <li className="relative pl-8">
       <span
@@ -84,7 +161,24 @@ function EventCard({ event }: { event: OpportunityTimelineEvent }) {
       <div className="rounded-lg border border-border/70 bg-card px-3 py-2.5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="min-w-0">
-            <p className="text-[13px] font-medium text-foreground">{event.title}</p>
+            <p className="text-[13px] font-medium text-foreground">{title}</p>
+            {isSentForApproval && assignees.length > 0 ? (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Sent to{" "}
+                <span className="font-medium text-foreground/80">{assignees.join(", ")}</span>
+              </p>
+            ) : isApprovedStep && (approverLabel || actorLabel) ? (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Approved by{" "}
+                <span className="font-medium text-foreground/80">
+                  {approverLabel || actorLabel}
+                </span>
+              </p>
+            ) : actorLabel ? (
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                by <span className="font-medium text-foreground/80">{actorLabel}</span>
+              </p>
+            ) : null}
             {event.entity_label ? (
               <p className="mt-0.5 text-[11px] text-muted-foreground">{event.entity_label}</p>
             ) : null}
@@ -102,25 +196,26 @@ function EventCard({ event }: { event: OpportunityTimelineEvent }) {
         ) : null}
 
         <dl className="mt-2 grid gap-1 text-[11px] text-muted-foreground">
-          {event.actor_name ? (
-            <div className="flex gap-1.5">
-              <dt className="shrink-0 font-medium text-foreground/70">By</dt>
-              <dd>{event.actor_name}</dd>
-            </div>
-          ) : null}
-          {event.requested_by_name && event.event_type !== "approval_requested" ? (
+          {event.requested_by_name &&
+          event.event_type !== "approval_requested" &&
+          event.requested_by_name !== actorLabel &&
+          event.requested_by_name !== approverLabel ? (
             <div className="flex gap-1.5">
               <dt className="shrink-0 font-medium text-foreground/70">Requested by</dt>
               <dd>{event.requested_by_name}</dd>
             </div>
           ) : null}
-          {event.decided_by_name ? (
+          {event.decided_by_name &&
+          event.decided_by_name !== actorLabel &&
+          event.decided_by_name !== approverLabel &&
+          !isApprovedStep ? (
             <div className="flex gap-1.5">
               <dt className="shrink-0 font-medium text-foreground/70">Decided by</dt>
               <dd>{event.decided_by_name}</dd>
             </div>
           ) : null}
-          {event.from_state || event.to_state ? (
+          {event.event_type !== "approval_requested" &&
+          (event.from_state || event.to_state) ? (
             <div className="flex gap-1.5">
               <dt className="shrink-0 font-medium text-foreground/70">State</dt>
               <dd className="font-mono">
@@ -135,7 +230,7 @@ function EventCard({ event }: { event: OpportunityTimelineEvent }) {
             </div>
           ) : null}
           {typeof event.version === "number" ? (
-            <div className="flex gap-1.5">
+            <div className="flex flex-wrap gap-1.5">
               <dt className="shrink-0 font-medium text-foreground/70">Version</dt>
               <dd className="font-mono">v{event.version}</dd>
             </div>
@@ -210,15 +305,16 @@ export function OpportunityTimelinePanel({
             </p>
             <h2
               id="opportunity-timeline-title"
-              className="truncate text-sm font-medium tracking-tight text-foreground"
+              className="truncate text-base font-extrabold tracking-tight text-foreground"
             >
-              Opportunity timeline
+              Deal timeline
             </h2>
-            {data?.opportunity_code || data?.opportunity_name ? (
-              <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                {[data.opportunity_code, data.opportunity_name].filter(Boolean).join(" · ")}
-              </p>
-            ) : null}
+            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+              Lead creation → Deal won
+              {data?.opportunity_code || data?.opportunity_name
+                ? ` · ${[data.opportunity_code, data.opportunity_name].filter(Boolean).join(" · ")}`
+                : ""}
+            </p>
           </div>
           <Button
             type="button"

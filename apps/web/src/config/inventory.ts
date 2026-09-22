@@ -1,5 +1,5 @@
 /**
- * Inventory workspace config — aligned with FRD-08 screen inventory
+ * Inventory workspace config - aligned with FRD-08 screen inventory
  * and apps/api inventory routers.
  */
 

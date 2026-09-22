@@ -114,7 +114,7 @@ export function ApVendorLedgerPage({ vendorId }: { vendorId: string }) {
 
       <div className="rounded-xl border border-border/80 bg-card shadow-sm">
         <div className="border-b border-border/70 px-3 py-2.5">
-          <h3 className="text-sm font-medium tracking-tight">Ledger Lines</h3>
+          <h3 className="text-base font-extrabold tracking-tight">Ledger Lines</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[960px] border-collapse text-sm">
@@ -147,7 +147,7 @@ export function ApVendorLedgerPage({ vendorId }: { vendorId: string }) {
                       </Link>
                     </td>
                     <td className="px-2 py-1.5 font-mono text-xs">{line.document_date}</td>
-                    <td className="px-2 py-1.5 font-mono text-xs">{line.due_date ?? "—"}</td>
+                    <td className="px-2 py-1.5 font-mono text-xs">{line.due_date ?? "-"}</td>
                     <td className="px-2 py-1.5 text-xs capitalize">{line.document_type}</td>
                     <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(line.debit_amount)}</td>
                     <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(line.credit_amount)}</td>

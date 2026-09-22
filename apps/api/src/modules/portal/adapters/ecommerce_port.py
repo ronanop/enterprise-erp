@@ -1,4 +1,4 @@
-"""E-Commerce port — optional channel order UUID refs only."""
+"""E-Commerce port - optional channel order UUID refs only."""
 
 from uuid import UUID
 

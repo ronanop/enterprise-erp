@@ -2,6 +2,12 @@
 
 from fastapi import APIRouter
 
+from modules.project.routers.follow_ups import follow_ups_router
+from modules.project.routers.my_jobs import my_jobs_router
+from modules.project.routers.members import members_router
+from modules.project.routers.purchase_orders import purchase_orders_router
+from modules.project.routers.stage_alerts import stage_alerts_router
+from modules.project.routers.customer_trackers import customer_trackers_router
 from modules.project.routers import (
     change_requests_router,
     project_budgets_router,
@@ -48,3 +54,9 @@ project_router.include_router(project_status_history_router)
 project_router.include_router(project_notifications_router)
 project_router.include_router(reports_router)
 project_router.include_router(site_installations_router)
+project_router.include_router(members_router)
+project_router.include_router(my_jobs_router)
+project_router.include_router(follow_ups_router)
+project_router.include_router(stage_alerts_router)
+project_router.include_router(purchase_orders_router)
+project_router.include_router(customer_trackers_router)

@@ -3,14 +3,17 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class AddressJson(BaseModel):
     """Billing/shipping address payload.
 
     Defaults keep list/get responses working when legacy rows stored `{}`.
+    `extra='allow'` preserves vendor multi-address payloads (`addresses`, `billing`, etc.).
     """
+
+    model_config = ConfigDict(extra="allow")
 
     line1: str = "TBD"
     city: str = "TBD"
@@ -50,6 +53,7 @@ class EmployeeCreateRequest(BaseModel):
     reporting_manager_id: UUID | None = None
     date_of_leaving: date | None = None
     user_id: UUID | None = None
+    bypass_onboarding: bool = False
 
 
 class EmployeeUpdateRequest(BaseModel):
@@ -181,6 +185,138 @@ class VendorResponse(BaseModel):
     mobile: str | None = None
     payment_terms: str | None = None
     address_json: AddressJson | None = None
+
+
+class KycDocument(BaseModel):
+    """A KYC attachment on a registration."""
+
+    model_config = ConfigDict(extra="allow")
+
+    doc_type: str
+    file_name: str
+    storage_key: str | None = None
+    uploaded_at: datetime | None = None
+
+
+class PartyRegistrationCreateRequest(BaseModel):
+    branch_id: UUID
+    party_type: str = Field(description="'customer' or 'vendor'")
+    legal_name: str = Field(max_length=255)
+    company_id: UUID | None = None
+    trade_name: str | None = Field(default=None, max_length=255)
+    party_subtype: str | None = Field(default=None, max_length=30)
+    tax_number: str | None = Field(default=None, max_length=100)
+    pan_number: str | None = Field(default=None, max_length=20)
+    cin_number: str | None = Field(default=None, max_length=30)
+    contact_person: str | None = Field(default=None, max_length=255)
+    email: str | None = None
+    mobile: str | None = Field(default=None, max_length=30)
+    address_json: AddressJson | None = None
+    bank_details_json: dict | None = None
+    kyc_documents_json: list[KycDocument] | None = None
+    declared_annual_turnover: float | None = Field(default=None, ge=0)
+    requested_credit_limit: float | None = Field(default=None, ge=0)
+    requested_credit_days: int | None = Field(default=None, ge=0, le=365)
+    expected_monthly_spend: float | None = Field(default=None, ge=0)
+    early_payment_discount_pct: float | None = Field(default=None, ge=0, le=100)
+    currency_code: str | None = Field(default=None, max_length=3)
+    source_crm_company_id: UUID | None = None
+    source_kyc_record_id: UUID | None = None
+
+
+class PartyRegistrationUpdateRequest(BaseModel):
+    version: int
+    branch_id: UUID | None = None
+    legal_name: str | None = Field(default=None, max_length=255)
+    trade_name: str | None = Field(default=None, max_length=255)
+    party_subtype: str | None = Field(default=None, max_length=30)
+    tax_number: str | None = Field(default=None, max_length=100)
+    pan_number: str | None = Field(default=None, max_length=20)
+    cin_number: str | None = Field(default=None, max_length=30)
+    contact_person: str | None = Field(default=None, max_length=255)
+    email: str | None = None
+    mobile: str | None = Field(default=None, max_length=30)
+    address_json: AddressJson | None = None
+    bank_details_json: dict | None = None
+    kyc_documents_json: list[KycDocument] | None = None
+    declared_annual_turnover: float | None = Field(default=None, ge=0)
+    requested_credit_limit: float | None = Field(default=None, ge=0)
+    requested_credit_days: int | None = Field(default=None, ge=0, le=365)
+    expected_monthly_spend: float | None = Field(default=None, ge=0)
+    early_payment_discount_pct: float | None = Field(default=None, ge=0, le=100)
+    currency_code: str | None = Field(default=None, max_length=3)
+
+
+class KycVerifyRequest(BaseModel):
+    verified: bool = True
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class CreditEvaluationRequest(BaseModel):
+    supplier_credit_days: int = Field(
+        default=60, ge=0, le=365, description="Credit days our own suppliers give us"
+    )
+    customer_credit_days: int = Field(
+        default=30, ge=0, le=365, description="Credit days we give our customers"
+    )
+    monthly_interest_rate_pct: float | None = Field(default=None, ge=0, le=100)
+
+
+class RegistrationApproveRequest(BaseModel):
+    approved_credit_limit: float | None = Field(default=None, ge=0)
+    approved_credit_days: int | None = Field(default=None, ge=0, le=365)
+    reason: str | None = Field(default=None, max_length=500)
+    override_risk_band: bool = False
+
+
+class RegistrationRejectRequest(BaseModel):
+    reason: str = Field(max_length=500)
+
+
+class PartyRegistrationResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    company_id: UUID
+    branch_id: UUID
+    registration_code: str
+    party_type: str
+    legal_name: str
+    kyc_status: str
+    status: str
+    version: int
+    is_deleted: bool
+    kyc_documents_json: list = Field(default_factory=list)
+    trade_name: str | None = None
+    party_subtype: str | None = None
+    tax_number: str | None = None
+    pan_number: str | None = None
+    cin_number: str | None = None
+    contact_person: str | None = None
+    email: str | None = None
+    mobile: str | None = None
+    address_json: AddressJson | None = None
+    bank_details_json: dict | None = None
+    kyc_verified_at: datetime | None = None
+    kyc_verified_by: UUID | None = None
+    declared_annual_turnover: float | None = None
+    requested_credit_limit: float | None = None
+    requested_credit_days: int | None = None
+    expected_monthly_spend: float | None = None
+    early_payment_discount_pct: float | None = None
+    currency_code: str | None = None
+    evaluation_json: dict | None = None
+    assessed_credit_limit: float | None = None
+    assessed_credit_days: int | None = None
+    risk_band: str | None = None
+    evaluated_at: datetime | None = None
+    evaluated_by: UUID | None = None
+    decision_reason: str | None = None
+    decided_at: datetime | None = None
+    decided_by: UUID | None = None
+    source_crm_company_id: UUID | None = None
+    source_kyc_record_id: UUID | None = None
+    customer_id: UUID | None = None
+    vendor_id: UUID | None = None
 
 
 class ProductCreateRequest(BaseModel):

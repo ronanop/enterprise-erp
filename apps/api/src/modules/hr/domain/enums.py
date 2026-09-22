@@ -25,11 +25,36 @@ class EmploymentType(str, Enum):
 
 class EmploymentStatus(str, Enum):
     DRAFT = "draft"
+    ONBOARDING = "onboarding"
     ACTIVE = "active"
     PROBATION = "probation"
     CONFIRMED = "confirmed"
+    NOTICE_PERIOD = "notice_period"
+    SEPARATED = "separated"
+    EX_EMPLOYEE = "ex_employee"
     ENDED = "ended"
     CANCELLED = "cancelled"
+
+
+class LeaveRequestStatus(str, Enum):
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    MANAGER_APPROVED = "manager_approved"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    CANCELLED = "cancelled"
+
+
+class AttendanceDayStatus(str, Enum):
+    PRESENT = "present"
+    ABSENT = "absent"
+    HALF_DAY = "half_day"
+    WORK_FROM_HOME = "work_from_home"
+    HOLIDAY = "holiday"
+    LATE = "late"
+    WEEK_OFF = "week_off"
+    ON_DUTY = "on_duty"
+    MISS_PUNCH = "miss_punch"
 
 
 class AssignmentStatus(str, Enum):
@@ -60,25 +85,16 @@ class HolidayCalendarStatus(str, Enum):
     ARCHIVED = "archived"
 
 
-class LeaveRequestStatus(str, Enum):
-    DRAFT = "draft"
-    SUBMITTED = "submitted"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    CANCELLED = "cancelled"
-
-
 class LeaveBalanceStatus(str, Enum):
     OPEN = "open"
     CLOSED = "closed"
 
 
-class AttendanceDayStatus(str, Enum):
-    PRESENT = "present"
-    ABSENT = "absent"
-    HALF_DAY = "half_day"
-    WORK_FROM_HOME = "work_from_home"
-    HOLIDAY = "holiday"
+class LeaveAdjustmentStatus(str, Enum):
+    DRAFT = "draft"
+    SUBMITTED = "submitted"
+    APPROVED = "approved"
+    REJECTED = "rejected"
 
 
 class AttendanceSource(str, Enum):
@@ -180,15 +196,33 @@ class SeparationType(str, Enum):
     RESIGNATION = "resignation"
     TERMINATION = "termination"
     RETIREMENT = "retirement"
+    DEATH = "death"
+    OTHER = "other"
 
 
 class SeparationStatus(str, Enum):
     DRAFT = "draft"
     SUBMITTED = "submitted"
     MANAGER_APPROVED = "manager_approved"
+    IT_APPROVED = "it_approved"
+    ACCOUNTS_APPROVED = "accounts_approved"
     HR_APPROVED = "hr_approved"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
+
+
+class NoticeStatus(str, Enum):
+    PENDING = "pending"
+    ON_NOTICE = "on_notice"
+    SERVED = "served"
+    NOT_SERVED = "not_served"
+    DIRECT_EXIT = "direct_exit"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class SeparationInitiatedBy(str, Enum):
+    EMPLOYEE = "employee"
+    HR = "hr"
 
 
 class HrEntityType(str, Enum):
@@ -198,7 +232,10 @@ class HrEntityType(str, Enum):
     EMPLOYEE_DOCUMENT = "employee_document"
     PERFORMANCE_REVIEW = "performance_review"
     TRAINING = "training"
+    TRAINING_ROOM = "training_room"
+    TRAINING_REQUEST = "training_request"
     SEPARATION = "separation"
+    EXIT_AGREEMENT = "exit_agreement"
     DESIGNATION = "designation"
     SHIFT = "shift"
     LEAVE_TYPE = "leave_type"
@@ -212,7 +249,10 @@ CODE_PREFIXES: dict[HrEntityType, tuple[str, int]] = {
     HrEntityType.EMPLOYEE_DOCUMENT: ("EDOC-", 6),
     HrEntityType.PERFORMANCE_REVIEW: ("PRF-", 6),
     HrEntityType.TRAINING: ("TRN-", 6),
+    HrEntityType.TRAINING_ROOM: ("ROOM-", 4),
+    HrEntityType.TRAINING_REQUEST: ("MTG-", 6),
     HrEntityType.SEPARATION: ("SEP-", 6),
+    HrEntityType.EXIT_AGREEMENT: ("EXA-", 6),
     HrEntityType.DESIGNATION: ("DES-", 6),
     HrEntityType.SHIFT: ("SFT-", 6),
     HrEntityType.LEAVE_TYPE: ("LT-", 6),

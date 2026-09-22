@@ -1,4 +1,4 @@
-"""CRM CrmStateHistory repository — append-only blueprint transition log."""
+"""CRM CrmStateHistory repository - append-only blueprint transition log."""
 
 from uuid import UUID, uuid4
 

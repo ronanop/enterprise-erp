@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Apply Leave - Employee Portal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary-fixed-variant": "#5a00c6",
+                        "tertiary": "#006242",
+                        "on-surface-variant": "#434655",
+                        "outline": "#737686",
+                        "surface-container-high": "#dce9ff",
+                        "error-container": "#ffdad6",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-dim": "#cbdbf5",
+                        "surface-bright": "#f8f9ff",
+                        "secondary": "#712ae2",
+                        "tertiary-fixed-dim": "#4edea3",
+                        "tertiary-container": "#007d55",
+                        "tertiary-fixed": "#6ffbbe",
+                        "error": "#ba1a1a",
+                        "on-primary": "#ffffff",
+                        "on-surface": "#0b1c30",
+                        "surface-variant": "#d3e4fe",
+                        "on-tertiary-fixed": "#002113",
+                        "on-secondary-container": "#fffbff",
+                        "on-error-container": "#93000a",
+                        "outline-variant": "#c3c6d7",
+                        "primary": "#004ac6",
+                        "surface-tint": "#0053db",
+                        "on-secondary-fixed": "#25005a",
+                        "primary-container": "#2563eb",
+                        "on-tertiary-fixed-variant": "#005236",
+                        "on-tertiary-container": "#bdffdb",
+                        "primary-fixed": "#dbe1ff",
+                        "inverse-surface": "#213145",
+                        "secondary-fixed": "#eaddff",
+                        "background": "#f8f9ff",
+                        "surface-container": "#e5eeff",
+                        "surface-container-highest": "#d3e4fe",
+                        "surface": "#f8f9ff",
+                        "on-primary-fixed": "#00174b",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "on-error": "#ffffff",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "inverse-primary": "#b4c5ff",
+                        "secondary-fixed-dim": "#d2bbff",
+                        "surface-container-low": "#eff4ff",
+                        "secondary-container": "#8a4cfc",
+                        "on-primary-container": "#eeefff",
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-tertiary": "#ffffff",
+                        "on-background": "#0b1c30",
+                        "on-secondary": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "section-margin": "32px",
+                        "stack-gap-sm": "8px",
+                        "unit": "4px",
+                        "container-padding": "20px",
+                        "stack-gap-lg": "24px",
+                        "stack-gap-md": "16px"
+                    },
+                    "fontFamily": {
+                        "display-lg-mobile": ["Inter"],
+                        "display-md": ["Inter"],
+                        "display-lg": ["Inter"],
+                        "label-sm": ["Inter"],
+                        "title-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "label-md": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "headline-sm": ["Inter"]
+                    },
+                    "fontSize": {
+                        "display-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                        "display-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                        "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                        "title-lg": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                        "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                        "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8f9ff; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .glass-panel { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+        .active-dot::after { content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; background: currentColor; border-radius: 9999px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #d3e4fe; border-radius: 10px; }
+        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+        .ai-glow { box-shadow: 0 0 20px rgba(113, 42, 226, 0.2); }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="text-on-surface antialiased overflow-x-hidden">
+<!-- Top App Bar -->
+<header class="fixed top-0 w-full z-50 bg-surface/80 dark:bg-surface-dim/80 backdrop-blur-xl border-b border-outline-variant/30 flex justify-between items-center px-container-padding h-16">
+<div class="flex items-center gap-3">
+<button class="w-10 h-10 rounded-full bg-surface-container-low flex items-center justify-center text-on-surface-variant hover:opacity-80 transition-opacity active:scale-95 duration-150">
+<span class="material-symbols-outlined">close</span>
+</button>
+<h1 class="font-title-lg text-title-lg text-primary">Apply Leave</h1>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full overflow-hidden border-2 border-primary-container">
+<img class="w-full h-full object-cover" data-alt="Professional headshot of a smiling female employee in a modern office setting, bright natural lighting, corporate minimalist aesthetic, wearing a navy blue blazer, clean high-key background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuANWFnMdccUGXr4UMzCeNRRlusjowauO3YKEeZOf9YDE3LQLU8FVw4Nkhsfa35DZMNoiLQJXDvqhqPzqy8KYXK7cLn3cBe1oJZu6VTjE3Veh7bxOE-gtgmCsIvOJY-thr-6vwy-aFJf6u4kJ8AePgc1QEa29w10k9T2MgZmd9UOTYqrk6bbzjkWdBNK3TH66yta7w-0ZVy_exwmmRbu0ub_rKJqpvjwHMbw5Mld33uRy39iGRWT4oOQuxmPK14a_rj9qdMb4iPLows"/>
+</div>
+</div>
+</header>
+<main class="pt-20 pb-32 px-container-padding max-w-lg mx-auto min-h-screen">
+<!-- Progress Stepper -->
+<div class="flex justify-between items-center mb-section-margin px-4">
+<div class="flex flex-col items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-primary text-on-primary flex items-center justify-center font-label-sm text-label-sm">1</div>
+<span class="font-label-sm text-label-sm text-primary">Type</span>
+</div>
+<div class="flex-1 h-[2px] bg-outline-variant/30 mx-2 -mt-6"></div>
+<div class="flex flex-col items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm">2</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Dates</span>
+</div>
+<div class="flex-1 h-[2px] bg-outline-variant/30 mx-2 -mt-6"></div>
+<div class="flex flex-col items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-surface-container-highest text-on-surface-variant flex items-center justify-center font-label-sm text-label-sm">3</div>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Reason</span>
+</div>
+</div>
+<!-- AI Assistant Interface -->
+<section class="mb-stack-gap-lg">
+<div class="flex items-start gap-4 mb-4">
+<div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-secondary to-primary-container flex items-center justify-center ai-glow shrink-0 shadow-lg">
+<span class="material-symbols-outlined text-white text-2xl" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</div>
+<div class="bg-white p-4 rounded-2xl rounded-tl-none shadow-sm border border-outline-variant/20 max-w-[85%]">
+<p class="font-body-md text-body-md text-on-surface">Need leave tomorrow? I can help you with that. Let's start by picking the type of leave.</p>
+</div>
+</div>
+</section>
+<!-- Leave Type Selection -->
+<section class="mb-section-margin">
+<h3 class="font-label-md text-label-md text-on-surface-variant mb-3 px-1 uppercase tracking-wider">Leave Type</h3>
+<div class="flex flex-wrap gap-3">
+<button class="px-6 py-3 rounded-full bg-primary-container text-on-primary-container font-label-md text-label-md border-2 border-primary transition-all active:scale-95">Casual</button>
+<button class="px-6 py-3 rounded-full bg-white text-on-surface-variant font-label-md text-label-md border border-outline-variant/50 hover:bg-surface-container transition-all active:scale-95">Sick</button>
+<button class="px-6 py-3 rounded-full bg-white text-on-surface-variant font-label-md text-label-md border border-outline-variant/50 hover:bg-surface-container transition-all active:scale-95">WFH</button>
+<button class="px-6 py-3 rounded-full bg-white text-on-surface-variant font-label-md text-label-md border border-outline-variant/50 hover:bg-surface-container transition-all active:scale-95">Maternity</button>
+</div>
+</section>
+<!-- Date Picker Card -->
+<section class="mb-section-margin">
+<div class="bg-white rounded-3xl p-6 shadow-[0px_4px_20px_rgba(0,0,0,0.05)] border border-outline-variant/20">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-title-lg text-title-lg text-on-surface">Select Dates</h3>
+<div class="flex gap-2">
+<button class="p-2 rounded-xl bg-surface-container-low text-primary">
+<span class="material-symbols-outlined">chevron_left</span>
+</button>
+<button class="p-2 rounded-xl bg-surface-container-low text-primary">
+<span class="material-symbols-outlined">chevron_right</span>
+</button>
+</div>
+</div>
+<div class="grid grid-cols-7 gap-2 mb-6">
+<!-- Day labels -->
+<div class="text-center font-label-sm text-label-sm text-outline">Mo</div>
+<div class="text-center font-label-sm text-label-sm text-outline">Tu</div>
+<div class="text-center font-label-sm text-label-sm text-outline">We</div>
+<div class="text-center font-label-sm text-label-sm text-outline">Th</div>
+<div class="text-center font-label-sm text-label-sm text-outline">Fr</div>
+<div class="text-center font-label-sm text-label-sm text-outline">Sa</div>
+<div class="text-center font-label-sm text-label-sm text-outline">Su</div>
+<!-- Calendar days (Demo data) -->
+<button class="h-10 w-10 flex items-center justify-center rounded-xl font-body-sm text-body-sm text-outline-variant">28</button>
+<button class="h-10 w-10 flex items-center justify-center rounded-xl font-body-sm text-body-sm text-outline-variant">29</button>
+<button class="h-10 w-10 flex items-center justify-center rounded-xl font-body-sm text-body-sm text-outline-variant">30</button>
+<button class="h-10 w-10 flex items-center justify-center rounded-xl font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low">1</button>
+<button class="h-10 w-10 flex items-center justify-center rounded-xl font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low">2</button>
+<button class="h-10 w-10 flex items-center justify-center rounded-xl font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low">3</button>
+<button class="h-10 w-10 flex items-center justify-center rounded-xl font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low">4</button>
+<button class="h-10 w-10 flex items-center justify-center rounded-xl font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low">5</button>
+<button class="h-10 w-10 flex items-center justify-center rounded-xl font-body-sm text-body-sm bg-primary text-on-primary shadow-lg shadow-primary/20">6</button>
+<button class="h-10 w-10 flex items-center justify-center rounded-xl font-body-sm text-body-sm bg-primary-fixed text-on-primary-fixed">7</button>
+<button class="h-10 w-10 flex items-center justify-center rounded-xl font-body-sm text-body-sm bg-primary-fixed text-on-primary-fixed">8</button>
+<button class="h-10 w-10 flex items-center justify-center rounded-xl font-body-sm text-body-sm bg-primary text-on-primary shadow-lg shadow-primary/20">9</button>
+<button class="h-10 w-10 flex items-center justify-center rounded-xl font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low">10</button>
+<button class="h-10 w-10 flex items-center justify-center rounded-xl font-body-sm text-body-sm text-on-surface hover:bg-surface-container-low">11</button>
+</div>
+<div class="flex gap-4">
+<div class="flex-1">
+<span class="block font-label-sm text-label-sm text-outline mb-1">Start Date</span>
+<div class="p-3 bg-surface-container-low rounded-2xl font-body-md text-body-md">Oct 06, 2024</div>
+</div>
+<div class="flex-1">
+<span class="block font-label-sm text-label-sm text-outline mb-1">End Date</span>
+<div class="p-3 bg-surface-container-low rounded-2xl font-body-md text-body-md">Oct 09, 2024</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Reason Input -->
+<section class="mb-section-margin">
+<h3 class="font-label-md text-label-md text-on-surface-variant mb-3 px-1">Any specific reason?</h3>
+<div class="relative group">
+<textarea class="w-full bg-white border border-outline-variant/50 rounded-2xl p-4 font-body-md text-body-md focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-outline-variant resize-none" placeholder="Reason for leave (Optional)" rows="3"></textarea>
+<div class="absolute bottom-3 right-3 text-outline-variant">
+<span class="material-symbols-outlined text-sm">edit</span>
+</div>
+</div>
+</section>
+<!-- AI Confidence Badge (Micro-interaction) -->
+<div class="flex items-center gap-2 mb-stack-gap-lg px-2">
+<div class="w-2 h-2 rounded-full bg-tertiary animate-pulse"></div>
+<p class="font-label-sm text-label-sm text-tertiary">Probability of approval: High (94%)</p>
+</div>
+</main>
+<!-- Bottom Actions / FAB Area -->
+<div class="fixed bottom-0 left-0 w-full z-50 px-container-padding pb-8 pt-4 bg-gradient-to-t from-background via-background to-transparent">
+<div class="max-w-lg mx-auto flex gap-4">
+<button class="flex-[1] h-14 rounded-full border border-outline-variant bg-white text-on-surface font-title-lg text-title-lg hover:bg-surface-container transition-all active:scale-95">
+                Save Draft
+            </button>
+<button class="flex-[2] h-14 rounded-full bg-primary text-on-primary font-title-lg text-title-lg shadow-xl shadow-primary/30 flex items-center justify-center gap-2 hover:opacity-90 transition-all active:scale-95">
+<span>Submit Request</span>
+<span class="material-symbols-outlined">send</span>
+</button>
+</div>
+</div>
+<!-- Background Decoration -->
+<div class="fixed inset-0 -z-10 pointer-events-none opacity-40">
+<div class="absolute top-[10%] left-[5%] w-64 h-64 bg-primary-fixed rounded-full blur-[100px]"></div>
+<div class="absolute bottom-[20%] right-[5%] w-72 h-72 bg-secondary-fixed rounded-full blur-[100px]"></div>
+</div>
+<!-- Navigation Shell Placeholder (Bottom Bar) -->
+<nav class="fixed bottom-0 left-0 w-full z-[60] flex justify-around items-center px-4 pt-3 pb-safe-area h-20 bg-surface/80 backdrop-blur-xl border-t border-outline-variant/30 rounded-t-xl shadow-lg md:hidden">
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-60 transition-all active:scale-90" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-sm text-[10px]">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary relative active-dot transition-all active:scale-90" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">event_upcoming</span>
+<span class="font-label-sm text-[10px]">Leave</span>
+</a>
+<a class="w-14 h-14 -mt-10 bg-gradient-to-br from-secondary to-primary-container rounded-2xl flex items-center justify-center text-white shadow-lg active:scale-95 transition-transform duration-150" href="#">
+<span class="material-symbols-outlined text-3xl">auto_awesome</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-60 transition-all active:scale-90" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-label-sm text-[10px]">Salary</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-60 transition-all active:scale-90" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-sm text-[10px]">Profile</span>
+</a>
+</nav>
+<script>
+        // Micro-interaction: Scale effect on cards
+        document.querySelectorAll('button').forEach(button => {
+            button.addEventListener('mousedown', () => {
+                button.classList.add('scale-95');
+            });
+            button.addEventListener('mouseup', () => {
+                button.classList.remove('scale-95');
+            });
+            button.addEventListener('mouseleave', () => {
+                button.classList.remove('scale-95');
+            });
+        });
+
+        // Simple visibility observer for AI text typing effect
+        const aiText = document.querySelector('.ai-glow + div p');
+        if (aiText) {
+            const originalText = aiText.innerText;
+            aiText.innerText = '';
+            let i = 0;
+            const typeWriter = () => {
+                if (i < originalText.length) {
+                    aiText.innerText += originalText.charAt(i);
+                    i++;
+                    setTimeout(typeWriter, 15);
+                }
+            }
+            typeWriter();
+        }
+    </script>
+</body></html>

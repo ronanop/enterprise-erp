@@ -101,7 +101,7 @@ from modules.ecommerce.service import (
 from modules.foundation.domain.value_objects import TenantContext
 from shared.schemas import APIResponse
 
-stores_router = APIRouter(prefix="/stores", tags=["E-Commerce — Store"])
+stores_router = APIRouter(prefix="/stores", tags=["E-Commerce - Store"])
 
 @stores_router.get("", response_model=APIResponse[list[StoreResponse]])
 def list_stores(
@@ -154,7 +154,7 @@ def approve_stores(
 ):
     return APIResponse(message="approve", data=StoreService(db).approve(ctx, row_id))
 
-sales_channels_router = APIRouter(prefix="/sales-channels", tags=["E-Commerce — SalesChannel"])
+sales_channels_router = APIRouter(prefix="/sales-channels", tags=["E-Commerce - SalesChannel"])
 
 @sales_channels_router.get("", response_model=APIResponse[list[SalesChannelResponse]])
 def list_sales_channels(
@@ -191,7 +191,7 @@ def update_sales_channels(
 ):
     return APIResponse(message="Updated", data=SalesChannelService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-product_listings_router = APIRouter(prefix="/product-listings", tags=["E-Commerce — ProductListing"])
+product_listings_router = APIRouter(prefix="/product-listings", tags=["E-Commerce - ProductListing"])
 
 @product_listings_router.get("", response_model=APIResponse[list[ProductListingResponse]])
 def list_product_listings(
@@ -252,7 +252,7 @@ def publish_product_listings(
 ):
     return APIResponse(message="publish", data=ProductListingService(db).publish(ctx, row_id))
 
-listing_prices_router = APIRouter(prefix="/listing-prices", tags=["E-Commerce — ListingPrice"])
+listing_prices_router = APIRouter(prefix="/listing-prices", tags=["E-Commerce - ListingPrice"])
 
 @listing_prices_router.get("", response_model=APIResponse[list[ListingPriceResponse]])
 def list_listing_prices(
@@ -289,7 +289,7 @@ def update_listing_prices(
 ):
     return APIResponse(message="Updated", data=ListingPriceService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-listing_inventories_router = APIRouter(prefix="/listing-inventories", tags=["E-Commerce — ListingInventory"])
+listing_inventories_router = APIRouter(prefix="/listing-inventories", tags=["E-Commerce - ListingInventory"])
 
 @listing_inventories_router.get("", response_model=APIResponse[list[ListingInventoryResponse]])
 def list_listing_inventories(
@@ -326,7 +326,7 @@ def update_listing_inventories(
 ):
     return APIResponse(message="Updated", data=ListingInventoryService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-customer_carts_router = APIRouter(prefix="/customer-carts", tags=["E-Commerce — CustomerCart"])
+customer_carts_router = APIRouter(prefix="/customer-carts", tags=["E-Commerce - CustomerCart"])
 
 @customer_carts_router.get("", response_model=APIResponse[list[CustomerCartResponse]])
 def list_customer_carts(
@@ -363,7 +363,7 @@ def update_customer_carts(
 ):
     return APIResponse(message="Updated", data=CustomerCartService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-cart_items_router = APIRouter(prefix="/cart-items", tags=["E-Commerce — CartItem"])
+cart_items_router = APIRouter(prefix="/cart-items", tags=["E-Commerce - CartItem"])
 
 @cart_items_router.get("", response_model=APIResponse[list[CartItemResponse]])
 def list_cart_items(
@@ -400,7 +400,7 @@ def update_cart_items(
 ):
     return APIResponse(message="Updated", data=CartItemService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-orders_router = APIRouter(prefix="/orders", tags=["E-Commerce — Order"])
+orders_router = APIRouter(prefix="/orders", tags=["E-Commerce - Order"])
 
 @orders_router.get("", response_model=APIResponse[list[OrderResponse]])
 def list_orders(
@@ -461,7 +461,7 @@ def cancel_orders(
 ):
     return APIResponse(message="cancel", data=OrderService(db).cancel(ctx, row_id))
 
-order_items_router = APIRouter(prefix="/order-items", tags=["E-Commerce — OrderItem"])
+order_items_router = APIRouter(prefix="/order-items", tags=["E-Commerce - OrderItem"])
 
 @order_items_router.get("", response_model=APIResponse[list[OrderItemResponse]])
 def list_order_items(
@@ -498,7 +498,7 @@ def update_order_items(
 ):
     return APIResponse(message="Updated", data=OrderItemService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-payments_router = APIRouter(prefix="/payments", tags=["E-Commerce — Payment"])
+payments_router = APIRouter(prefix="/payments", tags=["E-Commerce - Payment"])
 
 @payments_router.get("", response_model=APIResponse[list[PaymentResponse]])
 def list_payments(
@@ -551,7 +551,7 @@ def refund_payments(
 ):
     return APIResponse(message="refund", data=PaymentService(db).refund(ctx, row_id))
 
-payment_transactions_router = APIRouter(prefix="/payment-transactions", tags=["E-Commerce — PaymentTransaction"])
+payment_transactions_router = APIRouter(prefix="/payment-transactions", tags=["E-Commerce - PaymentTransaction"])
 
 @payment_transactions_router.get("", response_model=APIResponse[list[PaymentTransactionResponse]])
 def list_payment_transactions(
@@ -588,7 +588,7 @@ def update_payment_transactions(
 ):
     return APIResponse(message="Updated", data=PaymentTransactionService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-shipments_router = APIRouter(prefix="/shipments", tags=["E-Commerce — Shipment"])
+shipments_router = APIRouter(prefix="/shipments", tags=["E-Commerce - Shipment"])
 
 @shipments_router.get("", response_model=APIResponse[list[ShipmentResponse]])
 def list_shipments(
@@ -625,7 +625,7 @@ def update_shipments(
 ):
     return APIResponse(message="Updated", data=ShipmentService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-shipping_trackings_router = APIRouter(prefix="/shipping-trackings", tags=["E-Commerce — ShippingTracking"])
+shipping_trackings_router = APIRouter(prefix="/shipping-trackings", tags=["E-Commerce - ShippingTracking"])
 
 @shipping_trackings_router.get("", response_model=APIResponse[list[ShippingTrackingResponse]])
 def list_shipping_trackings(
@@ -662,7 +662,7 @@ def update_shipping_trackings(
 ):
     return APIResponse(message="Updated", data=ShippingTrackingService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-return_requests_router = APIRouter(prefix="/return-requests", tags=["E-Commerce — ReturnRequest"])
+return_requests_router = APIRouter(prefix="/return-requests", tags=["E-Commerce - ReturnRequest"])
 
 @return_requests_router.get("", response_model=APIResponse[list[ReturnRequestResponse]])
 def list_return_requests(
@@ -723,7 +723,7 @@ def reject_return_requests(
 ):
     return APIResponse(message="reject", data=ReturnRequestService(db).reject(ctx, row_id))
 
-return_items_router = APIRouter(prefix="/return-items", tags=["E-Commerce — ReturnItem"])
+return_items_router = APIRouter(prefix="/return-items", tags=["E-Commerce - ReturnItem"])
 
 @return_items_router.get("", response_model=APIResponse[list[ReturnItemResponse]])
 def list_return_items(
@@ -760,7 +760,7 @@ def update_return_items(
 ):
     return APIResponse(message="Updated", data=ReturnItemService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-coupons_router = APIRouter(prefix="/coupons", tags=["E-Commerce — Coupon"])
+coupons_router = APIRouter(prefix="/coupons", tags=["E-Commerce - Coupon"])
 
 @coupons_router.get("", response_model=APIResponse[list[CouponResponse]])
 def list_coupons(
@@ -797,7 +797,7 @@ def update_coupons(
 ):
     return APIResponse(message="Updated", data=CouponService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-promotions_router = APIRouter(prefix="/promotions", tags=["E-Commerce — Promotion"])
+promotions_router = APIRouter(prefix="/promotions", tags=["E-Commerce - Promotion"])
 
 @promotions_router.get("", response_model=APIResponse[list[PromotionResponse]])
 def list_promotions(
@@ -834,7 +834,7 @@ def update_promotions(
 ):
     return APIResponse(message="Updated", data=PromotionService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-marketplace_connectors_router = APIRouter(prefix="/marketplace-connectors", tags=["E-Commerce — MarketplaceConnector"])
+marketplace_connectors_router = APIRouter(prefix="/marketplace-connectors", tags=["E-Commerce - MarketplaceConnector"])
 
 @marketplace_connectors_router.get("", response_model=APIResponse[list[MarketplaceConnectorResponse]])
 def list_marketplace_connectors(
@@ -895,7 +895,7 @@ def sync_marketplace_connectors(
 ):
     return APIResponse(message="sync", data=MarketplaceConnectorService(db).sync(ctx, row_id))
 
-notifications_router = APIRouter(prefix="/notifications", tags=["E-Commerce — Notification"])
+notifications_router = APIRouter(prefix="/notifications", tags=["E-Commerce - Notification"])
 
 @notifications_router.get("", response_model=APIResponse[list[NotificationResponse]])
 def list_notifications(
@@ -940,7 +940,7 @@ def acknowledge_notifications(
 ):
     return APIResponse(message="acknowledge", data=NotificationService(db).acknowledge(ctx, row_id))
 
-reports_router = APIRouter(prefix="/reports", tags=["E-Commerce — Report"])
+reports_router = APIRouter(prefix="/reports", tags=["E-Commerce - Report"])
 
 @reports_router.get("", response_model=APIResponse[list[ReportResponse]])
 def list_reports(

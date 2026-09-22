@@ -2,15 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ClipboardCheck, RefreshCw } from "lucide-react";
+import { ClipboardCheck } from "lucide-react";
 
-import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { formatInr, listOvfs, type Ovf } from "@/services/sales-crm-service";
 
 type SortKey =
@@ -23,7 +23,7 @@ type SortKey =
   | "created_at";
 
 function formatCreatedDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -39,7 +39,7 @@ export function OvfListPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("ovf_no");
+  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("created_at", "desc");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,21 +90,7 @@ export function OvfListPage({
       {!embedded ? (
         <PageHeader
           title="OVF"
-          description="Order Value Forms — approval, SCM share, and deal-won. Created only from an eligible Opportunity once the customer PO is approved."
-          actions={
-            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          }
         />
-      ) : null}
-
-      {!embedded ? (
-        <CrmInfoBanner>
-          OVFs are created only from an Opportunity after the customer PO is approved — open the
-          opportunity to create one.
-        </CrmInfoBanner>
       ) : null}
 
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
@@ -112,17 +98,8 @@ export function OvfListPage({
       <CrmListPanel>
         <CrmListToolbar
           title="OVFs"
-          subtitle="Order value forms"
           icon={ClipboardCheck}
           count={sorted.length}
-          actions={
-            embedded ? (
-              <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-                <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-            ) : null
-          }
           search={{
             value: query,
             onChange: setQuery,
@@ -133,7 +110,7 @@ export function OvfListPage({
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+              <tr className={CRM_TABLE_HEAD_ROW}>
                 <CrmSortableTh label="OVF No." sortKey="ovf_no" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="State" sortKey="blueprint_state" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="PO Number" sortKey="po_number" activeKey={sortBy} dir={sortDir} onSort={onSort} />
@@ -161,7 +138,7 @@ export function OvfListPage({
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                     <td className="px-4 py-2.5 font-medium text-foreground">
                       <Link href={`/crm/ovf/${row.id}`} className="cursor-pointer hover:underline">
-                        {row.ovf_no}
+                        {formatCrmCode(row.ovf_no)}
                       </Link>
                     </td>
                     <td className="px-4 py-2.5">
@@ -169,17 +146,17 @@ export function OvfListPage({
                         {row.blueprint_state.replaceAll("_", " ")}
                       </Badge>
                     </td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{row.po_number ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{row.po_number ?? "-"}</td>
                     <td className="px-4 py-2.5 text-muted-foreground">{row.total_margin_pct}%</td>
                     <td className="px-4 py-2.5">
                       {row.deal_won ? (
                         <Badge variant="success">{formatInr(row.deal_won_amount ?? 0)}</Badge>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <span className="text-muted-foreground">-</span>
                       )}
                     </td>
                     <td className="px-4 py-2.5">
-                      {row.shared_to_scm ? <Badge variant="secondary">Shared</Badge> : <span className="text-muted-foreground">—</span>}
+                      {row.shared_to_scm ? <Badge variant="secondary">Shared</Badge> : <span className="text-muted-foreground">-</span>}
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">{formatCreatedDate(row.created_at)}</td>
                   </tr>

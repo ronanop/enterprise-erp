@@ -1,5 +1,5 @@
 /**
- * Payroll workspace config — aligned with FRD-10 screen inventory
+ * Payroll workspace config - aligned with FRD-10 screen inventory
  * and apps/api payroll routers (Period → Run → Payslip → Finance).
  */
 

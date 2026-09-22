@@ -1,11 +1,11 @@
-# ERD_01 — Foundation Domain
+# ERD_01 - Foundation Domain
 
-**Document:** Enterprise ERD — Foundation Domain  
+**Document:** Enterprise ERD - Foundation Domain  
 **Version:** 1.0  
 **Status:** Draft for Architecture Review  
 **Schema:** `foundation`, `audit`, `config`  
 **Aligned To:** BRD v1.0 · FRD-01 · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 
 ---
 
@@ -38,8 +38,8 @@ The Foundation Domain is the platform backbone for all ERP modules. It provides 
 - System/tenant/company/branch configuration keys
 
 ### Out of Scope
-- Organization hierarchy (`org_*`) — ERD_02
-- Business master data (`master_*`) — ERD_03
+- Organization hierarchy (`org_*`) - ERD_02
+- Business master data (`master_*`) - ERD_03
 - Business transactions (`trx_*`)
 - Authentication implementation code, SQLAlchemy models, Alembic scripts
 
@@ -166,22 +166,22 @@ Root multi-tenant entity. Every SaaS customer maps to one tenant.
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | UUID | NO | app-generated | PK |
-| `tenant_code` | VARCHAR(50) | NO | — | Unique tenant code |
-| `tenant_name` | VARCHAR(255) | NO | — | Display name |
+| `tenant_code` | VARCHAR(50) | NO | - | Unique tenant code |
+| `tenant_name` | VARCHAR(255) | NO | - | Display name |
 | `status` | VARCHAR(30) | NO | `'active'` | active, suspended, inactive |
-| `subscription_plan` | VARCHAR(50) | YES | — | Plan tier |
-| `max_companies` | INTEGER | YES | — | License limit |
-| `max_users` | INTEGER | YES | — | License limit |
+| `subscription_plan` | VARCHAR(50) | YES | - | Plan tier |
+| `max_companies` | INTEGER | YES | - | License limit |
+| `max_users` | INTEGER | YES | - | License limit |
 | `timezone` | VARCHAR(50) | NO | `'UTC'` | Default tenant TZ |
 | `locale` | VARCHAR(10) | NO | `'en'` | Default locale |
 | `created_at` | TIMESTAMPTZ | NO | `now()` | Immutable |
-| `created_by` | UUID | YES | — | System/bootstrap user |
-| `updated_at` | TIMESTAMPTZ | NO | `now()` | — |
-| `updated_by` | UUID | YES | — | — |
+| `created_by` | UUID | YES | - | System/bootstrap user |
+| `updated_at` | TIMESTAMPTZ | NO | `now()` | - |
+| `updated_by` | UUID | YES | - | - |
 | `version` | INTEGER | NO | `1` | Optimistic lock |
 | `is_deleted` | BOOLEAN | NO | `FALSE` | Soft delete |
-| `deleted_at` | TIMESTAMPTZ | YES | — | — |
-| `deleted_by` | UUID | YES | — | — |
+| `deleted_at` | TIMESTAMPTZ | YES | - | - |
+| `deleted_by` | UUID | YES | - | - |
 
 #### 6.1.3 Primary Key
 `pk_sec_tenant` → `id`
@@ -221,26 +221,26 @@ Platform login identity for all user types (Super Admin, Company Admin, Branch A
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | UUID | NO | app-generated | PK |
-| `tenant_id` | UUID | NO | — | FK → sec_tenant |
-| `email` | VARCHAR(255) | NO | — | Login email |
-| `password_hash` | VARCHAR(255) | NO | — | bcrypt/argon2 hash |
-| `display_name` | VARCHAR(255) | NO | — | — |
-| `user_type` | VARCHAR(30) | NO | — | super_admin, company_admin, branch_admin, manager, employee |
+| `tenant_id` | UUID | NO | - | FK → sec_tenant |
+| `email` | VARCHAR(255) | NO | - | Login email |
+| `password_hash` | VARCHAR(255) | NO | - | bcrypt/argon2 hash |
+| `display_name` | VARCHAR(255) | NO | - | - |
+| `user_type` | VARCHAR(30) | NO | - | super_admin, company_admin, branch_admin, manager, employee |
 | `status` | VARCHAR(30) | NO | `'active'` | draft, active, locked, inactive |
 | `mfa_enabled` | BOOLEAN | NO | `FALSE` | MFA flag |
-| `mfa_secret_encrypted` | TEXT | YES | — | Encrypted TOTP secret |
-| `last_login_at` | TIMESTAMPTZ | YES | — | — |
+| `mfa_secret_encrypted` | TEXT | YES | - | Encrypted TOTP secret |
+| `last_login_at` | TIMESTAMPTZ | YES | - | - |
 | `failed_login_count` | INTEGER | NO | `0` | Lockout counter |
-| `locked_until` | TIMESTAMPTZ | YES | — | Account lock expiry |
-| `employee_id` | UUID | YES | — | FK → master_employee (ERD_03, future) |
-| `created_at` | TIMESTAMPTZ | NO | `now()` | — |
-| `created_by` | UUID | YES | — | — |
-| `updated_at` | TIMESTAMPTZ | NO | `now()` | — |
-| `updated_by` | UUID | YES | — | — |
-| `version` | INTEGER | NO | `1` | — |
-| `is_deleted` | BOOLEAN | NO | `FALSE` | — |
-| `deleted_at` | TIMESTAMPTZ | YES | — | — |
-| `deleted_by` | UUID | YES | — | — |
+| `locked_until` | TIMESTAMPTZ | YES | - | Account lock expiry |
+| `employee_id` | UUID | YES | - | FK → master_employee (ERD_03, future) |
+| `created_at` | TIMESTAMPTZ | NO | `now()` | - |
+| `created_by` | UUID | YES | - | - |
+| `updated_at` | TIMESTAMPTZ | NO | `now()` | - |
+| `updated_by` | UUID | YES | - | - |
+| `version` | INTEGER | NO | `1` | - |
+| `is_deleted` | BOOLEAN | NO | `FALSE` | - |
+| `deleted_at` | TIMESTAMPTZ | YES | - | - |
+| `deleted_by` | UUID | YES | - | - |
 
 #### 6.2.3 Primary Key
 `pk_sec_user` → `id`
@@ -286,18 +286,18 @@ Named role for RBAC grouping (e.g., Finance Manager, HR Admin).
 | `id` | UUID | NO | PK |
 | `tenant_id` | UUID | NO | FK → sec_tenant |
 | `role_code` | VARCHAR(100) | NO | Unique per tenant |
-| `role_name` | VARCHAR(255) | NO | — |
-| `description` | TEXT | YES | — |
-| `is_system_role` | BOOLEAN | NO | DEFAULT FALSE — system roles non-deletable |
+| `role_name` | VARCHAR(255) | NO | - |
+| `description` | TEXT | YES | - |
+| `is_system_role` | BOOLEAN | NO | DEFAULT FALSE - system roles non-deletable |
 | `status` | VARCHAR(30) | NO | active, inactive |
-| `created_at` | TIMESTAMPTZ | NO | — |
-| `created_by` | UUID | YES | — |
-| `updated_at` | TIMESTAMPTZ | NO | — |
-| `updated_by` | UUID | YES | — |
-| `version` | INTEGER | NO | `1` | — |
-| `is_deleted` | BOOLEAN | NO | `FALSE` | — |
-| `deleted_at` | TIMESTAMPTZ | YES | — | — |
-| `deleted_by` | UUID | YES | — | — |
+| `created_at` | TIMESTAMPTZ | NO | - |
+| `created_by` | UUID | YES | - |
+| `updated_at` | TIMESTAMPTZ | NO | - |
+| `updated_by` | UUID | YES | - |
+| `version` | INTEGER | NO | `1` | - |
+| `is_deleted` | BOOLEAN | NO | `FALSE` | - |
+| `deleted_at` | TIMESTAMPTZ | YES | - | - |
+| `deleted_by` | UUID | YES | - | - |
 
 #### 6.3.3 Primary Key
 `pk_sec_role` → `id`
@@ -340,11 +340,11 @@ Atomic permission: `resource:action` (e.g., `sales.order:approve`).
 | `permission_code` | VARCHAR(150) | NO | Globally unique code |
 | `resource` | VARCHAR(100) | NO | Module/resource |
 | `action` | VARCHAR(50) | NO | create, read, update, delete, approve, export |
-| `description` | TEXT | YES | — |
+| `description` | TEXT | YES | - |
 | `module` | VARCHAR(50) | NO | Domain module |
 | `is_active` | BOOLEAN | NO | DEFAULT TRUE |
-| `created_at` | TIMESTAMPTZ | NO | — |
-| `created_by` | UUID | YES | — |
+| `created_at` | TIMESTAMPTZ | NO | - |
+| `created_by` | UUID | YES | - |
 
 #### 6.4.3 Primary Key
 `pk_sec_permission` → `id`
@@ -365,7 +365,7 @@ None (global permission catalog)
 `created_at`, `created_by` only (reference catalog)
 
 #### 6.4.8 Soft Delete Rules
-No soft delete — use `is_active` (Reference-style per DBS)
+No soft delete - use `is_active` (Reference-style per DBS)
 
 #### 6.4.9 Business Rules
 - Global permission catalog seeded via migration
@@ -386,9 +386,9 @@ Junction table assigning roles to users.
 | `tenant_id` | UUID | NO | FK → sec_tenant |
 | `user_id` | UUID | NO | FK → sec_user |
 | `role_id` | UUID | NO | FK → sec_role |
-| `assigned_at` | TIMESTAMPTZ | NO | `now()` | — |
+| `assigned_at` | TIMESTAMPTZ | NO | `now()` | - |
 | `assigned_by` | UUID | YES | FK → sec_user |
-| `expires_at` | TIMESTAMPTZ | YES | — | Optional expiry |
+| `expires_at` | TIMESTAMPTZ | YES | - | Optional expiry |
 
 #### 6.5.3 Primary Key
 `pk_sec_user_role` → `id`
@@ -411,7 +411,7 @@ Junction table assigning roles to users.
 `assigned_at`, `assigned_by`
 
 #### 6.5.8 Soft Delete Rules
-No soft delete — revoke by DELETE with audit event
+No soft delete - revoke by DELETE with audit event
 
 #### 6.5.9 Business Rules
 - User may hold multiple roles
@@ -432,7 +432,7 @@ Junction table granting permissions to roles.
 | `tenant_id` | UUID | NO | FK → sec_tenant |
 | `role_id` | UUID | NO | FK → sec_role |
 | `permission_id` | UUID | NO | FK → sec_permission |
-| `granted_at` | TIMESTAMPTZ | NO | `now()` | — |
+| `granted_at` | TIMESTAMPTZ | NO | `now()` | - |
 | `granted_by` | UUID | YES | FK → sec_user |
 
 #### 6.6.3 Primary Key
@@ -472,14 +472,14 @@ Active session reference (Redis is primary; DB for audit/revocation).
 
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
-| `id` | UUID | NO | PK — session ID |
+| `id` | UUID | NO | PK - session ID |
 | `tenant_id` | UUID | NO | FK → sec_tenant |
 | `user_id` | UUID | NO | FK → sec_user |
 | `session_token_hash` | VARCHAR(255) | NO | Hashed token |
-| `ip_address` | INET | YES | — |
-| `user_agent` | TEXT | YES | — |
-| `issued_at` | TIMESTAMPTZ | NO | — |
-| `expires_at` | TIMESTAMPTZ | NO | — |
+| `ip_address` | INET | YES | - |
+| `user_agent` | TEXT | YES | - |
+| `issued_at` | TIMESTAMPTZ | NO | - |
+| `expires_at` | TIMESTAMPTZ | NO | - |
 | `revoked_at` | TIMESTAMPTZ | YES | NULL = active |
 | `revoked_by` | UUID | YES | FK → sec_user |
 
@@ -525,9 +525,9 @@ JWT refresh token store with rotation support.
 | `user_id` | UUID | NO | FK → sec_user |
 | `session_id` | UUID | NO | FK → sec_session |
 | `token_hash` | VARCHAR(255) | NO | Hashed refresh token |
-| `issued_at` | TIMESTAMPTZ | NO | — |
-| `expires_at` | TIMESTAMPTZ | NO | — |
-| `revoked_at` | TIMESTAMPTZ | YES | — |
+| `issued_at` | TIMESTAMPTZ | NO | - |
+| `expires_at` | TIMESTAMPTZ | NO | - |
+| `revoked_at` | TIMESTAMPTZ | YES | - |
 | `replaced_by` | UUID | YES | Token rotation chain |
 
 #### 6.8.3 Primary Key
@@ -571,16 +571,16 @@ Workflow template per module/document type.
 | `id` | UUID | NO | PK |
 | `tenant_id` | UUID | NO | FK → sec_tenant |
 | `workflow_code` | VARCHAR(100) | NO | UK per tenant |
-| `workflow_name` | VARCHAR(255) | NO | — |
+| `workflow_name` | VARCHAR(255) | NO | - |
 | `module` | VARCHAR(50) | NO | e.g., procurement, sales |
 | `document_type` | VARCHAR(100) | NO | e.g., purchase_order |
 | `version_no` | INTEGER | NO | Definition version |
 | `is_active` | BOOLEAN | NO | DEFAULT TRUE |
 | `config_json` | JSONB | YES | Parallel approval rules, escalation |
-| `created_at` | TIMESTAMPTZ | NO | — |
-| `created_by` | UUID | YES | — |
-| `updated_at` | TIMESTAMPTZ | NO | — |
-| `updated_by` | UUID | YES | — |
+| `created_at` | TIMESTAMPTZ | NO | - |
+| `created_by` | UUID | YES | - |
+| `updated_at` | TIMESTAMPTZ | NO | - |
+| `updated_by` | UUID | YES | - |
 
 #### 6.9.3 Primary Key
 `pk_wf_definition` → `id`
@@ -600,7 +600,7 @@ Workflow template per module/document type.
 `created_at`, `created_by`, `updated_at`, `updated_by`
 
 #### 6.9.8 Soft Delete Rules
-No soft delete per Workflow matrix — use `is_active`
+No soft delete per Workflow matrix - use `is_active`
 
 #### 6.9.9 Business Rules
 - All business approvals through Workflow Engine (C-04)
@@ -621,14 +621,14 @@ Individual approval step within a workflow definition.
 | `tenant_id` | UUID | NO | FK → sec_tenant |
 | `workflow_id` | UUID | NO | FK → wf_definition |
 | `step_order` | INTEGER | NO | Sequence |
-| `step_code` | VARCHAR(100) | NO | — |
-| `step_name` | VARCHAR(255) | NO | — |
+| `step_code` | VARCHAR(100) | NO | - |
+| `step_name` | VARCHAR(255) | NO | - |
 | `approver_type` | VARCHAR(50) | NO | role, user, manager, department_head |
 | `approver_ref` | UUID | YES | Role/user reference |
 | `is_parallel` | BOOLEAN | NO | DEFAULT FALSE |
 | `sla_hours` | INTEGER | YES | Escalation SLA |
-| `created_at` | TIMESTAMPTZ | NO | — |
-| `created_by` | UUID | YES | — |
+| `created_at` | TIMESTAMPTZ | NO | - |
+| `created_by` | UUID | YES | - |
 
 #### 6.10.3 Primary Key
 `pk_wf_step` → `id`
@@ -673,11 +673,11 @@ Runtime workflow for a business document.
 | `entity_id` | UUID | NO | Source document PK |
 | `current_step_id` | UUID | YES | FK → wf_step |
 | `status` | VARCHAR(30) | NO | pending, approved, rejected, cancelled |
-| `started_at` | TIMESTAMPTZ | NO | — |
-| `completed_at` | TIMESTAMPTZ | YES | — |
+| `started_at` | TIMESTAMPTZ | NO | - |
+| `completed_at` | TIMESTAMPTZ | YES | - |
 | `started_by` | UUID | NO | FK → sec_user |
-| `created_at` | TIMESTAMPTZ | NO | — |
-| `updated_at` | TIMESTAMPTZ | NO | — |
+| `created_at` | TIMESTAMPTZ | NO | - |
+| `updated_at` | TIMESTAMPTZ | NO | - |
 
 #### 6.11.3 Primary Key
 `pk_wf_instance` → `id`
@@ -725,10 +725,10 @@ Immutable approval action log.
 | `instance_id` | UUID | NO | FK → wf_instance |
 | `step_id` | UUID | NO | FK → wf_step |
 | `action` | VARCHAR(30) | NO | approve, reject, delegate, escalate |
-| `comments` | TEXT | YES | — |
+| `comments` | TEXT | YES | - |
 | `performed_by` | UUID | NO | FK → sec_user |
-| `performed_at` | TIMESTAMPTZ | NO | — |
-| `ip_address` | INET | YES | — |
+| `performed_at` | TIMESTAMPTZ | NO | - |
+| `ip_address` | INET | YES | - |
 
 #### 6.12.3 Primary Key
 `pk_wf_action` → `id`
@@ -771,19 +771,19 @@ Notification channel template.
 | `id` | UUID | NO | PK |
 | `tenant_id` | UUID | NO | FK → sec_tenant |
 | `template_code` | VARCHAR(100) | NO | UK per tenant |
-| `template_name` | VARCHAR(255) | NO | — |
+| `template_name` | VARCHAR(255) | NO | - |
 | `channel` | VARCHAR(30) | NO | email, sms, push, in_app |
-| `subject_template` | TEXT | YES | — |
-| `body_template` | TEXT | NO | — |
+| `subject_template` | TEXT | YES | - |
+| `body_template` | TEXT | NO | - |
 | `locale` | VARCHAR(10) | NO | DEFAULT 'en' |
 | `is_active` | BOOLEAN | NO | DEFAULT TRUE |
-| `created_at` | TIMESTAMPTZ | NO | — |
-| `created_by` | UUID | YES | — |
-| `updated_at` | TIMESTAMPTZ | NO | — |
-| `updated_by` | UUID | YES | — |
+| `created_at` | TIMESTAMPTZ | NO | - |
+| `created_by` | UUID | YES | - |
+| `updated_at` | TIMESTAMPTZ | NO | - |
+| `updated_by` | UUID | YES | - |
 | `is_deleted` | BOOLEAN | NO | DEFAULT FALSE |
-| `deleted_at` | TIMESTAMPTZ | YES | — |
-| `deleted_by` | UUID | YES | — |
+| `deleted_at` | TIMESTAMPTZ | YES | - |
+| `deleted_by` | UUID | YES | - |
 
 #### 6.13.3 Primary Key
 `pk_ntf_template` → `id`
@@ -827,7 +827,7 @@ Triggered notification event.
 | `recipient_address` | VARCHAR(255) | YES | Email/phone override |
 | `payload_json` | JSONB | YES | Template variables |
 | `status` | VARCHAR(30) | NO | queued, sent, failed |
-| `created_at` | TIMESTAMPTZ | NO | — |
+| `created_at` | TIMESTAMPTZ | NO | - |
 
 #### 6.14.3 Primary Key
 `pk_ntf_event` → `id`
@@ -869,11 +869,11 @@ Per-channel delivery attempt tracking.
 | `id` | UUID | NO | PK |
 | `tenant_id` | UUID | NO | FK → sec_tenant |
 | `event_id` | UUID | NO | FK → ntf_event |
-| `channel` | VARCHAR(30) | NO | — |
+| `channel` | VARCHAR(30) | NO | - |
 | `attempt_no` | INTEGER | NO | DEFAULT 1 |
 | `status` | VARCHAR(30) | NO | success, failed, retrying |
-| `provider_response` | TEXT | YES | — |
-| `delivered_at` | TIMESTAMPTZ | YES | — |
+| `provider_response` | TEXT | YES | - |
+| `delivered_at` | TIMESTAMPTZ | YES | - |
 
 #### 6.15.3 Primary Key
 `pk_ntf_delivery` → `id`
@@ -911,17 +911,17 @@ Entity change audit log (DBS §32).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | YES | — |
-| `company_id` | UUID | YES | — |
-| `entity_name` | VARCHAR(100) | NO | — |
-| `entity_id` | UUID | NO | — |
+| `tenant_id` | UUID | YES | - |
+| `company_id` | UUID | YES | - |
+| `entity_name` | VARCHAR(100) | NO | - |
+| `entity_id` | UUID | NO | - |
 | `operation` | VARCHAR(30) | NO | create, update, soft_delete, approve |
-| `old_value` | JSONB | YES | — |
-| `new_value` | JSONB | YES | — |
+| `old_value` | JSONB | YES | - |
+| `new_value` | JSONB | YES | - |
 | `performed_by` | UUID | YES | FK → sec_user |
-| `performed_at` | TIMESTAMPTZ | NO | — |
-| `ip_address` | INET | YES | — |
-| `user_agent` | TEXT | YES | — |
+| `performed_at` | TIMESTAMPTZ | NO | - |
+| `ip_address` | INET | YES | - |
+| `user_agent` | TEXT | YES | - |
 | `request_id` | VARCHAR(100) | YES | Correlation ID |
 
 #### 6.16.3 Primary Key
@@ -940,7 +940,7 @@ Entity change audit log (DBS §32).
 - `ix_audit_log_tenant_id` (tenant_id)
 
 #### 6.16.7 Audit Columns
-N/A — this is the audit table
+N/A - this is the audit table
 
 #### 6.16.8 Soft Delete Rules
 Append-only; no updates or deletes
@@ -961,13 +961,13 @@ Security/system events (login, logout, role change).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| `tenant_id` | UUID | YES | — |
+| `tenant_id` | UUID | YES | - |
 | `event_type` | VARCHAR(100) | NO | login, logout, mfa_challenge, permission_denied |
 | `severity` | VARCHAR(20) | NO | info, warning, critical |
 | `user_id` | UUID | YES | FK → sec_user |
-| `details_json` | JSONB | YES | — |
-| `performed_at` | TIMESTAMPTZ | NO | — |
-| `ip_address` | INET | YES | — |
+| `details_json` | JSONB | YES | - |
+| `performed_at` | TIMESTAMPTZ | NO | - |
+| `ip_address` | INET | YES | - |
 
 #### 6.17.3 Primary Key
 `pk_audit_event` → `id`
@@ -985,7 +985,7 @@ Security/system events (login, logout, role change).
 - `ix_audit_event_user_id` (user_id)
 
 #### 6.17.7 Audit Columns
-N/A — append-only event log
+N/A - append-only event log
 
 #### 6.17.8 Soft Delete Rules
 No updates or deletes
@@ -1009,20 +1009,20 @@ Hierarchical configuration (DBS §34).
 | `tenant_id` | UUID | YES | FK → sec_tenant (nullable for global) |
 | `company_id` | UUID | YES | FK → org_company (nullable) |
 | `branch_id` | UUID | YES | FK → org_branch (nullable) |
-| `setting_key` | VARCHAR(150) | NO | — |
-| `setting_value` | TEXT | NO | — |
+| `setting_key` | VARCHAR(150) | NO | - |
+| `setting_value` | TEXT | NO | - |
 | `value_type` | VARCHAR(30) | NO | string, integer, boolean, json |
 | `scope` | VARCHAR(30) | NO | global, tenant, company, branch |
 | `is_encrypted` | BOOLEAN | NO | DEFAULT FALSE |
-| `description` | TEXT | YES | — |
-| `created_at` | TIMESTAMPTZ | NO | — |
-| `created_by` | UUID | YES | — |
-| `updated_at` | TIMESTAMPTZ | NO | — |
-| `updated_by` | UUID | YES | — |
+| `description` | TEXT | YES | - |
+| `created_at` | TIMESTAMPTZ | NO | - |
+| `created_by` | UUID | YES | - |
+| `updated_at` | TIMESTAMPTZ | NO | - |
+| `updated_by` | UUID | YES | - |
 | `version` | INTEGER | NO | DEFAULT 1 |
 | `is_deleted` | BOOLEAN | NO | DEFAULT FALSE |
-| `deleted_at` | TIMESTAMPTZ | YES | — |
-| `deleted_by` | UUID | YES | — |
+| `deleted_at` | TIMESTAMPTZ | YES | - |
+| `deleted_by` | UUID | YES | - |
 
 #### 6.18.3 Primary Key
 `pk_cfg_setting` → `id`
@@ -1082,7 +1082,7 @@ Optional; encrypted values for sensitive settings
 | Foundation | Master Data (ERD_03) | `sec_user.employee_id` → `master_employee` |
 | All Modules | Foundation | RBAC permissions, workflow, notifications, audit |
 
-**Rule (C-02):** No module reads another module's tables directly — access via service APIs. FKs are logical integrity references within same PostgreSQL cluster.
+**Rule (C-02):** No module reads another module's tables directly - access via service APIs. FKs are logical integrity references within same PostgreSQL cluster.
 
 ---
 
@@ -1188,4 +1188,4 @@ Per DBS: audit minimum 10 years; session/token ephemeral per policy above; confi
 
 ---
 
-*End of ERD_01 — Foundation Domain*
+*End of ERD_01 - Foundation Domain*

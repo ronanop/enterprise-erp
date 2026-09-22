@@ -34,6 +34,7 @@ export interface UserProfile {
   full_name?: string;
   display_name?: string;
   tenant_id?: string;
+  employee_id?: string | null;
   permissions?: string[];
   [key: string]: unknown;
 }

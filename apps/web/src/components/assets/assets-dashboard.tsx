@@ -147,7 +147,7 @@ export function AssetsDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="Assets"
-        description="Fixed-asset lifecycle — register, custody, warranty, maintenance, depreciation, disposal, and audits."
+        description="Fixed-asset lifecycle - register, custody, warranty, maintenance, depreciation, disposal, and audits."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -194,28 +194,28 @@ export function AssetsDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Active assets"
-          value={loading ? "—" : String(kpis.activeAssets)}
+          value={loading ? "-" : String(kpis.activeAssets)}
           hint={`${formatInr(kpis.bookValue)} book · ${data?.assets.length ?? 0} register`}
           icon={Package}
           tone={kpis.activeAssets > 0 ? "default" : "success"}
         />
         <FinanceKpiCard
           label="Open maintenance"
-          value={loading ? "—" : String(kpis.openMaintenance)}
+          value={loading ? "-" : String(kpis.openMaintenance)}
           hint={`${countByStatus(data?.maintenances ?? [], ["scheduled", "in_progress"])} in flight · ${data?.maintenances.length ?? 0} jobs`}
           icon={Wrench}
           tone={kpis.openMaintenance > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Pending depreciation"
-          value={loading ? "—" : String(kpis.pendingDepreciation)}
+          value={loading ? "-" : String(kpis.pendingDepreciation)}
           hint={`${formatInr(kpis.depAmount)} amount · ${data?.depreciations.length ?? 0} runs`}
           icon={Scale}
           tone={kpis.pendingDepreciation > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Open disposals"
-          value={loading ? "—" : String(kpis.openDisposals)}
+          value={loading ? "-" : String(kpis.openDisposals)}
           hint={`${countByStatus(data?.assets ?? [], ["disposed", "written_off"])} disposed assets · ${data?.disposals.length ?? 0} docs`}
           icon={Trash2}
           tone={kpis.openDisposals > 0 ? "danger" : "success"}
@@ -345,14 +345,14 @@ export function AssetsDashboard() {
                       <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
                       <td className="max-w-[200px] truncate px-4 py-2.5">
                         <p className="font-medium text-foreground">
-                          {String(row.asset_name ?? "—")}
+                          {String(row.asset_name ?? "-")}
                         </p>
                         <p className="truncate text-[11px] text-muted-foreground">
                           {String(row.asset_code ?? row.document_number ?? "")}
                         </p>
                       </td>
                       <td className="px-4 py-2.5 text-xs capitalize text-muted-foreground">
-                        {String(row.asset_type ?? "—").replaceAll("_", " ")}
+                        {String(row.asset_type ?? "-").replaceAll("_", " ")}
                       </td>
                       <td className="px-4 py-2.5 font-mono text-xs tabular-nums text-foreground">
                         {formatInr(asNumber(row.current_book_value))}
@@ -398,7 +398,7 @@ export function AssetsDashboard() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-medium">
-                      {String(row.document_number ?? "—")}
+                      {String(row.document_number ?? "-")}
                     </p>
                     <FinanceStatusBadge
                       status={asStatus(row.status) || String(row.status ?? "")}

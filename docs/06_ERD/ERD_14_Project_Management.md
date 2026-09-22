@@ -1,26 +1,26 @@
-# ERD_14 — Project Management Domain
+# ERD_14 - Project Management Domain
 
-**Document:** Enterprise ERD — Project Management Domain  
+**Document:** Enterprise ERD - Project Management Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 14 Implementation Planning  
+**Status:** Locked - Ready for Sprint 14 Implementation Planning  
 **Schema:** `project`  
 **Table Prefix:** `prj_`  
 **Aligned To:** BRD v1.0 · FRD-11 Project Management · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-11 Project Management Domain](../02_FRD/FRD-11-Project-Management-Domain.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.8-beta](../07_RELEASES/ERP_Core_v1.8-beta.md)  
 
 ---
 
 ## 1. Module Overview
 
-The Project Management Domain manages the **project lifecycle from initiation through closure**: project master, WBS (phases · milestones · tasks), dependencies and assignments, resource planning and allocation, timesheets, budgets and actual costs, issues and risks, change requests, collaboration (documents / comments), status history, in-module notifications, and reporting snapshots — for multi-company ERP delivery, customer, and internal initiatives.
+The Project Management Domain manages the **project lifecycle from initiation through closure**: project master, WBS (phases · milestones · tasks), dependencies and assignments, resource planning and allocation, timesheets, budgets and actual costs, issues and risks, change requests, collaboration (documents / comments), status history, in-module notifications, and reporting snapshots - for multi-company ERP delivery, customer, and internal initiatives.
 
-Project Management **depends on** Foundation, Organization, Master Data, and Finance (posting adapter). It **consumes existing masters only (C-01)** — **`master_employee`**, **`master_customer`**, **`master_product`**, and **`org_department`**. It **must never duplicate** employee, customer, product, department, or company masters.
+Project Management **depends on** Foundation, Organization, Master Data, and Finance (posting adapter). It **consumes existing masters only (C-01)** - **`master_employee`**, **`master_customer`**, **`master_product`**, and **`org_department`**. It **must never duplicate** employee, customer, product, department, or company masters.
 
 **Finance remains the only accounting system.** Project never ORM-writes `fin_*` tables. Budget linkage and cost journals use **`finance_budget_id` / `finance_journal_id` UUIDs**; GL posting occurs **only** through `PostingService.post_system_journal()`.
 
-HR, Payroll, CRM, Procurement, Inventory, Manufacturing, Quality, and Recruitment remain **isolated** except authorized UUID read-refs / service reads — **no FKs** to `crm_*` / `proc_*` / `inv_*` / `mfg_*` / `qm_*` / `pay_*` / `rec_*`, and **no `hr_*` / `pay_*` / `rec_*` writes**.
+HR, Payroll, CRM, Procurement, Inventory, Manufacturing, Quality, and Recruitment remain **isolated** except authorized UUID read-refs / service reads - **no FKs** to `crm_*` / `proc_*` / `inv_*` / `mfg_*` / `qm_*` / `pay_*` / `rec_*`, and **no `hr_*` / `pay_*` / `rec_*` writes**.
 
 **Business Tables: 20**  
 **Schema: `project`**
@@ -60,28 +60,28 @@ Billing / profitability (Phase 1.5+ via Sales/Finance services) · BI
 
 ### API Mount (planned)
 
-**`/api/v1/projects`** — routers for all aggregates (projects, phases, milestones, tasks, task-dependencies, task-assignments, timesheets, timesheet-entries, resource-plans, resource-allocations, project-budgets, project-costs, project-issues, project-risks, change-requests, project-documents, project-comments, project-status-history, project-notifications, reports).
+**`/api/v1/projects`** - routers for all aggregates (projects, phases, milestones, tasks, task-dependencies, task-assignments, timesheets, timesheet-entries, resource-plans, resource-allocations, project-budgets, project-costs, project-issues, project-risks, change-requests, project-documents, project-comments, project-status-history, project-notifications, reports).
 
 ---
 
 ## 2. Scope
 
 ### In Scope
-- **Projects** with type, manager, customer, dates, budget headline — FRD-11 §4
-- **Phases · milestones · tasks** WBS hierarchy — FRD-11 §5–§7
+- **Projects** with type, manager, customer, dates, budget headline - FRD-11 §4
+- **Phases · milestones · tasks** WBS hierarchy - FRD-11 §5-§7
 - **Task dependencies** and **task assignments** (employee-backed)
-- **Timesheets** + **timesheet entries** (daily hours ≤ 24 — service rule) — FRD-11 §9
-- **Resource plan** and **resource allocation** (allocation ≤ 100% — service rule) — FRD-11 §8
-- **Project budget** lines (labor / materials / travel / software / hardware / other) — FRD-11 §10
-- **Project cost** actuals with optional Finance journal ref after PostingService — FRD-11 §11
-- **Issues**, **risks**, **change requests** — FRD-11 §14 + governance
+- **Timesheets** + **timesheet entries** (daily hours ≤ 24 - service rule) - FRD-11 §9
+- **Resource plan** and **resource allocation** (allocation ≤ 100% - service rule) - FRD-11 §8
+- **Project budget** lines (labor / materials / travel / software / hardware / other) - FRD-11 §10
+- **Project cost** actuals with optional Finance journal ref after PostingService - FRD-11 §11
+- **Issues**, **risks**, **change requests** - FRD-11 §14 + governance
 - **Documents**, **comments**, **status history**, **project notifications**
-- **Project report** aggregate snapshots (health / budget variance / profitability KPIs) — FRD-11 §13
+- **Project report** aggregate snapshots (health / budget variance / profitability KPIs) - FRD-11 §13
 - Workflow, audit, RBAC, notifications, Celery stubs (planning)
 
 ### Out of Scope (Phase 2 / Separate)
-- Full **project billing / invoice registry** tables (`prj_project_billing`) — Phase 1: billing metadata / Sales invoice UUID on project or milestone
-- Duplicate `prj_employee` / `prj_customer` / `prj_department` / `prj_product` — **forbidden (C-01)**
+- Full **project billing / invoice registry** tables (`prj_project_billing`) - Phase 1: billing metadata / Sales invoice UUID on project or milestone
+- Duplicate `prj_employee` / `prj_customer` / `prj_department` / `prj_product` - **forbidden (C-01)**
 - Direct writes to `fin_*`, `hr_*`, `pay_*`, `crm_*`, `proc_*`, `inv_*`, `mfg_*`, `qm_*`, `rec_*`, `sales_*`
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 - Analytics cubes / `ana_fact_project`
@@ -105,13 +105,13 @@ Billing / profitability (Phase 1.5+ via Sales/Finance services) · BI
 | ERD_02 Organization | `org_company`, `org_branch`, `org_department` |
 | ERD_03 Master Data | **`master_employee`**, **`master_customer`**, **`master_product`** |
 | ERD_04 Finance | **`PostingService.post_system_journal()`**; `finance_budget_id` / `finance_journal_id` UUID storage |
-| ERD_12 Payroll | Optional **read-only** labor rate / cost hints — **no `pay_*` writes** |
-| ERD_11 HR | Employee refs only — **no `hr_*` writes** |
-| ERD_10 CRM | Optional `crm_opportunity_id` / `crm_customer_id` UUID — **no FK** |
-| ERD_06 Procurement | Optional PR / PO UUID — **no FK** |
-| ERD_07 Inventory | Optional material issue / receipt UUID — **no FK** |
-| ERD_08 Manufacturing | Optional production order UUID — **no FK** |
-| ERD_09 Quality | Optional inspection UUID — **no FK** |
+| ERD_12 Payroll | Optional **read-only** labor rate / cost hints - **no `pay_*` writes** |
+| ERD_11 HR | Employee refs only - **no `hr_*` writes** |
+| ERD_10 CRM | Optional `crm_opportunity_id` / `crm_customer_id` UUID - **no FK** |
+| ERD_06 Procurement | Optional PR / PO UUID - **no FK** |
+| ERD_07 Inventory | Optional material issue / receipt UUID - **no FK** |
+| ERD_08 Manufacturing | Optional production order UUID - **no FK** |
+| ERD_09 Quality | Optional inspection UUID - **no FK** |
 
 ---
 
@@ -120,25 +120,25 @@ Billing / profitability (Phase 1.5+ via Sales/Finance services) · BI
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
 | 1 | `prj_project` | Transaction Header | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 2 | `prj_project_phase` | WBS | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 3 | `prj_project_milestone` | WBS | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 2 | `prj_project_phase` | WBS | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 3 | `prj_project_milestone` | WBS | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 4 | `prj_project_task` | WBS / Work | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 5 | `prj_task_dependency` | Graph Detail | ✅ | ✅ | — | ✅ | ✅ | — |
-| 6 | `prj_task_assignment` | Assignment | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 5 | `prj_task_dependency` | Graph Detail | ✅ | ✅ | - | ✅ | ✅ | - |
+| 6 | `prj_task_assignment` | Assignment | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 7 | `prj_timesheet` | Transaction Header | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 8 | `prj_timesheet_entry` | Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 9 | `prj_resource_plan` | Plan Header | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 10 | `prj_resource_allocation` | Allocation | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 8 | `prj_timesheet_entry` | Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 9 | `prj_resource_plan` | Plan Header | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 10 | `prj_resource_allocation` | Allocation | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 11 | `prj_project_budget` | Financial | ✅ | ✅ | optional | ✅ | ✅ | ✅ |
-| 12 | `prj_project_cost` | Financial | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 13 | `prj_project_issue` | Issue | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 14 | `prj_project_risk` | Risk | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 12 | `prj_project_cost` | Financial | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 13 | `prj_project_issue` | Issue | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 14 | `prj_project_risk` | Risk | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 15 | `prj_change_request` | Governance | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 16 | `prj_project_document` | Document | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 17 | `prj_project_comment` | Collaboration | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 18 | `prj_project_status_history` | Audit Trail | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 19 | `prj_project_notification` | Notification | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 20 | `prj_project_report` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 16 | `prj_project_document` | Document | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 17 | `prj_project_comment` | Collaboration | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 18 | `prj_project_status_history` | Audit Trail | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 19 | `prj_project_notification` | Notification | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 20 | `prj_project_report` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | - |
 
 **Business Tables: 20**  
 **Schema: `project`**
@@ -250,21 +250,21 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
 | `tenant_id` / `company_id` / `branch_id` | UUID | NO | Scope |
-| `project_code` | VARCHAR(50) | NO | UK — `PRJ-YYYY-NNNNNN` — FRD-11 §4 |
-| `project_name` | VARCHAR(255) | NO | — |
+| `project_code` | VARCHAR(50) | NO | UK - `PRJ-YYYY-NNNNNN` - FRD-11 §4 |
+| `project_name` | VARCHAR(255) | NO | - |
 | `project_type` | VARCHAR(40) | NO | internal, customer, rnd, implementation, support |
 | `customer_id` | UUID | YES | FK → `master_customer` (optional for internal) |
 | `department_id` | UUID | YES | FK → `org_department` |
 | `project_manager_employee_id` | UUID | NO | FK → `master_employee` |
 | `sponsor_employee_id` | UUID | YES | FK → `master_employee` |
-| `planned_start_date` / `planned_end_date` | DATE | NO | — |
-| `actual_start_date` / `actual_end_date` | DATE | YES | — |
+| `planned_start_date` / `planned_end_date` | DATE | NO | - |
+| `actual_start_date` / `actual_end_date` | DATE | YES | - |
 | `budget_amount` | NUMERIC(18,4) | YES | Headline budget |
-| `currency_code` | VARCHAR(10) | NO | — |
-| `billing_type` | VARCHAR(30) | YES | fixed_price, time_material, milestone, retainer — FRD-11 §12 |
-| `crm_opportunity_id` / `crm_customer_id` | UUID | YES | **UUID only — no CRM FK** |
+| `currency_code` | VARCHAR(10) | NO | - |
+| `billing_type` | VARCHAR(30) | YES | fixed_price, time_material, milestone, retainer - FRD-11 §12 |
+| `crm_opportunity_id` / `crm_customer_id` | UUID | YES | **UUID only - no CRM FK** |
 | `health_status` | VARCHAR(20) | YES | green, amber, red |
-| `description` | TEXT | YES | — |
+| `description` | TEXT | YES | - |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, in_progress, on_hold, completed, cancelled, closed |
 | `workflow_*` | | | Project approval / closure |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
@@ -278,8 +278,8 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 | Column | Notes |
 |--------|-------|
 | `project_id` | FK |
-| `phase_code` | UK within project — `PH-01` |
-| `phase_name` | — |
+| `phase_code` | UK within project - `PH-01` |
+| `phase_name` | - |
 | `sequence_no` | SMALLINT |
 | `planned_start_date` / `planned_end_date` | DATE |
 | `status` | planned, active, completed, cancelled |
@@ -293,11 +293,11 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 |--------|-------|
 | `project_id` / `phase_id` | FKs (`phase_id` optional) |
 | `milestone_code` | UK within project |
-| `milestone_name` | — |
+| `milestone_name` | - |
 | `owner_employee_id` | FK → `master_employee` optional |
 | `due_date` | DATE |
 | `achieved_at` | TIMESTAMPTZ optional |
-| `status` | planned, achieved, delayed, cancelled — FRD-11 §7 |
+| `status` | planned, achieved, delayed, cancelled - FRD-11 §7 |
 
 ---
 
@@ -308,8 +308,8 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 | `document_number` | `TASK-YYYY-NNNNNN` optional |
 | `project_id` / `phase_id` / `milestone_id` | FKs (phase/milestone optional) |
 | `parent_task_id` | UUID self-FK optional (sub-task) |
-| `task_name` | — |
-| `priority` | low, medium, high, critical — FRD-11 §6 |
+| `task_name` | - |
+| `priority` | low, medium, high, critical - FRD-11 §6 |
 | `planned_start_date` / `due_date` | DATE |
 | `estimated_hours` / `actual_hours` | NUMERIC |
 | `percent_complete` | NUMERIC(5,2) |
@@ -355,7 +355,7 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 | `project_id` | FK optional (header may span one project; entries carry project/task) |
 | `period_start` / `period_end` | DATE |
 | `total_hours` | NUMERIC |
-| `status` | draft, submitted, approved, rejected, cancelled — FRD-11 §9 |
+| `status` | draft, submitted, approved, rejected, cancelled - FRD-11 §9 |
 | `workflow_*` | May reuse task/manager approval path; Phase 1 timesheet approval via manager workflow step or dedicated extension |
 
 ---
@@ -368,7 +368,7 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 | `project_id` / `task_id` | FKs |
 | `employee_id` | FK (denormalized) |
 | `work_date` | DATE |
-| `hours_worked` | NUMERIC(5,2) — ≤ 24 per day service UK |
+| `hours_worked` | NUMERIC(5,2) - ≤ 24 per day service UK |
 | `description` | TEXT optional |
 | `status` | draft, locked, cancelled |
 | **Service UK:** sum(`hours_worked`) per `(employee_id, work_date)` ≤ 24 |
@@ -381,7 +381,7 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 |--------|-------|
 | `document_number` | `RPLAN-YYYY-NNNNNN` |
 | `project_id` | FK |
-| `plan_name` | — |
+| `plan_name` | - |
 | `planned_from` / `planned_to` | DATE |
 | `status` | draft, active, closed, cancelled |
 
@@ -393,7 +393,7 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 |--------|-------|
 | `resource_plan_id` / `project_id` | FKs |
 | `employee_id` | FK → `master_employee` |
-| `resource_type` | employee, contractor, consultant, vendor — FRD-11 §8 |
+| `resource_type` | employee, contractor, consultant, vendor - FRD-11 §8 |
 | `allocation_percent` | NUMERIC(5,2) |
 | `start_date` / `end_date` | DATE |
 | `status` | planned, active, completed, cancelled |
@@ -407,12 +407,12 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 |--------|-------|
 | `document_number` | `PBUD-YYYY-NNNNNN` |
 | `project_id` | FK |
-| `budget_type` | labor, materials, travel, software, hardware, other — FRD-11 §10 |
+| `budget_type` | labor, materials, travel, software, hardware, other - FRD-11 §10 |
 | `budget_amount` | NUMERIC(18,4) |
 | `currency_code` | VARCHAR |
 | `fiscal_year_id` | UUID optional Finance fiscal ref (**no write**) |
 | `cost_center_code` | VARCHAR optional |
-| `finance_budget_id` | UUID **optional — Finance budget ref; no fin_* ORM write** |
+| `finance_budget_id` | UUID **optional - Finance budget ref; no fin_* ORM write** |
 | `status` | draft, submitted, approved, active, closed, rejected, cancelled |
 | `workflow_*` | Budget approval |
 
@@ -424,7 +424,7 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 |--------|-------|
 | `document_number` | `PCOST-YYYY-NNNNNN` |
 | `project_id` | FK |
-| `cost_source` | payroll, procurement, expense, asset, vendor_bill, manual — FRD-11 §11 |
+| `cost_source` | payroll, procurement, expense, asset, vendor_bill, manual - FRD-11 §11 |
 | `cost_amount` | NUMERIC(18,4) |
 | `currency_code` | VARCHAR |
 | `cost_date` | DATE |
@@ -447,7 +447,7 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 |--------|-------|
 | `document_number` | `PISS-YYYY-NNNNNN` |
 | `project_id` / `task_id` | FKs (`task_id` optional) |
-| `issue_title` | — |
+| `issue_title` | - |
 | `severity` | low, medium, high, critical |
 | `owner_employee_id` | FK optional |
 | `opened_at` / `resolved_at` | TIMESTAMPTZ |
@@ -461,9 +461,9 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 |--------|-------|
 | `document_number` | `PRISK-YYYY-NNNNNN` |
 | `project_id` | FK |
-| `risk_name` | — |
-| `impact` / `probability` | VARCHAR — low, medium, high, critical — FRD-11 §14 |
-| `risk_level` | derived or stored — low, medium, high, critical |
+| `risk_name` | - |
+| `impact` / `probability` | VARCHAR - low, medium, high, critical - FRD-11 §14 |
+| `risk_level` | derived or stored - low, medium, high, critical |
 | `owner_employee_id` | FK optional |
 | `mitigation_plan` | TEXT |
 | `review_date` | DATE |
@@ -477,7 +477,7 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 |--------|-------|
 | `document_number` | `PCR-YYYY-NNNNNN` |
 | `project_id` | FK |
-| `change_title` | — |
+| `change_title` | - |
 | `change_type` | scope, schedule, budget, resource, other |
 | `requested_by_employee_id` | FK → `master_employee` |
 | `impact_summary` | TEXT |
@@ -495,7 +495,7 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 | `project_id` | FK |
 | `task_id` / `milestone_id` | FK optional |
 | `document_type` | brd, design, report, contract, other |
-| `document_name` | — |
+| `document_name` | - |
 | `storage_uri` / `content_hash` | Phase 1 metadata (DMS later) |
 | `uploaded_by_employee_id` | FK optional |
 | `status` | active, superseded, archived |
@@ -532,7 +532,7 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 | Column | Notes |
 |--------|-------|
 | `project_id` | FK |
-| `notification_type` | task_due, milestone, budget_exceeded, risk_review, timesheet, other — FRD-11 §17 |
+| `notification_type` | task_due, milestone, budget_exceeded, risk_review, timesheet, other - FRD-11 §17 |
 | `recipient_user_id` / `recipient_employee_id` | UUID refs |
 | `payload_json` | JSONB |
 | `sent_at` | TIMESTAMPTZ |
@@ -547,11 +547,11 @@ Optional UUID-only (no FK): crm_opportunity_id, crm_customer_id,
 
 | Column | Notes |
 |--------|-------|
-| `report_code` | UK — period + type key |
+| `report_code` | UK - period + type key |
 | `project_id` | FK optional (null = company portfolio) |
 | `report_type` | health, budget_variance, profitability, resource_utilization, time_summary |
 | `period_start` / `period_end` | DATE |
-| `metrics_json` | JSONB — budget, cost, margin, overdue tasks, etc. — FRD-11 §13 |
+| `metrics_json` | JSONB - budget, cost, margin, overdue tasks, etc. - FRD-11 §13 |
 | `generated_at` | TIMESTAMPTZ |
 | `status` | draft, finalized |
 | **UK:** `(company_id, report_code)` |
@@ -696,7 +696,7 @@ Seed workflows only; instance rows use Foundation `wf_instance`. Timesheet appro
 | Row audit | Standard columns on all mutable `prj_*` tables |
 | Status history | `prj_project_status_history` on project status transitions |
 | Business audit | `AuditService` on project approve, budget approve, change approve, timesheet approve, cost post success/fail, closure |
-| Notifications | Task due, milestone achieved, budget exceeded, risk review, timesheet submitted — Foundation + `prj_project_notification` ledger — FRD-11 §17–§18 |
+| Notifications | Task due, milestone achieved, budget exceeded, risk review, timesheet submitted - Foundation + `prj_project_notification` ledger - FRD-11 §17-§18 |
 
 ---
 
@@ -740,7 +740,7 @@ Seed workflows only; instance rows use Foundation `wf_instance`. Timesheet appro
 
 Prior Alembic head: **`0222_seed_recruitment_workflows`**.
 
-Revision budget **`0223`–`0244` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`prj_task_dependency` and `prj_task_assignment` share one migration**.
+Revision budget **`0223`-`0244` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`prj_task_dependency` and `prj_task_assignment` share one migration**.
 
 | Order | Revision ID (≤32 chars) | Migration | Tables / Actions |
 |-------|-------------------------|-----------|------------------|
@@ -794,10 +794,10 @@ Revision budget **`0223`–`0244` (22 revisions)**. Schema + 20 tables + permiss
 | Organization | company, branch, **department** | Direct FK |
 | Master Data | **employee · customer · product** | Direct FK (C-01) |
 | Finance | **`PostingService.post_system_journal()`**; budget UUID | Adapter; store `finance_*_id` only |
-| Payroll | Labor cost **read** | Read port — **no `pay_*` writes** |
-| HR | Employee identity continuity | FK via master only — **no `hr_*` writes** |
-| CRM | Opportunity / customer attribution | UUID only — **no FK** |
-| Procurement / Inventory / MFG / Quality | Operational document trail | UUID only — **no FK** |
+| Payroll | Labor cost **read** | Read port - **no `pay_*` writes** |
+| HR | Employee identity continuity | FK via master only - **no `hr_*` writes** |
+| CRM | Opportunity / customer attribution | UUID only - **no FK** |
+| Procurement / Inventory / MFG / Quality | Operational document trail | UUID only - **no FK** |
 
 ### 16.2 Downstream
 
@@ -829,12 +829,12 @@ Revision budget **`0223`–`0244` (22 revisions)**. Schema + 20 tables + permiss
 | 4 | Consumes masters only (C-01); no duplicate employee/customer/product/department | ✅ |
 | 5 | Finance posting only via PostingService; store finance UUID refs | ✅ |
 | 6 | CRM / Proc / Inv / MFG / QM UUID-only; no FKs; no Recruitment writes | ✅ |
-| 7 | Migration order `0223`–`0244`, revision IDs ≤ 32 chars | ✅ |
+| 7 | Migration order `0223`-`0244`, revision IDs ≤ 32 chars | ✅ |
 | 8 | Workflows + RBAC + API mount + Celery stubs documented | ✅ |
 | 9 | Billing registry deferred without blocking Sprint 14 | ✅ |
 | 10 | Architecture Lock v1.1 preserved; no prior module redesign | ✅ |
 
-### ERD Phase Gate — Project Summary
+### ERD Phase Gate - Project Summary
 
 | Metric | Value |
 |--------|-------|
@@ -842,10 +842,10 @@ Revision budget **`0223`–`0244` (22 revisions)**. Schema + 20 tables + permiss
 | Schema | **`project`** |
 | Prefix | `prj_` |
 | API mount | `/api/v1/projects` |
-| Migration range | `0223` – `0244` |
+| Migration range | `0223` - `0244` |
 | Prior head | `0222_seed_recruitment_workflows` |
 | Planned head | `0244_seed_project_workflows` |
-| Document Status | **Locked — Ready for Sprint 14 Implementation Planning** |
+| Document Status | **Locked - Ready for Sprint 14 Implementation Planning** |
 
 ---
 

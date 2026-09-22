@@ -1,4 +1,4 @@
-"""Inventory stock ledger repository — insert only."""
+"""Inventory stock ledger repository - insert only."""
 
 from uuid import UUID, uuid4
 

@@ -1,378 +1,838 @@
-"""Aggregate opportunity activity into a chronological timeline."""
+"""Aggregate opportunity activity into a chronological timeline.
 
+Timeline cards use the same Current State labels as BlueprintActions:
+Lead Open → … → Deal Won.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
 from modules.crm.repository.approval_task_repository import ApprovalTaskRepository
-from modules.crm.repository.attachment_repository import AttachmentRepository
+from modules.crm.repository.lead_repository import LeadRepository
 from modules.crm.repository.opportunity_repository import OpportunityRepository
-from modules.crm.repository.opportunity_stage_repository import OpportunityStageRepository
 from modules.crm.repository.ovf_repository import OvfRepository
 from modules.crm.repository.quote_repository import QuoteRepository
 from modules.crm.repository.state_history_repository import StateHistoryRepository
+from modules.crm.service.crm_record_visibility import CrmRecordVisibility
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.repository.user_repository import UserRepository
-from modules.master_data.service.employee_service import EmployeeService
 
 
-def _humanize(value: str | None) -> str | None:
-    if not value:
+def _event(
+    *,
+    id: str,
+    occurred_at,
+    title: str,
+    entity_type: str,
+    entity_id: UUID | None,
+    entity_label: str | None = None,
+    event_type: str = "state_transition",
+    summary: str | None = None,
+    action: str | None = None,
+    from_state: str | None = None,
+    to_state: str | None = None,
+    actor_id=None,
+    actor_name: str | None = None,
+    **extra,
+) -> dict:
+    base = {
+        "id": id,
+        "occurred_at": occurred_at,
+        "event_type": event_type,
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "entity_label": entity_label,
+        "title": title,
+        "summary": summary,
+        "action": action,
+        "from_state": from_state,
+        "to_state": to_state,
+        "actor_id": actor_id,
+        "actor_name": actor_name,
+        "requested_by_id": None,
+        "requested_by_name": None,
+        "decided_by_id": None,
+        "decided_by_name": None,
+        "assignee_names": [],
+        "decision": None,
+        "team_role": None,
+        "remark": None,
+        "version": None,
+    }
+    base.update(extra)
+    return base
+
+
+# Blueprint "send" actions → My Jobs task.action (the approve action stored on the task).
+_SEND_ACTION_TO_TASK_ACTION: dict[str, str] = {
+    "send_sow_approval": "approve_sow",
+    "send_boq_approval": "approve_boq",
+    "send_po_approval": "approve_po",
+    "send_cloud_discount_approval": "approve_cloud_discount",
+}
+
+# Timeline approve/study actions that resolve from My Jobs decided_by.
+_APPROVE_TASK_ACTIONS: frozenset[str] = frozenset(
+    {
+        "approve_sow",
+        "approve_boq",
+        "approve_po",
+        "approve_internally",
+        "approve",
+        "approve_cloud_discount",
+    }
+)
+
+
+# Map blueprint actions → Current State label (hardware happy path).
+_ACTION_MILESTONE: dict[str, str] = {
+    "convert": "Converted to Opportunity",
+    "converted": "Converted to Opportunity",
+    "convert_lead": "Converted to Opportunity",
+    "attach_boq": "BOQ Attached",
+    "attach_sow": "SOW Attached",
+    "send_boq_approval": "BOQ Sent for Approval",
+    "send_sow_approval": "SOW Sent for Approval",
+    "approve_boq": "BOQ Studied",
+    "approve_sow": "SOW Studied",
+    "deal_reg": "Deal Registration Submitted",
+    "oem_received": "OEM Quotation Received",
+    "attach_oem_quote": "OEM Quote Attached",
+    "create_quote": "Quote Created",
+    "send_for_approval": "Quote Sent for Approval",  # quote/ovf disambiguated by entity
+    "approve_internally": "Quote Approved",
+    "send_to_customer": "Quote Sent",
+    "negotiate": "Quote Sent",
+    "follow_up": "Quote Sent",
+    "accept": "Quote Accepted",
+    "quote_accepted": "Quote Accepted",
+    "attach_po": "Customer PO Attached",
+    "send_po_approval": "Customer PO Sent for Approval",
+    "approve_po": "Customer PO Approved / OVF Ready",
+    "create_ovf": "OVF Created",
+    "approve": "OVF Approved",
+    "share_to_scm": "OVF Shared to SCM",
+    "deal_won": "Deal Won",
+    "won": "Deal Won",
+    "lost": "Lost Deal",
+}
+
+_TO_STATE_MILESTONE: dict[str, dict[str, str]] = {
+    "lead": {
+        "open": "Lead Open",
+        "converted": "Converted to Opportunity",
+        "lost": "Lost Deal",
+    },
+    "opportunity": {
+        "open": "Opportunity Open",
+        "boq_pending": "BOQ Attached",
+        "sow_approval": "SOW Sent for Approval",
+        "boq_approval": "BOQ Sent for Approval",
+        "deal_reg": "Deal Registration",
+        "oem_pending": "Deal Registration Submitted",
+        "oem_attached": "OEM Quotation Received",
+        "quote_ready": "OEM Quote Attached",
+        "quote_in_progress": "Quote Created",
+        "po_pending": "Quote Accepted",
+        "po_approval": "Customer PO Sent for Approval",
+        "ovf_ready": "OVF Ready",
+        "won": "Deal Won",
+        "lost": "Lost Deal",
+    },
+    "quote": {
+        "draft": "Quote Created",
+        "internal_approval": "Quote Sent for Approval",
+        "approved_internal": "Quote Approved",
+        "sent_to_customer": "Quote Sent",
+        "negotiation": "Quote Sent",
+        "follow_up": "Quote Sent",
+        "accepted": "Quote Accepted",
+        "lost": "Lost Deal",
+    },
+    "ovf": {
+        "draft": "OVF Created",
+        "approval": "OVF Sent for Approval",
+        "approved": "OVF Approved",
+        "shared_scm": "OVF Shared to SCM",
+        "deal_won": "Deal Won",
+    },
+}
+
+
+def _milestone_title(
+    *,
+    entity_type: str | None,
+    action: str | None,
+    to_state: str | None,
+) -> str | None:
+    action_key = (action or "").strip().lower()
+    state_key = (to_state or "").strip().lower()
+    et = (entity_type or "").strip().lower()
+
+    if action_key == "send_for_approval":
+        if et == "ovf":
+            return "OVF Sent for Approval"
+        if et == "quote":
+            return "Quote Sent for Approval"
+    if action_key == "approve" and et == "ovf":
+        return "OVF Approved"
+    if action_key == "approve_po":
+        return "Customer PO Approved"
+    if action_key in _ACTION_MILESTONE:
+        return _ACTION_MILESTONE[action_key]
+    if et in _TO_STATE_MILESTONE and state_key in _TO_STATE_MILESTONE[et]:
+        return _TO_STATE_MILESTONE[et][state_key]
         return None
-    return value.replace("_", " ").strip().title()
 
 
 class OpportunityTimelineService:
     def __init__(self, db: Session) -> None:
         self._opportunities = OpportunityRepository(db)
+        self._leads = LeadRepository(db)
         self._quotes = QuoteRepository(db)
         self._ovfs = OvfRepository(db)
         self._history = StateHistoryRepository(db)
         self._approvals = ApprovalTaskRepository(db)
-        self._attachments = AttachmentRepository(db)
-        self._stages = OpportunityStageRepository(db)
         self._users = UserRepository(db)
-        self._employees = EmployeeService(db)
+        self._visibility = CrmRecordVisibility(db)
 
     def timeline(self, ctx: TenantContext, opportunity_id: UUID) -> dict:
         opp = self._opportunities.get(ctx, opportunity_id)
         if opp is None:
             raise NotFoundException("Opportunity not found")
+        self._visibility.ensure_opportunity_access(ctx, opp)
 
+        lead = self._leads.get(ctx, opp.lead_id) if opp.lead_id else None
         quotes = self._quotes.list_quotes(ctx, opp.company_id, opportunity_id=opportunity_id)
         ovfs = self._ovfs.list_ovfs(ctx, opp.company_id, opportunity_id=opportunity_id)
+        quote = next((q for q in quotes if q.quote_stage == "accepted"), None) or (
+            quotes[0] if quotes else None
+        )
+        ovf = ovfs[0] if ovfs else None
 
         entity_labels: dict[UUID, str] = {opp.id: opp.opportunity_code or "Opportunity"}
-        for quote in quotes:
-            entity_labels[quote.id] = f"Quote {quote.quote_no}"
-        for ovf in ovfs:
-            entity_labels[ovf.id] = f"OVF {ovf.ovf_no}"
+        for q in quotes:
+            entity_labels[q.id] = f"Quote {q.quote_no}"
+        for o in ovfs:
+            entity_labels[o.id] = f"OVF {o.ovf_no}"
+        if lead is not None:
+            entity_labels[lead.id] = getattr(lead, "lead_code", None) or "Lead"
 
         related_ids = [opportunity_id, *[q.id for q in quotes], *[o.id for o in ovfs]]
-        if opp.lead_id:
-            related_ids.append(opp.lead_id)
-            entity_labels[opp.lead_id] = "Lead"
+        if lead is not None:
+            related_ids.append(lead.id)
 
         history_rows = self._history.list_for_entities(ctx, related_ids)
-        approval_rows = self._approvals.list_for_entity_ids(ctx, opp.company_id, related_ids)
-        stage_rows = self._stages.list_for_opportunity(ctx, opportunity_id)
-
-        attachment_rows = list(self._attachments.list_for_entity(ctx, "opportunity", opportunity_id))
-        for quote in quotes:
-            attachment_rows.extend(self._attachments.list_for_entity(ctx, "quote", quote.id))
-        for ovf in ovfs:
-            attachment_rows.extend(self._attachments.list_for_entity(ctx, "ovf", ovf.id))
+        approval_tasks = self._approvals.list_for_entity_ids(ctx, opp.company_id, related_ids)
 
         user_ids: set[UUID] = set()
-        employee_ids: set[UUID] = set()
-        if opp.created_by:
-            user_ids.add(opp.created_by)
+        for uid in (
+            opp.created_by,
+            getattr(opp, "updated_by", None),
+            lead.created_by if lead is not None else None,
+            getattr(lead, "updated_by", None) if lead is not None else None,
+        ):
+            if uid:
+                user_ids.add(uid)
         for row in history_rows:
             if row.performed_by:
                 user_ids.add(row.performed_by)
-        for row in approval_rows:
-            for uid in (row.requested_by, row.decided_by, row.assigned_user_id, row.created_by):
-                if uid:
-                    user_ids.add(uid)
-        for row in attachment_rows:
-            if row.uploaded_by:
-                user_ids.add(row.uploaded_by)
-            if row.created_by:
-                user_ids.add(row.created_by)
-        for quote in quotes:
-            if quote.created_by:
-                user_ids.add(quote.created_by)
-        for ovf in ovfs:
-            if ovf.created_by:
-                user_ids.add(ovf.created_by)
-        for stage in stage_rows:
-            if stage.changed_by_employee_id:
-                employee_ids.add(stage.changed_by_employee_id)
+        for q in quotes:
+            if q.created_by:
+                user_ids.add(q.created_by)
+            if getattr(q, "updated_by", None):
+                user_ids.add(q.updated_by)
+        for o in ovfs:
+            if o.created_by:
+                user_ids.add(o.created_by)
+            if getattr(o, "updated_by", None):
+                user_ids.add(o.updated_by)
+        for task in approval_tasks:
+            if task.assigned_user_id:
+                user_ids.add(task.assigned_user_id)
+            if task.requested_by:
+                user_ids.add(task.requested_by)
+            if task.decided_by:
+                user_ids.add(task.decided_by)
 
         user_names = self._resolve_users(ctx.tenant_id, user_ids)
-        employee_names = self._resolve_employees(ctx, employee_ids)
+
+        def task_action_for_send(action: str | None, entity_type: str | None) -> str | None:
+            key = (action or "").strip().lower()
+            if key in _SEND_ACTION_TO_TASK_ACTION:
+                return _SEND_ACTION_TO_TASK_ACTION[key]
+            if key == "send_for_approval":
+                et = (entity_type or "").strip().lower()
+                if et == "quote":
+                    return "approve_internally"
+                if et == "ovf":
+                    return "approve"
+            return None
+
+        def tasks_for(entity_id: UUID | None, task_action: str | None) -> list:
+            if entity_id is None or not task_action:
+                return []
+            wanted = task_action.lower()
+            return [
+                t
+                for t in approval_tasks
+                if t.entity_id == entity_id and (t.action or "").strip().lower() == wanted
+            ]
+
+        def assignee_names_for(entity_id: UUID | None, task_action: str | None) -> list[str]:
+            rows = tasks_for(entity_id, task_action)
+            selected = [t for t in rows if (t.assigned_role or "") != "admin_copy"]
+            pool = selected or rows
+            names: list[str] = []
+            seen: set[str] = set()
+            for task in pool:
+                if not task.assigned_user_id:
+                    continue
+                label = user_names.get(task.assigned_user_id)
+                if not label or label in seen:
+                    continue
+                seen.add(label)
+                names.append(label)
+            return names
+
+        def decided_for(entity_id: UUID | None, task_action: str | None):
+            rows = [
+                t
+                for t in tasks_for(entity_id, task_action)
+                if (t.status or "").lower() == "approved" and t.decided_by
+            ]
+            if not rows:
+                return None, None
+            row = max(
+                rows,
+                key=lambda t: (
+                    (t.decided_at or t.updated_at or datetime.min).timestamp()
+                    if (t.decided_at or t.updated_at)
+                    else 0.0
+                ),
+            )
+            return row.decided_by, user_names.get(row.decided_by)
+
+        def hist_matches(
+            *,
+            actions: tuple[str, ...] = (),
+            to_state: str | None = None,
+            entity_id: UUID | None = None,
+        ) -> list:
+            wanted_actions = {a.lower() for a in actions if a}
+            state_key = (to_state or "").strip().lower() or None
+            matches = []
+            for row in history_rows:
+                if entity_id is not None and row.entity_id != entity_id:
+                    continue
+                action_ok = (
+                    not wanted_actions
+                    or (row.action or "").strip().lower() in wanted_actions
+                )
+                state_ok = (
+                    state_key is None
+                    or (row.to_state or "").strip().lower() == state_key
+                )
+                if action_ok and state_ok and (wanted_actions or state_key):
+                    matches.append(row)
+            return matches
+
+        def hist_time(*actions: str, entity_id: UUID | None = None) -> datetime | None:
+            matches = hist_matches(actions=actions, entity_id=entity_id)
+            if not matches:
+                return None
+            return min(matches, key=lambda r: r.performed_at or datetime.min).performed_at
+
+        def hist_to_state(to_state: str, entity_id: UUID | None = None) -> datetime | None:
+            matches = hist_matches(to_state=to_state, entity_id=entity_id)
+            if not matches:
+                return None
+            return min(matches, key=lambda r: r.performed_at or datetime.min).performed_at
+
+        def hist_actor(
+            *actions: str,
+            entity_id: UUID | None = None,
+            to_state: str | None = None,
+        ):
+            matches = hist_matches(actions=actions, to_state=to_state, entity_id=entity_id)
+            if not matches and to_state:
+                matches = hist_matches(to_state=to_state, entity_id=entity_id)
+            if not matches and actions:
+                matches = hist_matches(actions=actions, entity_id=entity_id)
+            if not matches:
+                return None
+            row = min(matches, key=lambda r: r.performed_at or datetime.min)
+            return row.performed_by
+
+        def bump(base: datetime | None, seconds: int) -> datetime | None:
+            if base is None:
+                return None
+            return base + timedelta(seconds=seconds)
 
         events: list[dict] = []
-
-        events.append(
-            {
-                "id": f"opp-created-{opp.id}",
-                "occurred_at": opp.created_at,
-                "event_type": "created",
-                "entity_type": "opportunity",
-                "entity_id": opp.id,
-                "entity_label": entity_labels[opp.id],
-                "title": "Opportunity created",
-                "summary": opp.opportunity_name or opp.opportunity_code,
-                "action": "create",
-                "from_state": None,
-                "to_state": opp.blueprint_state or opp.current_stage or opp.status,
-                "actor_id": opp.created_by,
-                "actor_name": user_names.get(opp.created_by) if opp.created_by else None,
-                "requested_by_id": None,
-                "requested_by_name": None,
-                "decided_by_id": None,
-                "decided_by_name": None,
-                "decision": None,
-                "team_role": None,
-                "remark": None,
-                "version": getattr(opp, "version", None),
-            }
+        seen_titles: set[str] = set()
+        default_actor = (
+            getattr(opp, "updated_by", None)
+            or opp.created_by
+            or (lead.created_by if lead is not None else None)
         )
 
-        for quote in quotes:
+        def add_milestone(
+            title: str,
+            *,
+            occurred_at,
+            entity_type: str,
+            entity_id: UUID | None,
+            event_type: str = "state_transition",
+            summary: str | None = None,
+            action: str | None = None,
+            to_state: str | None = None,
+            actor_id=None,
+            actor_actions: tuple[str, ...] = (),
+            dedupe: bool = True,
+        ) -> None:
+            if occurred_at is None:
+                return
+            if dedupe and title in seen_titles:
+                return
+            seen_titles.add(title)
+            resolved_actor = actor_id
+            if resolved_actor is None:
+                actions = actor_actions or ((action,) if action else ())
+                resolved_actor = hist_actor(
+                    *actions,
+                    entity_id=entity_id,
+                    to_state=to_state,
+                )
+            if resolved_actor is None:
+                resolved_actor = default_actor
+
+            send_task_action = task_action_for_send(action, entity_type)
+            assignees = assignee_names_for(entity_id, send_task_action) if send_task_action else []
+
+            approve_action = (action or "").strip().lower()
+            if approve_action not in _APPROVE_TASK_ACTIONS and actor_actions:
+                for candidate in actor_actions:
+                    if candidate in _APPROVE_TASK_ACTIONS:
+                        approve_action = candidate
+                        break
+            decided_id = None
+            decided_name = None
+            if approve_action in _APPROVE_TASK_ACTIONS:
+                decided_id, decided_name = decided_for(entity_id, approve_action)
+                if decided_id is not None:
+                    resolved_actor = decided_id
+
             events.append(
-                {
-                    "id": f"quote-created-{quote.id}",
-                    "occurred_at": quote.created_at,
-                    "event_type": "created",
-                    "entity_type": "quote",
-                    "entity_id": quote.id,
-                    "entity_label": entity_labels[quote.id],
-                    "title": "Quote created",
-                    "summary": quote.quote_no,
-                    "action": "create",
-                    "from_state": None,
-                    "to_state": quote.quote_stage,
-                    "actor_id": quote.created_by,
-                    "actor_name": user_names.get(quote.created_by) if quote.created_by else None,
-                    "requested_by_id": None,
-                    "requested_by_name": None,
-                    "decided_by_id": None,
-                    "decided_by_name": None,
-                    "decision": None,
-                    "team_role": None,
-                    "remark": None,
-                    "version": getattr(quote, "version", None),
-                }
+                _event(
+                    id=f"milestone-{title.lower().replace(' ', '-').replace('/', '-')}-{entity_id or opportunity_id}",
+                    occurred_at=occurred_at,
+                    title=title,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    entity_label=entity_labels.get(entity_id) if entity_id else None,
+                    event_type=event_type,
+                    summary=summary,
+                    action=action,
+                    to_state=to_state,
+                    actor_id=resolved_actor,
+                    actor_name=user_names.get(resolved_actor) if resolved_actor else None,
+                    assignee_names=assignees,
+                    decided_by_id=decided_id,
+                    decided_by_name=decided_name,
+                    decision="approved" if decided_id else None,
+                )
             )
 
-        for ovf in ovfs:
-            events.append(
-                {
-                    "id": f"ovf-created-{ovf.id}",
-                    "occurred_at": ovf.created_at,
-                    "event_type": "created",
-                    "entity_type": "ovf",
-                    "entity_id": ovf.id,
-                    "entity_label": entity_labels[ovf.id],
-                    "title": "OVF created",
-                    "summary": ovf.ovf_no,
-                    "action": "create",
-                    "from_state": None,
-                    "to_state": ovf.blueprint_state,
-                    "actor_id": ovf.created_by,
-                    "actor_name": user_names.get(ovf.created_by) if ovf.created_by else None,
-                    "requested_by_id": None,
-                    "requested_by_name": None,
-                    "decided_by_id": None,
-                    "decided_by_name": None,
-                    "decision": None,
-                    "team_role": None,
-                    "remark": None,
-                    "version": getattr(ovf, "version", None),
-                }
+        # ── Hardware happy-path Current State milestones ─────────────────
+        if lead is not None:
+            add_milestone(
+                "Lead Open",
+                occurred_at=lead.created_at,
+                entity_type="lead",
+                entity_id=lead.id,
+                event_type="created",
+                summary=getattr(lead, "lead_code", None),
+                action="create",
+                to_state="open",
+                actor_id=lead.created_by,
+            )
+            if lead.converted_at or lead.blueprint_state == "converted":
+                add_milestone(
+                    "Converted to Opportunity",
+                    occurred_at=lead.converted_at
+                    or hist_time("convert", "converted", "convert_lead")
+                    or opp.created_at,
+                    entity_type="lead",
+                    entity_id=lead.id,
+                    summary=opp.opportunity_code,
+                    action="convert",
+                    to_state="converted",
+                    actor_id=lead.updated_by or lead.created_by,
+                )
+
+        add_milestone(
+            "Opportunity Open",
+            occurred_at=opp.created_at,
+            entity_type="opportunity",
+            entity_id=opp.id,
+            event_type="created",
+            summary=opp.opportunity_name or opp.opportunity_code,
+            action="create",
+            to_state="open",
+            actor_id=opp.created_by,
+        )
+
+        # Document attach / study / registration
+        if opp.boq_attached and opp.sow_attached:
+            add_milestone(
+                "BOQ/SOW Attached",
+                occurred_at=hist_time("attach_boq", "attach_sow")
+                or hist_to_state("boq_pending")
+                or bump(opp.created_at, 10),
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="attach_boq",
+                actor_actions=("attach_boq", "attach_sow"),
+                to_state="boq_pending",
+            )
+        elif opp.boq_attached:
+            add_milestone(
+                "BOQ Attached",
+                occurred_at=hist_time("attach_boq")
+                or hist_to_state("boq_pending")
+                or bump(opp.created_at, 10),
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="attach_boq",
+                to_state="boq_pending",
+            )
+        elif opp.sow_attached:
+            add_milestone(
+                "SOW Attached",
+                occurred_at=hist_time("attach_sow") or bump(opp.created_at, 11),
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="attach_sow",
+                to_state="boq_pending",
+            )
+        if hist_time("send_sow_approval") or (opp.blueprint_state == "sow_approval"):
+            add_milestone(
+                "SOW Sent for Approval",
+                occurred_at=hist_time("send_sow_approval")
+                or hist_to_state("sow_approval")
+                or bump(opp.updated_at, 0),
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="send_sow_approval",
+                to_state="sow_approval",
+            )
+        if hist_time("send_boq_approval") or (opp.blueprint_state == "boq_approval"):
+            add_milestone(
+                "BOQ Sent for Approval",
+                occurred_at=hist_time("send_boq_approval")
+                or hist_to_state("boq_approval")
+                or bump(opp.updated_at, 0),
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="send_boq_approval",
+                to_state="boq_approval",
+            )
+        if opp.boq_approved and opp.sow_approved:
+            add_milestone(
+                "BOQ/SOW Studied",
+                occurred_at=hist_time("approve_boq", "approve_sow") or bump(opp.updated_at, 2),
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="approve_boq",
+                to_state="deal_reg",
+            )
+        elif opp.sow_approved:
+            add_milestone(
+                "SOW Studied",
+                occurred_at=hist_time("approve_sow") or bump(opp.updated_at, 1),
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="approve_sow",
+                to_state="deal_reg",
+            )
+        elif opp.boq_approved:
+            add_milestone(
+                "BOQ Studied",
+                occurred_at=hist_time("approve_boq") or bump(opp.updated_at, 2),
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="approve_boq",
+                to_state="deal_reg",
+            )
+        if opp.boq_approved or opp.sow_approved or (opp.blueprint_state or "") in {
+            "deal_reg",
+            "oem_pending",
+            "oem_attached",
+            "quote_ready",
+            "quote_in_progress",
+            "po_pending",
+            "po_approval",
+            "ovf_ready",
+            "won",
+        }:
+            if opp.boq_approved or opp.sow_approved:
+                add_milestone(
+                    "Deal Registration",
+                    occurred_at=hist_to_state("deal_reg")
+                    or hist_time("approve_boq", "approve_sow")
+                    or bump(opp.updated_at, 3),
+                    entity_type="opportunity",
+                    entity_id=opp.id,
+                    action="approve_boq",
+                    to_state="deal_reg",
+                )
+
+        if (
+            opp.blueprint_state
+            in {
+                "oem_pending",
+                "oem_attached",
+                "quote_ready",
+                "quote_in_progress",
+                "po_pending",
+                "po_approval",
+                "ovf_ready",
+                "won",
+            }
+            or hist_time("deal_reg")
+            or opp.deal_reg_number
+        ):
+            add_milestone(
+                "Deal Registration Submitted",
+                occurred_at=hist_time("deal_reg")
+                or hist_to_state("oem_pending")
+                or bump(opp.updated_at, 4),
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="deal_reg",
+                to_state="oem_pending",
+                summary=opp.deal_reg_number,
             )
 
+        if opp.oem_quotation_received or opp.blueprint_state in {
+            "oem_attached",
+            "quote_ready",
+            "quote_in_progress",
+            "po_pending",
+            "po_approval",
+            "ovf_ready",
+            "won",
+        }:
+            add_milestone(
+                "OEM Quotation Received",
+                occurred_at=hist_time("oem_received")
+                or hist_to_state("oem_attached")
+                or bump(opp.updated_at, 5),
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="oem_received",
+                to_state="oem_attached",
+            )
+
+        if opp.oem_quote_attached or opp.blueprint_state in {
+            "quote_ready",
+            "quote_in_progress",
+            "po_pending",
+            "po_approval",
+            "ovf_ready",
+            "won",
+        }:
+            add_milestone(
+                "OEM Quote Attached",
+                occurred_at=hist_time("attach_oem_quote")
+                or hist_to_state("quote_ready")
+                or bump(opp.updated_at, 6),
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="attach_oem_quote",
+                to_state="quote_ready",
+            )
+
+        # Quote path
+        if quote is not None:
+            qid = quote.id
+            add_milestone(
+                "Quote Created",
+                occurred_at=quote.created_at
+                or hist_time("create_quote")
+                or hist_to_state("quote_in_progress"),
+                entity_type="quote",
+                entity_id=qid,
+                event_type="created",
+                summary=quote.quote_no,
+                action="create",
+                to_state="draft",
+                actor_id=quote.created_by,
+            )
+            stage = (quote.quote_stage or "").lower()
+            quote_order = [
+                ("internal_approval", "Quote Sent for Approval", ("send_for_approval",)),
+                ("approved_internal", "Quote Approved", ("approve_internally",)),
+                ("sent_to_customer", "Quote Sent", ("send_to_customer", "negotiate", "follow_up")),
+                ("negotiation", "Quote Sent", ("negotiate",)),
+                ("follow_up", "Quote Sent", ("follow_up",)),
+                ("accepted", "Quote Accepted", ("accept", "quote_accepted")),
+            ]
+            stage_rank = {name: i for i, (name, _, _) in enumerate(quote_order)}
+            current_rank = stage_rank.get(stage, -1)
+            if opp.blueprint_state in {
+                "po_pending",
+                "po_approval",
+                "ovf_ready",
+                "won",
+            }:
+                current_rank = max(current_rank, stage_rank["accepted"])
+            for name, title, actions in quote_order:
+                if stage_rank[name] > current_rank and stage != name:
+                    if not hist_time(*actions, entity_id=qid) and not hist_to_state(name, entity_id=qid):
+                        continue
+                add_milestone(
+                    title,
+                    occurred_at=hist_time(*actions, entity_id=qid)
+                    or hist_to_state(name, entity_id=qid)
+                    or (quote.updated_at if stage == name else None)
+                    or bump(quote.created_at, 10 + stage_rank[name]),
+                    entity_type="quote",
+                    entity_id=qid,
+                    action=actions[0],
+                    actor_actions=actions,
+                    to_state=name,
+                    summary=quote.quote_no,
+                )
+
+        # Customer PO
+        if opp.customer_po_attached or opp.blueprint_state in {"po_approval", "ovf_ready", "won"}:
+            add_milestone(
+                "Customer PO Attached",
+                occurred_at=hist_time("attach_po") or bump(opp.updated_at, 20),
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="attach_po",
+                to_state="po_pending",
+            )
+        if (
+            hist_time("send_po_approval")
+            or opp.blueprint_state == "po_approval"
+            or (opp.customer_po_attached and not opp.customer_po_approved and opp.locked)
+        ):
+            add_milestone(
+                "Customer PO Sent for Approval",
+                occurred_at=hist_time("send_po_approval")
+                or hist_to_state("po_approval")
+                or bump(opp.updated_at, 21),
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="send_po_approval",
+                to_state="po_approval",
+            )
+        if opp.customer_po_approved or opp.blueprint_state in {"ovf_ready", "won"} or ovf is not None:
+            add_milestone(
+                "Customer PO Approved / OVF Ready",
+                occurred_at=hist_time("approve_po")
+                or hist_to_state("ovf_ready")
+                or bump(opp.updated_at, 22),
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="approve_po",
+                to_state="ovf_ready",
+            )
+
+        # OVF path
+        if ovf is not None:
+            oid = ovf.id
+            add_milestone(
+                "OVF Created",
+                occurred_at=ovf.created_at or hist_time("create_ovf"),
+                entity_type="ovf",
+                entity_id=oid,
+                event_type="created",
+                summary=ovf.ovf_no,
+                action="create",
+                to_state="draft",
+                actor_id=ovf.created_by,
+            )
+            ovf_stage = (ovf.blueprint_state or "draft").lower()
+            ovf_steps = [
+                ("approval", "OVF Sent for Approval", ("send_for_approval",)),
+                ("approved", "OVF Approved", ("approve",)),
+                ("shared_scm", "OVF Shared to SCM", ("share_to_scm",)),
+                ("deal_won", "Deal Won", ("deal_won",)),
+            ]
+            rank = {name: i for i, (name, _, _) in enumerate(ovf_steps)}
+            current = rank.get(ovf_stage, -1)
+            if ovf.deal_won:
+                current = rank["deal_won"]
+            for name, title, actions in ovf_steps:
+                if rank[name] > current and not hist_time(*actions, entity_id=oid):
+                    continue
+                add_milestone(
+                    title,
+                    occurred_at=hist_time(*actions, entity_id=oid)
+                    or hist_to_state(name, entity_id=oid)
+                    or (ovf.updated_at if ovf_stage == name else None)
+                    or bump(ovf.created_at, 30 + rank[name]),
+                    entity_type="ovf",
+                    entity_id=oid,
+                    action=actions[0],
+                    actor_actions=actions,
+                    to_state=name,
+                    summary=ovf.ovf_no,
+                )
+
+        # Deal won without OVF (cloud / direct)
+        if (opp.status or "").lower() == "won" or (opp.blueprint_state or "").lower() == "won":
+            add_milestone(
+                "Deal Won",
+                occurred_at=getattr(opp, "won_at", None)
+                or hist_time("deal_won", "won")
+                or opp.updated_at,
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="deal_won",
+                to_state="won",
+                summary=str(opp.deal_won_amount) if opp.deal_won_amount is not None else opp.opportunity_name,
+            )
+
+        # Lost
+        if (opp.status or "").lower() == "lost" or (opp.blueprint_state or "").lower() == "lost":
+            add_milestone(
+                "Lost Deal",
+                occurred_at=hist_time("lost") or opp.updated_at,
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="lost",
+                to_state="lost",
+            )
+
+        # Fill any remaining history rows that map to Current State labels we missed.
         for row in history_rows:
-            from_label = _humanize(row.from_state)
-            to_label = _humanize(row.to_state)
-            action_label = _humanize(row.action) or "Transition"
-            summary_parts = []
-            if from_label and to_label:
-                summary_parts.append(f"{from_label} → {to_label}")
-            elif to_label:
-                summary_parts.append(to_label)
-            if row.remark:
-                summary_parts.append(row.remark)
-            events.append(
-                {
-                    "id": f"history-{row.id}",
-                    "occurred_at": row.performed_at,
-                    "event_type": "state_transition",
-                    "entity_type": row.entity_type,
-                    "entity_id": row.entity_id,
-                    "entity_label": entity_labels.get(row.entity_id) or _humanize(row.entity_type),
-                    "title": action_label,
-                    "summary": " · ".join(summary_parts) if summary_parts else None,
-                    "action": row.action,
-                    "from_state": row.from_state,
-                    "to_state": row.to_state,
-                    "actor_id": row.performed_by,
-                    "actor_name": user_names.get(row.performed_by) if row.performed_by else None,
-                    "requested_by_id": None,
-                    "requested_by_name": None,
-                    "decided_by_id": None,
-                    "decided_by_name": None,
-                    "decision": None,
-                    "team_role": None,
-                    "remark": row.remark,
-                    "version": None,
-                }
+            title = _milestone_title(
+                entity_type=row.entity_type,
+                action=row.action,
+                to_state=row.to_state,
             )
-
-        for row in approval_rows:
-            requested_name = user_names.get(row.requested_by) if row.requested_by else None
-            decided_name = user_names.get(row.decided_by) if row.decided_by else None
-            assigned_name = user_names.get(row.assigned_user_id) if row.assigned_user_id else None
-            team = _humanize(row.team_role)
-            entity_label = entity_labels.get(row.entity_id) or _humanize(row.entity_type)
-
-            request_summary_parts = [f"Team: {team}" if team else None]
-            if requested_name:
-                request_summary_parts.append(f"Sent by {requested_name}")
-            if assigned_name:
-                request_summary_parts.append(f"Assigned to {assigned_name}")
-            if row.remarks:
-                request_summary_parts.append(row.remarks)
-
-            events.append(
-                {
-                    "id": f"approval-request-{row.id}",
-                    "occurred_at": row.created_at,
-                    "event_type": "approval_requested",
-                    "entity_type": row.entity_type,
-                    "entity_id": row.entity_id,
-                    "entity_label": entity_label,
-                    "title": row.title or "Approval requested",
-                    "summary": " · ".join(p for p in request_summary_parts if p),
-                    "action": row.action or "send_for_approval",
-                    "from_state": None,
-                    "to_state": "pending",
-                    "actor_id": row.requested_by or row.created_by,
-                    "actor_name": requested_name
-                    or (user_names.get(row.created_by) if row.created_by else None),
-                    "requested_by_id": row.requested_by,
-                    "requested_by_name": requested_name,
-                    "decided_by_id": None,
-                    "decided_by_name": None,
-                    "decision": None,
-                    "team_role": row.team_role,
-                    "remark": row.remarks,
-                    "version": None,
-                }
-            )
-
-            if row.status in {"approved", "rejected"} and row.decided_at:
-                decision_parts = [f"Decision: {_humanize(row.status)}"]
-                if decided_name:
-                    decision_parts.append(f"By {decided_name}")
-                if row.decision_remark:
-                    decision_parts.append(row.decision_remark)
-                events.append(
-                    {
-                        "id": f"approval-decision-{row.id}",
-                        "occurred_at": row.decided_at,
-                        "event_type": "approval_decided",
-                        "entity_type": row.entity_type,
-                        "entity_id": row.entity_id,
-                        "entity_label": entity_label,
-                        "title": f"Approval {_humanize(row.status)}".strip(),
-                        "summary": " · ".join(decision_parts),
-                        "action": row.status,
-                        "from_state": "pending",
-                        "to_state": row.status,
-                        "actor_id": row.decided_by,
-                        "actor_name": decided_name,
-                        "requested_by_id": row.requested_by,
-                        "requested_by_name": requested_name,
-                        "decided_by_id": row.decided_by,
-                        "decided_by_name": decided_name,
-                        "decision": row.status,
-                        "team_role": row.team_role,
-                        "remark": row.decision_remark,
-                        "version": None,
-                    }
-                )
-            elif row.status == "cancelled":
-                events.append(
-                    {
-                        "id": f"approval-cancelled-{row.id}",
-                        "occurred_at": row.updated_at or row.created_at,
-                        "event_type": "approval_cancelled",
-                        "entity_type": row.entity_type,
-                        "entity_id": row.entity_id,
-                        "entity_label": entity_label,
-                        "title": "Approval cancelled",
-                        "summary": row.title,
-                        "action": "cancelled",
-                        "from_state": "pending",
-                        "to_state": "cancelled",
-                        "actor_id": row.updated_by or row.requested_by,
-                        "actor_name": user_names.get(row.updated_by or row.requested_by)
-                        if (row.updated_by or row.requested_by)
-                        else None,
-                        "requested_by_id": row.requested_by,
-                        "requested_by_name": requested_name,
-                        "decided_by_id": None,
-                        "decided_by_name": None,
-                        "decision": "cancelled",
-                        "team_role": row.team_role,
-                        "remark": row.decision_remark or row.remarks,
-                        "version": None,
-                    }
-                )
-
-        for stage in stage_rows:
-            actor_name = None
-            actor_id = None
-            if stage.changed_by_employee_id:
-                actor_id = stage.changed_by_employee_id
-                actor_name = employee_names.get(stage.changed_by_employee_id)
-            events.append(
-                {
-                    "id": f"stage-{stage.id}",
-                    "occurred_at": stage.entered_at,
-                    "event_type": "stage_change",
-                    "entity_type": "opportunity",
-                    "entity_id": opportunity_id,
-                    "entity_label": entity_labels[opportunity_id],
-                    "title": f"Stage: {stage.stage_name or _humanize(stage.stage_code)}",
-                    "summary": stage.notes,
-                    "action": "stage_change",
-                    "from_state": None,
-                    "to_state": stage.stage_code,
-                    "actor_id": actor_id,
-                    "actor_name": actor_name,
-                    "requested_by_id": None,
-                    "requested_by_name": None,
-                    "decided_by_id": None,
-                    "decided_by_name": None,
-                    "decision": None,
-                    "team_role": None,
-                    "remark": stage.notes,
-                    "version": None,
-                }
-            )
-
-        for att in attachment_rows:
-            uploader = att.uploaded_by or att.created_by
-            category = _humanize(att.category) or "Attachment"
-            events.append(
-                {
-                    "id": f"attachment-{att.id}",
-                    "occurred_at": att.created_at,
-                    "event_type": "attachment",
-                    "entity_type": att.entity_type,
-                    "entity_id": att.entity_id,
-                    "entity_label": entity_labels.get(att.entity_id) or _humanize(att.entity_type),
-                    "title": f"{category} attached",
-                    "summary": att.file_name,
-                    "action": "attach",
-                    "from_state": None,
-                    "to_state": None,
-                    "actor_id": uploader,
-                    "actor_name": user_names.get(uploader) if uploader else None,
-                    "requested_by_id": None,
-                    "requested_by_name": None,
-                    "decided_by_id": None,
-                    "decided_by_name": None,
-                    "decision": None,
-                    "team_role": None,
-                    "remark": None,
-                    "version": None,
-                }
+            if not title or title in seen_titles:
+                continue
+            add_milestone(
+                title,
+                occurred_at=row.performed_at,
+                entity_type=row.entity_type or "opportunity",
+                entity_id=row.entity_id,
+                action=row.action,
+                to_state=row.to_state,
+                actor_id=row.performed_by,
+                summary=row.remark,
             )
 
         events.sort(
@@ -393,18 +853,9 @@ class OpportunityTimelineService:
         names: dict[UUID, str] = {}
         for user_id in user_ids:
             user = self._users.get_by_id(tenant_id, user_id)
-            if user and user.display_name:
-                names[user_id] = user.display_name
-        return names
-
-    def _resolve_employees(self, ctx: TenantContext, employee_ids: set[UUID]) -> dict[UUID, str]:
-        names: dict[UUID, str] = {}
-        for employee_id in employee_ids:
-            try:
-                employee = self._employees.get_employee(ctx, employee_id)
-            except NotFoundException:
+            if not user:
                 continue
-            label = f"{employee.first_name} {employee.last_name}".strip()
+            label = (user.display_name or "").strip() or (user.email or "").strip()
             if label:
-                names[employee_id] = label
+                names[user_id] = label
         return names

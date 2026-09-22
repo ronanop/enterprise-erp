@@ -12,8 +12,13 @@ from database.base import Base
 engine: Engine = create_engine(
     str(settings.database_url),
     pool_pre_ping=True,
-    pool_size=10,
-    max_overflow=20,
+    # Platform home fans out many list GETs; keep headroom under Postgres max_connections.
+    pool_size=25,
+    max_overflow=50,
+    pool_timeout=20,
+    pool_recycle=1800,
+    # Fail fast when RDS/SG/DNS is wrong (default TCP wait can exceed Coolify deploy timeout).
+    connect_args={"connect_timeout": 10},
 )
 
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)

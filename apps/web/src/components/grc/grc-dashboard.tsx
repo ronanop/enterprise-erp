@@ -133,7 +133,7 @@ export function GrcDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="GRC"
-        description="Governance, risk & compliance — policies, controls, risk register, compliance, audits, CAPA, and incidents."
+        description="Governance, risk & compliance - policies, controls, risk register, compliance, audits, CAPA, and incidents."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -180,28 +180,28 @@ export function GrcDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Open risks"
-          value={loading ? "—" : String(kpis.openRisks)}
+          value={loading ? "-" : String(kpis.openRisks)}
           hint={`${data?.risks.length ?? 0} risks · ${data?.riskCategories.length ?? 0} categories`}
           icon={ShieldAlert}
           tone={kpis.openRisks > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Active controls"
-          value={loading ? "—" : String(kpis.activeControls)}
+          value={loading ? "-" : String(kpis.activeControls)}
           hint={`${data?.controls.length ?? 0} controls · ${data?.controlTests.length ?? 0} tests`}
           icon={ShieldCheck}
           tone={kpis.activeControls > 0 ? "success" : "default"}
         />
         <FinanceKpiCard
           label="Planned audits"
-          value={loading ? "—" : String(kpis.plannedAudits)}
+          value={loading ? "-" : String(kpis.plannedAudits)}
           hint={`${data?.audits.length ?? 0} audits · ${data?.auditPlans.length ?? 0} plans`}
           icon={ClipboardCheck}
           tone={kpis.plannedAudits > 0 ? "default" : "success"}
         />
         <FinanceKpiCard
           label="Open CAPAs"
-          value={loading ? "—" : String(kpis.openCapas)}
+          value={loading ? "-" : String(kpis.openCapas)}
           hint={`${data?.correctiveActions.length ?? 0} CAPA · ${data?.incidents.length ?? 0} incidents`}
           icon={TriangleAlert}
           tone={kpis.openCapas > 0 ? "danger" : "success"}
@@ -238,7 +238,7 @@ export function GrcDashboard() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium tracking-tight">Workspace</h2>
+          <h2 className="text-base font-extrabold tracking-tight">Workspace</h2>
           <Badge variant="secondary">{grcWorkspaceGroups.length} areas</Badge>
         </div>
         <div className="grid gap-3 lg:grid-cols-3">
@@ -255,7 +255,7 @@ export function GrcDashboard() {
                     <Icon className="size-4" />
                   </span>
                   <div className="min-w-0">
-                    <h3 className="text-sm font-medium tracking-tight">{group.title}</h3>
+                    <h3 className="text-base font-extrabold tracking-tight">{group.title}</h3>
                     <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                       {group.description}
                     </p>
@@ -286,7 +286,7 @@ export function GrcDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Recent risks</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Recent risks</h2>
               <p className="text-[11px] text-muted-foreground">Risk register</p>
             </div>
             <Link
@@ -327,17 +327,17 @@ export function GrcDashboard() {
                     >
                       <td className="max-w-[220px] truncate px-4 py-2.5">
                         <p className="font-medium text-foreground">
-                          {String(row.risk_title ?? row.risk_number ?? "—")}
+                          {String(row.risk_title ?? row.risk_number ?? "-")}
                         </p>
                         <p className="truncate text-[11px] text-muted-foreground">
                           {String(row.risk_number ?? "")}
                         </p>
                       </td>
                       <td className="px-4 py-2.5 text-xs capitalize text-muted-foreground">
-                        {String(row.risk_level ?? "—").replaceAll("_", " ")}
+                        {String(row.risk_level ?? "-").replaceAll("_", " ")}
                       </td>
                       <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                        {String(row.owner_employee_id ?? "—").slice(0, 8)}
+                        {String(row.owner_employee_id ?? "-").slice(0, 8)}
                       </td>
                       <td className="px-4 py-2.5">
                         <FinanceStatusBadge
@@ -355,7 +355,7 @@ export function GrcDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">CAPA watch</h2>
+              <h2 className="text-base font-extrabold tracking-tight">CAPA watch</h2>
               <p className="text-[11px] text-muted-foreground">Corrective actions</p>
             </div>
             <Link
@@ -380,7 +380,7 @@ export function GrcDashboard() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-medium">
-                      {String(row.capa_number ?? row.document_number ?? "—")}
+                      {String(row.capa_number ?? row.document_number ?? "-")}
                     </p>
                     <FinanceStatusBadge
                       status={asStatus(row.status) || String(row.status ?? "")}
@@ -397,7 +397,7 @@ export function GrcDashboard() {
 
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
           <div className="mb-3">
-            <h2 className="text-sm font-medium tracking-tight">Risk level mix</h2>
+            <h2 className="text-base font-extrabold tracking-tight">Risk level mix</h2>
             <p className="text-[11px] text-muted-foreground">Inherent severity</p>
           </div>
           {loading ? (

@@ -1,16 +1,16 @@
-# ERD_23 — Customer Portal & Self-Service Portal
+# ERD_23 - Customer Portal & Self-Service Portal
 
-**Document:** Enterprise ERD — Customer Portal & Self-Service Portal Domain  
+**Document:** Enterprise ERD - Customer Portal & Self-Service Portal Domain  
 **Version:** 1.1  
-**Status:** Locked — Ready for Sprint 23 Implementation Planning  
+**Status:** Locked - Ready for Sprint 23 Implementation Planning  
 **Schema:** `portal`  
 **Table Prefix:** `pt_`  
 **Aligned To:** BRD v1.0 · FRD Customer / Self-Service Portal (planning) · Service FRD Customer Portal touchpoints · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** Customer Portal & Self-Service (enterprise self-service layer; aligned to Service / Helpdesk / Document / Sales / Finance consumption patterns)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.17-beta](../07_RELEASES/ERP_Core_v1.17-beta.md)  
 
-> **C-01 note:** Party / item identity remains **`master.master_customer`**, **`master.master_employee`**, and **`master.master_product`**. Customer Portal **never** invents parallel masters. This module provides **secure self-service access** for external customers — it **consumes** CRM · Sales · Finance · Document · Helpdesk · Service · Analytics · Integration Hub · E-Commerce and **never becomes the system of record**. Peers communicate via **services · events · UUID refs** — **never** via peer ORM writes.
+> **C-01 note:** Party / item identity remains **`master.master_customer`**, **`master.master_employee`**, and **`master.master_product`**. Customer Portal **never** invents parallel masters. This module provides **secure self-service access** for external customers - it **consumes** CRM · Sales · Finance · Document · Helpdesk · Service · Analytics · Integration Hub · E-Commerce and **never becomes the system of record**. Peers communicate via **services · events · UUID refs** - **never** via peer ORM writes.
 
 ---
 
@@ -20,7 +20,7 @@ The Customer Portal & Self-Service Portal domain provides the **enterprise exter
 
 This module **consumes existing ERP modules**. It **never** becomes order, invoice, document, ticket, service-request, or customer-master authority. **CRM remains customer relationship authority** (interaction / opportunity ledgers), **`master_customer` remains party identity (C-01)**, **Sales remains order authority**, **Finance remains invoice / accounting authority**, **Document remains document authority**, **Helpdesk remains ticket authority**, and **Service remains request authority**.
 
-Portal **depends on** Foundation, Organization, and Master Data. It **consumes existing masters only (C-01)** — **`master_customer`**, **`master_employee`**, **`master_product`**, and **`org_department`**.
+Portal **depends on** Foundation, Organization, and Master Data. It **consumes existing masters only (C-01)** - **`master_customer`**, **`master_employee`**, **`master_product`**, and **`org_department`**.
 
 **Finance remains the only accounting system.** Portal **never** ORM-writes `fin_*`. Any portal-initiated fee / access charge (if configured) uses **`finance_journal_id`** after **`PostingService.post_system_journal()`** only.
 
@@ -64,7 +64,7 @@ External customers (web / mobile self-service)
 
 ### API Mount (planned)
 
-**`/api/v1/portal`** — routers for all aggregates (portal-accounts, customer-profiles, portal-sessions, dashboards, dashboard-widgets, notifications, message-threads, messages, order-views, invoice-views, document-accesses, support-tickets, service-requests, download-histories, saved-reports, saved-searches, preferences, devices, login-audits, reports).
+**`/api/v1/portal`** - routers for all aggregates (portal-accounts, customer-profiles, portal-sessions, dashboards, dashboard-widgets, notifications, message-threads, messages, order-views, invoice-views, document-accesses, support-tickets, service-requests, download-histories, saved-reports, saved-searches, preferences, devices, login-audits, reports).
 
 ---
 
@@ -83,29 +83,29 @@ External customers (web / mobile self-service)
 - Workflow, RBAC, Celery stubs (planning)
 
 ### Out of Scope (Phase 2 / Separate)
-- Replacing **CRM** customer relationship ledgers — Portal profile is self-service surface; CRM remains CRM authority
+- Replacing **CRM** customer relationship ledgers - Portal profile is self-service surface; CRM remains CRM authority
 - Replacing **Sales / Finance / Document / Helpdesk / Service** systems of record
-- Full **IdP / SSO product** — Phase 1: account + session + device shells; Federation via Foundation / Hub later
-- Duplicate `pt_customer` / `pt_employee` / `pt_product` / `pt_department` masters — **forbidden (C-01)**
+- Full **IdP / SSO product** - Phase 1: account + session + device shells; Federation via Foundation / Hub later
+- Duplicate `pt_customer` / `pt_employee` / `pt_product` / `pt_department` masters - **forbidden (C-01)**
 - Direct ORM writes to any peer business schema
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 
 ### Business Rules
-1. **Portal consumes data only** — never system of record for orders, invoices, documents, tickets, service requests, or customer master
+1. **Portal consumes data only** - never system of record for orders, invoices, documents, tickets, service requests, or customer master
 2. **C-01:** customer / employee / product / department resolve via Master Data / Organization only
-3. **CRM** remains customer relationship authority — portal stores CRM interaction UUID optionally; **no `crm_*` ORM writes**
-4. **Sales** remains order authority — `pt_order_view.sales_order_id` UUID only
-5. **Finance** remains invoice authority — `pt_invoice_view` stores finance invoice UUID; journals **only** via `PostingService.post_system_journal()`
-6. **Document** remains document authority — access / download store `document_id` UUID only
-7. **Helpdesk / Service** remain ticket / request authority — portal rows map via UUID + service APIs
+3. **CRM** remains customer relationship authority - portal stores CRM interaction UUID optionally; **no `crm_*` ORM writes**
+4. **Sales** remains order authority - `pt_order_view.sales_order_id` UUID only
+5. **Finance** remains invoice authority - `pt_invoice_view` stores finance invoice UUID; journals **only** via `PostingService.post_system_journal()`
+6. **Document** remains document authority - access / download store `document_id` UUID only
+7. **Helpdesk / Service** remain ticket / request authority - portal rows map via UUID + service APIs
 8. Soft delete + version on mutable `pt_*` tables
 9. Numbers company-scoped (`ACC-` / `PRF-` / `SES-` / `DSH-` / `MSG-` / `THR-` / `ORD-` / `INV-` / `DOC-` / `TKT-` / `SRQ-` / `DL-` / `SVR-` / `SVS-` / `DEV-` / `AUD-` / `RPT-`)
-10. Passwords / secrets are **vault / hash refs** — never plaintext credentials in DB
-11. Analytics / Integration Hub / E-Commerce / Inventory / peers — UUID / events only — **no peer ORM writes**
+10. Passwords / secrets are **vault / hash refs** - never plaintext credentials in DB
+11. Analytics / Integration Hub / E-Commerce / Inventory / peers - UUID / events only - **no peer ORM writes**
 
 ### Assumptions
 - One `master_customer` may have one primary `pt_customer_profile` and one or more `pt_portal_account` users (delegates)
-- `pt_order_view` / `pt_invoice_view` are **projections / bookmarks**, refreshed from authoritative modules — not operational ledgers
+- `pt_order_view` / `pt_invoice_view` are **projections / bookmarks**, refreshed from authoritative modules - not operational ledgers
 - Portal support ticket creation invokes Helpdesk service and stores returned ticket UUID
 - Portal service request creation invokes Service module API similarly
 - Message thread is parent of messages (logical order); migration dual creates both safely
@@ -117,10 +117,10 @@ External customers (web / mobile self-service)
 | ERD_01 Foundation | `sec_tenant`, `sec_user`, `wf_definition`, `wf_instance`, platform audit / notification |
 | ERD_02 Organization | `org_company`, `org_branch`, `org_department` |
 | ERD_03 Master Data | **`master_customer`**, **`master_employee`**, **`master_product`** |
-| CRM | Relationship / interaction UUID — **no CRM ORM writes** |
+| CRM | Relationship / interaction UUID - **no CRM ORM writes** |
 | Sales | Order authority via **service / UUID** |
 | Finance | Invoice UUID + **`PostingService.post_system_journal()`** only |
-| Document | Document UUID — **no Document ORM writes** |
+| Document | Document UUID - **no Document ORM writes** |
 | Helpdesk | Ticket UUID via service |
 | Service | Service request UUID via service |
 | Analytics | Read-only |
@@ -135,24 +135,24 @@ External customers (web / mobile self-service)
 |---|-------|----------------|-----------|------------|-------------|---------|----------|
 | 1 | `pt_portal_account` | Identity | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 2 | `pt_customer_profile` | Profile | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 3 | `pt_portal_session` | Session | ✅ | ✅ | ✅ | ✅ | — |
-| 4 | `pt_dashboard` | Config | ✅ | ✅ | ✅ | ✅ | — |
-| 5 | `pt_dashboard_widget` | Config Detail | ✅ | ✅ | ✅ | ✅ | — |
-| 6 | `pt_notification` | Notification | ✅ | ✅ | ✅ | ✅ | — |
-| 7 | `pt_message` | Message | ✅ | ✅ | ✅ | ✅ | — |
-| 8 | `pt_message_thread` | Conversation | ✅ | ✅ | ✅ | ✅ | — |
-| 9 | `pt_order_view` | Projection | ✅ | ✅ | ✅ | ✅ | — |
-| 10 | `pt_invoice_view` | Projection | ✅ | ✅ | ✅ | ✅ | — |
+| 3 | `pt_portal_session` | Session | ✅ | ✅ | ✅ | ✅ | - |
+| 4 | `pt_dashboard` | Config | ✅ | ✅ | ✅ | ✅ | - |
+| 5 | `pt_dashboard_widget` | Config Detail | ✅ | ✅ | ✅ | ✅ | - |
+| 6 | `pt_notification` | Notification | ✅ | ✅ | ✅ | ✅ | - |
+| 7 | `pt_message` | Message | ✅ | ✅ | ✅ | ✅ | - |
+| 8 | `pt_message_thread` | Conversation | ✅ | ✅ | ✅ | ✅ | - |
+| 9 | `pt_order_view` | Projection | ✅ | ✅ | ✅ | ✅ | - |
+| 10 | `pt_invoice_view` | Projection | ✅ | ✅ | ✅ | ✅ | - |
 | 11 | `pt_document_access` | Entitlement | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 12 | `pt_support_ticket` | Portal Envelope | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 13 | `pt_service_request` | Portal Envelope | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 14 | `pt_download_history` | Audit Log | ✅ | ✅ | ✅ | ✅ | — |
-| 15 | `pt_saved_report` | Preference | ✅ | ✅ | ✅ | ✅ | — |
-| 16 | `pt_saved_search` | Preference | ✅ | ✅ | ✅ | ✅ | — |
-| 17 | `pt_preference` | Preference | ✅ | ✅ | ✅ | ✅ | — |
-| 18 | `pt_device` | Security | ✅ | ✅ | ✅ | ✅ | — |
-| 19 | `pt_login_audit` | Security Log | ✅ | ✅ | ✅ | ✅ | — |
-| 20 | `pt_report` | Snapshot | ✅ | ✅ | ✅ | ✅ | — |
+| 14 | `pt_download_history` | Audit Log | ✅ | ✅ | ✅ | ✅ | - |
+| 15 | `pt_saved_report` | Preference | ✅ | ✅ | ✅ | ✅ | - |
+| 16 | `pt_saved_search` | Preference | ✅ | ✅ | ✅ | ✅ | - |
+| 17 | `pt_preference` | Preference | ✅ | ✅ | ✅ | ✅ | - |
+| 18 | `pt_device` | Security | ✅ | ✅ | ✅ | ✅ | - |
+| 19 | `pt_login_audit` | Security Log | ✅ | ✅ | ✅ | ✅ | - |
+| 20 | `pt_report` | Snapshot | ✅ | ✅ | ✅ | ✅ | - |
 
 **Business Tables: 20** · **Schema: `portal`**
 
@@ -214,13 +214,13 @@ master_customer / master_employee / master_product (C-01)
                     ├── pt_notification
                     │       └── pt_message_thread
                     │              └── pt_message
-                    ├── pt_order_view ── sales_order_id (UUID — Sales SoR)
-                    ├── pt_invoice_view ── finance_invoice_id (UUID — Finance SoR)
+                    ├── pt_order_view ── sales_order_id (UUID - Sales SoR)
+                    ├── pt_invoice_view ── finance_invoice_id (UUID - Finance SoR)
                     │         └── finance_journal_id (PostingService only, if fee posted)
-                    ├── pt_document_access ── document_id (UUID — Document SoR)
+                    ├── pt_document_access ── document_id (UUID - Document SoR)
                     │         └── pt_download_history
-                    ├── pt_support_ticket ── helpdesk_ticket_id (UUID — Helpdesk SoR)
-                    ├── pt_service_request ── service_request_id (UUID — Service SoR)
+                    ├── pt_support_ticket ── helpdesk_ticket_id (UUID - Helpdesk SoR)
+                    ├── pt_service_request ── service_request_id (UUID - Service SoR)
                     ├── pt_saved_report / pt_saved_search
                     └── pt_report
 
@@ -243,7 +243,7 @@ Optional UUID-only (no FK): crm_interaction_id, sales_order_id, sales_invoice_id
 | `customer_id` | FK → `master_customer` |
 | `customer_profile_id` | FK → `pt_customer_profile` |
 | `display_name` | VARCHAR |
-| `credential_vault_ref` | VARCHAR — hash / vault path only |
+| `credential_vault_ref` | VARCHAR - hash / vault path only |
 | `status` | draft, submitted, approved, active, locked, suspended, retired |
 | `owner_employee_id` | FK optional → `master_employee` (internal admin) |
 | `department_id` | FK optional → `org_department` |
@@ -257,10 +257,10 @@ Optional UUID-only (no FK): crm_interaction_id, sales_order_id, sales_invoice_id
 | Column | Notes |
 |--------|-------|
 | `profile_number` | `PRF-YYYY-NNNNNN` |
-| `customer_id` | FK → `master_customer` — **C-01** |
-| `display_name` / `preferred_language` / `timezone` | — |
+| `customer_id` | FK → `master_customer` - **C-01** |
+| `display_name` / `preferred_language` / `timezone` | - |
 | `billing_contact_json` / `shipping_contact_json` | JSONB (non-authoritative contact prefs) |
-| `crm_party_ref_id` | UUID optional — **CRM SoR; no FK** |
+| `crm_party_ref_id` | UUID optional - **CRM SoR; no FK** |
 | `status` | draft, submitted, approved, active, inactive |
 | `workflow_*` | Profile approval |
 | **UK:** `(company_id, profile_number)` · soft UK `(company_id, customer_id)` when active |
@@ -288,7 +288,7 @@ Optional UUID-only (no FK): crm_interaction_id, sales_order_id, sales_invoice_id
 |--------|-------|
 | `dashboard_number` | `DSH-YYYY-NNNNNN` |
 | `portal_account_id` | FK → `pt_portal_account` |
-| `dashboard_code` / `dashboard_name` | — |
+| `dashboard_code` / `dashboard_name` | - |
 | `layout_json` | JSONB |
 | `is_default` | BOOLEAN |
 | `status` | draft, active, archived |
@@ -303,7 +303,7 @@ Optional UUID-only (no FK): crm_interaction_id, sales_order_id, sales_invoice_id
 | `dashboard_id` | FK → `pt_dashboard` |
 | `widget_type` | order_summary, invoice_summary, ticket_status, service_status, document_list, notification_feed, custom |
 | `title` | VARCHAR |
-| `config_json` | JSONB — query keys / UUID filters only |
+| `config_json` | JSONB - query keys / UUID filters only |
 | `sequence_no` | INT |
 | `status` | active, hidden |
 | **UK soft:** `(dashboard_id, sequence_no)` |
@@ -316,7 +316,7 @@ Optional UUID-only (no FK): crm_interaction_id, sales_order_id, sales_invoice_id
 |--------|-------|
 | `portal_account_id` | FK → `pt_portal_account` |
 | `notification_type` | order_update, invoice_ready, document_shared, ticket_update, service_update, message, system |
-| `title` / `body` | — |
+| `title` / `body` | - |
 | `related_entity_type` / `related_entity_id` | VARCHAR / UUID |
 | `read_at` | TIMESTAMPTZ |
 | `delivery_status` | pending, sent, failed, read |
@@ -360,15 +360,15 @@ Optional UUID-only (no FK): crm_interaction_id, sales_order_id, sales_invoice_id
 | `view_number` | `ORD-YYYY-NNNNNN` |
 | `portal_account_id` | FK → `pt_portal_account` |
 | `customer_id` | FK → `master_customer` |
-| `sales_order_id` | UUID — **Sales SoR; no FK** |
-| `ec_order_id` | UUID optional — channel order ref |
+| `sales_order_id` | UUID - **Sales SoR; no FK** |
+| `ec_order_id` | UUID optional - channel order ref |
 | `order_ref` / `order_status_text` | VARCHAR snapshots |
 | `product_id` | FK optional → `master_product` (primary product hint) |
 | `ordered_at` | TIMESTAMPTZ |
 | `last_synced_at` | TIMESTAMPTZ |
 | `status` | visible, hidden, stale |
 | **UK:** `(company_id, view_number)` · soft UK `(portal_account_id, sales_order_id)` |
-| **Rule:** Projection only — never mutates Sales |
+| **Rule:** Projection only - never mutates Sales |
 
 ---
 
@@ -379,15 +379,15 @@ Optional UUID-only (no FK): crm_interaction_id, sales_order_id, sales_invoice_id
 | `view_number` | `INV-YYYY-NNNNNN` |
 | `portal_account_id` | FK → `pt_portal_account` |
 | `customer_id` | FK → `master_customer` |
-| `finance_invoice_id` | UUID — **Finance SoR; no FK** |
+| `finance_invoice_id` | UUID - **Finance SoR; no FK** |
 | `sales_invoice_id` | UUID optional |
 | `invoice_ref` / `amount_due` / `currency` | snapshot fields |
 | `due_at` | TIMESTAMPTZ |
-| `finance_journal_id` | UUID optional — after **PostingService** (e.g. portal fee) |
+| `finance_journal_id` | UUID optional - after **PostingService** (e.g. portal fee) |
 | `last_synced_at` | TIMESTAMPTZ |
 | `status` | visible, hidden, stale, paid_snapshot |
 | **UK:** `(company_id, view_number)` |
-| **Rule:** Projection only — never mutates Finance invoices via ORM |
+| **Rule:** Projection only - never mutates Finance invoices via ORM |
 
 ---
 
@@ -397,7 +397,7 @@ Optional UUID-only (no FK): crm_interaction_id, sales_order_id, sales_invoice_id
 |--------|-------|
 | `access_number` | `DOC-YYYY-NNNNNN` |
 | `portal_account_id` | FK → `pt_portal_account` |
-| `document_id` | UUID — **Document SoR; no FK** |
+| `document_id` | UUID - **Document SoR; no FK** |
 | `access_level` | view, download |
 | `granted_by_employee_id` | FK → `master_employee` |
 | `granted_at` / `expires_at` | TIMESTAMPTZ |
@@ -414,9 +414,9 @@ Optional UUID-only (no FK): crm_interaction_id, sales_order_id, sales_invoice_id
 | `ticket_number` | `TKT-YYYY-NNNNNN` |
 | `portal_account_id` | FK → `pt_portal_account` |
 | `customer_id` | FK → `master_customer` |
-| `subject` / `description` | — |
+| `subject` / `description` | - |
 | `priority` | low, medium, high, urgent |
-| `helpdesk_ticket_id` | UUID — **Helpdesk SoR; no FK** |
+| `helpdesk_ticket_id` | UUID - **Helpdesk SoR; no FK** |
 | `assigned_employee_id` | FK optional → `master_employee` |
 | `status` | draft, submitted, open, in_progress, waiting, resolved, closed, cancelled |
 | `workflow_*` | Support request approval / routing |
@@ -434,7 +434,7 @@ Optional UUID-only (no FK): crm_interaction_id, sales_order_id, sales_invoice_id
 | `customer_id` | FK → `master_customer` |
 | `request_type` | install, repair, visit, consultation, other |
 | `description` | TEXT |
-| `service_request_id` | UUID — **Service SoR; no FK** |
+| `service_request_id` | UUID - **Service SoR; no FK** |
 | `preferred_slot_json` | JSONB |
 | `status` | draft, submitted, accepted, scheduled, completed, cancelled |
 | `workflow_*` | Service request approval |
@@ -449,7 +449,7 @@ Optional UUID-only (no FK): crm_interaction_id, sales_order_id, sales_invoice_id
 | `download_number` | `DL-YYYY-NNNNNN` |
 | `portal_account_id` | FK → `pt_portal_account` |
 | `document_access_id` | FK → `pt_document_access` |
-| `document_id` | UUID — Document SoR ref |
+| `document_id` | UUID - Document SoR ref |
 | `downloaded_at` | TIMESTAMPTZ |
 | `bytes_transferred` | BIGINT |
 | `status` | recorded, failed |
@@ -465,7 +465,7 @@ Optional UUID-only (no FK): crm_interaction_id, sales_order_id, sales_invoice_id
 | `portal_account_id` | FK → `pt_portal_account` |
 | `report_name` | VARCHAR |
 | `source_type` | portal, analytics_ref |
-| `bi_report_ref_id` | UUID optional — Analytics read-only |
+| `bi_report_ref_id` | UUID optional - Analytics read-only |
 | `definition_json` | JSONB |
 | `status` | active, archived |
 | **UK:** `(company_id, saved_report_number)` |
@@ -554,7 +554,7 @@ Optional UUID-only (no FK): crm_interaction_id, sales_order_id, sales_invoice_id
 
 **No FK to:** `crm_*`, `sales_*`, `fin_*`, `doc_*`, `helpdesk_*`, `service_*`, `bi_*`, `int_*`, `ec_*`, …  
 **Finance:** `finance_journal_id` UUID only; writes **only** via `PostingService.post_system_journal()`.  
-**Peers:** UUID refs only — **no peer ORM writes**.
+**Peers:** UUID refs only - **no peer ORM writes**.
 
 ---
 
@@ -638,7 +638,7 @@ Seed only; instances on Foundation `wf_instance`. `is_parallel` on **`wf_step`**
 
 Prior Alembic head: **`0420_seed_ecommerce_workflows`**.
 
-Revision budget **`0421`–`0442` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`pt_message_thread` and `pt_message` share one migration** (parent thread created with messages).
+Revision budget **`0421`-`0442` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`pt_message_thread` and `pt_message` share one migration** (parent thread created with messages).
 
 | Order | Revision ID (≤32 chars) | Tables / Actions |
 |-------|-------------------------|------------------|
@@ -691,16 +691,16 @@ Revision budget **`0421`–`0442` (22 revisions)**. Schema + 20 tables + permiss
 | Foundation | tenant, user, workflow, audit, notification |
 | Organization | company, branch, **department** FK |
 | Master Data | **customer · employee · product** (C-01) |
-| CRM | **Customer relationship authority** — UUID only — **no `crm_*` writes** |
-| Sales | **Order authority** — `sales_order_id` UUID — **no `sales_*` writes** |
-| Finance | **Invoice authority** + **`PostingService.post_system_journal()`** — **no `fin_*` ORM writes** |
-| Document | **Document authority** — document UUID — **no Document ORM writes** |
-| Helpdesk | **Ticket authority** — helpdesk ticket UUID via service |
-| Service | **Request authority** — service request UUID via service |
+| CRM | **Customer relationship authority** - UUID only - **no `crm_*` writes** |
+| Sales | **Order authority** - `sales_order_id` UUID - **no `sales_*` writes** |
+| Finance | **Invoice authority** + **`PostingService.post_system_journal()`** - **no `fin_*` ORM writes** |
+| Document | **Document authority** - document UUID - **no Document ORM writes** |
+| Helpdesk | **Ticket authority** - helpdesk ticket UUID via service |
+| Service | **Request authority** - service request UUID via service |
 | Analytics | **Read-only** saved-report / widget refs |
-| Integration Hub | External IdP / API transport — UUID only |
+| Integration Hub | External IdP / API transport - UUID only |
 | E-Commerce | Optional `ec_order_id` UUID |
-| Inventory / Project / Asset / Quality / Manufacturing / HR / Payroll / Recruitment | UUID / event only if needed — **no peer ORM writes** |
+| Inventory / Project / Asset / Quality / Manufacturing / HR / Payroll / Recruitment | UUID / event only if needed - **no peer ORM writes** |
 
 ### Downstream
 
@@ -734,11 +734,11 @@ Revision budget **`0421`–`0442` (22 revisions)**. Schema + 20 tables + permiss
 | 5 | Finance only via PostingService; no fin_* ORM writes | ✅ |
 | 6 | Portal consumes only; CRM/Sales/Finance/Document/Helpdesk/Service remain authorities | ✅ |
 | 7 | Analytics read-only; Integration Hub transport; UUID-only peers; no peer ORM writes | ✅ |
-| 8 | Migration order `0421`–`0442`, revision IDs ≤ 32 chars | ✅ |
+| 8 | Migration order `0421`-`0442`, revision IDs ≤ 32 chars | ✅ |
 | 9 | Workflows (`PT_*`) + RBAC (`portal.*`) + API mount + Celery stubs documented | ✅ |
 | 10 | Architecture Lock v1.1 preserved; no prior module redesign | ✅ |
 
-### ERD Phase Gate — Customer Portal & Self-Service Summary
+### ERD Phase Gate - Customer Portal & Self-Service Summary
 
 | Metric | Value |
 |--------|-------|
@@ -746,10 +746,10 @@ Revision budget **`0421`–`0442` (22 revisions)**. Schema + 20 tables + permiss
 | Schema | **`portal`** |
 | Prefix | `pt_` |
 | API mount | `/api/v1/portal` |
-| Migration range | `0421` – `0442` |
+| Migration range | `0421` - `0442` |
 | Prior head | `0420_seed_ecommerce_workflows` |
 | Planned head | `0442_seed_portal_workflows` |
-| Document Status | **Locked — Ready for Sprint 23 Implementation Planning** |
+| Document Status | **Locked - Ready for Sprint 23 Implementation Planning** |
 
 ---
 

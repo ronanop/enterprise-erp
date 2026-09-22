@@ -22,23 +22,61 @@ export type AdminLoginAccount = {
   kind: "platform" | "tenant";
 };
 
+export type ServiceTeamLoginAccount = {
+  email: string;
+  displayName: string;
+  role: string;
+  href: string;
+};
+
 /** Platform / tenant admins land on the overview dashboard. */
 export const adminLoginAccounts: AdminLoginAccount[] = [
   {
     email: "admin@example.com",
     displayName: "Platform Admin",
-    href: "/",
+    href: "/home",
+    kind: "platform",
+  },
+  {
+    email: "techbank@cachedigitech.com",
+    displayName: "TechBank (Platform Admin)",
+    href: "/home",
     kind: "platform",
   },
   {
     email: "tenant.admin@example.com",
     displayName: "Tenant Admin",
-    href: "/",
+    href: "/home",
     kind: "tenant",
   },
 ];
 
-/** One demo user per ERP module — email uses the module registry key. */
+/**
+ * Service workflow demo team - mirrors production roles after SSO assignment:
+ * ERP admin → Service Head (module admin); Head → Service Engineers (module members).
+ */
+export const serviceTeamLoginAccounts: ServiceTeamLoginAccount[] = [
+  {
+    email: "service.head@example.com",
+    displayName: "Service Head",
+    role: "Assigns tickets · sees all",
+    href: "/service/service-request-tickets",
+  },
+  {
+    email: "service.engineer1@example.com",
+    displayName: "Service Engineer 1",
+    role: "Works assigned tickets",
+    href: "/service/service-request-tickets",
+  },
+  {
+    email: "service.engineer2@example.com",
+    displayName: "Service Engineer 2",
+    role: "Works assigned tickets",
+    href: "/service/service-request-tickets",
+  },
+];
+
+/** One demo user per ERP module - email uses the module registry key. */
 export const moduleLoginAccounts: ModuleLoginAccount[] = erpModules.map((mod) => ({
   email: `${mod.key}.user@example.com`,
   displayName: `${mod.title} User`,
@@ -50,12 +88,13 @@ export const moduleLoginAccounts: ModuleLoginAccount[] = erpModules.map((mod) =>
 const redirectByEmail = new Map<string, string>([
   ...adminLoginAccounts.map((a) => [a.email.toLowerCase(), a.href] as const),
   ...moduleLoginAccounts.map((a) => [a.email.toLowerCase(), a.href] as const),
+  ...serviceTeamLoginAccounts.map((a) => [a.email.toLowerCase(), a.href] as const),
 ]);
 
-/** Resolve post-login destination from the signed-in email. Unknown → `/`. */
+/** Resolve post-login destination from the signed-in email. Unknown → `/home`. */
 export function getPostLoginRedirect(email: string | null | undefined): string {
-  if (!email) return "/";
-  return redirectByEmail.get(email.trim().toLowerCase()) ?? "/";
+  if (!email) return "/home";
+  return redirectByEmail.get(email.trim().toLowerCase()) ?? "/home";
 }
 
 export function getModuleLoginByEmail(email: string): ModuleLoginAccount | undefined {

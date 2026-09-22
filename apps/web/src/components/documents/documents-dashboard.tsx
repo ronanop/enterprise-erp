@@ -132,7 +132,7 @@ export function DocumentsDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="Documents"
-        description="Document management — folders, versions, permissions, approvals, templates, retention, and archives."
+        description="Document management - folders, versions, permissions, approvals, templates, retention, and archives."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -179,28 +179,28 @@ export function DocumentsDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Library documents"
-          value={loading ? "—" : String(kpis.libraryDocs)}
+          value={loading ? "-" : String(kpis.libraryDocs)}
           hint={`${data?.folders.length ?? 0} folders · ${countOpenDocs(data?.documents ?? [], ["archived", "disposed", "cancelled"])} active`}
           icon={FolderOpen}
           tone={kpis.libraryDocs > 0 ? "default" : "success"}
         />
         <FinanceKpiCard
           label="Pending approvals"
-          value={loading ? "—" : String(kpis.pendingApprovals)}
+          value={loading ? "-" : String(kpis.pendingApprovals)}
           hint={`${data?.approvals.length ?? 0} approvals · ${countByStatus(data?.workflows ?? [], ["active"])} workflows`}
           icon={CheckSquare}
           tone={kpis.pendingApprovals > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Active shares"
-          value={loading ? "—" : String(kpis.activeShares)}
+          value={loading ? "-" : String(kpis.activeShares)}
           hint={`${data?.shares.length ?? 0} shares · ${data?.permissions.length ?? 0} ACL rows`}
           icon={Share2}
           tone={kpis.activeShares > 0 ? "default" : "success"}
         />
         <FinanceKpiCard
           label="Archives"
-          value={loading ? "—" : String(kpis.archives)}
+          value={loading ? "-" : String(kpis.archives)}
           hint={`${data?.retentionPolicies.length ?? 0} retention · ${data?.templates.length ?? 0} templates`}
           icon={Archive}
           tone={kpis.archives > 0 ? "success" : "default"}
@@ -237,7 +237,7 @@ export function DocumentsDashboard() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium tracking-tight">Workspace</h2>
+          <h2 className="text-base font-extrabold tracking-tight">Workspace</h2>
           <Badge variant="secondary">{documentsWorkspaceGroups.length} areas</Badge>
         </div>
         <div className="grid gap-3 lg:grid-cols-3">
@@ -254,7 +254,7 @@ export function DocumentsDashboard() {
                     <Icon className="size-4" />
                   </span>
                   <div className="min-w-0">
-                    <h3 className="text-sm font-medium tracking-tight">{group.title}</h3>
+                    <h3 className="text-base font-extrabold tracking-tight">{group.title}</h3>
                     <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                       {group.description}
                     </p>
@@ -285,7 +285,7 @@ export function DocumentsDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Recent documents</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Recent documents</h2>
               <p className="text-[11px] text-muted-foreground">Library intake</p>
             </div>
             <Link
@@ -326,18 +326,18 @@ export function DocumentsDashboard() {
                     >
                       <td className="max-w-[220px] truncate px-4 py-2.5">
                         <p className="font-medium text-foreground">
-                          {String(row.title ?? row.document_number ?? "—")}
+                          {String(row.title ?? row.document_number ?? "-")}
                         </p>
                         <p className="truncate text-[11px] text-muted-foreground">
                           {String(row.document_number ?? "")}
                         </p>
                       </td>
                       <td className="px-4 py-2.5 text-xs capitalize text-muted-foreground">
-                        {String(row.document_category ?? "—").replaceAll("_", " ")}
+                        {String(row.document_category ?? "-").replaceAll("_", " ")}
                       </td>
                       <td className="px-4 py-2.5 text-xs capitalize text-muted-foreground">
                         {String(
-                          row.classification_level ?? row.classification ?? "—",
+                          row.classification_level ?? row.classification ?? "-",
                         ).replaceAll("_", " ")}
                       </td>
                       <td className="px-4 py-2.5">
@@ -356,7 +356,7 @@ export function DocumentsDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Approval queue</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Approval queue</h2>
               <p className="text-[11px] text-muted-foreground">Publish control</p>
             </div>
             <Link
@@ -381,7 +381,7 @@ export function DocumentsDashboard() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-medium">
-                      {String(row.document_number ?? "—")}
+                      {String(row.document_number ?? "-")}
                     </p>
                     <FinanceStatusBadge
                       status={asStatus(row.status) || String(row.status ?? "")}
@@ -399,7 +399,7 @@ export function DocumentsDashboard() {
 
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
           <div className="mb-3">
-            <h2 className="text-sm font-medium tracking-tight">Classification mix</h2>
+            <h2 className="text-base font-extrabold tracking-tight">Classification mix</h2>
             <p className="text-[11px] text-muted-foreground">FRD-19 §6 levels</p>
           </div>
           {loading ? (

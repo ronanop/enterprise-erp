@@ -35,6 +35,8 @@ def test_separation_flow():
     row = SimpleNamespace(status="draft")
     engine.submit(row)
     engine.manager_approve(row)
+    engine.it_approve(row)
+    engine.accounts_approve(row)
     engine.hr_approve(row)
     engine.complete(row)
     assert row.status == "completed"

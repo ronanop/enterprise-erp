@@ -37,6 +37,7 @@ from modules.crm.schemas import (
     LeadSourceResponse,
     LeadSourceUpdate,
     LeadUpdate,
+    SalesLeadUpdate,
     LogResponse,
     MeetingCreate,
     MeetingResponse,
@@ -183,6 +184,29 @@ def update_lead(
     return APIResponse(message="OK", data=LeadService(db).update(ctx, lead_id, **extract_update_fields(body)))
 
 
+@leads_router.patch("/{lead_id}/sales", response_model=APIResponse[LeadResponse])
+def update_sales_lead(
+    lead_id: UUID,
+    body: SalesLeadUpdate,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.lead:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK",
+        data=LeadService(db).update_sales_lead(ctx, lead_id, **extract_update_fields(body)),
+    )
+
+
+@leads_router.delete("/{lead_id}", response_model=APIResponse[dict[str, str]])
+def delete_lead(
+    lead_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.lead:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    LeadService(db).delete(ctx, lead_id)
+    return APIResponse(message="OK", data={"id": str(lead_id)})
+
+
 @leads_router.post("/{lead_id}/assign", response_model=APIResponse[LeadAssignmentResponse])
 def assign_lead(
     lead_id: UUID,
@@ -313,6 +337,16 @@ def update_opportunity(
 ):
     return APIResponse(message="OK", data=OpportunityService(db).update(ctx, opportunity_id, **extract_update_fields(body)),
     )
+
+
+@opportunities_router.delete("/{opportunity_id}", response_model=APIResponse[dict[str, str]])
+def delete_opportunity(
+    opportunity_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.opportunity:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    OpportunityService(db).delete(ctx, opportunity_id)
+    return APIResponse(message="OK", data={"id": str(opportunity_id)})
 
 
 @opportunities_router.post("/{opportunity_id}/close-won", response_model=APIResponse[OpportunityResponse])
@@ -632,7 +666,7 @@ def report_summary(
 
 
 # ---------------------------------------------------------------------------
-# Sales CRM (Zoho-replacement) routers — defined in their own modules and
+# Sales CRM (Zoho-replacement) routers - defined in their own modules and
 # re-exported here so `modules.crm.router` can import everything from this
 # package the same way it does for the legacy CRM routers above.
 # ---------------------------------------------------------------------------
@@ -642,6 +676,12 @@ from modules.crm.routers.companies import companies_router  # noqa: E402,F401
 from modules.crm.routers.contacts import contacts_router  # noqa: E402,F401
 from modules.crm.routers.my_jobs import my_jobs_router  # noqa: E402,F401
 from modules.crm.routers.oems import oems_router  # noqa: E402,F401
+from modules.crm.routers.selling_entities import selling_entities_router  # noqa: E402,F401
 from modules.crm.routers.ovf import ovf_router  # noqa: E402,F401
 from modules.crm.routers.products import products_router  # noqa: E402,F401
 from modules.crm.routers.sales_quotes import quotes_router  # noqa: E402,F401
+from modules.crm.routers.kyc_records import kyc_records_router  # noqa: E402,F401
+from modules.crm.routers.saved_reports import saved_reports_router  # noqa: E402,F401
+
+# Mount custom/saved report routes on the existing /reports prefix (keeps /summary).
+reports_router.include_router(saved_reports_router)

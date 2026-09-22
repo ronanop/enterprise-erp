@@ -32,14 +32,24 @@ MODULES = ROOT / "src" / "modules"
 orm_classes: dict[str, type] = {}
 
 
+_MODEL_MOD_RE = re.compile(
+    r"^modules(?:\.[A-Za-z_][A-Za-z0-9_]*)+\.models(?:\.[A-Za-z_][A-Za-z0-9_]*)*$"
+)
+
+
 def load_models() -> None:
     import modules
 
     for modinfo in pkgutil.walk_packages(modules.__path__, modules.__name__ + "."):
-        if ".models" not in modinfo.name:
+        if not _MODEL_MOD_RE.fullmatch(modinfo.name):
+            continue
+        module_name = modinfo.name
+        # Defense-in-depth: only import packages under modules.*.models*
+        if not module_name.startswith("modules.") or ".models" not in module_name:
             continue
         try:
-            m = importlib.import_module(modinfo.name)
+            # Allowlisted module names only (regex + prefix checks above).
+            m = importlib.import_module(module_name)  # noqa: S307 - not user input
         except Exception:
             continue
         for attr in dir(m):

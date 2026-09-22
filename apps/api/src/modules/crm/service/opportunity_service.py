@@ -12,6 +12,9 @@ from modules.crm.models import CrmOpportunity, CrmPipeline
 from modules.crm.repository.opportunity_repository import OpportunityRepository
 from modules.crm.repository.opportunity_stage_repository import OpportunityStageRepository
 from modules.crm.repository.pipeline_repository import PipelineRepository
+from modules.crm.service.cloud_flow import compute_profitability_percent
+from modules.crm.service.crm_module_admin import CrmModuleAdminService
+from modules.crm.service.crm_record_visibility import CrmRecordVisibility
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import OpportunityEngine, OpportunityStageEngine, PipelineEngine
@@ -63,17 +66,20 @@ class OpportunityService:
         self._stage_engine = OpportunityStageEngine()
         self._integration = CRMIntegrationService(db)
         self._audit = AuditService(db)
+        self._crm_admin = CrmModuleAdminService(db)
+        self._visibility = CrmRecordVisibility(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_opportunities(ctx, cid)
+        allowed_ids = self._visibility.filter_opportunity_ids_for_user(ctx, cid)
+        return self._repo.list_opportunities(ctx, cid, opportunity_ids=allowed_ids)
 
     def get(self, ctx: TenantContext, opportunity_id: UUID) -> CrmOpportunity:
         row = self._repo.get(ctx, opportunity_id)
         if row is None:
             raise NotFoundException("Opportunity not found")
+        self._visibility.ensure_opportunity_access(ctx, row)
         return row
-
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
@@ -110,6 +116,20 @@ class OpportunityService:
 
     def update(self, ctx: TenantContext, opportunity_id: UUID, **fields):
         opp = self.get(ctx, opportunity_id)
+        if opp.distributor_discount_locked and "distributor_discount_percent" in fields:
+            fields.pop("distributor_discount_percent", None)
+        if (
+            "customer_discount_percent" in fields
+            or "distributor_discount_percent" in fields
+            or "customer_mrr" in fields
+            or "customer_arr" in fields
+        ):
+            dist = Decimal(
+                str(fields.get("distributor_discount_percent", opp.distributor_discount_percent or 0))
+            )
+            cust = fields.get("customer_discount_percent", opp.customer_discount_percent)
+            if cust is not None:
+                fields["profitability_percent"] = compute_profitability_percent(dist, Decimal(str(cust)))
         if "current_stage" in fields and fields["current_stage"] != opp.current_stage:
             self._stage_engine.validate_transition(opp.current_stage, fields["current_stage"])
             seq = len([s for s in self._stages.list_stages(ctx, opp.company_id) if s.opportunity_id == opportunity_id]) + 1
@@ -134,12 +154,27 @@ class OpportunityService:
             raise NotFoundException("Opportunity not found")
         return row
 
+    def delete(self, ctx: TenantContext, opportunity_id: UUID) -> None:
+        self._crm_admin.ensure_admin(ctx)
+        opp = self.get(ctx, opportunity_id)
+        if opp.locked:
+            raise ConflictException("Opportunity is locked pending approval")
+        if not self._repo.soft_delete(ctx, opportunity_id):
+            raise NotFoundException("Opportunity not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="crm_opportunity",
+            entity_id=opportunity_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
+
     def close_won(self, ctx: TenantContext, opportunity_id: UUID, *, create_quotation: bool = True, currency_code: str = "USD"):
         opp = self.get(ctx, opportunity_id)
         if opp.blueprint_state and opp.blueprint_state not in {"won", "lost"}:
             raise ConflictException(
                 "This opportunity is on the sales blueprint. Mark Deal Won from the "
-                "OVF after Share to SCM — do not use legacy close-won."
+                "OVF after Share to SCM - do not use legacy close-won."
             )
         self._engine.apply_win(opp)
         now = datetime.now(timezone.utc)

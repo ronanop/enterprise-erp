@@ -47,7 +47,7 @@ class ProcGrnHeader(Base, *ProcTransactionMixin):
         nullable=False,
         index=True,
     )
-    # Logical ref to master_warehouse — no inventory FK per ERD §6.11
+    # Logical ref to master_warehouse - no inventory FK per ERD §6.11
     warehouse_reference: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
     workflow_status: Mapped[str | None] = mapped_column(String(30), nullable=True)

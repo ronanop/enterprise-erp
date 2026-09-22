@@ -43,8 +43,9 @@ class ServiceRequestRepository(SvcScopedRepository):
         row = self.get(ctx, row_id)
         if row is None:
             return None
+        # Allow explicit nulls so asset/date fields can be cleared from the UI
         for k, v in fields.items():
-            if v is not None:
+            if hasattr(row, k):
                 setattr(row, k, v)
         row.updated_at = utcnow()
         row.updated_by = ctx.user_id

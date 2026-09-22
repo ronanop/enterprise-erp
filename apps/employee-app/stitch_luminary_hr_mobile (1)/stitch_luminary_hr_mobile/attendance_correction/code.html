@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Attendance Correction | Kinetic ESS</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary-container": "#fffbff",
+                    "error": "#ba1a1a",
+                    "surface-container-high": "#dce9ff",
+                    "surface-container-low": "#eff4ff",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "tertiary": "#006242",
+                    "surface-variant": "#d3e4fe",
+                    "tertiary-fixed": "#6ffbbe",
+                    "primary-container": "#2563eb",
+                    "on-tertiary": "#ffffff",
+                    "secondary-container": "#8a4cfc",
+                    "primary-fixed": "#dbe1ff",
+                    "on-primary": "#ffffff",
+                    "error-container": "#ffdad6",
+                    "on-primary-fixed": "#00174b",
+                    "outline-variant": "#c3c6d7",
+                    "on-tertiary-container": "#bdffdb",
+                    "surface-dim": "#cbdbf5",
+                    "surface-container": "#e5eeff",
+                    "secondary": "#712ae2",
+                    "inverse-surface": "#213145",
+                    "outline": "#737686",
+                    "secondary-fixed-dim": "#d2bbff",
+                    "secondary-fixed": "#eaddff",
+                    "inverse-on-surface": "#eaf1ff",
+                    "surface": "#f8f9ff",
+                    "tertiary-container": "#007d55",
+                    "on-secondary": "#ffffff",
+                    "on-tertiary-fixed-variant": "#005236",
+                    "background": "#f8f9ff",
+                    "on-tertiary-fixed": "#002113",
+                    "on-secondary-fixed": "#25005a",
+                    "inverse-primary": "#b4c5ff",
+                    "on-secondary-fixed-variant": "#5a00c6",
+                    "primary": "#004ac6",
+                    "surface-container-highest": "#d3e4fe",
+                    "on-surface-variant": "#434655",
+                    "surface-bright": "#f8f9ff",
+                    "on-primary-container": "#eeefff",
+                    "on-error-container": "#93000a",
+                    "on-background": "#0b1c30",
+                    "on-error": "#ffffff",
+                    "primary-fixed-dim": "#b4c5ff",
+                    "on-primary-fixed-variant": "#003ea8",
+                    "surface-tint": "#0053db",
+                    "on-surface": "#0b1c30"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "container-padding": "20px",
+                    "unit": "4px",
+                    "stack-gap-sm": "8px",
+                    "stack-gap-md": "16px",
+                    "section-margin": "32px",
+                    "stack-gap-lg": "24px"
+            },
+            "fontFamily": {
+                    "label-md": ["Inter"],
+                    "headline-sm": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "display-md": ["Inter"],
+                    "display-lg-mobile": ["Inter"],
+                    "label-sm": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "title-lg": ["Inter"],
+                    "body-md": ["Inter"]
+            },
+            "fontSize": {
+                    "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "display-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                    "display-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "title-lg": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .glass { backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .active-dot::after { content: ''; width: 4px; height: 4px; background: #004ac6; border-radius: 999px; margin-top: 4px; }
+        input:focus { outline: none; border-color: #2563eb; ring: 2px solid rgba(37, 99, 235, 0.1); }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="fixed top-0 w-full z-50 backdrop-blur-xl bg-surface/80 flex justify-between items-center px-container-padding h-16">
+<div class="flex items-center gap-3">
+<button class="w-10 h-10 flex items-center justify-center hover:bg-surface-container-low rounded-full transition-colors">
+<span class="material-symbols-outlined text-on-surface">arrow_back</span>
+</button>
+<h1 class="font-headline-sm text-headline-sm-mobile text-on-surface">Correction Request</h1>
+</div>
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-surface-container-high">
+<img class="w-full h-full object-cover" data-alt="A professional headshot of a corporate employee with a warm, friendly expression. The background is a soft-focus modern office interior with clean lines and premium lighting, matching the blue and white brand aesthetic of the kinetic app. The lighting is crisp and clear, creating a high-end professional feel." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCma7jODJJHdgQEnT5eKxpmqD844E3sQ1_uBL5tdETyXwQQ5q5M0g9t86Q3mZhLUeHEyy72rX43unuIJztnhq9avWjhtt_L9eGSubjYh7B0O4_831WAaC2rWKe_vLzu7BPIYZYp2FWS9vhpzT8jQI9tjNU2Jq04Cx7_aoLKLhmAGxW1_rzoYtMvaSxtYO3IqFkRiBZagul5dlIZKKduigm_xdZCrskPl_Lx6pRt2pF3d0BVJCvs8530hf9uZ2OKLGOGqVLfzPDN7bE"/>
+</div>
+</header>
+<main class="mt-20 px-container-padding flex flex-col gap-section-margin">
+<!-- Wrong Punch Details Card -->
+<section>
+<div class="bg-surface-container-lowest border border-outline-variant/30 p-stack-gap-md rounded-xl shadow-sm">
+<div class="flex items-center justify-between mb-4">
+<span class="font-label-sm text-label-sm bg-error-container text-on-error-container px-3 py-1 rounded-full uppercase tracking-wider">Missing Check-Out</span>
+<span class="font-label-md text-label-md text-on-surface-variant">Oct 10, 2023</span>
+</div>
+<div class="flex items-start gap-4">
+<div class="w-12 h-12 rounded-xl bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">fingerprint</span>
+</div>
+<div class="flex-1">
+<p class="font-body-sm text-body-sm text-on-surface-variant">Checked In at</p>
+<p class="font-title-lg text-title-lg text-on-surface">09:00 AM</p>
+<p class="mt-2 font-body-sm text-body-sm text-error flex items-center gap-1">
+<span class="material-symbols-outlined text-[16px]">info</span>
+                            Automatic checkout failed at 18:00 PM
+                        </p>
+</div>
+</div>
+</div>
+</section>
+<!-- Correction Form -->
+<section class="flex flex-col gap-stack-gap-lg">
+<div class="space-y-4">
+<label class="block">
+<span class="font-label-md text-label-md text-on-surface-variant ml-1 mb-2 block">Corrected Time</span>
+<div class="relative">
+<input class="w-full h-14 px-4 bg-surface-container-lowest border border-outline-variant/50 rounded-xl font-body-md text-body-md text-on-surface focus:border-primary-container transition-all" type="time" value="18:30"/>
+<span class="absolute right-4 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant">schedule</span>
+</div>
+</label>
+<label class="block">
+<span class="font-label-md text-label-md text-on-surface-variant ml-1 mb-2 block">Reason for Correction</span>
+<textarea class="w-full p-4 bg-surface-container-lowest border border-outline-variant/50 rounded-xl font-body-md text-body-md text-on-surface focus:border-primary-container transition-all resize-none" placeholder="Briefly describe why the punch was missed (e.g., Client meeting offsite, forgot to punch out)" rows="4"></textarea>
+</label>
+</div>
+<!-- Upload Verification -->
+<div class="space-y-4">
+<span class="font-label-md text-label-md text-on-surface-variant ml-1 block">Verification Proof (Optional)</span>
+<div class="grid grid-cols-2 gap-4">
+<button class="flex flex-col items-center justify-center gap-2 h-28 bg-surface-container border-2 border-dashed border-outline-variant/50 rounded-xl hover:bg-surface-container-high transition-colors group">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary">upload_file</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Upload File</span>
+</button>
+<button class="flex flex-col items-center justify-center gap-2 h-28 bg-surface-container border-2 border-dashed border-outline-variant/50 rounded-xl hover:bg-surface-container-high transition-colors group">
+<span class="material-symbols-outlined text-on-surface-variant group-hover:text-primary">photo_camera</span>
+<span class="font-label-sm text-label-sm text-on-surface-variant">Open Camera</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Status Timeline -->
+<section class="bg-surface-container-low/50 p-stack-gap-md rounded-2xl">
+<h3 class="font-label-md text-label-md text-on-surface-variant mb-6 uppercase tracking-widest">Workflow Timeline</h3>
+<div class="relative flex flex-col gap-8 ml-2">
+<!-- Timeline Line -->
+<div class="absolute left-[11px] top-2 bottom-2 w-[2px] bg-outline-variant/30"></div>
+<!-- Step 1: Active -->
+<div class="flex items-start gap-4 relative z-10">
+<div class="w-6 h-6 rounded-full bg-primary flex items-center justify-center text-on-primary ring-4 ring-primary-container/20">
+<span class="material-symbols-outlined text-[14px]">edit</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-on-surface">Request Submitted</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Current Stage</p>
+</div>
+</div>
+<!-- Step 2: Pending -->
+<div class="flex items-start gap-4 relative z-10">
+<div class="w-6 h-6 rounded-full bg-surface-container-highest flex items-center justify-center text-outline border border-outline-variant/50">
+<span class="material-symbols-outlined text-[14px]">person</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-on-surface-variant">Manager Approval</p>
+<p class="font-body-sm text-body-sm text-outline">Awaiting Manager review</p>
+</div>
+</div>
+<!-- Step 3: Pending -->
+<div class="flex items-start gap-4 relative z-10">
+<div class="w-6 h-6 rounded-full bg-surface-container-highest flex items-center justify-center text-outline border border-outline-variant/50">
+<span class="material-symbols-outlined text-[14px]">verified</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-on-surface-variant">HR Verification</p>
+<p class="font-body-sm text-body-sm text-outline">Final processing</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Bottom Action Area -->
+<footer class="fixed bottom-24 left-0 w-full px-container-padding z-40">
+<button class="w-full h-14 bg-primary-container text-on-primary font-title-lg text-title-lg rounded-full shadow-lg shadow-primary/20 flex items-center justify-center gap-2 transition-transform active:scale-95 duration-200" onclick="this.classList.add('scale-95'); setTimeout(()=&gt;this.classList.remove('scale-95'), 150)">
+            Submit Request
+            <span class="material-symbols-outlined">send</span>
+</button>
+</footer>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-4 pb-safe h-20 bg-surface/80 backdrop-blur-xl border-t border-outline-variant/20 shadow-sm rounded-t-xl">
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors px-4 py-2 rounded-xl">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-sm text-label-sm mt-1">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center text-primary after:content-[''] after:w-1 after:h-1 after:bg-primary after:rounded-full after:mt-1 hover:bg-surface-container-low transition-colors px-4 py-2 rounded-xl">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">fingerprint</span>
+<span class="font-label-sm text-label-sm">Attendance</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors px-4 py-2 rounded-xl">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="font-label-sm text-label-sm mt-1">Leave</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors px-4 py-2 rounded-xl">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-label-sm text-label-sm mt-1">Salary</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors px-4 py-2 rounded-xl">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-sm text-label-sm mt-1">Profile</span>
+</button>
+</nav>
+<script>
+        // Micro-interactions
+        document.querySelectorAll('button, input, textarea').forEach(el => {
+            el.addEventListener('touchstart', function() {
+                this.classList.add('opacity-80');
+            });
+            el.addEventListener('touchend', function() {
+                this.classList.remove('opacity-80');
+            });
+        });
+
+        // Simple validation visualization
+        const submitBtn = document.querySelector('footer button');
+        submitBtn.addEventListener('click', () => {
+            submitBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">sync</span> Submitting...';
+            setTimeout(() => {
+                submitBtn.innerHTML = 'Request Submitted!';
+                submitBtn.classList.replace('bg-primary-container', 'bg-tertiary-container');
+            }, 1500);
+        });
+    </script>
+</body></html>

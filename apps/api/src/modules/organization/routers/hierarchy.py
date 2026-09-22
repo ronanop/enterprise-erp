@@ -3,9 +3,10 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from core.constants import MAX_PAGE_SIZE
 from database.session import get_db
 from modules.foundation.dependencies import require_permission
 from modules.foundation.domain.value_objects import TenantContext
@@ -16,8 +17,11 @@ from modules.organization.schemas import (
     BusinessUnitCreateRequest,
     CostCenterCreateRequest,
     DepartmentCreateRequest,
+    DepartmentModulesUpdateRequest,
+    DepartmentResponse,
     DepartmentUpdateRequest,
     LocationCreateRequest,
+    LocationUpdateRequest,
     ProfitCenterCreateRequest,
 )
 from modules.organization.service.branch_service import BranchService
@@ -43,8 +47,9 @@ def list_branches(
     ctx: Annotated[TenantContext, Depends(require_permission("organization.branch:read"))],
     db: Annotated[Session, Depends(get_db)],
     company_id: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = MAX_PAGE_SIZE,
 ) -> APIResponse[list[BranchResponse]]:
-    branches = BranchService(db).list_branches(ctx, company_id=company_id)
+    branches = BranchService(db).list_branches(ctx, company_id=company_id)[:limit]
     return APIResponse(
         message="Branches retrieved",
         data=[BranchResponse(**b.__dict__) for b in branches],
@@ -73,6 +78,7 @@ def get_branch(
 
 
 @branches_router.put("/{branch_id}", response_model=APIResponse[BranchResponse])
+@branches_router.patch("/{branch_id}", response_model=APIResponse[BranchResponse])
 def update_branch(
     branch_id: UUID,
     body: BranchUpdateRequest,
@@ -97,42 +103,59 @@ def delete_branch(
     return APIResponse(message="Branch deleted", data=None)
 
 
-@departments_router.get("", response_model=APIResponse[list])
+@departments_router.get("", response_model=APIResponse[list[DepartmentResponse]])
 def list_departments(
     ctx: Annotated[TenantContext, Depends(require_permission("organization.department:read"))],
     db: Annotated[Session, Depends(get_db)],
     company_id: UUID | None = None,
     branch_id: UUID | None = None,
-) -> APIResponse[list]:
+    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = MAX_PAGE_SIZE,
+) -> APIResponse[list[DepartmentResponse]]:
     depts = DepartmentService(db).list_departments(
         ctx, company_id=company_id, branch_id=branch_id
+    )[:limit]
+    return APIResponse(
+        message="Departments retrieved",
+        data=[DepartmentService.to_response(d) for d in depts],
     )
-    return APIResponse(message="Departments retrieved", data=[d.__dict__ for d in depts])
 
 
-@departments_router.post("", response_model=APIResponse[dict])
+@departments_router.post("", response_model=APIResponse[DepartmentResponse])
 def create_department(
     body: DepartmentCreateRequest,
     ctx: Annotated[TenantContext, Depends(require_permission("organization.department:create"))],
     db: Annotated[Session, Depends(get_db)],
-) -> APIResponse[dict]:
+) -> APIResponse[DepartmentResponse]:
     dept = DepartmentService(db).create_department(ctx, **body.model_dump())
     db.commit()
-    return APIResponse(message="Department created", data=dept.__dict__)
+    return APIResponse(message="Department created", data=DepartmentService.to_response(dept))
 
 
-@departments_router.put("/{department_id}", response_model=APIResponse[dict])
+@departments_router.put("/{department_id}/modules", response_model=APIResponse[DepartmentResponse])
+def replace_department_modules(
+    department_id: UUID,
+    body: DepartmentModulesUpdateRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("organization.department:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[DepartmentResponse]:
+    dept = DepartmentService(db).replace_modules(ctx, department_id, body.module_keys)
+    db.commit()
+    return APIResponse(message="Department modules updated", data=DepartmentService.to_response(dept))
+
+
+@departments_router.put("/{department_id}", response_model=APIResponse[DepartmentResponse])
+@departments_router.patch("/{department_id}", response_model=APIResponse[DepartmentResponse])
 def update_department(
     department_id: UUID,
     body: DepartmentUpdateRequest,
     ctx: Annotated[TenantContext, Depends(require_permission("organization.department:update"))],
     db: Annotated[Session, Depends(get_db)],
-) -> APIResponse[dict]:
+) -> APIResponse[DepartmentResponse]:
     dept = DepartmentService(db).update_department(
         ctx, department_id, **body.model_dump(exclude_unset=True)
     )
     db.commit()
-    return APIResponse(message="Department updated", data=dept.__dict__)
+    return APIResponse(message="Department updated", data=DepartmentService.to_response(dept))
 
 
 @departments_router.delete("/{department_id}", response_model=APIResponse[None])
@@ -174,8 +197,12 @@ def list_locations(
     ctx: Annotated[TenantContext, Depends(require_permission("organization.location:read"))],
     db: Annotated[Session, Depends(get_db)],
     branch_id: UUID | None = None,
+    company_id: UUID | None = None,
+    limit: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = MAX_PAGE_SIZE,
 ) -> APIResponse[list]:
-    locs = LocationService(db).list_locations(ctx, branch_id=branch_id)
+    locs = LocationService(db).list_locations(ctx, branch_id=branch_id, company_id=company_id)[
+        :limit
+    ]
     return APIResponse(message="Locations retrieved", data=[loc.__dict__ for loc in locs])
 
 
@@ -188,6 +215,30 @@ def create_location(
     loc = LocationService(db).create_location(ctx, **body.model_dump())
     db.commit()
     return APIResponse(message="Location created", data=loc.__dict__)
+
+
+@locations_router.patch("/{location_id}", response_model=APIResponse[dict])
+def update_location(
+    location_id: UUID,
+    body: LocationUpdateRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("organization.location:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[dict]:
+    payload = {k: v for k, v in body.model_dump().items() if v is not None}
+    loc = LocationService(db).update_location(ctx, location_id, **payload)
+    db.commit()
+    return APIResponse(message="Location updated", data=loc.__dict__)
+
+
+@locations_router.delete("/{location_id}", response_model=APIResponse[None])
+def delete_location(
+    location_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("organization.location:delete"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[None]:
+    LocationService(db).delete_location(ctx, location_id)
+    db.commit()
+    return APIResponse(message="Location deleted", data=None)
 
 
 @cost_centers_router.get("", response_model=APIResponse[list])

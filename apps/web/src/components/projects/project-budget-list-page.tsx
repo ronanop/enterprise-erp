@@ -82,7 +82,7 @@ export function ProjectBudgetListPage() {
         key: "cost_center_code",
         label: "Cost Center",
         sort: (r) => r.cost_center_code,
-        cell: (r) => r.cost_center_code ?? "—",
+        cell: (r) => r.cost_center_code ?? "-",
       },
       {
         key: "created_at",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlalchemy as sa
 from sqlalchemy import inspect
 from sqlalchemy.engine import Connection
 from sqlalchemy.sql.schema import Column, Table as SATable
@@ -124,3 +125,54 @@ def create_index_if_missing(
 
 def create_orm_table(table: SATable, bind: Connection) -> None:
     table.create(bind=bind, checkfirst=True)
+
+
+def create_orm_table_defer_columns(
+    table: SATable,
+    bind: Connection,
+    defer_columns: set[str],
+) -> None:
+    """Create ORM table omitting columns (and related FKs/indexes) added in later revisions."""
+    if table_exists(bind, table.name, schema=table.schema):
+        return
+
+    removed_cols: list[Column] = []
+    dropped_indexes: list[sa.Index] = []
+    dropped_constraints: list[sa.Constraint] = []
+
+    for col_name in defer_columns:
+        if col_name not in table.c:
+            continue
+        col = table.c[col_name]
+        for idx in list(table.indexes):
+            if col_name in {c.name for c in idx.columns}:
+                table.indexes.discard(idx)
+                if idx not in dropped_indexes:
+                    dropped_indexes.append(idx)
+        for constraint in list(table.constraints):
+            if isinstance(constraint, sa.ForeignKeyConstraint) and col_name in {
+                c.name for c in constraint.columns
+            }:
+                table.constraints.discard(constraint)
+                dropped_constraints.append(constraint)
+        for fk in list(col.foreign_keys):
+            table.foreign_keys.discard(fk)
+        table._columns.remove(col)
+        removed_cols.append(col)
+
+    for constraint in list(table.constraints):
+        if isinstance(constraint, sa.CheckConstraint):
+            sqltext = str(constraint.sqltext)
+            if any(name in sqltext for name in defer_columns):
+                table.constraints.discard(constraint)
+                dropped_constraints.append(constraint)
+
+    try:
+        table.create(bind=bind, checkfirst=True)
+    finally:
+        for col in removed_cols:
+            table._columns.add(col)
+        for idx in dropped_indexes:
+            table.indexes.add(idx)
+        for constraint in dropped_constraints:
+            table.constraints.add(constraint)

@@ -298,18 +298,18 @@ export function GlHubPage() {
       {tab === "dashboard" ? (
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <FinanceKpiCard label="Total Accounts" value={String(summary?.total_accounts ?? "—")} icon={Landmark} />
-            <FinanceKpiCard label="Active Ledger Accounts" value={String(summary?.active_ledger_accounts ?? "—")} icon={BookOpen} tone="success" />
-            <FinanceKpiCard label="Total Debits" value={summary ? formatInrPrecise(summary.total_debits) : "—"} icon={Wallet} />
-            <FinanceKpiCard label="Total Credits" value={summary ? formatInrPrecise(summary.total_credits) : "—"} icon={Wallet} />
-            <FinanceKpiCard label="Current Balance" value={summary ? formatInrPrecise(summary.current_balance) : "—"} icon={Scale} hint="Debits − Credits (posted GL)" />
-            <FinanceKpiCard label="Today's Transactions" value={String(summary?.todays_transactions ?? "—")} icon={BookOpen} />
-            <FinanceKpiCard label="Current Fiscal Year" value={summary?.current_fiscal_year_code ?? "—"} icon={CalendarRange} />
-            <FinanceKpiCard label="Current Period" value={summary?.current_period_name ?? "—"} icon={CalendarRange} />
+            <FinanceKpiCard label="Total Accounts" value={String(summary?.total_accounts ?? "-")} icon={Landmark} />
+            <FinanceKpiCard label="Active Ledger Accounts" value={String(summary?.active_ledger_accounts ?? "-")} icon={BookOpen} tone="success" />
+            <FinanceKpiCard label="Total Debits" value={summary ? formatInrPrecise(summary.total_debits) : "-"} icon={Wallet} />
+            <FinanceKpiCard label="Total Credits" value={summary ? formatInrPrecise(summary.total_credits) : "-"} icon={Wallet} />
+            <FinanceKpiCard label="Current Balance" value={summary ? formatInrPrecise(summary.current_balance) : "-"} icon={Scale} hint="Debits - Credits (posted GL)" />
+            <FinanceKpiCard label="Today's Transactions" value={String(summary?.todays_transactions ?? "-")} icon={BookOpen} />
+            <FinanceKpiCard label="Current Fiscal Year" value={summary?.current_fiscal_year_code ?? "-"} icon={CalendarRange} />
+            <FinanceKpiCard label="Current Period" value={summary?.current_period_name ?? "-"} icon={CalendarRange} />
           </div>
           <GlTrialBalancePreviewPanel preview={preview} loading={previewLoading} />
           <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-            <h3 className="text-sm font-medium tracking-tight">Recent Ledger Activity</h3>
+            <h3 className="text-base font-extrabold tracking-tight">Recent Ledger Activity</h3>
             {loading && rows.length === 0 ? (
               <div className="mt-3 space-y-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-8 animate-pulse rounded bg-muted/70" />)}</div>
             ) : rows.length === 0 ? (

@@ -9,7 +9,6 @@ import {
   Handshake,
   LayoutGrid,
   PieChart,
-  RefreshCw,
   Target,
   TrendingUp,
   UserPlus,
@@ -23,8 +22,6 @@ import {
 } from "@/components/crm/crm-dashboard-charts";
 import {
   CrmActivityTile,
-  CrmHeadlineBand,
-  CrmHeadlineStat,
   CrmIconBadge,
   CrmKpiCard,
   CrmListPanel,
@@ -32,11 +29,11 @@ import {
   CrmSection,
   CrmViewAllLink,
   CrmWarnBanner,
+  CRM_TABLE_HEAD_ROW,
 } from "@/components/crm/crm-ui";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { crmPipelineStages } from "@/config/crm";
 import { isAuthenticated } from "@/lib/auth";
 import { cn } from "@/lib/utils";
@@ -181,20 +178,8 @@ export function CrmDashboard() {
     <CrmPage>
       <PageHeader
         title="Sales CRM Dashboard"
-        description="Pipeline health, deal mix, and revenue outlook across leads and opportunities."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="cursor-pointer"
-              onClick={() => void load()}
-              disabled={loading}
-            >
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
             <Link
               href="/crm/leads"
               className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
@@ -226,35 +211,6 @@ export function CrmDashboard() {
           Some CRM endpoints returned errors. Showing available records.
         </div>
       ) : null}
-
-      <CrmHeadlineBand>
-        <div className="grid divide-y divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
-          <CrmHeadlineStat
-            label="Pipeline value"
-            value={formatInr(kpis.pipelineValue)}
-            sub={`${kpis.openOpps} open opportunities`}
-            loading={loading}
-          />
-          <CrmHeadlineStat
-            label="Won value"
-            value={formatInr(kpis.wonValue)}
-            sub={`${kpis.winRate}% win rate`}
-            loading={loading}
-          />
-          <CrmHeadlineStat
-            label="Open leads"
-            value={String(kpis.openLeads)}
-            sub={`${data?.leads.length ?? 0} total leads`}
-            loading={loading}
-          />
-          <CrmHeadlineStat
-            label="Active campaigns"
-            value={String(countByStatus(data?.campaigns ?? [], ["active"]))}
-            sub={`${data?.campaigns.length ?? 0} total campaigns`}
-            loading={loading}
-          />
-        </div>
-      </CrmHeadlineBand>
 
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <CrmKpiCard
@@ -297,7 +253,6 @@ export function CrmDashboard() {
       <div className="grid gap-3 xl:grid-cols-3">
         <CrmSection
           title="Pipeline funnel"
-          subtitle="Lead → Meeting volume"
           icon={BarChart3}
           badge={<Badge variant="secondary">Counts</Badge>}
         >
@@ -322,7 +277,6 @@ export function CrmDashboard() {
 
         <CrmSection
           title="Stage mix"
-          subtitle="All opportunities"
           icon={PieChart}
           badge={<Badge variant="secondary">Share</Badge>}
         >
@@ -341,7 +295,7 @@ export function CrmDashboard() {
                     {s.label}
                   </span>
                   <span className="font-medium tabular-nums text-foreground">
-                    {loading ? "—" : count}
+                    {loading ? "-" : count}
                   </span>
                 </li>
               );
@@ -351,7 +305,6 @@ export function CrmDashboard() {
 
         <CrmSection
           title="Pipeline value"
-          subtitle="Expected revenue by stage"
           icon={Target}
           badge={<Badge variant="secondary">INR</Badge>}
         >
@@ -365,7 +318,7 @@ export function CrmDashboard() {
             <div className="flex items-center gap-2.5">
               <CrmIconBadge icon={UserPlus} />
               <div>
-                <h2 className="text-sm font-medium tracking-tight">Recent leads</h2>
+                <h2 className="text-base font-extrabold tracking-tight">Recent leads</h2>
                 <p className="text-[11px] text-muted-foreground">Latest prospect activity</p>
               </div>
             </div>
@@ -374,7 +327,7 @@ export function CrmDashboard() {
           <div className="erp-scroll overflow-x-auto">
             <table className="w-full min-w-110 text-left text-sm">
               <thead>
-                <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+                <tr className={CRM_TABLE_HEAD_ROW}>
                   <th className="px-4 py-2.5 font-medium">Lead</th>
                   <th className="px-4 py-2.5 font-medium">Contact</th>
                   <th className="px-4 py-2.5 font-medium">Status</th>
@@ -406,7 +359,7 @@ export function CrmDashboard() {
                   recent.map((row, idx) => (
                     <tr
                       key={String(row.id ?? idx)}
-                      className="border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
+                      className="border-b border-border/40 transition-colors duration-150 last:border-0 hover:bg-muted/40"
                     >
                       <td className="max-w-50 truncate px-4 py-2.5">
                         <Link
@@ -423,7 +376,7 @@ export function CrmDashboard() {
                         </p>
                       </td>
                       <td className="px-4 py-2.5 text-muted-foreground">
-                        {String(row.mobile ?? row.email ?? "—")}
+                        {String(row.mobile ?? row.email ?? "-")}
                       </td>
                       <td className="px-4 py-2.5">
                         <FinanceStatusBadge
@@ -443,7 +396,7 @@ export function CrmDashboard() {
             <div className="flex items-center gap-2.5">
               <CrmIconBadge icon={Handshake} />
               <div>
-                <h2 className="text-sm font-medium tracking-tight">Top opportunities</h2>
+                <h2 className="text-base font-extrabold tracking-tight">Top opportunities</h2>
                 <p className="text-[11px] text-muted-foreground">Highest expected revenue</p>
               </div>
             </div>
@@ -468,7 +421,7 @@ export function CrmDashboard() {
               oppWatch.map((row, idx) => (
                 <li
                   key={String(row.id ?? idx)}
-                  className="px-4 py-2.5 transition-colors duration-150 hover:bg-accent/30"
+                  className="px-4 py-2.5 transition-colors duration-150 hover:bg-muted/40"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <Link
@@ -478,7 +431,7 @@ export function CrmDashboard() {
                         !row.id && "pointer-events-none",
                       )}
                     >
-                      {String(row.opportunity_name ?? row.opportunity_code ?? "—")}
+                      {String(row.opportunity_name ?? row.opportunity_code ?? "-")}
                     </Link>
                     <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">
                       {formatInr(asNumber(row.expected_revenue))}
@@ -502,21 +455,21 @@ export function CrmDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-3">
         <CrmActivityTile
           label="Meetings"
-          value={loading ? "—" : String(data?.meetings.length ?? 0)}
+          value={loading ? "-" : String(data?.meetings.length ?? 0)}
           icon={CalendarDays}
           tint="bg-sky-50 text-sky-800"
           href="/crm/meetings"
         />
         <CrmActivityTile
           label="Follow-ups"
-          value={loading ? "—" : String(data?.followups.length ?? 0)}
+          value={loading ? "-" : String(data?.followups.length ?? 0)}
           icon={ClipboardList}
           tint="bg-amber-50 text-amber-900"
           href="/crm/customer-followups"
         />
         <CrmActivityTile
           label="Campaigns active"
-          value={loading ? "—" : String(countByStatus(data?.campaigns ?? [], ["active"]))}
+          value={loading ? "-" : String(countByStatus(data?.campaigns ?? [], ["active"]))}
           icon={LayoutGrid}
           tint="bg-emerald-50 text-emerald-800"
           href="/crm/campaigns"

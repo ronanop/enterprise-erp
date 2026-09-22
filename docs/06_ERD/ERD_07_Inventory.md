@@ -1,20 +1,20 @@
-# ERD_07 — Inventory & Warehouse Domain
+# ERD_07 - Inventory & Warehouse Domain
 
-**Document:** Enterprise ERD — Inventory & Warehouse Domain  
+**Document:** Enterprise ERD - Inventory & Warehouse Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 7 Implementation Planning  
+**Status:** Locked - Ready for Sprint 7 Implementation Planning  
 **Schema:** `inventory`  
 **Table Prefix:** `inv_`  
 **Aligned To:** BRD v1.0 · FRD-08 · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-08 Inventory & Warehouse Domain](../02_FRD/FRD-08-Inventory-Warehouse-Domain.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.1-beta](../07_RELEASES/ERP_Core_v1.1-beta.md)  
 
 ---
 
 ## 1. Module Overview
 
-The Inventory & Warehouse Domain is the **stock control and warehouse operations engine** for on-hand balances, reservations, stock ledger, goods receipt/issue, transfers, adjustments, batch/serial tracking, cycle counting, and FIFO valuation. It is the **sole writer** of stock quantities. Procurement and Sales integrate only through the Inventory Service (ports introduced in Sprint 5–6 become real adapters in Sprint 7).
+The Inventory & Warehouse Domain is the **stock control and warehouse operations engine** for on-hand balances, reservations, stock ledger, goods receipt/issue, transfers, adjustments, batch/serial tracking, cycle counting, and FIFO valuation. It is the **sole writer** of stock quantities. Procurement and Sales integrate only through the Inventory Service (ports introduced in Sprint 5-6 become real adapters in Sprint 7).
 
 **Business Tables: 14**  
 **Schema: `inventory`**
@@ -56,27 +56,27 @@ Manufacturing (FRD-13) · Quality (FRD-14) · BI (future)
 ## 2. Scope
 
 ### In Scope
-- Bin hierarchy under `master_warehouse` (FRD-08 §5–6)
+- Bin hierarchy under `master_warehouse` (FRD-08 §5-6)
 - Stock balances: on_hand, reserved, available (FRD-08 §4)
 - Append-only stock ledger for every quantity change (FRD-08 §7)
 - Reservations for sales (and extensible source modules) (FRD-08 §15)
 - Goods receipt / goods issue via Inventory Service (GRN, delivery, returns)
 - Warehouse and bin transfers with approval workflow (FRD-08 §8)
 - Stock adjustments with approval (FRD-08 §9)
-- Batch and serial tracking (FRD-08 §10–11)
+- Batch and serial tracking (FRD-08 §10-11)
 - Cycle counting with variance approval (FRD-08 §13)
 - FIFO valuation layers (FRD-08 §14 recommended method)
 - Finance system-journal hooks for COGS / inventory write-off/gain
 - Workflow, audit, RBAC, Celery jobs (low stock, expiry, posting retry)
 
 ### Out of Scope (Phase 2 / Separate ERD)
-- **Duplicate warehouse master** — `master_warehouse` is authoritative (C-01); no `inv_warehouse`
-- **Full barcode print/scan subsystem** — optional `barcode_value` attributes only; no `inv_barcode` table
-- **Advanced WMS** — wave picking, putaway optimization, labor management
-- **Manufacturing WIP / BOM tables** (`mfg_*`) — FRD-13; source_module hooks only
-- **Quality Management tables** (`qm_*`) — FRD-14; quarantine bin + quality_status only
-- **LIFO valuation** — deferred; weighted average optional via company config later
-- **Separate `inv_valuation_posting` table** — Finance journal IDs stored on adjustment/ledger context
+- **Duplicate warehouse master** - `master_warehouse` is authoritative (C-01); no `inv_warehouse`
+- **Full barcode print/scan subsystem** - optional `barcode_value` attributes only; no `inv_barcode` table
+- **Advanced WMS** - wave picking, putaway optimization, labor management
+- **Manufacturing WIP / BOM tables** (`mfg_*`) - FRD-13; source_module hooks only
+- **Quality Management tables** (`qm_*`) - FRD-14; quarantine bin + quality_status only
+- **LIFO valuation** - deferred; weighted average optional via company config later
+- **Separate `inv_valuation_posting` table** - Finance journal IDs stored on adjustment/ledger context
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 - Analytics cubes / `ana_fact_inventory`
 
@@ -86,11 +86,11 @@ Manufacturing (FRD-13) · Quality (FRD-14) · BI (future)
 - **SCM (FRD-15):** Network visibility read-only over balances
 
 ### Assumptions
-- **Only Inventory Service** writes `inv_*` tables — Procurement and Sales must not update inventory ORM
+- **Only Inventory Service** writes `inv_*` tables - Procurement and Sales must not update inventory ORM
 - Warehouse identity = `master.master_warehouse.id` (C-01)
-- Available qty = `on_hand_qty - reserved_qty` (hard block when available would go negative, unless company policy allows backorder — default hard block)
-- Stock ledger rows are **append-only** — corrections via reversing ledger entries
-- Soft delete applies to bins, batches, serials, and document headers/lines — **not** to posted ledger rows
+- Available qty = `on_hand_qty - reserved_qty` (hard block when available would go negative, unless company policy allows backorder - default hard block)
+- Stock ledger rows are **append-only** - corrections via reversing ledger entries
+- Soft delete applies to bins, batches, serials, and document headers/lines - **not** to posted ledger rows
 - Document numbers company-scoped and immutable after submit
 - Perpetual inventory: quantity (and FIFO layer cost) updated at GRN receipt; sales issue consumes FIFO layers
 
@@ -102,8 +102,8 @@ Manufacturing (FRD-13) · Quality (FRD-14) · BI (future)
 | ERD_02 Organization | `org_company`, `org_branch` |
 | ERD_03 Master Data | `master_product`, `master_uom`, `master_warehouse` |
 | ERD_04 Finance | `fin_fiscal_year`, `fin_period`, `fin_journal_header`, `fin_chart_of_account` |
-| ERD_05 Sales | Logical source docs only (UUID refs) — order, delivery, return |
-| ERD_06 Procurement | Logical source docs only (UUID refs) — GRN, purchase return |
+| ERD_05 Sales | Logical source docs only (UUID refs) - order, delivery, return |
+| ERD_06 Procurement | Logical source docs only (UUID refs) - GRN, purchase return |
 
 ---
 
@@ -111,22 +111,22 @@ Manufacturing (FRD-13) · Quality (FRD-14) · BI (future)
 
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
-| 1 | `inv_bin` | Location Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 2 | `inv_batch` | Lot Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 3 | `inv_serial` | Serial Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 4 | `inv_stock_balance` | Balance Snapshot | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 5 | `inv_stock_ledger` | Posted Ledger | ✅ | ✅ | ✅ | — *(immutable)* | — | — |
-| 6 | `inv_reservation` | Reservation | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 1 | `inv_bin` | Location Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 2 | `inv_batch` | Lot Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 3 | `inv_serial` | Serial Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 4 | `inv_stock_balance` | Balance Snapshot | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 5 | `inv_stock_ledger` | Posted Ledger | ✅ | ✅ | ✅ | - *(immutable)* | - | - |
+| 6 | `inv_reservation` | Reservation | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 7 | `inv_transfer_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 8 | `inv_transfer_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 8 | `inv_transfer_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 9 | `inv_adjustment_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 10 | `inv_adjustment_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
+| 10 | `inv_adjustment_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
 | 11 | `inv_cycle_count_header` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 12 | `inv_cycle_count_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 13 | `inv_valuation_layer` | Cost Layer (FIFO) | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 14 | `inv_reorder_policy` | Policy Master | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 12 | `inv_cycle_count_line` | Transaction Detail | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 13 | `inv_valuation_layer` | Cost Layer (FIFO) | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 14 | `inv_reorder_policy` | Policy Master | ✅ | ✅ | optional | ✅ | ✅ | - |
 
-> **Note:** `inv_stock_ledger` rows are **immutable** after insert — no soft delete; reverse via offsetting ledger entry.
+> **Note:** `inv_stock_ledger` rows are **immutable** after insert - no soft delete; reverse via offsetting ledger entry.
 
 **Business Tables: 14**  
 **Schema: `inventory`**
@@ -180,7 +180,7 @@ master_warehouse
 ```text
 org_company
   └── org_branch
-        └── master_warehouse          (ERD_03 — authoritative)
+        └── master_warehouse          (ERD_03 - authoritative)
               └── inv_bin             (aisle / rack / shelf / bin)
 ```
 
@@ -239,8 +239,8 @@ Precise storage location under a warehouse (FRD-08 §6).
 | `tenant_id` / `company_id` | UUID | NO | Scope |
 | `branch_id` | UUID | YES | Optional |
 | `warehouse_id` | UUID | NO | FK → `master.master_warehouse` |
-| `bin_code` | VARCHAR(50) | NO | UK per warehouse — e.g. `BIN-A01-R01-S02-10` |
-| `bin_name` | VARCHAR(255) | YES | — |
+| `bin_code` | VARCHAR(50) | NO | UK per warehouse - e.g. `BIN-A01-R01-S02-10` |
+| `bin_name` | VARCHAR(255) | YES | - |
 | `aisle` / `rack` / `shelf` | VARCHAR(30) | YES | Hierarchy attributes |
 | `parent_bin_id` | UUID | YES | FK → `inv_bin` (optional tree) |
 | `bin_type` | VARCHAR(30) | NO | storage, quarantine, staging, in_transit |
@@ -261,9 +261,9 @@ Lot/batch identity for products requiring batch control (FRD-08 §10).
 | `id` | UUID | NO | PK |
 | Scope | UUID | NO | tenant/company |
 | `product_id` | UUID | NO | FK → `master_product` |
-| `batch_number` | VARCHAR(50) | NO | UK per company+product — `BATCH-YYYY-NNNNNN` |
-| `manufacturing_date` | DATE | YES | — |
-| `expiry_date` | DATE | YES | — |
+| `batch_number` | VARCHAR(50) | NO | UK per company+product - `BATCH-YYYY-NNNNNN` |
+| `manufacturing_date` | DATE | YES | - |
+| `expiry_date` | DATE | YES | - |
 | `barcode_value` | VARCHAR(100) | YES | Optional scan code |
 | `status` | VARCHAR(30) | NO | active, expired, quarantined, closed |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
@@ -278,14 +278,14 @@ Unique item tracking (FRD-08 §11).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope | UUID | NO | — |
+| Scope | UUID | NO | - |
 | `product_id` | UUID | NO | FK → `master_product` |
-| `serial_number` | VARCHAR(100) | NO | UK per company — `SN-YYYY-NNNNNN` |
+| `serial_number` | VARCHAR(100) | NO | UK per company - `SN-YYYY-NNNNNN` |
 | `batch_id` | UUID | YES | FK → `inv_batch` |
 | `warehouse_id` | UUID | YES | Current location |
 | `bin_id` | UUID | YES | FK → `inv_bin` |
 | `status` | VARCHAR(30) | NO | available, reserved, issued, returned, scrapped |
-| `barcode_value` | VARCHAR(100) | YES | — |
+| `barcode_value` | VARCHAR(100) | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 ---
@@ -300,7 +300,7 @@ Current stock repository (FRD-08 §4).
 | `id` | UUID | NO | PK |
 | Scope | UUID | NO | tenant/company/branch |
 | `warehouse_id` | UUID | NO | FK → `master_warehouse` |
-| `bin_id` | UUID | YES | FK → `inv_bin` — NULL = warehouse-level |
+| `bin_id` | UUID | YES | FK → `inv_bin` - NULL = warehouse-level |
 | `product_id` | UUID | NO | FK → `master_product` |
 | `batch_id` | UUID | YES | FK → `inv_batch` |
 | `uom_id` | UUID | NO | FK → `master_uom` (base UOM) |
@@ -327,18 +327,18 @@ Immutable stock movement ledger (FRD-08 §7). Every quantity change creates ledg
 | `id` | UUID | NO | PK |
 | Scope | UUID | NO | tenant/company/branch |
 | `entry_number` | VARCHAR(50) | NO | UK per company |
-| `posted_at` | TIMESTAMPTZ | NO | — |
+| `posted_at` | TIMESTAMPTZ | NO | - |
 | `posted_by` | UUID | YES | FK → `sec_user` |
-| `product_id` / `warehouse_id` / `uom_id` | UUID | NO | — |
-| `bin_id` / `batch_id` / `serial_id` | UUID | YES | — |
+| `product_id` / `warehouse_id` / `uom_id` | UUID | NO | - |
+| `bin_id` / `batch_id` / `serial_id` | UUID | YES | - |
 | `movement_type` | VARCHAR(30) | NO | See §11 |
 | `quantity_in` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `quantity_out` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `unit_cost` / `total_cost` | NUMERIC(18,4) | YES | Base currency |
 | `source_module` | VARCHAR(50) | NO | procurement, sales, inventory, manufacturing |
 | `source_document_type` | VARCHAR(50) | NO | grn, delivery, transfer, adjustment, … |
-| `source_document_id` | UUID | NO | — |
-| `source_line_id` | UUID | YES | — |
+| `source_document_id` | UUID | NO | - |
+| `source_line_id` | UUID | YES | - |
 | `reversal_of_ledger_id` | UUID | YES | FK → self |
 | `finance_journal_id` | UUID | YES | FK → `fin_journal_header` when valued |
 
@@ -356,17 +356,17 @@ Reserve stock for sales (and future production/projects) (FRD-08 §15).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope | UUID | NO | — |
-| `warehouse_id` / `product_id` / `uom_id` | UUID | NO | — |
-| `bin_id` / `batch_id` | UUID | YES | — |
-| `quantity_reserved` | NUMERIC(18,4) | NO | — |
+| Scope | UUID | NO | - |
+| `warehouse_id` / `product_id` / `uom_id` | UUID | NO | - |
+| `bin_id` / `batch_id` | UUID | YES | - |
+| `quantity_reserved` | NUMERIC(18,4) | NO | - |
 | `quantity_issued` | NUMERIC(18,4) | NO | DEFAULT 0 |
 | `source_module` | VARCHAR(50) | NO | sales, manufacturing, project |
 | `source_document_type` | VARCHAR(50) | NO | sales_order, … |
-| `source_document_id` | UUID | NO | — |
-| `source_line_id` | UUID | YES | — |
+| `source_document_id` | UUID | NO | - |
+| `source_line_id` | UUID | YES | - |
 | `status` | VARCHAR(30) | NO | active, partially_issued, fulfilled, released, cancelled |
-| `reserved_at` / `released_at` | TIMESTAMPTZ | YES | — |
+| `reserved_at` / `released_at` | TIMESTAMPTZ | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 **Rule:** Reserved quantity cannot be reserved or sold again.
@@ -383,14 +383,14 @@ Move inventory between warehouses or bins (FRD-08 §8).
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope | UUID | NO | — |
-| `document_number` | VARCHAR(50) | NO | UK — `TRF-YYYY-NNNNNN` |
-| `document_date` | DATE | NO | — |
+| Scope | UUID | NO | - |
+| `document_number` | VARCHAR(50) | NO | UK - `TRF-YYYY-NNNNNN` |
+| `document_date` | DATE | NO | - |
 | `transfer_type` | VARCHAR(30) | NO | warehouse, bin, branch |
 | `from_warehouse_id` / `to_warehouse_id` | UUID | NO | FK → `master_warehouse` |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, in_transit, received, closed, cancelled |
-| `workflow_status` / `workflow_instance_id` | mixed | YES | — |
-| `shipped_at` / `received_at` | TIMESTAMPTZ | YES | — |
+| `workflow_status` / `workflow_instance_id` | mixed | YES | - |
+| `shipped_at` / `received_at` | TIMESTAMPTZ | YES | - |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 **Line:** product, qty, uom, from_bin, to_bin, batch_id, serial refs, status.
@@ -407,7 +407,7 @@ Correct inventory discrepancies (FRD-08 §9). Approval required.
 | Header fields | Notes |
 |---------------|-------|
 | `document_number` | `ADJ-YYYY-NNNNNN` |
-| `warehouse_id` | — |
+| `warehouse_id` | - |
 | `reason_code` | damage, loss, shrinkage, count_error, expiry, other |
 | `status` | draft, submitted, approved, posted, cancelled |
 | `fiscal_year_id` / `period_id` | Required for valued post |
@@ -427,7 +427,7 @@ Inventory verification (FRD-08 §13).
 |--------|-------|
 | `document_number` | `CNT-YYYY-NNNNNN` |
 | `count_type` | daily, weekly, monthly, annual |
-| `warehouse_id` | — |
+| `warehouse_id` | - |
 | `status` | draft, in_progress, submitted, approved, posted, cancelled |
 | Workflow | `INV_CYCLE_COUNT_APPROVAL` for variances |
 
@@ -443,20 +443,20 @@ FIFO cost layers (FRD-08 §14). Default valuation method: **FIFO**.
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
-| Scope | UUID | NO | — |
-| `warehouse_id` / `product_id` | UUID | NO | — |
-| `batch_id` | UUID | YES | — |
+| Scope | UUID | NO | - |
+| `warehouse_id` / `product_id` | UUID | NO | - |
+| `batch_id` | UUID | YES | - |
 | `received_at` | TIMESTAMPTZ | NO | Layer age for FIFO |
-| `original_qty` / `remaining_qty` | NUMERIC(18,4) | NO | — |
+| `original_qty` / `remaining_qty` | NUMERIC(18,4) | NO | - |
 | `unit_cost` | NUMERIC(18,4) | NO | Base currency |
-| `currency_code` | VARCHAR(3) | NO | — |
+| `currency_code` | VARCHAR(3) | NO | - |
 | `source_module` / `source_document_id` | mixed | NO | Typically GRN |
 | `status` | VARCHAR(30) | NO | open, depleted, reversed |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
 **Issue costing:** Consume oldest open layers first; post COGS/inventory via Finance on sales issue / write-off.
 
-**Company config (future):** `fifo` (default) \| `weighted_average` — WA may reuse single layer or balance cost field in a later revision; ERD locks FIFO table now.
+**Company config (future):** `fifo` (default) \| `weighted_average` - WA may reuse single layer or balance cost field in a later revision; ERD locks FIFO table now.
 
 ---
 
@@ -469,9 +469,9 @@ Support low-stock alerts and planning thresholds.
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
 | Scope | UUID | NO | tenant/company |
-| `warehouse_id` / `product_id` | UUID | NO | — |
+| `warehouse_id` / `product_id` | UUID | NO | - |
 | `reorder_point` | NUMERIC(18,4) | NO | Alert when available ≤ point |
-| `safety_stock` | NUMERIC(18,4) | YES | — |
+| `safety_stock` | NUMERIC(18,4) | YES | - |
 | `reorder_qty` | NUMERIC(18,4) | YES | Suggested PR qty |
 | `status` | VARCHAR(30) | NO | active, inactive |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
@@ -517,7 +517,7 @@ Support low-stock alerts and planning thresholds.
 | `inv_valuation_layer` | warehouse/product/batch | master / inv_batch |
 | `inv_reorder_policy` | warehouse/product | master |
 
-**No FK to:** `sales_*`, `proc_*`, `mfg_*`, `qm_*` — source documents referenced by UUID + `source_module` only.
+**No FK to:** `sales_*`, `proc_*`, `mfg_*`, `qm_*` - source documents referenced by UUID + `source_module` only.
 
 All `inv_*` tables: `tenant_id` → `sec_tenant`, `company_id` → `org_company`. Transactional tables: `branch_id` → `org_branch`.
 
@@ -584,10 +584,10 @@ All `inv_*` tables: `tenant_id` → `sec_tenant`, `company_id` → `org_company`
 | Trigger | Inventory API | Ledger | Balance |
 |---------|---------------|--------|---------|
 | Proc GRN confirm | `receive_goods` | +receipt | on_hand ↑; FIFO layer create |
-| Proc purchase return | `issue_purchase_return` | −issue / return_out | on_hand ↓ |
-| Sales order confirm | `reserve` | — (or memo) | reserved ↑ |
-| Sales order cancel | `release_reservation` | — | reserved ↓ |
-| Sales delivery confirm | `issue_goods` | −issue | on_hand ↓, reserved ↓; FIFO consume |
+| Proc purchase return | `issue_purchase_return` | -issue / return_out | on_hand ↓ |
+| Sales order confirm | `reserve` | - (or memo) | reserved ↑ |
+| Sales order cancel | `release_reservation` | - | reserved ↓ |
+| Sales delivery confirm | `issue_goods` | -issue | on_hand ↓, reserved ↓; FIFO consume |
 | Sales return receive | `receive_sales_return` | +receipt | on_hand ↑ |
 | Transfer ship / receive | `transfer_ship` / `transfer_receive` | out + in | from ↓ / to ↑ |
 | Adjustment post | `adjust` | ± | on_hand ± |
@@ -602,7 +602,7 @@ All `inv_*` tables: `tenant_id` → `sec_tenant`, `company_id` → `org_company`
 ## 13. Integration Specifications
 
 ### 13.1 Procurement (ERD_06)
-- **Only** Inventory Service updates stock — replace Sprint 6 `NoOpInventoryAdapter`
+- **Only** Inventory Service updates stock - replace Sprint 6 `NoOpInventoryAdapter`
 - GRN `warehouse_reference` → `warehouse_id`
 - Same DB transaction preferred for GRN confirm + receive_goods
 
@@ -618,7 +618,7 @@ All `inv_*` tables: `tenant_id` → `sec_tenant`, `company_id` → `org_company`
 - Pattern: `InventoryPostingService` → `PostingService.post_system_journal`
 
 ### 13.4 Manufacturing / Quality (Future)
-- `source_module = manufacturing` on reservation/issue/receipt — no `mfg_*` tables
+- `source_module = manufacturing` on reservation/issue/receipt - no `mfg_*` tables
 - Quarantine via `bin_type` / `quality_status`; QM UUID refs only
 
 ---
@@ -717,7 +717,7 @@ Prior Alembic head: **`0077_seed_proc_workflows`**.
 |--------|-----|----------|---------|
 | Foundation | FRD-01 | tenant, user, workflow, audit, RBAC | Direct FK |
 | Organization | FRD-02 | company, branch | Direct FK |
-| Master Data | FRD-03 | product, uom, warehouse | Direct FK — C-01 |
+| Master Data | FRD-03 | product, uom, warehouse | Direct FK - C-01 |
 | Finance | FRD-04 | period, COA, journal posting API | FK + posting service |
 
 ### 18.2 Upstream Event Sources (No FK)
@@ -776,23 +776,23 @@ Cross-module: in-process Inventory application services (modular monolith), not 
 |---|----------------|--------|
 | 1 | Business tables = **14**; schema = **`inventory`** | ✅ |
 | 2 | Prefix `inv_` defined | ✅ |
-| 3 | `master_warehouse` reused — no `inv_warehouse` | ✅ |
+| 3 | `master_warehouse` reused - no `inv_warehouse` | ✅ |
 | 4 | Aligned to FRD-08; FIFO default documented | ✅ |
-| 5 | Ledger append-only; ATP = on_hand − reserved | ✅ |
+| 5 | Ledger append-only; ATP = on_hand - reserved | ✅ |
 | 6 | Proc/Sales integration via Inventory Service only | ✅ |
 | 7 | Manufacturing/Quality hooks without new schemas | ✅ |
-| 8 | Migration order `0078`–`0094`, revision IDs ≤ 32 chars | ✅ |
+| 8 | Migration order `0078`-`0094`, revision IDs ≤ 32 chars | ✅ |
 | 9 | Workflows + RBAC + Celery documented | ✅ |
 | 10 | Cross-module dependencies documented | ✅ |
 
-### ERD Phase Gate — Inventory Summary
+### ERD Phase Gate - Inventory Summary
 
 | Metric | Value |
 |--------|-------|
 | Business Tables | **14** |
 | Schema | **`inventory`** |
 | Prefix | `inv_` |
-| Migration range | `0078` – `0094` |
+| Migration range | `0078` - `0094` |
 | Prior head | `0077_seed_proc_workflows` |
 | Planned head | `0094_seed_inv_workflows` |
 

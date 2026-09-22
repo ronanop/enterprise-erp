@@ -124,6 +124,18 @@ def upgrade() -> None:
     for code, resource, action, module in HR_PERMISSIONS:
         perm_ids[code] = _ensure_permission(conn, now, code, resource, action, module)
 
+    def _resolve_perm_id(code: str) -> str | None:
+        if code in perm_ids:
+            return perm_ids[code]
+        row = conn.execute(
+            sa.text("SELECT id FROM foundation.sec_permission WHERE permission_code = :code"),
+            {"code": code},
+        ).first()
+        if row is None:
+            return None
+        perm_ids[code] = str(row[0])
+        return perm_ids[code]
+
     tenants = conn.execute(
         sa.text("SELECT id FROM foundation.sec_tenant WHERE is_deleted = false")
     ).fetchall()
@@ -132,7 +144,10 @@ def upgrade() -> None:
         for role_code, role_name, codes in ROLE_SPECS:
             role_id = _ensure_role(conn, now, tid, role_code, role_name)
             for code in codes:
-                _grant(conn, now, tid, role_id, perm_ids[code])
+                perm_id = _resolve_perm_id(code)
+                if perm_id is None:
+                    continue
+                _grant(conn, now, tid, role_id, perm_id)
 
 
 def downgrade() -> None:

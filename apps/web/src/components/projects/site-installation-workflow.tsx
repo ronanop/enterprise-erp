@@ -3,31 +3,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowUpRight,
+  Bell,
   Check,
   Cable,
   ClipboardCheck,
   CloudUpload,
   MapPin,
+  MapPinned,
   Package,
   Server,
-  Wrench,
+  Users,
 } from "lucide-react";
 
 import {
-  linesFromMaterial,
-  TypeQtyLinesEditor,
-  type TypeQtyLineDraft,
-  typeQtyLinesToMaterial,
-} from "@/components/projects/material-type-qty-lines";
-import {
-  CABLE_TYPES,
-  INDUSTRIAL_SOCKET_TYPES,
-  LUG_TYPES,
-  SITE_DELIVERY_TYPES,
+  deliveryIncludesBios,
   deliveryIncludesOs,
   deliveryIncludesRack,
+  deliveryIncludesServer,
   deliveryIsRackOnly,
-  deliveryNeedsHwat,
   siteDeliveryTypeLabel,
   siteWorkflowStageLabel,
 } from "@/components/projects/projects-domain";
@@ -35,416 +29,936 @@ import {
   ProjectsErrorBanner,
   ProjectsSection,
 } from "@/components/projects/projects-ui";
+import { ConfirmDialog } from "@/components/finance/journals/confirm-dialog";
+import { FinanceSelect } from "@/components/finance/journals/finance-form-field";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { useAuthUser } from "@/hooks/use-auth-user";
 import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
+import { loadIntakeSummaryLookups } from "@/components/projects/site-intake-summary";
+import {
+  assigneeFieldForStage,
+  assignWaitingHint,
+  canAssignStageFromTracking,
+  type AssignableStage,
+} from "@/components/projects/site-stage-assignments";
+import { stageProgressLabel } from "@/components/projects/site-stage-attachment";
 import {
   advanceSiteInstallation,
   getSiteInstallationBlueprint,
   getSiteInstallationByProject,
+  followUpSiteStage,
+  getProject,
+  listEmployeeOptions,
+  listSiteStageFollowUps,
   updateSiteInstallationByProject,
   type SiteInstallation,
   type SiteInstallationBlueprint,
   type SiteInstallationFormInput,
+  type SiteStageFollowUp,
 } from "@/services/projects-portal-service";
+import { parseAuthMe } from "@/lib/auth-user";
+import { resolveSessionEmployeeId } from "@/lib/crm/session-employee";
+import { canAdminViewStageForm, canOpenCurrentStageForm, isStageWorkDone, type SiteStageFormKey } from "@/lib/projects/site-stage-form-access";
+import { authService } from "@/services/api-client";
 
 type StageKey =
   | "intake"
+  | "assignment"
   | "survey"
   | "scm"
+  | "onsite_delivery"
+  | "material_handover"
+  | "onsite"
   | "installation"
-  | "configuration"
   | "acceptance"
   | "completed";
 
 const STAGE_ICONS: Record<string, typeof MapPin> = {
   intake: ClipboardCheck,
+  assignment: Users,
   survey: MapPin,
   scm: Package,
+  onsite_delivery: MapPinned,
+  material_handover: Package,
+  onsite: MapPinned,
   installation: Server,
-  configuration: Wrench,
   acceptance: CloudUpload,
   completed: Check,
 };
 
-function CheckboxField({
-  label,
-  checked,
-  onChange,
-  disabled,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <label
-      className={cn(
-        "flex h-8 cursor-pointer items-center gap-2 self-end rounded-md border border-border/70 bg-background px-2.5 text-xs transition-colors duration-200",
-        "hover:bg-muted/40",
-        disabled && "cursor-not-allowed opacity-60",
-      )}
-    >
-      <input
-        type="checkbox"
-        className="size-3.5 accent-primary"
-        checked={checked}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)}
-      />
-      <span className="font-medium text-foreground">{label}</span>
-    </label>
-  );
-}
-
-function TextField({
-  label,
-  value,
-  onChange,
-  disabled,
-  required,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  disabled?: boolean;
-  required?: boolean;
-}) {
-  return (
-    <label className="grid gap-1 text-xs">
-      <span className="font-medium text-muted-foreground">
-        {label}
-        {required ? <span className="text-destructive"> *</span> : null}
-      </span>
-      <Input
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-8 text-sm"
-      />
-    </label>
-  );
-}
-
-function DateField({
-  label,
-  value,
-  onChange,
-  disabled,
-  required,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  disabled?: boolean;
-  required?: boolean;
-}) {
-  return (
-    <label className="grid gap-1 text-xs">
-      <span className="font-medium text-muted-foreground">
-        {label}
-        {required ? <span className="text-destructive"> *</span> : null}
-      </span>
-      <Input
-        type="date"
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-8 text-sm"
-      />
-    </label>
-  );
-}
-
-function NumberField({
-  label,
-  value,
-  onChange,
-  disabled,
-  required,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  disabled?: boolean;
-  required?: boolean;
-}) {
-  return (
-    <label className="grid gap-1 text-xs">
-      <span className="font-medium text-muted-foreground">
-        {label}
-        {required ? <span className="text-destructive"> *</span> : null}
-      </span>
-      <Input
-        type="number"
-        min={0}
-        value={value}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-8 text-sm"
-      />
-    </label>
-  );
-}
-
-function MaterialLinesField({
-  label,
-  lines,
-  options,
-  disabled,
-  addLabel,
-  onChange,
-}: {
-  label: string;
-  lines: TypeQtyLineDraft[];
-  options: { value: string; label: string }[];
-  disabled?: boolean;
-  addLabel: string;
-  onChange: (next: TypeQtyLineDraft[]) => void;
-}) {
-  return (
-    <div className="grid gap-1 text-xs">
-      <span className="font-medium text-muted-foreground">
-        {label}
-        <span className="text-destructive"> *</span>
-      </span>
-      <TypeQtyLinesEditor
-        value={JSON.stringify(lines)}
-        options={options}
-        disabled={disabled}
-        addLabel={addLabel}
-        onChange={(raw) => {
-          try {
-            const parsed = JSON.parse(raw) as TypeQtyLineDraft[];
-            onChange(Array.isArray(parsed) ? parsed : [{ type: "", quantity: "", date: "" }]);
-          } catch {
-            onChange([{ type: "", quantity: "", date: "" }]);
-          }
-        }}
-      />
-    </div>
-  );
-}
-
-type Draft = {
-  delivery_type: string;
-  requestor_name: string;
-  circle: string;
-  cloud_name: string;
-  site_name: string;
-  power_requirements: string;
-  rfai_request_done: boolean;
-  rfai_number: string;
-  fabric_partner: string;
-  application: string;
-  cable_length: string;
-  cable_lines: TypeQtyLineDraft[];
-  industrial_socket: boolean;
-  socket_lines: TypeQtyLineDraft[];
-  lugs: boolean;
-  lug_lines: TypeQtyLineDraft[];
-  power_on_material: boolean;
-  power_on_material_date: string;
-  tile_details: string;
-  survey_completed: boolean;
-  survey_completed_date: string;
-  space_available: boolean;
-  space_available_date: string;
-  power_available: boolean;
-  power_available_date: string;
-  server_qty: string;
-  rack_qty: string;
-  server_wh_delivery_date: string;
-  server_on_site_delivery_date: string;
-  rack_wh_delivery_date: string;
-  rack_on_site_delivery_date: string;
-  pdu_wh_delivery_date: string;
-  pdu_on_site_delivery_date: string;
-  mo_request: boolean;
-  mo_request_date: string;
-  im_material: boolean;
-  im_material_date: string;
-  material_handover_done: boolean;
-  material_handover_date: string;
-  rack_server_stacking_done: boolean;
-  rack_server_power_on_done: boolean;
-  dac_ilo_cabling_done: boolean;
-  bios_configuration_done: boolean;
-  firmware_nw_config_done: boolean;
-  lld_done: boolean;
-  os_installation_done: boolean;
-  mbss_done: boolean;
-  handover_to_cloud_done: boolean;
-  hwat_request_done: boolean;
-  hwat_signoff_received: boolean;
-  remarks: string;
+const STAGE_FORM_LINKS: Partial<
+  Record<StageKey, { href: (projectId: string) => string; label: string }>
+> = {
+  survey: {
+    href: (id) => `/projects/projects/${id}/survey`,
+    label: "Open Survey form",
+  },
+  scm: {
+    href: (id) => `/projects/projects/${id}/scm`,
+    label: "Open SCM form",
+  },
+  onsite_delivery: {
+    href: (id) => `/projects/projects/${id}/onsite-delivery`,
+    label: "Open Onsite Delivery form",
+  },
+  material_handover: {
+    href: (id) => `/projects/projects/${id}/material-handover`,
+    label: "Open Material Handover form",
+  },
+  onsite: {
+    href: (id) => `/projects/projects/${id}/onsite-delivery`,
+    label: "Open Onsite Delivery form",
+  },
+  installation: {
+    href: (id) => `/projects/projects/${id}/installation`,
+    label: "Open Installation & Configuration form",
+  },
+  acceptance: {
+    href: (id) => `/projects/projects/${id}/acceptance`,
+    label: "Open Acceptance form",
+  },
 };
 
-function fromRow(row: SiteInstallation): Draft {
-  return {
-    delivery_type: row.delivery_type,
-    requestor_name: row.requestor_name ?? "",
-    circle: row.circle ?? "",
-    cloud_name: row.cloud_name ?? "",
-    site_name: row.site_name ?? "",
-    power_requirements: row.power_requirements ?? "",
-    rfai_request_done: row.rfai_request_done ?? false,
-    rfai_number: row.rfai_number ?? "",
-    fabric_partner: row.fabric_partner ?? "",
-    application: row.application ?? "",
-    cable_length: row.cable_length ?? "",
-    cable_lines: linesFromMaterial(row.cable_lines),
-    industrial_socket: row.industrial_socket ?? false,
-    socket_lines: linesFromMaterial(row.industrial_socket_lines),
-    lugs: row.lugs ?? false,
-    lug_lines: linesFromMaterial(row.lug_lines),
-    power_on_material: row.power_on_material ?? false,
-    power_on_material_date: row.power_on_material_date ?? "",
-    tile_details: row.tile_details ?? "",
-    survey_completed: row.survey_completed,
-    survey_completed_date: row.survey_completed_date ?? "",
-    space_available: row.space_available,
-    space_available_date: row.space_available_date ?? "",
-    power_available: row.power_available,
-    power_available_date: row.power_available_date ?? "",
-    server_qty: row.server_qty != null ? String(row.server_qty) : "",
-    rack_qty: row.rack_qty != null ? String(row.rack_qty) : "",
-    server_wh_delivery_date: row.server_wh_delivery_date ?? "",
-    server_on_site_delivery_date: row.server_on_site_delivery_date ?? "",
-    rack_wh_delivery_date: row.rack_wh_delivery_date ?? "",
-    rack_on_site_delivery_date: row.rack_on_site_delivery_date ?? "",
-    pdu_wh_delivery_date: row.pdu_wh_delivery_date ?? "",
-    pdu_on_site_delivery_date: row.pdu_on_site_delivery_date ?? "",
-    mo_request: row.mo_request,
-    mo_request_date: row.mo_request_date ?? "",
-    im_material: row.im_material,
-    im_material_date: row.im_material_date ?? "",
-    material_handover_done: row.material_handover_done ?? false,
-    material_handover_date: row.material_handover_date ?? "",
-    rack_server_stacking_done: row.rack_server_stacking_done,
-    rack_server_power_on_done: row.rack_server_power_on_done,
-    dac_ilo_cabling_done: row.dac_ilo_cabling_done,
-    bios_configuration_done: row.bios_configuration_done,
-    firmware_nw_config_done: row.firmware_nw_config_done ?? false,
-    lld_done: row.lld_done,
-    os_installation_done: row.os_installation_done ?? false,
-    mbss_done: row.mbss_done ?? false,
-    handover_to_cloud_done: row.handover_to_cloud_done,
-    hwat_request_done: row.hwat_request_done,
-    hwat_signoff_received: row.hwat_signoff_received,
-    remarks: row.remarks ?? "",
-  };
+/** Show person name only - drop trailing employee code like " (EMP-000057)". */
+function employeeNameOnly(label: string): string {
+  const stripped = label.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  return stripped || label;
 }
 
-function toPayload(draft: Draft): SiteInstallationFormInput {
-  const qty = (v: string) => {
-    const t = v.trim();
-    if (!t) return null;
-    const n = Number(t);
-    return Number.isFinite(n) ? Math.trunc(n) : null;
-  };
-  const orNull = (v: string) => {
-    const t = v.trim();
-    return t === "" ? null : t;
-  };
-  return {
-    delivery_type: draft.delivery_type,
-    requestor_name: orNull(draft.requestor_name),
-    circle: orNull(draft.circle),
-    cloud_name: orNull(draft.cloud_name),
-    site_name: orNull(draft.site_name),
-    power_requirements: orNull(draft.power_requirements),
-    rfai_request_done: draft.rfai_request_done,
-    rfai_number: orNull(draft.rfai_number),
-    fabric_partner: orNull(draft.fabric_partner),
-    application: orNull(draft.application),
-    cable_length: orNull(draft.cable_length),
-    industrial_socket: draft.industrial_socket,
-    lugs: draft.lugs,
-    cable_lines: deliveryIncludesRack(draft.delivery_type)
-      ? typeQtyLinesToMaterial(draft.cable_lines)
-      : [],
-    lug_lines: deliveryIncludesRack(draft.delivery_type)
-      ? typeQtyLinesToMaterial(draft.lug_lines)
-      : [],
-    industrial_socket_lines: deliveryIncludesRack(draft.delivery_type)
-      ? typeQtyLinesToMaterial(draft.socket_lines)
-      : [],
-    power_on_material: draft.power_on_material,
-    power_on_material_date: draft.power_on_material
-      ? orNull(draft.power_on_material_date)
-      : null,
-    tile_details: orNull(draft.tile_details),
-    survey_completed: draft.survey_completed,
-    survey_completed_date: draft.survey_completed
-      ? orNull(draft.survey_completed_date)
-      : null,
-    space_available: draft.space_available,
-    space_available_date: draft.space_available
-      ? orNull(draft.space_available_date)
-      : null,
-    power_available: draft.power_available,
-    power_available_date: draft.power_available
-      ? orNull(draft.power_available_date)
-      : null,
-    server_qty: qty(draft.server_qty),
-    rack_qty: deliveryIncludesRack(draft.delivery_type) ? qty(draft.rack_qty) : null,
-    server_wh_delivery_date: orNull(draft.server_wh_delivery_date),
-    server_on_site_delivery_date: orNull(draft.server_on_site_delivery_date),
-    rack_wh_delivery_date: orNull(draft.rack_wh_delivery_date),
-    rack_on_site_delivery_date: orNull(draft.rack_on_site_delivery_date),
-    pdu_wh_delivery_date: orNull(draft.pdu_wh_delivery_date),
-    pdu_on_site_delivery_date: orNull(draft.pdu_on_site_delivery_date),
-    mo_request: draft.mo_request,
-    mo_request_date: draft.mo_request ? orNull(draft.mo_request_date) : null,
-    im_material: draft.im_material,
-    im_material_date: draft.im_material ? orNull(draft.im_material_date) : null,
-    material_handover_done: draft.material_handover_done,
-    material_handover_date: draft.material_handover_done
-      ? orNull(draft.material_handover_date)
-      : null,
-    rack_server_stacking_done: draft.rack_server_stacking_done,
-    rack_server_power_on_done: draft.rack_server_power_on_done,
-    dac_ilo_cabling_done: draft.dac_ilo_cabling_done,
-    bios_configuration_done: draft.bios_configuration_done,
-    firmware_nw_config_done: draft.firmware_nw_config_done,
-    lld_done: draft.lld_done,
-    os_installation_done: draft.os_installation_done,
-    mbss_done: draft.mbss_done,
-    handover_to_cloud_done: draft.handover_to_cloud_done,
-    hwat_request_done: draft.hwat_request_done,
-    hwat_signoff_received: draft.hwat_signoff_received,
-    remarks: orNull(draft.remarks),
-  };
-}
-
-export function SiteInstallationWorkflow({
-  projectId,
-  onChanged,
-}: {
-  projectId: string;
-  onChanged?: () => void;
-}) {
-  const [row, setRow] = useState<SiteInstallation | null>(null);
+export function SiteInstallationTrackingSummary({ projectId }: { projectId: string }) {
+  const { projectModuleAdmin } = useAuthUser();
   const [blueprint, setBlueprint] = useState<SiteInstallationBlueprint | null>(null);
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const [site, setSite] = useState<SiteInstallation | null>(null);
+  const [employeeOptions, setEmployeeOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [followUpTarget, setFollowUpTarget] = useState<{
+    stage: string;
+    label: string;
+    assigneeName: string;
+  } | null>(null);
+  const [followUpNote, setFollowUpNote] = useState("");
+  const [followUpBusy, setFollowUpBusy] = useState(false);
+  const [followUpFeedback, setFollowUpFeedback] = useState<string | null>(null);
+  const [followUps, setFollowUps] = useState<SiteStageFollowUp[]>([]);
+  const [assignDrafts, setAssignDrafts] = useState<Record<string, string>>({});
+  const [assignBusyStage, setAssignBusyStage] = useState<string | null>(null);
+
+  const refreshFollowUpsOnly = useCallback(async () => {
+    const rows = await listSiteStageFollowUps(projectId).catch(() => []);
+    setFollowUps(Array.isArray(rows) ? rows : []);
+  }, [projectId]);
+
+  const latestFollowUpByStage = useMemo(() => {
+    const map = new Map<string, SiteStageFollowUp>();
+    for (const fu of followUps) {
+      if (fu.stage && !map.has(fu.stage)) {
+        map.set(fu.stage, fu);
+      }
+    }
+    return map;
+  }, [followUps]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [site, bp] = await Promise.all([
+      const [bp, row, employees, followUpRows] = await Promise.all([
+        getSiteInstallationBlueprint(projectId),
+        getSiteInstallationByProject(projectId),
+        listEmployeeOptions().catch(() => []),
+        listSiteStageFollowUps(projectId).catch(() => []),
+      ]);
+      setBlueprint(bp);
+      setSite(row);
+      setEmployeeOptions(
+        Array.isArray(employees) ? (employees as Array<{ id: string; label: string }>) : [],
+      );
+      setFollowUps(Array.isArray(followUpRows) ? followUpRows : []);
+      const drafts: Record<string, string> = {};
+      for (const sa of bp.stage_assignments ?? []) {
+        drafts[sa.stage] = sa.assignee_employee_id ?? "";
+      }
+      setAssignDrafts(drafts);
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError ? err.message : "Failed to load stage owner tracking",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  const onAssignStage = useCallback(
+    async (stage: string) => {
+      const field = assigneeFieldForStage(stage as AssignableStage);
+      const employeeId = (assignDrafts[stage] ?? "").trim();
+      if (!employeeId) {
+        setError(`Select a person for ${field.label} before assigning.`);
+        return;
+      }
+      setAssignBusyStage(stage);
+      setError(null);
+      setFollowUpFeedback(null);
+      try {
+        const payload: SiteInstallationFormInput = {
+          [field.name]: employeeId,
+        };
+        await updateSiteInstallationByProject(projectId, payload);
+
+        // Survey assign after create advances Intake (or legacy Assignment) → Survey.
+        if (stage === "survey") {
+          let current = await getSiteInstallationByProject(projectId);
+          if (current.workflow_stage === "intake") {
+            current = await advanceSiteInstallation(projectId, "complete_intake");
+          }
+          if (current.workflow_stage === "assignment") {
+            await advanceSiteInstallation(projectId, "complete_assignment");
+          }
+        }
+
+        await load();
+        setFollowUpFeedback(`Assigned ${field.label.replace(/ assignee$/i, "")} owner.`);
+      } catch (err) {
+        setError(err instanceof ApiClientError ? err.message : "Failed to assign stage owner");
+      } finally {
+        setAssignBusyStage(null);
+      }
+    },
+    [assignDrafts, load, projectId],
+  );
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (!projectModuleAdmin) return;
+    const id = window.setInterval(() => void refreshFollowUpsOnly(), 20_000);
+    return () => window.clearInterval(id);
+  }, [projectModuleAdmin, refreshFollowUpsOnly]);
+
+  if (loading && !blueprint) {
+    return <div className="h-28 animate-pulse rounded-xl bg-muted/60" />;
+  }
+
+  if (!blueprint || !site) {
+    return <ProjectsErrorBanner>{error ?? "Tracking unavailable."}</ProjectsErrorBanner>;
+  }
+
+  const statusText = (
+    workStatus: string,
+    progressStatus?: string | null,
+  ) => {
+    const progress = stageProgressLabel(progressStatus);
+    if (progress !== "-") return progress;
+    if (workStatus === "done") return "Done";
+    if (workStatus === "in_progress") return "In progress";
+    if (workStatus === "skipped") return "Skipped";
+    return "Pending";
+  };
+
+  const displayDate = (value: string | null | undefined) => {
+    if (!value) return "-";
+    return String(value).slice(0, 10);
+  };
+
+  const displayDateTime = (value: string | null | undefined) => {
+    if (!value) return "-";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value).slice(0, 16).replace("T", " ");
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const employeeName = (employeeId: string | null | undefined) => {
+    if (!employeeId) return "Unassigned";
+    const label = employeeOptions.find((e) => e.id === employeeId)?.label;
+    return label ? employeeNameOnly(label) : "Assigned";
+  };
+
+  const rackOnly = deliveryIsRackOnly(site.delivery_type);
+  const hasRack = deliveryIncludesRack(site.delivery_type);
+  const hasServer = deliveryIncludesServer(site.delivery_type);
+  const hasBios = deliveryIncludesBios(site.delivery_type);
+  const hasOs = deliveryIncludesOs(site.delivery_type);
+  const installStep = rackOnly ? "Installation" : "Installation & Configuration";
+
+  const completedByForStep = (step: string) => {
+    if (step === "Survey") return employeeName(site.survey_assignee_employee_id);
+    if (step === "SCM / Logistics") return employeeName(site.scm_assignee_employee_id);
+    if (step === "Onsite Delivery") {
+      return employeeName(
+        site.onsite_delivery_assignee_employee_id ?? site.onsite_assignee_employee_id,
+      );
+    }
+    if (step === "Material Handover") {
+      return employeeName(site.material_handover_assignee_employee_id);
+    }
+    if (step === "On-site") {
+      return employeeName(
+        site.onsite_delivery_assignee_employee_id ?? site.onsite_assignee_employee_id,
+      );
+    }
+    if (step === "Installation" || step === "Installation & Configuration") {
+      return employeeName(site.installation_assignee_employee_id);
+    }
+    if (step === "Acceptance") return employeeName(site.acceptance_assignee_employee_id);
+    return "-";
+  };
+
+  const stageDates: Array<{
+    step: string;
+    item: string;
+    date: string;
+    completedBy: string;
+    answer: "yes" | "no";
+  }> = [
+    {
+      step: "Survey",
+      item: "Space Available",
+      date: displayDate(site.space_available_date),
+      completedBy: completedByForStep("Survey"),
+      answer: site.space_available ? "yes" : "no",
+    },
+    {
+      step: "Survey",
+      item: "Power Available",
+      date: displayDate(site.power_available_date),
+      completedBy: completedByForStep("Survey"),
+      answer: site.power_available ? "yes" : "no",
+    },
+    {
+      step: "Survey",
+      item: "Survey Completed",
+      date: displayDate(site.survey_completed_date),
+      completedBy: completedByForStep("Survey"),
+      answer: site.survey_completed ? "yes" : "no",
+    },
+    ...(hasServer
+      ? [
+          {
+            step: "SCM / Logistics",
+            item: "Server WH Delivery",
+            date: displayDate(site.server_wh_delivery_date),
+            completedBy: completedByForStep("SCM / Logistics"),
+            answer: (site.server_wh_delivery_date ? "yes" : "no") as "yes" | "no",
+          },
+        ]
+      : []),
+    ...(hasRack
+      ? [
+          {
+            step: "SCM / Logistics",
+            item: "Rack WH Delivery",
+            date: displayDate(site.rack_wh_delivery_date),
+            completedBy: completedByForStep("SCM / Logistics"),
+            answer: (site.rack_wh_delivery_date ? "yes" : "no") as "yes" | "no",
+          },
+        ]
+      : []),
+    {
+      step: "SCM / Logistics",
+      item: "PDU WH Delivery",
+      date: displayDate(site.pdu_wh_delivery_date),
+      completedBy: completedByForStep("SCM / Logistics"),
+      answer: site.pdu_wh_delivery_date ? "yes" : "no",
+    },
+    {
+      step: "Onsite Delivery",
+      item: "MO Request",
+      date: displayDate(site.mo_request_date),
+      completedBy: completedByForStep("Onsite Delivery"),
+      answer: site.mo_request ? "yes" : "no",
+    },
+    ...(hasServer
+      ? [
+          {
+            step: "Onsite Delivery",
+            item: "Server On-site Delivery",
+            date: displayDate(site.server_on_site_delivery_date),
+            completedBy: completedByForStep("Onsite Delivery"),
+            answer: (site.server_on_site_delivery_date ? "yes" : "no") as "yes" | "no",
+          },
+        ]
+      : []),
+    ...(hasRack
+      ? [
+          {
+            step: "Onsite Delivery",
+            item: "Rack On-site Delivery",
+            date: displayDate(site.rack_on_site_delivery_date),
+            completedBy: completedByForStep("Onsite Delivery"),
+            answer: (site.rack_on_site_delivery_date ? "yes" : "no") as "yes" | "no",
+          },
+        ]
+      : []),
+    {
+      step: "Onsite Delivery",
+      item: "PDU On-site Delivery",
+      date: displayDate(site.pdu_on_site_delivery_date),
+      completedBy: completedByForStep("Onsite Delivery"),
+      answer: site.pdu_on_site_delivery_date ? "yes" : "no",
+    },
+    {
+      step: "Material Handover",
+      item: "IM Material",
+      date: displayDate(site.im_material_date),
+      completedBy: completedByForStep("Material Handover"),
+      answer: site.im_material ? "yes" : "no",
+    },
+    ...(rackOnly
+      ? []
+      : [
+          {
+            step: "Material Handover",
+            item: "Power-on Material",
+            date: displayDate(site.power_on_material_date),
+            completedBy: completedByForStep("Material Handover"),
+            answer: (site.power_on_material ? "yes" : "no") as "yes" | "no",
+          },
+        ]),
+    {
+      step: "Material Handover",
+      item: "Material Handover",
+      date: displayDate(site.material_handover_date),
+      completedBy: completedByForStep("Material Handover"),
+      answer: site.material_handover_done ? "yes" : "no",
+    },
+    {
+      step: installStep,
+      item: rackOnly
+        ? "Rack Installation"
+        : hasRack
+          ? "Rack + Stacking"
+          : "Server Stacking",
+      date: displayDate(site.rack_server_stacking_date),
+      completedBy: completedByForStep(installStep),
+      answer: site.rack_server_stacking_done ? "yes" : "no",
+    },
+    ...(rackOnly || !hasServer
+      ? []
+      : [
+          {
+            step: installStep,
+            item: hasRack ? "Rack + Server Power On" : "Server Power On",
+            date: displayDate(site.rack_server_power_on_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.rack_server_power_on_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "DAC / ILO Cabling",
+            date: displayDate(site.dac_ilo_cabling_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.dac_ilo_cabling_done ? "yes" : "no") as "yes" | "no",
+          },
+        ]),
+    ...(hasBios
+      ? [
+          {
+            step: installStep,
+            item: "LLD",
+            date: displayDate(site.lld_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.lld_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "BIOS Configuration",
+            date: displayDate(site.bios_configuration_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.bios_configuration_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "Firmware Configuration",
+            date: displayDate(site.firmware_config_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.firmware_config_done ? "yes" : "no") as "yes" | "no",
+          },
+        ]
+      : []),
+    ...(hasOs
+      ? [
+          {
+            step: installStep,
+            item: "OS Installation",
+            date: displayDate(site.os_installation_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.os_installation_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "VM Installation",
+            date: displayDate(site.vm_installation_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.vm_installation_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "N/W Configuration",
+            date: displayDate(site.nw_config_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.nw_config_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "Tools Integration",
+            date: displayDate(site.tools_integration_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.tools_integration_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "MBSS",
+            date: displayDate(site.mbss_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.mbss_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: installStep,
+            item: "VASCAN",
+            date: displayDate(site.vascan_date),
+            completedBy: completedByForStep(installStep),
+            answer: (site.vascan_done ? "yes" : "no") as "yes" | "no",
+          },
+        ]
+      : []),
+    {
+      step: "Acceptance",
+      item: "Handover to Application Team",
+      date: displayDate(site.handover_to_cloud_date),
+      completedBy: completedByForStep("Acceptance"),
+      answer: site.handover_to_cloud_done ? "yes" : "no",
+    },
+    ...(rackOnly
+      ? []
+      : [
+          {
+            step: "Acceptance",
+            item: "HW-AT Request",
+            date: displayDate(site.hwat_request_date),
+            completedBy: completedByForStep("Acceptance"),
+            answer: (site.hwat_request_done ? "yes" : "no") as "yes" | "no",
+          },
+          {
+            step: "Acceptance",
+            item: "HW-AT Sign-off",
+            date: displayDate(site.hwat_signoff_date),
+            completedBy: completedByForStep("Acceptance"),
+            answer: (site.hwat_signoff_received ? "yes" : "no") as "yes" | "no",
+          },
+        ]),
+  ];
+
+  return (
+    <ProjectsSection
+      title="Project Tracking"
+      subtitle="Assign the next stage owner after the previous step is completed. Survey is assigned first after project create."
+      icon={Users}
+    >
+      {error ? <ProjectsErrorBanner>{error}</ProjectsErrorBanner> : null}
+      {followUpFeedback ? (
+        <p className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-foreground">
+          {followUpFeedback}
+        </p>
+      ) : null}
+
+      <div className="space-y-4">
+        <div className="erp-scroll overflow-x-auto rounded-lg border border-border/70">
+          <table className="w-full min-w-180 text-left text-sm">
+            <thead>
+              <tr className="border-b border-border/70 bg-muted/20 text-[11px] uppercase tracking-wide text-muted-foreground">
+                <th className="px-3 py-2 font-medium">Step</th>
+                <th className="px-3 py-2 font-medium">Assigned To</th>
+                <th className="px-3 py-2 font-medium">Date Assigned</th>
+                <th className="px-3 py-2 font-medium">Date Completed</th>
+                <th className="px-3 py-2 font-medium">Status</th>
+                {projectModuleAdmin ? (
+                  <>
+                    <th className="px-3 py-2 font-medium">Follow-up</th>
+                    <th className="px-3 py-2 font-medium">Assignee reply</th>
+                    <th className="px-3 py-2 font-medium">Follow up</th>
+                  </>
+                ) : null}
+              </tr>
+            </thead>
+            <tbody>
+              {(blueprint.stage_assignments ?? []).map((sa) => {
+                const assigneeLabel = sa.assignee_employee_id
+                  ? employeeName(sa.assignee_employee_id)
+                  : "Unassigned";
+                const stageWorkDone = isStageWorkDone(sa.progress_status, sa.work_status);
+                const adminCanViewStage =
+                  Boolean(projectModuleAdmin) &&
+                  site != null &&
+                  canAdminViewStageForm(
+                    site,
+                    sa.stage as Exclude<SiteStageFormKey, "assignment">,
+                    sa.progress_status,
+                    sa.work_status,
+                  );
+                const canFollowUp =
+                  Boolean(sa.assignee_employee_id) && !stageWorkDone;
+                const stageFollowUp = latestFollowUpByStage.get(sa.stage);
+                const stageViewHref =
+                  adminCanViewStage && STAGE_FORM_LINKS[sa.stage as StageKey]
+                    ? STAGE_FORM_LINKS[sa.stage as StageKey]!.href(projectId)
+                    : null;
+                const canAssign = canAssignStageFromTracking(
+                  sa.stage,
+                  blueprint.stage_assignments ?? [],
+                  Boolean(projectModuleAdmin),
+                );
+                const waitingHint = assignWaitingHint(
+                  sa.stage,
+                  blueprint.stage_assignments ?? [],
+                );
+                const draftValue = assignDrafts[sa.stage] ?? sa.assignee_employee_id ?? "";
+                const assignBusy = assignBusyStage === sa.stage;
+
+                return (
+                  <tr key={sa.stage} className="border-b border-border/50 last:border-0">
+                    <td className="px-3 py-2 font-medium text-foreground">
+                      <span className="inline-flex items-center gap-1.5">
+                        {stageViewHref ? (
+                          <Link
+                            href={stageViewHref}
+                            title={`View ${sa.label} progress`}
+                            className="cursor-pointer text-foreground transition-colors duration-200 hover:text-primary hover:underline"
+                          >
+                            {sa.label}
+                          </Link>
+                        ) : (
+                          sa.label
+                        )}
+                        {stageViewHref ? (
+                          <Link
+                            href={stageViewHref}
+                            title={`View ${sa.label} progress`}
+                            aria-label={`View ${sa.label} progress`}
+                            className="inline-flex cursor-pointer text-primary transition-colors duration-200 hover:text-primary/80"
+                          >
+                            <ArrowUpRight className="size-3.5 shrink-0" aria-hidden />
+                          </Link>
+                        ) : null}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {canAssign ? (
+                        <div className="flex min-w-[220px] flex-col gap-1.5">
+                          <div className="flex items-center gap-2">
+                            <FinanceSelect
+                              value={draftValue}
+                              className="h-8 min-w-0 flex-1"
+                              aria-label={`Assign ${sa.label}`}
+                              disabled={assignBusy}
+                              onChange={(e) =>
+                                setAssignDrafts((prev) => ({
+                                  ...prev,
+                                  [sa.stage]: e.target.value,
+                                }))
+                              }
+                            >
+                              <option value="">Select person…</option>
+                              {employeeOptions.map((emp) => (
+                                <option key={emp.id} value={emp.id}>
+                                  {employeeNameOnly(emp.label)}
+                                </option>
+                              ))}
+                            </FinanceSelect>
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant="outline"
+                              className="h-8 shrink-0 cursor-pointer"
+                              disabled={assignBusy || !draftValue.trim()}
+                              onClick={() => void onAssignStage(sa.stage)}
+                            >
+                              {assignBusy ? "Saving…" : sa.assignee_employee_id ? "Update" : "Assign"}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : waitingHint && !sa.assignee_employee_id ? (
+                        <span className="text-xs italic text-muted-foreground">{waitingHint}</span>
+                      ) : (
+                        assigneeLabel
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {displayDate(sa.assigned_date)}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {displayDate(sa.completed_date)}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {statusText(sa.work_status, sa.progress_status)}
+                    </td>
+                    {projectModuleAdmin ? (
+                      <>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {stageFollowUp ? (
+                            stageFollowUp.has_reply ? (
+                              <span className="font-medium text-foreground">Replied</span>
+                            ) : (
+                              <span className="text-amber-700 dark:text-amber-500">Awaiting reply</span>
+                            )
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td className="max-w-52 px-3 py-2 text-muted-foreground">
+                          {stageFollowUp?.latest_reply?.trim() ? (
+                            <span
+                              className="line-clamp-2 text-sm text-foreground"
+                              title={stageFollowUp.latest_reply}
+                            >
+                              {stageFollowUp.latest_reply}
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="xs"
+                            className="cursor-pointer gap-1 transition-colors duration-200"
+                            disabled={!canFollowUp}
+                            onClick={() => {
+                              setFollowUpFeedback(null);
+                              setFollowUpNote("");
+                              setFollowUpTarget({
+                                stage: sa.stage,
+                                label: sa.label,
+                                assigneeName: assigneeLabel,
+                              });
+                            }}
+                          >
+                            <Bell className="size-3" />
+                            Follow up
+                          </Button>
+                        </td>
+                      </>
+                    ) : null}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {projectModuleAdmin ? (
+          <div className="erp-scroll overflow-x-auto rounded-lg border border-border/70">
+            <table className="w-full min-w-180 text-left text-sm">
+              <thead>
+                <tr className="border-b border-border/70 bg-muted/20 text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Follow-up date</th>
+                  <th className="px-3 py-2 font-medium">Step</th>
+                  <th className="px-3 py-2 font-medium">Assigned To</th>
+                  <th className="px-3 py-2 font-medium">Note</th>
+                  <th className="px-3 py-2 font-medium">Reply</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {followUps.length > 0 ? (
+                  followUps.map((fu) => (
+                    <tr key={fu.id} className="border-b border-border/50 last:border-0">
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {displayDateTime(fu.created_at)}
+                      </td>
+                      <td className="px-3 py-2 font-medium text-foreground">
+                        {fu.stage_label || fu.stage || "-"}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {employeeName(fu.recipient_employee_id)}
+                      </td>
+                      <td className="max-w-48 px-3 py-2 text-muted-foreground">
+                        {fu.note?.trim() ? (
+                          <span className="line-clamp-3 whitespace-pre-wrap">{fu.note}</span>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                      <td className="max-w-56 px-3 py-2 text-muted-foreground">
+                        {fu.latest_reply?.trim() ? (
+                          <span className="line-clamp-2" title={fu.latest_reply}>
+                            {fu.latest_reply}
+                          </span>
+                        ) : (
+                          <span className="text-xs italic">Awaiting reply</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground capitalize">
+                        {fu.has_reply ? "Replied" : fu.delivery_status || fu.status || "-"}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-3 text-xs text-muted-foreground">
+                      No follow-ups sent yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        <div className="erp-scroll overflow-x-auto rounded-lg border border-border/70">
+          <table className="w-full min-w-180 text-left text-sm">
+            <thead>
+              <tr className="border-b border-border/70 bg-muted/20 text-[11px] uppercase tracking-wide text-muted-foreground">
+                <th className="px-3 py-2 font-medium">Step</th>
+                <th className="px-3 py-2 font-medium">Checkpoint</th>
+                <th className="px-3 py-2 font-medium">Yes / No</th>
+                <th className="px-3 py-2 font-medium">Completed By</th>
+                <th className="px-3 py-2 font-medium">Date Completed</th>
+              </tr>
+            </thead>
+            <tbody>
+              {stageDates.length > 0 ? (
+                stageDates.map((row) => (
+                  <tr
+                    key={`${row.step}-${row.item}`}
+                    className="border-b border-border/50 last:border-0"
+                  >
+                    <td className="px-3 py-2 font-medium text-foreground">{row.step}</td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={cn(
+                          "inline-flex rounded-md border px-2 py-0.5 text-xs font-medium",
+                          row.answer === "yes"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                            : "border-red-200 bg-red-50 text-red-800",
+                        )}
+                      >
+                        {row.item}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2">
+                      <span
+                        className={cn(
+                          "inline-flex min-w-10 justify-center rounded-md border px-2 py-0.5 text-xs font-semibold uppercase tracking-wide",
+                          row.answer === "yes"
+                            ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                            : "border-red-200 bg-red-50 text-red-800",
+                        )}
+                      >
+                        {row.answer === "yes" ? "Yes" : "No"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">{row.completedBy}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{row.date}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-3 py-3 text-xs text-muted-foreground">
+                    No checkpoints for this delivery type.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {projectModuleAdmin ? (
+        <ConfirmDialog
+          open={Boolean(followUpTarget)}
+          title="Send stage follow-up"
+          description={
+            followUpTarget
+              ? `Notify ${followUpTarget.assigneeName} about ${followUpTarget.label}.`
+              : undefined
+          }
+          confirmLabel="Send follow-up"
+          cancelLabel="Cancel"
+          busy={followUpBusy}
+          onCancel={() => {
+            if (followUpBusy) return;
+            setFollowUpTarget(null);
+            setFollowUpNote("");
+          }}
+          onConfirm={() => {
+            if (!followUpTarget) return;
+            setFollowUpBusy(true);
+            void followUpSiteStage(projectId, followUpTarget.stage, followUpNote)
+              .then(async (result) => {
+                setFollowUpFeedback(result.message);
+                setFollowUpTarget(null);
+                setFollowUpNote("");
+                await refreshFollowUpsOnly();
+              })
+              .catch((err) => {
+                setFollowUpFeedback(
+                  err instanceof ApiClientError
+                    ? err.message
+                    : err instanceof Error
+                      ? err.message
+                      : "Failed to send follow-up",
+                );
+              })
+              .finally(() => setFollowUpBusy(false));
+          }}
+        >
+          <label className="mt-3 block space-y-1.5">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Note (optional)
+            </span>
+            <textarea
+              value={followUpNote}
+              onChange={(e) => setFollowUpNote(e.target.value)}
+              rows={3}
+              placeholder="Add a short follow-up note…"
+              className="w-full rounded-md border border-border/80 bg-background px-2.5 py-2 text-sm text-foreground outline-none transition-colors duration-200 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40"
+              disabled={followUpBusy}
+            />
+          </label>
+        </ConfirmDialog>
+      ) : null}
+    </ProjectsSection>
+  );
+}
+
+/** Overview only - stage details are filled on dedicated form pages. */
+export function SiteInstallationWorkflow({ projectId }: { projectId: string }) {
+  const { projectModuleAdmin } = useAuthUser();
+  const [row, setRow] = useState<SiteInstallation | null>(null);
+  const [blueprint, setBlueprint] = useState<SiteInstallationBlueprint | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [canOpenForm, setCanOpenForm] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const [site, bp, project, lookups, meRes] = await Promise.all([
         getSiteInstallationByProject(projectId),
         getSiteInstallationBlueprint(projectId),
+        getProject(projectId),
+        loadIntakeSummaryLookups(),
+        authService.me(),
       ]);
       setRow(site);
       setBlueprint(bp);
-      setDraft(fromRow(site));
+      const parsed = parseAuthMe(meRes.data);
+      const employeeId = resolveSessionEmployeeId(lookups.employees, parsed.user);
+      setCanOpenForm(
+        canOpenCurrentStageForm(project, site, employeeId, parsed.projectModuleAdmin),
+      );
     } catch (err) {
       setError(
         err instanceof ApiClientError ? err.message : "Failed to load site installation workflow",
@@ -460,143 +974,98 @@ export function SiteInstallationWorkflow({
 
   const locked = row?.status === "completed" || blueprint?.terminal === true;
   const stage = (blueprint?.state ?? row?.workflow_stage ?? "intake") as StageKey;
+  const completedStageLinks = useMemo(() => {
+    if (!row || !blueprint || !locked) return [];
+    return (blueprint.stage_assignments ?? [])
+      .filter((sa) =>
+        canAdminViewStageForm(
+          row,
+          sa.stage as Exclude<SiteStageFormKey, "assignment">,
+          sa.progress_status,
+          sa.work_status,
+        ),
+      )
+      .map((sa) => {
+        const link = STAGE_FORM_LINKS[sa.stage as StageKey];
+        if (!link) return null;
+        const label =
+          sa.stage === "installation" && deliveryIsRackOnly(row.delivery_type)
+            ? "View Installation"
+            : `View ${sa.label}`;
+        return { key: sa.stage, href: link.href(projectId), label };
+      })
+      .filter((entry): entry is { key: string; href: string; label: string } => entry != null);
+  }, [blueprint, locked, projectId, row]);
   const currentIdx = useMemo(() => {
     const stages = blueprint?.stages ?? [];
     return stages.findIndex((s) => s.key === stage);
   }, [blueprint, stage]);
 
-  async function save() {
-    if (!draft) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const saved = await updateSiteInstallationByProject(projectId, toPayload(draft));
-      setRow(saved);
-      setDraft(fromRow(saved));
-      setBlueprint(await getSiteInstallationBlueprint(projectId));
-      onChanged?.();
-    } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? `${err.message}${err.errors.length ? `: ${err.errors.join(", ")}` : ""}`
-          : "Failed to save site installation",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function advance(action: string) {
-    if (!draft) return;
-    setBusy(true);
-    setError(null);
-    try {
-      // Persist current stage fields first so gates see latest values
-      await updateSiteInstallationByProject(projectId, toPayload(draft));
-      const advanced = await advanceSiteInstallation(projectId, action);
-      setRow(advanced);
-      setDraft(fromRow(advanced));
-      setBlueprint(await getSiteInstallationBlueprint(projectId));
-      onChanged?.();
-    } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? `${err.message}${err.errors.length ? `: ${err.errors.join(", ")}` : ""}`
-          : "Failed to advance workflow",
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (loading && !row) {
     return <div className="h-36 animate-pulse rounded-xl bg-muted/60" />;
   }
 
-  if (!row || !draft || !blueprint) {
+  if (!row || !blueprint) {
     return <ProjectsErrorBanner>{error ?? "Site workflow unavailable."}</ProjectsErrorBanner>;
   }
 
-  const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
-    setDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
+  const formLink = STAGE_FORM_LINKS[stage];
+  const formLinkLabel =
+    stage === "installation" && deliveryIsRackOnly(row.delivery_type)
+      ? "Open Installation form"
+      : formLink?.label;
 
   return (
     <ProjectsSection
       title="Site Installation Workflow"
       subtitle={`${row.document_number} · ${siteDeliveryTypeLabel(row.delivery_type)} · ${siteWorkflowStageLabel(stage)}`}
       icon={Cable}
-      actions={
-        <div className="flex flex-wrap items-center gap-2">
-          {stage === "survey" && !locked ? (
-            <Link
-              href={`/projects/projects/${projectId}/survey`}
-              className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors duration-200 hover:bg-primary/90"
-            >
-              Open Survey form
-            </Link>
-          ) : null}
-          {stage === "scm" && !locked ? (
-            <Link
-              href={`/projects/projects/${projectId}/scm`}
-              className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors duration-200 hover:bg-primary/90"
-            >
-              Open SCM form
-            </Link>
-          ) : null}
-          {stage === "installation" && !locked ? (
-            <Link
-              href={`/projects/projects/${projectId}/installation`}
-              className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors duration-200 hover:bg-primary/90"
-            >
-              Open Installation form
-            </Link>
-          ) : null}
-          {stage === "configuration" && !locked ? (
-            <Link
-              href={`/projects/projects/${projectId}/configuration`}
-              className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors duration-200 hover:bg-primary/90"
-            >
-              Open Configuration form
-            </Link>
-          ) : null}
-          {stage === "acceptance" && !locked ? (
-            <Link
-              href={`/projects/projects/${projectId}/acceptance`}
-              className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors duration-200 hover:bg-primary/90"
-            >
-              Open Acceptance form
-            </Link>
-          ) : null}
-          {!locked ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="cursor-pointer"
-              disabled={busy}
-              onClick={() => void save()}
-            >
-              Save stage
-            </Button>
-          ) : null}
-          {(blueprint.allowed_actions ?? []).map((action) => (
-            <Button
-              key={action}
-              type="button"
-              size="sm"
-              className="cursor-pointer"
-              disabled={busy || locked}
-              onClick={() => void advance(action)}
-            >
-              {blueprint.action_labels?.[action] ?? action}
-            </Button>
-          ))}
-        </div>
-      }
+      bodyClassName="space-y-4"
     >
       {error ? <ProjectsErrorBanner>{error}</ProjectsErrorBanner> : null}
 
-      <div className="erp-scroll mb-3 flex items-center gap-0.5 overflow-x-auto rounded-lg border border-border/70 bg-muted/20 px-2 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {formLink && !locked && canOpenForm ? (
+          <Link
+            href={formLink.href(projectId)}
+            className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground transition-colors duration-200 hover:bg-primary/90"
+          >
+            {formLinkLabel}
+          </Link>
+        ) : null}
+        {stage === "intake" && !locked ? (
+          <p className="text-xs text-muted-foreground">
+            Intake fields are edited from Edit Project. Assign the Survey owner from Project Tracking
+            below.
+          </p>
+        ) : null}
+        {formLink && !locked && !canOpenForm && stage !== "intake" ? (
+          <p className="text-xs text-muted-foreground">
+            This step is assigned to a stage owner. Track progress below; only the assignee can open
+            the workflow form.
+          </p>
+        ) : null}
+        {locked && projectModuleAdmin && completedStageLinks.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {completedStageLinks.map((link) => (
+              <Link
+                key={link.key}
+                href={link.href}
+                className="inline-flex h-8 cursor-pointer items-center justify-center rounded-md border border-border/80 bg-card px-3 text-xs font-medium text-foreground transition-colors duration-200 hover:bg-muted"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        ) : null}
+        {locked ? (
+          <p className="text-xs text-muted-foreground">
+            Workflow completed - open any completed step above in read-only mode.
+          </p>
+        ) : null}
+      </div>
+
+      <div className="erp-scroll flex flex-wrap items-center gap-1 rounded-lg border border-border/70 bg-muted/20 px-2 py-2">
         {blueprint.stages.map((s, idx) => {
           const Icon = STAGE_ICONS[s.key] ?? ClipboardCheck;
           const isDone = idx < currentIdx;
@@ -632,433 +1101,10 @@ export function SiteInstallationWorkflow({
         })}
       </div>
 
-      <div className="space-y-4">
-        <div className="grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {/* Header verticals — always visible; editable only in Intake */}
-          <label className="grid gap-1 text-xs sm:col-span-2 lg:col-span-1">
-            <span className="font-medium text-muted-foreground">Delivery Type</span>
-            <select
-              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-              value={draft.delivery_type}
-              disabled={locked || stage !== "intake"}
-              onChange={(e) => set("delivery_type", e.target.value)}
-            >
-              {SITE_DELIVERY_TYPES.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <TextField
-            label="Site Name"
-            required
-            value={draft.site_name}
-            disabled={locked || stage !== "intake"}
-            onChange={(v) => set("site_name", v)}
-          />
-          <TextField
-            label="Power Requirements"
-            required
-            value={draft.power_requirements}
-            disabled={locked || stage !== "intake"}
-            onChange={(v) => set("power_requirements", v)}
-          />
-          <CheckboxField
-            label="RFAI Request"
-            checked={draft.rfai_request_done}
-            disabled={locked || stage !== "intake"}
-            onChange={(v) => set("rfai_request_done", v)}
-          />
-          <TextField
-            label="RFAI Number"
-            required
-            value={draft.rfai_number}
-            disabled={locked || stage !== "intake"}
-            onChange={(v) => set("rfai_number", v)}
-          />
-          <TextField
-            label="Fabric Partner"
-            value={draft.fabric_partner}
-            disabled={locked || stage !== "intake"}
-            onChange={(v) => set("fabric_partner", v)}
-          />
-          <TextField
-            label="Application"
-            value={draft.application}
-            disabled={locked || stage !== "intake"}
-            onChange={(v) => set("application", v)}
-          />
-        </div>
-
-        {stage === "survey" && (
-          <div className="space-y-3 border-t border-border/70 pt-3">
-            {deliveryIncludesRack(draft.delivery_type) ? (
-              <div className="grid items-start gap-3 lg:grid-cols-3">
-                <MaterialLinesField
-                  label="Cable"
-                  lines={draft.cable_lines}
-                  options={CABLE_TYPES}
-                  disabled={locked}
-                  addLabel="Add cable type"
-                  onChange={(next) => set("cable_lines", next)}
-                />
-                <MaterialLinesField
-                  label="Industrial Socket"
-                  lines={draft.socket_lines}
-                  options={INDUSTRIAL_SOCKET_TYPES}
-                  disabled={locked}
-                  addLabel="Add socket type"
-                  onChange={(next) => set("socket_lines", next)}
-                />
-                <MaterialLinesField
-                  label="Lugs"
-                  lines={draft.lug_lines}
-                  options={LUG_TYPES}
-                  disabled={locked}
-                  addLabel="Add lug type"
-                  onChange={(next) => set("lug_lines", next)}
-                />
-              </div>
-            ) : (
-              <div className="grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                <TextField
-                  label="Cable Length"
-                  required
-                  value={draft.cable_length}
-                  disabled={locked}
-                  onChange={(v) => set("cable_length", v)}
-                />
-                <CheckboxField
-                  label="Industrial Socket"
-                  checked={draft.industrial_socket}
-                  disabled={locked}
-                  onChange={(v) => set("industrial_socket", v)}
-                />
-                <CheckboxField
-                  label="Lugs"
-                  checked={draft.lugs}
-                  disabled={locked}
-                  onChange={(v) => set("lugs", v)}
-                />
-              </div>
-            )}
-            <div className="grid items-start gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <TextField
-                label="Tile Details"
-                required
-                value={draft.tile_details}
-                disabled={locked}
-                onChange={(v) => set("tile_details", v)}
-              />
-              <CheckboxField
-                label="Power-on Material"
-                checked={draft.power_on_material}
-                disabled={locked}
-                onChange={(v) => {
-                  set("power_on_material", v);
-                  if (!v) set("power_on_material_date", "");
-                }}
-              />
-              {draft.power_on_material ? (
-                <DateField
-                  label="Power-on Material Date"
-                  required
-                  value={draft.power_on_material_date}
-                  disabled={locked}
-                  onChange={(v) => set("power_on_material_date", v)}
-                />
-              ) : null}
-              <CheckboxField
-                label="Survey Completed"
-                checked={draft.survey_completed}
-                disabled={locked}
-                onChange={(v) => {
-                  set("survey_completed", v);
-                  if (!v) set("survey_completed_date", "");
-                }}
-              />
-              {draft.survey_completed ? (
-                <DateField
-                  label="Survey Completed Date"
-                  required
-                  value={draft.survey_completed_date}
-                  disabled={locked}
-                  onChange={(v) => set("survey_completed_date", v)}
-                />
-              ) : null}
-              <CheckboxField
-                label="Space Available"
-                checked={draft.space_available}
-                disabled={locked}
-                onChange={(v) => {
-                  set("space_available", v);
-                  if (!v) set("space_available_date", "");
-                }}
-              />
-              {draft.space_available ? (
-                <DateField
-                  label="Space Available Date"
-                  required
-                  value={draft.space_available_date}
-                  disabled={locked}
-                  onChange={(v) => set("space_available_date", v)}
-                />
-              ) : null}
-              <CheckboxField
-                label="Power Available"
-                checked={draft.power_available}
-                disabled={locked}
-                onChange={(v) => {
-                  set("power_available", v);
-                  if (!v) set("power_available_date", "");
-                }}
-              />
-              {draft.power_available ? (
-                <DateField
-                  label="Power Available Date"
-                  required
-                  value={draft.power_available_date}
-                  disabled={locked}
-                  onChange={(v) => set("power_available_date", v)}
-                />
-              ) : null}
-            </div>
-          </div>
-        )}
-
-        {stage === "scm" && (
-          <div className="grid items-start gap-3 border-t border-border/70 pt-3 sm:grid-cols-2 lg:grid-cols-3">
-            <NumberField
-              label="Server QTY"
-              required
-              value={draft.server_qty}
-              disabled={locked}
-              onChange={(v) => set("server_qty", v)}
-            />
-            {deliveryIncludesRack(draft.delivery_type) ? (
-              <NumberField
-                label="Rack Qty"
-                required
-                value={draft.rack_qty}
-                disabled={locked}
-                onChange={(v) => set("rack_qty", v)}
-              />
-            ) : null}
-            <DateField
-              label="Server WH Delivery Date"
-              value={draft.server_wh_delivery_date}
-              disabled={locked}
-              onChange={(v) => set("server_wh_delivery_date", v)}
-            />
-            <DateField
-              label="Server On Site Delivery"
-              value={draft.server_on_site_delivery_date}
-              disabled={locked}
-              onChange={(v) => set("server_on_site_delivery_date", v)}
-            />
-            {deliveryIncludesRack(draft.delivery_type) ? (
-              <>
-                <DateField
-                  label="Rack WH Delivery Date"
-                  value={draft.rack_wh_delivery_date}
-                  disabled={locked}
-                  onChange={(v) => set("rack_wh_delivery_date", v)}
-                />
-                <DateField
-                  label="Rack On Site Delivery"
-                  value={draft.rack_on_site_delivery_date}
-                  disabled={locked}
-                  onChange={(v) => set("rack_on_site_delivery_date", v)}
-                />
-              </>
-            ) : null}
-            <DateField
-              label="PDU WH Delivery Date"
-              value={draft.pdu_wh_delivery_date}
-              disabled={locked}
-              onChange={(v) => set("pdu_wh_delivery_date", v)}
-            />
-            <DateField
-              label="PDU On Site Delivery Date"
-              value={draft.pdu_on_site_delivery_date}
-              disabled={locked}
-              onChange={(v) => set("pdu_on_site_delivery_date", v)}
-            />
-            <CheckboxField
-              label="MO Request"
-              checked={draft.mo_request}
-              disabled={locked}
-              onChange={(v) => {
-                set("mo_request", v);
-                if (!v) set("mo_request_date", "");
-              }}
-            />
-            {draft.mo_request ? (
-              <DateField
-                label="MO Request Date"
-                required
-                value={draft.mo_request_date}
-                disabled={locked}
-                onChange={(v) => set("mo_request_date", v)}
-              />
-            ) : null}
-            <CheckboxField
-              label="IM Material"
-              checked={draft.im_material}
-              disabled={locked}
-              onChange={(v) => {
-                set("im_material", v);
-                if (!v) set("im_material_date", "");
-              }}
-            />
-            {draft.im_material ? (
-              <DateField
-                label="IM Material Date"
-                required
-                value={draft.im_material_date}
-                disabled={locked}
-                onChange={(v) => set("im_material_date", v)}
-              />
-            ) : null}
-            <CheckboxField
-              label="Material Handover (WH → Site)"
-              checked={draft.material_handover_done}
-              disabled={locked}
-              onChange={(v) => {
-                set("material_handover_done", v);
-                if (!v) set("material_handover_date", "");
-              }}
-            />
-            {draft.material_handover_done ? (
-              <DateField
-                label="Material Handover Date"
-                required
-                value={draft.material_handover_date}
-                disabled={locked}
-                onChange={(v) => set("material_handover_date", v)}
-              />
-            ) : null}
-          </div>
-        )}
-
-        {stage === "installation" && (
-          <div className="grid items-start gap-3 border-t border-border/70 pt-3 sm:grid-cols-2 lg:grid-cols-3">
-            <CheckboxField
-              label={
-                deliveryIsRackOnly(draft.delivery_type)
-                  ? "Rack Installation"
-                  : "Rack Installation + Server Stacking"
-              }
-              checked={draft.rack_server_stacking_done}
-              disabled={locked}
-              onChange={(v) => set("rack_server_stacking_done", v)}
-            />
-            {!deliveryIsRackOnly(draft.delivery_type) ? (
-              <>
-                <CheckboxField
-                  label="Rack + Server Power On"
-                  checked={draft.rack_server_power_on_done}
-                  disabled={locked}
-                  onChange={(v) => set("rack_server_power_on_done", v)}
-                />
-                <CheckboxField
-                  label="DAC/ILO Cabling"
-                  checked={draft.dac_ilo_cabling_done}
-                  disabled={locked}
-                  onChange={(v) => set("dac_ilo_cabling_done", v)}
-                />
-              </>
-            ) : (
-              <p className="self-center text-xs text-muted-foreground sm:col-span-2">
-                Rack Installation only: skip server power-on / DAC-ILO — advance to Handover to
-                Cloud.
-              </p>
-            )}
-          </div>
-        )}
-
-        {stage === "configuration" && (
-          <div className="grid items-start gap-3 border-t border-border/70 pt-3 sm:grid-cols-2 lg:grid-cols-3">
-            <CheckboxField
-              label="BIOS Configuration"
-              checked={draft.bios_configuration_done}
-              disabled={locked}
-              onChange={(v) => set("bios_configuration_done", v)}
-            />
-            <CheckboxField
-              label="Firmware / N/W Configuration"
-              checked={draft.firmware_nw_config_done}
-              disabled={locked}
-              onChange={(v) => set("firmware_nw_config_done", v)}
-            />
-            <CheckboxField
-              label="LLD Availability"
-              checked={draft.lld_done}
-              disabled={locked}
-              onChange={(v) => set("lld_done", v)}
-            />
-            {deliveryIncludesOs(draft.delivery_type) ? (
-              <>
-                <CheckboxField
-                  label="OS Installation"
-                  checked={draft.os_installation_done}
-                  disabled={locked}
-                  onChange={(v) => set("os_installation_done", v)}
-                />
-                <CheckboxField
-                  label="MBSS"
-                  checked={draft.mbss_done}
-                  disabled={locked}
-                  onChange={(v) => set("mbss_done", v)}
-                />
-              </>
-            ) : null}
-          </div>
-        )}
-
-        {stage === "acceptance" && (
-          <div className="grid items-start gap-3 border-t border-border/70 pt-3 sm:grid-cols-2 lg:grid-cols-3">
-            <CheckboxField
-              label="Handover to Cloud (HO Cloud)"
-              checked={draft.handover_to_cloud_done}
-              disabled={locked}
-              onChange={(v) => set("handover_to_cloud_done", v)}
-            />
-            {deliveryNeedsHwat(draft.delivery_type) ? (
-              <>
-                <CheckboxField
-                  label="HWAT Request"
-                  checked={draft.hwat_request_done}
-                  disabled={locked}
-                  onChange={(v) => set("hwat_request_done", v)}
-                />
-                <CheckboxField
-                  label="HWAT Sign off received from Circle"
-                  checked={draft.hwat_signoff_received}
-                  disabled={locked}
-                  onChange={(v) => set("hwat_signoff_received", v)}
-                />
-              </>
-            ) : (
-              <p className="self-center text-xs text-muted-foreground sm:col-span-2">
-                Rack Installation only: HWAT is skipped — complete Handover to Cloud to close.
-              </p>
-            )}
-          </div>
-        )}
-
-        <label className="grid gap-1 text-xs">
-          <span className="font-medium text-muted-foreground">Remarks</span>
-          <textarea
-            value={draft.remarks}
-            disabled={locked}
-            rows={2}
-            onChange={(e) => set("remarks", e.target.value)}
-            className="rounded-md border border-input bg-background px-2 py-1.5 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          />
-        </label>
-      </div>
+      <p className="text-xs text-muted-foreground">
+        Open the stage form to enter details and complete the step. Fields are not edited on this
+        overview.
+      </p>
     </ProjectsSection>
   );
 }

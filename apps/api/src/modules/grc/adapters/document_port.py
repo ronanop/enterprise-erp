@@ -1,4 +1,4 @@
-"""Document port — UUID-only stubs; no doc_* FK / ORM writes."""
+"""Document port - UUID-only stubs; no doc_* FK / ORM writes."""
 
 from uuid import UUID
 

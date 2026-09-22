@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 const SUCCESS = new Set([
   "posted",
@@ -145,7 +146,7 @@ const DANGER = new Set([
 ]);
 
 export function FinanceStatusBadge({ status }: { status: string | null | undefined }) {
-  const value = (status ?? "—").toString();
+  const value = (status ?? "-").toString();
   const key = value.toLowerCase();
   const variant = SUCCESS.has(key)
     ? "success"
@@ -155,9 +156,18 @@ export function FinanceStatusBadge({ status }: { status: string | null | undefin
         ? "destructive"
         : "outline";
 
+  const dotColor = variant === "success"
+    ? "bg-emerald-500"
+    : variant === "warning"
+      ? "bg-amber-500"
+      : variant === "destructive"
+        ? "bg-destructive"
+        : "bg-muted-foreground/60";
+
   return (
-    <Badge variant={variant} className="font-medium capitalize">
-      {value.replaceAll("_", " ") || "—"}
+    <Badge variant={variant} className="font-medium capitalize gap-1.5">
+      <span className={cn("size-1.5 rounded-full shrink-0", dotColor)} aria-hidden />
+      {value.replaceAll("_", " ") || "-"}
     </Badge>
   );
 }

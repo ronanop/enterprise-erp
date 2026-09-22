@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class LoginRequest(BaseModel):
@@ -20,6 +20,15 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class MicrosoftExchangeRequest(BaseModel):
+    code: str = Field(min_length=8)
+
+
+class MicrosoftLoginConfigResponse(BaseModel):
+    enabled: bool
+    authorization_path: str = "/auth/microsoft/login"
+
+
 class TokenResponse(BaseModel):
     access_token: str | None = None
     refresh_token: str | None = None
@@ -28,15 +37,6 @@ class TokenResponse(BaseModel):
     mfa_required: bool = False
     mfa_challenge_token: str | None = None
     redirect_to: str | None = None
-
-
-class MicrosoftLoginConfigResponse(BaseModel):
-    enabled: bool
-    authorization_path: str = "/auth/microsoft/login"
-
-
-class MicrosoftExchangeRequest(BaseModel):
-    code: str = Field(min_length=8)
 
 
 class TenantCreateRequest(BaseModel):
@@ -78,10 +78,56 @@ class UserResponse(BaseModel):
     tenant_id: UUID
     email: str
     display_name: str
+    employee_id: UUID | None = None
     user_type: str
     status: str
     mfa_enabled: bool
     role_ids: list[UUID] = Field(default_factory=list)
+    assigned_module_keys: list[str] = Field(default_factory=list)
+    admin_module_keys: list[str] = Field(default_factory=list)
+
+
+class UserModulesUpdateRequest(BaseModel):
+    module_keys: list[str] = Field(default_factory=list)
+
+
+class UserModulesResponse(BaseModel):
+    user_id: UUID
+    assigned_module_keys: list[str] = Field(default_factory=list)
+    admin_module_keys: list[str] = Field(default_factory=list)
+    effective_module_keys: list[str] = Field(default_factory=list)
+
+
+class M365UserSyncResultResponse(BaseModel):
+    domain: str
+    directory_count: int
+    created: int
+    updated: int
+
+
+class ModuleUserOption(BaseModel):
+    user_id: UUID
+    display_name: str
+    email: str
+
+
+class ModuleUserRecord(BaseModel):
+    user_id: UUID
+    display_name: str
+    email: str
+    role: str
+    status: str
+    # Service module only: service_engineer | field_engineer
+    service_job_role: str | None = None
+
+
+class ModuleUserCreateRequest(BaseModel):
+    user_id: UUID
+    service_job_role: str | None = None
+
+
+class ModuleUserServiceRoleUpdateRequest(BaseModel):
+    service_job_role: str
 
 
 class RoleCreateRequest(BaseModel):
@@ -113,6 +159,15 @@ class PermissionResponse(BaseModel):
     action: str
     module: str
     description: str | None = None
+
+
+class ModuleMemberOption(BaseModel):
+    """Selectable team member (master_employee id) for module-scoped pickers."""
+
+    id: UUID
+    label: str
+    email: str
+    user_id: UUID
 
 
 class AssignRoleRequest(BaseModel):
@@ -148,19 +203,61 @@ class WorkflowActionRequest(BaseModel):
 
 
 class NotificationTemplateCreateRequest(BaseModel):
-    template_code: str
-    template_name: str
-    channel: str
-    body_template: str
-    subject_template: str | None = None
+    model_config = ConfigDict(extra="forbid")
+
+    template_code: str = Field(min_length=1, max_length=100, pattern=r"^[^<>]{1,100}$")
+    template_name: str = Field(min_length=1, max_length=255, pattern=r"^[^<>]{1,255}$")
+    channel: str = Field(min_length=1, max_length=30, pattern=r"^[a-zA-Z0-9_\-]{1,30}$")
+    body_template: str = Field(min_length=1, max_length=100_000)
+    subject_template: str | None = Field(default=None, max_length=500, pattern=r"^[^<>]{0,500}$")
 
 
 class NotificationSendRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     template_id: UUID
-    event_type: str
+    event_type: str = Field(min_length=1, max_length=100, pattern=r"^[a-zA-Z0-9_.\-]{1,100}$")
     recipient_user_id: UUID | None = None
-    recipient_address: str | None = None
+    recipient_address: str | None = Field(default=None, max_length=255)
     payload_json: dict | None = None
+
+
+class EmailComposeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    to_address: str = Field(min_length=3, max_length=255)
+    subject: str = Field(min_length=1, max_length=500)
+    body_html: str = Field(min_length=1, max_length=500_000)
+    event_type: str = Field(
+        default="email.compose",
+        min_length=1,
+        max_length=100,
+        pattern=r"^[a-zA-Z0-9_.\-]{1,100}$",
+    )
+    template_id: UUID | None = None
+    payload_json: dict | None = None
+
+
+class DeviceTokenRegisterRequest(BaseModel):
+    token: str
+    platform: str = "web"
+
+
+class NotificationInboxItemResponse(BaseModel):
+    id: UUID
+    title: str
+    body: str
+    kind: str
+    unread: bool
+    created_at: datetime
+    href: str | None = None
+    read_at: datetime | None = None
+
+
+class NotificationUnreadCountResponse(BaseModel):
+    unread_count: int
+
+
 
 
 class SettingUpsertRequest(BaseModel):

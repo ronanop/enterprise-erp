@@ -33,5 +33,15 @@ class WorkflowStateException(FoundationDomainException):
 
 
 class MicrosoftLoginNotConfiguredException(FoundationDomainException):
-    def __init__(self, message: str = "Microsoft sign-in is not configured on this environment") -> None:
+    def __init__(
+        self, message: str = "Microsoft sign-in is not configured on this environment"
+    ) -> None:
         super().__init__(message, status_code=503)
+
+
+class OrganizationLoginForbiddenException(FoundationDomainException):
+    def __init__(
+        self,
+        message: str = "Microsoft sign-in is only available for Organization module users",
+    ) -> None:
+        super().__init__(message, status_code=403)

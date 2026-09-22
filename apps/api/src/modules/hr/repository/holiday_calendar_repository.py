@@ -19,11 +19,10 @@ class HolidayCalendarRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrHolidayCalendar, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(HrHolidayCalendar).where(
-            HrHolidayCalendar.company_id == company_id,
-            HrHolidayCalendar.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(HrHolidayCalendar).where(HrHolidayCalendar.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(HrHolidayCalendar.company_id == company_id)
         stmt = self.apply_hr_filter(stmt, HrHolidayCalendar, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 
@@ -52,3 +51,17 @@ class HolidayCalendarRepository(HrScopedRepository):
             row.version = int(row.version or 1) + 1
         self.db.flush()
         return row
+
+    def soft_delete(self, ctx: TenantContext, row_id: UUID) -> bool:
+        row = self.get(ctx, row_id)
+        if row is None:
+            return False
+        row.is_deleted = True
+        row.deleted_at = utcnow()
+        row.deleted_by = ctx.user_id
+        row.updated_at = utcnow()
+        row.updated_by = ctx.user_id
+        if hasattr(row, "version"):
+            row.version = int(row.version or 1) + 1
+        self.db.flush()
+        return True

@@ -188,12 +188,12 @@ export function FiscalHubPage({ initialTab = "dashboard" }: Props) {
       {tab === "dashboard" ? (
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <FinanceKpiCard label="Active Fiscal Year" value={summary?.active_fiscal_year?.fiscal_year_code ?? "—"} icon={CalendarRange} />
-            <FinanceKpiCard label="Total Fiscal Years" value={String(summary?.total_fiscal_years ?? "—")} icon={CalendarRange} />
-            <FinanceKpiCard label="Open Periods" value={String(summary?.open_periods ?? "—")} icon={Unlock} tone="success" />
-            <FinanceKpiCard label="Closed Periods" value={String(summary?.closed_periods ?? "—")} icon={Lock} tone="warning" />
-            <FinanceKpiCard label="Locked Periods" value={String(summary?.locked_periods ?? "—")} icon={Lock} tone="danger" />
-            <FinanceKpiCard label="Current Period" value={summary?.current_period?.period_name ?? "—"} icon={CalendarRange} hint={summary?.current_period ? `${summary.current_period.start_date} – ${summary.current_period.end_date}` : undefined} />
+            <FinanceKpiCard label="Active Fiscal Year" value={summary?.active_fiscal_year?.fiscal_year_code ?? "-"} icon={CalendarRange} />
+            <FinanceKpiCard label="Total Fiscal Years" value={String(summary?.total_fiscal_years ?? "-")} icon={CalendarRange} />
+            <FinanceKpiCard label="Open Periods" value={String(summary?.open_periods ?? "-")} icon={Unlock} tone="success" />
+            <FinanceKpiCard label="Closed Periods" value={String(summary?.closed_periods ?? "-")} icon={Lock} tone="warning" />
+            <FinanceKpiCard label="Locked Periods" value={String(summary?.locked_periods ?? "-")} icon={Lock} tone="danger" />
+            <FinanceKpiCard label="Current Period" value={summary?.current_period?.period_name ?? "-"} icon={CalendarRange} hint={summary?.current_period ? `${summary.current_period.start_date} - ${summary.current_period.end_date}` : undefined} />
             <FinanceKpiCard label="Year Close Progress" value={`${summary?.year_close_progress_pct ?? 0}%`} icon={CalendarRange} />
           </div>
           <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">

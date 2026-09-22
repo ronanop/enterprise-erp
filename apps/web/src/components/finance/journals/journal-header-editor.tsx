@@ -115,7 +115,7 @@ export function JournalHeaderEditor({
       onSubmit={handleSubmit(onSave)}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-medium tracking-tight">Header</h2>
+        <h2 className="text-base font-extrabold tracking-tight">Header</h2>
         {editable ? (
           <div className="flex gap-2">
             <Button
@@ -160,7 +160,7 @@ export function JournalHeaderEditor({
         </FinanceField>
         <FinanceField label="Period">
           <FinanceSelect disabled={!editable} {...register("period_id")}>
-            <option value="">—</option>
+            <option value="">-</option>
             {periods.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label}

@@ -48,6 +48,7 @@ class ShiftService:
 
 class ShiftAssignmentService:
     def __init__(self, db: Session) -> None:
+        self._db = db
         self._repo = ShiftAssignmentRepository(db)
         self._shifts = ShiftRepository(db)
         self._scope = HrScopeValidator(db)
@@ -62,6 +63,20 @@ class ShiftAssignmentService:
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)
+        if row is None:
+            raise NotFoundException("Shift assignment not found")
+        return row
+
+    def update(self, ctx: TenantContext, row_id: UUID, **fields):
+        self.get(ctx, row_id)
+        if "shift_id" in fields and fields["shift_id"] is not None:
+            if self._shifts.get(ctx, fields["shift_id"]) is None:
+                raise NotFoundException("Shift not found")
+        if "employee_id" in fields and fields["employee_id"] is not None:
+            self._master.get_employee(ctx, fields["employee_id"])
+        if "branch_id" in fields and fields["branch_id"] is not None:
+            self._scope.validate_branch_access(ctx, fields["branch_id"])
+        row = self._repo.update(ctx, row_id, **fields)
         if row is None:
             raise NotFoundException("Shift assignment not found")
         return row
@@ -105,4 +120,25 @@ class ShiftAssignmentService:
     def approve(self, ctx: TenantContext, row_id: UUID):
         row = self.get(ctx, row_id)
         self._engine.approve(row)
-        return self._repo.update(ctx, row_id, status=row.status)
+        updated = self._repo.update(ctx, row_id, status=row.status)
+        try:
+            from modules.hr.service.hr_notify import notify_employee
+
+            notify_employee(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                employee_id=row.employee_id,
+                template_code="hr.shift_change",
+                template_name="Shift Change",
+                event_type="hr.shift_change",
+                title="Shift assignment approved",
+                body=f"Your shift assignment effective {row.effective_from} was approved.",
+                kind="shift",
+            )
+        except Exception:
+            pass
+        return updated
+
+    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        if not self._repo.soft_delete(ctx, row_id):
+            raise NotFoundException("Shift assignment not found")

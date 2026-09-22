@@ -1,4 +1,4 @@
-"""Payroll port — read-only salary structure hints; no pay_* writes."""
+"""Payroll port - read-only salary structure hints; no pay_* writes."""
 
 from uuid import UUID
 

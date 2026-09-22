@@ -1,4 +1,4 @@
-"""Procurement governance — workflow, audit, notifications."""
+"""Procurement governance - workflow, audit, notifications."""
 
 from uuid import UUID
 

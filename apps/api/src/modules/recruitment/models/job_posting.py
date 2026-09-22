@@ -44,7 +44,7 @@ class RecJobPosting(Base, *RecDetailMixin):
     )
     posting_title: Mapped[str] = mapped_column(String(255), nullable=False)
     channel: Mapped[str] = mapped_column(String(30), nullable=False)
-    # UUID ref — no FK here: rec_recruitment_source is created after this table (ERD §15 0203→0204)
+    # UUID ref - no FK here: rec_recruitment_source is created after this table (ERD §15 0203→0204)
     recruitment_source_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), nullable=True, index=True
     )

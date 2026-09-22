@@ -96,23 +96,21 @@ class AuditRepository:
             for r in self.db.scalars(stmt).all()
         ]
 
-    def list_logs_for_entity(
+    def list_logs_for_entity_ids(
         self,
-        *,
-        tenant_id: UUID | None,
-        entity_name: str,
-        entity_id: UUID,
+        tenant_id: UUID,
+        entity_ids: list[UUID],
     ) -> list[AuditLogEntity]:
+        if not entity_ids:
+            return []
         stmt = (
             select(AuditLog)
             .where(
-                AuditLog.entity_name == entity_name,
-                AuditLog.entity_id == entity_id,
+                AuditLog.tenant_id == tenant_id,
+                AuditLog.entity_id.in_(entity_ids),
             )
-            .order_by(AuditLog.performed_at.asc())
+            .order_by(AuditLog.performed_at)
         )
-        if tenant_id:
-            stmt = stmt.where(AuditLog.tenant_id == tenant_id)
         return [
             AuditLogEntity(
                 id=r.id,

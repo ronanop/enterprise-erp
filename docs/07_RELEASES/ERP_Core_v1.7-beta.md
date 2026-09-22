@@ -1,15 +1,15 @@
-# ERP Core v1.7-beta — Release Notes
+# ERP Core v1.7-beta - Release Notes
 
 | Field | Value |
 |-------|--------|
 | **Document Type** | Enterprise Release Notes |
 | **Release Name** | ERP Core v1.7-beta |
 | **Release Status** | Beta Development Release |
-| **Architecture Lock** | v1.1 — Maintained |
+| **Architecture Lock** | v1.1 - Maintained |
 | **Prepared As** | Enterprise Solution Architect · ERP Product Architect · Technical Documentation Lead · Release Manager · Principal Software Engineer |
-| **Classification** | Internal — Confidential |
+| **Classification** | Internal - Confidential |
 | **Predecessor** | [ERP Core v1.6-beta](./ERP_Core_v1.6-beta.md) |
-| **Ready For** | Sprint 13 — Recruitment / Talent Acquisition |
+| **Ready For** | Sprint 13 - Recruitment / Talent Acquisition |
 
 ---
 
@@ -21,18 +21,18 @@
 | **Status** | Beta Development Release |
 | **Date** | 2026-07-14 |
 | **Previous Release** | ERP Core v1.6-beta |
-| **Architecture Lock** | v1.1 — Preserved |
+| **Architecture Lock** | v1.1 - Preserved |
 | **Recommended Git Tag** | `v1.7-beta` |
 
 ---
 
 ## 2. Sprint 12 Highlights
 
-Sprint 12 delivered the **Payroll Management** domain (FRD-10 / ERD_12) as the workforce compensation and statutory settlement layer — consuming HR read exports and Master Data employee identity only (C-01), without duplicating employee / department / attendance / leave masters, and posting GL only through Finance `PostingService.post_system_journal()`.
+Sprint 12 delivered the **Payroll Management** domain (FRD-10 / ERD_12) as the workforce compensation and statutory settlement layer - consuming HR read exports and Master Data employee identity only (C-01), without duplicating employee / department / attendance / leave masters, and posting GL only through Finance `PostingService.post_system_journal()`.
 
 | Capability | Delivery |
 |------------|----------|
-| **Payroll Module** | `apps/api/src/modules/payroll/` — Clean Architecture package (domain, models, repositories, engines, services, routers, adapters, tasks) |
+| **Payroll Module** | `apps/api/src/modules/payroll/` - Clean Architecture package (domain, models, repositories, engines, services, routers, adapters, tasks) |
 | **Payroll Runs** | Period-scoped run create / calculate / submit / approve with run lines |
 | **Payslips** | Per-employee slip generation from approved run output |
 | **Salary Structures** | Structure catalog + structure lines mapped to components |
@@ -66,7 +66,7 @@ Sprint 12 delivered the **Payroll Management** domain (FRD-10 / ERD_12) as the w
 
 **Coverage:** payroll periods · salary structures · salary components · employee salaries · payroll runs · payslips · tax configuration · statutory contributions · bonuses · reimbursements · loans · payroll adjustments · payroll posting · payroll summaries.
 
-**API mount:** `/api/v1/payroll` — payroll-periods, salary-structures, salary-components, earning-types, deduction-types, employee-salaries, employee-salary-components, payroll-runs (+ calculate / submit / approve), payroll-run-lines, payslips, tax-configurations, statutory-contributions, bonuses (+ submit / approve), reimbursements, loans (+ submit / approve), loan-installments, payroll-adjustments, payroll-postings (+ submit / post), payroll-summaries, reports.
+**API mount:** `/api/v1/payroll` - payroll-periods, salary-structures, salary-components, earning-types, deduction-types, employee-salaries, employee-salary-components, payroll-runs (+ calculate / submit / approve), payroll-run-lines, payslips, tax-configurations, statutory-contributions, bonuses (+ submit / approve), reimbursements, loans (+ submit / approve), loan-installments, payroll-adjustments, payroll-postings (+ submit / post), payroll-summaries, reports.
 
 ---
 
@@ -76,10 +76,10 @@ Payroll **never** duplicates employee identity, department, attendance, leave, o
 
 | Module | Integration |
 |--------|-------------|
-| **Master Data** | **`master_employee` only (C-01)**; FKs from Payroll tables via `PayrollMasterDataAdapter` — **never create payroll employee tables** |
-| **Organization** | **`org_department` only** via `PayrollOrganizationAdapter` — **no payroll department master** |
-| **HR** | **Read-only** via `PayrollHrAdapter` → `HRIntegrationService` (employment / attendance / leave facts); `employment_id` UUID reference — **no `hr_*` writes / FKs** |
-| **Finance** | Posting **only** through `JournalService` + `PostingService.post_system_journal()`; store **`finance_journal_id` only** — **no direct `fin_*` writes** |
+| **Master Data** | **`master_employee` only (C-01)**; FKs from Payroll tables via `PayrollMasterDataAdapter` - **never create payroll employee tables** |
+| **Organization** | **`org_department` only** via `PayrollOrganizationAdapter` - **no payroll department master** |
+| **HR** | **Read-only** via `PayrollHrAdapter` → `HRIntegrationService` (employment / attendance / leave facts); `employment_id` UUID reference - **no `hr_*` writes / FKs** |
+| **Finance** | Posting **only** through `JournalService` + `PostingService.post_system_journal()`; store **`finance_journal_id` only** - **no direct `fin_*` writes** |
 | **Inventory** | **No Inventory writes**; no `inv_*` writes or FKs |
 | **Procurement** | **No Procurement writes**; no `proc_*` writes or FKs |
 | **Manufacturing** | **No Manufacturing writes**; no `mfg_*` writes or FKs |
@@ -123,8 +123,8 @@ Swagger (`/docs`) and OpenAPI (`/openapi.json`) both return **200**; Payroll API
 
 | Gate | Status |
 |------|--------|
-| **Alembic Upgrade** | **PASS** — head `0200_seed_payroll_workflows` |
-| **FastAPI Startup** | **PASS** — Application startup complete |
+| **Alembic Upgrade** | **PASS** - head `0200_seed_payroll_workflows` |
+| **FastAPI Startup** | **PASS** - Application startup complete |
 | **Swagger** | **PASS** (`/docs` 200) |
 | **OpenAPI** | **PASS** (`/openapi.json` 200) |
 | **Ruff** | **PASS** |
@@ -145,12 +145,12 @@ Validation completed successfully. Head `0200_seed_payroll_workflows` confirmed,
 
 | Principle | Confirmation |
 |-----------|--------------|
-| **Architecture Lock v1.1** | **Preserved** — no Architecture Lock changes |
+| **Architecture Lock v1.1** | **Preserved** - no Architecture Lock changes |
 | **No redesign** | Prior sprints unmodified except required integration wiring (router / Celery / Alembic env / mypy package registration) |
 | **Clean Architecture** | Router → Service → Repository → Database maintained |
 | **DDD** | Payroll domain enums, exceptions, entities, value objects, engines |
 | **Modular Monolith** | New `modules/payroll` package; no service-boundary redesign |
-| **Previous modules unchanged** | Confirmed — Foundation · Organization · Master Data · Finance · Sales · Procurement · Inventory · Manufacturing · Quality · CRM · HR untouched except required wiring |
+| **Previous modules unchanged** | Confirmed - Foundation · Organization · Master Data · Finance · Sales · Procurement · Inventory · Manufacturing · Quality · CRM · HR untouched except required wiring |
 
 Stack unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreSQL · Redis · Celery.
 
@@ -161,10 +161,10 @@ Stack unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreSQL · Redis · 
 | Attribute | Value |
 |-----------|--------|
 | **Next Release** | ERP Core **v1.8-beta** (planned) |
-| **Sprint** | **Sprint 13 — Recruitment / Talent Acquisition** |
+| **Sprint** | **Sprint 13 - Recruitment / Talent Acquisition** |
 | **Primary domain** | **Recruitment / Talent Acquisition** |
 
-**Planned scope (planning only — no implementation in this release):**
+**Planned scope (planning only - no implementation in this release):**
 
 - Candidate and requisition lifecycle
 - Interview / offer workflows
@@ -186,8 +186,8 @@ Stack unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreSQL · Redis · 
 | **Alembic head** | **`0200_seed_payroll_workflows`** |
 | **Tests** | **179 passed** |
 | **Routes** | **627** FastAPI · **436** OpenAPI · **71** Payroll · **51** Payroll OpenAPI |
-| **Quality gates** | Alembic · FastAPI · Swagger · OpenAPI · Ruff · MyPy · Pytest — **ALL PASS** |
-| **Next** | **Sprint 13 — Recruitment / Talent Acquisition** |
+| **Quality gates** | Alembic · FastAPI · Swagger · OpenAPI · Ruff · MyPy · Pytest - **ALL PASS** |
+| **Next** | **Sprint 13 - Recruitment / Talent Acquisition** |
 | **Ready for Git Tag** | **`v1.7-beta`** |
 
 ---
@@ -196,14 +196,14 @@ Stack unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreSQL · Redis · 
 
 | Version | Date | Scope | Alembic Head | Tests |
 |---------|------|--------|--------------|-------|
-| **v1.0-alpha** | 2026-07-13 | Sprints 0–5 (Foundation → Sales) | `0055_seed_sales_workflows` | 77 passed |
-| **v1.1-beta** | 2026-07-13 | Sprints 0–6 (+ Procurement P2P) | `0077_seed_proc_workflows` | 99 passed |
-| **v1.2-beta** | 2026-07-13 | Sprints 0–7 (+ Inventory & Warehouse) | `0094_seed_inv_workflows` | 113 passed |
-| **v1.3-beta** | 2026-07-14 | Sprints 0–8 (+ Manufacturing & Production) | `0114_seed_mfg_workflows` | 127 passed |
-| **v1.4-beta** | 2026-07-14 | Sprints 0–9 (+ Quality Management) | `0135_seed_qm_workflows` | 146 passed |
-| **v1.5-beta** | 2026-07-14 | Sprints 0–10 (+ CRM) | `0156_seed_crm_workflows` | 158 passed |
-| **v1.6-beta** | 2026-07-14 | Sprints 0–11 (+ HRMS) | `0178_seed_hr_workflows` | 169 passed |
-| **v1.7-beta** | 2026-07-14 | Sprints 0–12 (+ Payroll) | `0200_seed_payroll_workflows` | 179 passed |
+| **v1.0-alpha** | 2026-07-13 | Sprints 0-5 (Foundation → Sales) | `0055_seed_sales_workflows` | 77 passed |
+| **v1.1-beta** | 2026-07-13 | Sprints 0-6 (+ Procurement P2P) | `0077_seed_proc_workflows` | 99 passed |
+| **v1.2-beta** | 2026-07-13 | Sprints 0-7 (+ Inventory & Warehouse) | `0094_seed_inv_workflows` | 113 passed |
+| **v1.3-beta** | 2026-07-14 | Sprints 0-8 (+ Manufacturing & Production) | `0114_seed_mfg_workflows` | 127 passed |
+| **v1.4-beta** | 2026-07-14 | Sprints 0-9 (+ Quality Management) | `0135_seed_qm_workflows` | 146 passed |
+| **v1.5-beta** | 2026-07-14 | Sprints 0-10 (+ CRM) | `0156_seed_crm_workflows` | 158 passed |
+| **v1.6-beta** | 2026-07-14 | Sprints 0-11 (+ HRMS) | `0178_seed_hr_workflows` | 169 passed |
+| **v1.7-beta** | 2026-07-14 | Sprints 0-12 (+ Payroll) | `0200_seed_payroll_workflows` | 179 passed |
 
 ```text
 v1.6-beta ──(+ Sprint 12 Payroll)──► v1.7-beta ──► Sprint 13 Recruitment / Talent Acquisition (planned)

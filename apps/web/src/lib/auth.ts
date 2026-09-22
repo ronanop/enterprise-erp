@@ -29,6 +29,15 @@ export function isAuthenticated(): boolean {
   return Boolean(getAccessToken());
 }
 
+/** Send user to login with return URL (client-only). */
+export function redirectToLogin(): void {
+  if (typeof window === "undefined") return;
+  const path = window.location.pathname;
+  if (path.startsWith("/login") || path.startsWith("/onboarding")) return;
+  const next = `${path}${window.location.search}`;
+  window.location.assign(`/login?next=${encodeURIComponent(next)}`);
+}
+
 /** Best-effort JWT `sub` for UI-only checks (SoD hints). Not a security boundary. */
 export function getAccessTokenUserId(): string | null {
   const token = getAccessToken();

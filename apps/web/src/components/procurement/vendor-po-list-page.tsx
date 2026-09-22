@@ -18,12 +18,7 @@ import {
   type ScmVendorPo,
   type VendorOption,
 } from "@/services/procurement-service";
-
-function grnTone(status: string): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "closed" || status === "delivered") return "default";
-  if (status === "partial") return "secondary";
-  return "outline";
-}
+import { formatGrnStatusBadgeLabel, grnBadgeVariant } from "@/utils/grn-status-display";
 
 export function VendorPoListPage() {
   const [rows, setRows] = useState<ScmVendorPo[]>([]);
@@ -102,7 +97,7 @@ export function VendorPoListPage() {
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard label="All POs" value={String(kpis.total)} icon={ShoppingCart} />
         <FinanceKpiCard
-          label="GRN pending"
+          label="GRN open"
           value={String(kpis.pending)}
           tone="warning"
           icon={CircleDot}
@@ -182,8 +177,8 @@ export function VendorPoListPage() {
                     <FinanceStatusBadge status={row.status} />
                   </td>
                   <td className="px-3 py-2">
-                    <Badge variant={grnTone(row.grn_status)} className="uppercase">
-                      {row.grn_status}
+                    <Badge variant={grnBadgeVariant(row.grn_status)} className="uppercase">
+                      {formatGrnStatusBadgeLabel(row.grn_status)}
                     </Badge>
                   </td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">

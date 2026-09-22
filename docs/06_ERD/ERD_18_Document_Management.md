@@ -1,28 +1,28 @@
-# ERD_18 — Document Management System (DMS) Domain
+# ERD_18 - Document Management System (DMS) Domain
 
-**Document:** Enterprise ERD — Document Management System Domain  
+**Document:** Enterprise ERD - Document Management System Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 18 Implementation Planning  
+**Status:** Locked - Ready for Sprint 18 Implementation Planning  
 **Schema:** `document`  
 **Table Prefix:** `doc_`  
 **Aligned To:** BRD v1.0 · FRD-19 Document Management System · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-19 Document Management System Domain](../02_FRD/FRD-19-Document-Management-System-Domain.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.12-beta](../07_RELEASES/ERP_Core_v1.12-beta.md)  
 
-> **C-01 note:** Employee and customer identity remain **`master.master_employee`** and **`master.master_customer`**. DMS **never** invents parallel masters. Helpdesk / Service / Project / Asset / CRM / Inventory / Manufacturing / Quality context uses **UUID-only** refs — **no FK to `hd_*` / `svc_*` / `prj_*` / `ast_*` / `crm_*` / `inv_*` / `mfg_*` / `qm_*`**.
+> **C-01 note:** Employee and customer identity remain **`master.master_employee`** and **`master.master_customer`**. DMS **never** invents parallel masters. Helpdesk / Service / Project / Asset / CRM / Inventory / Manufacturing / Quality context uses **UUID-only** refs - **no FK to `hd_*` / `svc_*` / `prj_*` / `ast_*` / `crm_*` / `inv_*` / `mfg_*` / `qm_*`**.
 
 ---
 
 ## 1. Module Overview
 
-The Document Management System Domain provides a **centralized enterprise document repository**: folders, documents and versions, metadata and tagging, permissions and sharing, comments, approval / domain workflow configuration, checkout/check-in, audit trail, attachments, templates, retention and archive, notifications, and reporting — spanning create → upload → review → approve → publish → use → archive → retention / disposal (FRD-19 §3).
+The Document Management System Domain provides a **centralized enterprise document repository**: folders, documents and versions, metadata and tagging, permissions and sharing, comments, approval / domain workflow configuration, checkout/check-in, audit trail, attachments, templates, retention and archive, notifications, and reporting - spanning create → upload → review → approve → publish → use → archive → retention / disposal (FRD-19 §3).
 
-DMS **depends on** Foundation, Organization, and Master Data. It **consumes existing masters only (C-01)** — **`master_employee`**, **`master_customer`**, and **`org_department`**. It **must never duplicate** employee, customer, department, or company masters.
+DMS **depends on** Foundation, Organization, and Master Data. It **consumes existing masters only (C-01)** - **`master_employee`**, **`master_customer`**, and **`org_department`**. It **must never duplicate** employee, customer, department, or company masters.
 
 **Finance remains the only accounting system.** DMS never ORM-writes `fin_*` tables. Any chargeable / recoverable posting (e.g. certified copy fees Phase 1 stub) uses **`finance_journal_id`**; GL posting occurs **only** through `PostingService.post_system_journal()`.
 
-Helpdesk, Service, Project, Asset, CRM, Inventory, Manufacturing, Quality, HR, Payroll, and Recruitment remain **isolated** except authorized UUID / employee refs — **no peer FKs / no peer ORM writes** (Recruitment **read-only** where referenced).
+Helpdesk, Service, Project, Asset, CRM, Inventory, Manufacturing, Quality, HR, Payroll, and Recruitment remain **isolated** except authorized UUID / employee refs - **no peer FKs / no peer ORM writes** (Recruitment **read-only** where referenced).
 
 **Business Tables: 20**  
 **Schema: `document`**
@@ -60,29 +60,29 @@ All business domains (document consumers) · BI / GRC (future)
 
 ### API Mount (planned)
 
-**`/api/v1/documents`** — routers for all aggregates (folders, documents, document-versions, document-metadata, document-tags, document-tag-maps, document-permissions, document-shares, document-comments, document-approvals, document-workflows, document-checkouts, document-audits, document-attachments, templates, template-fields, retention-policies, archives, notifications, reports).
+**`/api/v1/documents`** - routers for all aggregates (folders, documents, document-versions, document-metadata, document-tags, document-tag-maps, document-permissions, document-shares, document-comments, document-approvals, document-workflows, document-checkouts, document-audits, document-attachments, templates, template-fields, retention-policies, archives, notifications, reports).
 
 ---
 
 ## 2. Scope
 
 ### In Scope
-- **Folders** and **documents** repository — FRD-19 §4–§5
-- **Version control** — FRD-19
-- **Metadata**, **tags**, **tag maps** — FRD-19 §6–§7
-- **Permissions** and **shares** — secure access
+- **Folders** and **documents** repository - FRD-19 §4-§5
+- **Version control** - FRD-19
+- **Metadata**, **tags**, **tag maps** - FRD-19 §6-§7
+- **Permissions** and **shares** - secure access
 - **Comments**, **checkout/check-in**, **attachments**
 - **Approvals** and **domain workflow** configuration (seeded with Foundation `wf_*`)
 - **Audit** trail of document events
 - **Templates** and **template fields**
-- **Retention policies** and **archive** rows — FRD-19
+- **Retention policies** and **archive** rows - FRD-19
 - **Notifications** and **reports**
 - Workflow, audit, RBAC, Celery stubs (planning)
 
 ### Out of Scope (Phase 2 / Separate)
-- Full **OCR / full-text search engine cluster** product — Phase 1: metadata + URI / hash + optional `content_indexed_at` stub
-- Full **e-signature vendor gateway** — Phase 1: approval status metadata only
-- Duplicate `doc_employee` / `doc_customer` / `doc_department` masters — **forbidden (C-01)**
+- Full **OCR / full-text search engine cluster** product - Phase 1: metadata + URI / hash + optional `content_indexed_at` stub
+- Full **e-signature vendor gateway** - Phase 1: approval status metadata only
+- Duplicate `doc_employee` / `doc_customer` / `doc_department` masters - **forbidden (C-01)**
 - Direct writes to `fin_*`, `hd_*`, `svc_*`, `prj_*`, `ast_*`, `crm_*`, `inv_*`, `mfg_*`, `qm_*`, `hr_*`, `pay_*`, `rec_*`, `sales_*`
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 - Analytics cubes / `ana_fact_document`
@@ -92,7 +92,7 @@ All business domains (document consumers) · BI / GRC (future)
 - Soft delete + version on mutable `doc_*` tables
 - Document numbers company-scoped (`DOC-YYYY-NNNNNN`)
 - One **active checkout** per document (service-enforced)
-- Binary content stored externally (MinIO / S3); DB holds **URI + content_hash + size** only — FRD file-type list Phase 1
+- Binary content stored externally (MinIO / S3); DB holds **URI + content_hash + size** only - FRD file-type list Phase 1
 - Optional chargeable certified-copy: DMS row → `PostingService.post_system_journal()` → store `finance_journal_id`
 
 ### Dependencies
@@ -103,17 +103,17 @@ All business domains (document consumers) · BI / GRC (future)
 | ERD_02 Organization | `org_company`, `org_branch`, `org_department` |
 | ERD_03 Master Data | **`master_employee`**, **`master_customer`** |
 | ERD_04 Finance | **`PostingService.post_system_journal()`**; `finance_journal_id` UUID storage |
-| ERD_17 Helpdesk | Optional `helpdesk_ticket_id` UUID — **no FK** |
-| ERD_16 Service | Optional `service_request_id` UUID — **no FK** |
-| ERD_14 Project | Optional `project_id` UUID — **no FK** |
-| ERD_15 Asset | Optional `asset_id` UUID — **no FK** |
-| ERD_05 CRM | Optional `crm_opportunity_id` UUID — **no FK** |
-| ERD_07 Inventory | Optional inventory UUID — **no FK** |
-| ERD_08 Manufacturing | Optional production UUID — **no FK** |
-| ERD_09 Quality | Optional quality UUID — **no FK** |
-| ERD_11 HR | Employee via master — **read / no `hr_*` writes** |
-| ERD_12 Payroll | Optional labor **read** — **no `pay_*` writes** |
-| ERD_13 Recruitment | Optional candidate doc context — **read only / no writes** |
+| ERD_17 Helpdesk | Optional `helpdesk_ticket_id` UUID - **no FK** |
+| ERD_16 Service | Optional `service_request_id` UUID - **no FK** |
+| ERD_14 Project | Optional `project_id` UUID - **no FK** |
+| ERD_15 Asset | Optional `asset_id` UUID - **no FK** |
+| ERD_05 CRM | Optional `crm_opportunity_id` UUID - **no FK** |
+| ERD_07 Inventory | Optional inventory UUID - **no FK** |
+| ERD_08 Manufacturing | Optional production UUID - **no FK** |
+| ERD_09 Quality | Optional quality UUID - **no FK** |
+| ERD_11 HR | Employee via master - **read / no `hr_*` writes** |
+| ERD_12 Payroll | Optional labor **read** - **no `pay_*` writes** |
+| ERD_13 Recruitment | Optional candidate doc context - **read only / no writes** |
 
 ---
 
@@ -121,26 +121,26 @@ All business domains (document consumers) · BI / GRC (future)
 
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
-| 1 | `doc_folder` | Catalog / Tree | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 1 | `doc_folder` | Catalog / Tree | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 2 | `doc_document` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 3 | `doc_document_version` | Version | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 4 | `doc_document_metadata` | Detail | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 5 | `doc_document_tag` | Catalog | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 6 | `doc_document_tag_map` | Map | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 7 | `doc_document_permission` | ACL | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 8 | `doc_document_share` | Share | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 9 | `doc_document_comment` | Collaboration | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 3 | `doc_document_version` | Version | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 4 | `doc_document_metadata` | Detail | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 5 | `doc_document_tag` | Catalog | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 6 | `doc_document_tag_map` | Map | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 7 | `doc_document_permission` | ACL | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 8 | `doc_document_share` | Share | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 9 | `doc_document_comment` | Collaboration | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 10 | `doc_document_approval` | Approval | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 11 | `doc_document_workflow` | Config | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 11 | `doc_document_workflow` | Config | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 12 | `doc_document_checkout` | Lock | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 13 | `doc_document_audit` | Audit | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 14 | `doc_document_attachment` | Attachment | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 15 | `doc_template` | Template | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 16 | `doc_template_field` | Detail | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 13 | `doc_document_audit` | Audit | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 14 | `doc_document_attachment` | Attachment | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 15 | `doc_template` | Template | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 16 | `doc_template_field` | Detail | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 17 | `doc_retention_policy` | Policy | ✅ | ✅ | optional | ✅ | ✅ | ✅ |
 | 18 | `doc_archive` | Archive | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 19 | `doc_notification` | Notification | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 20 | `doc_report` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 19 | `doc_notification` | Notification | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 20 | `doc_report` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | - |
 
 **Business Tables: 20**  
 **Schema: `document`**
@@ -243,7 +243,7 @@ Optional UUID-only (no FK): helpdesk_ticket_id, service_request_id, project_id,
 |--------|-------|
 | `folder_code` / `folder_name` | UK `(company_id, folder_code)` |
 | `parent_folder_id` | Self-FK optional |
-| `folder_type` | system, business, user — FRD-19 §5 |
+| `folder_type` | system, business, user - FRD-19 §5 |
 | `department_id` | FK optional → `org_department` |
 | `owner_employee_id` | FK optional → `master_employee` |
 | `path_label` | VARCHAR optional denormalized path |
@@ -259,8 +259,8 @@ Optional UUID-only (no FK): helpdesk_ticket_id, service_request_id, project_id,
 | `tenant_id` / `company_id` / `branch_id` | UUID | NO | Scope |
 | `document_number` | VARCHAR(50) | NO | `DOC-YYYY-NNNNNN` |
 | `folder_id` | UUID | YES | FK → `doc_folder` |
-| `title` | VARCHAR(255) | NO | — |
-| `classification_level` | VARCHAR(30) | NO | public, internal, confidential, restricted — FRD-19 §6 |
+| `title` | VARCHAR(255) | NO | - |
+| `classification_level` | VARCHAR(30) | NO | public, internal, confidential, restricted - FRD-19 §6 |
 | `document_category` | VARCHAR(40) | YES | employee, invoice, contract, po, quality, project, policy, compliance, other |
 | `owner_employee_id` | UUID | NO | FK → `master_employee` |
 | `customer_id` | UUID | YES | FK → `master_customer` |
@@ -269,13 +269,13 @@ Optional UUID-only (no FK): helpdesk_ticket_id, service_request_id, project_id,
 | `retention_policy_id` | UUID | YES | FK → `doc_retention_policy` |
 | `workflow_config_id` | UUID | YES | FK → `doc_document_workflow` |
 | `current_version_no` | INT | NO | default 1 |
-| `mime_type` / `file_extension` | VARCHAR | YES | — |
+| `mime_type` / `file_extension` | VARCHAR | YES | - |
 | `storage_uri` / `content_hash` | VARCHAR | YES | current blob pointer |
-| `file_size_bytes` | BIGINT | YES | — |
-| `helpdesk_ticket_id` / `service_request_id` / `project_id` / `asset_id` / `crm_opportunity_id` | UUID | YES | **UUID only — no peer FK** |
-| `inventory_ref_id` / `production_order_id` / `quality_ref_id` | UUID | YES | **UUID only — no FK** |
+| `file_size_bytes` | BIGINT | YES | - |
+| `helpdesk_ticket_id` / `service_request_id` / `project_id` / `asset_id` / `crm_opportunity_id` | UUID | YES | **UUID only - no peer FK** |
+| `inventory_ref_id` / `production_order_id` / `quality_ref_id` | UUID | YES | **UUID only - no FK** |
 | `finance_journal_id` | UUID | YES | after PostingService when chargeable |
-| `published_at` / `expires_at` | TIMESTAMPTZ / DATE | YES | — |
+| `published_at` / `expires_at` | TIMESTAMPTZ / DATE | YES | - |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, published, checked_out, archived, expired, disposed, cancelled |
 | `workflow_*` | | | Document approval / publish |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
@@ -290,7 +290,7 @@ Optional UUID-only (no FK): helpdesk_ticket_id, service_request_id, project_id,
 |--------|-------|
 | `document_id` | FK |
 | `version_no` | INT |
-| `storage_uri` / `content_hash` / `file_size_bytes` | — |
+| `storage_uri` / `content_hash` / `file_size_bytes` | - |
 | `change_summary` | TEXT |
 | `created_by_employee_id` | FK → `master_employee` |
 | `is_current` | BOOLEAN |
@@ -401,10 +401,10 @@ Optional UUID-only (no FK): helpdesk_ticket_id, service_request_id, project_id,
 |--------|-------|
 | `workflow_code` / `workflow_name` | UK `(company_id, workflow_code)` |
 | `applies_to_category` | VARCHAR optional |
-| `foundation_workflow_code` | VARCHAR — maps to Foundation `wf_definition.workflow_code` (e.g. `DOC_DOCUMENT_APPROVAL`) |
+| `foundation_workflow_code` | VARCHAR - maps to Foundation `wf_definition.workflow_code` (e.g. `DOC_DOCUMENT_APPROVAL`) |
 | `is_default` | BOOLEAN |
 | `status` | active, inactive |
-| **Note:** Domain config only — instance rows remain Foundation `wf_instance` |
+| **Note:** Domain config only - instance rows remain Foundation `wf_instance` |
 
 ---
 
@@ -442,7 +442,7 @@ Optional UUID-only (no FK): helpdesk_ticket_id, service_request_id, project_id,
 | Column | Notes |
 |--------|-------|
 | `document_id` | FK |
-| `file_name` / `mime_type` | — |
+| `file_name` / `mime_type` | - |
 | `storage_uri` / `content_hash` / `file_size_bytes` | Phase 1 metadata |
 | `uploaded_by_employee_id` | FK optional |
 | `status` | active, superseded, archived |
@@ -467,7 +467,7 @@ Optional UUID-only (no FK): helpdesk_ticket_id, service_request_id, project_id,
 | Column | Notes |
 |--------|-------|
 | `template_id` | FK → `doc_template` |
-| `field_code` / `field_label` | — |
+| `field_code` / `field_label` | - |
 | `field_type` | text, number, date, boolean, list |
 | `is_required` | BOOLEAN |
 | `default_value` | TEXT |
@@ -661,7 +661,7 @@ Seed workflows only; instance rows use Foundation `wf_instance`. Domain table `d
 |-------|-----------|
 | Row audit | Standard columns on all mutable `doc_*` tables |
 | Business audit | `AuditService` + `doc_document_audit` on upload, approve, publish, share, checkout, archive, dispose |
-| Notifications | Approval / review / expiry / retention / checkout overdue — Foundation + `doc_notification` |
+| Notifications | Approval / review / expiry / retention / checkout overdue - Foundation + `doc_notification` |
 
 ---
 
@@ -706,7 +706,7 @@ Seed workflows only; instance rows use Foundation `wf_instance`. Domain table `d
 
 Prior Alembic head: **`0310_seed_helpdesk_workflows`**.
 
-Revision budget **`0311`–`0332` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`doc_document_tag` and `doc_document_tag_map` share one migration**.
+Revision budget **`0311`-`0332` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`doc_document_tag` and `doc_document_tag_map` share one migration**.
 
 | Order | Revision ID (≤32 chars) | Migration | Tables / Actions |
 |-------|-------------------------|-----------|------------------|
@@ -762,9 +762,9 @@ Revision budget **`0311`–`0332` (22 revisions)**. Schema + 20 tables + permiss
 | Organization | company, branch, **department** | Direct FK |
 | Master Data | **`master_employee` · `master_customer`** | FK + services (C-01) |
 | Finance | **`PostingService.post_system_journal()`** | Adapter; store `finance_journal_id` |
-| Helpdesk / Service / Project / Asset / CRM | Optional operational context | UUID only — **no FK** |
-| Inventory / Manufacturing / Quality | Optional operational context | UUID only — **no FK** |
-| HR / Payroll / Recruitment | Author continuity; optional labor / candidate read | Master FK / read port — **no writes** |
+| Helpdesk / Service / Project / Asset / CRM | Optional operational context | UUID only - **no FK** |
+| Inventory / Manufacturing / Quality | Optional operational context | UUID only - **no FK** |
+| HR / Payroll / Recruitment | Author continuity; optional labor / candidate read | Master FK / read port - **no writes** |
 
 ### 16.2 Downstream
 
@@ -796,12 +796,12 @@ Revision budget **`0311`–`0332` (22 revisions)**. Schema + 20 tables + permiss
 | 4 | Consumes masters only (C-01) | ✅ |
 | 5 | Finance posting only via PostingService; store finance UUID refs | ✅ |
 | 6 | Helpdesk / Service / Project / Asset / CRM / Inv / MFG / QM UUID-only; HR/Payroll/Recruitment read-only | ✅ |
-| 7 | Migration order `0311`–`0332`, revision IDs ≤ 32 chars | ✅ |
+| 7 | Migration order `0311`-`0332`, revision IDs ≤ 32 chars | ✅ |
 | 8 | Workflows + RBAC + API mount + Celery stubs documented | ✅ |
 | 9 | Full OCR / e-sign gateway deferred without blocking Sprint 18 | ✅ |
 | 10 | Architecture Lock v1.1 preserved; no prior module redesign | ✅ |
 
-### ERD Phase Gate — DMS Summary
+### ERD Phase Gate - DMS Summary
 
 | Metric | Value |
 |--------|-------|
@@ -809,7 +809,7 @@ Revision budget **`0311`–`0332` (22 revisions)**. Schema + 20 tables + permiss
 | Schema | **`document`** |
 | Prefix | `doc_` |
 | API mount | `/api/v1/documents` |
-| Migration range | `0311` – `0332` |
+| Migration range | `0311` - `0332` |
 | Prior head | `0310_seed_helpdesk_workflows` |
 | Planned head | `0332_seed_document_workflows` |
 | Document Status | **Draft** |

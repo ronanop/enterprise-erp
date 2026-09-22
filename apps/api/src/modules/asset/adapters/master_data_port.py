@@ -1,4 +1,4 @@
-"""Master Data port — AssetService for master_asset create/link + employee/product/vendor."""
+"""Master Data port - AssetService for master_asset create/link + employee/product/vendor."""
 
 from uuid import UUID
 

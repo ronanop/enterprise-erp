@@ -318,7 +318,7 @@ export function JournalCreatePage() {
         <section className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Journal lines</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Journal lines</h2>
               <p className="text-[11px] text-muted-foreground">
                 Debit must equal credit before save.
               </p>
@@ -400,7 +400,7 @@ export function JournalCreatePage() {
                     </td>
                     <td className="px-3 py-2">
                       <FinanceSelect {...register(`lines.${index}.cost_center_id`)}>
-                        <option value="">—</option>
+                        <option value="">-</option>
                         {costCenters.map((c) => (
                           <option key={c.id} value={c.id}>
                             {c.label}
@@ -416,7 +416,7 @@ export function JournalCreatePage() {
                     </td>
                     <td className="px-3 py-2">
                       <FinanceSelect {...register(`lines.${index}.tax_id`)}>
-                        <option value="">—</option>
+                        <option value="">-</option>
                         {taxes.map((t) => (
                           <option key={t.id} value={t.id}>
                             {t.label}

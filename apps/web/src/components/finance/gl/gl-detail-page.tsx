@@ -158,16 +158,16 @@ export function GlDetailPage({ entryId }: { entryId: string }) {
         </div>
         <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
           <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Fiscal / Period</p>
-          <p className="mt-2 text-sm">{entry.fiscal_year_code ?? "—"} · {entry.period_name ?? "—"}</p>
+          <p className="mt-2 text-sm">{entry.fiscal_year_code ?? "-"} · {entry.period_name ?? "-"}</p>
         </div>
         <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
           <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">Workflow</p>
-          <p className="mt-2 text-sm capitalize">{entry.workflow_status ?? journal?.workflow_status ?? "—"}</p>
+          <p className="mt-2 text-sm capitalize">{entry.workflow_status ?? journal?.workflow_status ?? "-"}</p>
         </div>
       </div>
 
       <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-        <h3 className="text-sm font-medium tracking-tight">Voucher / Journal</h3>
+        <h3 className="text-base font-extrabold tracking-tight">Voucher / Journal</h3>
         <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
           <div><dt className="text-[11px] text-muted-foreground uppercase">Voucher</dt><dd className="font-mono">{entry.entry_number}</dd></div>
           <div>
@@ -178,7 +178,7 @@ export function GlDetailPage({ entryId }: { entryId: string }) {
                   {entry.journal_number ?? entry.journal_header_id.slice(0, 8)}
                 </Link>
               ) : (
-                entry.journal_number ?? "—"
+                entry.journal_number ?? "-"
               )}
             </dd>
           </div>
@@ -189,15 +189,15 @@ export function GlDetailPage({ entryId }: { entryId: string }) {
               </Link>
             </dd>
           </div>
-          <div><dt className="text-[11px] text-muted-foreground uppercase">Posting</dt><dd className="font-mono text-xs">{entry.posted_at?.slice(0, 19) ?? "—"} · {resolve(entry.posted_by)}</dd></div>
-          <div className="sm:col-span-2"><dt className="text-[11px] text-muted-foreground uppercase">Description</dt><dd>{entry.description ?? journal?.description ?? "—"}</dd></div>
+          <div><dt className="text-[11px] text-muted-foreground uppercase">Posting</dt><dd className="font-mono text-xs">{entry.posted_at?.slice(0, 19) ?? "-"} · {resolve(entry.posted_by)}</dd></div>
+          <div className="sm:col-span-2"><dt className="text-[11px] text-muted-foreground uppercase">Description</dt><dd>{entry.description ?? journal?.description ?? "-"}</dd></div>
         </dl>
       </div>
 
       {journal?.lines && journal.lines.length > 0 ? (
         <div className="rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="border-b border-border/70 px-3 py-2.5">
-            <h3 className="text-sm font-medium tracking-tight">Journal Lines</h3>
+            <h3 className="text-base font-extrabold tracking-tight">Journal Lines</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[720px] text-sm">
@@ -219,7 +219,7 @@ export function GlDetailPage({ entryId }: { entryId: string }) {
                         {line.account_id.slice(0, 8)}…
                       </Link>
                     </td>
-                    <td className="px-2 py-1.5 text-xs text-muted-foreground">{line.description ?? "—"}</td>
+                    <td className="px-2 py-1.5 text-xs text-muted-foreground">{line.description ?? "-"}</td>
                     <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(line.debit_amount)}</td>
                     <td className="px-2 py-1.5 text-right font-mono text-xs tabular-nums">{formatInrPrecise(line.credit_amount)}</td>
                   </tr>
@@ -231,7 +231,7 @@ export function GlDetailPage({ entryId }: { entryId: string }) {
       ) : null}
 
       <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-        <h3 className="mb-2 text-sm font-medium tracking-tight">Audit Timeline</h3>
+        <h3 className="mb-2 text-base font-extrabold tracking-tight">Audit Timeline</h3>
         <JournalAuditTimeline events={auditEvents} resolveUser={resolve} />
       </div>
 

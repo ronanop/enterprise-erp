@@ -1,14 +1,14 @@
-# Sales CRM (Zoho-Replacement) — Demo Guide
+# Sales CRM (Zoho-Replacement) - Demo Guide
 
 Migration: `0445_crm_sales_process` · Schema: `crm`
 
 This guide walks the full happy-path sales blueprint end to end using the
 REST API: **Company → Lead → Opportunity (BOQ → SOW → Deal Reg → OEM → Quote
 → Customer PO → OVF → Deal Won)**. It matches the acceptance criteria in the
-product brief and exercises every product rule (#1–#8).
+product brief and exercises every product rule (#1-#8).
 
 All requests are prefixed with `API_V1_PREFIX = /api/v1`. Examples below use
-`curl` syntax — on Windows, run them from Git Bash / WSL, or use `curl.exe`
+`curl` syntax - on Windows, run them from Git Bash / WSL, or use `curl.exe`
 explicitly inside PowerShell (the built-in `curl` alias is `Invoke-WebRequest`
 and does not accept the same flags).
 
@@ -34,11 +34,11 @@ This creates/refreshes four team-role logins (password **`Secure1!`** for all):
 | `accounts.user@example.com` | `CRM_ACCOUNTS` | Read-only visibility into quotes/OVF (Accounts team) |
 
 `sales.user@example.com` also already exists as the generic Sales-module
-demo admin (from `seed_demo_data.py`) — the script simply layers the
+demo admin (from `seed_demo_data.py`) - the script simply layers the
 `CRM_SALES_MANAGER` role and permissions onto it, so no credentials change.
 
 It also prints the seeded product IDs and the `Calipers Consulting`
-`crm_company` id — grab that id from the script output (`Sales account : ACC-... (id=...)`)
+`crm_company` id - grab that id from the script output (`Sales account : ACC-... (id=...)`)
 before continuing, or fetch it again with step 2 below.
 
 ## 1. Log in
@@ -76,10 +76,10 @@ curl -s -X POST $BASE/crm/companies -H "Authorization: Bearer $TOKEN" \
   }'
 ```
 
-A **Lead can only be created from a Company** — there is no standalone
+A **Lead can only be created from a Company** - there is no standalone
 `POST /crm/leads` path for the sales blueprint. You'll need a
 `lead_source_id` (`GET /crm/lead-sources`) and an `owner_employee_id`
-(`GET /master-data/employees`) — both are pre-seeded by `seed_demo_modules.py`
+(`GET /master-data/employees`) - both are pre-seeded by `seed_demo_modules.py`
 for the demo company:
 
 ```bash
@@ -101,7 +101,7 @@ Response `blueprint_state` = `"open"`. Save `LEAD_ID`.
 ## 3. Convert Lead → Opportunity (Rule #2)
 
 Opportunities in the sales blueprint can **only** be created through lead
-conversion — there is no direct "create opportunity" path for this flow.
+conversion - there is no direct "create opportunity" path for this flow.
 
 ```bash
 PIPELINE_ID=$(curl -s "$BASE/crm/pipelines" -H "Authorization: Bearer $TOKEN" | jq -r '.data[0].id')
@@ -109,7 +109,7 @@ PIPELINE_ID=$(curl -s "$BASE/crm/pipelines" -H "Authorization: Bearer $TOKEN" | 
 curl -s -X POST $BASE/crm/leads/$LEAD_ID/convert \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{
     "pipeline_id": "'"$PIPELINE_ID"'",
-    "opportunity_name": "Acme Robotics — Server Refresh",
+    "opportunity_name": "Acme Robotics - Server Refresh",
     "expected_revenue": 500000,
     "remark": "Qualified after site visit"
   }'
@@ -120,13 +120,13 @@ Save `OPPORTUNITY_ID` from the response. `blueprint_state` = `"open"`.
 ## 4. BOQ → Presales approval (Rules #6/#8)
 
 ```bash
-# Attach BOQ (metadata-only demo upload — provide file_path or content_base64)
+# Attach BOQ (metadata-only demo upload - provide file_path or content_base64)
 curl -s -X POST $BASE/crm/opportunities/$OPPORTUNITY_ID/actions/attach_boq \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"file_name":"boq-v1.pdf","file_path":"/uploads/boq-v1.pdf","content_type":"application/pdf"}'
 # state -> boq_pending
 
-# Send for approval to Presales — locks the opportunity + creates a My Jobs task
+# Send for approval to Presales - locks the opportunity + creates a My Jobs task
 curl -s -X POST $BASE/crm/opportunities/$OPPORTUNITY_ID/actions/send_boq_approval \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"team_role":"presales","remarks":"Please review BOQ pricing"}'
@@ -148,7 +148,7 @@ curl -s -X POST $BASE/crm/my-jobs/$TASK_ID/decide \
 ```
 
 Deciding "approved" automatically resumes the opportunity blueprint
-(`approve_boq`) and unlocks it — `blueprint_state` -> `sow_optional`.
+(`approve_boq`) and unlocks it - `blueprint_state` -> `sow_optional`.
 
 ## 5. SOW (optional) → Deal Registration → OEM
 
@@ -175,7 +175,7 @@ curl -s -X POST $BASE/crm/opportunities/$OPPORTUNITY_ID/actions/attach_oem_quote
 # state -> quote_ready  (oem_quote_attached = true)
 ```
 
-## 6. Quote — only after OEM quote attached (Rule #3)
+## 6. Quote - only after OEM quote attached (Rule #3)
 
 ```bash
 QUOTE_ID=$(curl -s -X POST $BASE/crm/quotes \
@@ -211,13 +211,13 @@ curl -s -X POST $BASE/crm/quotes/$QUOTE_ID/approve-internally \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{}'
 ```
 
-**If margin is at/below the threshold**, `approve-internally` is rejected —
+**If margin is at/below the threshold**, `approve-internally` is rejected -
 send it to Management instead (Rule #6 + #8):
 
 ```bash
 curl -s -X POST $BASE/crm/quotes/$QUOTE_ID/send-for-approval \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d '{"team_role":"management","remarks":"Margin below threshold — please review"}'
+  -d '{"team_role":"management","remarks":"Margin below threshold - please review"}'
 # quote locked + My Jobs task created for Management
 
 MGMT_TOKEN=$(curl -s -X POST $BASE/auth/login -H "Content-Type: application/json" \
@@ -226,7 +226,7 @@ TASK_ID=$(curl -s "$BASE/crm/my-jobs?team_role=management&status=pending" \
   -H "Authorization: Bearer $MGMT_TOKEN" | jq -r '.data[0].id')
 curl -s -X POST $BASE/crm/my-jobs/$TASK_ID/decide \
   -H "Authorization: Bearer $MGMT_TOKEN" -H "Content-Type: application/json" \
-  -d '{"decision":"approved","remark":"Approved despite thin margin — strategic account"}'
+  -d '{"decision":"approved","remark":"Approved despite thin margin - strategic account"}'
 ```
 
 Then move it to the customer and close it out:
@@ -262,7 +262,7 @@ curl -s -X POST $BASE/crm/my-jobs/$TASK_ID/decide \
 # resumes approve_po -> customer_po_approved = true, state -> ovf_ready, unlocked
 ```
 
-## 8. OVF — only after customer PO approved (Rule #4)
+## 8. OVF - only after customer PO approved (Rule #4)
 
 ```bash
 OVF_ID=$(curl -s -X POST $BASE/crm/ovf \
@@ -335,10 +335,10 @@ curl -s -X POST $BASE/crm/quotes/$QUOTE_ID/actions/lost -H "Authorization: Beare
   -H "Content-Type: application/json" -d '{"remark":"Customer went with a competitor"}'
 ```
 
-There is no "lost" action on OVF — by the time an OVF exists, the deal is
+There is no "lost" action on OVF - by the time an OVF exists, the deal is
 already contractually committed (Customer PO approved).
 
-## Reference — endpoints added
+## Reference - endpoints added
 
 | Area | Base path |
 |---|---|
@@ -368,7 +368,7 @@ are untouched and continue to work for non-blueprint records
   until the approving team decides; locked records reject further blueprint
   actions (`409 Record Locked`) except the universal `lost` action.
 - **Notification stub**: `CrmApprovalTask.notification_sent` is set `true`
-  synchronously when a job is created — this is a stand-in for the real
+  synchronously when a job is created - this is a stand-in for the real
   Notification Engine integration, not a functional email/push send.
 
 ## 10. Frontend UI Demo
@@ -383,19 +383,19 @@ the approval side) and open **CRM** in the left nav.
 ### Teamspace tabs
 
 `My Jobs | Company | Leads | Opportunities | Quotes | OVF | Contacts | Products | Calls | KYC`
-(Calls and KYC are stubbed — "coming soon" placeholders; every other tab is
+(Calls and KYC are stubbed - "coming soon" placeholders; every other tab is
 fully wired to the live `/crm/*` API surface above.)
 
 ### Walking the blueprint in the UI
 
 1. **Company** → *New Company* → fill Account Info + Billing Address
    (required) → *Copy from Billing* can pre-fill Shipping → Save. Open the
-   company's detail page — it is the **only** place with a *Create Lead*
+   company's detail page - it is the **only** place with a *Create Lead*
    button. Active companies can create multiple leads; the button is disabled
    only when the account is inactive.
 2. **Create Lead** → the form prefills from the company (name, email,
    billing address) inside a "Synced from Company" banner; pick a product
-   type (Hardware / Software / Others — Others reveals a free-text field),
+   type (Hardware / Software / Others - Others reveals a free-text field),
    Lead Source, and Owner, then submit.
 3. **Lead detail** → shows the Company → Lead → Opportunity → Quote → OVF →
    Won stepper (`DealTimeline`) with the current stage highlighted →
@@ -408,19 +408,19 @@ fully wired to the live `/crm/*` API surface above.)
    Accounts/Management → *Create OVF* becomes available after a Quote is
    accepted). The Quotes/OVF tables on this page show empty-state copy
    explaining each gate (e.g. "Create Quote after the OEM quote is
-   attached…"). **Opportunities has no "New" button** on its list — a banner
+   attached…"). **Opportunities has no "New" button** on its list - a banner
    explains they can only be created by converting a Lead.
 5. **Quote detail** → GST/HSN-aware line table with a reverse margin
    calculator (edit Cost, Sell, or Margin % and the other two recompute);
    attach a Vendor Quote before *Send for Approval* (a soft warning banner
    nudges this); *Approve Internally* is gated server-side by the margin
-   threshold (≥7% HW/SW, ≥20% Services) — if the margin is at/below
+   threshold (≥7% HW/SW, ≥20% Services) - if the margin is at/below
    threshold it 409s and you must use *Send for Approval* instead, which
    raises a My Jobs task for Management.
 6. **OVF detail** → add Customer-PO-side and Vendor-side lines to see the
    margin/finance-cost roll up; *Send for Approval* → *Share to SCM* →
    *Mark Deal Won* forces a Deal Won Amount prompt and flips the parent
-   Opportunity to `won` (100% probability) — the `DealTimeline` shows "Won".
+   Opportunity to `won` (100% probability) - the `DealTimeline` shows "Won".
 7. **My Jobs** → the team inbox: filter by team (Presales / Project /
    Management / Accounts / SCM) and status, *Approve* or *Reject* with a
    remark (remark is required to reject), which resumes the originating
@@ -455,12 +455,12 @@ Products · Calls (stub) · KYC (stub)**
 | 1. Create/open account | **Company** → list → row or "New Company" | 2-col Account Info + billing/shipping address form (billing required, "Copy to shipping" button) + Description. The company detail page is the **only** place with a "Create Lead" button; active companies can create multiple leads, and inactive accounts keep the button disabled. |
 | 2. Create lead | Company detail → **Create Lead** | Pre-fills company/branch; pick Lead Source + Owner; product cascade (Hardware / Software / Others free-text). |
 | 3. Convert or lose | **Leads** → lead detail | Deal timeline stepper (Company → Lead → Opportunity → Quote → OVF → Won). "Convert to Opportunity" opens a dialog requiring Pipeline + remark; "Mark Lost" is available until Won. |
-| 4. Run the opportunity blueprint | **Opportunities** → opportunity detail (no "New" button on the list — banner explains conversion is Lead-only) | Blueprint action bar renders only the buttons allowed by `GET .../blueprint` (Attach BOQ → Send to Pre-sales → SOW/Skip → Deal Reg → OEM Received → Attach OEM Quote → **Create Quote** (gated, only appears once OEM quote is attached) → …→ Attach PO → Send to Accounts/Management → **Create OVF** (gated on accepted quote) → Deal Won). "Lost" stays available until Won. File-based actions open a small file picker and upload as base64 via the Attachments API. |
+| 4. Run the opportunity blueprint | **Opportunities** → opportunity detail (no "New" button on the list - banner explains conversion is Lead-only) | Blueprint action bar renders only the buttons allowed by `GET .../blueprint` (Attach BOQ → Send to Pre-sales → SOW/Skip → Deal Reg → OEM Received → Attach OEM Quote → **Create Quote** (gated, only appears once OEM quote is attached) → …→ Attach PO → Send to Accounts/Management → **Create OVF** (gated on accepted quote) → Deal Won). "Lost" stays available until Won. File-based actions open a small file picker and upload as base64 via the Attachments API. |
 | 5. Approve as another role | **My Jobs** | Inbox of pending/approved/rejected tasks, filterable by team and status; Approve/Reject buttons open a remark dialog (remark required to reject) and deep-link back to the source record. |
-| 6. Build the quote | **Quotes** → quote detail | GST/HSN-aware line table with a **reverse margin calculator** — edit any of Cost / Sell / Margin % and the other two recompute automatically before saving. An amber banner requires the vendor quote to be attached before Send-for-Approval/Approve-Internally; a second banner explains when the margin is at/below threshold and directs you to "Send for Approval" instead of "Approve Internally". Stage actions: Send for Approval → Approve Internally → Send to Customer → Accept/Negotiate/Follow-up → Lost. |
+| 6. Build the quote | **Quotes** → quote detail | GST/HSN-aware line table with a **reverse margin calculator** - edit any of Cost / Sell / Margin % and the other two recompute automatically before saving. An amber banner requires the vendor quote to be attached before Send-for-Approval/Approve-Internally; a second banner explains when the margin is at/below threshold and directs you to "Send for Approval" instead of "Approve Internally". Stage actions: Send for Approval → Approve Internally → Send to Customer → Accept/Negotiate/Follow-up → Lost. |
 | 7. Order Value Form | **OVF** → OVF detail (only reachable once the opportunity is `ovf_ready`, i.e. customer PO approved) | Customer-PO vs Vendor line tables, finance-cost %, Send for Approval → Approve → Share to SCM → **Deal Won** (forces a Deal Won Amount prompt in the action dialog). |
 | 8. Housekeeping | **Contacts**, **Products** | Simple CRUD lists with a create/edit dialog. |
-| — | **Calls**, **KYC** | Stub "coming soon" pages reserved for a future release. |
+| - | **Calls**, **KYC** | Stub "coming soon" pages reserved for a future release. |
 
 UX conventions used throughout the new screens:
 

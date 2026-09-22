@@ -1,8 +1,8 @@
-# Enterprise ERP Platform
+# iConnect Plus
 
 Multi-Industry, Multi-Company, Enterprise-Grade ERP Platform.
 
-**Architecture Baseline:** v1.1 — LOCKED  
+**Architecture Baseline:** v1.1 - LOCKED  
 **Status:** Sprint 0 Foundation Complete
 
 ## Architecture
@@ -11,11 +11,11 @@ Multi-Industry, Multi-Company, Enterprise-Grade ERP Platform.
 |-------|------------|
 | Frontend | Next.js 16+, TypeScript, Tailwind CSS, ShadCN UI |
 | Backend | Python 3.13+, FastAPI, SQLAlchemy 2.0, Alembic, Pydantic v2, Celery |
-| Database | PostgreSQL |
-| Search | OpenSearch |
-| Storage | MinIO / AWS S3 |
+| Database | PostgreSQL (AWS RDS in production) |
+| Search | OpenSearch (optional) |
+| Storage | AWS S3 |
 | Cache / Queue | Redis, RabbitMQ |
-| Infrastructure | Docker, Kubernetes Ready, Terraform Ready |
+| Deploy | Docker Compose · Coolify on EC2 (`docker-compose.coolify.yml`) |
 
 **Pattern:** Clean Architecture · DDD · Modular Monolith
 
@@ -51,11 +51,14 @@ cp .env.example .env
 
 ### 2. Infrastructure (Docker)
 
-```bash
-docker compose up -d
-```
+**Coolify (AWS EC2):** use `docker-compose.coolify.yml` — see `docs/coolify-deploy.md`  
+(AWS RDS + S3; Redis/RabbitMQ in compose; no MinIO/nginx).
 
-Services: PostgreSQL, Redis, RabbitMQ, MinIO, OpenSearch
+**LAN / local app stack:**
+
+```bash
+docker compose -f docker-compose.app.yml up -d --build
+```
 
 ### 3. Backend API
 
@@ -65,7 +68,7 @@ python -m venv .venv
 .venv\Scripts\activate        # Windows
 pip install -e ".[dev]"
 alembic upgrade head
-uvicorn main:app --reload --host 0.0.0.0 --port 8000 --app-dir src
+uvicorn main:app --reload --reload-dir src --host 0.0.0.0 --port 8000 --app-dir src
 ```
 
 API: http://localhost:8000/api/v1/health  
@@ -126,4 +129,4 @@ Sprint 0 delivers platform foundation only:
 
 ## License
 
-Proprietary — Internal Use Only
+Proprietary - Internal Use Only

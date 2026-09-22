@@ -15,6 +15,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { resolveWithinRoot, statWithinRoot } = require("../../shared/safe-fs.cjs");
 
 // Validation rules
 const RULES = {
@@ -123,7 +124,7 @@ function validateFileSize(filepath, extension) {
   const issues = [];
   const warnings = [];
 
-  const stats = fs.statSync(filepath);
+  const stats = statWithinRoot(process.cwd(), filepath);
   const size = stats.size;
 
   let limits;
@@ -238,9 +239,24 @@ function formatBytes(bytes) {
  * Main validation function
  */
 function validateAsset(assetPath) {
+  let resolvedAsset;
+  try {
+    resolvedAsset = resolveWithinRoot(process.cwd(), assetPath);
+  } catch {
+    return {
+      path: assetPath,
+      filename: path.basename(assetPath),
+      valid: false,
+      issues: [`File path is not allowed: ${assetPath}`],
+      warnings: [],
+      suggestions: [],
+      checks: {},
+    };
+  }
+
   const results = {
-    path: assetPath,
-    filename: path.basename(assetPath),
+    path: resolvedAsset,
+    filename: path.basename(resolvedAsset),
     valid: true,
     issues: [],
     warnings: [],
@@ -249,13 +265,13 @@ function validateAsset(assetPath) {
   };
 
   // Check file exists
-  if (!fs.existsSync(assetPath)) {
+  if (!fs.existsSync(resolvedAsset)) {
     results.valid = false;
     results.issues.push(`File not found: ${assetPath}`);
     return results;
   }
 
-  const filename = path.basename(assetPath);
+  const filename = path.basename(resolvedAsset);
   const extension = path.extname(filename).slice(1).toLowerCase();
 
   // 1. Validate filename
@@ -274,7 +290,7 @@ function validateAsset(assetPath) {
   }
 
   // 3. Validate file size
-  const sizeResult = validateFileSize(assetPath, extension);
+  const sizeResult = validateFileSize(resolvedAsset, extension);
   results.checks.fileSize = sizeResult;
   if (!sizeResult.valid) {
     results.issues.push(...sizeResult.issues);
@@ -366,9 +382,13 @@ function main() {
   }
 
   // Resolve path
-  const resolvedPath = path.isAbsolute(assetPath)
-    ? assetPath
-    : path.join(process.cwd(), assetPath);
+  let resolvedPath;
+  try {
+    resolvedPath = resolveWithinRoot(process.cwd(), assetPath);
+  } catch {
+    console.error(`Asset path is not allowed: ${assetPath}`);
+    process.exit(1);
+  }
 
   // Validate
   const results = validateAsset(resolvedPath);

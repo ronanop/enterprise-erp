@@ -12,18 +12,21 @@ from modules.crm.models.customer_satisfaction import CrmCustomerSatisfaction
 from modules.crm.models.email_log import CrmEmailLog
 from modules.crm.models.followup import CrmFollowup
 from modules.crm.models.interaction import CrmInteraction
+from modules.crm.models.kyc_record import CrmKycRecord
 from modules.crm.models.lead import CrmLead
 from modules.crm.models.lead_activity import CrmLeadActivity
 from modules.crm.models.lead_assignment import CrmLeadAssignment
 from modules.crm.models.lead_source import CrmLeadSource
 from modules.crm.models.meeting import CrmMeeting
 from modules.crm.models.oem import CrmOem
+from modules.crm.models.selling_entity import CrmSellingEntity
 from modules.crm.models.opportunity import CrmOpportunity
 from modules.crm.models.opportunity_stage import CrmOpportunityStage
 from modules.crm.models.ovf import CrmOvf, CrmOvfLine
 from modules.crm.models.pipeline import CrmPipeline
 from modules.crm.models.product import CrmProduct
 from modules.crm.models.quote import CrmQuote, CrmQuoteLine
+from modules.crm.models.saved_report import CrmSavedReport
 from modules.crm.models.state_history import CrmStateHistory
 from modules.crm.models.task import CrmTask
 from modules.crm.models.visit_log import CrmVisitLog
@@ -41,12 +44,14 @@ __all__ = [
     "CrmEmailLog",
     "CrmFollowup",
     "CrmInteraction",
+    "CrmKycRecord",
     "CrmLead",
     "CrmLeadActivity",
     "CrmLeadAssignment",
     "CrmLeadSource",
     "CrmMeeting",
     "CrmOem",
+    "CrmSellingEntity",
     "CrmOpportunity",
     "CrmOpportunityStage",
     "CrmOvf",
@@ -55,6 +60,7 @@ __all__ = [
     "CrmProduct",
     "CrmQuote",
     "CrmQuoteLine",
+    "CrmSavedReport",
     "CrmStateHistory",
     "CrmTask",
     "CrmVisitLog",

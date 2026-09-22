@@ -124,7 +124,7 @@ export function HelpdeskDashboard() {
     <div className="space-y-5">
       <PageHeader
         title="Helpdesk"
-        description="Customer support — tickets, assignments, SLA, escalations, knowledge base, resolutions, and feedback."
+        description="Customer support - tickets, assignments, SLA, escalations, knowledge base, resolutions, and feedback."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <button
@@ -171,28 +171,28 @@ export function HelpdeskDashboard() {
       <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
         <FinanceKpiCard
           label="Open tickets"
-          value={loading ? "—" : String(kpis.openTickets)}
+          value={loading ? "-" : String(kpis.openTickets)}
           hint={`${data?.tickets.length ?? 0} tickets · ${countByStatus(data?.tickets ?? [], ["in_progress", "assigned"])} active`}
           icon={Ticket}
           tone={kpis.openTickets > 0 ? "warning" : "success"}
         />
         <FinanceKpiCard
           label="Active assignments"
-          value={loading ? "—" : String(kpis.activeAssignments)}
+          value={loading ? "-" : String(kpis.activeAssignments)}
           hint={`${data?.assignments.length ?? 0} assignments · ${countByStatus(data?.teams ?? [], ["active"])} teams`}
           icon={UserCheck}
           tone={kpis.activeAssignments > 0 ? "default" : "success"}
         />
         <FinanceKpiCard
           label="Open escalations"
-          value={loading ? "—" : String(kpis.openEscalations)}
+          value={loading ? "-" : String(kpis.openEscalations)}
           hint={`${countByStatus(data?.slas ?? [], ["active"])} active SLAs · ${data?.escalations.length ?? 0} total`}
           icon={LifeBuoy}
           tone={kpis.openEscalations > 0 ? "danger" : "success"}
         />
         <FinanceKpiCard
           label="Published articles"
-          value={loading ? "—" : String(kpis.publishedArticles)}
+          value={loading ? "-" : String(kpis.publishedArticles)}
           hint={`${data?.articles.length ?? 0} articles · ${data?.knowledgeBases.length ?? 0} KB spaces`}
           icon={BookOpen}
           tone={kpis.publishedArticles > 0 ? "success" : "default"}
@@ -229,7 +229,7 @@ export function HelpdeskDashboard() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium tracking-tight">Workspace</h2>
+          <h2 className="text-base font-extrabold tracking-tight">Workspace</h2>
           <Badge variant="secondary">{helpdeskWorkspaceGroups.length} areas</Badge>
         </div>
         <div className="grid gap-3 lg:grid-cols-3">
@@ -246,7 +246,7 @@ export function HelpdeskDashboard() {
                     <Icon className="size-4" />
                   </span>
                   <div className="min-w-0">
-                    <h3 className="text-sm font-medium tracking-tight">{group.title}</h3>
+                    <h3 className="text-base font-extrabold tracking-tight">{group.title}</h3>
                     <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
                       {group.description}
                     </p>
@@ -277,7 +277,7 @@ export function HelpdeskDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Recent tickets</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Recent tickets</h2>
               <p className="text-[11px] text-muted-foreground">Support intake</p>
             </div>
             <Link
@@ -318,17 +318,17 @@ export function HelpdeskDashboard() {
                     >
                       <td className="max-w-[220px] truncate px-4 py-2.5">
                         <p className="font-medium text-foreground">
-                          {String(row.subject ?? row.document_number ?? "—")}
+                          {String(row.subject ?? row.document_number ?? "-")}
                         </p>
                         <p className="truncate text-[11px] text-muted-foreground">
                           {String(row.document_number ?? "")}
                         </p>
                       </td>
                       <td className="px-4 py-2.5 text-xs capitalize text-muted-foreground">
-                        {String(row.ticket_type ?? "—").replaceAll("_", " ")}
+                        {String(row.ticket_type ?? "-").replaceAll("_", " ")}
                       </td>
                       <td className="px-4 py-2.5 text-xs capitalize text-muted-foreground">
-                        {String(row.channel ?? "—").replaceAll("_", " ")}
+                        {String(row.channel ?? "-").replaceAll("_", " ")}
                       </td>
                       <td className="px-4 py-2.5">
                         <FinanceStatusBadge
@@ -346,7 +346,7 @@ export function HelpdeskDashboard() {
         <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
           <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
             <div>
-              <h2 className="text-sm font-medium tracking-tight">Escalation watch</h2>
+              <h2 className="text-base font-extrabold tracking-tight">Escalation watch</h2>
               <p className="text-[11px] text-muted-foreground">Recent escalations</p>
             </div>
             <Link
@@ -371,14 +371,14 @@ export function HelpdeskDashboard() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <p className="truncate text-sm font-medium">
-                      {String(row.document_number ?? "—")}
+                      {String(row.document_number ?? "-")}
                     </p>
                     <FinanceStatusBadge
                       status={asStatus(row.status) || String(row.status ?? "")}
                     />
                   </div>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    L{String(row.escalation_level ?? "—")} ·{" "}
+                    L{String(row.escalation_level ?? "-")} ·{" "}
                     {String(row.reason_code ?? "escalation").replaceAll("_", " ")}
                   </p>
                 </li>
@@ -389,7 +389,7 @@ export function HelpdeskDashboard() {
 
         <div className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
           <div className="mb-3">
-            <h2 className="text-sm font-medium tracking-tight">Ticket status mix</h2>
+            <h2 className="text-base font-extrabold tracking-tight">Ticket status mix</h2>
             <p className="text-[11px] text-muted-foreground">Queue lifecycle</p>
           </div>
           {loading ? (

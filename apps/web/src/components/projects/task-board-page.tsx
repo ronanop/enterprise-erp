@@ -68,7 +68,7 @@ export function TaskBoardPage() {
 
   const projectName = useMemo(() => {
     const map = new Map(projects.map((p) => [p.id, p.label]));
-    return (id: string) => map.get(id) ?? "—";
+    return (id: string) => map.get(id) ?? "-";
   }, [projects]);
 
   const filtered = useMemo(() => {
@@ -180,7 +180,7 @@ export function TaskBoardPage() {
                     </h2>
                   </div>
                   <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
-                    {loading ? "—" : rows.length}
+                    {loading ? "-" : rows.length}
                   </span>
                 </header>
 

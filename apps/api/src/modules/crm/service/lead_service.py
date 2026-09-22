@@ -1,11 +1,13 @@
 """Lead application services."""
 
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from core.exceptions import ConflictException, NotFoundException
+from core.exceptions import ConflictException, ForbiddenException, NotFoundException
 from modules.crm.domain.enums import CrmEntityType, LeadStatus
 from modules.crm.models import CrmLead
 from modules.crm.repository.company_repository import CompanyRepository
@@ -13,6 +15,13 @@ from modules.crm.repository.lead_activity_repository import LeadActivityReposito
 from modules.crm.repository.lead_assignment_repository import LeadAssignmentRepository
 from modules.crm.repository.lead_repository import LeadRepository
 from modules.crm.repository.lead_source_repository import LeadSourceRepository
+from modules.crm.service.cloud_flow import (
+    DEFAULT_DISTRIBUTOR_DISCOUNT_PERCENT,
+    cloud_sub_product_label,
+    cloud_variant_from_lead,
+)
+from modules.crm.service.crm_module_admin import CrmModuleAdminService
+from modules.crm.service.crm_record_visibility import CrmRecordVisibility
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import (
@@ -23,7 +32,10 @@ from modules.crm.service.engines import (
 )
 from modules.crm.service.integration_service import CRMIntegrationService
 from modules.foundation.domain.value_objects import TenantContext
+from modules.foundation.models.security import SecUser
 from modules.foundation.service.audit_service import AuditService
+from modules.master_data.models.employee import MasterEmployee
+from modules.master_data.repository.employee_repository import EmployeeRepository
 
 
 class LeadSourceService:
@@ -66,6 +78,8 @@ class LeadService:
         self._activity_engine = LeadActivityEngine()
         self._integration = CRMIntegrationService(db)
         self._audit = AuditService(db)
+        self._crm_admin = CrmModuleAdminService(db)
+        self._visibility = CrmRecordVisibility(db)
 
     def list(
         self,
@@ -74,15 +88,32 @@ class LeadService:
         company_account_id: UUID | None = None,
     ):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_leads(ctx, cid, company_account_id)
+        created_by: UUID | None = None
+        if self._visibility.requires_creator_scope(ctx):
+            created_by = self._visibility.current_user_id(ctx)
+            if created_by is None:
+                return []
+        return self._repo.list_leads(
+            ctx, cid, company_account_id, created_by=created_by
+        )
 
     def get(self, ctx: TenantContext, lead_id: UUID) -> CrmLead:
         row = self._repo.get(ctx, lead_id)
         if row is None:
             raise NotFoundException("Lead not found")
+        self._visibility.ensure_lead_access(ctx, row)
         self._ensure_display_snapshot(ctx, row)
         return row
 
+    def _current_employee_id(self, ctx: TenantContext) -> UUID | None:
+        try:
+            return self._resolve_owner_employee_id(ctx, None)
+        except ConflictException:
+            return None
+
+    def _ensure_lead_owner_or_admin(self, ctx: TenantContext, lead: CrmLead) -> None:
+        """Backward-compatible alias - visibility is creator-based for non-admins."""
+        self._visibility.ensure_lead_access(ctx, lead)
     def _ensure_display_snapshot(self, ctx: TenantContext, lead: CrmLead) -> None:
         """Backfill blank address/entity fields from the linked company account."""
         if lead.company_account_id is None:
@@ -142,9 +173,190 @@ class LeadService:
         if patched:
             self._db.flush()
 
+    def _resolve_owner_employee_id(self, ctx: TenantContext, candidate: UUID | None) -> UUID:
+        """Ensure lead owner references a real master_employee row (FK on crm_lead)."""
+        repo = EmployeeRepository(self._db)
+        if candidate is not None:
+            row = repo.get_by_id(ctx, candidate)
+            if row is not None:
+                return candidate
+
+        linked = repo.get_by_user_id(ctx, ctx.user_id) if ctx.user_id else None
+        if linked is not None:
+            return linked.id
+
+        user: SecUser | None = None
+        if ctx.user_id:
+            user = self._db.scalar(
+                select(SecUser).where(
+                    SecUser.id == ctx.user_id,
+                    SecUser.tenant_id == ctx.tenant_id,
+                    SecUser.is_deleted.is_(False),
+                )
+            )
+
+        if user and user.employee_id:
+            row = repo.get_by_id(ctx, user.employee_id)
+            if row is not None:
+                return user.employee_id
+
+        if user and user.email:
+            email_row = self._db.scalar(
+                select(MasterEmployee).where(
+                    MasterEmployee.tenant_id == ctx.tenant_id,
+                    MasterEmployee.is_deleted.is_(False),
+                    func.lower(MasterEmployee.email) == user.email.lower(),
+                )
+            )
+            if email_row is not None:
+                if user.employee_id != email_row.id:
+                    user.employee_id = email_row.id
+                if email_row.user_id != user.id:
+                    email_row.user_id = user.id
+                    email_row.updated_by = ctx.user_id
+                self._db.flush()
+                return email_row.id
+
+        company_id = ctx.company_id
+        if company_id:
+            scoped = repo.list_employees(ctx, company_id=company_id)
+            if len(scoped) == 1:
+                return scoped[0].id
+
+        scoped = repo.list_employees(ctx)
+        if len(scoped) == 1:
+            return scoped[0].id
+
+        if user is not None:
+            provisioned = self._ensure_employee_for_user(ctx, user)
+            if provisioned is not None:
+                return provisioned
+
+        raise ConflictException(
+            "Lead owner must be a valid employee. Select an owner from the list, or ask an admin "
+            "to link your login to an employee in master data."
+        )
+
+    def _ensure_employee_for_user(self, ctx: TenantContext, user: SecUser) -> UUID | None:
+        """Create/link a master employee so CRM users can own leads without admin prep."""
+        from uuid import uuid4
+
+        from modules.organization.models.branch import OrgBranch
+        from modules.organization.models.hierarchy import OrgDepartment
+
+        company_id = ctx.company_id
+        if company_id is None:
+            return None
+
+        branch_id = ctx.branch_id
+        if branch_id is None:
+            branch = self._db.scalar(
+                select(OrgBranch)
+                .where(
+                    OrgBranch.tenant_id == ctx.tenant_id,
+                    OrgBranch.company_id == company_id,
+                    OrgBranch.is_deleted.is_(False),
+                )
+                .order_by(OrgBranch.branch_code)
+                .limit(1)
+            )
+            if branch is None:
+                return None
+            branch_id = branch.id
+
+        department = self._db.scalar(
+            select(OrgDepartment)
+            .where(
+                OrgDepartment.tenant_id == ctx.tenant_id,
+                OrgDepartment.company_id == company_id,
+                OrgDepartment.branch_id == branch_id,
+                OrgDepartment.is_deleted.is_(False),
+            )
+            .order_by(OrgDepartment.department_code)
+            .limit(1)
+        )
+        if department is None:
+            department = self._db.scalar(
+                select(OrgDepartment)
+                .where(
+                    OrgDepartment.tenant_id == ctx.tenant_id,
+                    OrgDepartment.company_id == company_id,
+                    OrgDepartment.is_deleted.is_(False),
+                )
+                .order_by(OrgDepartment.department_code)
+                .limit(1)
+            )
+        if department is None:
+            return None
+
+        email = (user.email or "").strip().lower()
+        if not email:
+            email = f"crm-user-{user.id}@local.invalid"
+
+        existing = self._db.scalar(
+            select(MasterEmployee).where(
+                MasterEmployee.tenant_id == ctx.tenant_id,
+                MasterEmployee.company_id == company_id,
+                MasterEmployee.is_deleted.is_(False),
+                func.lower(MasterEmployee.email) == email,
+            )
+        )
+        if existing is not None:
+            if user.employee_id != existing.id:
+                user.employee_id = existing.id
+            if existing.user_id != user.id:
+                existing.user_id = user.id
+                existing.updated_by = ctx.user_id
+            self._db.flush()
+            return existing.id
+
+        display = (user.display_name or email.split("@", 1)[0] or "CRM User").strip()
+        parts = display.split(None, 1)
+        first_name = (parts[0] if parts else "CRM")[:100]
+        last_name = (parts[1] if len(parts) > 1 else "User")[:100]
+        employee_code = f"CRM-{str(user.id).replace('-', '')[:12].upper()}"
+
+        code_taken = self._db.scalar(
+            select(MasterEmployee.id).where(
+                MasterEmployee.tenant_id == ctx.tenant_id,
+                MasterEmployee.company_id == company_id,
+                MasterEmployee.employee_code == employee_code,
+                MasterEmployee.is_deleted.is_(False),
+            )
+        )
+        if code_taken is not None:
+            employee_code = f"CRM-{uuid4().hex[:12].upper()}"
+
+        row = MasterEmployee(
+            id=uuid4(),
+            tenant_id=ctx.tenant_id,
+            company_id=company_id,
+            branch_id=branch_id,
+            department_id=department.id,
+            employee_code=employee_code,
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            mobile="0000000000",
+            designation="CRM Owner",
+            date_of_joining=date.today(),
+            status="active",
+            user_id=user.id,
+            created_by=ctx.user_id,
+            updated_by=ctx.user_id,
+        )
+        # Insert employee before linking sec_user.employee_id (FK order).
+        self._db.add(row)
+        self._db.flush()
+        user.employee_id = row.id
+        self._db.flush()
+        return row.id
+
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
+        owner_candidate = fields.pop("owner_employee_id", None)
+        fields["owner_employee_id"] = self._resolve_owner_employee_id(ctx, owner_candidate)
         code = self._numbers.generate(CrmEntityType.LEAD, cid, CrmLead, "lead_code")
         fields.setdefault("document_date", date.today())
         fields.setdefault("status", LeadStatus.NEW.value)
@@ -164,6 +376,51 @@ class LeadService:
         if row is None:
             raise NotFoundException("Lead not found")
         return row
+
+    def update_sales_lead(self, ctx: TenantContext, lead_id: UUID, **fields):
+        version = fields.pop("version", None)
+        owner_candidate = fields.pop("owner_employee_id", None)
+        lead = self.get(ctx, lead_id)
+        if lead.company_account_id is None:
+            raise ConflictException("Only sales-process leads can be updated with this endpoint")
+        if lead.blueprint_state == "lost":
+            raise ConflictException("Lost leads cannot be edited")
+        if lead.blueprint_state not in ("open", "converted"):
+            raise ConflictException("Only open or converted sales leads can be edited")
+        sales_blueprint_engine.assert_not_locked(lead)
+        if version is not None and int(lead.version or 1) != int(version):
+            raise ConflictException("Lead was modified by another user; refresh and try again")
+        if owner_candidate is not None:
+            if self._crm_admin.is_admin(ctx):
+                fields["owner_employee_id"] = self._resolve_owner_employee_id(ctx, owner_candidate)
+            elif owner_candidate != lead.owner_employee_id:
+                raise ForbiddenException("Only CRM admins can change lead owner")
+        row = self._repo.update(ctx, lead_id, **fields)
+        if row is None:
+            raise NotFoundException("Lead not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="crm_lead",
+            entity_id=row.id,
+            operation="update",
+            performed_by=ctx.user_id,
+        )
+        return row
+
+    def delete(self, ctx: TenantContext, lead_id: UUID) -> None:
+        self._crm_admin.ensure_admin(ctx)
+        lead = self.get(ctx, lead_id)
+        if lead.locked:
+            raise ConflictException("Lead is locked pending approval")
+        if not self._repo.soft_delete(ctx, lead_id):
+            raise NotFoundException("Lead not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="crm_lead",
+            entity_id=lead_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
 
     def assign(
         self,
@@ -200,18 +457,35 @@ class LeadService:
         ctx: TenantContext,
         lead_id: UUID,
         *,
-        pipeline_id: UUID,
-        opportunity_name: str,
-        expected_revenue: float = 0,
+        pipeline_id: UUID | None = None,
+        opportunity_name: str | None = None,
+        expected_revenue: float | None = None,
         existing_customer_id: UUID | None = None,
         create_customer: bool = True,
         remark: str | None = None,
     ):
         lead = self.get(ctx, lead_id)
+        if pipeline_id is None:
+            from modules.crm.repository.pipeline_repository import PipelineRepository
+
+            pipelines = PipelineRepository(self._db).list_pipelines(ctx, lead.company_id)
+            if not pipelines:
+                raise ConflictException("No sales pipeline is configured for this company")
+            pipeline_id = pipelines[0].id
+        resolved_name = (opportunity_name or "").strip() or (
+            lead.project_title
+            or (f"{lead.first_name} {lead.last_name or ''}".strip() + " - Opportunity")
+            or f"{lead.company_name or 'Lead'} - Opportunity"
+        )
+        resolved_revenue = (
+            expected_revenue
+            if expected_revenue is not None
+            else float(lead.expected_amount or 0)
+        )
         if lead.company_account_id is not None:
             # Sales-blueprint lead (rule #1/#2): lifecycle is governed by
             # ``blueprint_state``, not the legacy ``status`` qualification
-            # gate — only require it to still be in the initial "open" state
+            # gate - only require it to still be in the initial "open" state
             # and unlocked.
             if lead.blueprint_state != "open":
                 raise ConflictException(
@@ -223,7 +497,7 @@ class LeadService:
             self._engine.validate_convertible(lead)
         customer_id = existing_customer_id or lead.customer_id
         # ``crm_company`` is an optional, non-duplicate link to
-        # ``master_customer`` (per the sales-account spec) — sales-blueprint
+        # ``master_customer`` (per the sales-account spec) - sales-blueprint
         # leads therefore don't auto-create a master_customer on convert;
         # legacy (non-blueprint) leads keep the previous auto-create-customer
         # behaviour for backward compatibility.
@@ -237,23 +511,30 @@ class LeadService:
         opp_fields = {
             "branch_id": lead.branch_id,
             "company_id": lead.company_id,
-            "opportunity_name": opportunity_name or lead.project_title or f"{lead.company_name} — Opportunity",
+            "opportunity_name": resolved_name,
             "pipeline_id": pipeline_id,
             "owner_employee_id": lead.owner_employee_id,
             "lead_id": lead_id,
             "customer_id": customer_id,
-            "expected_revenue": expected_revenue or lead.expected_amount or 0,
+            "expected_revenue": resolved_revenue,
             "expected_close_date": lead.expected_closure_date,
-            "probability_percent": 25,
+            "probability_percent": lead.engagement_score if lead.engagement_score is not None else 25,
             "current_stage": "qualification",
         }
         # Rule #2: an Opportunity is only ever created "for the sales process"
-        # (i.e. blueprint-enabled) via this lead-convert path — direct
+        # (i.e. blueprint-enabled) via this lead-convert path - direct
         # POST /crm/opportunities calls leave blueprint_state unset.
         if lead.company_account_id is not None:
             opp_fields["company_account_id"] = lead.company_account_id
             opp_fields["blueprint_state"] = "open"
             opp_fields["project_title"] = lead.project_title
+            cloud_variant = cloud_variant_from_lead(lead)
+            if cloud_variant:
+                opp_fields["cloud_blueprint_variant"] = cloud_variant
+                opp_fields["product_type"] = lead.product_type
+                opp_fields["cloud_sub_product"] = cloud_sub_product_label(lead)
+                opp_fields["distributor_discount_percent"] = DEFAULT_DISTRIBUTOR_DISCOUNT_PERCENT
+                opp_fields["distributor_discount_locked"] = True
 
         opportunity = opp_svc.create(ctx, **opp_fields)
         now = datetime.now(timezone.utc)

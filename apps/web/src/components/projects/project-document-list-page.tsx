@@ -100,7 +100,7 @@ export function ProjectDocumentListPage() {
   return (
     <ProjectsRecordList
       title="Documents"
-      description="Project artefacts — BRDs, designs, reports, and contracts linked to a project, task, or milestone."
+      description="Project artefacts - BRDs, designs, reports, and contracts linked to a project, task, or milestone."
       panelTitle="Document registry"
       panelSubtitle="Project artefacts"
       icon={FileText}

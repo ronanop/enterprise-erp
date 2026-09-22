@@ -130,7 +130,7 @@ export function JournalListPage() {
     <div className="space-y-4">
       <PageHeader
         title="Journals"
-        description="Enterprise journal vouchers — search, filter, post, and reverse via live Finance APIs."
+        description="Enterprise journal vouchers - search, filter, post, and reverse via live Finance APIs."
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Button

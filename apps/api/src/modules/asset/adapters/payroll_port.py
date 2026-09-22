@@ -1,4 +1,4 @@
-"""Payroll port — optional read-only labor cost hint; no pay_* writes."""
+"""Payroll port - optional read-only labor cost hint; no pay_* writes."""
 
 from uuid import UUID
 

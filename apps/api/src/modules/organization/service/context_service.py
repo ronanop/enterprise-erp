@@ -6,11 +6,17 @@ from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
 from core.redis import SessionStore
+from modules.foundation.domain.org_data_scope import (
+    has_module_wide_data_access,
+    is_platform_admin,
+)
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.organization.repository.company_repository import CompanyRepository
 from modules.organization.repository.org_scope_repository import OrgScopeRepository
 from modules.organization.service.org_scope_validator import OrgScopeValidator
+
+ORGANIZATION_MODULE_KEY = "organization"
 
 
 class OrgContextService:
@@ -32,7 +38,27 @@ class OrgContextService:
         }
 
     def list_accessible_companies(self, ctx: TenantContext):
-        return self._companies.list_companies(ctx)
+        if is_platform_admin(ctx) or has_module_wide_data_access(ctx, ORGANIZATION_MODULE_KEY):
+            return self._companies.list_companies(ctx)
+
+        scopes = self._scopes.list_user_scopes(ctx.user_id, ctx.tenant_id)
+        company_ids = {s.company_id for s in scopes}
+        if not company_ids:
+            # Empty org scope must not leak every company for non-admins.
+            if self._is_hr_admin(ctx):
+                return []
+            return self._companies.list_companies(ctx)
+
+        companies = []
+        seen: set[UUID] = set()
+        for company_id in company_ids:
+            if company_id in seen:
+                continue
+            company = self._companies.get_by_id(ctx, company_id)
+            if company is not None:
+                companies.append(company)
+                seen.add(company_id)
+        return companies
 
     def list_accessible_branches(self, ctx: TenantContext, company_id: UUID):
         from modules.organization.repository.branch_repository import BranchRepository
@@ -51,6 +77,14 @@ class OrgContextService:
         if company is None:
             raise NotFoundException("Company not found")
         self._validator.validate_company_access(ctx, company_id)
+        if branch_id is None:
+            from modules.foundation.service.org_context_service import OrgContextService
+
+            branch_id = OrgContextService(self._db).resolve_branch_for_company(
+                user_id=ctx.user_id,
+                tenant_id=ctx.tenant_id,
+                company_id=company_id,
+            )
         if branch_id:
             self._validator.validate_branch_access(ctx, branch_id)
 
@@ -77,3 +111,8 @@ class OrgContextService:
             "company_id": str(company_id),
             "branch_id": str(branch_id) if branch_id else None,
         }
+
+    def _is_hr_admin(self, ctx: TenantContext) -> bool:
+        from modules.hr.service.hr_module_admin import HrModuleAdminService
+
+        return HrModuleAdminService(self._db).has_hr_admin_role(ctx.tenant_id, ctx.user_id)

@@ -149,29 +149,35 @@ class CrmEntityType(str, Enum):
     OVF = "ovf"
     PRODUCT = "product"
     OEM = "oem"
+    SELLING_ENTITY = "selling_entity"
     APPROVAL_TASK = "approval_task"
+    KYC = "kyc"
 
 
 CODE_PREFIXES: dict[CrmEntityType, tuple[str, int]] = {
-    CrmEntityType.LEAD: ("LEAD-", 6),
-    CrmEntityType.OPPORTUNITY: ("OPP-", 6),
-    CrmEntityType.CAMPAIGN: ("CMP-", 6),
-    CrmEntityType.PIPELINE: ("PIPE-", 6),
-    CrmEntityType.TASK: ("TSK-", 6),
-    CrmEntityType.FOLLOWUP: ("FU-", 6),
-    CrmEntityType.MEETING: ("MTG-", 6),
-    CrmEntityType.INTERACTION: ("INT-", 6),
-    CrmEntityType.FEEDBACK: ("FBK-", 6),
-    CrmEntityType.COMPANY: ("ACC-", 6),
-    CrmEntityType.QUOTE: ("QT-", 6),
-    CrmEntityType.OVF: ("OVF-", 6),
-    CrmEntityType.PRODUCT: ("PRD-", 6),
-    CrmEntityType.OEM: ("OEM-", 6),
-    CrmEntityType.APPROVAL_TASK: ("JOB-", 6),
+    # width = zero-pad length for the trailing sequence (0 = no padding → QT-2026-14).
+    CrmEntityType.LEAD: ("LEAD-", 0),
+    CrmEntityType.OPPORTUNITY: ("OPP-", 0),
+    CrmEntityType.CAMPAIGN: ("CMP-", 0),
+    CrmEntityType.PIPELINE: ("PIPE-", 0),
+    CrmEntityType.TASK: ("TSK-", 0),
+    CrmEntityType.FOLLOWUP: ("FU-", 0),
+    CrmEntityType.MEETING: ("MTG-", 0),
+    CrmEntityType.INTERACTION: ("INT-", 0),
+    CrmEntityType.FEEDBACK: ("FBK-", 0),
+    CrmEntityType.COMPANY: ("COMP-", 2),
+    CrmEntityType.QUOTE: ("QT-", 0),
+    CrmEntityType.OVF: ("OVF-", 0),
+    CrmEntityType.PRODUCT: ("PRD-", 0),
+    CrmEntityType.OEM: ("OEM-", 0),
+    CrmEntityType.SELLING_ENTITY: ("ENT-", 0),
+    CrmEntityType.APPROVAL_TASK: ("JOB-", 0),
+    CrmEntityType.KYC: ("KYC-", 0),
 }
 
-# Team roles that can receive a "My Jobs" approval task.
-APPROVAL_TEAM_ROLES = ("presales", "project", "management", "accounts", "scm")
+# Team roles that can receive a "My Jobs" approval task. ``legal`` validates
+# customer PO terms & conditions - that validation never sits with Sales.
+APPROVAL_TEAM_ROLES = ("presales", "project", "management", "accounts", "scm", "legal")
 APPROVAL_TASK_STATUSES = ("pending", "approved", "rejected", "cancelled")
 
 SOURCE_MODULE = "crm"

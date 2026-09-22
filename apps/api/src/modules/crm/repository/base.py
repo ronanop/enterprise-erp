@@ -6,8 +6,11 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from core.exceptions import ForbiddenException
+from modules.foundation.domain.org_data_scope import apply_org_scope_filter
 from modules.foundation.domain.value_objects import TenantContext
 from modules.organization.repository.base import OrgScopedRepository
+
+CRM_MODULE_KEY = "crm"
 
 
 def utcnow() -> datetime:
@@ -20,22 +23,21 @@ class CrmScopedRepository(OrgScopedRepository):
 
     @staticmethod
     def apply_crm_filter(stmt, model, ctx: TenantContext, *, branch_scoped: bool = False):
+        # CRM isolates non-admins via creator/visibility rules, not session branch.
+        # Branch-scoping here caused "Branch scope mismatch" and empty lists whenever
+        # a company/lead lived on another branch of the same company.
+        _ = branch_scoped
         stmt = CrmScopedRepository.apply_tenant_filter(stmt, model, ctx)
-        if ctx.company_id and ctx.user_type not in {"super_admin", "tenant_admin"}:
-            stmt = stmt.where(model.company_id == ctx.company_id)
-        if (
-            branch_scoped
-            and ctx.branch_id
-            and ctx.user_type not in {"super_admin", "tenant_admin"}
-            and hasattr(model, "branch_id")
-        ):
-            stmt = stmt.where(model.branch_id == ctx.branch_id)
-        return stmt
+        return apply_org_scope_filter(
+            stmt, model, ctx, module_key=CRM_MODULE_KEY, branch_scoped=False
+        )
 
     @staticmethod
     def resolve_company_id(ctx: TenantContext, company_id: UUID | None) -> UUID:
         if company_id is not None:
-            CrmScopedRepository.ensure_company_access(ctx, company_id)
+            CrmScopedRepository.ensure_company_access(
+                ctx, company_id, module_key=CRM_MODULE_KEY
+            )
             return company_id
         if ctx.company_id is None:
             raise ForbiddenException("Company context required")

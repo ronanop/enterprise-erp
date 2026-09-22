@@ -81,7 +81,7 @@ export function JournalAuditTimeline({ events, resolveUser }: Props) {
 
   return (
     <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-      <h2 className="text-sm font-medium tracking-tight">Audit timeline</h2>
+      <h2 className="text-base font-extrabold tracking-tight">Audit timeline</h2>
       <p className="mt-0.5 text-[11px] text-muted-foreground">
         Created · Updated · Submitted · Approved · Rejected · Posted · Reversed
       </p>
@@ -109,7 +109,7 @@ export function JournalAuditTimeline({ events, resolveUser }: Props) {
                   <p className="mt-0.5 text-[10px] opacity-80">
                     {event.created_at
                       ? new Date(event.created_at).toLocaleString("en-IN")
-                      : "—"}
+                      : "-"}
                   </p>
                   {event.detail ? (
                     <p className="mt-1 text-[11px] opacity-90">{event.detail}</p>

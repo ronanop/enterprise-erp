@@ -1,4 +1,4 @@
-"""My Jobs — team-routed approval tasks raised by the sales blueprint."""
+"""My Jobs - team-routed approval tasks raised by the sales blueprint."""
 
 from datetime import datetime
 from uuid import UUID, uuid4
@@ -16,7 +16,7 @@ class CrmApprovalTask(Base, *CrmDetailMixin):
     __table_args__ = (
         UniqueConstraint("company_id", "task_code", name="uk_crm_approval_task_company_code"),
         CheckConstraint(
-            "team_role IN ('presales','project','management','accounts','scm')",
+            "team_role IN ('presales','project','management','accounts','scm','legal')",
             name="ck_crm_approval_task_team_role",
         ),
         CheckConstraint(

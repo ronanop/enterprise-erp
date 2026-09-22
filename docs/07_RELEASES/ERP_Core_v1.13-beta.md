@@ -1,15 +1,15 @@
-# ERP Core v1.13-beta — Release Notes
+# ERP Core v1.13-beta - Release Notes
 
 | Field | Value |
 |-------|--------|
 | **Document Type** | Enterprise Release Notes |
 | **Release Name** | ERP Core v1.13-beta |
 | **Release Status** | Beta Development Release |
-| **Architecture Lock** | v1.1 — Maintained |
+| **Architecture Lock** | v1.1 - Maintained |
 | **Prepared As** | Enterprise Solution Architect · ERP Product Architect · Technical Documentation Lead · Release Manager · Principal Software Engineer |
-| **Classification** | Internal — Confidential |
+| **Classification** | Internal - Confidential |
 | **Predecessor** | [ERP Core v1.12-beta](./ERP_Core_v1.12-beta.md) |
-| **Ready For** | Sprint 19 — Governance, Risk & Compliance (GRC) |
+| **Ready For** | Sprint 19 - Governance, Risk & Compliance (GRC) |
 
 ---
 
@@ -21,18 +21,18 @@
 | **Status** | Beta Development Release |
 | **Date** | 2026-07-15 |
 | **Previous Release** | ERP Core v1.12-beta |
-| **Architecture Lock** | v1.1 — Preserved |
+| **Architecture Lock** | v1.1 - Preserved |
 | **Recommended Git Tag** | `v1.13-beta` |
 
 ---
 
 ## 2. Sprint 18 Highlights
 
-Sprint 18 delivered the **Document Management System (DMS)** domain (FRD-19 / ERD_18) as the centralized enterprise document repository — folders → documents → versions → classification → access → collaboration → governance → retention / archive — while **existing masters remain authoritative (C-01)**. No duplicate customer / employee / department masters. Chargeable / recoverable posting occurs only through Finance `PostingService.post_system_journal()`, storing `finance_journal_id` UUID references only. Helpdesk / Service / Project / Asset / CRM / Inventory / Manufacturing / Quality peer context uses UUID-only refs with **no peer ORM writes**.
+Sprint 18 delivered the **Document Management System (DMS)** domain (FRD-19 / ERD_18) as the centralized enterprise document repository - folders → documents → versions → classification → access → collaboration → governance → retention / archive - while **existing masters remain authoritative (C-01)**. No duplicate customer / employee / department masters. Chargeable / recoverable posting occurs only through Finance `PostingService.post_system_journal()`, storing `finance_journal_id` UUID references only. Helpdesk / Service / Project / Asset / CRM / Inventory / Manufacturing / Quality peer context uses UUID-only refs with **no peer ORM writes**.
 
 | Capability | Delivery |
 |------------|----------|
-| **Document Module** | `apps/api/src/modules/document/` — Clean Architecture package (domain, models, repositories, engines, services, routers, adapters, tasks) |
+| **Document Module** | `apps/api/src/modules/document/` - Clean Architecture package (domain, models, repositories, engines, services, routers, adapters, tasks) |
 | **Folders** | Hierarchical repository containers |
 | **Documents** | Central document register with submit / approve / publish |
 | **Document Versions** | Immutable version history and current pointer |
@@ -76,29 +76,29 @@ Sprint 18 delivered the **Document Management System (DMS)** domain (FRD-19 / ER
 
 **Coverage:** folders · documents · versions · metadata · tags · tag maps · permissions · shares · comments · approvals · workflows · checkouts · audits · attachments · templates · template fields · retention policies · archives · notifications · reports.
 
-**API mount:** `/api/v1/documents` — folders, documents (+ submit / approve / publish), document-versions, document-metadata, document-tags, document-tag-maps, document-permissions, document-shares, document-comments, document-approvals (+ submit / complete), document-workflows, document-checkouts (+ submit / complete / checkin), document-audits, document-attachments, templates, template-fields, retention-policies (+ submit / approve), archives (+ submit / approve), notifications, reports.
+**API mount:** `/api/v1/documents` - folders, documents (+ submit / approve / publish), document-versions, document-metadata, document-tags, document-tag-maps, document-permissions, document-shares, document-comments, document-approvals (+ submit / complete), document-workflows, document-checkouts (+ submit / complete / checkin), document-audits, document-attachments, templates, template-fields, retention-policies (+ submit / approve), archives (+ submit / approve), notifications, reports.
 
 ---
 
 ## 4. Cross Module Integrations
 
-Document Management **never** duplicates customer, employee, or department masters. **Existing masters remain authoritative (C-01)**. Peer domains are consumed via FKs, service adapters, or UUID-only references — **never** via direct ORM writes outside `doc_*`.
+Document Management **never** duplicates customer, employee, or department masters. **Existing masters remain authoritative (C-01)**. Peer domains are consumed via FKs, service adapters, or UUID-only references - **never** via direct ORM writes outside `doc_*`.
 
 | Module | Integration |
 |--------|-------------|
-| **Master Data** | **`master_employee` · `master_customer` only (C-01)** — **no duplicate masters** |
-| **Organization** | **`org_department` only** — no DMS department master |
-| **Finance** | Store **`finance_journal_id` UUID only**; posting **only** through `PostingService.post_system_journal()` — **no direct `fin_*` writes** |
-| **Helpdesk** | Optional `helpdesk_ticket_id` **UUID only** — **no `hd_*` FK / no writes** |
-| **Service** | Optional `service_request_id` **UUID only** — **no `svc_*` FK / no writes** |
-| **Project** | Optional `project_id` **UUID only** — **no FK / no writes** |
-| **Asset** | Optional `asset_id` **UUID only** — **no `ast_*` FK / no writes** |
-| **CRM** | Optional `crm_opportunity_id` **UUID only** — **no FK / no writes** |
-| **Inventory** | Optional `inventory_ref_id` **UUID only** — **no FK / no writes** |
-| **Manufacturing** | Optional `production_order_id` **UUID only** — **no FK / no writes** |
-| **Quality** | Optional `quality_ref_id` **UUID only** — **no FK / no writes** |
-| **HR** | Employee refs via Master Data — **read only / no `hr_*` writes** |
-| **Payroll** | Optional labor cost **read** — **no `pay_*` writes** |
+| **Master Data** | **`master_employee` · `master_customer` only (C-01)** - **no duplicate masters** |
+| **Organization** | **`org_department` only** - no DMS department master |
+| **Finance** | Store **`finance_journal_id` UUID only**; posting **only** through `PostingService.post_system_journal()` - **no direct `fin_*` writes** |
+| **Helpdesk** | Optional `helpdesk_ticket_id` **UUID only** - **no `hd_*` FK / no writes** |
+| **Service** | Optional `service_request_id` **UUID only** - **no `svc_*` FK / no writes** |
+| **Project** | Optional `project_id` **UUID only** - **no FK / no writes** |
+| **Asset** | Optional `asset_id` **UUID only** - **no `ast_*` FK / no writes** |
+| **CRM** | Optional `crm_opportunity_id` **UUID only** - **no FK / no writes** |
+| **Inventory** | Optional `inventory_ref_id` **UUID only** - **no FK / no writes** |
+| **Manufacturing** | Optional `production_order_id` **UUID only** - **no FK / no writes** |
+| **Quality** | Optional `quality_ref_id` **UUID only** - **no FK / no writes** |
+| **HR** | Employee refs via Master Data - **read only / no `hr_*` writes** |
+| **Payroll** | Optional labor cost **read** - **no `pay_*` writes** |
 | **Recruitment** | **Read only / no writes** |
 | **Foundation** | **Workflow** (`DOC_DOCUMENT_APPROVAL`, `DOC_DOCUMENT_PUBLISH`, `DOC_DOCUMENT_CHECKOUT`, `DOC_DOCUMENT_ARCHIVE`, `DOC_RETENTION_APPROVAL`); **RBAC** (`document.*` permissions; roles `DOCUMENT_MANAGER`, `DOCUMENT_EDITOR`, `DOCUMENT_REVIEWER`, `DOCUMENT_ADMIN` with `status='active'`) |
 
@@ -138,8 +138,8 @@ Swagger (`/docs`) and OpenAPI (`/openapi.json`) both return **200**; Document Ma
 
 | Gate | Status |
 |------|--------|
-| **Alembic Upgrade** | **PASS** — head `0332_seed_document_workflows` |
-| **FastAPI Startup** | **PASS** — Application startup complete (validated on port **8031**; port 8000 unavailable) |
+| **Alembic Upgrade** | **PASS** - head `0332_seed_document_workflows` |
+| **FastAPI Startup** | **PASS** - Application startup complete (validated on port **8031**; port 8000 unavailable) |
 | **Swagger** | **PASS** (`/docs` 200) |
 | **OpenAPI** | **PASS** (`/openapi.json` 200) |
 | **Ruff** | **PASS** |
@@ -160,12 +160,12 @@ Validation completed successfully. Head `0332_seed_document_workflows` confirmed
 
 | Principle | Confirmation |
 |-----------|--------------|
-| **Architecture Lock v1.1** | **Preserved** — no Architecture Lock changes |
+| **Architecture Lock v1.1** | **Preserved** - no Architecture Lock changes |
 | **No redesign** | Prior sprints unmodified except required integration wiring (router / Celery / Alembic env / mypy package registration) |
 | **Clean Architecture** | Router → Service → Repository → Database maintained |
 | **DDD** | Document domain enums, exceptions, entities, value objects, engines |
 | **Modular Monolith** | New `modules/document` package; no service-boundary redesign |
-| **Previous modules unchanged** | Confirmed — Foundation · Organization · Master Data · Finance · Sales · Procurement · Inventory · Manufacturing · Quality · CRM · HR · Payroll · Recruitment · Project · Asset · Service · Helpdesk untouched except required wiring |
+| **Previous modules unchanged** | Confirmed - Foundation · Organization · Master Data · Finance · Sales · Procurement · Inventory · Manufacturing · Quality · CRM · HR · Payroll · Recruitment · Project · Asset · Service · Helpdesk untouched except required wiring |
 
 Stack unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreSQL · Redis · Celery.
 
@@ -176,10 +176,10 @@ Stack unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreSQL · Redis · 
 | Attribute | Value |
 |-----------|--------|
 | **Next Release** | ERP Core **v1.14-beta** (planned) |
-| **Sprint** | **Sprint 19 — Governance, Risk & Compliance (GRC)** |
+| **Sprint** | **Sprint 19 - Governance, Risk & Compliance (GRC)** |
 | **Primary domain** | **Governance, Risk & Compliance** |
 
-**Planned scope (planning only — no implementation in this release):**
+**Planned scope (planning only - no implementation in this release):**
 
 - GRC policies / controls / risk register foundation
 - Continuity with Master Data party / employee masters (C-01)
@@ -200,8 +200,8 @@ Stack unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreSQL · Redis · 
 | **Alembic head** | **`0332_seed_document_workflows`** |
 | **Tests** | **241 passed** |
 | **Routes** | **1167** FastAPI · **756** OpenAPI · **92** Document · **52** Document OpenAPI |
-| **Quality gates** | Alembic · FastAPI · Swagger · OpenAPI · Ruff · MyPy · Pytest — **ALL PASS** |
-| **Next** | **Sprint 19 — Governance, Risk & Compliance (GRC)** |
+| **Quality gates** | Alembic · FastAPI · Swagger · OpenAPI · Ruff · MyPy · Pytest - **ALL PASS** |
+| **Next** | **Sprint 19 - Governance, Risk & Compliance (GRC)** |
 | **Ready for Git Tag** | **`v1.13-beta`** |
 
 ---
@@ -210,20 +210,20 @@ Stack unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreSQL · Redis · 
 
 | Version | Date | Scope | Alembic Head | Tests |
 |---------|------|--------|--------------|-------|
-| **v1.0-alpha** | 2026-07-13 | Sprints 0–5 (Foundation → Sales) | `0055_seed_sales_workflows` | 77 passed |
-| **v1.1-beta** | 2026-07-13 | Sprints 0–6 (+ Procurement P2P) | `0077_seed_proc_workflows` | 99 passed |
-| **v1.2-beta** | 2026-07-13 | Sprints 0–7 (+ Inventory & Warehouse) | `0094_seed_inv_workflows` | 113 passed |
-| **v1.3-beta** | 2026-07-14 | Sprints 0–8 (+ Manufacturing & Production) | `0114_seed_mfg_workflows` | 127 passed |
-| **v1.4-beta** | 2026-07-14 | Sprints 0–9 (+ Quality Management) | `0135_seed_qm_workflows` | 146 passed |
-| **v1.5-beta** | 2026-07-14 | Sprints 0–10 (+ CRM) | `0156_seed_crm_workflows` | 158 passed |
-| **v1.6-beta** | 2026-07-14 | Sprints 0–11 (+ HRMS) | `0178_seed_hr_workflows` | 169 passed |
-| **v1.7-beta** | 2026-07-14 | Sprints 0–12 (+ Payroll) | `0200_seed_payroll_workflows` | 179 passed |
-| **v1.8-beta** | 2026-07-14 | Sprints 0–13 (+ Recruitment) | `0222_seed_recruitment_workflows` | 189 passed |
-| **v1.9-beta** | 2026-07-14 | Sprints 0–14 (+ Project) | `0244_seed_project_workflows` | 199 passed |
-| **v1.10-beta** | 2026-07-14 | Sprints 0–15 (+ Asset) | `0266_seed_asset_workflows` | 209 passed |
-| **v1.11-beta** | 2026-07-15 | Sprints 0–16 (+ Service) | `0288_seed_service_workflows` | 219 passed |
-| **v1.12-beta** | 2026-07-15 | Sprints 0–17 (+ Helpdesk) | `0310_seed_helpdesk_workflows` | 230 passed |
-| **v1.13-beta** | 2026-07-15 | Sprints 0–18 (+ Document / DMS) | `0332_seed_document_workflows` | 241 passed |
+| **v1.0-alpha** | 2026-07-13 | Sprints 0-5 (Foundation → Sales) | `0055_seed_sales_workflows` | 77 passed |
+| **v1.1-beta** | 2026-07-13 | Sprints 0-6 (+ Procurement P2P) | `0077_seed_proc_workflows` | 99 passed |
+| **v1.2-beta** | 2026-07-13 | Sprints 0-7 (+ Inventory & Warehouse) | `0094_seed_inv_workflows` | 113 passed |
+| **v1.3-beta** | 2026-07-14 | Sprints 0-8 (+ Manufacturing & Production) | `0114_seed_mfg_workflows` | 127 passed |
+| **v1.4-beta** | 2026-07-14 | Sprints 0-9 (+ Quality Management) | `0135_seed_qm_workflows` | 146 passed |
+| **v1.5-beta** | 2026-07-14 | Sprints 0-10 (+ CRM) | `0156_seed_crm_workflows` | 158 passed |
+| **v1.6-beta** | 2026-07-14 | Sprints 0-11 (+ HRMS) | `0178_seed_hr_workflows` | 169 passed |
+| **v1.7-beta** | 2026-07-14 | Sprints 0-12 (+ Payroll) | `0200_seed_payroll_workflows` | 179 passed |
+| **v1.8-beta** | 2026-07-14 | Sprints 0-13 (+ Recruitment) | `0222_seed_recruitment_workflows` | 189 passed |
+| **v1.9-beta** | 2026-07-14 | Sprints 0-14 (+ Project) | `0244_seed_project_workflows` | 199 passed |
+| **v1.10-beta** | 2026-07-14 | Sprints 0-15 (+ Asset) | `0266_seed_asset_workflows` | 209 passed |
+| **v1.11-beta** | 2026-07-15 | Sprints 0-16 (+ Service) | `0288_seed_service_workflows` | 219 passed |
+| **v1.12-beta** | 2026-07-15 | Sprints 0-17 (+ Helpdesk) | `0310_seed_helpdesk_workflows` | 230 passed |
+| **v1.13-beta** | 2026-07-15 | Sprints 0-18 (+ Document / DMS) | `0332_seed_document_workflows` | 241 passed |
 
 ```text
 v1.12-beta ──(+ Sprint 18 Document / DMS)──► v1.13-beta ──► Sprint 19 GRC (planned)

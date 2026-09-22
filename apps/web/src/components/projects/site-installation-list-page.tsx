@@ -24,32 +24,44 @@ const STAGE_META: Record<
 > = {
   intake: {
     title: "Intake & RFAI",
-    description: "Site requests awaiting RFAI capture — requestor, circle, cloud, and site.",
+    description: "Site requests awaiting RFAI capture - requestor, circle, cloud, and site.",
     empty: "No sites in Intake. Create a project to start the delivery workflow.",
+  },
+  assignment: {
+    title: "Assign Survey owner",
+    description:
+      "Assign the Survey owner after project create. Later stage owners are set from Project Tracking after each step completes.",
+    empty: "No sites waiting for Survey assignment.",
   },
   survey: {
     title: "Survey",
-    description: "Sites in survey — space, power, tile details, and survey completion.",
+    description: "Sites in survey - space, power, tile details, and survey completion.",
     empty: "No sites in Survey.",
   },
   scm: {
     title: "SCM / Logistics",
-    description: "Material movement — MO request, IM material, and WH / on-site delivery dates.",
+    description: "Material movement - quantities and warehouse delivery dates.",
     empty: "No sites in SCM / Logistics.",
   },
-  installation: {
-    title: "Installation",
-    description: "Rack stacking, power-on, and DAC/ILO cabling at site.",
-    empty: "No sites in Installation.",
+  onsite_delivery: {
+    title: "Onsite Delivery",
+    description: "MO request and server / rack / PDU on-site delivery.",
+    empty: "No sites in Onsite Delivery.",
   },
-  configuration: {
-    title: "Configuration",
-    description: "BIOS / firmware and LLD configuration before acceptance.",
-    empty: "No sites in Configuration.",
+  material_handover: {
+    title: "Material Handover",
+    description: "IM material, power-on material, and WH → site handover.",
+    empty: "No sites in Material Handover.",
+  },
+  installation: {
+    title: "Installation & Configuration",
+    description:
+      "In-scope install work - rack-only sites skip server / OS / configuration; other scopes include stacking, power, cabling, and config as applicable.",
+    empty: "No sites in Installation & Configuration.",
   },
   acceptance: {
     title: "Acceptance",
-    description: "Handover to Cloud and HW AT / circle sign-off.",
+    description: "Handover to Application Team and HW AT / circle sign-off.",
     empty: "No sites in Acceptance.",
   },
   completed: {
@@ -69,13 +81,18 @@ export function SiteInstallationListPage({ stage }: { stage?: string }) {
     : {
       title: "All Sites",
       description:
-        "Site installation register across Intake → Survey → SCM → Installation → Configuration → Acceptance.",
+        "Site installation register across Intake → Survey → SCM → Onsite Delivery → Material Handover → Installation → Acceptance.",
       empty: "No site installations yet. Create a project to seed the workflow.",
     };
 
   const load = useCallback(async () => {
     const rows = await listSiteInstallations();
     if (!stage) return rows;
+    if (stage === "onsite_delivery") {
+      return rows.filter(
+        (r) => r.workflow_stage === "onsite_delivery" || r.workflow_stage === "onsite",
+      );
+    }
     return rows.filter((r) => r.workflow_stage === stage);
   }, [stage]);
 
@@ -100,31 +117,31 @@ export function SiteInstallationListPage({ stage }: { stage?: string }) {
         label: "Site Name",
         sort: (r) => r.site_name,
         className: "font-medium text-foreground",
-        cell: (r) => r.site_name || "—",
+        cell: (r) => r.site_name || "-",
       },
       {
         key: "rfai_number",
         label: "RFAI",
         sort: (r) => r.rfai_number,
-        cell: (r) => r.rfai_number || "—",
+        cell: (r) => r.rfai_number || "-",
       },
       {
         key: "circle",
         label: "Circle",
         sort: (r) => r.circle,
-        cell: (r) => r.circle || "—",
+        cell: (r) => r.circle || "-",
       },
       {
         key: "cloud_name",
         label: "Cloud",
         sort: (r) => r.cloud_name,
-        cell: (r) => r.cloud_name || "—",
+        cell: (r) => r.cloud_name || "-",
       },
       {
         key: "requestor_name",
         label: "Requestor",
         sort: (r) => r.requestor_name,
-        cell: (r) => r.requestor_name || "—",
+        cell: (r) => r.requestor_name || "-",
       },
       {
         key: "delivery_type",
@@ -155,8 +172,6 @@ export function SiteInstallationListPage({ stage }: { stage?: string }) {
       panelTitle="Site installations"
       panelSubtitle={stage ? siteWorkflowStageLabel(stage) : "All stages"}
       icon={Cable}
-      newHref="/projects/projects/new"
-      newLabel="New Project"
       searchPlaceholder="Search sites, RFAI, circle…"
       loadingMessage="Loading site installations…"
       emptyMessage={meta.empty}

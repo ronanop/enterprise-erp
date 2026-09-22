@@ -1,4 +1,4 @@
-"""CRM sales account (Company) ORM — distinct from master.master_customer."""
+"""CRM sales account (Company) ORM - distinct from master.master_customer."""
 
 from uuid import UUID, uuid4
 

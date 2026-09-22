@@ -1,4 +1,4 @@
-"""P2P domain invariants — code prefixes and invoice postable state."""
+"""P2P domain invariants - code prefixes and invoice postable state."""
 
 
 import pytest

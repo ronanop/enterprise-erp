@@ -141,20 +141,20 @@ export function ReportsHubPage() {
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <FinanceKpiCard label="Available Reports" value={String(catalog.length || "—")} icon={FileSpreadsheet} />
+        <FinanceKpiCard label="Available Reports" value={String(catalog.length || "-")} icon={FileSpreadsheet} />
         <FinanceKpiCard
           label="Trial Balance Accounts"
-          value={tbAccounts != null ? String(tbAccounts) : "—"}
+          value={tbAccounts != null ? String(tbAccounts) : "-"}
           icon={Scale}
         />
         <FinanceKpiCard
           label="TB Difference"
-          value={tbDifference != null ? formatInrPrecise(tbDifference) : "—"}
+          value={tbDifference != null ? formatInrPrecise(tbDifference) : "-"}
           icon={Scale}
           tone={tbDifference != null && Math.abs(tbDifference) > 0.01 ? "warning" : "success"}
           hint="Should be zero when balanced"
         />
-        <FinanceKpiCard label="Report Categories" value={String(grouped.size || "—")} icon={BarChart3} />
+        <FinanceKpiCard label="Report Categories" value={String(grouped.size || "-")} icon={BarChart3} />
       </div>
 
       {loading && catalog.length === 0 ? (
@@ -172,7 +172,7 @@ export function ReportsHubPage() {
               <section key={category} className="space-y-3">
                 <div className="flex items-center gap-2">
                   <CatIcon className="size-4 text-muted-foreground" />
-                  <h2 className="text-sm font-medium tracking-tight">
+                  <h2 className="text-base font-extrabold tracking-tight">
                     {CATEGORY_LABELS[category] ?? category}
                   </h2>
                 </div>
@@ -193,7 +193,7 @@ export function ReportsHubPage() {
                             <Icon className="size-4" />
                           </span>
                         </div>
-                        <h3 className="mt-3 text-sm font-medium tracking-tight group-hover:text-primary">
+                        <h3 className="mt-3 text-base font-extrabold tracking-tight group-hover:text-primary">
                           {item.title}
                         </h3>
                         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.description}</p>

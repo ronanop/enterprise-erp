@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Company Assets Dashboard</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(226, 232, 240, 0.8);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .active-dot::after {
+            content: '';
+            display: block;
+            width: 4px;
+            height: 4px;
+            background-color: #004ac6;
+            border-radius: 9999px;
+            margin-top: 4px;
+        }
+        .safe-pb {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-surface": "#0b1c30",
+                      "error-container": "#ffdad6",
+                      "tertiary-fixed-dim": "#4edea3",
+                      "inverse-surface": "#213145",
+                      "on-secondary-fixed-variant": "#5a00c6",
+                      "secondary": "#712ae2",
+                      "error": "#ba1a1a",
+                      "on-background": "#0b1c30",
+                      "on-secondary-fixed": "#25005a",
+                      "on-tertiary-fixed": "#002113",
+                      "tertiary-container": "#007d55",
+                      "secondary-fixed-dim": "#d2bbff",
+                      "on-primary-fixed": "#00174b",
+                      "inverse-on-surface": "#eaf1ff",
+                      "primary": "#004ac6",
+                      "on-primary-fixed-variant": "#003ea8",
+                      "secondary-fixed": "#eaddff",
+                      "on-secondary-container": "#fffbff",
+                      "surface-container-highest": "#d3e4fe",
+                      "primary-fixed": "#dbe1ff",
+                      "outline": "#737686",
+                      "surface-container-low": "#eff4ff",
+                      "surface-tint": "#0053db",
+                      "on-surface-variant": "#434655",
+                      "primary-container": "#2563eb",
+                      "surface-container": "#e5eeff",
+                      "on-tertiary": "#ffffff",
+                      "surface-dim": "#cbdbf5",
+                      "surface": "#f8f9ff",
+                      "surface-bright": "#f8f9ff",
+                      "on-error": "#ffffff",
+                      "on-tertiary-container": "#bdffdb",
+                      "surface-container-lowest": "#ffffff",
+                      "outline-variant": "#c3c6d7",
+                      "on-primary-container": "#eeefff",
+                      "background": "#f8f9ff",
+                      "on-error-container": "#93000a",
+                      "tertiary-fixed": "#6ffbbe",
+                      "tertiary": "#006242",
+                      "on-primary": "#ffffff",
+                      "surface-container-high": "#dce9ff",
+                      "on-tertiary-fixed-variant": "#005236",
+                      "secondary-container": "#8a4cfc",
+                      "surface-variant": "#d3e4fe",
+                      "on-secondary": "#ffffff",
+                      "primary-fixed-dim": "#b4c5ff",
+                      "inverse-primary": "#b4c5ff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "stack-gap-md": "16px",
+                      "container-padding": "20px",
+                      "unit": "4px",
+                      "stack-gap-lg": "24px",
+                      "stack-gap-sm": "8px",
+                      "section-margin": "32px"
+              },
+              "fontFamily": {
+                      "label-md": ["Inter"],
+                      "headline-sm": ["Inter"],
+                      "label-sm": ["Inter"],
+                      "body-sm": ["Inter"],
+                      "display-lg-mobile": ["Inter"],
+                      "display-lg": ["Inter"],
+                      "title-lg": ["Inter"],
+                      "display-md": ["Inter"],
+                      "body-md": ["Inter"]
+              },
+              "fontSize": {
+                      "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                      "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                      "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "display-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                      "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "title-lg": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                      "display-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+              }
+            },
+          },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface min-h-screen">
+<!-- Top App Bar -->
+<header class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl shadow-sm flex items-center justify-between px-container-padding h-16">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="A professional high-resolution headshot of a young Hispanic male designer with short dark hair and a friendly smile. He is wearing a crisp white shirt and is positioned in a bright, modern office with soft daylight and blurry green plants in the background. The aesthetic is clean, professional, and corporate modern." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBvoWaXS2c9u1PZCmsBC8yWNbzQEhtYaU9wvKmLNhKTQzZMJcLvdzK9juwnl9BwXIUhoyQYS8TMPwPDV9C0JLl60lOfxFNJZredPoVxyvTOBD7TgHLdP9h69jroLr58rX74w4BJojUqF_MvJ_V1ElocNZ9MgK9GzDWgPPFIlcjWlbW4UD029jwmM6vJvPEARlKKAw7sk4G_InmHkG6YiD9tRmQY0lLuSuVYUH8huesZlD_j863x8SIMS8Yb4xMzZ1F8LY2D6NjtY_U"/>
+</div>
+<h1 class="font-headline-sm text-headline-sm-mobile text-primary tracking-tight">Welcome, Alex</h1>
+</div>
+<div class="flex items-center gap-2">
+<button class="w-10 h-10 flex items-center justify-center transition-all duration-200 active:scale-95 hover:opacity-80 text-on-surface-variant">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+</div>
+</header>
+<main class="pt-24 pb-32 px-container-padding max-w-lg mx-auto">
+<!-- Search & Filter Header -->
+<section class="mb-section-margin">
+<h2 class="font-display-md text-display-md text-on-surface mb-stack-gap-md">My Assets</h2>
+<div class="relative group">
+<div class="absolute inset-y-0 left-4 flex items-center pointer-events-none text-outline">
+<span class="material-symbols-outlined text-[20px]">search</span>
+</div>
+<input class="w-full h-12 pl-12 pr-4 rounded-xl bg-surface-container border-none focus:ring-2 focus:ring-primary/20 transition-all text-body-md font-body-md placeholder:text-outline" placeholder="Search devices, serial numbers..." type="text"/>
+</div>
+<!-- Category Chips -->
+<div class="flex gap-2 overflow-x-auto py-4 no-scrollbar">
+<button class="whitespace-nowrap px-4 py-2 rounded-full bg-primary text-on-primary font-label-md text-label-md shadow-md">All Assets</button>
+<button class="whitespace-nowrap px-4 py-2 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-high transition-colors">Laptops</button>
+<button class="whitespace-nowrap px-4 py-2 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-high transition-colors">Mobile</button>
+<button class="whitespace-nowrap px-4 py-2 rounded-full bg-surface-container text-on-surface-variant font-label-md text-label-md hover:bg-surface-container-high transition-colors">Peripherals</button>
+</div>
+</section>
+<!-- Assets Bento Grid/Stream -->
+<div class="space-y-stack-gap-md">
+<!-- Asset Card 1 -->
+<div class="glass-card p-stack-gap-md rounded-xl flex flex-col gap-4 transition-all duration-200 active:scale-[0.98]">
+<div class="flex justify-between items-start">
+<div class="w-12 h-12 rounded-lg bg-primary-container/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[32px]">laptop_mac</span>
+</div>
+<span class="px-3 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-sm text-label-sm">Active</span>
+</div>
+<div>
+<h3 class="font-title-lg text-title-lg text-on-surface">MacBook Pro 16"</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">M3 Max • 64GB RAM • 1TB SSD</p>
+</div>
+<div class="pt-4 border-t border-outline-variant flex justify-between items-center">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Asset ID</span>
+<span class="font-body-md text-body-md text-on-surface font-semibold">MBP-2024-X42</span>
+</div>
+<button class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant hover:bg-primary-container hover:text-on-primary-container transition-colors">
+<span class="material-symbols-outlined">qr_code_2</span>
+</button>
+</div>
+</div>
+<!-- Asset Card 2 -->
+<div class="glass-card p-stack-gap-md rounded-xl flex flex-col gap-4 transition-all duration-200 active:scale-[0.98]">
+<div class="flex justify-between items-start">
+<div class="w-12 h-12 rounded-lg bg-primary-container/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[32px]">monitor</span>
+</div>
+<span class="px-3 py-1 rounded-full bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-sm text-label-sm">In Use</span>
+</div>
+<div>
+<h3 class="font-title-lg text-title-lg text-on-surface">Dell UltraSharp 32"</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">4K UHD • USB-C Hub • Daisy Chain</p>
+</div>
+<div class="pt-4 border-t border-outline-variant flex justify-between items-center">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Asset ID</span>
+<span class="font-body-md text-body-md text-on-surface font-semibold">MON-DELL-882</span>
+</div>
+<button class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant hover:bg-primary-container hover:text-on-primary-container transition-colors">
+<span class="material-symbols-outlined">qr_code_2</span>
+</button>
+</div>
+</div>
+<!-- Asset Card 3 -->
+<div class="glass-card p-stack-gap-md rounded-xl flex flex-col gap-4 transition-all duration-200 active:scale-[0.98]">
+<div class="flex justify-between items-start">
+<div class="w-12 h-12 rounded-lg bg-primary-container/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[32px]">smartphone</span>
+</div>
+<span class="px-3 py-1 rounded-full bg-secondary-fixed text-on-secondary-fixed-variant font-label-sm text-label-sm">Provisioning</span>
+</div>
+<div>
+<h3 class="font-title-lg text-title-lg text-on-surface">iPhone 15 Pro</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Titanium Blue • 256GB • MDM Managed</p>
+</div>
+<div class="pt-4 border-t border-outline-variant flex justify-between items-center">
+<div class="flex flex-col">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Asset ID</span>
+<span class="font-body-md text-body-md text-on-surface font-semibold">PHN-IPH-15P</span>
+</div>
+<button class="w-10 h-10 rounded-lg bg-surface-container flex items-center justify-center text-on-surface-variant hover:bg-primary-container hover:text-on-primary-container transition-colors">
+<span class="material-symbols-outlined">qr_code_2</span>
+</button>
+</div>
+</div>
+<!-- Policy & Support Quick Links -->
+<div class="grid grid-cols-2 gap-stack-gap-md mt-stack-gap-lg">
+<div class="bg-surface-container-high p-stack-gap-md rounded-xl flex flex-col gap-2">
+<span class="material-symbols-outlined text-secondary">description</span>
+<span class="font-label-md text-label-md text-on-surface">Asset Policy</span>
+<p class="text-[10px] text-on-surface-variant uppercase font-bold">Updated June 2024</p>
+</div>
+<div class="bg-surface-container-high p-stack-gap-md rounded-xl flex flex-col gap-2">
+<span class="material-symbols-outlined text-tertiary">support_agent</span>
+<span class="font-label-md text-label-md text-on-surface">Request Repair</span>
+<p class="text-[10px] text-on-surface-variant uppercase font-bold">IT Support Desk</p>
+</div>
+</div>
+</div>
+<!-- Atmospheric Effect (Background) -->
+<div class="fixed top-0 left-0 w-full h-full -z-10 opacity-30 pointer-events-none">
+
+</div>
+</main>
+<!-- AI Assistant FAB -->
+<button class="fixed bottom-24 right-6 w-14 h-14 rounded-full bg-gradient-to-tr from-primary to-secondary text-white shadow-2xl flex items-center justify-center z-50 backdrop-blur-sm transition-transform active:scale-90">
+<span class="material-symbols-outlined text-[28px]" style="font-variation-settings: 'FILL' 1;">auto_awesome</span>
+</button>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 pb-safe h-20 bg-surface/80 border-t border-outline-variant backdrop-blur-xl shadow-lg">
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90 hover:bg-surface-container-low p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-sm text-label-sm">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90 hover:bg-surface-container-low p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">fingerprint</span>
+<span class="font-label-sm text-label-sm">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90 hover:bg-surface-container-low p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="font-label-sm text-label-sm">Leave</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary font-bold after:content-[''] after:w-1 after:h-1 after:bg-primary after:rounded-full after:mt-1 transition-transform duration-200 active:scale-90 hover:bg-surface-container-low p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-sm text-label-sm">Assets</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant transition-transform duration-200 active:scale-90 hover:bg-surface-container-low p-2 rounded-lg" href="#">
+<span class="material-symbols-outlined">person</span>
+<span class="font-label-sm text-label-sm">Profile</span>
+</a>
+</nav>
+<script>
+        // Simple search interaction
+        const searchInput = document.querySelector('input');
+        searchInput.addEventListener('focus', () => {
+            searchInput.parentElement.classList.add('scale-[1.02]');
+        });
+        searchInput.addEventListener('blur', () => {
+            searchInput.parentElement.classList.remove('scale-[1.02]');
+        });
+
+        // Category filter toggle
+        const chips = document.querySelectorAll('.no-scrollbar button');
+        chips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                chips.forEach(c => {
+                    c.classList.remove('bg-primary', 'text-on-primary', 'shadow-md');
+                    c.classList.add('bg-surface-container', 'text-on-surface-variant');
+                });
+                chip.classList.add('bg-primary', 'text-on-primary', 'shadow-md');
+                chip.classList.remove('bg-surface-container', 'text-on-surface-variant');
+            });
+        });
+    </script>
+</body></html>

@@ -64,7 +64,7 @@ export function JournalCommentsPanel({
 
   return (
     <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
-      <h2 className="text-sm font-medium tracking-tight">Discussion</h2>
+      <h2 className="text-base font-extrabold tracking-tight">Discussion</h2>
       <p className="mt-0.5 text-[11px] text-muted-foreground">
         Internal comments · newest first
       </p>
@@ -116,7 +116,7 @@ export function JournalCommentsPanel({
                 <span className="text-[10px] text-muted-foreground">
                   {item.created_at
                     ? new Date(item.created_at).toLocaleString("en-IN")
-                    : "—"}
+                    : "-"}
                 </span>
               </div>
               <p className="mt-1 whitespace-pre-wrap text-foreground/90">{item.body}</p>

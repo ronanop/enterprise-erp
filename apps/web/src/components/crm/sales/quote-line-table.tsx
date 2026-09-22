@@ -1,5 +1,6 @@
 "use client";
 
+import { CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { useState } from "react";
 import { Pencil, Plus, Trash2, X } from "lucide-react";
 
@@ -177,8 +178,7 @@ export function QuoteLineTable({
     <section className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
         <div>
-          <h2 className="text-sm font-medium tracking-tight">Quote Lines</h2>
-          <p className="text-[11px] text-muted-foreground">GST/HSN aware · unit price + margin %</p>
+          <h2 className="text-base font-extrabold tracking-tight">Quote Lines</h2>
         </div>
         {!readOnly ? (
           <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={toggleAdd}>
@@ -233,7 +233,7 @@ export function QuoteLineTable({
       <div className="erp-scroll overflow-x-auto">
         <table className="w-full min-w-[960px] text-left text-sm">
           <thead>
-            <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+            <tr className={CRM_TABLE_HEAD_ROW}>
               <th className="px-3 py-2">#</th>
               <th className="px-3 py-2">Product</th>
               <th className="px-3 py-2">HSN</th>
@@ -313,7 +313,7 @@ export function QuoteLineTable({
                   <tr key={line.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                     <td className="px-3 py-2 font-mono text-xs">{line.line_no}</td>
                     <td className="px-3 py-2">{line.product_name}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{line.hsn_sac ?? "—"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{line.hsn_sac ?? "-"}</td>
                     <td className="px-3 py-2 capitalize text-muted-foreground">{line.line_type}</td>
                     <td className="px-3 py-2">{line.qty}</td>
                     <td className="px-3 py-2">{formatInrPrecise(line.unit_cost)}</td>

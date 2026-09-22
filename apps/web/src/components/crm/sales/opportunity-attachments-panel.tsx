@@ -263,7 +263,7 @@ export function OpportunityAttachmentsPanel({
             </p>
             <h2
               id="opportunity-attachments-title"
-              className="truncate text-sm font-medium tracking-tight text-foreground"
+              className="truncate text-base font-extrabold tracking-tight text-foreground"
             >
               Attachments
             </h2>

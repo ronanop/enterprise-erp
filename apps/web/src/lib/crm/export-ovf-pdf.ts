@@ -1,15 +1,24 @@
 /**
- * OVF PDF export matching the Zoho "OVF Module" print preview layout.
- * Prioritizes readability: stacked label/value fields, generous spacing,
- * and landscape charge tables (extra pages are fine).
+ * OVF PDF export - table-first layout (Zoho-style print).
+ * Overview fields and charge lines are rendered as bordered tables, not free text.
  */
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
-import type {
-  CustomerChargeRow,
-  VendorChargeRow,
+import {
+  CACHE_LOGO_MM,
+  WOMEN_OWNED_LOGO_MM,
+  loadLetterheadLogos,
+  pdfImageFormat,
+} from "@/utils/pdf-letterhead";
+import {
+  computeOvfMargins,
+  formatChargeRowFileNames,
+  normalizeDistributorName,
+  type CustomerChargeRow,
+  type VendorChargeRow,
 } from "@/components/crm/sales/ovf-order-lines-section";
+import { downloadPdf, openPdfInNewTab } from "@/lib/crm/open-pdf-preview";
 import type { Opportunity, Ovf, Quote } from "@/services/sales-crm-service";
 
 export type OvfExportInput = {
@@ -35,33 +44,23 @@ export type OvfExportInput = {
 };
 
 const PORTRAIT_W = 210;
-const PORTRAIT_H = 297;
 const LANDSCAPE_W = 297;
 const LANDSCAPE_H = 210;
-const MARGIN = 14;
-const COL_GAP = 10;
-const FIELD_GAP = 5.5;
-const LINE_H = 5;
+const MARGIN = 12;
 
 const TEXT: [number, number, number] = [0x22, 0x22, 0x22];
-const LABEL: [number, number, number] = [0x4a, 0x4a, 0x4a];
+const LABEL: [number, number, number] = [0x3a, 0x3a, 0x3a];
 const SECTION: [number, number, number] = [0x1a, 0x56, 0xdb];
-const BORDER: [number, number, number] = [0xc8, 0xcd, 0xd4];
-const HEAD_FILL: [number, number, number] = [0xee, 0xf1, 0xf5];
-const BOX_FILL: [number, number, number] = [0xf4, 0xf7, 0xfc];
+const BORDER: [number, number, number] = [0xb8, 0xbe, 0xc8];
+const HEAD_FILL: [number, number, number] = [0xe8, 0xee, 0xf6];
+const LABEL_FILL: [number, number, number] = [0xf3, 0xf5, 0xf8];
 const ROW_ALT: [number, number, number] = [0xfa, 0xfb, 0xfc];
 
-type PageRef = { n: number; landscape: boolean };
-
 function pageSize(doc: jsPDF): { w: number; h: number } {
-  const [w, h] = doc.internal.pageSize.getWidth
-    ? [doc.internal.pageSize.getWidth(), doc.internal.pageSize.getHeight()]
-    : [PORTRAIT_W, PORTRAIT_H];
-  return { w, h };
-}
-
-function contentWidth(doc: jsPDF): number {
-  return pageSize(doc).w - MARGIN * 2;
+  return {
+    w: doc.internal.pageSize.getWidth(),
+    h: doc.internal.pageSize.getHeight(),
+  };
 }
 
 function pdfSafe(text: string): string {
@@ -112,7 +111,6 @@ function formatDateTime(value: string | null | undefined): string {
 function formatDeliveryPeriod(value: string | null | undefined): string {
   if (!value) return "-";
   const trimmed = value.trim();
-  // Only format as a calendar date when the string is clearly a date, not free text.
   if (/^\d{4}-\d{2}-\d{2}/.test(trimmed) || /^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/.test(trimmed)) {
     const d = new Date(trimmed);
     if (!Number.isNaN(d.getTime())) {
@@ -147,149 +145,174 @@ function stageLabel(ovf: Ovf): string {
   return map[ovf.blueprint_state] || ovf.blueprint_state.replaceAll("_", " ");
 }
 
-function drawFooter(doc: jsPDF, pageRef: PageRef) {
-  const { w, h } = pageSize(doc);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(120, 120, 120);
-  doc.text("OVF Module", MARGIN, h - 8);
-  doc.text(`Page ${pageRef.n}`, w - MARGIN, h - 8, { align: "right" });
+function lastTableY(doc: jsPDF, fallback: number): number {
+  return ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? fallback) + 6;
 }
 
-function sectionTitle(doc: jsPDF, title: string, y: number): number {
-  const w = contentWidth(doc);
-  const h = 9;
-  doc.setFillColor(...BOX_FILL);
-  doc.rect(MARGIN, y, w, h, "F");
-  doc.setDrawColor(...BORDER);
-  doc.setLineWidth(0.35);
-  doc.rect(MARGIN, y, w, h, "S");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(...SECTION);
-  doc.text(title, MARGIN + 3.5, y + 6);
-  return y + h + 6;
-}
-
-function ensureSpace(doc: jsPDF, y: number, need: number, pageRef: PageRef): number {
-  const { h } = pageSize(doc);
-  if (y + need < h - 16) return y;
-  drawFooter(doc, pageRef);
-  if (pageRef.landscape) {
-    doc.addPage("a4", "l");
-  } else {
-    doc.addPage("a4", "p");
+function drawPageFooters(doc: jsPDF) {
+  const totalPages = doc.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    const isLandscape = doc.internal.pageSize.getWidth() > doc.internal.pageSize.getHeight();
+    const w = isLandscape ? LANDSCAPE_W : PORTRAIT_W;
+    const h = isLandscape ? LANDSCAPE_H : doc.internal.pageSize.getHeight();
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, h - 12, w, 12, "F");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    doc.text("OVF Module", MARGIN, h - 5);
+    doc.text(`Page ${i} of ${totalPages}`, w - MARGIN, h - 5, { align: "right" });
   }
-  pageRef.n += 1;
-  return 16;
 }
 
-function addLandscapePage(doc: jsPDF, pageRef: PageRef): number {
-  drawFooter(doc, pageRef);
-  doc.addPage("a4", "l");
-  pageRef.n += 1;
-  pageRef.landscape = true;
-  return 16;
-}
-
-/**
- * Stacked field: label on its own line, value below — never overlaps.
- */
-function drawStackedField(
-  doc: jsPDF,
-  x: number,
-  y: number,
-  width: number,
-  label: string,
-  value: string,
-): number {
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.setTextColor(...LABEL);
-  const labelLines = doc.splitTextToSize(`${pdfSafe(label)} :`, width) as string[];
-  let yy = y;
-  for (const line of labelLines) {
-    doc.text(line, x, yy);
-    yy += LINE_H;
-  }
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(...TEXT);
-  const valueLines = doc.splitTextToSize(dash(value), width) as string[];
-  for (const line of valueLines) {
-    doc.text(line, x, yy);
-    yy += LINE_H;
-  }
-  return yy + FIELD_GAP;
-}
-
-function measureStackedField(doc: jsPDF, width: number, label: string, value: string): number {
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  const labelLines = doc.splitTextToSize(`${pdfSafe(label)} :`, width) as string[];
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  const valueLines = doc.splitTextToSize(dash(value), width) as string[];
-  return labelLines.length * LINE_H + valueLines.length * LINE_H + FIELD_GAP;
-}
-
-function drawTwoColumnFields(
-  doc: jsPDF,
-  y: number,
+/** Pair left/right fields into Label | Value | Label | Value table rows. */
+function toTwoColRows(
   left: Array<[string, string]>,
   right: Array<[string, string]>,
-  pageRef: PageRef,
-): number {
-  const colW = (contentWidth(doc) - COL_GAP) / 2;
-  const leftX = MARGIN;
-  const rightX = MARGIN + colW + COL_GAP;
-  let ly = y;
-  let ry = y;
-  const rows = Math.max(left.length, right.length);
-
-  for (let i = 0; i < rows; i++) {
-    const leftH = left[i] ? measureStackedField(doc, colW, left[i][0], left[i][1]) : 0;
-    const rightH = right[i] ? measureStackedField(doc, colW, right[i][0], right[i][1]) : 0;
-    const need = Math.max(leftH, rightH, 14);
-    const top = Math.max(ly, ry);
-    const startY = ensureSpace(doc, top, need + 2, pageRef);
-    if (startY !== top) {
-      ly = startY;
-      ry = startY;
-    }
-    if (left[i]) ly = drawStackedField(doc, leftX, ly, colW, left[i][0], left[i][1]);
-    if (right[i]) ry = drawStackedField(doc, rightX, ry, colW, right[i][0], right[i][1]);
-    // Keep columns aligned at the taller field so pairs stay readable.
-    const synced = Math.max(ly, ry);
-    ly = synced;
-    ry = synced;
+): string[][] {
+  const rows: string[][] = [];
+  const n = Math.max(left.length, right.length);
+  for (let i = 0; i < n; i++) {
+    const [ll, lv] = left[i] ?? ["", ""];
+    const [rl, rv] = right[i] ?? ["", ""];
+    rows.push([pdfSafe(ll), dash(lv), pdfSafe(rl), dash(rv)]);
   }
-  return Math.max(ly, ry) + 4;
+  return rows;
 }
 
-function tableBaseStyles() {
+function drawSectionTable(
+  doc: jsPDF,
+  startY: number,
+  title: string,
+  left: Array<[string, string]>,
+  right: Array<[string, string]>,
+): number {
+  const pageW = pageSize(doc).w;
+  const usable = pageW - MARGIN * 2;
+  const labelW = usable * 0.18;
+  const valueW = usable * 0.32;
+
+  autoTable(doc, {
+    startY,
+    margin: { left: MARGIN, right: MARGIN, top: 14, bottom: 14 },
+    head: [[title, "", "", ""]],
+    body: toTwoColRows(left, right),
+    theme: "grid",
+    styles: {
+      font: "helvetica",
+      fontSize: 8.5,
+      cellPadding: { top: 2.8, right: 2.4, bottom: 2.8, left: 2.4 },
+      textColor: TEXT,
+      lineColor: BORDER,
+      lineWidth: 0.25,
+      overflow: "linebreak",
+      valign: "middle",
+      minCellHeight: 8,
+    },
+    headStyles: {
+      fillColor: HEAD_FILL,
+      textColor: SECTION,
+      fontStyle: "bold",
+      fontSize: 10,
+      cellPadding: { top: 3.5, right: 2.4, bottom: 3.5, left: 2.4 },
+      halign: "left",
+    },
+    columnStyles: {
+      0: { cellWidth: labelW, fillColor: LABEL_FILL, fontStyle: "bold", textColor: LABEL, fontSize: 8 },
+      1: { cellWidth: valueW, fontStyle: "normal", textColor: TEXT },
+      2: { cellWidth: labelW, fillColor: LABEL_FILL, fontStyle: "bold", textColor: LABEL, fontSize: 8 },
+      3: { cellWidth: valueW, fontStyle: "normal", textColor: TEXT },
+    },
+    didParseCell: (data) => {
+      if (data.section === "head") {
+        // Span title across all columns visually by emptying extras.
+        if (data.column.index > 0) {
+          data.cell.text = [""];
+        }
+      }
+    },
+  });
+
+  return lastTableY(doc, startY);
+}
+
+function drawKvTable(
+  doc: jsPDF,
+  startY: number,
+  title: string,
+  rows: Array<[string, string]>,
+): number {
+  const pageW = pageSize(doc).w;
+  const usable = pageW - MARGIN * 2;
+
+  autoTable(doc, {
+    startY,
+    margin: { left: MARGIN, right: MARGIN, top: 14, bottom: 14 },
+    head: [[title, ""]],
+    body: rows.map(([label, value]) => [pdfSafe(label), dash(value)]),
+    theme: "grid",
+    styles: {
+      font: "helvetica",
+      fontSize: 8.5,
+      cellPadding: { top: 2.8, right: 2.4, bottom: 2.8, left: 2.4 },
+      textColor: TEXT,
+      lineColor: BORDER,
+      lineWidth: 0.25,
+      overflow: "linebreak",
+      valign: "middle",
+      minCellHeight: 8,
+    },
+    headStyles: {
+      fillColor: HEAD_FILL,
+      textColor: SECTION,
+      fontStyle: "bold",
+      fontSize: 10,
+      cellPadding: { top: 3.5, right: 2.4, bottom: 3.5, left: 2.4 },
+    },
+    columnStyles: {
+      0: {
+        cellWidth: usable * 0.36,
+        fillColor: LABEL_FILL,
+        fontStyle: "bold",
+        textColor: LABEL,
+        fontSize: 8,
+      },
+      1: { cellWidth: usable * 0.64, fontStyle: "normal", textColor: TEXT },
+    },
+    didParseCell: (data) => {
+      if (data.section === "head" && data.column.index > 0) {
+        data.cell.text = [""];
+      }
+    },
+  });
+
+  return lastTableY(doc, startY);
+}
+
+function chargeTableStyles() {
   return {
     font: "helvetica" as const,
-    fontSize: 9.5,
-    cellPadding: { top: 3.2, right: 2.8, bottom: 3.2, left: 2.8 },
+    fontSize: 8,
+    cellPadding: { top: 2.6, right: 2, bottom: 2.6, left: 2 },
     textColor: TEXT,
     lineColor: BORDER,
     lineWidth: 0.25,
     overflow: "linebreak" as const,
     valign: "middle" as const,
-    minCellHeight: 10,
+    minCellHeight: 8,
   };
 }
 
-function tableHeadStyles() {
+function chargeHeadStyles() {
   return {
     fillColor: HEAD_FILL,
     textColor: TEXT,
     fontStyle: "bold" as const,
-    fontSize: 9,
-    cellPadding: { top: 3.5, right: 2.8, bottom: 3.5, left: 2.8 },
+    fontSize: 7.5,
+    cellPadding: { top: 3, right: 2, bottom: 3, left: 2 },
     valign: "middle" as const,
+    overflow: "linebreak" as const,
   };
 }
 
@@ -301,28 +324,57 @@ export function buildOvfExportFilename(ovf: Ovf, quoteName?: string | null): str
   return `OVF_${base || ovf.ovf_no}.pdf`;
 }
 
-export function exportOvfPdf(input: OvfExportInput): void {
+export async function buildOvfPdfDocument(input: OvfExportInput): Promise<jsPDF> {
+  const { cache: cacheLogo, womenOwned: womenLogo } = await loadLetterheadLogos();
   const doc = new jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
-  const pageRef: PageRef = { n: 1, landscape: false };
   const { ovf, quote, opportunity, customerRows, vendorRows } = input;
+  const { totalMarginAmount, totalMarginPct } = computeOvfMargins({
+    customerRows,
+    vendorRows,
+    freight: ovf.freight,
+    financeCostPct: ovf.finance_cost_pct,
+  });
 
   const saleTotal = customerRows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
   const purchaseTotal = vendorRows.reduce((sum, row) => sum + (Number(row.total) || 0), 0);
 
-  let y = 18;
+  let y = MARGIN;
+  if (cacheLogo) {
+    doc.addImage(
+      cacheLogo,
+      pdfImageFormat(cacheLogo),
+      MARGIN,
+      y,
+      CACHE_LOGO_MM.w,
+      CACHE_LOGO_MM.h,
+    );
+  }
+  if (womenLogo) {
+    doc.addImage(
+      womenLogo,
+      pdfImageFormat(womenLogo),
+      PORTRAIT_W - MARGIN - WOMEN_OWNED_LOGO_MM.w,
+      y + (CACHE_LOGO_MM.h - WOMEN_OWNED_LOGO_MM.h) / 2,
+      WOMEN_OWNED_LOGO_MM.w,
+      WOMEN_OWNED_LOGO_MM.h,
+    );
+  }
+  y += CACHE_LOGO_MM.h + 5;
+
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
+  doc.setFontSize(16);
   doc.setTextColor(...TEXT);
   doc.text("OVF Module Information", MARGIN, y);
-  y += 7;
+  y += 5;
   doc.setDrawColor(...SECTION);
-  doc.setLineWidth(0.7);
+  doc.setLineWidth(0.6);
   doc.line(MARGIN, y, PORTRAIT_W - MARGIN, y);
-  y += 8;
+  y += 5;
 
-  y = drawTwoColumnFields(
+  y = drawSectionTable(
     doc,
     y,
+    "OVF Module Information",
     [
       ["Customer Name", input.customerName],
       ["Billing Address", input.billingAddress],
@@ -352,30 +404,26 @@ export function exportOvfPdf(input: OvfExportInput): void {
       ["OVF Version", String(ovf.version)],
       ["Tag", "-"],
     ],
-    pageRef,
   );
 
-  y = ensureSpace(doc, y + 2, 36, pageRef);
-  y = sectionTitle(doc, "Technology Segment & Sub Technology Segment", y);
-  y = drawTwoColumnFields(
+  y = drawSectionTable(
     doc,
     y,
+    "Technology Segment & Sub Technology Segment",
     [
       ["Technology Segment", ovf.technology_segment || "-"],
       ["Other Sub Technology Segment", ovf.sub_technology_segment || "-"],
     ],
     [["Sub Technology Segment.", ovf.sub_technology_segment || "-"]],
-    pageRef,
   );
 
-  y = ensureSpace(doc, y + 2, 40, pageRef);
-  y = sectionTitle(doc, "Charges and Details", y);
-  y = drawTwoColumnFields(
+  y = drawSectionTable(
     doc,
     y,
+    "Charges and Details",
     [
-      ["Total Margin in Amount.", formatMoney(ovf.total_margin_amount)],
-      ["Total Margin In Percentage.", `${formatMoney(ovf.total_margin_pct)}%`],
+      ["Total Margin in Amount.", formatMoney(totalMarginAmount)],
+      ["Total Margin In Percentage.", `${formatMoney(totalMarginPct)}%`],
       ["Opportunity", opportunity?.opportunity_name || "-"],
       ["Approval Status", ovf.approval_status.replaceAll("_", " ")],
       ["Additional Charges", formatMoney(ovf.additional_charges)],
@@ -386,148 +434,164 @@ export function exportOvfPdf(input: OvfExportInput): void {
       ["Freight Charges", formatMoney(ovf.freight)],
       ["Finance Cost (%)", `${formatMoney(ovf.finance_cost_pct)}%`],
     ],
-    pageRef,
   );
 
-  y = ensureSpace(doc, y + 2, 22, pageRef);
-  const totalsW = contentWidth(doc);
-  doc.setFillColor(...HEAD_FILL);
-  doc.roundedRect(MARGIN, y, totalsW, 18, 1.2, 1.2, "F");
-  doc.setDrawColor(...BORDER);
-  doc.roundedRect(MARGIN, y, totalsW, 18, 1.2, 1.2, "S");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(...TEXT);
-  doc.text("Total Sale Value", MARGIN + 4, y + 7);
-  doc.text(formatMoney(saleTotal, 0), PORTRAIT_W - MARGIN - 4, y + 7, { align: "right" });
-  doc.text("Total Purchase Value", MARGIN + 4, y + 14);
-  doc.text(formatMoney(purchaseTotal, 0), PORTRAIT_W - MARGIN - 4, y + 14, { align: "right" });
+  y = drawKvTable(doc, y, "Totals", [
+    ["Total Sale Value", formatMoney(saleTotal, 0)],
+    ["Total Purchase Value", formatMoney(purchaseTotal, 0)],
+  ]);
 
-  // Charge tables on landscape pages so every column stays readable.
-  y = addLandscapePage(doc, pageRef);
-  y = sectionTitle(doc, "Customer Charges.", y);
+  // Charge tables on landscape so every column fits.
+  doc.addPage("a4", "l");
+  y = 14;
+
   autoTable(doc, {
     startY: y,
-    margin: { left: MARGIN, right: MARGIN, top: 16, bottom: 16 },
+    margin: { left: MARGIN, right: MARGIN, top: 12, bottom: 14 },
     head: [
       [
+        {
+          content: "Customer Charges.",
+          colSpan: 9,
+          styles: {
+            fillColor: HEAD_FILL,
+            textColor: SECTION,
+            fontStyle: "bold",
+            fontSize: 10,
+            halign: "left",
+          },
+        },
+      ],
+      [
         "Product Name",
+        "Description",
         "Qty",
         "Unit Amount (Rs.)",
         "Total",
         "GST %",
         "GST Amount",
         "Amount with GST",
-        "Add PO",
+        "PO Files",
       ],
     ],
-    body: customerRows.map((row) => [
-      pdfSafe(row.product_name || "-"),
-      formatQty(row.qty),
-      formatMoney(row.unit_price),
-      formatMoney(row.total, 0),
-      `${dash(row.gst_pct)}%`,
-      formatMoney(row.total_gst, 0),
-      formatMoney(row.total_with_gst, 0),
-      pdfSafe(row.add_po || "-"),
-    ]),
-    styles: tableBaseStyles(),
-    headStyles: tableHeadStyles(),
+    body:
+      customerRows.length > 0
+        ? customerRows.map((row) => [
+            pdfSafe(row.product_name || "-"),
+            pdfSafe(row.description || "-"),
+            formatQty(row.qty),
+            formatMoney(row.unit_price),
+            formatMoney(row.total, 0),
+            `${dash(row.gst_pct)}%`,
+            formatMoney(row.total_gst, 0),
+            formatMoney(row.total_with_gst, 0),
+            pdfSafe(formatChargeRowFileNames(row.poFiles)),
+          ])
+        : [["-", "-", "-", "-", "-", "-", "-", "-", "-"]],
+    theme: "grid",
+    styles: chargeTableStyles(),
+    headStyles: chargeHeadStyles(),
     alternateRowStyles: { fillColor: ROW_ALT },
     columnStyles: {
-      0: { cellWidth: 62, halign: "left" },
-      1: { cellWidth: 18, halign: "right" },
-      2: { cellWidth: 34, halign: "right" },
+      0: { cellWidth: 42, halign: "left" },
+      1: { cellWidth: 40, halign: "left" },
+      2: { cellWidth: 16, halign: "right" },
       3: { cellWidth: 28, halign: "right" },
-      4: { cellWidth: 20, halign: "center" },
-      5: { cellWidth: 30, halign: "right" },
-      6: { cellWidth: 36, halign: "right" },
-      7: { cellWidth: 28, halign: "left" },
-    },
-    didDrawPage: () => {
-      // autoTable may add pages; keep page counter approximate via footer redraw
-      drawFooter(doc, pageRef);
+      4: { cellWidth: 24, halign: "right" },
+      5: { cellWidth: 16, halign: "center" },
+      6: { cellWidth: 26, halign: "right" },
+      7: { cellWidth: 30, halign: "right" },
+      8: { cellWidth: 41, halign: "left" },
     },
   });
 
-  const afterCustomer =
-    ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? y) + 10;
-
-  // Sync page count after autoTable (it may have added pages).
-  pageRef.n = doc.getNumberOfPages();
-  pageRef.landscape = true;
-
-  let vendorY = afterCustomer;
-  if (vendorY > LANDSCAPE_H - 50) {
-    vendorY = addLandscapePage(doc, pageRef);
-  } else {
-    vendorY = ensureSpace(doc, vendorY, 40, pageRef);
+  y = lastTableY(doc, y) + 4;
+  if (y > LANDSCAPE_H - 55) {
+    doc.addPage("a4", "l");
+    y = 14;
   }
 
-  vendorY = sectionTitle(doc, "Vendor Charges.", vendorY);
   autoTable(doc, {
-    startY: vendorY,
-    margin: { left: MARGIN, right: MARGIN, top: 16, bottom: 16 },
+    startY: y,
+    margin: { left: MARGIN, right: MARGIN, top: 12, bottom: 14 },
     head: [
       [
+        {
+          content: "Vendor Charges.",
+          colSpan: 12,
+          styles: {
+            fillColor: HEAD_FILL,
+            textColor: SECTION,
+            fontStyle: "bold",
+            fontSize: 10,
+            halign: "left",
+          },
+        },
+      ],
+      [
+        "Product Name",
+        "Description",
         "Qty",
         "Unit Purchase (Rs.)",
         "Total",
         "GST %",
         "GST Amount",
         "Amount with GST",
-        "Vendor Name",
+        "Distributor Name",
         "Contact Person",
         "Contact No.",
-        "Add Quote",
+        "Quote Files",
       ],
     ],
-    body: vendorRows.map((row) => [
-      formatQty(row.qty),
-      formatMoney(row.unit_price),
-      formatMoney(row.total, 0),
-      `${dash(row.gst_pct)}%`,
-      formatMoney(row.total_gst, 0),
-      formatMoney(row.total_with_gst, 0),
-      pdfSafe(row.vendor_name || "-"),
-      pdfSafe(row.contact_person || "-"),
-      pdfSafe(row.contact_number || "-"),
-      pdfSafe(row.add_quote || "-"),
-    ]),
-    styles: tableBaseStyles(),
-    headStyles: tableHeadStyles(),
+    body:
+      vendorRows.length > 0
+        ? vendorRows.map((row) => [
+            pdfSafe(row.product_name || "-"),
+            pdfSafe(row.description || "-"),
+            formatQty(row.qty),
+            formatMoney(row.unit_price),
+            formatMoney(row.total, 0),
+            `${dash(row.gst_pct)}%`,
+            formatMoney(row.total_gst, 0),
+            formatMoney(row.total_with_gst, 0),
+            pdfSafe(normalizeDistributorName(row.vendor_name) || "-"),
+            pdfSafe(row.contact_person || "-"),
+            pdfSafe(row.contact_number || "-"),
+            pdfSafe(formatChargeRowFileNames(row.quoteFiles)),
+          ])
+        : [["-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-", "-"]],
+    theme: "grid",
+    styles: chargeTableStyles(),
+    headStyles: chargeHeadStyles(),
     alternateRowStyles: { fillColor: ROW_ALT },
     columnStyles: {
-      0: { cellWidth: 14, halign: "right" },
-      1: { cellWidth: 30, halign: "right" },
-      2: { cellWidth: 22, halign: "right" },
-      3: { cellWidth: 16, halign: "center" },
-      4: { cellWidth: 24, halign: "right" },
-      5: { cellWidth: 30, halign: "right" },
-      6: { cellWidth: 46, halign: "left" },
-      7: { cellWidth: 30, halign: "left" },
-      8: { cellWidth: 28, halign: "left" },
-      9: { cellWidth: 22, halign: "left" },
+      0: { cellWidth: 30, halign: "left" },
+      1: { cellWidth: 28, halign: "left" },
+      2: { cellWidth: 12, halign: "right" },
+      3: { cellWidth: 24, halign: "right" },
+      4: { cellWidth: 18, halign: "right" },
+      5: { cellWidth: 14, halign: "center" },
+      6: { cellWidth: 20, halign: "right" },
+      7: { cellWidth: 24, halign: "right" },
+      8: { cellWidth: 32, halign: "left" },
+      9: { cellWidth: 24, halign: "left" },
+      10: { cellWidth: 22, halign: "left" },
+      11: { cellWidth: 25, halign: "left" },
     },
-    didDrawPage: () => drawFooter(doc, pageRef),
   });
 
-  // Final page numbers on every page
-  const totalPages = doc.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    const isLandscape = doc.internal.pageSize.getWidth() > doc.internal.pageSize.getHeight();
-    const w = isLandscape ? LANDSCAPE_W : PORTRAIT_W;
-    const h = isLandscape ? LANDSCAPE_H : PORTRAIT_H;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(120, 120, 120);
-    // Clear prior footer by redrawing (white bar then text)
-    doc.setFillColor(255, 255, 255);
-    doc.rect(0, h - 12, w, 12, "F");
-    doc.text("OVF Module", MARGIN, h - 6);
-    doc.text(`Page ${i} of ${totalPages}`, w - MARGIN, h - 6, { align: "right" });
-  }
+  drawPageFooters(doc);
+  return doc;
+}
 
-  doc.save(buildOvfExportFilename(ovf, input.quoteName));
+/** Download OVF as PDF. */
+export async function exportOvfPdf(input: OvfExportInput): Promise<void> {
+  const doc = await buildOvfPdfDocument(input);
+  downloadPdf(doc, buildOvfExportFilename(input.ovf, input.quoteName));
+}
+
+/** Open OVF PDF in a new tab (print preview - same file Export downloads). */
+export async function openOvfPrintPreview(input: OvfExportInput): Promise<void> {
+  const doc = await buildOvfPdfDocument(input);
+  openPdfInNewTab(doc, buildOvfExportFilename(input.ovf, input.quoteName));
 }

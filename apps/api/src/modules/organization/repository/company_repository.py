@@ -5,10 +5,13 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from modules.foundation.domain.org_data_scope import apply_company_scope
 from modules.foundation.domain.value_objects import TenantContext
 from modules.organization.domain.entities import CompanyEntity
 from modules.organization.models.company import OrgCompany
 from modules.organization.repository.base import OrgScopedRepository, utcnow
+
+ORGANIZATION_MODULE_KEY = "organization"
 
 
 class CompanyRepository(OrgScopedRepository):
@@ -18,8 +21,9 @@ class CompanyRepository(OrgScopedRepository):
     def list_companies(self, ctx: TenantContext) -> list[CompanyEntity]:
         stmt = select(OrgCompany)
         stmt = self.apply_tenant_filter(stmt, OrgCompany, ctx)
-        if ctx.company_id and ctx.user_type not in {"super_admin", "tenant_admin"}:
-            stmt = stmt.where(OrgCompany.id == ctx.company_id)
+        stmt = apply_company_scope(
+            stmt, OrgCompany, ctx, module_key=ORGANIZATION_MODULE_KEY
+        )
         return [self._to_entity(r) for r in self.db.scalars(stmt).all()]
 
     def get_by_id(self, ctx: TenantContext, company_id: UUID) -> CompanyEntity | None:
@@ -52,6 +56,7 @@ class CompanyRepository(OrgScopedRepository):
         tax_number: str | None = None,
         fiscal_year_start_month: int = 4,
         timezone: str = "UTC",
+        status: str = "active",
     ) -> CompanyEntity:
         row = OrgCompany(
             id=uuid4(),
@@ -65,7 +70,7 @@ class CompanyRepository(OrgScopedRepository):
             tax_number=tax_number,
             fiscal_year_start_month=fiscal_year_start_month,
             timezone=timezone,
-            status="draft",
+            status=status or "active",
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
         )

@@ -9,6 +9,7 @@ from modules.payroll.models.loan import PayLoan
 from modules.payroll.models.loan_installment import PayLoanInstallment
 from modules.payroll.models.payroll_adjustment import PayPayrollAdjustment
 from modules.payroll.models.payroll_period import PayPayrollPeriod
+from modules.payroll.models.payroll_policy import PayPayrollPolicy
 from modules.payroll.models.payroll_posting import PayPayrollPosting
 from modules.payroll.models.payroll_run import PayPayrollRun
 from modules.payroll.models.payroll_run_line import PayPayrollRunLine
@@ -23,6 +24,7 @@ from modules.payroll.models.tax_configuration import PayTaxConfiguration
 
 __all__ = [
     "PayPayrollPeriod",
+    "PayPayrollPolicy",
     "PaySalaryStructure",
     "PaySalaryComponent",
     "PaySalaryStructureLine",

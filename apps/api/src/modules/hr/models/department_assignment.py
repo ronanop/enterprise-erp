@@ -1,4 +1,4 @@
-"""HR department assignment — uses org_department only (C-01)."""
+"""HR department assignment - uses org_department only (C-01)."""
 
 from datetime import date
 from uuid import UUID, uuid4

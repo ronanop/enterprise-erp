@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FileStack, RefreshCw } from "lucide-react";
+import { FileStack } from "lucide-react";
 
-import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
-import { Button } from "@/components/ui/button";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { ApiClientError } from "@/services/api-client";
 import {
   listAttachmentsByCategory,
@@ -24,32 +24,28 @@ type SortKey = "document" | "opportunity" | "stage" | "size";
 
 const META: Record<
   DocumentCategory,
-  { title: string; description: string; flag: keyof Opportunity; label: string; subtitle: string }
+  { title: string; flag: keyof Opportunity; label: string; subtitle: string }
 > = {
   oem_quote: {
     title: "OEM Quote",
-    description: "OEM quotations attached on opportunities before customer quote creation.",
     flag: "oem_quote_attached",
     label: "OEM Quote",
     subtitle: "OEM quotation documents",
   },
   customer_po: {
     title: "Purchase Order",
-    description: "Customer purchase orders attached after quote acceptance.",
     flag: "customer_po_attached",
     label: "Customer PO",
     subtitle: "Customer purchase orders",
   },
   boq: {
     title: "BOQ",
-    description: "Bill of Quantities documents attached on opportunities.",
     flag: "boq_attached",
     label: "BOQ",
     subtitle: "Bill of quantities",
   },
   sow: {
     title: "SOW",
-    description: "Statement of Work documents attached on opportunities.",
     flag: "sow_attached",
     label: "SOW",
     subtitle: "Statements of work",
@@ -89,9 +85,9 @@ export function DocumentRegistryListPage({
       const oppIds = new Set(scopedOpps.map((opp) => opp.id));
       const scopedFiles = companyAccountId
         ? files.filter(
-            (file) =>
-              file.entity_type === "opportunity" && oppIds.has(file.entity_id),
-          )
+          (file) =>
+            file.entity_type === "opportunity" && oppIds.has(file.entity_id),
+        )
         : files;
       setAttachments(scopedFiles);
       setOpportunities(scopedOpps);
@@ -167,28 +163,7 @@ export function DocumentRegistryListPage({
       {!embedded ? (
         <PageHeader
           title={meta.title}
-          description={meta.description}
-          actions={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="cursor-pointer"
-              disabled={loading}
-              onClick={() => void load()}
-            >
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          }
         />
-      ) : null}
-
-      {!embedded ? (
-        <CrmInfoBanner>
-          {meta.label} files are attached from an Opportunity blueprint step — open the opportunity to
-          upload or review.
-        </CrmInfoBanner>
       ) : null}
 
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
@@ -196,24 +171,8 @@ export function DocumentRegistryListPage({
       <CrmListPanel>
         <CrmListToolbar
           title={meta.title}
-          subtitle={meta.subtitle}
           icon={FileStack}
           count={sorted.length}
-          actions={
-            embedded ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="cursor-pointer"
-                disabled={loading}
-                onClick={() => void load()}
-              >
-                <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-            ) : null
-          }
           search={{
             value: query,
             onChange: setQuery,
@@ -224,7 +183,7 @@ export function DocumentRegistryListPage({
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+              <tr className={CRM_TABLE_HEAD_ROW}>
                 <CrmSortableTh label="Document" sortKey="document" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Opportunity" sortKey="opportunity" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Stage" sortKey="stage" activeKey={sortBy} dir={sortDir} onSort={onSort} />
@@ -273,22 +232,22 @@ export function DocumentRegistryListPage({
                           {row.opportunity?.opportunity_name ?? row.opportunityId.slice(0, 8)}
                         </Link>
                       ) : (
-                        "—"
+                        "-"
                       )}
                       {row.opportunity?.opportunity_code ? (
                         <div className="text-[11px] text-muted-foreground">
-                          {row.opportunity.opportunity_code}
+                          {formatCrmCode(row.opportunity.opportunity_code)}
                         </div>
                       ) : null}
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground capitalize">
-                      {(row.opportunity?.blueprint_state ?? row.opportunity?.current_stage ?? "—").replaceAll(
+                      {(row.opportunity?.blueprint_state ?? row.opportunity?.current_stage ?? "-").replaceAll(
                         "_",
                         " ",
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-muted-foreground">
-                      {row.size != null ? `${Math.max(1, Math.round(row.size / 1024))} KB` : "—"}
+                      {row.size != null ? `${Math.max(1, Math.round(row.size / 1024))} KB` : "-"}
                     </td>
                   </tr>
                 ))

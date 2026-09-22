@@ -21,6 +21,7 @@ import {
   exportArInvoicesXlsx,
   printArInvoicesTable,
 } from "@/lib/finance/ar-export";
+import { safeAppHref, safeEntityHref } from "@/lib/html";
 import { cn } from "@/lib/utils";
 import type { ArEntry } from "@/services/ar-service";
 import { formatInrPrecise } from "@/services/finance-service";
@@ -84,7 +85,6 @@ export function ArInvoiceTable(props: Props) {
   const [colsOpen, setColsOpen] = useState(false);
   const visible = useMemo(() => new Set(prefs.visibleColumns), [prefs.visibleColumns]);
   const pageCount = Math.max(1, Math.ceil(props.total / props.pageSize));
-  const detailHref = props.detailHref ?? ((row: ArEntry) => `/finance/accounts-receivable/invoices/${row.id}`);
   const exportTitle = props.exportTitle ?? "Accounts Receivable Invoices";
 
   const sortable: Partial<Record<ColumnKey, ArSortKey>> = {
@@ -174,12 +174,21 @@ export function ArInvoiceTable(props: Props) {
                   <tr key={row.id} className="border-b border-border/50 transition-colors duration-150 hover:bg-muted/40">
                     {visible.has("invoice_no") ? (
                       <td className="px-2 py-1.5 font-mono text-xs">
-                        <Link href={detailHref(row)} className="cursor-pointer hover:underline">{row.document_number}</Link>
+                      <Link
+                        href={
+                          props.detailHref
+                            ? safeAppHref(props.detailHref(row))
+                            : safeEntityHref("/finance/accounts-receivable/invoices", row.id)
+                        }
+                        className="cursor-pointer hover:underline"
+                      >
+                        {row.document_number}
+                      </Link>
                       </td>
                     ) : null}
                     {visible.has("customer") ? (
                       <td className="px-2 py-1.5">
-                        <Link href={`/finance/accounts-receivable/customers/${row.customer_id}`} className="cursor-pointer hover:underline">
+                        <Link href={safeEntityHref("/finance/accounts-receivable/customers", row.customer_id)} className="cursor-pointer hover:underline">
                           {row.customer_name ?? row.customer_code ?? row.customer_id.slice(0, 8)}
                         </Link>
                       </td>

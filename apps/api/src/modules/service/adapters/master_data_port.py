@@ -1,4 +1,4 @@
-"""Master Data port — customer / employee / asset / product (C-01)."""
+"""Master Data port - customer / employee / asset / product (C-01)."""
 
 from uuid import UUID
 

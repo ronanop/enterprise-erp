@@ -1,0 +1,93 @@
+{
+  "version": 2,
+  "endpoints": [
+    {
+      "tool_name": "erp_health_check",
+      "method": "GET",
+      "path": "/api/v1/health",
+      "access": "read",
+      "description": "Check ERP API liveness, version, and database connectivity.",
+      "permission": null
+    },
+    {
+      "tool_name": "list_leads",
+      "method": "GET",
+      "path": "/api/v1/leads",
+      "access": "read",
+      "description": "List CRM leads for the tenant. Optional filters: q (search text), status, limit, offset. Returns pagination metadata.",
+      "permission": "crm.lead:read"
+    },
+    {
+      "tool_name": "get_lead",
+      "method": "GET",
+      "path": "/api/v1/leads/{id}",
+      "access": "read",
+      "description": "Fetch a single CRM lead by UUID.",
+      "permission": "crm.lead:read"
+    },
+    {
+      "tool_name": "list_orders",
+      "method": "GET",
+      "path": "/api/v1/orders",
+      "access": "read",
+      "description": "List sales orders. Optional filters: q (document number search), status, limit, offset.",
+      "permission": "sales.order:read"
+    },
+    {
+      "tool_name": "get_order",
+      "method": "GET",
+      "path": "/api/v1/orders/{id}",
+      "access": "read",
+      "description": "Fetch a single sales order by UUID, including line items.",
+      "permission": "sales.order:read"
+    },
+    {
+      "tool_name": "list_customers",
+      "method": "GET",
+      "path": "/api/v1/agent/customers",
+      "access": "read",
+      "description": "List master-data customers. Optional filters: q, status, limit, offset.",
+      "permission": "master.customer:read"
+    },
+    {
+      "tool_name": "get_customer",
+      "method": "GET",
+      "path": "/api/v1/agent/customers/{id}",
+      "access": "read",
+      "description": "Fetch a single customer record by UUID.",
+      "permission": "master.customer:read"
+    },
+    {
+      "tool_name": "list_invoices",
+      "method": "GET",
+      "path": "/api/v1/invoices",
+      "access": "read",
+      "description": "List sales invoices. Optional filters: q (document number), status, limit, offset.",
+      "permission": "sales.invoice:read"
+    },
+    {
+      "tool_name": "get_invoice",
+      "method": "GET",
+      "path": "/api/v1/invoices/{id}",
+      "access": "read",
+      "description": "Fetch a single sales invoice by UUID.",
+      "permission": "sales.invoice:read"
+    },
+    {
+      "tool_name": "list_products",
+      "method": "GET",
+      "path": "/api/v1/agent/products",
+      "access": "read",
+      "description": "List product master records. Optional filters: q (code or name), status, limit, offset.",
+      "permission": "master.product:read"
+    },
+    {
+      "tool_name": "get_product",
+      "method": "GET",
+      "path": "/api/v1/agent/products/{id}",
+      "access": "read",
+      "description": "Fetch a single product by UUID.",
+      "permission": "master.product:read"
+    }
+  ]
+}

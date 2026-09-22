@@ -2,83 +2,90 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeft, Download, FileText, Pencil, Plus, RefreshCw } from "lucide-react";
-
-import { exportQuotePdf, loadSellerLetterhead } from "@/lib/crm/export-quote-pdf";
+import { useRouter } from "next/navigation";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Building2,
+  FileText,
+  MapPin,
+  Scale,
+} from "lucide-react";
 
 import {
-  CrmDetailGrid,
-  CrmDetailItem,
   CrmErrorBanner,
-  CrmHeadlineBand,
-  CrmHeadlineStat,
   CrmPage,
   CrmSection,
   CrmWarnBanner,
 } from "@/components/crm/crm-ui";
+import {
+  CrmReadOnlyField,
+  CrmReadOnlyTextarea,
+  textOrDash,
+} from "@/components/crm/sales/crm-readonly-field";
 import { ApprovalBanner } from "@/components/crm/sales/approval-banner";
+import { CrmEntityRejectionAlert } from "@/components/crm/sales/crm-approval-inbox-listener";
 import { AttachmentsPanel } from "@/components/crm/sales/attachments-panel";
-import { BlueprintActions, BlueprintStateBadge } from "@/components/crm/sales/blueprint-actions";
-import { DealTimeline, type DealStage } from "@/components/crm/sales/deal-timeline";
+import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
+import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
+import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
+import { CrmRecordActionsMenu } from "@/components/crm/sales/crm-record-actions-menu";
+import { normalizeQuoteServiceType } from "@/lib/crm/lead-product-options";
 import { QuoteLineTable } from "@/components/crm/sales/quote-line-table";
-import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { cloneQuoteRecord, downloadQuoteExport, printQuotePreview } from "@/lib/crm/crm-record-actions";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { ApiClientError } from "@/services/api-client";
 import {
+  applyOpportunityAction,
   applyQuoteAction,
   approveQuoteInternally,
+  deleteQuote,
   formatInr,
-  formatInrPrecise,
   fullName,
-  getCompany,
   getOpportunity,
+  getOpportunityBlueprint,
   getQuote,
   getQuoteBlueprint,
   getQuoteMargin,
-  getSalesLead,
   listAttachments,
   listContacts,
-  listEmployeeOptions,
   listQuoteLines,
   listOvfs,
   sendQuoteForApproval,
   type BlueprintActionPayload,
   type BlueprintState,
-  type Company,
   type Contact,
   type Opportunity,
-  type Option,
   type Ovf,
   type Quote,
   type QuoteLine,
   type QuoteMarginSummary,
-  type SalesLead,
+  type Attachment,
 } from "@/services/sales-crm-service";
 
-function textOrDash(value: string | number | null | undefined): string {
-  if (value === null || value === undefined) return "—";
-  const text = String(value).trim();
-  return text || "—";
+function formatQuoteStage(stage: string): string {
+  if (!stage) return "-";
+  return stage.replaceAll("_", " ");
 }
 
 export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
+  const router = useRouter();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [blueprint, setBlueprint] = useState<BlueprintState | null>(null);
   const [margin, setMargin] = useState<QuoteMarginSummary | null>(null);
   const [lines, setLines] = useState<QuoteLine[]>([]);
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
-  const [company, setCompany] = useState<Company | null>(null);
-  const [sourceLead, setSourceLead] = useState<SalesLead | null>(null);
+  const [oppBlueprint, setOppBlueprint] = useState<BlueprintState | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [employees, setEmployees] = useState<Option[]>([]);
   const [existingOvf, setExistingOvf] = useState<Ovf | null>(null);
   const [hasVendorQuote, setHasVendorQuote] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [banner, setBanner] = useState<{ text: string; tone: "success" | "error" } | null>(null);
+  const [banner, setBanner] = useState<{ text: string; tone: "error" } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,21 +102,15 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       setBlueprint(bp);
       setMargin(marginRow);
       setLines(lineRows);
+      setAttachments(attachmentRows);
       setHasVendorQuote(attachmentRows.some((row) => row.category === "vendor_quote"));
-      const [opp, ovfRows, companyRow, employeeRows] = await Promise.all([
+      const [opp, ovfRows, oppBp] = await Promise.all([
         getOpportunity(quoteRow.opportunity_id).catch(() => null),
         listOvfs({ opportunity_id: quoteRow.opportunity_id }).catch(() => []),
-        quoteRow.company_account_id
-          ? getCompany(quoteRow.company_account_id).catch(() => null)
-          : Promise.resolve(null),
-        listEmployeeOptions().catch(() => [] as Option[]),
+        getOpportunityBlueprint(quoteRow.opportunity_id).catch(() => null),
       ]);
       setOpportunity(opp);
-      setCompany(companyRow);
-      setEmployees(employeeRows);
-      setSourceLead(
-        opp?.lead_id ? await getSalesLead(opp.lead_id).catch(() => null) : null,
-      );
+      setOppBlueprint(oppBp);
       setContacts(
         opp?.company_account_id
           ? await listContacts(opp.company_account_id).catch(() => [] as Contact[])
@@ -133,14 +134,48 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
     setBusy(true);
     setError(null);
     try {
+      if (action === "create_ovf") {
+        router.push(`/crm/quotes/${quoteId}/ovf/new`);
+        return;
+      }
+      const oppActions = new Set([
+        "attach_po",
+        "send_po_approval",
+        "lost",
+        "attach_boq",
+        "attach_sow",
+        "send_boq_approval",
+        "send_sow_approval",
+        "skip_sow",
+        "deal_reg",
+        "oem_received",
+        "attach_oem_quote",
+        "create_ovf",
+      ]);
+      if (opportunity && oppActions.has(action)) {
+        await applyOpportunityAction(opportunity.id, action, payload);
+        await load();
+        return;
+      }
       if (action === "send_for_approval") {
-        await sendQuoteForApproval(quoteId, { team_role: payload.team_role, remarks: payload.remarks });
+        const assignedUserId = payload.assigned_user_id;
+        const assignedUserIds = Array.isArray(payload.assigned_user_ids)
+          ? payload.assigned_user_ids.filter((id): id is string => typeof id === "string" && Boolean(id.trim()))
+          : [];
+        if (typeof assignedUserId !== "string" || !assignedUserId.trim()) {
+          throw new ApiClientError("Select an approver before sending for approval.", 400);
+        }
+        await sendQuoteForApproval(quoteId, {
+          team_role: typeof payload.team_role === "string" ? payload.team_role : undefined,
+          assigned_user_id: assignedUserId,
+          assigned_user_ids: assignedUserIds.length > 0 ? assignedUserIds : [assignedUserId],
+          remarks: typeof payload.remarks === "string" ? payload.remarks : null,
+        });
       } else if (action === "approve_internally") {
         await approveQuoteInternally(quoteId, { remark: payload.remark });
       } else {
         await applyQuoteAction(quoteId, action, payload);
       }
-      setBanner({ text: `Action "${action.replaceAll("_", " ")}" applied.`, tone: "success" });
       await load();
     } catch (err) {
       const message = err instanceof ApiClientError ? err.message : `Failed to ${action}`;
@@ -173,85 +208,18 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
 
   if (!quote || !blueprint) return null;
 
-  const lost = blueprint.state === "lost";
   const readOnlyLines = quote.locked || ["accepted", "lost", "sent_to_customer", "negotiation", "follow_up"].includes(quote.quote_stage);
   const nearingSubmit = blueprint.allowed_actions.includes("send_for_approval") && !hasVendorQuote;
-  const timelineStage: DealStage = existingOvf?.deal_won ? "won" : existingOvf ? "ovf" : "quote";
   const contact =
     contacts.find((row) => row.id === quote.contact_id) ??
     contacts.find((row) => row.is_primary) ??
-    contacts[0];
-  const ownerFromEmployee = opportunity?.owner_employee_id
-    ? employees.find((row) => row.id === opportunity.owner_employee_id)?.label
-    : undefined;
-  const projectTitle =
-    quote.project_title || opportunity?.project_title || opportunity?.opportunity_name || null;
-  const accountName = quote.account_name || company?.customer_name || null;
-  const serviceType = quote.service_type || sourceLead?.product_type || null;
-  const ownerName = quote.owner_name || ownerFromEmployee || null;
-  const contactName = contact ? fullName(contact) : "—";
-  const entityName = quote.entity_name || sourceLead?.entity_name || company?.customer_name || null;
-  const entityEmail =
-    quote.entity_email || sourceLead?.entity_email || company?.customer_email || null;
-  const entityAddress =
-    quote.entity_address ||
-    sourceLead?.entity_address ||
-    [
-      company?.billing_street,
-      company?.billing_city,
-      company?.billing_state,
-      company?.billing_code,
-      company?.billing_country,
-    ]
-      .filter(Boolean)
-      .join(", ") ||
     null;
-  const entityGst = quote.entity_gst || sourceLead?.entity_gst || null;
-  const entityContact =
-    quote.entity_contact || sourceLead?.entity_contact || company?.phone || null;
-  const billingCountry =
-    quote.billing_country || company?.billing_country || sourceLead?.country || null;
-  const shippingCountry =
-    quote.shipping_country || company?.shipping_country || company?.billing_country || null;
-  const description =
-    quote.description || sourceLead?.notes || company?.description || null;
-  const timelineLinks = {
-    ...(opportunity?.company_account_id
-      ? { company: `/crm/companies/${opportunity.company_account_id}` }
-      : {}),
-    ...(opportunity?.lead_id ? { lead: `/crm/leads/${opportunity.lead_id}` } : {}),
-    opportunity: `/crm/opportunities/${quote.opportunity_id}`,
-    quote: `/crm/quotes/${quote.id}`,
-    ...(existingOvf ? { ovf: `/crm/ovf/${existingOvf.id}` } : {}),
-    ...(existingOvf?.deal_won ? { won: `/crm/ovf/${existingOvf.id}` } : {}),
-  };
-  const nextStep = existingOvf
-    ? {
-      label: existingOvf.deal_won ? "Review Won Deal" : "Continue OVF",
-      description: existingOvf.deal_won
-        ? "The deal is complete. Review its final OVF and value."
-        : "Continue approval, SCM sharing, and Deal Won on the OVF.",
-      href: `/crm/ovf/${existingOvf.id}`,
-    }
-    : quote.quote_stage === "accepted" &&
-      opportunity?.blueprint_state === "ovf_ready" &&
-      opportunity.customer_po_approved
-      ? {
-        label: "Create OVF",
-        description: "Customer PO is approved. Create the OVF to continue the deal.",
-        href: `/crm/quotes/${quote.id}/ovf/new`,
-      }
-      : quote.quote_stage === "accepted"
-        ? {
-          label: "Attach Customer PO",
-          description:
-            "The quote is accepted. Continue on the opportunity to attach and approve the customer PO.",
-          href: `/crm/opportunities/${quote.opportunity_id}`,
-        }
-        : {
-          label: "Complete Quote",
-          description: "Use the quote actions and line editor on this screen to advance the deal.",
-        };
+  const contactName = contact ? fullName(contact) : "-";
+  const boqAttachmentLabel =
+    attachments
+      .filter((row) => row.category === "boq")
+      .map((row) => row.file_name)
+      .join(", ") || "-";
 
   const canCreateOvf =
     quote.quote_stage === "accepted" &&
@@ -259,88 +227,79 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
     opportunity?.blueprint_state === "ovf_ready" &&
     Boolean(opportunity.customer_po_approved);
 
-  async function onExportPdf() {
+  const oppTransitionActions =
+    quote.quote_stage === "accepted" && oppBlueprint
+      ? oppBlueprint.allowed_actions.filter(
+          (action) =>
+            action !== "create_quote" &&
+            action !== "create_ovf" &&
+            action !== "quote_accepted" &&
+            !blueprint.allowed_actions.includes(action) &&
+            !(existingOvf && action === "create_ovf"),
+        )
+      : [];
+
+  const blueprintActions = Array.from(
+    new Set([
+      ...blueprint.allowed_actions,
+      ...oppTransitionActions,
+      ...(canCreateOvf ? ["create_ovf"] : []),
+    ]),
+  ).filter((action) => !(action === "create_ovf" && existingOvf));
+
+  async function onPrintPreview() {
     const q = quote;
     if (!q) return;
-    setExporting(true);
-    setError(null);
-    try {
-      const seller = await loadSellerLetterhead(q.company_id, q.branch_id);
-      await exportQuotePdf({
-        quote: q,
-        lines,
-        seller,
-        customerName: entityName || accountName || "—",
-        customerAddress: entityAddress || "—",
-        subject: q.subject || projectTitle || q.quote_no,
-        ownerName: ownerName || "—",
-        termsOverride: q.terms,
-      });
-      setBanner({ text: "Quote PDF exported.", tone: "success" });
-    } catch (err) {
-      const message = err instanceof ApiClientError ? err.message : "Failed to export quote PDF";
-      setBanner({ text: message, tone: "error" });
-    } finally {
-      setExporting(false);
-    }
+    await printQuotePreview(q, lines);
+  }
+
+  async function onExport() {
+    const q = quote;
+    if (!q) return;
+    await downloadQuoteExport(q, lines);
   }
 
   return (
     <CrmPage>
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div>
         <Link href="/crm/quotes" className="inline-flex cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80">
           <ArrowLeft className="size-3.5" /> Quotes
         </Link>
-        <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()}>
-          <RefreshCw className="size-3.5" /> Refresh
-        </Button>
       </div>
 
-      <DealTimeline current={timelineStage} lost={lost} links={timelineLinks} nextStep={nextStep} />
-      <ApprovalBanner locked={blueprint.locked} approvalStatus={quote.approval_status} label="This quote" />
+      <CrmEntityRejectionAlert entityType="quote" entityId={quote.id} />
+      <ApprovalBanner locked={blueprint.locked} approvalStatus={blueprint.state} label="This quote" />
 
       <PageHeader
-        title={`${quote.quote_no}${quote.quote_revision > 1 ? ` (Rev ${quote.quote_revision})` : ""}`}
-        description={quote.subject ?? "Customer quotation"}
+        title={`${formatCrmCode(quote.quote_no)}${quote.quote_revision > 1 ? ` (Rev ${quote.quote_revision})` : ""}`}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <FinanceStatusBadge status={quote.approval_status} />
-            <BlueprintStateBadge state={blueprint.state} />
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-7 cursor-pointer px-2.5 text-[0.8rem] transition-colors duration-200"
-              disabled={exporting || loading}
-              onClick={() => void onExportPdf()}
-            >
-              <Download className={`size-3.5 ${exporting ? "animate-pulse" : ""}`} />
-              {exporting ? "Exporting…" : "Export PDF"}
-            </Button>
-            {!quote.locked &&
-              quote.quote_stage !== "accepted" &&
-              quote.quote_stage !== "lost" ? (
-              <Link
-                href={`/crm/quotes/${quote.id}/edit`}
-                className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted/60"
-              >
-                <Pencil className="size-3.5" /> Edit
-              </Link>
-            ) : null}
-            {canCreateOvf ? (
-              <Link
-                href={`/crm/quotes/${quote.id}/ovf/new`}
-                className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-2.5 text-[0.8rem] font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
-              >
-                <Plus className="size-3.5" /> Create OVF
-              </Link>
-            ) : existingOvf ? (
+            <CrmDetailEditLink href={`/crm/quotes/${quote.id}/edit`} />
+            {existingOvf ? (
               <Link
                 href={`/crm/ovf/${existingOvf.id}`}
                 className="inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-[0.8rem] font-medium text-foreground shadow-sm transition-colors duration-200 hover:bg-muted/60"
               >
                 Open OVF
               </Link>
+            ) : null}
+            {quote ? (
+              <CrmRecordActionsMenu
+                entityType="quote"
+                entityId={quote.id}
+                entityLabel="Quote"
+                entityName={formatCrmCode(quote.quote_no)}
+                shareTitle={formatCrmCode(quote.quote_no)}
+                onClone={() => cloneQuoteRecord(quote, lines, router)}
+                onPrintPreview={onPrintPreview}
+                onExport={onExport}
+                onDelete={() => deleteQuote(quote.id)}
+                onDeleted={() =>
+                  router.push(
+                    opportunity ? `/crm/opportunities/${opportunity.id}` : "/crm/quotes",
+                  )
+                }
+              />
             ) : null}
           </div>
         }
@@ -358,29 +317,27 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         </p>
       ) : null}
 
-      {banner ? (
-        banner.tone === "error" ? (
-          <CrmErrorBanner>{banner.text}</CrmErrorBanner>
-        ) : (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-950">
-            {banner.text}
-          </div>
-        )
-      ) : null}
+      {banner ? <CrmErrorBanner>{banner.text}</CrmErrorBanner> : null}
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
       {nearingSubmit ? (
         <CrmWarnBanner>
           <span className="flex items-start gap-2">
             <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-            No vendor quote attached yet — attach it below before sending this quote for approval.
+            No vendor quote attached yet - attach it below before sending this quote for approval.
           </span>
         </CrmWarnBanner>
       ) : null}
 
       <BlueprintActions
-        allowedActions={blueprint.allowed_actions}
-        locked={blueprint.locked}
+        allowedActions={blueprintActions}
+        locked={blueprint.locked && oppTransitionActions.length === 0}
+        currentStageLabel={resolveSalesStageLabel({
+          entityType: "quote",
+          blueprintState: blueprint.state,
+          locked: blueprint.locked,
+          quote,
+        })}
         excludeActions={["approve_internally"]}
         onAction={onBlueprintAction}
         disabled={busy}
@@ -395,88 +352,82 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         </CrmWarnBanner>
       ) : null}
 
-      <CrmHeadlineBand>
-        <div className="grid divide-y divide-white/10 sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-4">
-          <CrmHeadlineStat label="Grand Total" value={formatInrPrecise(quote.grand_total)} />
-          <CrmHeadlineStat
-            label="Avg Margin"
-            value={`${quote.avg_margin_pct}%`}
-            sub={
-              margin?.requires_management_approval
-                ? `Below ${margin.required_threshold_pct}% threshold`
-                : undefined
+      <CrmSection title="Quote Information" icon={FileText}>
+        <div className="grid min-w-0 gap-x-6 gap-y-3 md:grid-cols-2">
+          <CrmReadOnlyField
+            label="Project Title"
+            value={textOrDash(quote.project_title)}
+          />
+          <CrmReadOnlyField label="Subject *" value={textOrDash(quote.subject)} />
+          <CrmReadOnlyField label="Account Name" value={textOrDash(quote.account_name)} />
+          <CrmReadOnlyField label="Valid Until *" value={textOrDash(quote.valid_until)} />
+          <CrmReadOnlyField label="Contact Name" value={contactName} />
+          <CrmReadOnlyField label="Quote Owner" value={textOrDash(quote.owner_name)} />
+          <CrmReadOnlyField
+            label="Service Type *"
+            value={textOrDash(normalizeQuoteServiceType(quote.service_type) || quote.service_type)}
+          />
+          <CrmReadOnlyField label="Quote No." value={formatCrmCode(quote.quote_no)} />
+          <CrmReadOnlyField
+            label="Quote Stage"
+            value={formatQuoteStage(quote.quote_stage)}
+          />
+          <CrmReadOnlyField label="Version" value={String(quote.version ?? 1)} />
+        </div>
+      </CrmSection>
+
+      <CrmSection title="Entity Information" icon={Building2}>
+        <div className="grid min-w-0 gap-x-6 gap-y-3 md:grid-cols-2">
+          <CrmReadOnlyField label="Entity Name" value={textOrDash(quote.entity_name)} />
+          <CrmReadOnlyField label="Entity Address" value={textOrDash(quote.entity_address)} />
+          <CrmReadOnlyField
+            label="Entity Contact Number"
+            value={textOrDash(quote.entity_contact)}
+          />
+          <CrmReadOnlyField label="Entity Email" value={textOrDash(quote.entity_email)} />
+          <CrmReadOnlyField label="Entity GST No." value={textOrDash(quote.entity_gst)} />
+        </div>
+      </CrmSection>
+
+      <CrmSection title="Terms and Conditions" icon={Scale}>
+        <div className="grid min-w-0 grid-cols-1 gap-y-3">
+          <CrmReadOnlyTextarea label="Terms and Conditions" value={textOrDash(quote.terms)} />
+          <CrmReadOnlyField label="Freight Charges (₹)" value={formatInr(quote.freight)} />
+          <CrmReadOnlyField label="BOQ Attachment (multiple)" value={boqAttachmentLabel} />
+          <CrmReadOnlyField
+            label="AMC/Warranty"
+            value={
+              quote.amc_warranty === "yes"
+                ? "Yes"
+                : quote.amc_warranty === "no"
+                  ? "No"
+                  : "None"
             }
           />
-          <CrmHeadlineStat
-            label="Stage"
-            value={quote.quote_stage.replaceAll("_", " ")}
-          />
-          <CrmHeadlineStat
-            label="Approval"
-            value={quote.approval_status.replaceAll("_", " ")}
-            sub={`Freight ${formatInr(quote.freight)}`}
-          />
+          <CrmReadOnlyField label="Start Date" value={textOrDash(quote.amc_start_date)} />
+          <CrmReadOnlyField label="End Date" value={textOrDash(quote.amc_end_date)} />
         </div>
-      </CrmHeadlineBand>
+      </CrmSection>
 
-      <CrmSection title="Quote Details" subtitle="Commercial, entity, and terms" icon={FileText}>
-        <h3 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          Quote Information
-        </h3>
-        <CrmDetailGrid className="mt-3">
-          <CrmDetailItem label="Customer's Project Title">{textOrDash(projectTitle)}</CrmDetailItem>
-          <CrmDetailItem label="Subject">{textOrDash(quote.subject || projectTitle)}</CrmDetailItem>
-          <CrmDetailItem label="Account Name">{textOrDash(accountName)}</CrmDetailItem>
-          <CrmDetailItem label="Valid Until">{textOrDash(quote.valid_until)}</CrmDetailItem>
-          <CrmDetailItem label="Contact Name">{contactName}</CrmDetailItem>
-          <CrmDetailItem label="Quote Owner">{textOrDash(ownerName)}</CrmDetailItem>
-          <CrmDetailItem label="Service Type">{textOrDash(serviceType)}</CrmDetailItem>
-          <CrmDetailItem label="Quote No.">{quote.quote_no}</CrmDetailItem>
-          <CrmDetailItem label="Quote Stage">
-            <span className="capitalize">{quote.quote_stage.replaceAll("_", " ")}</span>
-          </CrmDetailItem>
-          <CrmDetailItem label="Quote Revision">{quote.quote_revision}</CrmDetailItem>
-          <CrmDetailItem label="Approval Status">
-            <FinanceStatusBadge status={quote.approval_status} />
-          </CrmDetailItem>
-          <CrmDetailItem label="Sales Order ID">
-            {textOrDash(quote.sales_order_id ?? opportunity?.sales_order_id)}
-          </CrmDetailItem>
-        </CrmDetailGrid>
-
-        <h3 className="mt-4 border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          Entity Information
-        </h3>
-        <CrmDetailGrid className="mt-3">
-          <CrmDetailItem label="Entity Name">{textOrDash(entityName)}</CrmDetailItem>
-          <CrmDetailItem label="Entity Address">
-            <span className="whitespace-pre-wrap">{textOrDash(entityAddress)}</span>
-          </CrmDetailItem>
-          <CrmDetailItem label="Entity Contact Number">{textOrDash(entityContact)}</CrmDetailItem>
-          <CrmDetailItem label="Entity Email">{textOrDash(entityEmail)}</CrmDetailItem>
-          <CrmDetailItem label="Entity GST No.">{textOrDash(entityGst)}</CrmDetailItem>
-          <CrmDetailItem label="Billing Country">{textOrDash(billingCountry)}</CrmDetailItem>
-          <CrmDetailItem label="Shipping Country">{textOrDash(shippingCountry)}</CrmDetailItem>
-        </CrmDetailGrid>
-
-        <h3 className="mt-4 border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          Commercial Terms
-        </h3>
-        <CrmDetailGrid className="mt-3">
-          <CrmDetailItem label="Freight Charges (₹)">{formatInr(quote.freight)}</CrmDetailItem>
-          <CrmDetailItem label="Grand Total">{formatInrPrecise(quote.grand_total)}</CrmDetailItem>
-          <CrmDetailItem label="Avg Margin">{quote.avg_margin_pct}%</CrmDetailItem>
-          <CrmDetailItem label="Total Margin Amount">{formatInrPrecise(quote.total_margin_amount)}</CrmDetailItem>
-          <CrmDetailItem label="Description">
-            <span className="whitespace-pre-wrap">{textOrDash(description)}</span>
-          </CrmDetailItem>
-          <CrmDetailItem label="Reason For Discount">
-            <span className="whitespace-pre-wrap">{textOrDash(quote.reason_for_discount)}</span>
-          </CrmDetailItem>
-          <CrmDetailItem label="Terms and Conditions">
-            <span className="whitespace-pre-wrap">{textOrDash(quote.terms)}</span>
-          </CrmDetailItem>
-        </CrmDetailGrid>
+      <CrmSection title="Customer Address Information" icon={MapPin}>
+        <div className="grid min-w-0 gap-x-10 gap-y-5 lg:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Billing Address</p>
+            <CrmReadOnlyField label="Street" value={textOrDash(quote.billing_street)} />
+            <CrmReadOnlyField label="City" value={textOrDash(quote.billing_city)} />
+            <CrmReadOnlyField label="State" value={textOrDash(quote.billing_state)} />
+            <CrmReadOnlyField label="Zip Code" value={textOrDash(quote.billing_zip)} />
+            <CrmReadOnlyField label="Country" value={textOrDash(quote.billing_country)} />
+          </div>
+          <div className="grid min-w-0 grid-cols-1 gap-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Shipping Address</p>
+            <CrmReadOnlyField label="Street" value={textOrDash(quote.shipping_street)} />
+            <CrmReadOnlyField label="City" value={textOrDash(quote.shipping_city)} />
+            <CrmReadOnlyField label="State" value={textOrDash(quote.shipping_state)} />
+            <CrmReadOnlyField label="Zip Code" value={textOrDash(quote.shipping_zip)} />
+            <CrmReadOnlyField label="Country" value={textOrDash(quote.shipping_country)} />
+          </div>
+        </div>
       </CrmSection>
 
       <QuoteLineTable
@@ -484,14 +435,8 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         lines={lines}
         readOnly={readOnlyLines}
         initialDraft={{
-          product_name:
-            sourceLead?.sub_product ||
-            sourceLead?.sub_product_other ||
-            sourceLead?.sub_product_category ||
-            "",
-          line_type: ["hardware", "software", "services"].includes(sourceLead?.product_type ?? "")
-            ? sourceLead?.product_type ?? "hardware"
-            : "hardware",
+          product_name: "",
+          line_type: "hardware",
         }}
         onChanged={() => void load()}
       />

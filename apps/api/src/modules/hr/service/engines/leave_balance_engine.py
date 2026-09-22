@@ -26,3 +26,13 @@ class LeaveBalanceEngine:
             + Decimal(str(row.accrued or 0))
             - Decimal(str(row.used or 0))
         )
+
+    def apply_adjustment(self, row, days_delta) -> None:
+        """Positive delta credits (accrue); negative delta debits (usage)."""
+        delta = Decimal(str(days_delta))
+        if delta == 0:
+            return
+        if delta > 0:
+            self.accrue(row, delta)
+        else:
+            self.apply_usage(row, abs(delta))

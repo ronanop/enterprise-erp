@@ -1,25 +1,22 @@
 """Health check endpoints."""
 
-from fastapi import APIRouter
+from typing import Annotated
 
-from core.config import settings
-from database.session import check_database_connection
+from fastapi import APIRouter, Depends
+
+from security.public_routes import optional_authentication
 from shared.schemas import APIResponse
 
 router = APIRouter()
 
 
 @router.get("/health", response_model=APIResponse[dict[str, str]])
-def health_check() -> APIResponse[dict[str, str]]:
-    """Liveness and dependency health probe."""
-    db_status = "healthy" if check_database_connection() else "unhealthy"
+def health_check(
+    _: Annotated[None, Depends(optional_authentication)],
+) -> APIResponse[dict[str, str]]:
+    """Public liveness probe — no DB/network I/O (Coolify/Docker healthchecks)."""
     return APIResponse(
         success=True,
-        message="Service health check",
-        data={
-            "status": "healthy",
-            "environment": settings.environment,
-            "version": settings.app_version,
-            "database": db_status,
-        },
+        message="OK",
+        data={"status": "ok"},
     )

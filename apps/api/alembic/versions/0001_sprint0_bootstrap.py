@@ -1,4 +1,4 @@
-"""Initial schema placeholder — Sprint 0 bootstrap."""
+"""Initial schema placeholder - Sprint 0 bootstrap."""
 
 from collections.abc import Sequence
 

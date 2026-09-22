@@ -45,6 +45,7 @@ class NtfEvent(Base, TenantMixin):
     payload_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="queued")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     template: Mapped["NtfTemplate"] = relationship(back_populates="events")
     deliveries: Mapped[list["NtfDelivery"]] = relationship(back_populates="event")

@@ -1,28 +1,28 @@
-# ERD_17 — Helpdesk & Customer Support Domain
+# ERD_17 - Helpdesk & Customer Support Domain
 
-**Document:** Enterprise ERD — Helpdesk & Customer Support Domain  
+**Document:** Enterprise ERD - Helpdesk & Customer Support Domain  
 **Version:** 1.0  
-**Status:** Locked — Ready for Sprint 17 Implementation Planning  
+**Status:** Locked - Ready for Sprint 17 Implementation Planning  
 **Schema:** `helpdesk`  
 **Table Prefix:** `hd_`  
 **Aligned To:** BRD v1.0 · FRD-17 Helpdesk & Customer Support · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
 **Functional Requirements:** [FRD-17 Helpdesk & Customer Support Domain](../02_FRD/FRD-17-Helpdesk-Customer-Support-Domain.md)  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 **Prior Release:** [ERP Core v1.11-beta](../07_RELEASES/ERP_Core_v1.11-beta.md)  
 
-> **C-01 note:** Customer and employee identity remain **`master.master_customer`** and **`master.master_employee`**. Helpdesk **never** invents parallel masters. Service / CRM / Project / Asset / Inventory / Quality / Manufacturing context uses **UUID-only** refs — **no FK to `svc_*` / `crm_*` / `prj_*` / `ast_*` / `inv_*` / `qm_*` / `mfg_*`**.
+> **C-01 note:** Customer and employee identity remain **`master.master_customer`** and **`master.master_employee`**. Helpdesk **never** invents parallel masters. Service / CRM / Project / Asset / Inventory / Quality / Manufacturing context uses **UUID-only** refs - **no FK to `svc_*` / `crm_*` / `prj_*` / `ast_*` / `inv_*` / `qm_*` / `mfg_*`**.
 
 ---
 
 ## 1. Module Overview
 
-The Helpdesk & Customer Support Domain manages **centralized ticket, incident, and support operations**: ticket categories and priorities, ticket intake and lifecycle, assignment and status history, comments / attachments / activity, SLA and escalation, knowledge base and articles, resolution and customer feedback, support teams / shifts / schedules, notifications, reports, and dashboard snapshots — from issue reported through validation and closure (FRD-17 §3).
+The Helpdesk & Customer Support Domain manages **centralized ticket, incident, and support operations**: ticket categories and priorities, ticket intake and lifecycle, assignment and status history, comments / attachments / activity, SLA and escalation, knowledge base and articles, resolution and customer feedback, support teams / shifts / schedules, notifications, reports, and dashboard snapshots - from issue reported through validation and closure (FRD-17 §3).
 
-Helpdesk **depends on** Foundation, Organization, and Master Data. It **consumes existing masters only (C-01)** — **`master_customer`**, **`master_employee`**, and **`org_department`**. It **must never duplicate** customer, employee, department, or company masters.
+Helpdesk **depends on** Foundation, Organization, and Master Data. It **consumes existing masters only (C-01)** - **`master_customer`**, **`master_employee`**, and **`org_department`**. It **must never duplicate** customer, employee, department, or company masters.
 
 **Finance remains the only accounting system.** Helpdesk never ORM-writes `fin_*` tables. Any recoverable / chargeable posting uses **`finance_journal_id`**; GL posting occurs **only** through `PostingService.post_system_journal()`.
 
-Service, CRM, Project, Asset, Inventory, Quality, Manufacturing, HR, Payroll, and Recruitment remain **isolated** except authorized UUID / employee refs — **no peer FKs / no peer ORM writes**.
+Service, CRM, Project, Asset, Inventory, Quality, Manufacturing, HR, Payroll, and Recruitment remain **isolated** except authorized UUID / employee refs - **no peer FKs / no peer ORM writes**.
 
 **Business Tables: 20**  
 **Schema: `helpdesk`**
@@ -61,17 +61,17 @@ BI / CX analytics · optional Service handoff
 
 ### API Mount (planned)
 
-**`/api/v1/helpdesk`** — routers for all aggregates (ticket-categories, ticket-priorities, tickets, ticket-assignments, ticket-status-history, ticket-comments, ticket-attachments, ticket-activities, ticket-slas, ticket-escalations, knowledge-bases, knowledge-articles, resolutions, customer-feedback, support-teams, support-shifts, support-schedules, ticket-notifications, ticket-reports, ticket-dashboards).
+**`/api/v1/helpdesk`** - routers for all aggregates (ticket-categories, ticket-priorities, tickets, ticket-assignments, ticket-status-history, ticket-comments, ticket-attachments, ticket-activities, ticket-slas, ticket-escalations, knowledge-bases, knowledge-articles, resolutions, customer-feedback, support-teams, support-shifts, support-schedules, ticket-notifications, ticket-reports, ticket-dashboards).
 
 ---
 
 ## 2. Scope
 
 ### In Scope
-- **Ticket categories** and **priorities** — FRD-17 §4–§5
-- **Tickets** (incident / request / problem / change) with multipath channels — FRD-17 §4
+- **Ticket categories** and **priorities** - FRD-17 §4-§5
+- **Tickets** (incident / request / problem / change) with multipath channels - FRD-17 §4
 - **Assignment**, **status history**, **comments**, **attachments**, **activity** ledger
-- **SLA** and **escalation** — FRD-17
+- **SLA** and **escalation** - FRD-17
 - **Knowledge base** and **articles** with approval
 - **Resolution** and **customer feedback**
 - **Support teams**, **shifts**, **schedules**
@@ -79,8 +79,8 @@ BI / CX analytics · optional Service handoff
 - Workflow, audit, RBAC, Celery stubs (planning)
 
 ### Out of Scope (Phase 2 / Separate)
-- Full **omnichannel telephony / WhatsApp gateway** product — Phase 1: `channel` enum + metadata only
-- Duplicate `hd_customer` / `hd_employee` / `hd_department` masters — **forbidden (C-01)**
+- Full **omnichannel telephony / WhatsApp gateway** product - Phase 1: `channel` enum + metadata only
+- Duplicate `hd_customer` / `hd_employee` / `hd_department` masters - **forbidden (C-01)**
 - Direct writes to `fin_*`, `svc_*`, `crm_*`, `prj_*`, `ast_*`, `inv_*`, `qm_*`, `mfg_*`, `hr_*`, `pay_*`, `rec_*`, `sales_*`
 - SQLAlchemy models, Alembic migrations, application code (implementation sprint)
 - Analytics cubes / `ana_fact_helpdesk`
@@ -89,7 +89,7 @@ BI / CX analytics · optional Service handoff
 - **Identity:** customers / employees always resolve through Master Data (C-01)
 - `hd_ticket_category` / `hd_ticket_priority` are Helpdesk-domain catalogs (not Master Data tables)
 - Soft delete + version on mutable helpdesk tables
-- Document numbers company-scoped (`TKT-YYYY-NNNNNN` — FRD-17 §4; unique within `helpdesk` schema)
+- Document numbers company-scoped (`TKT-YYYY-NNNNNN` - FRD-17 §4; unique within `helpdesk` schema)
 - One **active primary** assignment per ticket unless `is_shared_queue=true` (service-enforced)
 - Optional billable recovery: create Helpdesk expense intent via journal → `PostingService.post_system_journal()` → store `finance_journal_id` (Phase 1 on resolution / dashboard cost metadata if needed)
 
@@ -101,15 +101,15 @@ BI / CX analytics · optional Service handoff
 | ERD_02 Organization | `org_company`, `org_branch`, `org_department` |
 | ERD_03 Master Data | **`master_customer`**, **`master_employee`** |
 | ERD_04 Finance | **`PostingService.post_system_journal()`**; `finance_journal_id` UUID storage |
-| ERD_16 Service | Optional `service_request_id` / `service_ticket_id` / `work_order_id` UUID — **no FK** |
-| ERD_05 CRM | Optional `crm_opportunity_id` / `crm_customer_id` UUID — **no FK** |
-| ERD_14 Project | Optional `project_id` UUID — **no FK** |
-| ERD_15 Asset | Optional `asset_id` UUID — **no FK** |
-| ERD_07 Inventory | Optional `inventory_issue_id` UUID — **no FK** |
-| ERD_09 Quality | Optional `quality_case_id` UUID — **no FK** |
-| ERD_08 Manufacturing | Optional `production_order_id` UUID — **no FK** |
-| ERD_11 HR | Employee via master only — **read / no `hr_*` writes** |
-| ERD_12 Payroll | Optional labor **read** — **no `pay_*` writes** |
+| ERD_16 Service | Optional `service_request_id` / `service_ticket_id` / `work_order_id` UUID - **no FK** |
+| ERD_05 CRM | Optional `crm_opportunity_id` / `crm_customer_id` UUID - **no FK** |
+| ERD_14 Project | Optional `project_id` UUID - **no FK** |
+| ERD_15 Asset | Optional `asset_id` UUID - **no FK** |
+| ERD_07 Inventory | Optional `inventory_issue_id` UUID - **no FK** |
+| ERD_09 Quality | Optional `quality_case_id` UUID - **no FK** |
+| ERD_08 Manufacturing | Optional `production_order_id` UUID - **no FK** |
+| ERD_11 HR | Employee via master only - **read / no `hr_*` writes** |
+| ERD_12 Payroll | Optional labor **read** - **no `pay_*` writes** |
 | ERD_13 Recruitment | **No writes** |
 
 ---
@@ -118,26 +118,26 @@ BI / CX analytics · optional Service handoff
 
 | # | Table | Classification | tenant_id | company_id | branch_id | Soft Delete | Version | Workflow |
 |---|-------|----------------|-----------|------------|-----------|-------------|---------|----------|
-| 1 | `hd_ticket_category` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 2 | `hd_ticket_priority` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 1 | `hd_ticket_category` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 2 | `hd_ticket_priority` | Catalog Master | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 3 | `hd_ticket` | Transaction | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 4 | `hd_ticket_assignment` | Assignment | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 5 | `hd_ticket_status_history` | History | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 6 | `hd_ticket_comment` | Collaboration | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 7 | `hd_ticket_attachment` | Document | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 8 | `hd_ticket_activity` | Activity | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 9 | `hd_ticket_sla` | Policy | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 5 | `hd_ticket_status_history` | History | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 6 | `hd_ticket_comment` | Collaboration | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 7 | `hd_ticket_attachment` | Document | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 8 | `hd_ticket_activity` | Activity | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 9 | `hd_ticket_sla` | Policy | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 10 | `hd_ticket_escalation` | Event | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 11 | `hd_knowledge_base` | Catalog | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 11 | `hd_knowledge_base` | Catalog | ✅ | ✅ | optional | ✅ | ✅ | - |
 | 12 | `hd_knowledge_article` | Content | ✅ | ✅ | optional | ✅ | ✅ | ✅ |
 | 13 | `hd_resolution` | Closure | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| 14 | `hd_customer_feedback` | Quality | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 15 | `hd_support_team` | Org Unit | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 16 | `hd_support_shift` | Workforce | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 17 | `hd_support_schedule` | Schedule | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| 18 | `hd_ticket_notification` | Notification | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 19 | `hd_ticket_report` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | — |
-| 20 | `hd_ticket_dashboard` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | — |
+| 14 | `hd_customer_feedback` | Quality | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 15 | `hd_support_team` | Org Unit | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 16 | `hd_support_shift` | Workforce | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 17 | `hd_support_schedule` | Schedule | ✅ | ✅ | ✅ | ✅ | ✅ | - |
+| 18 | `hd_ticket_notification` | Notification | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 19 | `hd_ticket_report` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | - |
+| 20 | `hd_ticket_dashboard` | Aggregate Snapshot | ✅ | ✅ | optional | ✅ | ✅ | - |
 
 **Business Tables: 20**  
 **Schema: `helpdesk`**
@@ -238,8 +238,8 @@ Optional UUID-only (no FK): service_request_id, service_ticket_id, work_order_id
 
 | Column | Notes |
 |--------|-------|
-| `category_code` | UK — HARDWARE, SOFTWARE, NETWORK, SECURITY, APPLICATION, INFRA, OTHER — FRD-17 §5 |
-| `category_name` | — |
+| `category_code` | UK - HARDWARE, SOFTWARE, NETWORK, SECURITY, APPLICATION, INFRA, OTHER - FRD-17 §5 |
+| `category_name` | - |
 | `parent_category_id` | UUID optional self-FK |
 | `default_priority_id` | UUID optional → `hd_ticket_priority` (nullable Phase 1) |
 | `default_sla_id` | UUID optional → `hd_ticket_sla` (nullable Phase 1) |
@@ -252,8 +252,8 @@ Optional UUID-only (no FK): service_request_id, service_ticket_id, work_order_id
 
 | Column | Notes |
 |--------|-------|
-| `priority_code` | UK — LOW, MEDIUM, HIGH, CRITICAL |
-| `priority_name` | — |
+| `priority_code` | UK - LOW, MEDIUM, HIGH, CRITICAL |
+| `priority_name` | - |
 | `rank_order` | SMALLINT (1=highest) |
 | `default_response_minutes` / `default_resolution_minutes` | INT optional |
 | `status` | active, inactive |
@@ -267,26 +267,26 @@ Optional UUID-only (no FK): service_request_id, service_ticket_id, work_order_id
 |--------|------|----------|-------------|
 | `id` | UUID | NO | PK |
 | `tenant_id` / `company_id` / `branch_id` | UUID | NO | Scope |
-| `document_number` | VARCHAR(50) | NO | `TKT-YYYY-NNNNNN` — FRD-17 §4 |
+| `document_number` | VARCHAR(50) | NO | `TKT-YYYY-NNNNNN` - FRD-17 §4 |
 | `category_id` | UUID | NO | FK → `hd_ticket_category` |
 | `priority_id` | UUID | NO | FK → `hd_ticket_priority` |
-| `ticket_type` | VARCHAR(40) | NO | incident, service_request, problem, change — FRD-17 |
+| `ticket_type` | VARCHAR(40) | NO | incident, service_request, problem, change - FRD-17 |
 | `customer_id` | UUID | YES | FK → `master_customer` (external requester) |
 | `requester_employee_id` | UUID | YES | FK → `master_employee` (internal requester) |
 | `department_id` | UUID | YES | FK → `org_department` |
 | `support_team_id` | UUID | YES | FK → `hd_support_team` |
 | `sla_id` | UUID | YES | FK → `hd_ticket_sla` |
-| `subject` | VARCHAR(255) | NO | — |
-| `description` | TEXT | YES | — |
-| `channel` | VARCHAR(40) | YES | portal, mobile, email, phone, whatsapp, api, manual — FRD-17 §4 |
+| `subject` | VARCHAR(255) | NO | - |
+| `description` | TEXT | YES | - |
+| `channel` | VARCHAR(40) | YES | portal, mobile, email, phone, whatsapp, api, manual - FRD-17 §4 |
 | `impact` / `urgency` | VARCHAR(20) | YES | low, medium, high, critical |
 | `sla_status` | VARCHAR(30) | YES | within_sla, at_risk, breached |
 | `is_shared_queue` | BOOLEAN | NO | default false |
-| `service_request_id` / `service_ticket_id` / `work_order_id` | UUID | YES | **UUID only — no svc FK** |
-| `crm_opportunity_id` / `crm_customer_id` | UUID | YES | **UUID only — no crm FK** |
-| `project_id` / `asset_id` / `inventory_issue_id` | UUID | YES | **UUID only — no FK** |
-| `quality_case_id` / `production_order_id` | UUID | YES | **UUID only — no FK** |
-| `opened_at` / `due_at` / `resolved_at` / `closed_at` | TIMESTAMPTZ | YES | — |
+| `service_request_id` / `service_ticket_id` / `work_order_id` | UUID | YES | **UUID only - no svc FK** |
+| `crm_opportunity_id` / `crm_customer_id` | UUID | YES | **UUID only - no crm FK** |
+| `project_id` / `asset_id` / `inventory_issue_id` | UUID | YES | **UUID only - no FK** |
+| `quality_case_id` / `production_order_id` | UUID | YES | **UUID only - no FK** |
+| `opened_at` / `due_at` / `resolved_at` / `closed_at` | TIMESTAMPTZ | YES | - |
 | `status` | VARCHAR(30) | NO | draft, submitted, approved, new, assigned, in_progress, pending, resolved, closed, cancelled |
 | `workflow_*` | | | Ticket approval |
 | AUDIT_STD + SOFT_DELETE_OPT + version | | | |
@@ -332,7 +332,7 @@ Optional UUID-only (no FK): service_request_id, service_ticket_id, work_order_id
 | `ticket_id` | FK |
 | `author_employee_id` | FK optional → `master_employee` |
 | `author_customer_id` | FK optional → `master_customer` |
-| `is_public` | BOOLEAN — customer-visible vs internal |
+| `is_public` | BOOLEAN - customer-visible vs internal |
 | `body` | TEXT |
 | `commented_at` | TIMESTAMPTZ |
 | `status` | active, deleted_soft |
@@ -449,7 +449,7 @@ Optional UUID-only (no FK): service_request_id, service_ticket_id, work_order_id
 |--------|-------|
 | `ticket_id` | FK |
 | `customer_id` | FK → `master_customer` |
-| `rating` | SMALLINT 1–5 |
+| `rating` | SMALLINT 1-5 |
 | `comments` | TEXT |
 | `captured_at` | TIMESTAMPTZ |
 | `channel` | portal, email, sms, phone |
@@ -473,7 +473,7 @@ Optional UUID-only (no FK): service_request_id, service_ticket_id, work_order_id
 | Column | Notes |
 |--------|-------|
 | `support_team_id` | FK → `hd_support_team` |
-| `shift_code` / `shift_name` | — |
+| `shift_code` / `shift_name` | - |
 | `start_time` / `end_time` | TIME |
 | `timezone` | VARCHAR(64) |
 | `status` | active, inactive |
@@ -529,7 +529,7 @@ Optional UUID-only (no FK): service_request_id, service_ticket_id, work_order_id
 | Column | Notes |
 |--------|-------|
 | `dashboard_code` | UK |
-| `dashboard_name` | — |
+| `dashboard_name` | - |
 | `owner_employee_id` | FK optional |
 | `layout_json` / `metrics_json` | JSONB widget config + cached KPIs |
 | `refreshed_at` | TIMESTAMPTZ |
@@ -663,7 +663,7 @@ Seed workflows only; instance rows use Foundation `wf_instance`.
 |-------|-----------|
 | Row audit | Standard columns on all mutable `hd_*` tables |
 | Business audit | `AuditService` on ticket approve, assignment approve, status change, escalation, resolution complete, knowledge publish |
-| Notifications | Assignment, SLA risk/breach, escalation, resolution, feedback due, knowledge review — Foundation + `hd_ticket_notification` |
+| Notifications | Assignment, SLA risk/breach, escalation, resolution, feedback due, knowledge review - Foundation + `hd_ticket_notification` |
 
 ---
 
@@ -708,7 +708,7 @@ Seed workflows only; instance rows use Foundation `wf_instance`.
 
 Prior Alembic head: **`0288_seed_service_workflows`**.
 
-Revision budget **`0289`–`0310` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`hd_ticket_comment` and `hd_ticket_attachment` share one migration**.
+Revision budget **`0289`-`0310` (22 revisions)**. Schema + 20 tables + permissions + workflows = 23 logical steps → **`hd_ticket_comment` and `hd_ticket_attachment` share one migration**.
 
 | Order | Revision ID (≤32 chars) | Migration | Tables / Actions |
 |-------|-------------------------|-----------|------------------|
@@ -764,10 +764,10 @@ Revision budget **`0289`–`0310` (22 revisions)**. Schema + 20 tables + permiss
 | Organization | company, branch, **department** | Direct FK |
 | Master Data | **`master_customer` · `master_employee`** | FK + services (C-01) |
 | Finance | **`PostingService.post_system_journal()`** | Adapter; store `finance_journal_id` |
-| Service | Optional request / ticket / WO context | UUID only — **no `svc_*` FK** |
-| CRM / Project / Asset / Inventory / Quality / MFG | Optional operational context | UUID only — **no FK** |
-| HR / Payroll | Agent continuity; optional labor read | Master FK / read port — **no writes** |
-| Recruitment | — | **No writes** |
+| Service | Optional request / ticket / WO context | UUID only - **no `svc_*` FK** |
+| CRM / Project / Asset / Inventory / Quality / MFG | Optional operational context | UUID only - **no FK** |
+| HR / Payroll | Agent continuity; optional labor read | Master FK / read port - **no writes** |
+| Recruitment | - | **No writes** |
 
 ### 16.2 Downstream
 
@@ -799,12 +799,12 @@ Revision budget **`0289`–`0310` (22 revisions)**. Schema + 20 tables + permiss
 | 4 | Consumes masters only (C-01) | ✅ |
 | 5 | Finance posting only via PostingService; store finance UUID refs | ✅ |
 | 6 | Service / CRM / Project / Asset / Inv / QM / MFG UUID-only; no Recruitment writes | ✅ |
-| 7 | Migration order `0289`–`0310`, revision IDs ≤ 32 chars | ✅ |
+| 7 | Migration order `0289`-`0310`, revision IDs ≤ 32 chars | ✅ |
 | 8 | Workflows + RBAC + API mount + Celery stubs documented | ✅ |
 | 9 | Full omnichannel gateway deferred without blocking Sprint 17 | ✅ |
 | 10 | Architecture Lock v1.1 preserved; no prior module redesign | ✅ |
 
-### ERD Phase Gate — Helpdesk Summary
+### ERD Phase Gate - Helpdesk Summary
 
 | Metric | Value |
 |--------|-------|
@@ -812,10 +812,10 @@ Revision budget **`0289`–`0310` (22 revisions)**. Schema + 20 tables + permiss
 | Schema | **`helpdesk`** |
 | Prefix | `hd_` |
 | API mount | `/api/v1/helpdesk` |
-| Migration range | `0289` – `0310` |
+| Migration range | `0289` - `0310` |
 | Prior head | `0288_seed_service_workflows` |
 | Planned head | `0310_seed_helpdesk_workflows` |
-| Document Status | **Locked — Ready for Sprint 17 Implementation Planning** |
+| Document Status | **Locked - Ready for Sprint 17 Implementation Planning** |
 
 ---
 

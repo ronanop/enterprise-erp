@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Building2, FileText, ListOrdered, Paperclip, Plus, Scale, Trash2 } from "lucide-react";
+import { ArrowLeft, Building2, FileText, ListOrdered, MapPin, Paperclip, Plus, Scale, Trash2 } from "lucide-react";
 
 import { CrmErrorBanner, CrmIconBadge, CrmListPanel, CrmPage, CrmSection } from "@/components/crm/crm-ui";
+import { CrmSessionEmployeeField } from "@/components/crm/sales/crm-session-employee-field";
 import {
   FinanceField,
   FinanceSelect,
@@ -18,6 +19,12 @@ import {
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { resolveSessionEmployeeLabel } from "@/lib/crm/session-employee";
+import {
+  QUOTE_SERVICE_TYPES,
+  normalizeQuoteServiceType,
+} from "@/lib/crm/lead-product-options";
 import { ApiClientError } from "@/services/api-client";
 import {
   addQuoteLine,
@@ -33,7 +40,7 @@ import {
   getQuote,
   getSalesLead,
   listContacts,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   listQuoteLines,
   updateQuote,
   updateQuoteLine,
@@ -57,7 +64,18 @@ type QuoteDraft = {
   entity_address: string;
   entity_gst: string;
   entity_contact: string;
+  amc_warranty: string;
+  amc_start_date: string;
+  amc_end_date: string;
+  billing_street: string;
+  billing_city: string;
+  billing_state: string;
+  billing_zip: string;
   billing_country: string;
+  shipping_street: string;
+  shipping_city: string;
+  shipping_state: string;
+  shipping_zip: string;
   shipping_country: string;
   description: string;
   reason_for_discount: string;
@@ -84,7 +102,7 @@ const EMPTY_FORM: QuoteDraft = {
   project_title: "",
   account_name: "",
   contact_id: "",
-  service_type: "hardware",
+  service_type: "",
   owner_name: "",
   subject: "",
   valid_until: "",
@@ -93,7 +111,18 @@ const EMPTY_FORM: QuoteDraft = {
   entity_address: "",
   entity_gst: "",
   entity_contact: "",
+  amc_warranty: "none",
+  amc_start_date: "",
+  amc_end_date: "",
+  billing_street: "",
+  billing_city: "",
+  billing_state: "",
+  billing_zip: "",
   billing_country: "",
+  shipping_street: "",
+  shipping_city: "",
+  shipping_state: "",
+  shipping_zip: "",
   shipping_country: "",
   description: "",
   reason_for_discount: "",
@@ -101,16 +130,13 @@ const EMPTY_FORM: QuoteDraft = {
   freight: "0",
 };
 
-function newLine(source?: SalesLead | null): LineDraft {
-  const productName =
-    source?.sub_product || source?.sub_product_other || source?.sub_product_category || "";
-  const sourceType = source?.product_type ?? "";
+function newLine(): LineDraft {
   return {
     key: crypto.randomUUID(),
-    product_name: productName,
+    product_name: "",
     hsn_sac: "",
-    description: source?.notes ?? "",
-    line_type: ["hardware", "software", "services"].includes(sourceType) ? sourceType : "hardware",
+    description: "",
+    line_type: "hardware",
     qty: "1",
     unit_cost: "0",
     unit_sell: "0",
@@ -129,14 +155,15 @@ export function QuoteFormPage({
 }) {
   const router = useRouter();
   const isEdit = Boolean(quoteId);
+  const { user } = useAuthUser();
   const [quote, setQuote] = useState<Quote | null>(null);
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [employees, setEmployees] = useState<Option[]>([]);
   const [form, setForm] = useState<QuoteDraft>(EMPTY_FORM);
   const [lines, setLines] = useState<LineDraft[]>([]);
   const [initialLineIds, setInitialLineIds] = useState<string[]>([]);
   const [boqFiles, setBoqFiles] = useState<File[]>([]);
+  const [copyAddressAction, setCopyAddressAction] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -161,17 +188,16 @@ export function QuoteFormPage({
           quoteRow.company_account_id
             ? listContacts(quoteRow.company_account_id).catch(() => [])
             : Promise.resolve([]),
-          listEmployeeOptions().catch(() => []),
+          listCrmMemberOptions().catch(() => []),
         ]);
         setQuote(quoteRow);
         setOpportunity(opportunityRow);
         setContacts(contactRows);
-        setEmployees(employeeRows);
         setForm({
           project_title: quoteRow.project_title ?? "",
           account_name: quoteRow.account_name ?? "",
           contact_id: quoteRow.contact_id ?? "",
-          service_type: quoteRow.service_type ?? "",
+          service_type: normalizeQuoteServiceType(quoteRow.service_type),
           owner_name: quoteRow.owner_name ?? "",
           subject: quoteRow.subject ?? "",
           valid_until: quoteRow.valid_until ?? "",
@@ -180,7 +206,18 @@ export function QuoteFormPage({
           entity_address: quoteRow.entity_address ?? "",
           entity_gst: quoteRow.entity_gst ?? "",
           entity_contact: quoteRow.entity_contact ?? "",
+          amc_warranty: quoteRow.amc_warranty ?? "none",
+          amc_start_date: quoteRow.amc_start_date ?? "",
+          amc_end_date: quoteRow.amc_end_date ?? "",
+          billing_street: quoteRow.billing_street ?? "",
+          billing_city: quoteRow.billing_city ?? "",
+          billing_state: quoteRow.billing_state ?? "",
+          billing_zip: quoteRow.billing_zip ?? "",
           billing_country: quoteRow.billing_country ?? "",
+          shipping_street: quoteRow.shipping_street ?? "",
+          shipping_city: quoteRow.shipping_city ?? "",
+          shipping_state: quoteRow.shipping_state ?? "",
+          shipping_zip: quoteRow.shipping_zip ?? "",
           shipping_country: quoteRow.shipping_country ?? "",
           description: quoteRow.description ?? "",
           reason_for_discount: quoteRow.reason_for_discount ?? "",
@@ -190,19 +227,19 @@ export function QuoteFormPage({
         const mappedLines =
           lineRows.length > 0
             ? lineRows.map((line) => ({
-                key: line.id,
-                serverId: line.id,
-                product_name: line.product_name,
-                hsn_sac: line.hsn_sac ?? "",
-                description: line.description ?? "",
-                line_type: line.line_type || "hardware",
-                qty: String(line.qty ?? 1),
-                unit_cost: String(line.unit_cost ?? 0),
-                unit_sell: String(line.unit_cost ?? 0),
-                margin_pct: String(line.margin_pct ?? 0),
-                gst_pct: String(line.gst_pct ?? 0),
-                vendorFile: null,
-              }))
+              key: line.id,
+              serverId: line.id,
+              product_name: line.product_name,
+              hsn_sac: line.hsn_sac ?? "",
+              description: line.description ?? "",
+              line_type: line.line_type || "hardware",
+              qty: String(line.qty ?? 1),
+              unit_cost: String(line.unit_cost ?? 0),
+              unit_sell: String(line.unit_cost ?? 0),
+              margin_pct: String(line.margin_pct ?? 0),
+              gst_pct: String(line.gst_pct ?? 0),
+              vendorFile: null,
+            }))
             : [newLine()];
         setLines(mappedLines);
         setInitialLineIds(lineRows.map((line) => line.id));
@@ -224,7 +261,7 @@ export function QuoteFormPage({
         opportunityRow.company_account_id
           ? listContacts(opportunityRow.company_account_id).catch(() => [])
           : Promise.resolve([]),
-        listEmployeeOptions().catch(() => []),
+        listCrmMemberOptions().catch(() => []),
         getOpportunityBlueprint(opportunityId).catch(() => null),
       ]);
       if (
@@ -239,28 +276,30 @@ export function QuoteFormPage({
       }
       setOpportunity(opportunityRow);
       setContacts(contactRows);
-      setEmployees(employeeRows);
 
       const billingAddress = companyRow
         ? [
-            companyRow.billing_street,
-            companyRow.billing_city,
-            companyRow.billing_state,
-            companyRow.billing_code,
-            companyRow.billing_country,
-          ]
-            .filter(Boolean)
-            .join(", ")
+          companyRow.billing_street,
+          companyRow.billing_city,
+          companyRow.billing_state,
+          companyRow.billing_code,
+          companyRow.billing_country,
+        ]
+          .filter(Boolean)
+          .join(", ")
         : "";
       const primaryContact = contactRows.find((contact) => contact.is_primary) ?? contactRows[0];
       const ownerLabel =
-        employeeRows.find((employee) => employee.id === opportunityRow.owner_employee_id)?.label ??
+        resolveSessionEmployeeLabel(employeeRows, user) ||
+        employeeRows.find((employee) => employee.id === opportunityRow.owner_employee_id)?.label ||
         "";
       setForm({
         project_title: opportunityRow.project_title || opportunityRow.opportunity_name || "",
         account_name: companyRow?.customer_name ?? "",
         contact_id: primaryContact?.id ?? "",
-        service_type: "",
+        service_type:
+          normalizeQuoteServiceType(leadRow?.product_type ?? opportunityRow.product_type) ||
+          "",
         owner_name: ownerLabel,
         subject: "",
         valid_until: "",
@@ -269,21 +308,32 @@ export function QuoteFormPage({
         entity_address: leadRow?.entity_address || billingAddress,
         entity_gst: leadRow?.entity_gst || "",
         entity_contact: leadRow?.entity_contact || companyRow?.phone || "",
-        billing_country: companyRow?.billing_country || "",
+        amc_warranty: "none",
+        amc_start_date: "",
+        amc_end_date: "",
+        billing_street: leadRow?.street || companyRow?.billing_street || "",
+        billing_city: leadRow?.city || companyRow?.billing_city || "",
+        billing_state: leadRow?.state || companyRow?.billing_state || "",
+        billing_zip: leadRow?.zip || companyRow?.billing_code || "",
+        billing_country: leadRow?.country || companyRow?.billing_country || "",
+        shipping_street: companyRow?.shipping_street || "",
+        shipping_city: companyRow?.shipping_city || "",
+        shipping_state: companyRow?.shipping_state || "",
+        shipping_zip: companyRow?.shipping_code || "",
         shipping_country: companyRow?.shipping_country || companyRow?.billing_country || "",
         description: leadRow?.notes || companyRow?.description || "",
         reason_for_discount: "",
         terms: "",
         freight: "0",
       });
-      setLines([newLine(leadRow)]);
+      setLines([newLine()]);
       setInitialLineIds([]);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load quote details");
     } finally {
       setLoading(false);
     }
-  }, [isEdit, opportunityId, quoteId]);
+  }, [isEdit, opportunityId, quoteId, user]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -292,6 +342,35 @@ export function QuoteFormPage({
 
   function setField<K extends keyof QuoteDraft>(key: K, value: QuoteDraft[K]) {
     setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function copyAddress(direction: "billing_to_shipping" | "shipping_to_billing") {
+    setForm((current) =>
+      direction === "billing_to_shipping"
+        ? {
+          ...current,
+          shipping_street: current.billing_street,
+          shipping_city: current.billing_city,
+          shipping_state: current.billing_state,
+          shipping_zip: current.billing_zip,
+          shipping_country: current.billing_country,
+        }
+        : {
+          ...current,
+          billing_street: current.shipping_street,
+          billing_city: current.shipping_city,
+          billing_state: current.shipping_state,
+          billing_zip: current.shipping_zip,
+          billing_country: current.shipping_country,
+        },
+    );
+  }
+
+  function onCopyAddressChange(value: string) {
+    if (value === "billing_to_shipping" || value === "shipping_to_billing") {
+      copyAddress(value);
+    }
+    setCopyAddressAction("");
   }
 
   function setLine(key: string, field: keyof Omit<LineDraft, "key">, value: string | File | null) {
@@ -328,7 +407,7 @@ export function QuoteFormPage({
     const marginAmount = rows.reduce((sum, row) => sum + row.totalMarginValue, 0);
     const grandTotal = sellTotal;
     const freight = Number(form.freight) || 0;
-    // Mean of each row's Margin % — only rows that look like real line items
+    // Mean of each row's Margin % - only rows that look like real line items
     // (have a product, price, or non-zero margin) so blank "Add row" lines don't dilute.
     const activeMarginPcts = lines
       .filter((line) => {
@@ -376,7 +455,7 @@ export function QuoteFormPage({
       product_name: line.product_name.trim(),
       hsn_sac: line.hsn_sac || null,
       description: line.description || null,
-      line_type: line.line_type,
+      line_type: line.line_type || "hardware",
       qty: Number(line.qty) || 1,
       unit_cost: unitPrice,
       unit_sell: unitPrice * (1 + marginPct / 100),
@@ -398,7 +477,18 @@ export function QuoteFormPage({
       entity_address: form.entity_address || null,
       entity_gst: form.entity_gst || null,
       entity_contact: form.entity_contact || null,
+      amc_warranty: form.amc_warranty || "none",
+      amc_start_date: form.amc_start_date || null,
+      amc_end_date: form.amc_end_date || null,
+      billing_street: form.billing_street || null,
+      billing_city: form.billing_city || null,
+      billing_state: form.billing_state || null,
+      billing_zip: form.billing_zip || null,
       billing_country: form.billing_country || null,
+      shipping_street: form.shipping_street || null,
+      shipping_city: form.shipping_city || null,
+      shipping_state: form.shipping_state || null,
+      shipping_zip: form.shipping_zip || null,
       shipping_country: form.shipping_country || null,
       freight: Number(form.freight) || 0,
       terms: form.terms || null,
@@ -413,7 +503,20 @@ export function QuoteFormPage({
     if (!form.subject.trim()) missing.push("Subject");
     if (!form.valid_until.trim()) missing.push("Valid Until");
     if (!form.service_type.trim()) missing.push("Service Type");
-    if (lines.some((line) => !line.product_name.trim())) missing.push("Product Name (quoted items)");
+    if (lines.length === 0) {
+      missing.push("At least one quoted item row");
+    }
+    for (let index = 0; index < lines.length; index += 1) {
+      const line = lines[index];
+      const rowLabel = `Row ${index + 1}`;
+      if (!line.product_name.trim()) missing.push(`${rowLabel}: Product Name`);
+      if (!line.description.trim()) missing.push(`${rowLabel}: Item Description`);
+      if (!line.qty.trim() || Number(line.qty) <= 0) missing.push(`${rowLabel}: Quantity`);
+      if (!line.unit_sell.trim() || Number(line.unit_sell) <= 0) missing.push(`${rowLabel}: Unit Price`);
+      if (!line.margin_pct.trim()) missing.push(`${rowLabel}: Margin %`);
+      if (!line.gst_pct.trim()) missing.push(`${rowLabel}: GST %`);
+      if (!line.vendorFile && !line.serverId) missing.push(`${rowLabel}: Vendor Quote Attach`);
+    }
     if (missing.length > 0) {
       setMandateMessage(missingRequiredMessage(missing));
       setMandateOpen(true);
@@ -499,11 +602,6 @@ export function QuoteFormPage({
       <PageHeader
         className="min-w-0"
         title={isEdit ? `Edit ${quote?.quote_no ?? "Quote"}` : "Create Quote"}
-        description={
-          isEdit
-            ? "Update quote details, entity information, and quoted items."
-            : "Customer quote details are prefilled from the Company, Lead, and Opportunity — edit anything before saving."
-        }
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Link
@@ -522,7 +620,7 @@ export function QuoteFormPage({
 
       <CrmSection title="Quote Information" icon={FileText} className="min-w-0 overflow-x-clip">
         <div className="grid min-w-0 gap-x-6 gap-y-3 md:grid-cols-2">
-          <FinanceField label="Customer's Project Title">
+          <FinanceField label="Project Title">
             <Input
               value={form.project_title}
               onChange={(event) => setField("project_title", event.target.value)}
@@ -557,28 +655,18 @@ export function QuoteFormPage({
               ))}
             </FinanceSelect>
           </FinanceField>
-          <FinanceField label="Quote Owner">
-            <FinanceSelect
-              value={form.owner_name}
-              onChange={(event) => setField("owner_name", event.target.value)}
-            >
-              <option value="">Select owner</option>
-              {employees.map((employee) => (
-                <option key={employee.id} value={employee.label}>
-                  {employee.label}
-                </option>
-              ))}
-            </FinanceSelect>
-          </FinanceField>
+          <CrmSessionEmployeeField label="Quote Owner" value={form.owner_name} />
           <FinanceField label="Service Type *">
             <FinanceSelect
               value={form.service_type}
               onChange={(event) => setField("service_type", event.target.value)}
             >
               <option value="">Select</option>
-              <option value="hardware">Hardware</option>
-              <option value="software">Software</option>
-              <option value="services">Services</option>
+              {QUOTE_SERVICE_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
             </FinanceSelect>
           </FinanceField>
           <FinanceField label="Quote No.">
@@ -598,17 +686,6 @@ export function QuoteFormPage({
           <FinanceField label="Version">
             <Input value={isEdit ? String(quote?.version ?? 1) : "1"} disabled />
           </FinanceField>
-          <FinanceField label="Approval Status">
-            <Input
-              value={
-                isEdit
-                  ? (quote?.approval_status ?? "").replaceAll("_", " ") || "-"
-                  : "Not required"
-              }
-              disabled
-              className="capitalize"
-            />
-          </FinanceField>
         </div>
       </CrmSection>
 
@@ -622,18 +699,14 @@ export function QuoteFormPage({
         </div>
       </CrmSection>
 
-      <CrmSection title="Additional Information" icon={FileText} className="min-w-0 overflow-x-clip">
-        <div className="min-w-0 space-y-3">
-          <FinanceField label="Sales Order ID"><Input value={opportunity?.sales_order_id ?? ""} disabled /></FinanceField>
-          <FinanceField label="Description"><FinanceTextarea value={form.description} onChange={(e) => setField("description", e.target.value)} /></FinanceField>
-          <FinanceField label="Reason For Discount"><FinanceTextarea value={form.reason_for_discount} onChange={(e) => setField("reason_for_discount", e.target.value)} /></FinanceField>
-        </div>
-      </CrmSection>
-
       <CrmSection title="Terms and Conditions" icon={Scale} className="min-w-0 overflow-x-clip">
-        <div className="grid min-w-0 gap-x-6 gap-y-3 md:grid-cols-2">
-          <FinanceField label="Terms and Conditions" className="md:col-span-2"><FinanceTextarea value={form.terms} onChange={(e) => setField("terms", e.target.value)} /></FinanceField>
-          <FinanceField label="Freight Charges (₹)"><Input type="number" min={0} value={form.freight} onChange={(e) => setField("freight", e.target.value)} /></FinanceField>
+        <div className="grid min-w-0 grid-cols-1 gap-y-3">
+          <FinanceField label="Terms and Conditions">
+            <FinanceTextarea value={form.terms} onChange={(e) => setField("terms", e.target.value)} />
+          </FinanceField>
+          <FinanceField label="Freight Charges (₹)">
+            <Input type="number" min={0} value={form.freight} onChange={(e) => setField("freight", e.target.value)} />
+          </FinanceField>
           <FinanceField label="BOQ Attachment (multiple)">
             <div className="flex min-w-0 flex-col gap-1.5">
               <div className="flex min-w-0 items-center gap-2">
@@ -671,8 +744,85 @@ export function QuoteFormPage({
               ) : null}
             </div>
           </FinanceField>
-          <FinanceField label="Billing Country"><Input value={form.billing_country} onChange={(e) => setField("billing_country", e.target.value)} /></FinanceField>
-          <FinanceField label="Shipping Country"><Input value={form.shipping_country} onChange={(e) => setField("shipping_country", e.target.value)} /></FinanceField>
+          <FinanceField label="AMC/Warranty">
+            <FinanceSelect
+              value={form.amc_warranty}
+              onChange={(e) => setField("amc_warranty", e.target.value)}
+            >
+              <option value="none">None</option>
+              <option value="yes">Yes</option>
+              <option value="no">No</option>
+            </FinanceSelect>
+          </FinanceField>
+          <FinanceField label="Start Date">
+            <Input
+              type="date"
+              value={form.amc_start_date}
+              onChange={(e) => setField("amc_start_date", e.target.value)}
+            />
+          </FinanceField>
+          <FinanceField label="End Date">
+            <Input
+              type="date"
+              value={form.amc_end_date}
+              onChange={(e) => setField("amc_end_date", e.target.value)}
+            />
+          </FinanceField>
+        </div>
+      </CrmSection>
+
+      <CrmSection
+        title="Customer Address Information"
+        icon={MapPin}
+        actions={
+          <FinanceSelect
+            value={copyAddressAction}
+            onChange={(e) => onCopyAddressChange(e.target.value)}
+            className="h-8 min-w-[180px] cursor-pointer text-xs"
+          >
+            <option value="">Copy address…</option>
+            <option value="billing_to_shipping">Billing to Shipping</option>
+            <option value="shipping_to_billing">Shipping to Billing</option>
+          </FinanceSelect>
+        }
+      >
+        <div className="grid min-w-0 gap-x-10 gap-y-5 lg:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Billing Address</p>
+            <FinanceField label="Street">
+              <Input value={form.billing_street} onChange={(e) => setField("billing_street", e.target.value)} />
+            </FinanceField>
+            <FinanceField label="City">
+              <Input value={form.billing_city} onChange={(e) => setField("billing_city", e.target.value)} />
+            </FinanceField>
+            <FinanceField label="State">
+              <Input value={form.billing_state} onChange={(e) => setField("billing_state", e.target.value)} />
+            </FinanceField>
+            <FinanceField label="Zip Code">
+              <Input value={form.billing_zip} onChange={(e) => setField("billing_zip", e.target.value)} />
+            </FinanceField>
+            <FinanceField label="Country">
+              <Input value={form.billing_country} onChange={(e) => setField("billing_country", e.target.value)} />
+            </FinanceField>
+          </div>
+          <div className="grid min-w-0 grid-cols-1 gap-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Shipping Address</p>
+            <FinanceField label="Street">
+              <Input value={form.shipping_street} onChange={(e) => setField("shipping_street", e.target.value)} />
+            </FinanceField>
+            <FinanceField label="City">
+              <Input value={form.shipping_city} onChange={(e) => setField("shipping_city", e.target.value)} />
+            </FinanceField>
+            <FinanceField label="State">
+              <Input value={form.shipping_state} onChange={(e) => setField("shipping_state", e.target.value)} />
+            </FinanceField>
+            <FinanceField label="Zip Code">
+              <Input value={form.shipping_zip} onChange={(e) => setField("shipping_zip", e.target.value)} />
+            </FinanceField>
+            <FinanceField label="Country">
+              <Input value={form.shipping_country} onChange={(e) => setField("shipping_country", e.target.value)} />
+            </FinanceField>
+          </div>
         </div>
       </CrmSection>
 
@@ -680,7 +830,7 @@ export function QuoteFormPage({
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
           <div className="flex items-center gap-2.5">
             <CrmIconBadge icon={ListOrdered} />
-            <h2 className="text-sm font-medium">Quoted Items</h2>
+            <h2 className="text-base font-extrabold tracking-tight">Quoted Items</h2>
           </div>
           <Button
             type="button"
@@ -701,7 +851,6 @@ export function QuoteFormPage({
                   "Product Name",
                   "HSN/SAC Code",
                   "Item Description",
-                  "Service Type",
                   "Quantity",
                   "Unit Price (₹)",
                   "Margin %",
@@ -747,17 +896,6 @@ export function QuoteFormPage({
                         value={line.description}
                         onChange={(e) => setLine(line.key, "description", e.target.value)}
                       />
-                    </td>
-                    <td className="px-2 py-2">
-                      <FinanceSelect
-                        className="w-28 min-w-[6.5rem]"
-                        value={line.line_type}
-                        onChange={(e) => setLine(line.key, "line_type", e.target.value)}
-                      >
-                        <option value="hardware">Hardware</option>
-                        <option value="software">Software</option>
-                        <option value="services">Services</option>
-                      </FinanceSelect>
                     </td>
                     <td className="px-2 py-2">
                       <Input

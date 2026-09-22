@@ -1,9 +1,9 @@
 """HR training ORM."""
 
-from datetime import date
+from datetime import date, time
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Date, ForeignKey, String, Text, Time, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -22,6 +22,10 @@ class HrTraining(Base, *HrMasterMixin):
         CheckConstraint(
             "status IN ('planned','in_progress','completed','cancelled')",
             name="ck_hr_trn_status",
+        ),
+        CheckConstraint(
+            "recurrence_rule IS NULL OR recurrence_rule IN ('none','daily','weekly','monthly')",
+            name="ck_hr_trn_recurrence",
         ),
         {"schema": "hr"},
     )
@@ -44,4 +48,15 @@ class HrTraining(Base, *HrMasterMixin):
     )
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    start_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    end_time: Mapped[time | None] = mapped_column(Time, nullable=True)
+    room_id: Mapped[UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("hr.hr_training_room.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    is_recurring: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    recurrence_rule: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="planned", index=True)

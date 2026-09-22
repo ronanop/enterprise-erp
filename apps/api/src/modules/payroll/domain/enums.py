@@ -129,6 +129,47 @@ class SummaryStatus(str, Enum):
     FINALIZED = "finalized"
 
 
+class PayrollPolicyStatus(str, Enum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+
+class PayrollCycleType(str, Enum):
+    DAY_20_TO_20 = "day_20_to_20"
+    CALENDAR_MONTH = "calendar_month"
+    CUSTOM = "custom"
+
+
+class LeaveBalanceCreditTiming(str, Enum):
+    AFTER_CALENDAR_MONTH_END = "after_calendar_month_end"
+    ON_FIRST_OF_NEXT_MONTH = "on_first_of_next_month"
+
+
+class SalaryProrationMode(str, Enum):
+    PER_DAY_X_OVER_N = "per_day_x_over_n"
+    FIXED_30_DAY_FACTOR = "fixed_30_day_factor"
+
+
+class PayrollPeriodDayDenominator(str, Enum):
+    """N in payable = X × (paid_days / N)."""
+
+    SHIFT_SCHEDULED_DAYS = "shift_scheduled_days"
+    ALL_CALENDAR_DAYS_IN_PERIOD = "all_calendar_days_in_period"
+    FIXED_30 = "fixed_30"
+
+
+class PfDeductionMode(str, Enum):
+    FIXED_SPLIT = "fixed_split"
+    FIXED_TOTAL = "fixed_total"
+    STATUTORY_PERCENT = "statutory_percent"
+
+
+class NetPayFormula(str, Enum):
+    GROSS_MINUS_FIXED_PF_TOTAL = "gross_minus_fixed_pf_total"
+    GROSS_MINUS_EMPLOYEE_PF_ONLY = "gross_minus_employee_pf_only"
+
+
 class PayEntityType(str, Enum):
     PAYROLL_RUN = "payroll_run"
     PAYSLIP = "payslip"

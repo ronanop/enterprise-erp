@@ -13,6 +13,7 @@ from modules.project.repository.project_milestone_repository import ProjectMiles
 from modules.project.service.document_number_service import DocumentNumberService
 from modules.project.service.engines import ProjectMilestoneEngine
 from modules.project.service.project_scope_validator import ProjectScopeValidator
+from modules.project.service.project_assignment_scope import ProjectAssignmentScope
 
 
 class MilestoneService:
@@ -22,10 +23,12 @@ class MilestoneService:
         self._numbers = DocumentNumberService(db)
         self._engine = ProjectMilestoneEngine()
         self._audit = AuditService(db)
+        self._assignment = ProjectAssignmentScope(db)
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_rows(ctx, cid)
+        rows = self._repo.list_rows(ctx, cid)
+        return self._assignment.filter_project_child_rows(ctx, cid, rows)
 
     def get(self, ctx: TenantContext, row_id: UUID) -> PrjProjectMilestone:
         row = self._repo.get(ctx, row_id)

@@ -20,7 +20,7 @@ class AuditLog(Base):
     company_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     entity_name: Mapped[str] = mapped_column(String(100), nullable=False)
     entity_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
-    operation: Mapped[str] = mapped_column(String(30), nullable=False)
+    operation: Mapped[str] = mapped_column(String(80), nullable=False)
     old_value: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     new_value: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     performed_by: Mapped[UUID | None] = mapped_column(

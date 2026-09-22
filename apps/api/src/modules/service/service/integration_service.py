@@ -1,4 +1,4 @@
-"""Service integration — cross-module reads only; no peer ORM writes."""
+"""Service integration - cross-module reads only; no peer ORM writes."""
 
 from uuid import UUID
 

@@ -10,6 +10,9 @@ import {
   Handshake,
   Headphones,
   LayoutDashboard,
+  Mail,
+  Megaphone,
+  Mic,
   Package,
   Plug,
   Scale,
@@ -17,8 +20,10 @@ import {
   ShoppingCart,
   Store,
   Truck,
+  Users,
   Wallet,
   Briefcase,
+  ListTodo,
   UserPlus,
   FolderKanban,
   Wrench,
@@ -31,6 +36,8 @@ export type NavItem = {
   href: string;
   description?: string;
   icon?: LucideIcon;
+  /** Keep navigation in the current tab inside the ERP shell. Operations modules open in a new tab. */
+  inApp?: boolean;
 };
 
 export type NavGroup = {
@@ -41,6 +48,8 @@ export type NavGroup = {
 const iconMap: Record<ErpModule["icon"], LucideIcon> = {
   dashboard: LayoutDashboard,
   shield: Shield,
+  mail: Mail,
+  voice: Mic,
   building: Building2,
   boxes: Boxes,
   wallet: Wallet,
@@ -58,6 +67,7 @@ const iconMap: Record<ErpModule["icon"], LucideIcon> = {
   service: Headphones,
   helpdesk: Headphones,
   document: FileText,
+  marketing: Megaphone,
   grc: Scale,
   analytics: BarChart3,
   integration: Plug,
@@ -73,27 +83,52 @@ const groupTitles: Record<ErpModule["group"], string> = {
   operations: "Operations",
 };
 
+/** Foundation, organization, and master data stay in the ERP shell; operations open in a new tab. */
+const IN_APP_NAV_GROUPS = new Set<ErpModule["group"]>(["foundation", "organization", "master-data"]);
+
 export const navigation: NavGroup[] = [
   {
     title: "Overview",
     items: [
       {
         title: "Dashboard",
-        href: "/",
+        href: "/home",
         description: "Platform status and all modules",
         icon: LayoutDashboard,
+        inApp: true,
+      },
+      {
+        title: "My Jobs",
+        href: "/my-jobs",
+        description: "Approvals and assigned work across your modules",
+        icon: ListTodo,
+        inApp: true,
       },
     ],
   },
   ...(["foundation", "organization", "master-data", "operations"] as const).map((group) => ({
     title: groupTitles[group],
-    items: erpModules
-      .filter((m) => m.group === group)
-      .map((m) => ({
-        title: m.title,
-        href: m.href,
-        description: m.description,
-        icon: iconMap[m.icon],
-      })),
+    items: [
+      ...erpModules
+        .filter((m) => m.group === group)
+        .map((m) => ({
+          title: m.title,
+          href: m.href,
+          description: m.description,
+          icon: iconMap[m.icon],
+          inApp: IN_APP_NAV_GROUPS.has(group),
+        })),
+      ...(group === "organization"
+        ? [
+            {
+              title: "Users",
+              href: "/organization/users",
+              description: "ERP users in your organization tenant",
+              icon: Users,
+              inApp: true,
+            } satisfies NavItem,
+          ]
+        : []),
+    ],
   })),
 ];

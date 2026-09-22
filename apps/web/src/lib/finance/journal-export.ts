@@ -1,7 +1,6 @@
-import * as XLSX from "xlsx";
-
 import type { Journal } from "@/services/journal-service";
 import { journalDifference } from "@/services/journal-service";
+import { downloadCsv, downloadXlsx } from "@/lib/spreadsheet";
 
 type PeriodMap = Record<string, string>;
 
@@ -32,43 +31,24 @@ function rowsForExport(
   }));
 }
 
-function downloadBlob(filename: string, blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
 export function exportJournalsCsv(
   rows: Journal[],
   periodLabels: PeriodMap,
   resolveUser: (id?: string | null) => string = shortId,
 ) {
-  const data = rowsForExport(rows, periodLabels, resolveUser);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const csv = XLSX.utils.sheet_to_csv(ws);
-  downloadBlob(
+  downloadCsv(
     `journals-${new Date().toISOString().slice(0, 10)}.csv`,
-    new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8" }),
+    rowsForExport(rows, periodLabels, resolveUser),
   );
 }
 
-export function exportJournalsXlsx(
+export async function exportJournalsXlsx(
   rows: Journal[],
   periodLabels: PeriodMap,
   resolveUser: (id?: string | null) => string = shortId,
 ) {
-  const data = rowsForExport(rows, periodLabels, resolveUser);
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Journals");
-  const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  downloadBlob(
+  await downloadXlsx(
     `journals-${new Date().toISOString().slice(0, 10)}.xlsx`,
-    new Blob([buffer], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    }),
+    [{ name: "Journals", rows: rowsForExport(rows, periodLabels, resolveUser) }],
   );
 }

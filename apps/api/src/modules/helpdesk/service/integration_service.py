@@ -1,4 +1,4 @@
-"""Helpdesk integration — cross-module reads / UUID stubs; no peer ORM writes."""
+"""Helpdesk integration - cross-module reads / UUID stubs; no peer ORM writes."""
 
 from uuid import UUID
 

@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Employee Portal - Salary</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(226, 232, 240, 0.5);
+        }
+        .salary-gradient {
+            background: linear-gradient(135deg, #004ac6 0%, #712ae2 100%);
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+    </style>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary-fixed-variant": "#5a00c6",
+                    "tertiary": "#006242",
+                    "on-surface-variant": "#434655",
+                    "outline": "#737686",
+                    "surface-container-high": "#dce9ff",
+                    "error-container": "#ffdad6",
+                    "surface-container-lowest": "#ffffff",
+                    "surface-dim": "#cbdbf5",
+                    "surface-bright": "#f8f9ff",
+                    "secondary": "#712ae2",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "tertiary-container": "#007d55",
+                    "tertiary-fixed": "#6ffbbe",
+                    "error": "#ba1a1a",
+                    "on-primary": "#ffffff",
+                    "on-surface": "#0b1c30",
+                    "surface-variant": "#d3e4fe",
+                    "on-tertiary-fixed": "#002113",
+                    "on-secondary-container": "#fffbff",
+                    "on-error-container": "#93000a",
+                    "outline-variant": "#c3c6d7",
+                    "primary": "#004ac6",
+                    "surface-tint": "#0053db",
+                    "on-secondary-fixed": "#25005a",
+                    "primary-container": "#2563eb",
+                    "on-tertiary-fixed-variant": "#005236",
+                    "on-tertiary-container": "#bdffdb",
+                    "primary-fixed": "#dbe1ff",
+                    "inverse-surface": "#213145",
+                    "secondary-fixed": "#eaddff",
+                    "background": "#f8f9ff",
+                    "surface-container": "#e5eeff",
+                    "surface-container-highest": "#d3e4fe",
+                    "surface": "#f8f9ff",
+                    "on-primary-fixed": "#00174b",
+                    "on-primary-fixed-variant": "#003ea8",
+                    "on-error": "#ffffff",
+                    "primary-fixed-dim": "#b4c5ff",
+                    "inverse-primary": "#b4c5ff",
+                    "secondary-fixed-dim": "#d2bbff",
+                    "surface-container-low": "#eff4ff",
+                    "secondary-container": "#8a4cfc",
+                    "on-primary-container": "#eeefff",
+                    "inverse-on-surface": "#eaf1ff",
+                    "on-tertiary": "#ffffff",
+                    "on-background": "#0b1c30",
+                    "on-secondary": "#ffffff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "section-margin": "32px",
+                    "stack-gap-sm": "8px",
+                    "unit": "4px",
+                    "container-padding": "20px",
+                    "stack-gap-lg": "24px",
+                    "stack-gap-md": "16px"
+            },
+            "fontFamily": {
+                    "display-lg-mobile": ["Inter"],
+                    "display-md": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "label-sm": ["Inter"],
+                    "title-lg": ["Inter"],
+                    "body-md": ["Inter"],
+                    "label-md": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "headline-sm": ["Inter"]
+            },
+            "fontSize": {
+                    "display-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                    "display-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                    "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "title-lg": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen pb-24">
+<!-- TopAppBar -->
+<header class="bg-surface/80 dark:bg-surface-dim/80 backdrop-blur-xl fixed top-0 w-full z-50 border-b border-outline-variant/30 dark:border-outline/20">
+<div class="flex justify-between items-center px-container-padding h-16 w-full max-w-5xl mx-auto">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary/20">
+<img class="w-full h-full object-cover" data-alt="A professional studio portrait of a high-level product designer in an office setting. The lighting is soft and cinematic with cool blue and warm purple backlighting, reflecting a premium corporate tech aesthetic. The composition is a clean headshot with a blurred modern office background, emphasizing clarity and professionalism." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAKkWIfwrXlaCPyDh6wCHfCQ8dhiBrDV9qLn3huB79WCjENaKIW1yyblz_KOdhCnbOgRsZeSYQ7i_qGAGgzhQa5y55MZH0Rsg-rz5VXZXU2q3zqCrpIw680XAS31jnfwG3kpltlPoT6BDEKbmxDVc6FZHaqK9gPvO4LOU5Ut47QczeuMIHyz6t3GacMw-I-ikmgTQ720htVy8w9KGKKw4o2i7kSzZK_FKnIRA6B5XANwKmJTKZn4JSgbxO1nA1-NtgBngsPk7s5pJ8"/>
+</div>
+<h1 class="font-display-md text-display-md font-bold text-primary dark:text-primary-fixed">Salary</h1>
+</div>
+<button class="text-on-surface-variant hover:opacity-80 transition-opacity active:scale-95 duration-150">
+<span class="material-symbols-outlined text-[28px]" data-icon="notifications">notifications</span>
+</button>
+</div>
+</header>
+<main class="pt-24 px-container-padding max-w-5xl mx-auto space-y-section-margin">
+<!-- Current Month Salary Card (Main Feature) -->
+<section>
+<div class="salary-gradient rounded-[24px] p-6 text-white shadow-xl shadow-primary/20 relative overflow-hidden">
+<!-- Decorative background elements -->
+<div class="absolute -right-12 -top-12 w-48 h-48 bg-white/10 rounded-full blur-3xl"></div>
+<div class="absolute -left-12 -bottom-12 w-48 h-48 bg-secondary/30 rounded-full blur-3xl"></div>
+<div class="relative z-10">
+<div class="flex justify-between items-center mb-6">
+<div>
+<p class="font-label-md text-label-md text-white/80 uppercase tracking-wider">October 2024</p>
+<h2 class="font-display-lg text-display-lg mt-1">Net Pay</h2>
+</div>
+<button class="bg-white/20 p-2 rounded-full backdrop-blur-md" id="toggleSalary">
+<span class="material-symbols-outlined" data-icon="visibility">visibility</span>
+</button>
+</div>
+<div class="mb-8">
+<div class="flex items-baseline gap-2" id="salaryValue">
+<span class="text-3xl font-light opacity-80">$</span>
+<span class="text-5xl font-extrabold tracking-tight">8,450.00</span>
+</div>
+</div>
+<!-- Breakdown Mini Card -->
+<div class="bg-white/10 backdrop-blur-md rounded-xl p-4 grid grid-cols-3 gap-4 border border-white/10">
+<div class="text-center">
+<p class="text-[10px] text-white/60 uppercase font-bold mb-1">Gross CTC</p>
+<p class="font-title-lg text-title-lg">$11.2k</p>
+</div>
+<div class="text-center border-x border-white/10">
+<p class="text-[10px] text-white/60 uppercase font-bold mb-1">Tax</p>
+<p class="font-title-lg text-title-lg">$1.8k</p>
+</div>
+<div class="text-center">
+<p class="text-[10px] text-white/60 uppercase font-bold mb-1">PF/Ded</p>
+<p class="font-title-lg text-title-lg">$0.9k</p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Salary Timeline Chart (Visual Data) -->
+<section>
+<div class="flex justify-between items-end mb-4">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">6-Month Trend</h3>
+<span class="text-label-sm text-primary font-semibold">+4.2% vs prev. year</span>
+</div>
+<div class="glass-card rounded-2xl p-6 h-64 flex items-end justify-between gap-2 overflow-hidden relative">
+<!-- Simulated Chart bars -->
+<div class="flex flex-col items-center gap-3 w-full">
+<div class="w-full bg-surface-container-high rounded-t-lg transition-all duration-700 h-32 hover:bg-primary-container cursor-pointer relative group">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-on-surface text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">$8.1k</div>
+</div>
+<span class="text-[10px] font-bold text-outline uppercase">May</span>
+</div>
+<div class="flex flex-col items-center gap-3 w-full">
+<div class="w-full bg-surface-container-high rounded-t-lg transition-all duration-700 h-36 hover:bg-primary-container cursor-pointer relative group">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-on-surface text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">$8.2k</div>
+</div>
+<span class="text-[10px] font-bold text-outline uppercase">Jun</span>
+</div>
+<div class="flex flex-col items-center gap-3 w-full">
+<div class="w-full bg-surface-container-high rounded-t-lg transition-all duration-700 h-40 hover:bg-primary-container cursor-pointer relative group">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-on-surface text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">$8.3k</div>
+</div>
+<span class="text-[10px] font-bold text-outline uppercase">Jul</span>
+</div>
+<div class="flex flex-col items-center gap-3 w-full">
+<div class="w-full bg-surface-container-high rounded-t-lg transition-all duration-700 h-38 hover:bg-primary-container cursor-pointer relative group">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-on-surface text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">$8.2k</div>
+</div>
+<span class="text-[10px] font-bold text-outline uppercase">Aug</span>
+</div>
+<div class="flex flex-col items-center gap-3 w-full">
+<div class="w-full bg-surface-container-high rounded-t-lg transition-all duration-700 h-44 hover:bg-primary-container cursor-pointer relative group">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-on-surface text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">$8.4k</div>
+</div>
+<span class="text-[10px] font-bold text-outline uppercase">Sep</span>
+</div>
+<div class="flex flex-col items-center gap-3 w-full">
+<div class="w-full bg-primary rounded-t-lg transition-all duration-700 h-48 hover:bg-secondary cursor-pointer relative group shadow-lg shadow-primary/20">
+<div class="absolute -top-8 left-1/2 -translate-x-1/2 bg-on-surface text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">$8.5k</div>
+</div>
+<span class="text-[10px] font-bold text-primary uppercase">Oct</span>
+</div>
+</div>
+</section>
+<!-- Annual Summary Grid -->
+<section class="grid grid-cols-2 gap-4">
+<div class="glass-card p-5 rounded-2xl border-l-4 border-primary">
+<p class="text-label-sm text-outline mb-1 uppercase font-bold tracking-tighter">YTD Earnings</p>
+<h4 class="font-display-md text-display-md text-on-surface">$82,400</h4>
+<div class="mt-3 w-full h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[75%] rounded-full"></div>
+</div>
+</div>
+<div class="glass-card p-5 rounded-2xl border-l-4 border-secondary">
+<p class="text-label-sm text-outline mb-1 uppercase font-bold tracking-tighter">Total Tax</p>
+<h4 class="font-display-md text-display-md text-on-surface">$16,250</h4>
+<div class="mt-3 w-full h-1 bg-surface-container-highest rounded-full overflow-hidden">
+<div class="h-full bg-secondary w-[60%] rounded-full"></div>
+</div>
+</div>
+</section>
+<!-- Previous Payslips List -->
+<section>
+<div class="flex justify-between items-center mb-4">
+<h3 class="font-headline-sm text-headline-sm text-on-surface">Recent Payslips</h3>
+<button class="text-label-md text-primary font-bold">See All</button>
+</div>
+<div class="space-y-3">
+<!-- List Item -->
+<div class="glass-card p-4 rounded-xl flex items-center justify-between hover:scale-[1.02] transition-transform duration-200 cursor-pointer group">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+</div>
+<div>
+<h5 class="font-label-md text-label-md text-on-surface">September 2024</h5>
+<p class="text-body-sm text-outline">Paid on 30 Sep</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<span class="font-title-lg text-title-lg text-on-surface">$8,410</span>
+<button class="w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined" data-icon="download">download</span>
+</button>
+</div>
+</div>
+<!-- List Item -->
+<div class="glass-card p-4 rounded-xl flex items-center justify-between hover:scale-[1.02] transition-transform duration-200 cursor-pointer group">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+</div>
+<div>
+<h5 class="font-label-md text-label-md text-on-surface">August 2024</h5>
+<p class="text-body-sm text-outline">Paid on 31 Aug</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<span class="font-title-lg text-title-lg text-on-surface">$8,280</span>
+<button class="w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined" data-icon="download">download</span>
+</button>
+</div>
+</div>
+<!-- List Item -->
+<div class="glass-card p-4 rounded-xl flex items-center justify-between hover:scale-[1.02] transition-transform duration-200 cursor-pointer group">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" data-icon="description">description</span>
+</div>
+<div>
+<h5 class="font-label-md text-label-md text-on-surface">July 2024</h5>
+<p class="text-body-sm text-outline">Paid on 31 Jul</p>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<span class="font-title-lg text-title-lg text-on-surface">$8,300</span>
+<button class="w-10 h-10 rounded-full border border-outline-variant flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined" data-icon="download">download</span>
+</button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 bg-surface/80 dark:bg-surface-dim/80 backdrop-blur-xl border-t border-outline-variant/30 dark:border-outline/20 rounded-t-xl shadow-lg shadow-black/5 h-20 px-4 pt-3 pb-safe-area flex justify-around items-center">
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant opacity-60 hover:text-primary dark:hover:text-primary-fixed transition-colors active:scale-90 duration-200">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-sm text-[11px] mt-1">Home</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant opacity-60 hover:text-primary dark:hover:text-primary-fixed transition-colors active:scale-90 duration-200">
+<span class="material-symbols-outlined" data-icon="fingerprint">fingerprint</span>
+<span class="font-label-sm text-[11px] mt-1">Attendance</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant opacity-60 hover:text-primary dark:hover:text-primary-fixed transition-colors active:scale-90 duration-200">
+<span class="material-symbols-outlined" data-icon="event_upcoming">event_upcoming</span>
+<span class="font-label-sm text-[11px] mt-1">Leave</span>
+</button>
+<button class="flex flex-col items-center justify-center text-primary dark:text-primary-fixed relative after:content-[''] after:absolute after:-bottom-1 after:w-1 after:h-1 after:bg-primary after:rounded-full active:scale-90 transition-all duration-200">
+<span class="material-symbols-outlined" data-icon="payments" style="font-variation-settings: 'FILL' 1;">payments</span>
+<span class="font-label-sm text-[11px] mt-1">Salary</span>
+</button>
+<button class="flex flex-col items-center justify-center text-on-surface-variant dark:text-outline-variant opacity-60 hover:text-primary dark:hover:text-primary-fixed transition-colors active:scale-90 duration-200">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-label-sm text-[11px] mt-1">Profile</span>
+</button>
+</nav>
+<!-- AI Assistant FAB -->
+<button class="fixed right-6 bottom-24 w-14 h-14 rounded-full bg-gradient-to-br from-secondary to-primary shadow-lg shadow-primary/40 flex items-center justify-center text-white z-[40] transition-transform hover:scale-110 active:scale-95">
+<span class="material-symbols-outlined" data-icon="auto_awesome">auto_awesome</span>
+</button>
+<script>
+        // Micro-interaction: Salary visibility toggle
+        const toggleBtn = document.getElementById('toggleSalary');
+        const salaryValue = document.getElementById('salaryValue');
+        let isHidden = false;
+
+        toggleBtn.addEventListener('click', () => {
+            isHidden = !isHidden;
+            if (isHidden) {
+                salaryValue.innerHTML = '<span class="text-5xl font-extrabold tracking-tight">••••••••</span>';
+                toggleBtn.innerHTML = '<span class="material-symbols-outlined" data-icon="visibility_off">visibility_off</span>';
+            } else {
+                salaryValue.innerHTML = '<span class="text-3xl font-light opacity-80">$</span><span class="text-5xl font-extrabold tracking-tight">8,450.00</span>';
+                toggleBtn.innerHTML = '<span class="material-symbols-outlined" data-icon="visibility">visibility</span>';
+            }
+        });
+    </script>
+</body></html>

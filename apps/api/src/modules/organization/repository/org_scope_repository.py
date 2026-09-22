@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from modules.foundation.domain.org_data_scope import has_tenant_wide_data_access
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import SecUserOrgScope
 from modules.organization.repository.base import utcnow
@@ -30,7 +31,13 @@ class OrgScopeRepository:
         return self.db.scalar(stmt)
 
     def user_has_company_access(self, ctx: TenantContext, company_id: UUID) -> bool:
-        if ctx.user_type in {"super_admin", "tenant_admin"}:
+        # Platform admins, or any module admin (CRM/finance/etc.) — org APIs are
+        # shared and must not require a separate "organization" module admin grant.
+        if has_tenant_wide_data_access(ctx) or ctx.admin_module_keys:
+            return True
+        if ctx.company_id and ctx.company_id == company_id:
+            return True
+        if ctx.scoped_company_ids and company_id in ctx.scoped_company_ids:
             return True
         stmt = select(SecUserOrgScope).where(
             SecUserOrgScope.user_id == ctx.user_id,
@@ -42,12 +49,31 @@ class OrgScopeRepository:
     def user_has_branch_access(self, ctx: TenantContext, branch_id: UUID) -> bool:
         if ctx.user_type in {"super_admin", "tenant_admin", "company_admin"}:
             return True
+        if ctx.admin_module_keys:
+            return True
+        if ctx.branch_id and ctx.branch_id == branch_id:
+            return True
+        # Explicit assignment to this branch
         stmt = select(SecUserOrgScope).where(
             SecUserOrgScope.user_id == ctx.user_id,
             SecUserOrgScope.tenant_id == ctx.tenant_id,
             SecUserOrgScope.branch_id == branch_id,
         )
-        return self.db.scalar(stmt) is not None
+        if self.db.scalar(stmt) is not None:
+            return True
+        # Company-scoped users may manage every branch under companies they access.
+        from modules.organization.models.branch import OrgBranch
+
+        branch = self.db.scalar(
+            select(OrgBranch).where(
+                OrgBranch.id == branch_id,
+                OrgBranch.tenant_id == ctx.tenant_id,
+                OrgBranch.is_deleted.is_(False),
+            )
+        )
+        if branch is None:
+            return False
+        return self.user_has_company_access(ctx, branch.company_id)
 
     def assign_scope(
         self,
@@ -71,3 +97,40 @@ class OrgScopeRepository:
         self.db.add(row)
         self.db.flush()
         return row
+
+    def delete_user_scopes(self, tenant_id: UUID, user_id: UUID) -> None:
+        stmt = select(SecUserOrgScope).where(
+            SecUserOrgScope.tenant_id == tenant_id,
+            SecUserOrgScope.user_id == user_id,
+        )
+        for row in self.db.scalars(stmt).all():
+            self.db.delete(row)
+        self.db.flush()
+
+    def replace_company_scopes(
+        self,
+        ctx: TenantContext,
+        *,
+        user_id: UUID,
+        company_ids: list[UUID],
+        default_company_id: UUID | None = None,
+    ) -> list[UUID]:
+        """Replace a user's org scopes with one company-level row per selected entity."""
+        unique: list[UUID] = []
+        seen: set[UUID] = set()
+        for company_id in company_ids:
+            if company_id in seen:
+                continue
+            seen.add(company_id)
+            unique.append(company_id)
+        self.delete_user_scopes(ctx.tenant_id, user_id)
+        default_id = default_company_id if default_company_id in seen else (unique[0] if unique else None)
+        for company_id in unique:
+            self.assign_scope(
+                ctx,
+                user_id=user_id,
+                company_id=company_id,
+                branch_id=None,
+                is_default=company_id == default_id,
+            )
+        return unique

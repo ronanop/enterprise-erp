@@ -102,7 +102,7 @@ from modules.service.service import (
 )
 from shared.schemas import APIResponse
 
-service_categories_router = APIRouter(prefix="/service-categories", tags=["Service — ServiceCategory"])
+service_categories_router = APIRouter(prefix="/service-categories", tags=["Service - ServiceCategory"])
 
 @service_categories_router.get("", response_model=APIResponse[list[ServiceCategoryResponse]])
 def list_service_categories(
@@ -139,7 +139,7 @@ def update_service_categories(
 ):
     return APIResponse(message="Updated", data=ServiceCategoryService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-service_requests_router = APIRouter(prefix="/service-requests", tags=["Service — ServiceRequest"])
+service_requests_router = APIRouter(prefix="/service-requests", tags=["Service - ServiceRequest"])
 
 @service_requests_router.get("", response_model=APIResponse[list[ServiceRequestResponse]])
 def list_service_requests(
@@ -192,7 +192,7 @@ def approve_service_requests(
 ):
     return APIResponse(message="approve", data=ServiceRequestService(db).approve(ctx, row_id))
 
-service_tickets_router = APIRouter(prefix="/service-tickets", tags=["Service — ServiceTicket"])
+service_tickets_router = APIRouter(prefix="/service-tickets", tags=["Service - ServiceTicket"])
 
 @service_tickets_router.get("", response_model=APIResponse[list[ServiceTicketResponse]])
 def list_service_tickets(
@@ -229,7 +229,7 @@ def update_service_tickets(
 ):
     return APIResponse(message="Updated", data=ServiceTicketService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-service_assignments_router = APIRouter(prefix="/service-assignments", tags=["Service — ServiceAssignment"])
+service_assignments_router = APIRouter(prefix="/service-assignments", tags=["Service - ServiceAssignment"])
 
 @service_assignments_router.get("", response_model=APIResponse[list[ServiceAssignmentResponse]])
 def list_service_assignments(
@@ -274,7 +274,7 @@ def complete_service_assignments(
 ):
     return APIResponse(message="complete", data=ServiceAssignmentService(db).complete(ctx, row_id))
 
-service_schedules_router = APIRouter(prefix="/service-schedules", tags=["Service — ServiceSchedule"])
+service_schedules_router = APIRouter(prefix="/service-schedules", tags=["Service - ServiceSchedule"])
 
 @service_schedules_router.get("", response_model=APIResponse[list[ServiceScheduleResponse]])
 def list_service_schedules(
@@ -319,7 +319,7 @@ def complete_service_schedules(
 ):
     return APIResponse(message="complete", data=ServiceScheduleService(db).complete(ctx, row_id))
 
-work_orders_router = APIRouter(prefix="/work-orders", tags=["Service — WorkOrder"])
+work_orders_router = APIRouter(prefix="/work-orders", tags=["Service - WorkOrder"])
 
 @work_orders_router.get("", response_model=APIResponse[list[WorkOrderResponse]])
 def list_work_orders(
@@ -380,7 +380,7 @@ def complete_work_orders(
 ):
     return APIResponse(message="complete", data=WorkOrderService(db).complete(ctx, row_id))
 
-service_tasks_router = APIRouter(prefix="/service-tasks", tags=["Service — ServiceTask"])
+service_tasks_router = APIRouter(prefix="/service-tasks", tags=["Service - ServiceTask"])
 
 @service_tasks_router.get("", response_model=APIResponse[list[ServiceTaskResponse]])
 def list_service_tasks(
@@ -417,7 +417,7 @@ def update_service_tasks(
 ):
     return APIResponse(message="Updated", data=ServiceTaskService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-service_checklists_router = APIRouter(prefix="/service-checklists", tags=["Service — ServiceChecklist"])
+service_checklists_router = APIRouter(prefix="/service-checklists", tags=["Service - ServiceChecklist"])
 
 @service_checklists_router.get("", response_model=APIResponse[list[ServiceChecklistResponse]])
 def list_service_checklists(
@@ -454,7 +454,7 @@ def update_service_checklists(
 ):
     return APIResponse(message="Updated", data=ServiceChecklistService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-service_visits_router = APIRouter(prefix="/service-visits", tags=["Service — ServiceVisit"])
+service_visits_router = APIRouter(prefix="/service-visits", tags=["Service - ServiceVisit"])
 
 @service_visits_router.get("", response_model=APIResponse[list[ServiceVisitResponse]])
 def list_service_visits(
@@ -499,7 +499,7 @@ def complete_service_visits(
 ):
     return APIResponse(message="complete", data=ServiceVisitService(db).complete(ctx, row_id))
 
-service_materials_router = APIRouter(prefix="/service-materials", tags=["Service — ServiceMaterial"])
+service_materials_router = APIRouter(prefix="/service-materials", tags=["Service - ServiceMaterial"])
 
 @service_materials_router.get("", response_model=APIResponse[list[ServiceMaterialResponse]])
 def list_service_materials(
@@ -536,7 +536,7 @@ def update_service_materials(
 ):
     return APIResponse(message="Updated", data=ServiceMaterialService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-time_entries_router = APIRouter(prefix="/time-entries", tags=["Service — ServiceTimeEntry"])
+time_entries_router = APIRouter(prefix="/time-entries", tags=["Service - ServiceTimeEntry"])
 
 @time_entries_router.get("", response_model=APIResponse[list[ServiceTimeEntryResponse]])
 def list_time_entries(
@@ -573,7 +573,7 @@ def update_time_entries(
 ):
     return APIResponse(message="Updated", data=ServiceTimeEntryService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-service_expenses_router = APIRouter(prefix="/service-expenses", tags=["Service — ServiceExpense"])
+service_expenses_router = APIRouter(prefix="/service-expenses", tags=["Service - ServiceExpense"])
 
 @service_expenses_router.get("", response_model=APIResponse[list[ServiceExpenseResponse]])
 def list_service_expenses(
@@ -642,7 +642,7 @@ def post_service_expenses(
     )
     return APIResponse(message="Posted", data=data)
 
-service_slas_router = APIRouter(prefix="/service-slas", tags=["Service — ServiceSla"])
+service_slas_router = APIRouter(prefix="/service-slas", tags=["Service - ServiceSla"])
 
 @service_slas_router.get("", response_model=APIResponse[list[ServiceSlaResponse]])
 def list_service_slas(
@@ -679,7 +679,7 @@ def update_service_slas(
 ):
     return APIResponse(message="Updated", data=ServiceSLAService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-service_escalations_router = APIRouter(prefix="/service-escalations", tags=["Service — ServiceEscalation"])
+service_escalations_router = APIRouter(prefix="/service-escalations", tags=["Service - ServiceEscalation"])
 
 @service_escalations_router.get("", response_model=APIResponse[list[ServiceEscalationResponse]])
 def list_service_escalations(
@@ -724,7 +724,7 @@ def escalate_service_escalations(
 ):
     return APIResponse(message="escalate", data=ServiceEscalationService(db).escalate(ctx, row_id))
 
-service_feedback_router = APIRouter(prefix="/service-feedback", tags=["Service — ServiceFeedback"])
+service_feedback_router = APIRouter(prefix="/service-feedback", tags=["Service - ServiceFeedback"])
 
 @service_feedback_router.get("", response_model=APIResponse[list[ServiceFeedbackResponse]])
 def list_service_feedback(
@@ -761,7 +761,7 @@ def update_service_feedback(
 ):
     return APIResponse(message="Updated", data=ServiceFeedbackService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-service_resolutions_router = APIRouter(prefix="/service-resolutions", tags=["Service — ServiceResolution"])
+service_resolutions_router = APIRouter(prefix="/service-resolutions", tags=["Service - ServiceResolution"])
 
 @service_resolutions_router.get("", response_model=APIResponse[list[ServiceResolutionResponse]])
 def list_service_resolutions(
@@ -814,7 +814,7 @@ def complete_service_resolutions(
 ):
     return APIResponse(message="complete", data=ServiceResolutionService(db).complete(ctx, row_id))
 
-service_documents_router = APIRouter(prefix="/service-documents", tags=["Service — ServiceDocument"])
+service_documents_router = APIRouter(prefix="/service-documents", tags=["Service - ServiceDocument"])
 
 @service_documents_router.get("", response_model=APIResponse[list[ServiceDocumentResponse]])
 def list_service_documents(
@@ -851,7 +851,7 @@ def update_service_documents(
 ):
     return APIResponse(message="Updated", data=ServiceDocumentService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-service_notifications_router = APIRouter(prefix="/service-notifications", tags=["Service — ServiceNotification"])
+service_notifications_router = APIRouter(prefix="/service-notifications", tags=["Service - ServiceNotification"])
 
 @service_notifications_router.get("", response_model=APIResponse[list[ServiceNotificationResponse]])
 def list_service_notifications(
@@ -859,8 +859,9 @@ def list_service_notifications(
     db: Annotated[Session, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
+    mine: bool = False,
 ):
-    items = ServiceNotificationService(db).list(ctx, company_id=company_id)
+    items = ServiceNotificationService(db).list(ctx, company_id=company_id, mine=mine)
     return APIResponse(message="OK", data=paginate(items, pagination))
 
 @service_notifications_router.get("/{row_id}", response_model=APIResponse[ServiceNotificationResponse])
@@ -888,7 +889,7 @@ def update_service_notifications(
 ):
     return APIResponse(message="Updated", data=ServiceNotificationService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-service_contracts_router = APIRouter(prefix="/service-contracts", tags=["Service — ServiceContract"])
+service_contracts_router = APIRouter(prefix="/service-contracts", tags=["Service - ServiceContract"])
 
 @service_contracts_router.get("", response_model=APIResponse[list[ServiceContractResponse]])
 def list_service_contracts(
@@ -941,7 +942,7 @@ def approve_service_contracts(
 ):
     return APIResponse(message="approve", data=ServiceContractService(db).approve(ctx, row_id))
 
-reports_router = APIRouter(prefix="/reports", tags=["Service — ServiceReport"])
+reports_router = APIRouter(prefix="/reports", tags=["Service - ServiceReport"])
 
 @reports_router.get("", response_model=APIResponse[list[ServiceReportResponse]])
 def list_reports(

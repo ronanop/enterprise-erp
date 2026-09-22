@@ -358,7 +358,7 @@ Invoice Posting:
 
 Scale:
 
-0 – 100
+0 - 100
 
 ## 14. SCREEN INVENTORY
 

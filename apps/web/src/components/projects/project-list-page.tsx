@@ -1,20 +1,19 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
-import { FolderKanban } from "lucide-react";
+import { Download, FolderKanban } from "lucide-react";
 
-import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
-import { HealthDot } from "@/components/projects/projects-badges";
-import { projectTypeLabel } from "@/components/projects/projects-domain";
 import {
   ProjectsRecordList,
   type RecordColumn,
 } from "@/components/projects/projects-record-list";
 import { useProjectsLookups } from "@/components/projects/use-projects-lookups";
+import { Button } from "@/components/ui/button";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { downloadXlsx } from "@/lib/spreadsheet";
 import {
   formatDate,
-  formatInr,
   listProjects,
   type Project,
 } from "@/services/projects-portal-service";
@@ -22,7 +21,9 @@ import {
 const LOOKUPS = ["employees", "customers"] as const;
 
 export function ProjectListPage() {
+  const { projectModuleAdmin } = useAuthUser();
   const { loadLookups, labels } = useProjectsLookups(LOOKUPS);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async () => {
     const [rows] = await Promise.all([listProjects(), loadLookups()]);
@@ -50,16 +51,10 @@ export function ProjectListPage() {
         cell: (r) => r.project_code,
       },
       {
-        key: "project_type",
-        label: "Type",
-        sort: (r) => r.project_type,
-        cell: (r) => projectTypeLabel(r.project_type),
-      },
-      {
         key: "customer_id",
         label: "Customer",
-        sort: (r) => labels.customerName(r.customer_id),
-        cell: (r) => labels.customerName(r.customer_id),
+        sort: (r) => r.customer_name || labels.customerName(r.customer_id),
+        cell: (r) => r.customer_name || labels.customerName(r.customer_id),
       },
       {
         key: "project_manager_employee_id",
@@ -68,24 +63,16 @@ export function ProjectListPage() {
         cell: (r) => labels.employeeName(r.project_manager_employee_id),
       },
       {
-        key: "planned_end_date",
-        label: "Planned End",
-        sort: (r) => r.planned_end_date,
-        cell: (r) => formatDate(r.planned_end_date),
+        key: "current_stage",
+        label: "Current Step",
+        sort: (r) => r.current_stage_label || r.current_stage || "",
+        cell: (r) => r.current_stage_label || r.current_stage || "-",
       },
       {
-        key: "budget_amount",
-        label: "Budget",
-        align: "right",
-        sort: (r) => Number(r.budget_amount ?? 0),
-        className: "text-right tabular-nums text-foreground",
-        cell: (r) => (r.budget_amount == null ? "—" : formatInr(r.budget_amount)),
-      },
-      {
-        key: "health_status",
-        label: "Health",
-        sort: (r) => r.health_status,
-        cell: (r) => <HealthDot health={r.health_status} />,
+        key: "current_stage_owner_name",
+        label: "Step Owner",
+        sort: (r) => r.current_stage_owner_name || "",
+        cell: (r) => r.current_stage_owner_name || "-",
       },
       {
         key: "created_at",
@@ -93,40 +80,74 @@ export function ProjectListPage() {
         sort: (r) => r.created_at,
         cell: (r) => formatDate(r.created_at),
       },
-      {
-        key: "status",
-        label: "Status",
-        sort: (r) => r.status,
-        className: "",
-        cell: (r) => <FinanceStatusBadge status={r.status} />,
-      },
     ],
+    [labels],
+  );
+
+  const exportPortfolio = useCallback(
+    async (rows: Project[]) => {
+      setExporting(true);
+      try {
+        const sheetRows = rows.map((r) => ({
+          Project: r.project_name,
+          Code: r.project_code,
+          Customer: r.customer_name || labels.customerName(r.customer_id),
+          Manager: labels.employeeName(r.project_manager_employee_id),
+          "Current Step": r.current_stage_label || r.current_stage || "",
+          "Step Owner": r.current_stage_owner_name || "",
+          "Date Created": formatDate(r.created_at),
+        }));
+        const stamp = new Date().toISOString().slice(0, 10);
+        await downloadXlsx(`projects-portfolio-${stamp}.xlsx`, [
+          { name: "Portfolio", rows: sheetRows },
+        ]);
+      } finally {
+        setExporting(false);
+      }
+    },
     [labels],
   );
 
   return (
     <ProjectsRecordList
       title="Projects"
-      description="Delivery portfolio — every project from request through approval, execution, and closure. Open a project to manage its WBS, resources, budget, and risks."
+      description={
+        projectModuleAdmin
+          ? "Delivery portfolio - every project from request through approval, execution, and closure. Open a project to manage its WBS, resources, budget, and risks."
+          : "Projects you are assigned to. Open My Jobs to complete your delivery steps."
+      }
       panelTitle="Portfolio"
-      panelSubtitle="Project register"
+      panelSubtitle={projectModuleAdmin ? "Project register" : "Assigned projects"}
       icon={FolderKanban}
-      newHref="/projects/projects/new"
-      newLabel="New Project"
       searchPlaceholder="Search projects…"
       loadingMessage="Loading projects…"
-      emptyMessage="No projects yet. Create one to start the delivery lifecycle."
+      emptyMessage="No projects yet. Create one from the PO Queue to start delivery."
       errorMessage="Failed to load projects"
       minWidth={1200}
       columns={columns}
-      defaultSortKey="project_code"
+      defaultSortKey="created_at"
+      defaultSortDir="desc"
       load={load}
       matches={(r, q) =>
         r.project_name.toLowerCase().includes(q) ||
         r.project_code.toLowerCase().includes(q) ||
-        r.project_type.toLowerCase().includes(q) ||
-        labels.customerName(r.customer_id).toLowerCase().includes(q)
+        (r.customer_name || labels.customerName(r.customer_id)).toLowerCase().includes(q) ||
+        (r.current_stage_label || "").toLowerCase().includes(q) ||
+        (r.current_stage_owner_name || "").toLowerCase().includes(q)
       }
+      headerActions={({ rows, loading }) => (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="cursor-pointer"
+          disabled={loading || exporting || rows.length === 0}
+          onClick={() => void exportPortfolio(rows)}
+        >
+          <Download className="size-3.5" />
+          {exporting ? "Exporting…" : "Export Excel"}
+        </Button>
+      )}
     />
   );
 }

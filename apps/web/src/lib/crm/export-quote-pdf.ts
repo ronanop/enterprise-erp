@@ -6,6 +6,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
+import { downloadPdf, openPdfInNewTab } from "@/lib/crm/open-pdf-preview";
 import type { Quote, QuoteLine } from "@/services/sales-crm-service";
 
 export type QuoteExportSeller = {
@@ -59,7 +60,7 @@ const BORDER: [number, number, number] = [0xe2, 0xde, 0xca];
 const HEAD_FILL: [number, number, number] = [0xef, 0xef, 0xef];
 const BOX_FILL: [number, number, number] = [0xd8, 0xd8, 0xd8];
 
-/** jsPDF Helvetica is WinAnsi — strip / replace unsupported glyphs. */
+/** jsPDF Helvetica is WinAnsi - strip / replace unsupported glyphs. */
 function pdfSafe(text: string): string {
   return text
     .replace(/\u20B9/g, "Rs.") // ₹
@@ -226,7 +227,10 @@ export function buildQuoteExportFilename(quote: Quote, subject?: string | null):
   return `QT_${base || quote.quote_no}.pdf`;
 }
 
-export async function exportQuotePdf(input: QuoteExportInput): Promise<void> {
+export async function exportQuotePdf(
+  input: QuoteExportInput,
+  options?: { download?: boolean },
+): Promise<void> {
   const [cacheLogo, womenLogo] = await Promise.all([
     loadImageDataUrl(CACHE_LOGO.path),
     loadImageDataUrl(WOMEN_LOGO.path),
@@ -267,7 +271,7 @@ export async function exportQuotePdf(input: QuoteExportInput): Promise<void> {
   leftY += lineH;
   doc.text(pdfSafe(seller.gst), BODY_X, leftY);
 
-  // ── Right meta under Women Owned — each field on its own line ───────────
+  // ── Right meta under Women Owned - each field on its own line ───────────
   const metaX = CONTENT_RIGHT;
   let rightY = logoY + CACHE_LOGO.h + 4.5;
   doc.setFont("helvetica", "bold");
@@ -364,7 +368,7 @@ export async function exportQuotePdf(input: QuoteExportInput): Promise<void> {
   const lastTable = (doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable;
   y = (lastTable?.finalY ?? y) + 5.6;
 
-  // ── Grand Total (gray bar, right side — ASCII-only to avoid stretch) ────
+  // ── Grand Total (gray bar, right side - ASCII-only to avoid stretch) ────
   const gtX = 104.85;
   const gtW = 100.79;
   const gtH = 7.32;
@@ -411,5 +415,15 @@ export async function exportQuotePdf(input: QuoteExportInput): Promise<void> {
   doc.text(pdfSafe(ownerName), BODY_X, y);
 
   drawFooter(doc);
-  doc.save(buildQuoteExportFilename(quote, subject));
+  const filename = buildQuoteExportFilename(quote, subject);
+  if (options?.download) {
+    downloadPdf(doc, filename);
+  } else {
+    openPdfInNewTab(doc, filename);
+  }
+}
+
+/** Download quote PDF. */
+export async function downloadQuotePdf(input: QuoteExportInput): Promise<void> {
+  await exportQuotePdf(input, { download: true });
 }

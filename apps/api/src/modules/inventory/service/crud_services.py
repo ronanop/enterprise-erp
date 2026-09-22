@@ -298,7 +298,7 @@ class InventoryPostingService:
             period_id=header.period_id,
             fiscal_year_id=header.fiscal_year_id,
         )
-        # gain: Dr Inventory Cr Income; loss: Dr Expense Cr Inventory — use signed net
+        # gain: Dr Inventory Cr Income; loss: Dr Expense Cr Inventory - use signed net
         net = sum(
             Decimal(str(ln.quantity)) * Decimal(str(ln.unit_cost or 0))
             for ln in header.lines if not ln.is_deleted

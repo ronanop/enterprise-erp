@@ -1,4 +1,4 @@
-"""CRM port — UUID-only stubs; no crm_* FK / ORM writes."""
+"""CRM port - UUID-only stubs; no crm_* FK / ORM writes."""
 
 from uuid import UUID
 

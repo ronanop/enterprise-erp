@@ -14,7 +14,8 @@ class RecCandidateDocument(Base, *RecDetailMixin):
     __tablename__ = "rec_candidate_document"
     __table_args__ = (
         CheckConstraint(
-            "document_type IN ('identity','education','experience','portfolio','other')",
+            "document_type IN ('identity','education','experience','portfolio','other',"
+            "'photo','cancelled_cheque')",
             name="ck_rec_cand_doc_type",
         ),
         CheckConstraint(

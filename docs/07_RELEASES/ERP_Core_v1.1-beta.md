@@ -1,15 +1,15 @@
-# ERP Core v1.1-beta — Release Notes
+# ERP Core v1.1-beta - Release Notes
 
 | Field | Value |
 |-------|--------|
 | **Document Type** | Enterprise Release Notes |
 | **Release Name** | ERP Core v1.1-beta |
 | **Release Status** | Beta Development Release |
-| **Architecture Lock** | v1.1 — Maintained |
+| **Architecture Lock** | v1.1 - Maintained |
 | **Prepared As** | Chief Software Architect · Enterprise Solution Architect · Technical Program Manager · ERP Release Manager |
-| **Classification** | Internal — Confidential |
+| **Classification** | Internal - Confidential |
 | **Predecessor** | [ERP Core v1.0-alpha](./ERP_Core_v1.0-alpha.md) |
-| **Ready For** | Sprint 7 — Inventory & Warehouse |
+| **Ready For** | Sprint 7 - Inventory & Warehouse |
 
 ---
 
@@ -19,17 +19,17 @@
 |-----------|--------|
 | **Version** | ERP Core v1.1-beta |
 | **Release Date** | 2026-07-13 |
-| **Status** | Beta Development Release — Procure-to-Pay complete |
+| **Status** | Beta Development Release - Procure-to-Pay complete |
 | **Recommended Git Tag** | `v1.1-beta` |
 | **Alembic Head** | `0077_seed_proc_workflows` |
 | **Architecture Lock** | Maintained (v1.1) |
-| **Baseline Delta** | Adds Sprint 6 Procurement on top of v1.0-alpha (Sprints 0–5) |
+| **Baseline Delta** | Adds Sprint 6 Procurement on top of v1.0-alpha (Sprints 0-5) |
 
 ---
 
 ## 2. Executive Summary
 
-ERP Core **v1.1-beta** advances the multi-tenant Enterprise ERP Platform from the **v1.0-alpha** development baseline by delivering **Sprint 6 — Procurement (Procure-to-Pay)**.
+ERP Core **v1.1-beta** advances the multi-tenant iConnect Plus from the **v1.0-alpha** development baseline by delivering **Sprint 6 - Procurement (Procure-to-Pay)**.
 
 The platform remains a **Modular Monolith** with **Clean Architecture** and **DDD**, governed by **Architecture Lock v1.1**. Documentation hierarchy BRD → FRD → SDD v1.1 → DBS v1.1 → ERD → code continues to be followed.
 
@@ -39,12 +39,12 @@ The platform remains a **Modular Monolith** with **Clean Architecture** and **DD
 - P2P spine: PR → RFQ → Vendor Quotation → Comparison → PO → GRN → Invoice → Return
 - Finance AP posting via system journals (`PostingService.post_system_journal`)
 - Inventory integration as **port/stub only** (no inventory stock tables; Sprint 7)
-- Migrations `0056`–`0077`; Alembic head `0077_seed_proc_workflows`
+- Migrations `0056`-`0077`; Alembic head `0077_seed_proc_workflows`
 - Test suite expanded to **99 passed**
 
 **What remains from v1.0-alpha:** Foundation, Organization, Master Data, Finance, and Sales Order-to-Cash capabilities are retained without architecture redesign.
 
-This release is **not** production GA. It is the approved gate to start **Sprint 7 — Inventory & Warehouse**.
+This release is **not** production GA. It is the approved gate to start **Sprint 7 - Inventory & Warehouse**.
 
 ---
 
@@ -60,7 +60,7 @@ This release is **not** production GA. It is the approved gate to start **Sprint
 | **Sprint 5** | Sales | Pricing, credit, quotation → order → delivery → invoice → return | Complete |
 | **Sprint 6** | Procurement | PR → RFQ → quote → comparison → PO → GRN → invoice → return | Complete |
 
-**Overall milestones completed: 7** (Infrastructure Phase Sprint 0 + Delivery Sprints 1–6).
+**Overall milestones completed: 7** (Infrastructure Phase Sprint 0 + Delivery Sprints 1-6).
 
 ---
 
@@ -107,7 +107,7 @@ This release is **not** production GA. It is the approved gate to start **Sprint
 - Quotation → Order → Delivery → Invoice → Return
 - AR posting and credit exposure updates on invoice/return
 
-### 5.6 Procure-to-Pay (Procurement) — **new in v1.1-beta**
+### 5.6 Procure-to-Pay (Procurement) - **new in v1.1-beta**
 - Purchase requisition (priority, department, cost center)
 - RFQ with invited vendors; vendor quotations and comparison engine
 - Vendor contracts; purchase orders with receive/invoice qty tracking
@@ -226,7 +226,7 @@ This release is **not** production GA. It is the approved gate to start **Sprint
 | **CRM** (`crm_*`) | FRD-05 / later sprint |
 | **Manufacturing** | FRD-13 |
 | **Payroll** | FRD-10 (after HR) |
-| **HR** | FRD-09 — Sprint 8 planned |
+| **HR** | FRD-09 - Sprint 8 planned |
 | Full Celery job bodies | Many tasks remain stubs |
 | Frontend Next.js application | Locked stack; not in this backend beta |
 
@@ -234,7 +234,7 @@ This release is **not** production GA. It is the approved gate to start **Sprint
 
 ## 12. Known Limitations
 
-1. **Inventory:** GRN/return emit inventory port calls via no-op adapter — stock ledgers not updated until Sprint 7.
+1. **Inventory:** GRN/return emit inventory port calls via no-op adapter - stock ledgers not updated until Sprint 7.
 2. **3-way match:** Implemented at service layer (`match_status`); no dedicated match tables.
 3. **Vendor performance:** Analytical snapshot table; populated by scheduled jobs (stub/recalc path).
 4. **Attachments:** DMS blobs out of scope; optional reference UUIDs only.
@@ -258,8 +258,8 @@ Subsequent roadmap (unchanged intent from v1.0-alpha): Sprint 8 HR → Sprint 9 
 
 | Version | Date | Scope | Alembic Head | Tests |
 |---------|------|--------|--------------|-------|
-| **v1.0-alpha** | 2026-07-13 | Sprints 0–5 (Foundation → Sales) | `0055_seed_sales_workflows` | 77 passed |
-| **v1.1-beta** | 2026-07-13 | Sprints 0–6 (+ Procurement P2P) | `0077_seed_proc_workflows` | 99 passed |
+| **v1.0-alpha** | 2026-07-13 | Sprints 0-5 (Foundation → Sales) | `0055_seed_sales_workflows` | 77 passed |
+| **v1.1-beta** | 2026-07-13 | Sprints 0-6 (+ Procurement P2P) | `0077_seed_proc_workflows` | 99 passed |
 
 ```text
 v1.0-alpha ──(+ Sprint 6 Procurement)──► v1.1-beta ──► Sprint 7 Inventory (planned)
@@ -286,6 +286,6 @@ v1.0-alpha ──(+ Sprint 6 Procurement)──► v1.1-beta ──► Sprint 7 
 | Modules | Foundation · Organization · Master Data · Finance · Sales · **Procurement** |
 | Alembic head | **`0077_seed_proc_workflows`** |
 | Quality | Ruff PASS · MyPy production PASS · Pytest **99** · Startup PASS |
-| Next | **Sprint 7 — Inventory & Warehouse** |
+| Next | **Sprint 7 - Inventory & Warehouse** |
 
 **ERP Core v1.1-beta release documentation completed and ready for release approval.**

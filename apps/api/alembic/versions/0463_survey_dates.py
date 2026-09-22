@@ -1,14 +1,15 @@
 """Add survey completion dates for materials and readiness checks."""
 
+import sys
 from collections.abc import Sequence
 from pathlib import Path
-import sys
 
 import sqlalchemy as sa
 from alembic import op
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from helpers import add_column_if_missing, column_exists
+
+from helpers import add_column_if_missing  # noqa: E402
 
 revision: str = "0463_survey_dates"
 down_revision: str | None = "0462_survey_material_lines"
@@ -36,7 +37,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
     for name in reversed(COLUMNS):
-        if column_exists(bind, TABLE, name, schema=SCHEMA):
-            op.drop_column(TABLE, name, schema=SCHEMA)
+        op.drop_column(TABLE, name, schema=SCHEMA)

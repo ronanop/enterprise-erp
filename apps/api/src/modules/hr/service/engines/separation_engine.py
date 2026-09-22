@@ -15,9 +15,19 @@ class SeparationEngine:
             raise InvalidSeparationState("Only submitted separations can receive manager approval")
         row.status = SeparationStatus.MANAGER_APPROVED.value
 
-    def hr_approve(self, row) -> None:
+    def it_approve(self, row) -> None:
         if row.status != SeparationStatus.MANAGER_APPROVED.value:
-            raise InvalidSeparationState("Manager approval required before HR approval")
+            raise InvalidSeparationState("Manager approval required before IT approval")
+        row.status = SeparationStatus.IT_APPROVED.value
+
+    def accounts_approve(self, row) -> None:
+        if row.status != SeparationStatus.IT_APPROVED.value:
+            raise InvalidSeparationState("IT approval required before Accounts approval")
+        row.status = SeparationStatus.ACCOUNTS_APPROVED.value
+
+    def hr_approve(self, row) -> None:
+        if row.status != SeparationStatus.ACCOUNTS_APPROVED.value:
+            raise InvalidSeparationState("Accounts approval required before HR approval")
         row.status = SeparationStatus.HR_APPROVED.value
 
     def complete(self, row) -> None:

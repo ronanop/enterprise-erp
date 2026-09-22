@@ -26,7 +26,7 @@ type Props = {
   readOnly?: boolean;
   /**
    * Optional live uploader. When provided, called for each file.
-   * Document module attachments require a document_id — wire when Finance↔DMS link exists.
+   * Document module attachments require a document_id - wire when Finance↔DMS link exists.
    */
   onUpload?: (file: File, onProgress: (pct: number) => void) => Promise<{
     id: string;
@@ -39,7 +39,7 @@ type Props = {
 };
 
 /**
- * Attachments panel — production UI with drag/drop + progress.
+ * Attachments panel - production UI with drag/drop + progress.
  * Uses injectable upload/delete hooks (no mock storage).
  */
 export function JournalAttachmentsPanel({
@@ -133,7 +133,7 @@ export function JournalAttachmentsPanel({
   return (
     <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
       <div className="flex items-center justify-between gap-2">
-        <h2 className="text-sm font-medium tracking-tight">Attachments</h2>
+        <h2 className="text-base font-extrabold tracking-tight">Attachments</h2>
         <span className="text-[10px] text-muted-foreground">Journal {journalId.slice(0, 8)}</span>
       </div>
 

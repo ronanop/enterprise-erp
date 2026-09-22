@@ -66,7 +66,7 @@ export function useProjectsLookups(kinds: readonly LookupKind[]) {
 
   const labels = useMemo(() => {
     const get = (kind: LookupKind, id: string | null | undefined) =>
-      id ? (maps[kind]?.get(id) ?? "—") : "—";
+      id ? (maps[kind]?.get(id) ?? "-") : "-";
     return {
       projectName: (id: string | null | undefined) => get("projects", id),
       employeeName: (id: string | null | undefined) => get("employees", id),

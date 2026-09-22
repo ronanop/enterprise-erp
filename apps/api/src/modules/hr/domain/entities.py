@@ -22,4 +22,6 @@ class HrAggregate(str, Enum):
     APPRAISAL = "hr_appraisal"
     TRAINING = "hr_training"
     TRAINING_ATTENDANCE = "hr_training_attendance"
+    TRAINING_ROOM = "hr_training_room"
+    TRAINING_REQUEST = "hr_training_request"
     SEPARATION = "hr_separation"

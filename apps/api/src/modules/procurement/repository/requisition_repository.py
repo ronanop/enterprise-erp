@@ -15,13 +15,12 @@ class RequisitionRepository(ProcScopedRepository):
     def __init__(self, db: Session) -> None:
         super().__init__(db)
 
-    def list_requisitions(self, ctx: TenantContext, company_id: UUID):
+    def list_requisitions(self, ctx: TenantContext, company_id: UUID | None):
         stmt = select(ProcRequisitionHeader).where(
             ProcRequisitionHeader.is_deleted.is_(False)
         )
+        stmt = self.apply_optional_company_filter(stmt, ProcRequisitionHeader, company_id)
         stmt = self.apply_proc_filter(stmt, ProcRequisitionHeader, ctx)
-        if company_id:
-            stmt = stmt.where(ProcRequisitionHeader.company_id == company_id)
         return self.db.execute(stmt).scalars().all()
 
     def get_requisition(self, ctx: TenantContext, requisition_id: UUID):

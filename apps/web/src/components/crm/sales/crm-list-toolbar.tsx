@@ -3,20 +3,19 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { CrmCountBadge, CrmIconBadge } from "@/components/crm/crm-ui";
+import { CRM_SECTION_TITLE, CrmCountBadge, CrmIconBadge } from "@/components/crm/crm-ui";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 /** Dense single-row toolbar for CRM list cards (icon + title + actions + search). */
 export function CrmListToolbar({
   title,
-  subtitle,
   count,
   icon,
   actions,
   search,
 }: {
   title: string;
-  subtitle?: string;
   count?: number;
   icon?: LucideIcon;
   actions?: ReactNode;
@@ -32,10 +31,9 @@ export function CrmListToolbar({
         {icon ? <CrmIconBadge icon={icon} /> : null}
         <div className="min-w-0">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <h2 className="truncate text-sm font-medium tracking-tight">{title}</h2>
+            <h2 className={cn(CRM_SECTION_TITLE, "truncate")}>{title}</h2>
             {typeof count === "number" ? <CrmCountBadge count={count} /> : null}
           </div>
-          {subtitle ? <p className="text-[11px] text-muted-foreground">{subtitle}</p> : null}
         </div>
       </div>
       <div className="flex shrink-0 flex-nowrap items-center gap-2">
@@ -46,7 +44,7 @@ export function CrmListToolbar({
             onChange={(e) => search.onChange(e.target.value)}
             placeholder={search.placeholder}
             aria-label={search.placeholder ?? `Search ${title}`}
-            className="h-8 w-52 shrink-0 sm:w-56"
+            className="h-8.5 w-52 shrink-0 rounded-full bg-muted/40 sm:w-60 hover:bg-muted/60 focus-visible:bg-background"
           />
         ) : null}
       </div>

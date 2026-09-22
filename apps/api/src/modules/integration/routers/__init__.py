@@ -101,7 +101,7 @@ from modules.integration.service import (
 )
 from shared.schemas import APIResponse
 
-external_systems_router = APIRouter(prefix="/external-systems", tags=["Integration — ExternalSystem"])
+external_systems_router = APIRouter(prefix="/external-systems", tags=["Integration - ExternalSystem"])
 
 @external_systems_router.get("", response_model=APIResponse[list[ExternalSystemResponse]])
 def list_external_systems(
@@ -138,7 +138,7 @@ def update_external_systems(
 ):
     return APIResponse(message="Updated", data=ExternalSystemService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-connectors_router = APIRouter(prefix="/connectors", tags=["Integration — Connector"])
+connectors_router = APIRouter(prefix="/connectors", tags=["Integration - Connector"])
 
 @connectors_router.get("", response_model=APIResponse[list[ConnectorResponse]])
 def list_connectors(
@@ -191,7 +191,7 @@ def approve_connectors(
 ):
     return APIResponse(message="approve", data=ConnectorService(db).approve(ctx, row_id))
 
-api_credentials_router = APIRouter(prefix="/api-credentials", tags=["Integration — ApiCredential"])
+api_credentials_router = APIRouter(prefix="/api-credentials", tags=["Integration - ApiCredential"])
 
 @api_credentials_router.get("", response_model=APIResponse[list[ApiCredentialResponse]])
 def list_api_credentials(
@@ -244,7 +244,7 @@ def approve_api_credentials(
 ):
     return APIResponse(message="approve", data=ApiCredentialService(db).approve(ctx, row_id))
 
-oauth_clients_router = APIRouter(prefix="/oauth-clients", tags=["Integration — OauthClient"])
+oauth_clients_router = APIRouter(prefix="/oauth-clients", tags=["Integration - OauthClient"])
 
 @oauth_clients_router.get("", response_model=APIResponse[list[OauthClientResponse]])
 def list_oauth_clients(
@@ -281,7 +281,7 @@ def update_oauth_clients(
 ):
     return APIResponse(message="Updated", data=OauthClientService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-webhooks_router = APIRouter(prefix="/webhooks", tags=["Integration — Webhook"])
+webhooks_router = APIRouter(prefix="/webhooks", tags=["Integration - Webhook"])
 
 @webhooks_router.get("", response_model=APIResponse[list[WebhookResponse]])
 def list_webhooks(
@@ -334,7 +334,7 @@ def approve_webhooks(
 ):
     return APIResponse(message="approve", data=WebhookService(db).approve(ctx, row_id))
 
-event_definitions_router = APIRouter(prefix="/event-definitions", tags=["Integration — EventDefinition"])
+event_definitions_router = APIRouter(prefix="/event-definitions", tags=["Integration - EventDefinition"])
 
 @event_definitions_router.get("", response_model=APIResponse[list[EventDefinitionResponse]])
 def list_event_definitions(
@@ -371,7 +371,7 @@ def update_event_definitions(
 ):
     return APIResponse(message="Updated", data=EventDefinitionService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-event_subscriptions_router = APIRouter(prefix="/event-subscriptions", tags=["Integration — EventSubscription"])
+event_subscriptions_router = APIRouter(prefix="/event-subscriptions", tags=["Integration - EventSubscription"])
 
 @event_subscriptions_router.get("", response_model=APIResponse[list[EventSubscriptionResponse]])
 def list_event_subscriptions(
@@ -408,7 +408,7 @@ def update_event_subscriptions(
 ):
     return APIResponse(message="Updated", data=EventSubscriptionService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-message_queues_router = APIRouter(prefix="/message-queues", tags=["Integration — MessageQueue"])
+message_queues_router = APIRouter(prefix="/message-queues", tags=["Integration - MessageQueue"])
 
 @message_queues_router.get("", response_model=APIResponse[list[MessageQueueResponse]])
 def list_message_queues(
@@ -445,7 +445,7 @@ def update_message_queues(
 ):
     return APIResponse(message="Updated", data=MessageQueueService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-messages_router = APIRouter(prefix="/messages", tags=["Integration — Message"])
+messages_router = APIRouter(prefix="/messages", tags=["Integration - Message"])
 
 @messages_router.get("", response_model=APIResponse[list[MessageResponse]])
 def list_messages(
@@ -482,7 +482,7 @@ def update_messages(
 ):
     return APIResponse(message="Updated", data=MessageService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-retry_queues_router = APIRouter(prefix="/retry-queues", tags=["Integration — RetryQueue"])
+retry_queues_router = APIRouter(prefix="/retry-queues", tags=["Integration - RetryQueue"])
 
 @retry_queues_router.get("", response_model=APIResponse[list[RetryQueueResponse]])
 def list_retry_queues(
@@ -527,7 +527,7 @@ def submit_retry_queues(
 ):
     return APIResponse(message="submit", data=RetryQueueService(db).submit(ctx, row_id))
 
-dead_letters_router = APIRouter(prefix="/dead-letters", tags=["Integration — DeadLetter"])
+dead_letters_router = APIRouter(prefix="/dead-letters", tags=["Integration - DeadLetter"])
 
 @dead_letters_router.get("", response_model=APIResponse[list[DeadLetterResponse]])
 def list_dead_letters(
@@ -572,7 +572,7 @@ def reprocess_dead_letters(
 ):
     return APIResponse(message="reprocess", data=DeadLetterService(db).reprocess(ctx, row_id))
 
-data_mappings_router = APIRouter(prefix="/data-mappings", tags=["Integration — DataMapping"])
+data_mappings_router = APIRouter(prefix="/data-mappings", tags=["Integration - DataMapping"])
 
 @data_mappings_router.get("", response_model=APIResponse[list[DataMappingResponse]])
 def list_data_mappings(
@@ -609,7 +609,7 @@ def update_data_mappings(
 ):
     return APIResponse(message="Updated", data=DataMappingService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-data_transformations_router = APIRouter(prefix="/data-transformations", tags=["Integration — DataTransformation"])
+data_transformations_router = APIRouter(prefix="/data-transformations", tags=["Integration - DataTransformation"])
 
 @data_transformations_router.get("", response_model=APIResponse[list[DataTransformationResponse]])
 def list_data_transformations(
@@ -646,7 +646,7 @@ def update_data_transformations(
 ):
     return APIResponse(message="Updated", data=DataTransformationService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-sync_jobs_router = APIRouter(prefix="/sync-jobs", tags=["Integration — SyncJob"])
+sync_jobs_router = APIRouter(prefix="/sync-jobs", tags=["Integration - SyncJob"])
 
 @sync_jobs_router.get("", response_model=APIResponse[list[SyncJobResponse]])
 def list_sync_jobs(
@@ -707,7 +707,7 @@ def run_sync_jobs(
 ):
     return APIResponse(message="run", data=SyncJobService(db).run(ctx, row_id))
 
-sync_logs_router = APIRouter(prefix="/sync-logs", tags=["Integration — SyncLog"])
+sync_logs_router = APIRouter(prefix="/sync-logs", tags=["Integration - SyncLog"])
 
 @sync_logs_router.get("", response_model=APIResponse[list[SyncLogResponse]])
 def list_sync_logs(
@@ -744,7 +744,7 @@ def update_sync_logs(
 ):
     return APIResponse(message="Updated", data=SyncLogService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-api_usages_router = APIRouter(prefix="/api-usages", tags=["Integration — ApiUsage"])
+api_usages_router = APIRouter(prefix="/api-usages", tags=["Integration - ApiUsage"])
 
 @api_usages_router.get("", response_model=APIResponse[list[ApiUsageResponse]])
 def list_api_usages(
@@ -781,7 +781,7 @@ def update_api_usages(
 ):
     return APIResponse(message="Updated", data=ApiUsageService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-rate_limits_router = APIRouter(prefix="/rate-limits", tags=["Integration — RateLimit"])
+rate_limits_router = APIRouter(prefix="/rate-limits", tags=["Integration - RateLimit"])
 
 @rate_limits_router.get("", response_model=APIResponse[list[RateLimitResponse]])
 def list_rate_limits(
@@ -818,7 +818,7 @@ def update_rate_limits(
 ):
     return APIResponse(message="Updated", data=RateLimitService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-notifications_router = APIRouter(prefix="/notifications", tags=["Integration — Notification"])
+notifications_router = APIRouter(prefix="/notifications", tags=["Integration - Notification"])
 
 @notifications_router.get("", response_model=APIResponse[list[NotificationResponse]])
 def list_notifications(
@@ -863,7 +863,7 @@ def acknowledge_notifications(
 ):
     return APIResponse(message="acknowledge", data=NotificationService(db).acknowledge(ctx, row_id))
 
-monitors_router = APIRouter(prefix="/monitors", tags=["Integration — Monitor"])
+monitors_router = APIRouter(prefix="/monitors", tags=["Integration - Monitor"])
 
 @monitors_router.get("", response_model=APIResponse[list[MonitorResponse]])
 def list_monitors(
@@ -900,7 +900,7 @@ def update_monitors(
 ):
     return APIResponse(message="Updated", data=MonitorService(db).update(ctx, row_id, **extract_update_fields(body)))
 
-reports_router = APIRouter(prefix="/reports", tags=["Integration — Report"])
+reports_router = APIRouter(prefix="/reports", tags=["Integration - Report"])
 
 @reports_router.get("", response_model=APIResponse[list[ReportResponse]])
 def list_reports(

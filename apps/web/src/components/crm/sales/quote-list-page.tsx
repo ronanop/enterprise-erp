@@ -2,15 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FileText, RefreshCw } from "lucide-react";
+import { FileText } from "lucide-react";
 
-import { CrmErrorBanner, CrmInfoBanner, CrmListPanel, CrmPage } from "@/components/crm/crm-ui";
+import { CrmErrorBanner, CrmListPanel, CrmPage, CRM_TABLE_HEAD_ROW } from "@/components/crm/crm-ui";
 import { CrmListToolbar } from "@/components/crm/sales/crm-list-toolbar";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { formatInr, listQuotes, type Quote } from "@/services/sales-crm-service";
 
 type SortKey =
@@ -22,7 +22,7 @@ type SortKey =
   | "valid_until";
 
 function formatCreatedDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -38,7 +38,7 @@ export function QuoteListPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("quote_no");
+  const { sortBy, sortDir, onSort } = useTableSort<SortKey>("created_at", "desc");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,21 +88,7 @@ export function QuoteListPage({
       {!embedded ? (
         <PageHeader
           title="Quotes"
-          description="Customer quotations with GST/HSN lines and a margin-gated approval workflow."
-          actions={
-            <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          }
         />
-      ) : null}
-
-      {!embedded ? (
-        <CrmInfoBanner>
-          Quotes are created from an eligible Opportunity (after the OEM quote is attached) — open the
-          opportunity to create one.
-        </CrmInfoBanner>
       ) : null}
 
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
@@ -110,17 +96,8 @@ export function QuoteListPage({
       <CrmListPanel>
         <CrmListToolbar
           title="Quotes"
-          subtitle="Customer quotations"
           icon={FileText}
           count={sorted.length}
-          actions={
-            embedded ? (
-              <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={() => void load()} disabled={loading}>
-                <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-                Refresh
-              </Button>
-            ) : null
-          }
           search={{
             value: query,
             onChange: setQuery,
@@ -131,7 +108,7 @@ export function QuoteListPage({
         <div className="erp-scroll overflow-x-auto">
           <table className="w-full min-w-[860px] text-left text-sm">
             <thead>
-              <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
+              <tr className={CRM_TABLE_HEAD_ROW}>
                 <CrmSortableTh label="Quote No." sortKey="quote_no" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Stage" sortKey="quote_stage" activeKey={sortBy} dir={sortDir} onSort={onSort} />
                 <CrmSortableTh label="Date Created" sortKey="created_at" activeKey={sortBy} dir={sortDir} onSort={onSort} />
@@ -158,7 +135,7 @@ export function QuoteListPage({
                   <tr key={row.id} className="border-b border-border/50 last:border-0 hover:bg-accent/30">
                     <td className="px-4 py-2.5 font-medium text-foreground">
                       <Link href={`/crm/quotes/${row.id}`} className="cursor-pointer hover:underline">
-                        {row.quote_no}
+                        {formatCrmCode(row.quote_no)}
                       </Link>
                     </td>
                     <td className="px-4 py-2.5">
@@ -169,7 +146,7 @@ export function QuoteListPage({
                     <td className="px-4 py-2.5 text-muted-foreground">{formatCreatedDate(row.created_at)}</td>
                     <td className="px-4 py-2.5">{formatInr(row.grand_total)}</td>
                     <td className="px-4 py-2.5">{row.avg_margin_pct}%</td>
-                    <td className="px-4 py-2.5 text-muted-foreground">{row.valid_until ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{row.valid_until ?? "-"}</td>
                   </tr>
                 ))
               )}

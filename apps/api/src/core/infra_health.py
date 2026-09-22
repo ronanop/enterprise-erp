@@ -1,0 +1,138 @@
+"""Startup probes for shared infrastructure (Postgres, Redis, RabbitMQ, S3, OpenSearch)."""
+
+from __future__ import annotations
+
+import socket
+from urllib.parse import urlparse, urlunparse
+
+import httpx
+from sqlalchemy import text
+
+from core.config import settings
+from core.logging import get_logger
+from core.redis import get_redis
+from database.session import engine
+
+logger = get_logger(__name__)
+
+
+def _redact_url(url: str) -> str:
+    """Hide password in connection URLs for logs."""
+    try:
+        parsed = urlparse(url)
+        if not parsed.password:
+            return url
+        host = parsed.hostname or ""
+        if parsed.port:
+            host = f"{host}:{parsed.port}"
+        user = parsed.username or ""
+        netloc = f"{user}:***@{host}" if user else f"***@{host}"
+        return urlunparse(parsed._replace(netloc=netloc))
+    except Exception:
+        return "<unparseable-url>"
+
+
+def _tcp_ok(host: str, port: int, timeout: float = 3.0) -> tuple[bool, str]:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True, "tcp ok"
+    except Exception as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+
+
+def _check_postgres() -> tuple[bool, str, str]:
+    target = _redact_url(str(settings.database_url))
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        return True, target, "select 1 ok"
+    except Exception as exc:
+        return False, target, f"{type(exc).__name__}: {exc}"
+
+
+def _check_redis() -> tuple[bool, str, str]:
+    target = _redact_url(settings.redis_url)
+    try:
+        client = get_redis()
+        pong = client.ping()
+        return True, target, f"ping={pong}"
+    except Exception as exc:
+        return False, target, f"{type(exc).__name__}: {exc}"
+
+
+def _check_rabbitmq() -> tuple[bool, str, str]:
+    target = _redact_url(settings.celery_broker_url)
+    try:
+        parsed = urlparse(settings.celery_broker_url)
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 5672
+        ok, detail = _tcp_ok(host, port)
+        if not ok:
+            return False, target, detail
+        try:
+            with socket.create_connection((host, port), timeout=3.0) as sock:
+                sock.settimeout(2.0)
+                banner = sock.recv(16)
+            if banner.startswith(b"AMQP"):
+                return True, target, f"amqp banner ok ({host}:{port})"
+            if banner:
+                return True, target, f"tcp ok, banner={banner!r}"
+        except TimeoutError:
+            return True, target, f"tcp ok ({host}:{port})"
+        return True, target, f"tcp ok ({host}:{port})"
+    except Exception as exc:
+        return False, target, f"{type(exc).__name__}: {exc}"
+
+
+def _check_s3() -> tuple[bool, str, str]:
+    from core import object_storage
+
+    backend = (settings.object_storage_backend or "local").strip().lower()
+    bucket = settings.s3_bucket.strip() or "(none)"
+    target = f"s3://{bucket} ({settings.s3_region})"
+    if backend != "s3":
+        return True, target, "OBJECT_STORAGE_BACKEND!=s3 (skipped)"
+    if not settings.s3_configured:
+        return False, target, "S3_BUCKET / S3_REGION empty"
+    ok, detail = object_storage.head_ok()
+    return ok, target, detail
+
+
+def _check_opensearch() -> tuple[bool, str, str]:
+    url = (settings.opensearch_url or "").strip().rstrip("/")
+    if not url:
+        return True, "(not configured)", "OPENSEARCH_URL empty (skipped)"
+    try:
+        with httpx.Client(timeout=3.0) as client:
+            response = client.get(url)
+        if response.status_code < 500:
+            return True, url, f"HTTP {response.status_code}"
+        return False, url, f"HTTP {response.status_code}: {response.text[:120]}"
+    except Exception as exc:
+        return False, url, f"{type(exc).__name__}: {exc}"
+
+
+def log_infrastructure_connections() -> dict[str, bool]:
+    """Probe infra targets and emit one log line per service. Returns ok flags."""
+    checks = (
+        ("postgres", _check_postgres),
+        ("redis", _check_redis),
+        ("rabbitmq", _check_rabbitmq),
+        ("s3", _check_s3),
+        ("opensearch", _check_opensearch),
+    )
+    results: dict[str, bool] = {}
+    logger.info("Checking infrastructure connections…")
+    for name, probe in checks:
+        ok, target, detail = probe()
+        results[name] = ok
+        if ok:
+            logger.info("Infra OK  %-11s %s (%s)", name, target, detail)
+        else:
+            logger.error("Infra FAIL %-11s %s (%s)", name, target, detail)
+    summary = ", ".join(f"{k}={'ok' if v else 'FAIL'}" for k, v in results.items())
+    logger.info("Infrastructure check complete: %s", summary)
+    return results
+
+
+__all__ = ["log_infrastructure_connections"]

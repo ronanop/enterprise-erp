@@ -1,15 +1,15 @@
-# ERP Core v1.6-beta — Release Notes
+# ERP Core v1.6-beta - Release Notes
 
 | Field | Value |
 |-------|--------|
 | **Document Type** | Enterprise Release Notes |
 | **Release Name** | ERP Core v1.6-beta |
 | **Release Status** | Beta Development Release |
-| **Architecture Lock** | v1.1 — Maintained |
+| **Architecture Lock** | v1.1 - Maintained |
 | **Prepared As** | Enterprise Solution Architect · ERP Product Architect · Technical Documentation Lead · Release Manager · Principal Software Engineer |
-| **Classification** | Internal — Confidential |
+| **Classification** | Internal - Confidential |
 | **Predecessor** | [ERP Core v1.5-beta](./ERP_Core_v1.5-beta.md) |
-| **Ready For** | Sprint 12 — Payroll (FRD-10) |
+| **Ready For** | Sprint 12 - Payroll (FRD-10) |
 
 ---
 
@@ -21,18 +21,18 @@
 | **Status** | Beta Development Release |
 | **Date** | 2026-07-14 |
 | **Previous Release** | ERP Core v1.5-beta |
-| **Architecture Lock** | v1.1 — Preserved |
+| **Architecture Lock** | v1.1 - Preserved |
 | **Recommended Git Tag** | `v1.6-beta` |
 
 ---
 
 ## 2. Sprint 11 Highlights
 
-Sprint 11 delivered the **Human Resource Management (HRMS)** domain (FRD-09 / ERD_11) as the enterprise employee-lifecycle layer after identity is established in Master Data — without duplicating `master_employee` (C-01), without creating `hr_department`, and without payroll runs / finance posting.
+Sprint 11 delivered the **Human Resource Management (HRMS)** domain (FRD-09 / ERD_11) as the enterprise employee-lifecycle layer after identity is established in Master Data - without duplicating `master_employee` (C-01), without creating `hr_department`, and without payroll runs / finance posting.
 
 | Capability | Delivery |
 |------------|----------|
-| **HR Module** | `apps/api/src/modules/hr/` — Clean Architecture package (domain, models, repositories, engines, services, routers, adapters, tasks) |
+| **HR Module** | `apps/api/src/modules/hr/` - Clean Architecture package (domain, models, repositories, engines, services, routers, adapters, tasks) |
 | **Employee Lifecycle** | Profile extension, employment terms, department / designation assignment history |
 | **Attendance** | Daily capture (present / absent / half_day / WFH / holiday); adjust / lock |
 | **Leave Management** | Leave types, balances, requests with submit / approve and balance decrement |
@@ -63,7 +63,7 @@ Sprint 11 delivered the **Human Resource Management (HRMS)** domain (FRD-09 / ER
 
 **Coverage:** attendance · leave management · shift management · performance management · training · separation · employee lifecycle (profile / employment / assignments / documents).
 
-**API mount:** `/api/v1/hr` — designations, employee-profiles, employment, department-assignments, designation-assignments, shifts, shift-assignments, holiday-calendars, leave-types, leave-balances, leave-requests (+ submit / approve), attendance (+ lock), employee-documents (+ verify), performance-reviews (+ submit / approve), goals, appraisals, training (+ assign), training-attendance, separation (+ submit / approve / complete), reports.
+**API mount:** `/api/v1/hr` - designations, employee-profiles, employment, department-assignments, designation-assignments, shifts, shift-assignments, holiday-calendars, leave-types, leave-balances, leave-requests (+ submit / approve), attendance (+ lock), employee-documents (+ verify), performance-reviews (+ submit / approve), goals, appraisals, training (+ assign), training-attendance, separation (+ submit / approve / complete), reports.
 
 ---
 
@@ -73,10 +73,10 @@ HR **never** duplicates employee identity or department masters and **never** wr
 
 | Module | Integration |
 |--------|-------------|
-| **Master Data** | **`master_employee` only (C-01)**; FKs from HR tables; designation label sync and separation completion via `HrMasterDataAdapter` → `EmployeeService` — **never ORM-writes `master_*` from HR repositories** |
-| **Organization** | **`org_department` only**; department assignment via `HrOrganizationAdapter` — **no `hr_department`** |
+| **Master Data** | **`master_employee` only (C-01)**; FKs from HR tables; designation label sync and separation completion via `HrMasterDataAdapter` → `EmployeeService` - **never ORM-writes `master_*` from HR repositories** |
+| **Organization** | **`org_department` only**; department assignment via `HrOrganizationAdapter` - **no `hr_department`** |
 | **Foundation** | **Workflow** (`HR_LEAVE_APPROVAL`, `HR_SHIFT_CHANGE`, `HR_SEPARATION_APPROVAL`, `HR_PERFORMANCE_APPROVAL`); **Audit** on leave approve, attendance lock, employment end, separation complete, performance approve; **RBAC** (`hr.*` permissions; roles `HR_EMPLOYEE`, `HR_MANAGER`, `HR_EXECUTIVE`, `HR_ADMIN` with `status='active'`) |
-| **Payroll readiness** | `HRIntegrationService` exposes **read-only** employment / attendance / leave facts for future Payroll — **no payroll tables** |
+| **Payroll readiness** | `HRIntegrationService` exposes **read-only** employment / attendance / leave facts for future Payroll - **no payroll tables** |
 | **Finance** | **No finance posting**; no `fin_*` writes |
 | **Inventory** | **No Inventory writes**; no `inv_*` writes |
 | **Manufacturing** | **No Manufacturing writes**; UUID references only where needed |
@@ -118,8 +118,8 @@ Swagger (`/docs`) and OpenAPI (`/openapi.json`) both return **200**; HR APIs are
 
 | Gate | Status |
 |------|--------|
-| **Alembic Upgrade** | **PASS** — head `0178_seed_hr_workflows` |
-| **FastAPI Startup** | **PASS** — Application startup complete |
+| **Alembic Upgrade** | **PASS** - head `0178_seed_hr_workflows` |
+| **FastAPI Startup** | **PASS** - Application startup complete |
 | **Swagger** | **PASS** (`/docs` 200) |
 | **OpenAPI** | **PASS** (`/openapi.json` 200) |
 | **Ruff** | **PASS** |
@@ -141,12 +141,12 @@ Validation completed successfully. Head `0178_seed_hr_workflows` confirmed, appl
 
 | Principle | Confirmation |
 |-----------|--------------|
-| **Architecture Lock v1.1** | **Preserved** — no Architecture Lock changes |
+| **Architecture Lock v1.1** | **Preserved** - no Architecture Lock changes |
 | **No redesign** | Prior sprints unmodified except required integration wiring (router / Celery / Alembic env / mypy package registration) |
 | **Clean Architecture** | Router → Service → Repository → Database maintained |
 | **DDD** | HR domain enums, exceptions, entities, value objects, engines |
 | **Modular Monolith** | New `modules/hr` package; no service-boundary redesign |
-| **Previous modules unchanged** | Confirmed — Foundation · Organization · Master Data · Finance · Sales · Procurement · Inventory · Manufacturing · Quality · CRM untouched except required wiring |
+| **Previous modules unchanged** | Confirmed - Foundation · Organization · Master Data · Finance · Sales · Procurement · Inventory · Manufacturing · Quality · CRM untouched except required wiring |
 
 Stack unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreSQL · Redis · Celery.
 
@@ -157,10 +157,10 @@ Stack unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreSQL · Redis · 
 | Attribute | Value |
 |-----------|--------|
 | **Next Release** | ERP Core **v1.7-beta** (planned) |
-| **Sprint** | **Sprint 12 — Payroll** |
+| **Sprint** | **Sprint 12 - Payroll** |
 | **Primary FRD** | **FRD-10 Payroll** |
 
-**Planned scope (planning only — no implementation in this release):**
+**Planned scope (planning only - no implementation in this release):**
 
 - Payroll runs and payslips
 - Earnings / deductions configuration
@@ -182,8 +182,8 @@ Stack unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreSQL · Redis · 
 | **Alembic head** | **`0178_seed_hr_workflows`** |
 | **Tests** | **169 passed** |
 | **Routes** | **556** FastAPI · **385** OpenAPI · **59** HR · **41** HR OpenAPI |
-| **Quality gates** | Alembic · FastAPI · Swagger · OpenAPI · Ruff · MyPy · Pytest — **ALL PASS** |
-| **Next** | **Sprint 12 — Payroll (FRD-10)** |
+| **Quality gates** | Alembic · FastAPI · Swagger · OpenAPI · Ruff · MyPy · Pytest - **ALL PASS** |
+| **Next** | **Sprint 12 - Payroll (FRD-10)** |
 | **Ready for Git Tag** | **`v1.6-beta`** |
 
 ---
@@ -192,13 +192,13 @@ Stack unchanged: FastAPI · SQLAlchemy 2.0 · Alembic · PostgreSQL · Redis · 
 
 | Version | Date | Scope | Alembic Head | Tests |
 |---------|------|--------|--------------|-------|
-| **v1.0-alpha** | 2026-07-13 | Sprints 0–5 (Foundation → Sales) | `0055_seed_sales_workflows` | 77 passed |
-| **v1.1-beta** | 2026-07-13 | Sprints 0–6 (+ Procurement P2P) | `0077_seed_proc_workflows` | 99 passed |
-| **v1.2-beta** | 2026-07-13 | Sprints 0–7 (+ Inventory & Warehouse) | `0094_seed_inv_workflows` | 113 passed |
-| **v1.3-beta** | 2026-07-14 | Sprints 0–8 (+ Manufacturing & Production) | `0114_seed_mfg_workflows` | 127 passed |
-| **v1.4-beta** | 2026-07-14 | Sprints 0–9 (+ Quality Management) | `0135_seed_qm_workflows` | 146 passed |
-| **v1.5-beta** | 2026-07-14 | Sprints 0–10 (+ CRM) | `0156_seed_crm_workflows` | 158 passed |
-| **v1.6-beta** | 2026-07-14 | Sprints 0–11 (+ HRMS) | `0178_seed_hr_workflows` | 169 passed |
+| **v1.0-alpha** | 2026-07-13 | Sprints 0-5 (Foundation → Sales) | `0055_seed_sales_workflows` | 77 passed |
+| **v1.1-beta** | 2026-07-13 | Sprints 0-6 (+ Procurement P2P) | `0077_seed_proc_workflows` | 99 passed |
+| **v1.2-beta** | 2026-07-13 | Sprints 0-7 (+ Inventory & Warehouse) | `0094_seed_inv_workflows` | 113 passed |
+| **v1.3-beta** | 2026-07-14 | Sprints 0-8 (+ Manufacturing & Production) | `0114_seed_mfg_workflows` | 127 passed |
+| **v1.4-beta** | 2026-07-14 | Sprints 0-9 (+ Quality Management) | `0135_seed_qm_workflows` | 146 passed |
+| **v1.5-beta** | 2026-07-14 | Sprints 0-10 (+ CRM) | `0156_seed_crm_workflows` | 158 passed |
+| **v1.6-beta** | 2026-07-14 | Sprints 0-11 (+ HRMS) | `0178_seed_hr_workflows` | 169 passed |
 
 ```text
 v1.5-beta ──(+ Sprint 11 HRMS)──► v1.6-beta ──► Sprint 12 Payroll (planned)

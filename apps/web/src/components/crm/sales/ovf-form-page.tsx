@@ -6,14 +6,16 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, ClipboardCheck, IndianRupee } from "lucide-react";
 
 import { CrmErrorBanner, CrmPage, CrmSection } from "@/components/crm/crm-ui";
-import { SyncedBanner } from "@/components/crm/sales/approval-banner";
+import { CrmSessionEmployeeField } from "@/components/crm/sales/crm-session-employee-field";
 import {
   OvfOrderLinesSection,
+  computeOvfMargins,
   customerRowsFromOvfLines,
   customerRowsFromQuoteLines,
+  mergeCustomerRowsWithPoAttachments,
+  mergeVendorRowsWithQuoteAttachments,
   persistOvfOrderLinesAfterCreate,
   persistOvfOrderLinesOnUpdate,
-  sumLineTotals,
   validateChargeAttachments,
   vendorRowsFromOvfLines,
   vendorRowsFromQuoteLines,
@@ -33,6 +35,14 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
+import { useAuthUser } from "@/hooks/use-auth-user";
+import { buildLeadDistributorDropdownOptions } from "@/lib/crm/lead-distributor-options";
+import {
+  LEAD_PRODUCT_TYPES,
+  normalizeLeadProductType,
+  subProductOptionsForType,
+} from "@/lib/crm/lead-product-options";
+import { resolveSessionEmployeeLabel } from "@/lib/crm/session-employee";
 import {
   addOvfLine,
   createAttachment,
@@ -44,8 +54,10 @@ import {
   getOpportunityBlueprint,
   getOvf,
   getQuote,
+  getSalesLead,
+  listAttachments,
   listContacts,
-  listEmployeeOptions,
+  listCrmMemberOptions,
   listOvfLines,
   listOvfs,
   listQuoteLines,
@@ -58,6 +70,7 @@ import {
 
 type OvfDraft = {
   po_number: string;
+  po_date: string;
   delivery_period: string;
   customer_name: string;
   quote_name: string;
@@ -78,26 +91,34 @@ type OvfDraft = {
   customer_payment_days: string;
   freight: string;
   additional_charges: string;
-  total_margin_amount: string;
-  total_margin_pct: string;
   finance_cost_pct: string;
   approval_status: string;
 };
 
-const SEGMENTS = ["Hardware", "Software", "Services", "Cloud", "Networking", "Security"];
-const SUB_SEGMENTS = ["Compute", "Storage", "Licensing", "Implementation", "Support", "Managed Services"];
-
 const NUMBER_NO_SPIN =
   "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
+async function distributorOptionsForOpportunity(opportunityRow: Opportunity): Promise<string[]> {
+  if (!opportunityRow.lead_id) return buildLeadDistributorDropdownOptions(null);
+  try {
+    const lead = await getSalesLead(opportunityRow.lead_id);
+    return buildLeadDistributorDropdownOptions(lead.distributor_name);
+  } catch {
+    return buildLeadDistributorDropdownOptions(null);
+  }
+}
+
 export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: string }) {
   const router = useRouter();
+  const { user } = useAuthUser();
   const isEdit = Boolean(ovfId);
   const [ovf, setOvf] = useState<Ovf | null>(null);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [opportunity, setOpportunity] = useState<Opportunity | null>(null);
+  const [vendorNameOptions, setVendorNameOptions] = useState<string[]>([]);
   const [form, setForm] = useState<OvfDraft>({
     po_number: "",
+    po_date: "",
     delivery_period: "",
     customer_name: "",
     quote_name: "",
@@ -118,8 +139,6 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
     customer_payment_days: "",
     freight: "",
     additional_charges: "",
-    total_margin_amount: "",
-    total_margin_pct: "",
     finance_cost_pct: "",
     approval_status: "not_required",
   });
@@ -130,10 +149,12 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
   const [mandateMessage, setMandateMessage] = useState("");
   const [customerRows, setCustomerRows] = useState<CustomerChargeRow[]>([]);
   const [vendorRows, setVendorRows] = useState<VendorChargeRow[]>([]);
+  const [marginInputsDirty, setMarginInputsDirty] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setMarginInputsDirty(false);
     try {
       if (isEdit && ovfId) {
         const ovfRow = await getOvf(ovfId);
@@ -146,18 +167,34 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
             409,
           );
         }
-        const [quoteRow, opportunityRow, ovfLines] = await Promise.all([
+        const [quoteRow, opportunityRow, ovfLines, quoteLines, attachments] = await Promise.all([
           getQuote(ovfRow.quote_id),
           getOpportunity(ovfRow.opportunity_id),
           listOvfLines(ovfId).catch(() => []),
+          listQuoteLines(ovfRow.quote_id).catch(() => []),
+          listAttachments("ovf", ovfId).catch(() => []),
         ]);
+        const poAttachments = attachments.filter((row) => row.category === "customer_po");
+        const quoteAttachments = attachments.filter((row) => row.category === "vendor_quote");
         setOvf(ovfRow);
         setQuote(quoteRow);
         setOpportunity(opportunityRow);
-        setCustomerRows(customerRowsFromOvfLines(ovfLines));
-        setVendorRows(vendorRowsFromOvfLines(ovfLines));
+        setVendorNameOptions(await distributorOptionsForOpportunity(opportunityRow));
+        setCustomerRows(
+          mergeCustomerRowsWithPoAttachments(
+            customerRowsFromOvfLines(ovfLines, quoteLines),
+            poAttachments,
+          ),
+        );
+        setVendorRows(
+          mergeVendorRowsWithQuoteAttachments(
+            vendorRowsFromOvfLines(ovfLines, quoteLines),
+            quoteAttachments,
+          ),
+        );
         setForm({
           po_number: ovfRow.po_number ?? "",
+          po_date: ovfRow.po_date ? String(ovfRow.po_date).slice(0, 10) : "",
           delivery_period: ovfRow.delivery_period ?? "",
           customer_name: ovfRow.customer_name ?? "",
           quote_name: ovfRow.quote_name ?? "",
@@ -178,8 +215,6 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           customer_payment_days: String(ovfRow.customer_payment_days ?? ""),
           freight: String(ovfRow.freight ?? ""),
           additional_charges: String(ovfRow.additional_charges ?? ""),
-          total_margin_amount: String(ovfRow.total_margin_amount ?? ""),
-          total_margin_pct: String(ovfRow.total_margin_pct ?? ""),
           finance_cost_pct: String(ovfRow.finance_cost_pct ?? ""),
           approval_status: ovfRow.approval_status || "not_required",
         });
@@ -192,7 +227,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
 
       const quoteRow = await getQuote(quoteId);
       const opportunityRow = await getOpportunity(quoteRow.opportunity_id);
-      const [companyRow, contactRows, employeeRows, blueprint, existingOvfs, quoteLines] =
+      const [companyRow, contactRows, memberRows, blueprint, existingOvfs, quoteLines] =
         await Promise.all([
           opportunityRow.company_account_id
             ? getCompany(opportunityRow.company_account_id).catch(() => null)
@@ -200,7 +235,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           opportunityRow.company_account_id
             ? listContacts(opportunityRow.company_account_id).catch(() => [])
             : Promise.resolve([]),
-          listEmployeeOptions().catch(() => []),
+          listCrmMemberOptions().catch(() => []),
           getOpportunityBlueprint(quoteRow.opportunity_id).catch(() => null),
           listOvfs({ opportunity_id: quoteRow.opportunity_id }).catch(() => []),
           listQuoteLines(quoteId).catch(() => []),
@@ -226,30 +261,32 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         contactRows[0] ??
         null;
       const ownerName =
-        employeeRows.find(
-          (employee) => employee.id === opportunityRow.owner_employee_id,
-        )?.label ?? "";
+        resolveSessionEmployeeLabel(memberRows, user) ||
+        quoteRow.owner_name?.trim() ||
+        memberRows.find((member) => member.id === opportunityRow.owner_employee_id)?.label ||
+        "";
       const contactName = selectedContact ? fullName(selectedContact) : "";
       const billingAddress = companyRow
         ? [
-            companyRow.billing_street,
-            companyRow.billing_city,
-            companyRow.billing_code,
-          ]
-            .filter(Boolean)
-            .join(", ")
+          companyRow.billing_street,
+          companyRow.billing_city,
+          companyRow.billing_code,
+        ]
+          .filter(Boolean)
+          .join(", ")
         : "";
       const shippingAddress = companyRow
         ? [
-            companyRow.shipping_street,
-            companyRow.shipping_city,
-            companyRow.shipping_code,
-          ]
-            .filter(Boolean)
-            .join(", ")
+          companyRow.shipping_street,
+          companyRow.shipping_city,
+          companyRow.shipping_code,
+        ]
+          .filter(Boolean)
+          .join(", ")
         : "";
       setQuote(quoteRow);
       setOpportunity(opportunityRow);
+      setVendorNameOptions(await distributorOptionsForOpportunity(opportunityRow));
       setCustomerRows(customerRowsFromQuoteLines(quoteLines));
       setVendorRows(vendorRowsFromQuoteLines(quoteLines));
       setForm((current) => ({
@@ -274,7 +311,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
     } finally {
       setLoading(false);
     }
-  }, [isEdit, ovfId, quoteId]);
+  }, [isEdit, ovfId, quoteId, user]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 0);
@@ -282,22 +319,39 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
   }, [load]);
 
   function setField<K extends keyof OvfDraft>(key: K, value: OvfDraft[K]) {
+    if (key === "freight" || key === "finance_cost_pct") {
+      setMarginInputsDirty(true);
+    }
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  const totalSaleValue = sumLineTotals(customerRows);
-  const totalPurchaseValue = sumLineTotals(vendorRows);
+  function onCustomerRowsChange(rows: CustomerChargeRow[]) {
+    setMarginInputsDirty(true);
+    setCustomerRows(rows);
+  }
+
+  function onVendorRowsChange(rows: VendorChargeRow[]) {
+    setMarginInputsDirty(true);
+    setVendorRows(rows);
+  }
+
+  const { totalMarginAmount, totalMarginPct } = computeOvfMargins({
+    customerRows,
+    vendorRows,
+    freight: form.freight,
+    financeCostPct: form.finance_cost_pct,
+  });
   const freightAmount = Number(form.freight) || 0;
   const financeCostPct = Number(form.finance_cost_pct) || 0;
-  const financeCostAmount = (totalPurchaseValue * financeCostPct) / 100;
-  const totalMarginAmount = totalSaleValue - totalPurchaseValue - freightAmount - financeCostAmount;
-  const totalMarginPct = totalSaleValue
-    ? (totalMarginAmount / totalSaleValue) * 100
-    : 0;
+  const marginAmountDisplay =
+    marginInputsDirty && Number.isFinite(totalMarginAmount) ? totalMarginAmount.toFixed(2) : "";
+  const marginPctDisplay =
+    marginInputsDirty && Number.isFinite(totalMarginPct) ? totalMarginPct.toFixed(2) : "";
 
   function ovfPayload() {
     return {
       po_number: form.po_number.trim(),
+      po_date: form.po_date || null,
       delivery_period: form.delivery_period || null,
       customer_name: form.customer_name.trim() || null,
       quote_name: form.quote_name.trim() || null,
@@ -376,7 +430,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         created.company_id ?? opportunity.company_account_id,
         customerRows,
         vendorRows,
-        { addOvfLine, createAttachment, fileToBase64 },
+        { listOvfLines, addOvfLine, updateOvfLine, createAttachment, fileToBase64 },
       );
       router.push(`/crm/ovf/${created.id}`);
     } catch (err) {
@@ -405,11 +459,6 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
       </Link>
       <PageHeader
         title={isEdit ? `Edit ${ovf?.ovf_no ?? "OVF"}` : "Create OVF Module"}
-        description={
-          isEdit
-            ? "Update OVF details, order lines, and commercial charges."
-            : "OVF details are prefilled from the accepted Quote, Opportunity, and Company."
-        }
         actions={
           <div className="flex items-center gap-2">
             <Link
@@ -424,7 +473,6 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           </div>
         }
       />
-      <SyncedBanner from="Company → Opportunity → Quote" />
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
       <CrmSection title="OVF Module Information" icon={ClipboardCheck}>
@@ -434,54 +482,91 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           <FinanceField label="Billing Address"><Input value={form.billing_address} onChange={(event) => setField("billing_address", event.target.value)} /></FinanceField>
           <FinanceField label="Quote No"><Input value={quote?.quote_no ?? "-"} disabled /></FinanceField>
           <FinanceField label="Billing State"><Input value={form.billing_state} onChange={(event) => setField("billing_state", event.target.value)} /></FinanceField>
-          <FinanceField label="OVF Module Owner"><Input value={form.owner_name} onChange={(event) => setField("owner_name", event.target.value)} /></FinanceField>
+          <CrmSessionEmployeeField label="OVF Module Owner" value={form.owner_name} />
           <FinanceField label="Billing Contact Person"><Input value={form.billing_contact_person} onChange={(event) => setField("billing_contact_person", event.target.value)} /></FinanceField>
           <FinanceField label="Shipping Address *"><Input value={form.shipping_address} onChange={(event) => setField("shipping_address", event.target.value)} /></FinanceField>
           <FinanceField label="Billing Country"><Input value={form.billing_country} onChange={(event) => setField("billing_country", event.target.value)} /></FinanceField>
           <FinanceField label="Shipping State"><Input value={form.shipping_state} onChange={(event) => setField("shipping_state", event.target.value)} /></FinanceField>
           <FinanceField label="PO Number *"><Input value={form.po_number} onChange={(event) => setField("po_number", event.target.value)} /></FinanceField>
+          <FinanceField label="Customer PO Date"><Input type="date" value={form.po_date} onChange={(event) => setField("po_date", event.target.value)} /></FinanceField>
           <FinanceField label="Shipping Contact Person"><Input value={form.shipping_contact_person} onChange={(event) => setField("shipping_contact_person", event.target.value)} /></FinanceField>
           <FinanceField label="Delivery Period *"><Input type="date" value={form.delivery_period} onChange={(event) => setField("delivery_period", event.target.value)} /></FinanceField>
           <FinanceField label="Shipping Country"><Input value={form.shipping_country} onChange={(event) => setField("shipping_country", event.target.value)} /></FinanceField>
-          <FinanceField label="Installation/Service Details"><FinanceTextarea value={form.installation_details} onChange={(event) => setField("installation_details", event.target.value)} /></FinanceField>
-          <FinanceField label="Account"><Input value={form.account_name} onChange={(event) => setField("account_name", event.target.value)} /></FinanceField>
-          <FinanceField label="Technology Segment">
-            <FinanceSelect value={form.technology_segment} onChange={(event) => setField("technology_segment", event.target.value)}>
-              <option value="">None</option>
-              {SEGMENTS.map((segment) => <option key={segment} value={segment}>{segment}</option>)}
-            </FinanceSelect>
-          </FinanceField>
-          <FinanceField label="Sub Technology Segment">
-            <FinanceSelect value={form.sub_technology_segment} onChange={(event) => setField("sub_technology_segment", event.target.value)}>
-              <option value="">None</option>
-              {SUB_SEGMENTS.map((segment) => <option key={segment} value={segment}>{segment}</option>)}
-            </FinanceSelect>
-          </FinanceField>
           <FinanceField label="OVF sent to SCM team">
             <Input value={ovf?.shared_to_scm ? "Yes" : "No"} disabled />
           </FinanceField>
+          <FinanceField label="Installation/Service Details"><FinanceTextarea value={form.installation_details} onChange={(event) => setField("installation_details", event.target.value)} /></FinanceField>
         </div>
       </CrmSection>
 
-      <OvfOrderLinesSection
-        customerRows={customerRows}
-        vendorRows={vendorRows}
-        onCustomerRowsChange={setCustomerRows}
-        onVendorRowsChange={setVendorRows}
-        disabled={saving}
-        onValidationError={setError}
-      />
+      <CrmSection title="Technology Segment & Sub Technology Segment" icon={ClipboardCheck}>
+        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+          <FinanceField label="Technology Segment">
+            <FinanceSelect
+              value={form.technology_segment}
+              onChange={(event) => {
+                const next = event.target.value;
+                const nextSubs = subProductOptionsForType(next);
+                setForm((current) => ({
+                  ...current,
+                  technology_segment: next,
+                  sub_technology_segment: nextSubs.includes(current.sub_technology_segment)
+                    ? current.sub_technology_segment
+                    : "",
+                }));
+              }}
+            >
+              <option value="">None</option>
+              {LEAD_PRODUCT_TYPES.map((segment) => (
+                <option key={segment} value={segment}>
+                  {segment}
+                </option>
+              ))}
+              {form.technology_segment &&
+              !normalizeLeadProductType(form.technology_segment) ? (
+                <option value={form.technology_segment}>{form.technology_segment}</option>
+              ) : null}
+            </FinanceSelect>
+          </FinanceField>
+          <FinanceField label="Sub Technology Segment">
+            <FinanceSelect
+              value={form.sub_technology_segment}
+              onChange={(event) => setField("sub_technology_segment", event.target.value)}
+              disabled={!normalizeLeadProductType(form.technology_segment)}
+            >
+              <option value="">
+                {normalizeLeadProductType(form.technology_segment)
+                  ? "None"
+                  : "Select technology segment first"}
+              </option>
+              {subProductOptionsForType(form.technology_segment).map((segment) => (
+                <option key={segment} value={segment}>
+                  {segment}
+                </option>
+              ))}
+              {form.sub_technology_segment &&
+              !subProductOptionsForType(form.technology_segment).includes(
+                form.sub_technology_segment,
+              ) ? (
+                <option value={form.sub_technology_segment}>
+                  {form.sub_technology_segment}
+                </option>
+              ) : null}
+            </FinanceSelect>
+          </FinanceField>
+        </div>
+      </CrmSection>
 
       <CrmSection title="Charges and Details" icon={IndianRupee}>
         <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
           <FinanceField label="Total Margin in Amount">
             <Input
-              type="number"
-              step="0.01"
+              type="text"
+              readOnly
               className={`${NUMBER_NO_SPIN} cursor-default bg-muted/50`}
-              value={Number.isFinite(totalMarginAmount) ? totalMarginAmount.toFixed(2) : "0.00"}
-              disabled
-              title="Customer − Vendor − Freight − Finance Cost"
+              value={marginAmountDisplay}
+              placeholder="-"
+              title="Customer - Vendor - Freight - Finance Cost"
             />
           </FinanceField>
           <FinanceField label="Vendor Payments Terms">
@@ -495,11 +580,11 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           </FinanceField>
           <FinanceField label="Total Margin in Percentage">
             <Input
-              type="number"
-              step="0.01"
+              type="text"
+              readOnly
               className={`${NUMBER_NO_SPIN} cursor-default bg-muted/50`}
-              value={Number.isFinite(totalMarginPct) ? totalMarginPct.toFixed(2) : "0.00"}
-              disabled
+              value={marginPctDisplay}
+              placeholder="-"
               title="Total Margin Amount ÷ Customer Total × 100"
             />
           </FinanceField>
@@ -564,6 +649,16 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           </FinanceField>
         </div>
       </CrmSection>
+
+      <OvfOrderLinesSection
+        customerRows={customerRows}
+        vendorRows={vendorRows}
+        onCustomerRowsChange={onCustomerRowsChange}
+        onVendorRowsChange={onVendorRowsChange}
+        vendorNameOptions={vendorNameOptions}
+        disabled={saving}
+      />
+
       <RequiredFieldsDialog
         open={mandateOpen}
         message={mandateMessage}

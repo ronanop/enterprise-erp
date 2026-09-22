@@ -2,163 +2,207 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowUpRight,
-  ClipboardList,
-  PackageCheck,
-  Receipt,
-  RefreshCw,
-  ShoppingCart,
-} from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
-import { FinanceKpiCard } from "@/components/finance/finance-kpi-card";
-import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
-import { PageHeader } from "@/components/layout/page-header";
+import { ProcurementDashboardSummary } from "@/components/procurement/procurement-dashboard-summary";
 import { ProcurementPipelineFunnel } from "@/components/procurement/procurement-pipeline-funnel";
-import { Badge } from "@/components/ui/badge";
 import {
-  procurementQuickLinks,
-  procurementWorkspaceGroups,
-  resolveProcurementGroupResources,
-} from "@/config/procurement";
-import { isAuthenticated } from "@/lib/auth";
+  ProcurementPage,
+  ProcurementWarnBanner,
+} from "@/components/procurement/procurement-ui";
+import { Button } from "@/components/ui/button";
+import { useClientAuth } from "@/hooks/use-client-auth";
+import { cn } from "@/lib/utils";
 import {
-  asNumber,
   asStatus,
-  averageScore,
-  countOpenDocs,
-  formatInr,
+  invalidateProcurementListCache,
+  listProcurementInventory,
+  listVendorOptions,
   loadProcurementOverview,
-  sumField,
+  peekProcurementInventoryFromCache,
+  peekProcurementOverviewFromCache,
+  peekPurchaseOrdersFromCache,
   type ProcurementOverview,
   type ProcurementRow,
+  type ProcOrder,
+  type ScmQueueItem,
 } from "@/services/procurement-service";
+import { countPoBuckets, emptyPoBucketCounts } from "@/utils/procurement-po-buckets";
+import {
+  buildProcurementInventoryStockSummary,
+  isInventoryLedgerRow,
+  type ProcurementInventoryStockSummary,
+} from "@/utils/procurement-inventory-report";
+import {
+  buildProcurementPipelineMetrics,
+} from "@/utils/procurement-pipeline-metrics";
+import {
+  isScmHoldOvfRow,
+  isScmOpenOvfRow,
+} from "@/utils/scm-queue-ovf-status";
 
-function recentByDate(rows: ProcurementRow[], limit = 6): ProcurementRow[] {
-  return [...rows]
-    .sort((a, b) => String(b.document_date ?? "").localeCompare(String(a.document_date ?? "")))
-    .slice(0, limit);
+/** Same rule as GrnsListPage - issued POs only (not draft/submitted/cancelled). */
+function isIssuedVendorPo(row: ProcurementRow): boolean {
+  const status = asStatus(row.status);
+  return status !== "draft" && status !== "submitted" && status !== "cancelled";
 }
 
-function scoreTone(score: number): "success" | "warning" | "danger" | "default" {
-  if (score <= 0) return "default";
-  if (score >= 80) return "success";
-  if (score >= 60) return "warning";
-  return "danger";
+function inventorySummaryFromCache(
+  vendorLabels: Record<string, string> = {},
+): ProcurementInventoryStockSummary | null {
+  const cached = peekProcurementInventoryFromCache();
+  if (!cached) return null;
+  return buildProcurementInventoryStockSummary(cached.filter(isInventoryLedgerRow), {
+    vendorLabels,
+  });
 }
 
 export function ProcurementDashboard() {
-  const [data, setData] = useState<ProcurementOverview | null>(null);
-  const [loading, setLoading] = useState(true);
-  const authenticated = typeof window !== "undefined" ? isAuthenticated() : false;
+  const cachedOnMount = peekProcurementOverviewFromCache();
+  const [vendorLabels, setVendorLabels] = useState<Record<string, string>>({});
+  const [inventorySummary, setInventorySummary] = useState<ProcurementInventoryStockSummary | null>(
+    () => inventorySummaryFromCache(),
+  );
+  const [data, setData] = useState<ProcurementOverview | null>(() => cachedOnMount);
+  const [loading, setLoading] = useState(() => cachedOnMount === null);
+  const [refreshing, setRefreshing] = useState(false);
+  const authenticated = useClientAuth();
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const rebuildInventorySummary = useCallback(
+    (
+      inventory: Awaited<ReturnType<typeof listProcurementInventory>>,
+      labels: Record<string, string>,
+    ) => {
+      setInventorySummary(
+        buildProcurementInventoryStockSummary(inventory.filter(isInventoryLedgerRow), {
+          vendorLabels: labels,
+        }),
+      );
+    },
+    [],
+  );
+
+  const load = useCallback(async (force = false) => {
+    if (force) invalidateProcurementListCache();
+    const hadInstant = !force && peekProcurementOverviewFromCache() !== null;
+    if (!hadInstant) {
+      setLoading(true);
+    } else {
+      setRefreshing(true);
+    }
     try {
-      setData(await loadProcurementOverview());
+      const [overview, inventory, vendors] = await Promise.all([
+        loadProcurementOverview(),
+        listProcurementInventory().catch(() => []),
+        listVendorOptions().catch(() => []),
+      ]);
+      const labels: Record<string, string> = {};
+      for (const vendor of vendors) {
+        if (vendor.id) labels[vendor.id] = vendor.label || vendor.id;
+      }
+      setVendorLabels(labels);
+      setData(overview);
+      rebuildInventorySummary(inventory, labels);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }, []);
+  }, [rebuildInventorySummary]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const kpis = useMemo(() => {
-    if (!data) {
-      return {
-        openPrs: 0,
-        openPos: 0,
-        apOutstanding: 0,
-        avgScore: 0,
-        prValue: 0,
-        poValue: 0,
-        activeContracts: 0,
-      };
-    }
-    return {
-      openPrs: countOpenDocs(data.requisitions, [
-        "approved",
-        "rejected",
-        "converted",
-        "converted_to_rfq",
-        "cancelled",
-        "closed",
-      ]),
-      openPos: countOpenDocs(data.orders, ["received", "closed", "cancelled", "completed"]),
-      apOutstanding: sumField(data.invoices, "balance_due"),
-      avgScore: averageScore(data.performance),
-      prValue: sumField(data.requisitions, "total_amount"),
-      poValue: sumField(data.orders, "total_amount"),
-      activeContracts: countOpenDocs(data.contracts, ["expired", "cancelled", "terminated"]),
-    };
-  }, [data]);
+  useEffect(() => {
+    if (!authenticated) return;
+    const id = window.setInterval(() => {
+      void loadProcurementOverview().then(setData).catch(() => undefined);
+      void Promise.all([
+        listProcurementInventory().catch(() => []),
+        listVendorOptions().catch(() => []),
+      ]).then(([inventory, vendors]) => {
+        setVendorLabels((prev) => {
+          const labels: Record<string, string> = { ...prev };
+          for (const vendor of vendors) {
+            if (vendor.id) labels[vendor.id] = vendor.label || vendor.id;
+          }
+          rebuildInventorySummary(inventory, labels);
+          return labels;
+        });
+      });
+    }, 45_000);
+    return () => window.clearInterval(id);
+  }, [authenticated, rebuildInventorySummary]);
 
-  const pipelineCounts = useMemo(
-    () => ({
-      requisitions: data?.requisitions.length ?? 0,
-      rfqs: data?.rfqs.length ?? 0,
-      orders: data?.orders.length ?? 0,
-      grns: data?.grns.length ?? 0,
-      invoices: data?.invoices.length ?? 0,
-    }),
+  const poBucketCounts = useMemo(() => {
+    const fromOrdersApi = peekPurchaseOrdersFromCache();
+    const source = fromOrdersApi ?? (data?.orders as unknown as ProcOrder[] | undefined);
+    if (!source || source.length === 0) return emptyPoBucketCounts();
+    return countPoBuckets(source);
+  }, [data?.orders]);
+
+  const scmQueueItems = useMemo((): ScmQueueItem[] => {
+    const raw = data?.scmQueue ?? [];
+    return raw as ScmQueueItem[];
+  }, [data?.scmQueue]);
+
+  const openOvfCount = useMemo(
+    () => scmQueueItems.filter((row) => isScmOpenOvfRow(row)).length,
+    [scmQueueItems],
+  );
+
+  const holdOvfCount = useMemo(
+    () => scmQueueItems.filter((row) => isScmHoldOvfRow(row)).length,
+    [scmQueueItems],
+  );
+
+  const inventoryLoading = loading && inventorySummary === null;
+
+  const pipelineMetrics = useMemo(
+    () =>
+      buildProcurementPipelineMetrics({
+        scmQueueCount: data?.scmQueue.length ?? 0,
+        vendorPos: (data?.vendorPos ?? []).filter(isIssuedVendorPo),
+      }),
     [data],
   );
 
-  const recentOrders = useMemo(() => recentByDate(data?.orders ?? []), [data]);
-  const recentRequisitions = useMemo(() => recentByDate(data?.requisitions ?? []), [data]);
-  const topVendors = useMemo(() => {
-    const rows = data?.performance ?? [];
-    return [...rows]
-      .sort((a, b) => asNumber(b.overall_score) - asNumber(a.overall_score))
-      .slice(0, 5);
-  }, [data]);
-
   const authBlocked =
-    Boolean(data?.statusCodes.includes(401)) ||
+    Boolean(data?.statusCodes?.includes(401)) ||
     (!authenticated && Boolean(data?.errors.length));
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        title="Procurement"
-        description="Procure-to-pay workspace — requisitions, RFQs, purchase orders, GRNs, vendor invoices, contracts, and supplier performance."
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => void load()}
-              disabled={loading}
-              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted disabled:opacity-60"
-            >
-              <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </button>
-            <Link
-              href="/procurement/orders"
-              className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-opacity duration-200 hover:opacity-90"
-            >
-              <ShoppingCart className="size-3.5" />
-              Orders
-            </Link>
-            <Link
-              href="/procurement/invoices"
-              className="inline-flex h-8 cursor-pointer items-center rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-sm transition-colors duration-200 hover:bg-muted"
-            >
-              Invoices
-            </Link>
-          </div>
-        }
-      />
+    <ProcurementPage className="space-y-5">
+      <div className="flex flex-col gap-4 border-b border-border/50 pb-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-[1.75rem] font-semibold tracking-tight text-foreground">
+            Overview Dashboard
+          </h1>
+        </div>
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 sm:w-auto">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-10 cursor-pointer rounded-xl"
+            onClick={() => void load(true)}
+            disabled={loading && !data}
+          >
+            <RefreshCw
+              className={cn("size-3.5", (loading || refreshing) && "animate-spin")}
+            />
+            Refresh
+          </Button>
+        </div>
+      </div>
 
       {authBlocked ? (
-        <div className="rounded-xl border border-dashed border-amber-300/80 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <ProcurementWarnBanner>
           Sign in to load live procurement data.{" "}
           <Link href="/login" className="cursor-pointer font-medium underline underline-offset-2">
             Go to login
           </Link>
-        </div>
+        </ProcurementWarnBanner>
       ) : null}
 
       {data?.partial && !authBlocked ? (
@@ -167,263 +211,20 @@ export function ProcurementDashboard() {
         </div>
       ) : null}
 
-      <div className="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
-        <FinanceKpiCard
-          label="Open requisitions"
-          value={loading ? "—" : String(kpis.openPrs)}
-          hint={`${formatInr(kpis.prValue)} requested value`}
-          icon={ClipboardList}
-          tone={kpis.openPrs > 0 ? "warning" : "success"}
-        />
-        <FinanceKpiCard
-          label="Open purchase orders"
-          value={loading ? "—" : String(kpis.openPos)}
-          hint={`${formatInr(kpis.poValue)} committed spend`}
-          icon={ShoppingCart}
-          tone="default"
-        />
-        <FinanceKpiCard
-          label="AP outstanding"
-          value={loading ? "—" : formatInr(kpis.apOutstanding)}
-          hint={`${data?.invoices.length ?? 0} vendor invoices`}
-          icon={Receipt}
-          tone={kpis.apOutstanding > 0 ? "warning" : "success"}
-        />
-        <FinanceKpiCard
-          label="Avg vendor score"
-          value={loading ? "—" : kpis.avgScore > 0 ? kpis.avgScore.toFixed(1) : "—"}
-          hint={`${kpis.activeContracts} active contracts · ${data?.performance.length ?? 0} scored`}
-          icon={PackageCheck}
-          tone={scoreTone(kpis.avgScore)}
-        />
-      </div>
+      <ProcurementDashboardSummary
+        loading={loading || inventoryLoading}
+        openOvfCount={openOvfCount}
+        holdOvfCount={holdOvfCount}
+        openPoCount={poBucketCounts.open}
+        poBucketCounts={poBucketCounts}
+        inventorySummary={inventorySummary}
+      />
 
-      <ProcurementPipelineFunnel counts={pipelineCounts} loading={loading} />
-
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        {procurementQuickLinks.map((link) => {
-          const Icon = link.icon;
-          return (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="group flex cursor-pointer items-center gap-3 rounded-xl border border-border/80 bg-card px-3.5 py-3 shadow-sm transition-[border-color,box-shadow] duration-200 hover:border-primary/25 hover:shadow-md"
-            >
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-                <Icon className="size-4" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1 text-sm font-medium tracking-tight">
-                  {link.title}
-                  <ArrowUpRight className="size-3 text-muted-foreground opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
-                </span>
-                <span className="block text-[11px] text-muted-foreground">{link.description}</span>
-              </span>
-            </Link>
-          );
-        })}
-      </div>
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-medium tracking-tight">Workspace</h2>
-          <Badge variant="secondary">{procurementWorkspaceGroups.length} areas</Badge>
-        </div>
-        <div className="grid gap-3 lg:grid-cols-3">
-          {procurementWorkspaceGroups.map((group) => {
-            const Icon = group.icon;
-            const resources = resolveProcurementGroupResources(group);
-            return (
-              <div
-                key={group.key}
-                className="rounded-xl border border-border/80 bg-card p-4 shadow-sm"
-              >
-                <div className="mb-3 flex items-start gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
-                    <Icon className="size-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-medium tracking-tight">{group.title}</h3>
-                    <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                      {group.description}
-                    </p>
-                  </div>
-                </div>
-                <ul className="space-y-1">
-                  {resources.map((resource) => (
-                    <li key={resource.key}>
-                      <Link
-                        href={`/procurement/${resource.key}`}
-                        className="flex cursor-pointer items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors duration-200 hover:bg-accent/50"
-                      >
-                        <span className="font-medium text-foreground">{resource.title}</span>
-                        <span className="truncate text-[10px] text-muted-foreground">
-                          {resource.description}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      <div className="grid gap-3 xl:grid-cols-[1.2fr_1.2fr_0.9fr]">
-        <DocTable
-          title="Recent purchase orders"
-          subtitle="Latest committed spend"
-          href="/procurement/orders"
-          loading={loading}
-          rows={recentOrders}
-          empty="No purchase orders yet."
-        />
-        <DocTable
-          title="Recent requisitions"
-          subtitle="Latest purchase needs"
-          href="/procurement/requisitions"
-          loading={loading}
-          rows={recentRequisitions}
-          empty="No requisitions yet."
-        />
-        <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-          <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-            <div>
-              <h2 className="text-sm font-medium tracking-tight">Vendor performance</h2>
-              <p className="text-[11px] text-muted-foreground">Top overall scores</p>
-            </div>
-            <Link
-              href="/procurement/performance"
-              className="cursor-pointer text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
-            >
-              View all
-            </Link>
-          </div>
-          <ul className="divide-y divide-border/60">
-            {loading ? (
-              <li className="px-4 py-8 text-center text-sm text-muted-foreground">Loading…</li>
-            ) : topVendors.length === 0 ? (
-              <li className="px-4 py-8 text-center text-sm text-muted-foreground">
-                No performance scores.
-              </li>
-            ) : (
-              topVendors.map((row, idx) => {
-                const score = asNumber(row.overall_score);
-                const pct = Math.min(100, Math.round(score));
-                return (
-                  <li
-                    key={String(row.id ?? idx)}
-                    className="px-4 py-2.5 transition-colors duration-150 hover:bg-accent/30"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-sm font-medium">
-                        {String(row.period_code ?? `Vendor ${idx + 1}`)}
-                      </p>
-                      <span className="font-mono text-xs font-medium tabular-nums">
-                        {score.toFixed(1)}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      OTD {asNumber(row.on_time_delivery_pct).toFixed(0)}% · Quality{" "}
-                      {asNumber(row.quality_rating).toFixed(1)}
-                    </p>
-                    <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
-                      <div
-                        className={`h-full rounded-full transition-[width] duration-300 ${
-                          pct >= 80 ? "bg-emerald-600" : pct >= 60 ? "bg-amber-500" : "bg-red-600"
-                        }`}
-                        style={{ width: `${Math.max(4, pct)}%` }}
-                        role="presentation"
-                      />
-                    </div>
-                  </li>
-                );
-              })
-            )}
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DocTable({
-  title,
-  subtitle,
-  href,
-  loading,
-  rows,
-  empty,
-}: {
-  title: string;
-  subtitle: string;
-  href: string;
-  loading: boolean;
-  rows: ProcurementRow[];
-  empty: string;
-}) {
-  return (
-    <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
-      <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-3">
-        <div>
-          <h2 className="text-sm font-medium tracking-tight">{title}</h2>
-          <p className="text-[11px] text-muted-foreground">{subtitle}</p>
-        </div>
-        <Link
-          href={href}
-          className="cursor-pointer text-xs font-medium text-primary transition-opacity duration-200 hover:opacity-80"
-        >
-          View all
-        </Link>
-      </div>
-      <div className="erp-scroll overflow-x-auto">
-        <table className="w-full min-w-[420px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-border/70 bg-muted/40 text-[11px] tracking-wide text-muted-foreground uppercase">
-              <th className="px-4 py-2.5 font-medium">Document</th>
-              <th className="px-4 py-2.5 font-medium">Date</th>
-              <th className="px-4 py-2.5 font-medium">Amount</th>
-              <th className="px-4 py-2.5 font-medium">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
-                  Loading…
-                </td>
-              </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
-                  {empty}
-                </td>
-              </tr>
-            ) : (
-              rows.map((row, idx) => (
-                <tr
-                  key={String(row.id ?? idx)}
-                  className="border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
-                >
-                  <td className="max-w-[180px] truncate px-4 py-2.5 font-medium text-foreground">
-                    {String(row.document_number ?? "—")}
-                  </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
-                    {String(row.document_date ?? "—")}
-                  </td>
-                  <td className="px-4 py-2.5 font-mono text-xs tabular-nums text-foreground">
-                    {formatInr(asNumber(row.total_amount))}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <FinanceStatusBadge status={asStatus(row.status) || String(row.status ?? "")} />
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+      <ProcurementPipelineFunnel
+        metrics={pipelineMetrics}
+        vendorPos={(data?.vendorPos ?? []).filter(isIssuedVendorPo)}
+        loading={loading}
+      />
+    </ProcurementPage>
   );
 }

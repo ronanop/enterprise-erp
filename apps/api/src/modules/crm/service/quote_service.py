@@ -8,6 +8,8 @@ Product rules enforced here:
      lock the record.
 """
 
+from __future__ import annotations
+
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -23,10 +25,13 @@ from modules.crm.repository.lead_repository import LeadRepository
 from modules.crm.repository.opportunity_repository import OpportunityRepository
 from modules.crm.repository.quote_repository import QuoteLineRepository, QuoteRepository
 from modules.crm.service.blueprint_service import log_state_history
+from modules.crm.service.crm_module_admin import CrmModuleAdminService
+from modules.crm.service.crm_record_visibility import CrmRecordVisibility
 from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.crm.service.engines import margin_engine, sales_blueprint_engine
 from modules.foundation.domain.value_objects import TenantContext
+from modules.foundation.service.audit_service import AuditService
 from modules.master_data.service.employee_service import EmployeeService
 
 
@@ -52,19 +57,46 @@ class QuoteService:
         self._employees = EmployeeService(db)
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
+        self._crm_admin = CrmModuleAdminService(db)
+        self._visibility = CrmRecordVisibility(db)
+        self._audit = AuditService(db)
 
     # -- reads -----------------------------------------------------------
     def list(self, ctx: TenantContext, company_id: UUID | None = None, opportunity_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_quotes(ctx, cid, opportunity_id=opportunity_id)
+        if opportunity_id is not None:
+            opp = self._opportunities.get(ctx, opportunity_id)
+            if opp is None:
+                raise NotFoundException("Opportunity not found")
+            self._visibility.ensure_opportunity_access(ctx, opp)
+            return self._repo.list_quotes(ctx, cid, opportunity_id=opportunity_id)
+
+        opp_ids, created_by, approval_ids = self._visibility.filter_quote_scope(ctx, cid)
+        if opp_ids is None:
+            return self._repo.list_quotes(ctx, cid)
+
+        by_id: dict = {}
+        if opp_ids:
+            for row in self._repo.list_quotes(ctx, cid, opportunity_ids=opp_ids):
+                by_id[row.id] = row
+        if created_by is not None:
+            for row in self._repo.list_quotes(ctx, cid, created_by=created_by):
+                by_id[row.id] = row
+        for qid in approval_ids:
+            if qid in by_id:
+                continue
+            row = self._repo.get(ctx, qid)
+            if row is not None and row.company_id == cid:
+                by_id[row.id] = row
+        return sorted(by_id.values(), key=lambda r: r.created_at or r.id, reverse=True)
 
     def get(self, ctx: TenantContext, quote_id: UUID) -> CrmQuote:
         row = self._repo.get(ctx, quote_id)
         if row is None:
             raise NotFoundException("Quote not found")
+        self._visibility.ensure_quote_access(ctx, row)
         self._ensure_display_snapshot(ctx, row)
         return row
-
     def list_lines(self, ctx: TenantContext, quote_id: UUID):
         self.get(ctx, quote_id)
         return self._lines.list_for_quote(ctx, quote_id)
@@ -78,6 +110,21 @@ class QuoteService:
         if "freight" in fields:
             row = self._recompute(ctx, quote_id)
         return row
+
+    def delete(self, ctx: TenantContext, quote_id: UUID) -> None:
+        self._crm_admin.ensure_admin(ctx)
+        quote = self.get(ctx, quote_id)
+        if quote.locked:
+            raise ConflictException("Quote is locked pending approval")
+        if not self._repo.soft_delete(ctx, quote_id):
+            raise NotFoundException("Quote not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="crm_quote",
+            entity_id=quote_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
 
     def _get_opportunity(self, ctx: TenantContext, opportunity_id: UUID) -> CrmOpportunity:
         opp = self._opportunities.get(ctx, opportunity_id)
@@ -189,15 +236,53 @@ class QuoteService:
                 lead.entity_contact if lead is not None else None,
                 account.phone if account is not None else None,
             ),
+            "amc_warranty": _first(current.get("amc_warranty"), "none"),
+            "billing_street": _first(
+                current.get("billing_street"),
+                lead.street if lead is not None else None,
+                account.billing_street if account is not None else None,
+            ),
+            "billing_city": _first(
+                current.get("billing_city"),
+                lead.city if lead is not None else None,
+                account.billing_city if account is not None else None,
+            ),
+            "billing_state": _first(
+                current.get("billing_state"),
+                lead.state if lead is not None else None,
+                account.billing_state if account is not None else None,
+            ),
+            "billing_zip": _first(
+                current.get("billing_zip"),
+                lead.zip if lead is not None else None,
+                account.billing_code if account is not None else None,
+            ),
             "billing_country": _first(
                 current.get("billing_country"),
-                account.billing_country if account is not None else None,
                 lead.country if lead is not None else None,
+                account.billing_country if account is not None else None,
+            ),
+            "shipping_street": _first(
+                current.get("shipping_street"),
+                account.shipping_street if account is not None else None,
+            ),
+            "shipping_city": _first(
+                current.get("shipping_city"),
+                account.shipping_city if account is not None else None,
+            ),
+            "shipping_state": _first(
+                current.get("shipping_state"),
+                account.shipping_state if account is not None else None,
+            ),
+            "shipping_zip": _first(
+                current.get("shipping_zip"),
+                account.shipping_code if account is not None else None,
             ),
             "shipping_country": _first(
                 current.get("shipping_country"),
                 account.shipping_country if account is not None else None,
                 account.billing_country if account is not None else None,
+                lead.country if lead is not None else None,
             ),
             "description": _first(
                 current.get("description"),
@@ -224,7 +309,16 @@ class QuoteService:
             "entity_address",
             "entity_gst",
             "entity_contact",
+            "amc_warranty",
+            "billing_street",
+            "billing_city",
+            "billing_state",
+            "billing_zip",
             "billing_country",
+            "shipping_street",
+            "shipping_city",
+            "shipping_state",
+            "shipping_zip",
             "shipping_country",
             "description",
         )
@@ -384,16 +478,27 @@ class QuoteService:
         }
 
     # -- blueprint / approval workflow ---------------------------------
-    def send_for_approval(self, ctx: TenantContext, quote_id: UUID, *, team_role: str = "management", remarks: str | None = None) -> CrmQuote:
+    def send_for_approval(
+        self,
+        ctx: TenantContext,
+        quote_id: UUID,
+        *,
+        team_role: str = "management",
+        assigned_user_id: UUID | None = None,
+        assigned_user_ids: list[UUID] | None = None,
+        remarks: str | None = None,
+    ) -> CrmQuote:
         quote = self.get(ctx, quote_id)
         sales_blueprint_engine.assert_not_locked(quote)
         next_state = sales_blueprint_engine.transition("quote", quote.quote_stage, "send_for_approval")
 
         from modules.crm.service.approval_task_service import ApprovalTaskService
 
-        ApprovalTaskService(self._db).create_task(
+        ApprovalTaskService(self._db).route_approval(
             ctx,
-            title=f"Approve Quote {quote.quote_no} — margin review",
+            assigned_user_id=assigned_user_id,
+            assigned_user_ids=assigned_user_ids,
+            title=f"Approve Quote {quote.quote_no} - margin review",
             entity_type="quote",
             entity_id=quote.id,
             team_role=team_role,
@@ -416,7 +521,7 @@ class QuoteService:
             if summary["requires_management_approval"]:
                 raise ConflictException(
                     f"Margin {summary['avg_margin_pct']}% is at/below the required "
-                    f"{summary['required_threshold_pct']}% threshold — send for Management "
+                    f"{summary['required_threshold_pct']}% threshold - send for Management "
                     "approval instead of approving directly."
                 )
         next_state = sales_blueprint_engine.transition("quote", quote.quote_stage, "approve_internally")
@@ -438,6 +543,14 @@ class QuoteService:
                     "Reject is only available for quotes pending Management approval via My Jobs"
                 )
             next_state = sales_blueprint_engine.transition("quote", quote.quote_stage, "reject_internally")
+            from modules.crm.service.attachment_service import AttachmentService
+
+            AttachmentService(self._db).remove_entity_attachments_by_category(
+                ctx,
+                "quote",
+                quote_id,
+                "vendor_quote",
+            )
             row = self._repo.update(ctx, quote_id, quote_stage=next_state, approval_status="rejected", locked=False)
             self._log(ctx, quote, quote.quote_stage, next_state, "reject_internally", payload.get("remark"))
             return row

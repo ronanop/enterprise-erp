@@ -40,6 +40,16 @@ def list_companies(
     return APIResponse(message="OK", data=paginate(rows, pagination))
 
 
+@companies_router.get("/next-account-number", response_model=APIResponse[dict[str, str]])
+def next_company_account_number(
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.company:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    number = CompanyService(db).peek_next_account_number(ctx, company_id)
+    return APIResponse(message="OK", data={"account_number": number})
+
+
 @companies_router.post("", response_model=APIResponse[CompanyResponse])
 def create_company(
     body: CompanyCreate,
@@ -69,6 +79,16 @@ def update_company(
         message="OK",
         data=CompanyService(db).update(ctx, company_account_id, **extract_update_fields(body)),
     )
+
+
+@companies_router.delete("/{company_account_id}", response_model=APIResponse[dict[str, str]])
+def delete_company(
+    company_account_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.company:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    CompanyService(db).delete(ctx, company_account_id)
+    return APIResponse(message="OK", data={"id": str(company_account_id)})
 
 
 @companies_router.post("/{company_account_id}/leads", response_model=APIResponse[SalesLeadResponse])

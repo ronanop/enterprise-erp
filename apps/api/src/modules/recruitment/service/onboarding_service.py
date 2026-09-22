@@ -1,4 +1,4 @@
-"""Onboarding service — employee conversion via adapters only."""
+"""Onboarding service - employee conversion via adapters only."""
 
 from uuid import UUID
 
@@ -22,6 +22,7 @@ from modules.recruitment.service.recruitment_scope_validator import RecruitmentS
 
 class OnboardingService:
     def __init__(self, db: Session) -> None:
+        self._db = db
         self._repo = OnboardingRepository(db)
         self._candidates = CandidateRepository(db)
         self._offers = OfferRepository(db)
@@ -66,8 +67,17 @@ class OnboardingService:
         self._engine.approve(row)
         return self._repo.update(ctx, row_id, status=row.status)
 
-    def complete(self, ctx: TenantContext, row_id: UUID, *, designation: str):
-        """Critical hire completion — Master Data + HR adapters only."""
+    def complete(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        *,
+        designation: str,
+        management_group_id: UUID | None = None,
+    ):
+        """Create employee in onboarding status - Emp ID / Active / payroll wait for activation."""
+        from uuid import uuid4
+
         row = self.get(ctx, row_id)
         if row.status != OnboardingStatus.IN_PROGRESS.value:
             raise InvalidOnboardingState("Only in-progress onboarding can complete")
@@ -76,6 +86,12 @@ class OnboardingService:
         offer = self._offers.get(ctx, row.offer_id)
         if candidate is None or offer is None:
             raise NotFoundException("Candidate or offer not found for onboarding")
+
+        self._assert_mandatory_documents(ctx, row)
+        self._assert_mandatory_tasks(ctx, row)
+
+        # Temporary code until HR assigns permanent Emp ID at activation
+        temp_code = f"ONB-{str(uuid4())[:8].upper()}"
 
         employee = self._master.create_employee(
             ctx,
@@ -88,6 +104,8 @@ class OnboardingService:
             designation=designation,
             date_of_joining=offer.joining_date,
             company_id=row.company_id,
+            employee_code=temp_code,
+            status="onboarding",
         )
 
         row.employee_id = employee.id
@@ -100,7 +118,13 @@ class OnboardingService:
             company_id=row.company_id,
             employment_type=offer.employment_type,
             date_of_joining=offer.joining_date,
+            status="onboarding",
+            lifecycle_source="recruitment_onboarding",
+            probation_start_date=offer.joining_date,
+            payroll_eligible=False,
+            management_group_id=management_group_id,
         )
+        # Stay in onboarding - activation assigns Emp ID, shift, payroll_eligible, then Active
         row.hr_employment_request_id = employment.id
         row.payroll_handoff_status = PayrollHandoffStatus.PENDING.value
 
@@ -123,3 +147,47 @@ class OnboardingService:
             performed_by=ctx.user_id,
         )
         return updated
+
+    def _assert_mandatory_documents(self, ctx: TenantContext, row) -> None:
+        """Block hire without KYC docs: identity, education, photo."""
+        from modules.recruitment.repository.candidate_document_repository import (
+            CandidateDocumentRepository,
+        )
+
+        docs = CandidateDocumentRepository(self._db).list_rows(ctx, row.company_id)
+        cand_docs = [d for d in docs if d.candidate_id == row.candidate_id and not d.is_deleted]
+        required = {"identity", "education", "photo"}
+        present = {
+            d.document_type
+            for d in cand_docs
+            if d.status in {"uploaded", "verified"} or d.verified_flag
+        }
+        missing = sorted(required - present)
+        if missing:
+            raise InvalidOnboardingState(
+                "Mandatory documents missing before employee creation: "
+                + ", ".join(missing)
+                + " (identity=Aadhaar/PAN; photo; education required)"
+            )
+
+    def _assert_mandatory_tasks(self, ctx: TenantContext, row) -> None:
+        from modules.recruitment.repository.onboarding_task_repository import (
+            OnboardingTaskRepository,
+        )
+
+        try:
+            tasks = OnboardingTaskRepository(self._db).list_rows(ctx, row.company_id)
+        except Exception:
+            return
+        open_mandatory = [
+            t
+            for t in tasks
+            if t.onboarding_id == row.id
+            and t.is_mandatory
+            and t.status not in {"completed", "waived", "cancelled"}
+        ]
+        if open_mandatory:
+            codes = ", ".join(t.task_code for t in open_mandatory[:8])
+            raise InvalidOnboardingState(
+                f"Mandatory onboarding tasks incomplete: {codes}"
+            )

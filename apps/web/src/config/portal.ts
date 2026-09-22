@@ -1,5 +1,5 @@
 /**
- * Portal workspace config — aligned with ERD_23 Customer Portal
+ * Portal workspace config - aligned with ERD_23 Customer Portal
  * and apps/api portal routers (Account → Service Request).
  */
 

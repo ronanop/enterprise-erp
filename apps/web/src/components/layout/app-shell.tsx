@@ -1,14 +1,19 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Suspense } from "react";
 import { usePathname } from "next/navigation";
 
 import { AssetsModuleSidebar } from "@/components/assets/assets-module-sidebar";
 import { CrmSidebar } from "@/components/crm/crm-workspace-nav";
+import { ElevenLabsConvaiWidget } from "@/components/elevenlabs/convai-widget";
+import { HrSidebar } from "@/components/hr/hr-sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppTopbar } from "@/components/layout/app-topbar";
+import { MarketingSidebar } from "@/components/marketing/marketing-workspace-nav";
+import { ProcurementSidebar } from "@/components/procurement/procurement-workspace-nav";
 import { ProjectsSidebar } from "@/components/projects/projects-workspace-nav";
+import { ServiceSidebar } from "@/components/service/service-workspace-nav";
+import { isHrPath } from "@/config/hr-nav";
 import { useStandaloneChrome } from "@/hooks/use-standalone-chrome";
 
 interface AppShellProps {
@@ -19,40 +24,48 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
   const standalone = useStandaloneChrome();
+  const hrMode = isHrPath(pathname);
   const isCrm = pathname === "/crm" || pathname.startsWith("/crm/");
   const isProjects = pathname === "/projects" || pathname.startsWith("/projects/");
+  const isProcurement =
+    pathname === "/procurement" || pathname.startsWith("/procurement/");
   const isAssets = pathname === "/assets" || pathname.startsWith("/assets/");
+  const isService = pathname === "/service" || pathname.startsWith("/service/");
+  const isMarketing = pathname === "/marketing" || pathname.startsWith("/marketing/");
 
   return (
     <div className="flex min-h-dvh w-full max-w-[100dvw] overflow-x-clip bg-background">
-      {!standalone ? <AppSidebar /> : null}
-      {standalone && isCrm ? <CrmSidebar /> : null}
-      {standalone && isProjects ? <ProjectsSidebar /> : null}
-      {standalone && isAssets ? (
-        <Suspense fallback={null}>
-          <AssetsModuleSidebar />
-        </Suspense>
-      ) : null}
-      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
+      {hrMode ? (
+        <HrSidebar />
+      ) : standalone ? (
+        <>
+          {isCrm ? <CrmSidebar /> : null}
+          {isProjects ? <ProjectsSidebar /> : null}
+          {isProcurement ? <ProcurementSidebar /> : null}
+          {isAssets ? <AssetsModuleSidebar /> : null}
+          {isService ? <ServiceSidebar /> : null}
+          {isMarketing ? <MarketingSidebar /> : null}
+        </>
+      ) : (
+        <AppSidebar />
+      )}
+      <div id="erp-workspace-main" className="flex min-w-0 flex-1 flex-col overflow-x-clip">
         <AppTopbar />
-        <main
-          className={
-            isAssets
-              ? "min-w-0 flex-1 overflow-x-clip px-4 py-6 sm:px-5 lg:px-6"
-              : "min-w-0 flex-1 overflow-x-clip px-4 py-6 sm:px-6 lg:px-8"
-          }
-        >
-          <div
-            className={
-              isAssets
-                ? "mx-auto w-full min-w-0 max-w-none animate-in fade-in-0 duration-300"
-                : "mx-auto w-full min-w-0 max-w-[1400px] animate-in fade-in-0 duration-300"
-            }
-          >
+        <main className="min-w-0 flex-1 overflow-x-clip px-4 py-6 sm:px-6 lg:px-8">
+          <div className="mx-auto w-full min-w-0 max-w-[1400px] animate-in fade-in-50 slide-in-from-bottom-2 duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:animate-none">
             {children}
           </div>
         </main>
+        {hrMode ? (
+          <footer className="border-t border-border/70 bg-card/40 px-4 py-3 text-[11px] text-muted-foreground sm:px-6">
+            <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-2">
+              <span className="font-medium tracking-tight">HRMS workspace</span>
+              <span>Workforce · Leave · Attendance · Talent · Hire · Pay</span>
+            </div>
+          </footer>
+        ) : null}
       </div>
+      <ElevenLabsConvaiWidget />
     </div>
   );
 }

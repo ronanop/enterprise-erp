@@ -7,7 +7,8 @@ legacy CRM lead & opportunity flows:
     LEAD:        open -> converted | lost
     OPPORTUNITY: open -> boq_pending -> boq_approval -> deal_reg ->
                  oem_pending -> oem_attached -> quote_ready ->
-                 quote_in_progress -> po_pending -> po_approval ->
+                 quote_in_progress -> po_pending -> po_approval
+                 (finance -> legal terms -> management) ->
                  ovf_ready -> won | lost
     QUOTE:       draft -> internal_approval -> approved_internal ->
                  sent_to_customer -> negotiation | follow_up | accepted | lost
@@ -44,19 +45,49 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
         "open": {
             "attach_boq": "boq_pending",
             "attach_sow": "boq_pending",
+            "attach_contract": "cloud_docs",
+            "send_cloud_discount_approval": "cloud_discount_approval",
+            "lost": "lost",
+        },
+        "cloud_docs": {
+            "attach_contract": "cloud_docs",
+            "send_cloud_discount_approval": "cloud_discount_approval",
+            "lost": "lost",
+        },
+        "cloud_discount_approval": {
+            "approve_cloud_discount": "cloud_onboarding",
+            "reject_cloud_discount": "cloud_docs",
+            "lost": "lost",
+        },
+        "map_oem_pending": {
+            "attach_oem_quote": "cloud_onboarding",
+            "skip_map_oem_quote": "cloud_onboarding",
+            "lost": "lost",
+        },
+        "cloud_onboarding": {
+            "mark_onboarding_done": "won",
             "lost": "lost",
         },
         "boq_pending": {
             "attach_boq": "boq_pending",
             "attach_sow": "boq_pending",
             "send_boq_approval": "boq_approval",
+            "send_sow_approval": "sow_approval",
+            # Gated in BlueprintService until BOQ or SOW is approved.
+            "deal_reg": "oem_pending",
             "lost": "lost",
         },
         "boq_approval": {
             "approve_boq": "deal_reg",
             "reject_boq": "boq_pending",
+            # Legacy: older builds routed send_sow_approval into boq_approval.
             "approve_sow": "deal_reg",
-            "reject_sow": "deal_reg",
+            "reject_sow": "boq_pending",
+            "lost": "lost",
+        },
+        "sow_approval": {
+            "approve_sow": "deal_reg",
+            "reject_sow": "boq_pending",
             "lost": "lost",
         },
         # Backward-compatible exit for opportunities already persisted in the
@@ -67,10 +98,12 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
             "lost": "lost",
         },
         "deal_reg": {
+            "attach_boq": "deal_reg",
             "attach_sow": "deal_reg",
             "deal_reg": "oem_pending",
             "lost": "lost",
-            "send_sow_approval": "boq_approval",
+            "send_boq_approval": "boq_approval",
+            "send_sow_approval": "sow_approval",
         },
         "oem_pending": {"oem_received": "oem_attached", "lost": "lost"},
         "oem_attached": {"attach_oem_quote": "quote_ready", "lost": "lost"},
@@ -81,7 +114,18 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
             "send_po_approval": "po_approval",
             "lost": "lost",
         },
-        "po_approval": {"approve_po": "ovf_ready", "reject_po": "po_pending", "lost": "lost"},
+        # Customer PO validation runs Finance (tax/GST) → Legal (terms &
+        # conditions) → Management. The first two stages stay in ``po_approval``
+        # and each one raises the next stage's My Jobs task on approval.
+        "po_approval": {
+            "approve_po_finance": "po_approval",
+            "reject_po_finance": "po_pending",
+            "approve_po_terms": "po_approval",
+            "reject_po_terms": "po_pending",
+            "approve_po": "ovf_ready",
+            "reject_po": "po_pending",
+            "lost": "lost",
+        },
         "ovf_ready": {"create_ovf": "ovf_ready", "deal_won": "won", "lost": "lost"},
         "won": {},
         "lost": {},

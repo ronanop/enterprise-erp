@@ -36,6 +36,13 @@ class EmployeeSalaryService:
         if branch_id is not None:
             self._scope.validate_branch_access(ctx, branch_id)
 
+        if not fields.get("document_number"):
+            import uuid as _uuid
+
+            fields["document_number"] = f"ESAL-{str(_uuid.uuid4())[:8].upper()}"
+        fields.setdefault("currency_code", "INR")
+        fields.setdefault("status", "active")
+
         row = self._repo.create(ctx, company_id=cid, branch_id=branch_id, **fields)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,

@@ -1,5 +1,5 @@
 /**
- * Sales workspace config — aligned with FRD-06 screen inventory
+ * Sales workspace config - aligned with FRD-06 screen inventory
  * and apps/api sales routers (quote → order → delivery → invoice → return).
  */
 
@@ -36,7 +36,7 @@ export const salesWorkspaceGroups: SalesWorkspaceGroup[] = [
   {
     key: "commercial",
     title: "Commercial Documents",
-    description: "Quotations through invoices — order-to-cash flow",
+    description: "Quotations through invoices - order-to-cash flow",
     icon: ShoppingCart,
     resourceKeys: ["quotations", "orders", "deliveries", "invoices", "returns"],
   },

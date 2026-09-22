@@ -1,11 +1,11 @@
-# ERD_03 — Master Data Domain
+# ERD_03 - Master Data Domain
 
-**Document:** Enterprise ERD — Master Data Domain  
+**Document:** Enterprise ERD - Master Data Domain  
 **Version:** 1.0  
 **Status:** Draft for Architecture Review  
 **Schema:** `master`  
 **Aligned To:** BRD v1.0 · FRD-03 · SDD v1.1 · DBS v1.1 · Architecture Lock v1.1  
-**Classification:** Internal — Confidential  
+**Classification:** Internal - Confidential  
 
 ---
 
@@ -43,9 +43,9 @@ The Master Data Domain is the central repository for core business entities cons
 
 ### Out of Scope
 - Business transactions (`trx_*`)
-- Global reference catalogs (`ref_country`, `ref_state`) — separate seed data
+- Global reference catalogs (`ref_country`, `ref_state`) - separate seed data
 - SQLAlchemy models, Alembic migrations, application code
-- History tables (`hist_*`) — Phase 2 SCD Type 2
+- History tables (`hist_*`) - Phase 2 SCD Type 2
 
 ### Assumptions
 - All masters require `tenant_id` and `company_id`
@@ -54,8 +54,8 @@ The Master Data Domain is the central repository for core business entities cons
 - Physical DELETE prohibited on all master tables
 
 ### Dependencies
-- `sec_tenant` (ERD_01) — upstream
-- `org_company`, `org_branch`, `org_department` (ERD_02) — upstream
+- `sec_tenant` (ERD_01) - upstream
+- `org_company`, `org_branch`, `org_department` (ERD_02) - upstream
 
 ---
 
@@ -129,9 +129,9 @@ org_company
 | 3 | `master_vendor` | Master | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 4 | `master_product` | Master | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 5 | `master_product_category` | Master | ✅ | ✅ | optional | ✅ | ✅ |
-| 6 | `master_uom` | Master | ✅ | ✅ | — | ✅ | ✅ |
-| 7 | `master_currency` | Master | ✅ | ✅ | — | ✅ | ✅ |
-| 8 | `master_tax` | Master | ✅ | ✅ | — | ✅ | ✅ |
+| 6 | `master_uom` | Master | ✅ | ✅ | - | ✅ | ✅ |
+| 7 | `master_currency` | Master | ✅ | ✅ | - | ✅ | ✅ |
+| 8 | `master_tax` | Master | ✅ | ✅ | - | ✅ | ✅ |
 | 9 | `master_asset` | Master | ✅ | ✅ | ✅ | ✅ | ✅ |
 | 10 | `master_warehouse` | Master | ✅ | ✅ | ✅ | ✅ | ✅ |
 
@@ -166,29 +166,29 @@ Central employee repository (FRD-03 §4). Single source of truth for all employe
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | UUID | NO | app-generated | PK |
-| `tenant_id` | UUID | NO | — | FK → sec_tenant |
-| `company_id` | UUID | NO | — | FK → org_company |
-| `branch_id` | UUID | NO | — | FK → org_branch |
-| `department_id` | UUID | NO | — | FK → org_department |
+| `tenant_id` | UUID | NO | - | FK → sec_tenant |
+| `company_id` | UUID | NO | - | FK → org_company |
+| `branch_id` | UUID | NO | - | FK → org_branch |
+| `department_id` | UUID | NO | - | FK → org_department |
 | `employee_code` | VARCHAR(50) | NO | auto EMP-000001 | UK per company |
-| `first_name` | VARCHAR(100) | NO | — | — |
-| `last_name` | VARCHAR(100) | NO | — | — |
-| `email` | VARCHAR(255) | NO | — | — |
-| `mobile` | VARCHAR(30) | NO | — | — |
-| `designation` | VARCHAR(100) | NO | — | Job title |
-| `reporting_manager_id` | UUID | YES | — | Self-FK → master_employee |
-| `date_of_joining` | DATE | NO | — | — |
-| `date_of_leaving` | DATE | YES | — | — |
+| `first_name` | VARCHAR(100) | NO | - | - |
+| `last_name` | VARCHAR(100) | NO | - | - |
+| `email` | VARCHAR(255) | NO | - | - |
+| `mobile` | VARCHAR(30) | NO | - | - |
+| `designation` | VARCHAR(100) | NO | - | Job title |
+| `reporting_manager_id` | UUID | YES | - | Self-FK → master_employee |
+| `date_of_joining` | DATE | NO | - | - |
+| `date_of_leaving` | DATE | YES | - | - |
 | `status` | VARCHAR(30) | NO | `'draft'` | draft, active, on_leave, resigned, terminated |
-| `user_id` | UUID | YES | — | FK → sec_user (ERD_01) |
-| `created_at` | TIMESTAMPTZ | NO | `now()` | — |
-| `created_by` | UUID | YES | — | — |
-| `updated_at` | TIMESTAMPTZ | NO | `now()` | — |
-| `updated_by` | UUID | YES | — | — |
-| `version` | INTEGER | NO | `1` | — |
-| `is_deleted` | BOOLEAN | NO | `FALSE` | — |
-| `deleted_at` | TIMESTAMPTZ | YES | — | — |
-| `deleted_by` | UUID | YES | — | — |
+| `user_id` | UUID | YES | - | FK → sec_user (ERD_01) |
+| `created_at` | TIMESTAMPTZ | NO | `now()` | - |
+| `created_by` | UUID | YES | - | - |
+| `updated_at` | TIMESTAMPTZ | NO | `now()` | - |
+| `updated_by` | UUID | YES | - | - |
+| `version` | INTEGER | NO | `1` | - |
+| `is_deleted` | BOOLEAN | NO | `FALSE` | - |
+| `deleted_at` | TIMESTAMPTZ | YES | - | - |
+| `deleted_by` | UUID | YES | - | - |
 
 #### 6.1.3 Primary Key
 `pk_master_employee` → `id`
@@ -244,14 +244,14 @@ Maintain all customers (FRD-03 §5). Referenced by CRM, Sales, Finance, and Help
 | `company_id` | UUID | NO | FK → org_company |
 | `branch_id` | UUID | NO | FK → org_branch |
 | `customer_code` | VARCHAR(50) | NO | UK per company |
-| `customer_name` | VARCHAR(255) | NO | — |
+| `customer_name` | VARCHAR(255) | NO | - |
 | `customer_type` | VARCHAR(30) | NO | individual, corporate, government |
 | `tax_number` | VARCHAR(100) | YES | Encrypted at rest |
-| `email` | VARCHAR(255) | YES | — |
-| `mobile` | VARCHAR(30) | YES | — |
+| `email` | VARCHAR(255) | YES | - |
+| `mobile` | VARCHAR(30) | YES | - |
 | `billing_address_json` | JSONB | NO | Structured address |
 | `shipping_address_json` | JSONB | YES | Structured address |
-| `credit_limit` | NUMERIC(18,2) | YES | — |
+| `credit_limit` | NUMERIC(18,2) | YES | - |
 | `currency_code` | VARCHAR(3) | YES | ISO 4217 |
 | `status` | VARCHAR(30) | NO | draft, active, inactive, blocked |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
@@ -302,14 +302,14 @@ Maintain all vendors/suppliers (FRD-03). Referenced by Procurement and Finance.
 | `company_id` | UUID | NO | FK → org_company |
 | `branch_id` | UUID | NO | FK → org_branch |
 | `vendor_code` | VARCHAR(50) | NO | UK per company |
-| `vendor_name` | VARCHAR(255) | NO | — |
+| `vendor_name` | VARCHAR(255) | NO | - |
 | `vendor_type` | VARCHAR(30) | NO | domestic, international, service |
 | `tax_number` | VARCHAR(100) | YES | Encrypted |
-| `email` | VARCHAR(255) | YES | — |
-| `mobile` | VARCHAR(30) | YES | — |
-| `payment_terms` | VARCHAR(50) | YES | — |
+| `email` | VARCHAR(255) | YES | - |
+| `mobile` | VARCHAR(30) | YES | - |
+| `payment_terms` | VARCHAR(50) | YES | - |
 | `bank_details_encrypted` | TEXT | YES | Encrypted JSON |
-| `address_json` | JSONB | YES | — |
+| `address_json` | JSONB | YES | - |
 | `status` | VARCHAR(30) | NO | draft, active, inactive, blocked |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
@@ -356,17 +356,17 @@ Product and service catalog (FRD-03). Referenced by Sales, Inventory, and Manufa
 | `company_id` | UUID | NO | FK → org_company |
 | `branch_id` | UUID | YES | FK → org_branch |
 | `product_code` | VARCHAR(50) | NO | UK per company |
-| `product_name` | VARCHAR(255) | NO | — |
+| `product_name` | VARCHAR(255) | NO | - |
 | `product_type` | VARCHAR(30) | NO | goods, service, bundle |
 | `category_id` | UUID | YES | FK → master_product_category |
 | `uom_id` | UUID | NO | FK → master_uom |
 | `tax_id` | UUID | YES | FK → master_tax |
-| `barcode` | VARCHAR(50) | YES | — |
+| `barcode` | VARCHAR(50) | YES | - |
 | `hsn_sac_code` | VARCHAR(20) | YES | Tax classification |
-| `standard_cost` | NUMERIC(18,4) | YES | — |
-| `list_price` | NUMERIC(18,4) | YES | — |
+| `standard_cost` | NUMERIC(18,4) | YES | - |
+| `list_price` | NUMERIC(18,4) | YES | - |
 | `is_inventory_tracked` | BOOLEAN | NO | DEFAULT TRUE |
-| `description` | TEXT | YES | — |
+| `description` | TEXT | YES | - |
 | `status` | VARCHAR(30) | NO | draft, active, inactive, discontinued |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
@@ -416,7 +416,7 @@ Hierarchical product categorization.
 | `tenant_id` | UUID | NO | FK → sec_tenant |
 | `company_id` | UUID | NO | FK → org_company |
 | `category_code` | VARCHAR(50) | NO | UK per company |
-| `category_name` | VARCHAR(255) | NO | — |
+| `category_name` | VARCHAR(255) | NO | - |
 | `parent_category_id` | UUID | YES | Self-FK |
 | `level` | SMALLINT | NO | DEFAULT 1 |
 | `path` | VARCHAR(500) | YES | Materialized path |
@@ -465,7 +465,7 @@ Unit of Measure master (FRD-03). Referenced by Product and Inventory modules.
 | `tenant_id` | UUID | NO | FK → sec_tenant |
 | `company_id` | UUID | NO | FK → org_company |
 | `uom_code` | VARCHAR(20) | NO | UK per company (e.g., KG, PCS) |
-| `uom_name` | VARCHAR(100) | NO | — |
+| `uom_name` | VARCHAR(100) | NO | - |
 | `uom_type` | VARCHAR(30) | NO | weight, volume, count, length |
 | `decimal_places` | SMALLINT | NO | DEFAULT 2 |
 | `is_base_uom` | BOOLEAN | NO | DEFAULT FALSE |
@@ -511,12 +511,12 @@ Company-level currency configuration with exchange rates (FRD-03).
 | `tenant_id` | UUID | NO | FK → sec_tenant |
 | `company_id` | UUID | NO | FK → org_company |
 | `currency_code` | VARCHAR(3) | NO | ISO 4217, UK per company |
-| `currency_name` | VARCHAR(100) | NO | — |
-| `symbol` | VARCHAR(10) | YES | — |
+| `currency_name` | VARCHAR(100) | NO | - |
+| `symbol` | VARCHAR(10) | YES | - |
 | `decimal_places` | SMALLINT | NO | DEFAULT 2 |
 | `is_base_currency` | BOOLEAN | NO | DEFAULT FALSE |
 | `exchange_rate` | NUMERIC(18,8) | YES | Rate to base currency |
-| `rate_effective_date` | DATE | YES | — |
+| `rate_effective_date` | DATE | YES | - |
 | `status` | VARCHAR(30) | NO | active, inactive |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
@@ -560,12 +560,12 @@ Tax configuration for Finance, Sales, and Procurement (FRD-03).
 | `tenant_id` | UUID | NO | FK → sec_tenant |
 | `company_id` | UUID | NO | FK → org_company |
 | `tax_code` | VARCHAR(50) | NO | UK per company |
-| `tax_name` | VARCHAR(255) | NO | — |
+| `tax_name` | VARCHAR(255) | NO | - |
 | `tax_type` | VARCHAR(30) | NO | gst, vat, sales_tax, withholding |
-| `rate_percent` | NUMERIC(8,4) | NO | — |
+| `rate_percent` | NUMERIC(8,4) | NO | - |
 | `is_compound` | BOOLEAN | NO | DEFAULT FALSE |
-| `effective_from` | DATE | NO | — |
-| `effective_to` | DATE | YES | — |
+| `effective_from` | DATE | NO | - |
+| `effective_to` | DATE | YES | - |
 | `status` | VARCHAR(30) | NO | active, inactive |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
@@ -611,15 +611,15 @@ Fixed asset register (FRD-03). Referenced by Asset Management and Finance.
 | `company_id` | UUID | NO | FK → org_company |
 | `branch_id` | UUID | NO | FK → org_branch |
 | `asset_code` | VARCHAR(50) | NO | UK per company |
-| `asset_name` | VARCHAR(255) | NO | — |
-| `asset_category` | VARCHAR(100) | NO | — |
-| `serial_number` | VARCHAR(100) | YES | — |
-| `purchase_date` | DATE | YES | — |
-| `purchase_value` | NUMERIC(18,2) | YES | — |
+| `asset_name` | VARCHAR(255) | NO | - |
+| `asset_category` | VARCHAR(100) | NO | - |
+| `serial_number` | VARCHAR(100) | YES | - |
+| `purchase_date` | DATE | YES | - |
+| `purchase_value` | NUMERIC(18,2) | YES | - |
 | `location_id` | UUID | YES | FK → org_location |
 | `custodian_employee_id` | UUID | YES | FK → master_employee |
 | `depreciation_method` | VARCHAR(50) | YES | straight_line, declining_balance |
-| `useful_life_months` | INTEGER | YES | — |
+| `useful_life_months` | INTEGER | YES | - |
 | `status` | VARCHAR(30) | NO | draft, active, disposed, written_off |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
@@ -668,11 +668,11 @@ Warehouse and storage location master (FRD-03). Referenced by Inventory and SCM.
 | `company_id` | UUID | NO | FK → org_company |
 | `branch_id` | UUID | NO | FK → org_branch |
 | `warehouse_code` | VARCHAR(50) | NO | UK per company |
-| `warehouse_name` | VARCHAR(255) | NO | — |
+| `warehouse_name` | VARCHAR(255) | NO | - |
 | `warehouse_type` | VARCHAR(30) | NO | central, transit, retail, quarantine |
 | `location_id` | UUID | YES | FK → org_location |
 | `is_default` | BOOLEAN | NO | DEFAULT FALSE |
-| `address_json` | JSONB | YES | — |
+| `address_json` | JSONB | YES | - |
 | `status` | VARCHAR(30) | NO | active, inactive |
 | AUDIT_STD + SOFT_DELETE_OPT | | | |
 
@@ -738,7 +738,7 @@ Soft delete only
 | Asset Management | FRD-12 | asset, employee |
 | SCM | FRD-15 | warehouse, product |
 
-**Rule (C-01):** Single source of truth — all modules consume masters via service APIs, not duplicate tables.
+**Rule (C-01):** Single source of truth - all modules consume masters via service APIs, not duplicate tables.
 
 ---
 
@@ -760,7 +760,7 @@ Downstream trx_* modules consume via API (Sales, Procurement, Inventory)
 
 ## 10. Performance Considerations
 
-- UK indexes on `(company_id, *_code)` for all masters — mandatory per DBS §28
+- UK indexes on `(company_id, *_code)` for all masters - mandatory per DBS §28
 - `ix(tenant_id)`, `ix(company_id)`, `ix(status)` on every master table
 - OpenSearch index for customer/product name search (SDD)
 - List APIs: pagination mandatory (default 25, max 200)
@@ -793,13 +793,13 @@ No OLTP partitioning for master tables (moderate volume). Future `hist_*` histor
 | master_employee | Confidential | email, mobile (PII) |
 | master_customer | Confidential | tax_number |
 | master_vendor | Confidential | tax_number, bank_details_encrypted |
-| master_product | Internal | — |
-| master_product_category | Internal | — |
-| master_uom | Internal | — |
-| master_currency | Internal | — |
-| master_tax | Internal | — |
-| master_asset | Internal | — |
-| master_warehouse | Internal | — |
+| master_product | Internal | - |
+| master_product_category | Internal | - |
+| master_uom | Internal | - |
+| master_currency | Internal | - |
+| master_tax | Internal | - |
+| master_asset | Internal | - |
+| master_warehouse | Internal | - |
 
 ---
 
@@ -856,17 +856,17 @@ Master records retained indefinitely while soft-deleted. Historical versions via
 
 | Term | Definition |
 |------|------------|
-| Master Record | Authoritative business entity — single source of truth (C-01) |
+| Master Record | Authoritative business entity - single source of truth (C-01) |
 | Company Scope | Uniqueness boundary for all business codes |
 | Soft Delete | `is_deleted = true`; record excluded from normal queries |
 | Status Lifecycle | draft → active → inactive → archived |
 | Business Code | Human-readable unique identifier per company (e.g., EMP-000001) |
-| Tenant Isolation | All queries filtered by `tenant_id` — cross-tenant joins prohibited |
+| Tenant Isolation | All queries filtered by `tenant_id` - cross-tenant joins prohibited |
 | Version | Optimistic concurrency counter incremented on every update |
 
 ---
 
-## ERD Phase Gate — Master Data Summary
+## ERD Phase Gate - Master Data Summary
 
 | Metric | Value |
 |--------|-------|
@@ -887,4 +887,4 @@ Master records retained indefinitely while soft-deleted. Historical versions via
 
 ---
 
-*End of ERD_03 — Master Data Domain*
+*End of ERD_03 - Master Data Domain*

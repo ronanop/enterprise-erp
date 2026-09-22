@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { History, Plus } from "lucide-react";
 
+import { ContactFormDialog } from "@/components/crm/sales/contact-form-dialog";
 import { FollowupFormDialog } from "@/components/crm/sales/followup-form-dialog";
 import { MeetingFormDialog } from "@/components/crm/sales/meeting-form-dialog";
 import { OpportunityAttachmentsPanel } from "@/components/crm/sales/opportunity-attachments-panel";
@@ -32,7 +33,7 @@ import {
 } from "@/services/sales-crm-service";
 import { setCrmOpportunityContext, setCrmSidebarFocus } from "@/lib/crm-sidebar-focus";
 
-type QuickCreateKind = "task" | "followup" | "lead" | "meeting" | "attachment" | "kyc";
+type QuickCreateKind = "task" | "followup" | "lead" | "meeting" | "attachment" | "kyc" | "contact";
 
 type NavItem = {
   title: string;
@@ -66,7 +67,7 @@ export const COMPANY_WORKSPACE_NAV: readonly NavItem[] = [
   { title: "Quotes", segment: "quotes" },
   { title: "Purchase Order", segment: "purchase-orders" },
   { title: "OVF", segment: "ovf" },
-  { title: "Contacts", segment: "contacts", companyOnly: true },
+  { title: "Contacts", segment: "contacts", companyOnly: true, quickCreate: "contact" },
   { title: "Products", segment: "products" },
   { title: "Meetings", segment: "meetings", companyOnly: true, quickCreate: "meeting" },
   { title: "Customer Follow Ups", segment: "customer-followups", quickCreate: "followup" },
@@ -177,7 +178,7 @@ async function loadCompanyNavCounts(
   };
 }
 
-/** Internal company/opportunity sidebar — fixed under the app topbar, full remaining height. */
+/** Internal company/opportunity sidebar - fixed under the app topbar, full remaining height. */
 export function CompanyWorkspaceNav({
   companyAccountId,
   scope = "company",
@@ -205,6 +206,7 @@ export function CompanyWorkspaceNav({
   const [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const [followupOpen, setFollowupOpen] = useState(false);
   const [meetingOpen, setMeetingOpen] = useState(false);
+  const [contactOpen, setContactOpen] = useState(false);
   const [company, setCompany] = useState<Company | null>(companyProp ?? null);
   const items = COMPANY_WORKSPACE_NAV.filter((item) => {
     if (scope === "company") return !item.opportunityOnly;
@@ -227,8 +229,8 @@ export function CompanyWorkspaceNav({
   function canQuickCreate(kind: QuickCreateKind | undefined): boolean {
     if (!kind) return false;
     if (kind === "task" || kind === "attachment") return isOpportunityScope;
-    if (kind === "lead" || kind === "meeting" || kind === "kyc") return isCompanyScope;
-    // Company sidebar: no hover "+" — create from the follow-ups page / opportunity only.
+    if (kind === "lead" || kind === "meeting" || kind === "kyc" || kind === "contact") return isCompanyScope;
+    // Company sidebar: no hover "+" - create from the follow-ups page / opportunity only.
     if (kind === "followup") return isOpportunityScope;
     return false;
   }
@@ -289,7 +291,7 @@ export function CompanyWorkspaceNav({
     return () => {
       cancelled = true;
     };
-  }, [companyAccountId, opportunityId, pathname, taskOpen, attachmentsOpen, followupOpen, meetingOpen]);
+  }, [companyAccountId, opportunityId, pathname, taskOpen, attachmentsOpen, followupOpen, meetingOpen, contactOpen]);
 
   function onQuickCreate(kind: QuickCreateKind) {
     if (kind === "task") {
@@ -308,8 +310,12 @@ export function CompanyWorkspaceNav({
       setMeetingOpen(true);
       return;
     }
+    if (kind === "contact") {
+      setContactOpen(true);
+      return;
+    }
     if (kind === "kyc") {
-      router.push("/crm/companies/new");
+      router.push(`${base}/kyc/new`);
       return;
     }
     if (kind === "lead") {
@@ -343,7 +349,7 @@ export function CompanyWorkspaceNav({
       {/*
         Reserves horizontal space for the fixed nav. Negative margin cancels
         AppShell main padding so the slot starts at the primary sidebar edge
-        (same left as the docked fixed aside) — removes the white gap.
+        (same left as the docked fixed aside) - removes the white gap.
       */}
       <div
         ref={spacerRef}
@@ -442,7 +448,7 @@ export function CompanyWorkspaceNav({
                             typeof count !== "number" && "text-muted-foreground/50",
                           )}
                         >
-                          {typeof count === "number" ? count : "—"}
+                          {typeof count === "number" ? count : "-"}
                         </span>
                         {showQuickCreate ? (
                           <button
@@ -507,6 +513,7 @@ export function CompanyWorkspaceNav({
         <FollowupFormDialog
           open={followupOpen}
           companyAccount={company}
+          companyAccountId={companyAccountId}
           opportunityId={isOpportunityScope ? opportunityId : null}
           onClose={() => setFollowupOpen(false)}
           onSaved={() => {
@@ -517,15 +524,26 @@ export function CompanyWorkspaceNav({
       ) : null}
 
       {isCompanyScope ? (
-        <MeetingFormDialog
-          open={meetingOpen}
-          companyAccount={company}
-          onClose={() => setMeetingOpen(false)}
-          onSaved={() => {
-            setMeetingOpen(false);
-            void loadCompanyNavCounts(companyAccountId, opportunityId).then(setCounts);
-          }}
-        />
+        <>
+          <MeetingFormDialog
+            open={meetingOpen}
+            companyAccount={company}
+            onClose={() => setMeetingOpen(false)}
+            onSaved={() => {
+              setMeetingOpen(false);
+              void loadCompanyNavCounts(companyAccountId, opportunityId).then(setCounts);
+            }}
+          />
+          <ContactFormDialog
+            open={contactOpen}
+            companyAccount={company}
+            onClose={() => setContactOpen(false)}
+            onSaved={() => {
+              setContactOpen(false);
+              void loadCompanyNavCounts(companyAccountId, opportunityId).then(setCounts);
+            }}
+          />
+        </>
       ) : null}
     </>
   );

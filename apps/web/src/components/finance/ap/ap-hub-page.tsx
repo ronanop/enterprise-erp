@@ -307,25 +307,25 @@ export function ApHubPage() {
       {tab === "dashboard" ? (
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <FinanceKpiCard label="Outstanding Payables" value={summary ? formatInrPrecise(summary.outstanding_payables) : "—"} icon={Wallet} />
+            <FinanceKpiCard label="Outstanding Payables" value={summary ? formatInrPrecise(summary.outstanding_payables) : "-"} icon={Wallet} />
             <FinanceKpiCard
               label="Payments Due Today"
-              value={summary ? formatInrPrecise(summary.payments_due_today) : "—"}
+              value={summary ? formatInrPrecise(summary.payments_due_today) : "-"}
               icon={Banknote}
               hint={summary ? `${summary.payments_due_today_count} bills` : undefined}
             />
-            <FinanceKpiCard label="Overdue Bills" value={String(summary?.overdue_bills ?? "—")} icon={AlertCircle} hint={summary ? formatInrPrecise(summary.overdue_amount) : undefined} />
-            <FinanceKpiCard label="Current Month Payments" value={summary ? formatInrPrecise(summary.current_month_payments) : "—"} icon={TrendingUp} />
-            <FinanceKpiCard label="Vendor Count" value={String(summary?.vendor_count ?? "—")} icon={Users} />
-            <FinanceKpiCard label="Payment Efficiency" value={summary ? `${summary.payment_efficiency.toFixed(1)}%` : "—"} icon={Clock} />
-            <FinanceKpiCard label="Cash Requirement" value={summary ? formatInrPrecise(summary.cash_requirement) : "—"} icon={Coins} />
-            <FinanceKpiCard label="Open Invoices" value={String(summary?.open_invoice_count ?? "—")} icon={Wallet} />
-            <FinanceKpiCard label="Payments" value={String(summary?.payment_count ?? "—")} icon={Banknote} />
+            <FinanceKpiCard label="Overdue Bills" value={String(summary?.overdue_bills ?? "-")} icon={AlertCircle} hint={summary ? formatInrPrecise(summary.overdue_amount) : undefined} />
+            <FinanceKpiCard label="Current Month Payments" value={summary ? formatInrPrecise(summary.current_month_payments) : "-"} icon={TrendingUp} />
+            <FinanceKpiCard label="Vendor Count" value={String(summary?.vendor_count ?? "-")} icon={Users} />
+            <FinanceKpiCard label="Payment Efficiency" value={summary ? `${summary.payment_efficiency.toFixed(1)}%` : "-"} icon={Clock} />
+            <FinanceKpiCard label="Cash Requirement" value={summary ? formatInrPrecise(summary.cash_requirement) : "-"} icon={Coins} />
+            <FinanceKpiCard label="Open Invoices" value={String(summary?.open_invoice_count ?? "-")} icon={Wallet} />
+            <FinanceKpiCard label="Payments" value={String(summary?.payment_count ?? "-")} icon={Banknote} />
           </div>
 
           {summary?.aging && summary.aging.length > 0 ? (
             <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-              <h3 className="text-sm font-medium tracking-tight">Aging Summary</h3>
+              <h3 className="text-base font-extrabold tracking-tight">Aging Summary</h3>
               <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 {summary.aging.map((b) => (
                   <div key={b.bucket} className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
@@ -341,7 +341,7 @@ export function ApHubPage() {
           <ApAgingPanel report={agingReport} loading={agingLoading} />
 
           <div className="rounded-xl border border-border/80 bg-card p-3.5 shadow-sm">
-            <h3 className="text-sm font-medium tracking-tight">Recent Invoices</h3>
+            <h3 className="text-base font-extrabold tracking-tight">Recent Invoices</h3>
             {loading && rows.length === 0 ? (
               <div className="mt-3 space-y-2">{Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-8 animate-pulse rounded bg-muted/70" />)}</div>
             ) : rows.length === 0 ? (

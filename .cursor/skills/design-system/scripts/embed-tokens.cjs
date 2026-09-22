@@ -12,12 +12,15 @@
 
 const fs = require('fs');
 const path = require('path');
+const { assertWithinRoot } = require('../../shared/safe-fs.cjs');
 
 // Find project root (look for assets/design-tokens.css)
 function findProjectRoot(startDir) {
   let dir = startDir;
   while (dir !== '/') {
-    if (fs.existsSync(path.join(dir, 'assets', 'design-tokens.css'))) {
+    const candidate = path.join(dir, 'assets', 'design-tokens.css');
+    assertWithinRoot(dir, candidate);
+    if (fs.existsSync(candidate)) {
       return dir;
     }
     dir = path.dirname(dir);
@@ -31,7 +34,7 @@ if (!projectRoot) {
   process.exit(1);
 }
 
-const tokensPath = path.join(projectRoot, 'assets', 'design-tokens.css');
+const tokensPath = assertWithinRoot(projectRoot, path.join(projectRoot, 'assets', 'design-tokens.css'));
 
 // Minimal tokens commonly used in infographics/slides
 const MINIMAL_TOKENS = [
@@ -93,7 +96,7 @@ try {
   }
 
   console.log(output);
-} catch (err) {
-  console.error(`Error reading tokens: ${err.message}`);
+} catch {
+  console.error('Error reading design tokens.');
   process.exit(1);
 }

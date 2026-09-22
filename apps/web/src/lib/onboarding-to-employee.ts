@@ -1,0 +1,251 @@
+/** Map onboarding portal payload ↔ employee wizard / extension fields. */
+
+import type { OnboardingCase, PortalPayload } from "@/types/onboarding-management";
+import type {
+  BankDetails,
+  EducationEntry,
+  EmployeeDocumentItem,
+  EmployeeExtension,
+  EmployeeLifecycleStatus,
+  EmployeeWizardDraft,
+  GovernmentIds,
+  PreviousEmploymentEntry,
+} from "@/types/employee-management";
+import {
+  emptyBank,
+  emptyEmployment,
+  emptyGovernmentIds,
+  emptyPersonal,
+  emptySalary,
+} from "@/types/employee-management";
+import { employmentDurationKind } from "@/config/hr-master-options";
+import { previewNextEmployeeCode } from "@/services/employee-management-service";
+import {
+  maskAadhaar,
+  maskAccount,
+  maskAddress,
+  maskDob,
+  maskEmail,
+  maskKeepLast,
+  maskPan,
+  maskPhone,
+} from "@/lib/pii-mask";
+
+function splitName(full: string): { first: string; last: string } {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  return { first: parts[0] || full, last: parts.slice(1).join(" ") };
+}
+
+export function portalToWizardDraft(
+  caseRow: OnboardingCase,
+  employeeCode?: string,
+  lifecycleStatus: EmployeeLifecycleStatus = "onboarding",
+): EmployeeWizardDraft {
+  const p = caseRow.portal;
+  const personal = emptyPersonal();
+  personal.firstName = p.personal.firstName || splitName(caseRow.candidateName).first;
+  personal.middleName = p.personal.middleName || "";
+  personal.lastName = p.personal.lastName || splitName(caseRow.candidateName).last;
+  personal.gender = p.personal.gender || "";
+  personal.dateOfBirth = p.personal.dob || "";
+  personal.maritalStatus = p.personal.maritalStatus || "";
+  personal.nationality = p.personal.nationality || "Indian";
+  personal.bloodGroup = p.personal.bloodGroup || "";
+  personal.mobile = p.personal.phone || caseRow.candidatePhone || "";
+  // Email id = personal; Cache email = company/official (candidate invite email often fills both).
+  personal.personalEmail =
+    p.personal.personalEmail || p.personal.email || caseRow.candidateEmail || "";
+  personal.officialEmail =
+    caseRow.candidateEmail || p.personal.email || p.personal.personalEmail || "";
+  personal.currentAddress = {
+    ...personal.currentAddress,
+    line1: p.personal.address || "",
+  };
+  const permanentLine =
+    (p.personal.sameAsCurrentAddress
+      ? p.personal.address
+      : p.personal.permanentAddress || p.personal.address) || "";
+  personal.permanentAddress = {
+    ...personal.permanentAddress,
+    line1: permanentLine,
+  };
+  personal.emergency = {
+    name: p.emergency.name || "",
+    phone: p.emergency.phone || "",
+    relationship: p.emergency.relationship || "",
+  };
+
+  const photoDoc = (p.documents || []).find(
+    (d) => d.kind === "photo" || d.typeCode === "DOC-PHOTO",
+  );
+  if (photoDoc?.fileDataUrl) {
+    personal.profilePhotoDataUrl = photoDoc.fileDataUrl;
+  }
+
+  const governmentIds: GovernmentIds = {
+    ...emptyGovernmentIds(),
+    aadhaar: p.governmentIds.aadhaar || "",
+    pan: p.governmentIds.pan || "",
+    passport: p.governmentIds.passport || "",
+    drivingLicense: p.governmentIds.drivingLicense || "",
+    uan: p.governmentIds.uan || "",
+    esic: p.governmentIds.esic || "",
+  };
+
+  const bank: BankDetails = {
+    ...emptyBank(),
+    bankName: p.bank.bankName || "",
+    accountHolderName: p.bank.accountHolder || "",
+    accountNumber: p.bank.accountNumber || "",
+    confirmAccountNumber: p.bank.accountNumber || "",
+    ifsc: p.bank.ifsc || "",
+    branchName: p.bank.branch || "",
+  };
+
+  const employment = emptyEmployment(employeeCode || previewNextEmployeeCode());
+  employment.joiningDate = caseRow.joiningDate || new Date().toISOString().slice(0, 10);
+  employment.entityId = caseRow.entityId || "";
+  employment.entityName = caseRow.entityName || "";
+  employment.departmentName = caseRow.department || "";
+  employment.designationName = caseRow.designation || "";
+  employment.branchName = caseRow.branch || "";
+  employment.shiftName = caseRow.shift || "";
+  employment.leavePolicyName = caseRow.leavePolicy || "";
+  employment.employmentType = caseRow.employmentType || "permanent";
+  employment.managementGroupId = caseRow.managementGroupId || "";
+  employment.managementGroupName = caseRow.managementGroupName || "";
+  employment.reportingManagerName = caseRow.reportingManager || "";
+  employment.probationPeriodDays =
+    employmentDurationKind(caseRow.employmentType) === "probation"
+      ? caseRow.probationPeriodDays || ""
+      : "0";
+  employment.trainingDurationDays =
+    employmentDurationKind(caseRow.employmentType) === "training"
+      ? caseRow.trainingDurationDays || ""
+      : "";
+  employment.lifecycleStatus = lifecycleStatus;
+
+  const documents: EmployeeDocumentItem[] = (p.documents || []).map((d) => ({
+    id: d.id,
+    documentType: d.kind,
+    documentNumber: "",
+    issueDate: "",
+    expiryDate: "",
+    fileName: d.fileName,
+    fileDataUrl: d.fileDataUrl,
+    uploadedBy: "Onboarding portal",
+    uploadedAt: d.uploadedAt,
+    source: "onboarding" as const,
+  }));
+
+  const education: EducationEntry[] = [];
+  const previousEmployment: PreviousEmploymentEntry[] = [];
+
+  return {
+    personal,
+    employment,
+    governmentIds,
+    bank,
+    companyBank: emptyBank(),
+    salary: emptySalary(),
+    documents,
+    education,
+    previousEmployment,
+  };
+}
+
+export function summarizePortalDetails(portal: PortalPayload): {
+  title: string;
+  lines: string[];
+}[] {
+  return [
+    {
+      title: "Personal",
+      lines: [
+        [portal.personal.firstName, portal.personal.middleName, portal.personal.lastName]
+          .filter(Boolean)
+          .join(" "),
+        maskEmail(portal.personal.personalEmail || portal.personal.email),
+        maskPhone(portal.personal.phone),
+        maskDob(portal.personal.dob),
+        portal.personal.gender,
+        portal.personal.address && `Current: ${maskAddress(portal.personal.address)}`,
+        (portal.personal.permanentAddress || portal.personal.address) &&
+          `Permanent: ${maskAddress(
+            portal.personal.sameAsCurrentAddress
+              ? portal.personal.address
+              : portal.personal.permanentAddress || portal.personal.address,
+          )}`,
+      ].filter(Boolean),
+    },
+    {
+      title: "Government IDs",
+      lines: [
+        portal.governmentIds.aadhaar && `Aadhaar: ${maskAadhaar(portal.governmentIds.aadhaar)}`,
+        portal.governmentIds.pan && `PAN: ${maskPan(portal.governmentIds.pan)}`,
+        portal.governmentIds.passport && `Passport: ${maskKeepLast(portal.governmentIds.passport)}`,
+        portal.governmentIds.uan && `UAN: ${maskKeepLast(portal.governmentIds.uan)}`,
+        portal.governmentIds.esic && `ESIC: ${maskKeepLast(portal.governmentIds.esic)}`,
+      ].filter(Boolean) as string[],
+    },
+    {
+      title: "Bank",
+      lines: [
+        portal.bank.bankName,
+        portal.bank.accountHolder,
+        portal.bank.accountNumber && `A/C ${maskAccount(portal.bank.accountNumber)}`,
+        portal.bank.ifsc,
+      ].filter(Boolean) as string[],
+    },
+    {
+      title: "Emergency",
+      lines: [
+        portal.emergency.name,
+        portal.emergency.relationship,
+        maskPhone(portal.emergency.phone),
+      ].filter(Boolean),
+    },
+    {
+      title: "Education",
+      lines: (() => {
+        const docs = portal.documents
+          .filter((d) => d.kind === "education" || ["DOC-GRAD", "DOC-PG", "DOC-CERT"].includes(d.typeCode ?? ""))
+          .map((d) => d.fileName);
+        return docs.length ? docs : ["None uploaded"];
+      })(),
+    },
+    {
+      title: "Documents",
+      lines:
+        portal.documents.length === 0
+          ? ["None uploaded"]
+          : portal.documents.map((d) => `${d.kind}: ${d.fileName} (${d.verifyStatus})`),
+    },
+    {
+      title: "Policies",
+      lines: [
+        portal.policies.agreed ? "Agreed" : "Not agreed",
+        portal.policies.signature && `Signature: ${portal.policies.signature}`,
+        ...(portal.policies.policies || []),
+      ].filter(Boolean) as string[],
+    },
+  ];
+}
+
+/** Prefer explicit profile photo, else onboarding/HR photo document. */
+export function profilePhotoFromExtension(
+  ext: Pick<EmployeeExtension, "personal" | "documents"> | undefined | null,
+): string | undefined {
+  if (!ext) return undefined;
+  if (ext.personal?.profilePhotoDataUrl) return ext.personal.profilePhotoDataUrl;
+  const photo = (ext.documents || []).find((d) => {
+    const t = (d.documentType || "").toLowerCase();
+    return t === "photo" || t === "doc-photo" || t.includes("photo");
+  });
+  return photo?.fileDataUrl || undefined;
+}
+
+export function displayOrDash(value: string | undefined | null): string {
+  const v = (value || "").trim();
+  return !v || v === "-" ? "-" : v;
+}

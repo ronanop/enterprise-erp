@@ -42,7 +42,7 @@ def capacity_overload_alerts() -> dict:
                 )
             ).all()
         )
-        # Placeholder utilization check — open ops vs capacity computed in later sprints
+        # Placeholder utilization check - open ops vs capacity computed in later sprints
         return {"status": "ok", "work_centers": len(rows), "overloads": 0}
     finally:
         db.close()

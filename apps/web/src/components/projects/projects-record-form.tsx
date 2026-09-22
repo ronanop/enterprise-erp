@@ -1,7 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
@@ -28,6 +28,10 @@ import {
 } from "@/components/projects/projects-ui";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+
+const READ_ONLY_CONTROL_CLASS =
+  "disabled:pointer-events-none disabled:cursor-default disabled:opacity-100 disabled:text-foreground";
 import { ApiClientError } from "@/services/api-client";
 import {
   createCustomer,
@@ -66,14 +70,14 @@ export type FieldSpec = {
   | "readonly"
   | "checkbox"
   | "yesno"
-  | "type_qty_lines";
+  | "type_qty_lines"
+  | "file";
   required?: boolean;
   /** Fixed choices (domain enums). */
   options?: { value: string; label: string }[];
   /** Choices resolved from the lookups map returned by `load`. */
   optionsKey?: string;
   placeholder?: string;
-  hint?: string;
   step?: string;
   min?: string;
   max?: string;
@@ -87,18 +91,50 @@ export type FieldSpec = {
   createNewLabel?: string;
   /** Label for the Add row button on type_qty_lines fields. */
   addLabel?: string;
+  /** For type_qty_lines - show per-line delivery date (default true). */
+  showDate?: boolean;
+  /** For type_qty_lines - lock type/qty; only dates editable (SCM). */
+  datesOnly?: boolean;
   /** Hide field unless predicate returns true. */
   visibleWhen?: (values: FormValues) => boolean;
   /** Clear these fields when this yesno/select/checkbox value changes. */
   clearFieldsOnChange?: string[];
+  /** When the select value changes, merge extra fields (e.g. entity → state). */
+  fillFieldsOnChange?: (value: string, lookups: Lookups) => Record<string, string>;
 };
 
 export type FormSection = {
   title: string;
   subtitle?: string;
   icon?: LucideIcon;
+  /** Desktop column count for the field grid (default 2). */
+  columns?: 2 | 3;
   fields: FieldSpec[];
 };
+
+type FieldBlock =
+  | { kind: "single"; field: FieldSpec }
+  | { kind: "pair"; checkbox: FieldSpec; date: FieldSpec };
+
+/** Pair checkbox/yesno + following date when the date is cleared by / tied to that field. */
+function groupFieldBlocks(fields: FieldSpec[]): FieldBlock[] {
+  const blocks: FieldBlock[] = [];
+  for (let i = 0; i < fields.length; i++) {
+    const field = fields[i];
+    const next = fields[i + 1];
+    const clearsDate =
+      (field.type === "checkbox" || field.type === "yesno") &&
+      next?.type === "date" &&
+      (field.clearFieldsOnChange ?? []).includes(next.name);
+    if (clearsDate && next) {
+      blocks.push({ kind: "pair", checkbox: field, date: next });
+      i += 1;
+      continue;
+    }
+    blocks.push({ kind: "single", field });
+  }
+  return blocks;
+}
 
 /**
  * Shared create/edit shell for Projects records. Values are held as strings and
@@ -114,6 +150,10 @@ export function ProjectsRecordForm({
   emptyValues,
   load,
   onSave,
+  readOnly = false,
+  readOnlyBanner,
+  headerActions,
+  afterSections,
 }: {
   title: string;
   description?: string;
@@ -122,12 +162,25 @@ export function ProjectsRecordForm({
   submitLabel: string;
   sections: FormSection[];
   emptyValues: FormValues;
-  load: () => Promise<{ values?: FormValues; lookups?: Lookups }>;
+  load: () => Promise<{
+    values?: FormValues;
+    lookups?: Lookups;
+    readOnly?: boolean;
+    readOnlyBanner?: string;
+  }>;
   onSave: (values: FormValues) => Promise<string>;
+  /** When true, fields are disabled and save is hidden (stage owner view). */
+  readOnly?: boolean;
+  readOnlyBanner?: string;
+  headerActions?: ReactNode;
+  /** Extra content rendered below the form sections, above the save bar. */
+  afterSections?: ReactNode;
 }) {
   const router = useRouter();
   const [values, setValues] = useState<FormValues>(emptyValues);
   const [lookups, setLookups] = useState<Lookups>({});
+  const [formReadOnly, setFormReadOnly] = useState(readOnly);
+  const [formReadOnlyBanner, setFormReadOnlyBanner] = useState(readOnlyBanner ?? "");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -148,20 +201,34 @@ export function ProjectsRecordForm({
       const result = await load();
       setLookups(result.lookups ?? {});
       if (result.values) setValues((v) => ({ ...v, ...result.values }));
+      if (result.readOnly !== undefined && !readOnly) setFormReadOnly(result.readOnly);
+      if (result.readOnlyBanner !== undefined && !readOnlyBanner)
+        setFormReadOnlyBanner(result.readOnlyBanner);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load form data");
     } finally {
       setLoading(false);
     }
-  }, [load]);
+  }, [load, readOnly, readOnlyBanner]);
 
   useEffect(() => {
     void boot();
   }, [boot]);
 
-  function set(name: string, value: string, clearFields?: string[]) {
+  useEffect(() => {
+    setFormReadOnly(readOnly);
+    setFormReadOnlyBanner(readOnlyBanner ?? "");
+  }, [readOnly, readOnlyBanner]);
+
+  function set(
+    name: string,
+    value: string,
+    clearFields?: string[],
+    fillFields?: Record<string, string>,
+  ) {
+    if (formReadOnly) return;
     setValues((v) => {
-      const next = { ...v, [name]: value };
+      const next = { ...v, ...fillFields, [name]: value };
       for (const key of clearFields ?? []) {
         next[key] = "";
       }
@@ -185,6 +252,218 @@ export function ProjectsRecordForm({
     return [];
   }
 
+  function fieldSpanClass(field: FieldSpec, columns?: 2 | 3): string | undefined {
+    const spanFull =
+      field.full ||
+      field.type === "type_qty_lines" ||
+      field.type === "textarea" ||
+      field.type === "file";
+    if (!spanFull) return undefined;
+    return columns === 3 ? "sm:col-span-2 xl:col-span-3" : "sm:col-span-2";
+  }
+
+  function renderFieldControl(field: FieldSpec) {
+    if (field.type === "type_qty_lines") {
+      return (
+        <TypeQtyLinesEditor
+          value={values[field.name] ?? ""}
+          options={optionsFor(field)}
+          addLabel={field.addLabel ?? "Add type"}
+          showDate={field.showDate !== false}
+          datesOnly={Boolean(field.datesOnly)}
+          disabled={formReadOnly}
+          onChange={(next) => set(field.name, next)}
+        />
+      );
+    }
+    if (field.type === "select") {
+      return (
+        <FinanceSelect
+          value={values[field.name] ?? ""}
+          disabled={formReadOnly}
+          className={cn(formReadOnly && READ_ONLY_CONTROL_CLASS)}
+          onChange={(e) => onSelectChange(field, e.target.value)}
+        >
+          <option value="">{field.placeholder ?? "Select…"}</option>
+          {optionsFor(field).map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+          {field.creatable === "customer" ? (
+            <option value={NEW_CUSTOMER_VALUE}>
+              {field.createNewLabel ?? "New Customer"}
+            </option>
+          ) : null}
+        </FinanceSelect>
+      );
+    }
+    if (field.type === "textarea") {
+      return (
+        <FinanceTextarea
+          value={values[field.name] ?? ""}
+          placeholder={field.placeholder}
+          disabled={formReadOnly}
+          className={cn(formReadOnly && READ_ONLY_CONTROL_CLASS)}
+          onChange={(e) => set(field.name, e.target.value)}
+        />
+      );
+    }
+    if (field.type === "readonly") {
+      if (field.full) {
+        return (
+          <FinanceTextarea
+            className="min-w-0 w-full"
+            value={values[field.name] ?? ""}
+            disabled
+            aria-readonly="true"
+            rows={3}
+          />
+        );
+      }
+      return (
+        <Input
+          className="min-w-0 w-full"
+          value={values[field.name] ?? ""}
+          disabled
+          aria-readonly="true"
+        />
+      );
+    }
+    if (field.type === "file") {
+      const current = (values[field.name] ?? "").trim();
+      const inputId = `file-${field.name}`;
+      return (
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+          {!formReadOnly ? (
+            <>
+              <Input
+                id={inputId}
+                className="sr-only"
+                type="file"
+                tabIndex={-1}
+                aria-hidden="true"
+                accept={field.placeholder || undefined}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  set(field.name, file?.name ?? "");
+                }}
+              />
+              <label
+                htmlFor={inputId}
+                className="inline-flex h-10 w-fit shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border border-primary/40 bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors duration-200 hover:bg-primary/90 focus-within:outline-none focus-within:ring-2 focus-within:ring-ring/40"
+              >
+                Choose file
+              </label>
+            </>
+          ) : null}
+          <p
+            className={cn(
+              "min-w-0 truncate text-sm",
+              current ? "font-medium text-foreground" : "text-muted-foreground",
+            )}
+            title={current || undefined}
+          >
+            {current || "No file chosen"}
+          </p>
+        </div>
+      );
+    }
+    if (field.type === "yesno") {
+      return (
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-4 text-sm text-foreground",
+            formReadOnly && "pointer-events-none",
+          )}
+        >
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
+              checked={values[field.name] === "true"}
+              disabled={formReadOnly}
+              onChange={() =>
+                set(
+                  field.name,
+                  values[field.name] === "true" ? "" : "true",
+                  field.clearFieldsOnChange,
+                )
+              }
+            />
+            <span>Yes</span>
+          </label>
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
+              checked={values[field.name] === "false"}
+              disabled={formReadOnly}
+              onChange={() =>
+                set(
+                  field.name,
+                  values[field.name] === "false" ? "" : "false",
+                  field.clearFieldsOnChange,
+                )
+              }
+            />
+            <span>No</span>
+          </label>
+        </div>
+      );
+    }
+    if (field.type === "checkbox") {
+      return (
+        <label
+          className={cn(
+            "flex min-h-10 w-full items-start gap-3 rounded-lg border border-border/80 bg-muted/25 px-3 py-2.5 text-sm text-foreground transition-colors duration-200",
+            formReadOnly ? "cursor-default" : "cursor-pointer hover:bg-muted/40",
+          )}
+        >
+          <input
+            type="checkbox"
+            className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
+            checked={values[field.name] === "true"}
+            disabled={formReadOnly}
+            onChange={(e) =>
+              set(
+                field.name,
+                e.target.checked ? "true" : "false",
+                field.clearFieldsOnChange,
+              )
+            }
+          />
+          <span className="min-w-0 leading-snug">{field.placeholder ?? "Yes"}</span>
+        </label>
+      );
+    }
+    return (
+      <Input
+        className={cn("min-w-0 w-full", formReadOnly && READ_ONLY_CONTROL_CLASS)}
+        type={field.type}
+        value={values[field.name] ?? ""}
+        placeholder={field.placeholder}
+        step={field.step}
+        min={field.min}
+        max={field.max}
+        disabled={formReadOnly}
+        onChange={(e) => set(field.name, e.target.value)}
+      />
+    );
+  }
+
+  function renderField(field: FieldSpec, className?: string) {
+    return (
+      <FinanceField
+        key={field.name}
+        label={isFieldRequired(field) ? `${field.label} *` : field.label}
+        className={cn("min-w-0", className)}
+      >
+        {renderFieldControl(field)}
+      </FinanceField>
+    );
+  }
+
   function openCustomerDialog(fieldName: string) {
     setCustomerFieldName(fieldName);
     setCustomerDraftName("");
@@ -201,11 +480,13 @@ export function ProjectsRecordForm({
   }
 
   function onSelectChange(field: FieldSpec, value: string) {
+    if (formReadOnly) return;
     if (field.creatable === "customer" && value === NEW_CUSTOMER_VALUE) {
       openCustomerDialog(field.name);
       return;
     }
-    set(field.name, value, field.clearFieldsOnChange);
+    const filled = field.fillFieldsOnChange?.(value, lookups) ?? {};
+    set(field.name, value, field.clearFieldsOnChange, filled);
   }
 
   async function saveCustomerDialog() {
@@ -216,7 +497,7 @@ export function ProjectsRecordForm({
     }
     const branchId = (values.branch_id ?? "").trim();
     if (!branchId) {
-      setCustomerDialogError("Select a Branch on the form before creating a customer.");
+      setCustomerDialogError("Select an office branch context before creating a customer.");
       return;
     }
 
@@ -253,13 +534,18 @@ export function ProjectsRecordForm({
   }
 
   async function save() {
+    if (formReadOnly) return;
     const missing = sections
       .flatMap((s) => s.fields)
       .filter((f) => {
         if (!isFieldRequired(f) || f.type === "readonly") return false;
         if (f.type === "checkbox") return values[f.name] !== "true";
         if (f.type === "yesno") return values[f.name] !== "true" && values[f.name] !== "false";
-        if (f.type === "type_qty_lines") return !hasValidTypeQtyLines(values[f.name]);
+        if (f.type === "type_qty_lines") {
+          return !hasValidTypeQtyLines(values[f.name], {
+            requireDate: f.showDate !== false,
+          });
+        }
         return !(values[f.name] ?? "").trim();
       })
       .map((f) => f.label);
@@ -307,114 +593,65 @@ export function ProjectsRecordForm({
         {backLabel}
       </Link>
 
-      <PageHeader title={title} description={description} />
+      <PageHeader title={title} description={description} actions={headerActions} />
 
       {error ? <ProjectsErrorBanner>{error}</ProjectsErrorBanner> : null}
 
-      {sections.map((section) => (
-        <ProjectsSection
-          key={section.title}
-          title={section.title}
-          subtitle={section.subtitle}
-          icon={section.icon}
-        >
-          <div className="grid items-start gap-x-10 gap-y-3 md:grid-cols-2">
-            {section.fields.filter(isFieldVisible).map((field) => (
-              <FinanceField
-                key={field.name}
-                label={isFieldRequired(field) ? `${field.label} *` : field.label}
-                hint={field.hint}
-                className={field.full || field.type === "type_qty_lines" ? "md:col-span-2" : undefined}
-              >
-                {field.type === "type_qty_lines" ? (
-                  <TypeQtyLinesEditor
-                    value={values[field.name] ?? ""}
-                    options={optionsFor(field)}
-                    addLabel={field.addLabel ?? "Add type"}
-                    onChange={(next) => set(field.name, next)}
-                  />
-                ) : field.type === "select" ? (
-                  <FinanceSelect
-                    value={values[field.name] ?? ""}
-                    onChange={(e) => onSelectChange(field, e.target.value)}
-                  >
-                    <option value="">{field.placeholder ?? "Select…"}</option>
-                    {optionsFor(field).map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                    {field.creatable === "customer" ? (
-                      <option value={NEW_CUSTOMER_VALUE}>
-                        {field.createNewLabel ?? "New Customer"}
-                      </option>
-                    ) : null}
-                  </FinanceSelect>
-                ) : field.type === "textarea" ? (
-                  <FinanceTextarea
-                    value={values[field.name] ?? ""}
-                    placeholder={field.placeholder}
-                    onChange={(e) => set(field.name, e.target.value)}
-                  />
-                ) : field.type === "readonly" ? (
-                  <Input value={values[field.name] ?? ""} disabled aria-readonly="true" />
-                ) : field.type === "yesno" ? (
-                  <div className="flex flex-wrap items-center gap-4 text-sm text-foreground">
-                    <label className="flex cursor-pointer items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
-                        checked={values[field.name] === "true"}
-                        onChange={() =>
-                          set(field.name, "true", field.clearFieldsOnChange)
-                        }
-                      />
-                      <span>Yes</span>
-                    </label>
-                    <label className="flex cursor-pointer items-center gap-2">
-                      <input
-                        type="checkbox"
-                        className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
-                        checked={values[field.name] === "false"}
-                        onChange={() =>
-                          set(field.name, "false", field.clearFieldsOnChange)
-                        }
-                      />
-                      <span>No</span>
-                    </label>
-                  </div>
-                ) : field.type === "checkbox" ? (
-                  <label className="flex cursor-pointer items-center gap-2 text-sm text-foreground">
-                    <input
-                      type="checkbox"
-                      className="size-4 cursor-pointer rounded border border-input accent-[var(--color-accent,#0369A1)]"
-                      checked={values[field.name] === "true"}
-                      onChange={(e) =>
-                        set(
-                          field.name,
-                          e.target.checked ? "true" : "false",
-                          field.clearFieldsOnChange,
-                        )
-                      }
-                    />
-                    <span>{field.placeholder ?? "Yes"}</span>
-                  </label>
-                ) : (
-                  <Input
-                    type={field.type}
-                    value={values[field.name] ?? ""}
-                    placeholder={field.placeholder}
-                    step={field.step}
-                    min={field.min}
-                    max={field.max}
-                    onChange={(e) => set(field.name, e.target.value)}
-                  />
-                )}
-              </FinanceField>
-            ))}
-          </div>
-        </ProjectsSection>
-      ))}
+      <div
+        className={cn(
+          "space-y-5",
+          formReadOnly &&
+          "[&_input:disabled]:pointer-events-none [&_input:disabled]:cursor-default [&_input:disabled]:opacity-100 [&_input:disabled]:text-foreground [&_select:disabled]:pointer-events-none [&_select:disabled]:cursor-default [&_select:disabled]:opacity-100 [&_select:disabled]:text-foreground [&_textarea:disabled]:pointer-events-none [&_textarea:disabled]:cursor-default [&_textarea:disabled]:opacity-100 [&_textarea:disabled]:text-foreground",
+        )}
+      >
+        {sections.map((section) => (
+          <ProjectsSection
+            key={section.title}
+            title={section.title}
+            subtitle={section.subtitle}
+            icon={section.icon}
+            bodyClassName="min-w-0"
+          >
+            <div
+              className={cn(
+                "grid min-w-0 grid-cols-1 items-start gap-x-8 gap-y-5",
+                section.columns === 3
+                  ? "sm:grid-cols-2 xl:grid-cols-3"
+                  : "sm:grid-cols-2",
+              )}
+            >
+              {groupFieldBlocks(section.fields).map((block) => {
+                if (block.kind === "pair") {
+                  if (!isFieldVisible(block.checkbox)) return null;
+                  const dateVisible = isFieldVisible(block.date);
+                  return (
+                    <div
+                      key={block.checkbox.name}
+                      className={cn(
+                        "grid min-w-0 grid-cols-1 items-start gap-x-8 gap-y-5",
+                        // Always reserve full row width so checkboxes stay in the left column;
+                        // date appears in the right column only when the checkbox is checked.
+                        section.columns === 3
+                          ? "sm:col-span-2 xl:col-span-3 sm:grid-cols-2"
+                          : "sm:col-span-2 sm:grid-cols-2",
+                      )}
+                    >
+                      {renderField(block.checkbox)}
+                      {dateVisible ? renderField(block.date) : (
+                        <div className="hidden sm:block" aria-hidden="true" />
+                      )}
+                    </div>
+                  );
+                }
+                if (!isFieldVisible(block.field)) return null;
+                return renderField(block.field, fieldSpanClass(block.field, section.columns));
+              })}
+            </div>
+          </ProjectsSection>
+        ))}
+      </div>
+
+      {afterSections}
 
       <div className="flex justify-end gap-2">
         <Button
@@ -425,17 +662,19 @@ export function ProjectsRecordForm({
           onClick={() => router.push(backHref)}
           disabled={saving}
         >
-          Cancel
+          {formReadOnly ? backLabel : "Cancel"}
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          className="cursor-pointer"
-          onClick={() => void save()}
-          disabled={saving}
-        >
-          {saving ? "Saving…" : submitLabel}
-        </Button>
+        {!formReadOnly ? (
+          <Button
+            type="button"
+            size="sm"
+            className="cursor-pointer"
+            onClick={() => void save()}
+            disabled={saving}
+          >
+            {saving ? "Saving…" : submitLabel}
+          </Button>
+        ) : null}
       </div>
 
       <ConfirmDialog

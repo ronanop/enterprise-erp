@@ -159,8 +159,8 @@ export function FiscalEnterpriseTable(props: Props) {
                     {visible.has("end") ? <td className="px-2 py-1.5 font-mono text-xs">{row.end_date}</td> : null}
                     {visible.has("status") ? <td className="px-2 py-1.5"><FinanceStatusBadge status={row.status} /></td> : null}
                     {visible.has("closed") ? <td className="px-2 py-1.5 text-xs">{row.status === "closed" ? "Yes" : "No"}</td> : null}
-                    {visible.has("created_by") ? <td className="px-2 py-1.5 text-xs text-muted-foreground">{props.resolveUser?.(row.created_by) ?? "—"}</td> : null}
-                    {visible.has("updated") ? <td className="px-2 py-1.5 font-mono text-xs text-muted-foreground">{row.updated_at?.slice(0, 19) ?? "—"}</td> : null}
+                    {visible.has("created_by") ? <td className="px-2 py-1.5 text-xs text-muted-foreground">{props.resolveUser?.(row.created_by) ?? "-"}</td> : null}
+                    {visible.has("updated") ? <td className="px-2 py-1.5 font-mono text-xs text-muted-foreground">{row.updated_at?.slice(0, 19) ?? "-"}</td> : null}
                   </tr>
                 ))
               : null}

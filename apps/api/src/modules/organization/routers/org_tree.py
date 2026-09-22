@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from database.session import get_db
 from modules.foundation.dependencies import get_tenant_context, require_permission
 from modules.foundation.domain.value_objects import TenantContext
-from modules.organization.schemas import ContextSwitchRequest
+from modules.organization.schemas import BranchResponse, CompanyResponse, ContextSwitchRequest
 from modules.organization.service.context_service import OrgContextService
 from modules.organization.service.org_tree_service import OrgTreeService
 from shared.schemas import APIResponse
@@ -50,20 +50,26 @@ def switch_context(
     return APIResponse(message="Context switched", data=data)
 
 
-@context_router.get("/companies", response_model=APIResponse[list])
+@context_router.get("/companies", response_model=APIResponse[list[CompanyResponse]])
 def list_context_companies(
     ctx: Annotated[TenantContext, Depends(get_tenant_context)],
     db: Annotated[Session, Depends(get_db)],
-) -> APIResponse[list]:
+) -> APIResponse[list[CompanyResponse]]:
     companies = OrgContextService(db).list_accessible_companies(ctx)
-    return APIResponse(message="Accessible companies", data=[c.__dict__ for c in companies])
+    return APIResponse(
+        message="Accessible companies",
+        data=[CompanyResponse(**c.__dict__) for c in companies],
+    )
 
 
-@context_router.get("/branches", response_model=APIResponse[list])
+@context_router.get("/branches", response_model=APIResponse[list[BranchResponse]])
 def list_context_branches(
     ctx: Annotated[TenantContext, Depends(get_tenant_context)],
     db: Annotated[Session, Depends(get_db)],
     company_id: Annotated[UUID, Query()],
-) -> APIResponse[list]:
+) -> APIResponse[list[BranchResponse]]:
     branches = OrgContextService(db).list_accessible_branches(ctx, company_id)
-    return APIResponse(message="Accessible branches", data=[b.__dict__ for b in branches])
+    return APIResponse(
+        message="Accessible branches",
+        data=[BranchResponse(**b.__dict__) for b in branches],
+    )
