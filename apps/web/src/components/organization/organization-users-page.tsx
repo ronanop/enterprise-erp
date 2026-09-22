@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Crown, RefreshCw, ShieldCheck, UserRound, Users } from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
+import { ChevronDown, Crown, ShieldCheck, UserRound, Users } from "lucide-react";
 
 import { UserAvatar } from "@/components/layout/user-avatar";
 import { UserMemberModulesCell } from "@/components/organization/user-member-modules-cell";
@@ -18,8 +18,8 @@ import {
 } from "@/lib/module-membership";
 import { PageHeader } from "@/components/layout/page-header";
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
 import {
   listFoundationUsers,
@@ -75,6 +75,8 @@ function UsersTableCard({
   variant,
   canEditModules,
   onModulesSaved,
+  defaultOpen = false,
+  expandWhen = false,
 }: {
   title: string;
   subtitle: string;
@@ -90,7 +92,17 @@ function UsersTableCard({
     assigned_module_keys: string[],
     admin_module_keys: string[],
   ) => void;
+  /** When true, the table body starts expanded. */
+  defaultOpen?: boolean;
+  /** Force-open while true (e.g. active search filter). */
+  expandWhen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const panelId = useId();
+
+  useEffect(() => {
+    if (expandWhen) setOpen(true);
+  }, [expandWhen]);
   const modulesColumnLabel =
     variant === "member"
       ? "Module membership"
@@ -101,86 +113,109 @@ function UsersTableCard({
   return (
     <div className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/70 px-4 py-3">
-        <div className="flex items-center gap-2.5">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-md text-left transition-colors duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          aria-expanded={open}
+          aria-controls={panelId}
+          onClick={() => setOpen((v) => !v)}
+        >
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             {icon}
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-foreground">{title}</p>
             <p className="text-[11px] text-muted-foreground">{subtitle}</p>
           </div>
-        </div>
-        {toolbar}
+          <ChevronDown
+            className={cn(
+              "size-4 shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none",
+              open && "rotate-180",
+            )}
+            aria-hidden
+          />
+        </button>
+        {toolbar ? (
+          <div
+            className="flex flex-wrap items-center gap-2"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            {toolbar}
+          </div>
+        ) : null}
       </div>
 
-      <div className="erp-scroll overflow-x-auto">
-        <table className="w-full min-w-[880px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-border/80 bg-muted/60 text-xs font-semibold tracking-wide text-foreground uppercase">
-              <th className="px-4 py-2.5">User</th>
-              <th className="px-4 py-2.5">Email</th>
-              <th className="px-4 py-2.5">{modulesColumnLabel}</th>
-              <th className="px-4 py-2.5">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading && rows.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
-                  Loading users…
-                </td>
+      {open ? (
+        <div id={panelId} className="erp-scroll overflow-x-auto">
+          <table className="w-full min-w-[880px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-border/80 bg-muted/60 text-xs font-semibold tracking-wide text-foreground uppercase">
+                <th className="px-4 py-2.5">User</th>
+                <th className="px-4 py-2.5">Email</th>
+                <th className="px-4 py-2.5">{modulesColumnLabel}</th>
+                <th className="px-4 py-2.5">Status</th>
               </tr>
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
-                  {emptyLabel}
-                </td>
-              </tr>
-            ) : (
-              rows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
-                >
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-2.5">
-                      <UserAvatar
-                        displayName={row.display_name}
-                        size="sm"
-                        className="!size-8 !text-[10px]"
-                      />
-                      <span className="font-medium text-foreground">{row.display_name}</span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-2.5 text-muted-foreground">{row.email}</td>
-                  <td className="px-4 py-2.5">
-                    {variant === "member" ? (
-                      <UserMemberModulesCell
-                        assignedModuleKeys={row.assigned_module_keys ?? []}
-                        adminModuleKeys={row.admin_module_keys ?? []}
-                      />
-                    ) : (
-                      <UserModulesCell
-                        userId={row.id}
-                        userType={row.user_type}
-                        assignedModuleKeys={row.assigned_module_keys ?? []}
-                        adminModuleKeys={row.admin_module_keys ?? []}
-                        canEdit={canEditModules && variant !== "erp"}
-                        onSaved={(assigned_module_keys, admin_module_keys) => {
-                          onModulesSaved(row.id, assigned_module_keys, admin_module_keys);
-                        }}
-                      />
-                    )}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <FinanceStatusBadge status={row.status} />
+            </thead>
+            <tbody>
+              {loading && rows.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
+                    Loading users…
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              ) : rows.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-4 py-10 text-center text-muted-foreground">
+                    {emptyLabel}
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="border-b border-border/50 transition-colors duration-150 last:border-0 hover:bg-accent/30"
+                  >
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <UserAvatar
+                          displayName={row.display_name}
+                          size="sm"
+                          className="!size-8 !text-[10px]"
+                        />
+                        <span className="font-medium text-foreground">{row.display_name}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2.5 text-muted-foreground">{row.email}</td>
+                    <td className="px-4 py-2.5">
+                      {variant === "member" ? (
+                        <UserMemberModulesCell
+                          assignedModuleKeys={row.assigned_module_keys ?? []}
+                          adminModuleKeys={row.admin_module_keys ?? []}
+                        />
+                      ) : (
+                        <UserModulesCell
+                          userId={row.id}
+                          userType={row.user_type}
+                          assignedModuleKeys={row.assigned_module_keys ?? []}
+                          adminModuleKeys={row.admin_module_keys ?? []}
+                          canEdit={canEditModules && variant !== "erp"}
+                          onSaved={(assigned_module_keys, admin_module_keys) => {
+                            onModulesSaved(row.id, assigned_module_keys, admin_module_keys);
+                          }}
+                        />
+                      )}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <FinanceStatusBadge status={row.status} />
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -205,14 +240,19 @@ export function OrganizationUsersPage({
   const [adminQuery, setAdminQuery] = useState("");
   const [memberQuery, setMemberQuery] = useState("");
   const [unassignedQuery, setUnassignedQuery] = useState("");
-  const [syncing, setSyncing] = useState(false);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
-  const [syncError, setSyncError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      // Keep Entra directory users fresh whenever this page is opened.
+      if (canEditModules) {
+        try {
+          await syncM365OrganizationUsers();
+        } catch {
+          // Soft-fail: still show local users if Graph sync is unavailable.
+        }
+      }
       setRows(await listFoundationUsers());
     } catch (err) {
       setRows([]);
@@ -228,31 +268,10 @@ export function OrganizationUsersPage({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [canEditModules]);
 
   useEffect(() => {
     void load();
-  }, [load]);
-
-  const onSyncM365 = useCallback(async () => {
-    setSyncing(true);
-    setSyncError(null);
-    setSyncMessage(null);
-    try {
-      const result = await syncM365OrganizationUsers();
-      setSyncMessage(
-        `Synced @${result.domain}: ${result.directory_count} users (${result.created} created, ${result.updated} updated).`,
-      );
-      await load();
-    } catch (err) {
-      if (err instanceof ApiClientError) {
-        setSyncError(err.message);
-      } else {
-        setSyncError("Microsoft 365 sync failed.");
-      }
-    } finally {
-      setSyncing(false);
-    }
   }, [load]);
 
   const erpAdmins = useMemo(() => {
@@ -332,27 +351,14 @@ export function OrganizationUsersPage({
     />
   );
 
-  const unassignedToolbar = (
-    <div className="flex flex-nowrap items-center gap-2">
-      <Input
-        value={unassignedQuery}
-        onChange={(e) => setUnassignedQuery(e.target.value)}
-        placeholder="Search name or email…"
-        className="h-9 w-[200px] shrink-0 cursor-pointer sm:w-64"
-        aria-label="Search users without module assignment"
-      />
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="h-9 shrink-0 cursor-pointer gap-1.5"
-        disabled={syncing || !canEditModules}
-        onClick={() => void onSyncM365()}
-      >
-        <RefreshCw className={`size-3.5 ${syncing ? "animate-spin" : ""}`} aria-hidden />
-        {syncing ? "Syncing…" : "Sync Entra"}
-      </Button>
-    </div>
+  const unassignedSearchInput = (
+    <Input
+      value={unassignedQuery}
+      onChange={(e) => setUnassignedQuery(e.target.value)}
+      placeholder="Search name or email…"
+      className="h-9 w-full min-w-[200px] max-w-xs cursor-pointer"
+      aria-label="Search users without module assignment"
+    />
   );
 
   return (
@@ -367,18 +373,6 @@ export function OrganizationUsersPage({
       {error ? (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           {error}
-        </div>
-      ) : null}
-
-      {syncError ? (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {syncError}
-        </div>
-      ) : null}
-
-      {syncMessage ? (
-        <div className="rounded-xl border border-border/80 bg-muted/40 px-4 py-3 text-sm text-foreground">
-          {syncMessage}
         </div>
       ) : null}
 
@@ -397,6 +391,7 @@ export function OrganizationUsersPage({
         variant="erp"
         canEditModules={canEditModules}
         onModulesSaved={onModulesSaved}
+        expandWhen={Boolean(erpQuery.trim())}
       />
 
       <UsersTableCard
@@ -416,6 +411,7 @@ export function OrganizationUsersPage({
         variant="admin"
         canEditModules={canEditModules}
         onModulesSaved={onModulesSaved}
+        expandWhen={Boolean(adminQuery.trim())}
       />
 
       <UsersTableCard
@@ -437,6 +433,7 @@ export function OrganizationUsersPage({
         variant="member"
         canEditModules={canEditModules}
         onModulesSaved={onModulesSaved}
+        expandWhen={Boolean(memberQuery.trim())}
       />
 
       <UsersTableCard
@@ -447,7 +444,7 @@ export function OrganizationUsersPage({
             : `${unassignedUsers.length} Entra users without module assignment`
         }
         icon={<Users className="size-4" />}
-        toolbar={unassignedToolbar}
+        toolbar={unassignedSearchInput}
         loading={loading}
         emptyLabel={
           unassignedQuery.trim()
@@ -458,6 +455,7 @@ export function OrganizationUsersPage({
         variant="admin"
         canEditModules={canEditModules}
         onModulesSaved={onModulesSaved}
+        expandWhen={Boolean(unassignedQuery.trim())}
       />
     </div>
   );

@@ -98,6 +98,13 @@ class UserModulesResponse(BaseModel):
     effective_module_keys: list[str] = Field(default_factory=list)
 
 
+class M365UserSyncResultResponse(BaseModel):
+    domain: str
+    directory_count: int
+    created: int
+    updated: int
+
+
 class ModuleUserOption(BaseModel):
     user_id: UUID
     display_name: str

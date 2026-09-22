@@ -28,7 +28,7 @@ export function hasAllModulesAdmin(adminModuleKeys: string[]): boolean {
 }
 
 export function moduleKeyForHref(href: string): string | null {
-  if (href === "/" || href === "/home") return null;
+  if (href === "/" || href === "/home" || href === "/my-jobs") return null;
   if (href === "/organization/users" || href.startsWith("/organization/")) {
     return "organization";
   }
@@ -59,7 +59,7 @@ export function canAccessHref(
   userType?: string,
   adminModuleKeys: string[] = [],
 ): boolean {
-  if (href === "/" || href === "/home") return true;
+  if (href === "/" || href === "/home" || href === "/my-jobs") return true;
 
   const group = moduleGroupForHref(href);
   if (group && ERP_ADMIN_ONLY_GROUPS.has(group)) {

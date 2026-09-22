@@ -23,9 +23,13 @@ class CrmScopedRepository(OrgScopedRepository):
 
     @staticmethod
     def apply_crm_filter(stmt, model, ctx: TenantContext, *, branch_scoped: bool = False):
+        # CRM isolates non-admins via creator/visibility rules, not session branch.
+        # Branch-scoping here caused "Branch scope mismatch" and empty lists whenever
+        # a company/lead lived on another branch of the same company.
+        _ = branch_scoped
         stmt = CrmScopedRepository.apply_tenant_filter(stmt, model, ctx)
         return apply_org_scope_filter(
-            stmt, model, ctx, module_key=CRM_MODULE_KEY, branch_scoped=branch_scoped
+            stmt, model, ctx, module_key=CRM_MODULE_KEY, branch_scoped=False
         )
 
     @staticmethod

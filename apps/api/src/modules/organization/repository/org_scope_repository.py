@@ -31,9 +31,13 @@ class OrgScopeRepository:
         return self.db.scalar(stmt)
 
     def user_has_company_access(self, ctx: TenantContext, company_id: UUID) -> bool:
-        if has_tenant_wide_data_access(ctx, "organization") or has_tenant_wide_data_access(
-            ctx
-        ):
+        # Platform admins, or any module admin (CRM/finance/etc.) — org APIs are
+        # shared and must not require a separate "organization" module admin grant.
+        if has_tenant_wide_data_access(ctx) or ctx.admin_module_keys:
+            return True
+        if ctx.company_id and ctx.company_id == company_id:
+            return True
+        if ctx.scoped_company_ids and company_id in ctx.scoped_company_ids:
             return True
         stmt = select(SecUserOrgScope).where(
             SecUserOrgScope.user_id == ctx.user_id,
@@ -45,6 +49,10 @@ class OrgScopeRepository:
     def user_has_branch_access(self, ctx: TenantContext, branch_id: UUID) -> bool:
         if ctx.user_type in {"super_admin", "tenant_admin", "company_admin"}:
             return True
+        if ctx.admin_module_keys:
+            return True
+        if ctx.branch_id and ctx.branch_id == branch_id:
+            return True
         # Explicit assignment to this branch
         stmt = select(SecUserOrgScope).where(
             SecUserOrgScope.user_id == ctx.user_id,
@@ -53,8 +61,7 @@ class OrgScopeRepository:
         )
         if self.db.scalar(stmt) is not None:
             return True
-        # Company-scoped users (e.g. HR with TENANT_ADMIN role, user_type=employee)
-        # may manage every branch under companies they already have access to.
+        # Company-scoped users may manage every branch under companies they access.
         from modules.organization.models.branch import OrgBranch
 
         branch = self.db.scalar(

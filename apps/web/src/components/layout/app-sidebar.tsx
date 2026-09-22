@@ -58,7 +58,10 @@ export function AppSidebar() {
         .map((group) => ({
           ...group,
           items: group.items.filter(
-            (item) => item.href === "/" || item.href === "/home",
+            (item) =>
+              item.href === "/" ||
+              item.href === "/home" ||
+              item.href === "/my-jobs",
           ),
         }))
         .filter((group) => group.items.length > 0);

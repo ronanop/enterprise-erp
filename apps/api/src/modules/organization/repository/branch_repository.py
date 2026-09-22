@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from modules.foundation.domain.org_data_scope import (
     effective_company_ids,
     has_module_wide_data_access,
+    is_platform_admin,
 )
 from modules.foundation.domain.value_objects import TenantContext
 from modules.organization.domain.entities import BranchEntity
@@ -30,24 +31,21 @@ class BranchRepository(OrgScopedRepository):
         )
         if company_id:
             stmt = stmt.where(OrgBranch.company_id == company_id)
-        elif has_module_wide_data_access(ctx, ORGANIZATION_MODULE_KEY):
+        elif has_module_wide_data_access(ctx, ORGANIZATION_MODULE_KEY) or is_platform_admin(ctx):
             pass
         else:
-            allowed = effective_company_ids(ctx, module_key=ORGANIZATION_MODULE_KEY)
-            if allowed is not None:
-                if not allowed:
-                    stmt = stmt.where(OrgBranch.id.is_(None))
-                elif len(allowed) == 1:
-                    stmt = stmt.where(OrgBranch.company_id == allowed[0])
-                else:
-                    stmt = stmt.where(OrgBranch.company_id.in_(allowed))
-        # Branch-scoped users only see their own branch; org/platform admins see all in scope
-        if (
-            ctx.branch_id
-            and ctx.user_type not in {"super_admin", "tenant_admin", "company_admin"}
-            and not has_module_wide_data_access(ctx, ORGANIZATION_MODULE_KEY)
-        ):
-            stmt = stmt.where(OrgBranch.id == ctx.branch_id)
+            # Session / assigned companies — do not require organization module admin.
+            allowed = effective_company_ids(ctx, module_key=None)
+            if allowed is None:
+                pass
+            elif not allowed:
+                stmt = stmt.where(OrgBranch.id.is_(None))
+            elif len(allowed) == 1:
+                stmt = stmt.where(OrgBranch.company_id == allowed[0])
+            else:
+                stmt = stmt.where(OrgBranch.company_id.in_(allowed))
+        # Company scope is enough. Do not pin to session branch — that forced CRM
+        # (and other) users to take organization module admin just to pick branches.
         stmt = stmt.order_by(OrgBranch.branch_name.asc())
         return [self._to_entity(r) for r in self.db.scalars(stmt).all()]
 

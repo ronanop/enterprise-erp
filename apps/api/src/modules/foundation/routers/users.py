@@ -11,6 +11,7 @@ from modules.foundation.dependencies import require_permission
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.schemas import (
     AssignRoleRequest,
+    M365UserSyncResultResponse,
     UserCreateRequest,
     UserModulesResponse,
     UserModulesUpdateRequest,
@@ -32,6 +33,30 @@ def list_users(
     return APIResponse(
         message="Users retrieved",
         data=[UserService.to_response(u) for u in users],
+    )
+
+
+@router.post("/sync-m365", response_model=APIResponse[M365UserSyncResultResponse])
+def sync_m365_organization_users(
+    ctx: Annotated[TenantContext, Depends(require_permission("foundation.user:update"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[M365UserSyncResultResponse]:
+    """Pull Microsoft Entra (M365) directory users into this tenant."""
+    from modules.foundation.service.entra_user_sync_service import EntraUserSyncService
+
+    result = EntraUserSyncService(db).sync_organization_users(
+        tenant_id=ctx.tenant_id,
+        actor_user_id=ctx.user_id,
+    )
+    db.commit()
+    return APIResponse(
+        message="Microsoft 365 users synced",
+        data=M365UserSyncResultResponse(
+            domain=result.domain,
+            directory_count=result.directory_count,
+            created=result.created,
+            updated=result.updated,
+        ),
     )
 
 
