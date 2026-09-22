@@ -278,59 +278,61 @@ function HeroSection() {
       <div className="cp-hero-sticky">
         <div className="cp-rays" aria-hidden />
         <div className="cp-stars" aria-hidden />
-        <div
-          className="cp-graphic"
-          style={{ transform: `translate3d(0, ${ty}px, 0) scale(${scale})` }}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="cp-hand cp-hand-left"
-            src={ASSETS.handLeft}
-            alt=""
-            width={161}
-            height={362}
-            style={{
-              opacity: hands,
-              transform: `translate3d(${-handShift}px, 0, 0)`,
-            }}
-          />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            className="cp-hand cp-hand-right"
-            src={ASSETS.handRight}
-            alt=""
-            width={176}
-            height={371}
-            style={{
-              opacity: hands,
-              transform: `translate3d(${handShift}px, 0, 0)`,
-            }}
-          />
-          <div className="cp-graphic-frame">
+        {/* Docked to the floor so wrists stay flush at rest; zoom still grows from the glass. */}
+        <div className="cp-graphic-anchor">
+          <div
+            className="cp-graphic"
+            style={{ transform: `translate3d(0, ${ty}px, 0) scale(${scale})` }}
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              className="cp-graphic-bg"
-              src={ASSETS.heroBg}
+              className="cp-hand cp-hand-left"
+              src={ASSETS.handLeft}
               alt=""
-              width={1332}
-              height={848}
-              fetchPriority="high"
+              width={161}
+              height={362}
+              style={{
+                opacity: hands,
+                transform: `translate3d(${-handShift}px, 0, 0)`,
+              }}
             />
-            <div className="cp-graphic-glow" aria-hidden />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="cp-hand cp-hand-right"
+              src={ASSETS.handRight}
+              alt=""
+              width={176}
+              height={371}
+              style={{
+                opacity: hands,
+                transform: `translate3d(${handShift}px, 0, 0)`,
+              }}
+            />
+            <div className="cp-graphic-frame">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="cp-graphic-bg"
+                src={ASSETS.heroBg}
+                alt=""
+                width={1332}
+                height={848}
+                fetchPriority="high"
+              />
+              <div className="cp-graphic-glow" aria-hidden />
+              <div
+                className="cp-hero-copy"
+                style={{ opacity: copy, transform: `scale(${1 - zoom * 0.08})` }}
+                aria-hidden={copy < 0.05}
+              >
+                <h1>
+                  {HERO.headline[0]}
+                  <br />
+                  {HERO.headline[1]}
+                </h1>
+                <p>{HERO.sub}</p>
+              </div>
+            </div>
           </div>
-        </div>
-
-        <div
-          className="cp-hero-copy"
-          style={{ opacity: copy, transform: `scale(${1 - zoom * 0.1})` }}
-          aria-hidden={copy < 0.05}
-        >
-          <h1>
-            {HERO.headline[0]}
-            <br />
-            {HERO.headline[1]}
-          </h1>
-          <p>{HERO.sub}</p>
         </div>
 
         {/* Lives inside the hero: fades in once the headline is gone. */}
