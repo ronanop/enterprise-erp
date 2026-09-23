@@ -40,6 +40,7 @@ type ParsedImportRow = {
   location: string | null;
   issue_date: string | null;
   charger_serial: string | null;
+  maintenance_reason: string | null;
   errors: string[];
 };
 
@@ -79,6 +80,7 @@ const TEMPLATE_HEADERS = [
   "Assignee",
   "Employee ID",
   "OperationalStatus",
+  "Maintenance Reason",
   "Location",
   "Issue Date",
   "Charger",
@@ -98,6 +100,7 @@ function buildSampleRows(types: ItAssetType[]) {
       Assignee: "Asha Nair",
       "Employee ID": "EMP-001",
       OperationalStatus: "Assigned",
+      "Maintenance Reason": "",
       Location: "Mumbai",
       "Issue Date": "2025-01-15",
       Charger: "CHG-1001",
@@ -112,7 +115,23 @@ function buildSampleRows(types: ItAssetType[]) {
       Assignee: "",
       "Employee ID": "",
       OperationalStatus: "Ready to Move",
+      "Maintenance Reason": "",
       Location: "New Delhi",
+      "Issue Date": "",
+      Charger: "",
+    },
+    {
+      "Asset Name": "Lenovo ThinkPad T14",
+      "S/N": "SN-1003",
+      Make: "Lenovo",
+      Model: "T14",
+      Configuration: "i5 10th GEN 16/512GB",
+      "Asset Type": laptop,
+      Assignee: "",
+      "Employee ID": "",
+      OperationalStatus: "In Maintenance",
+      "Maintenance Reason": "Screen flicker / hardware check",
+      Location: "Mumbai",
       "Issue Date": "",
       Charger: "",
     },
@@ -127,8 +146,14 @@ function normalizeOpsStatus(raw: string): string {
   const v = raw.trim().toLowerCase().replace(/\s+/g, "_");
   if (!v || v === "ready" || v === "ready_to_move") return "READY_TO_MOVE";
   if (v === "assigned") return "ASSIGNED";
-  if (v === "retired") return "RETIRED";
-  if (v === "pending_disposal" || v === "pending") return "PENDING_DISPOSAL";
+  if (
+    v === "in_maintenance" ||
+    v === "maintenance" ||
+    v === "maintaince" ||
+    v === "in_maintaince"
+  ) {
+    return "IN_MAINTENANCE";
+  }
   return raw.trim().toUpperCase();
 }
 
@@ -197,6 +222,13 @@ function parseExcelRows(json: Record<string, unknown>[]): ParsedImportRow[] {
     const configurationRaw = pickField(mapped, ["configuration", "config"]);
     const configuration =
       configurationRaw.length > 500 ? configurationRaw.slice(0, 500) : configurationRaw || null;
+    const maintenance_reason =
+      pickField(mapped, [
+        "maintenance_reason",
+        "reason",
+        "maintenance_remarks",
+        "remarks",
+      ]) || null;
 
     out.push({
       row_number: index + 2,
@@ -213,6 +245,7 @@ function parseExcelRows(json: Record<string, unknown>[]): ParsedImportRow[] {
       issue_date: parseIssueDate(mapped.issue_date ?? mapped.issue),
       charger_serial:
         pickField(mapped, ["charger", "charger_serial", "charger_sn"]) || null,
+      maintenance_reason,
       errors: [],
     });
   });
@@ -248,6 +281,9 @@ function validateRows(
     if (row.operational_status === "ASSIGNED" && !row.employee_code) {
       errors.push("Assigned status requires Employee ID");
     }
+    if (row.operational_status === "IN_MAINTENANCE" && !row.maintenance_reason?.trim()) {
+      errors.push("In Maintenance status requires Maintenance Reason");
+    }
     if (row.employee_code) {
       const emp = empByCode.get(row.employee_code.toLowerCase());
       if (!emp) {
@@ -266,7 +302,7 @@ function validateRows(
         );
       }
     }
-    const allowed = ["READY_TO_MOVE", "ASSIGNED", "RETIRED", "PENDING_DISPOSAL"];
+    const allowed = ["READY_TO_MOVE", "ASSIGNED", "IN_MAINTENANCE"];
     if (!allowed.includes(row.operational_status)) {
       errors.push(`Invalid status '${row.operational_status}'`);
     }
@@ -287,6 +323,7 @@ export function downloadItAssetImportTemplate(types: ItAssetType[]): void {
     { wch: 20 },
     { wch: 14 },
     { wch: 18 },
+    { wch: 28 },
     { wch: 16 },
     { wch: 12 },
     { wch: 14 },
@@ -301,27 +338,49 @@ export function downloadItAssetImportTemplate(types: ItAssetType[]): void {
   const typesSheet = XLSX.utils.json_to_sheet(typeRows);
   typesSheet["!cols"] = [{ wch: 28 }];
 
-  const refSheet = XLSX.utils.aoa_to_sheet([
-    ["OperationalStatus values"],
+  const statusSheet = XLSX.utils.aoa_to_sheet([
+    ["OperationalStatus"],
     ["Ready to Move"],
     ["Assigned"],
-    ["Retired"],
-    ["Pending Disposal"],
+    ["In Maintenance"],
+  ]);
+  statusSheet["!cols"] = [{ wch: 18 }];
+
+  const refSheet = XLSX.utils.aoa_to_sheet([
+    ["OperationalStatus values (use only these)"],
+    ["Ready to Move"],
+    ["Assigned"],
+    ["In Maintenance"],
     [],
     ["Notes"],
     ["Asset codes (AST-2026-000001) are auto-generated - do not add an Asset Code column."],
     ["Location must match a name from Assets → Locations (case-insensitive)."],
     ["If Location is missing, add it under Assets → Locations first, then re-import."],
     ["Assignee = employee name; Employee ID = code (e.g. EMP-001). Both required when Assigned."],
+    ["Maintenance Reason is required when OperationalStatus is In Maintenance (no assignee needed)."],
+    ["In Maintenance defaults: start date = today, expected duration = 7 days."],
     ["Asset Type must match Configuration → Asset Types (see Available types sheet)."],
-    ["Configuration is free text (e.g. Intel Core i5 / Gen 11 / 512 GB); shown on Asset Detail."],
+    ["Configuration is free text (e.g. i5 10th GEN 16/512GB); shown on Asset Detail."],
     ["Charger = charger serial number; creates and links a CHARGER component automatically."],
   ]);
+  refSheet["!cols"] = [{ wch: 90 }];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, importSheet, "Import");
   XLSX.utils.book_append_sheet(wb, typesSheet, "Available types");
+  XLSX.utils.book_append_sheet(wb, statusSheet, "Status dropdown");
   XLSX.utils.book_append_sheet(wb, refSheet, "Reference");
+
+  // Excel data validation list for OperationalStatus (column I = index 8).
+  const statusRange = "'Status dropdown'!$A$2:$A$4";
+  importSheet["!dataValidation"] = [
+    {
+      sqref: `I2:I1000`,
+      type: "list",
+      allowBlank: true,
+      formulas: [statusRange],
+    },
+  ];
 
   const written = XLSX.write(wb, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
   const blob = new Blob([written], {
@@ -480,6 +539,12 @@ export function ItAssetImportDialog({
           ...(loc ? { location_id: loc.id } : {}),
           issue_date: row.issue_date,
           charger_serial: row.charger_serial,
+          ...(row.operational_status === "IN_MAINTENANCE"
+            ? {
+                maintenance_reason: row.maintenance_reason,
+                expected_duration_days: 7,
+              }
+            : {}),
         };
       });
 
@@ -642,6 +707,9 @@ export function ItAssetImportDialog({
                     <th className="px-2 py-2">Asset name</th>
                     <th className="px-2 py-2">Type</th>
                     <th className="px-2 py-2">Status</th>
+                    {validated.some((r) => r.operational_status === "IN_MAINTENANCE") ? (
+                      <th className="px-2 py-2">Maintenance reason</th>
+                    ) : null}
                     <th className="px-2 py-2">Assignee</th>
                     <th className="px-2 py-2">Employee ID</th>
                     <th className="px-2 py-2">Location</th>
@@ -655,6 +723,13 @@ export function ItAssetImportDialog({
                       <td className="px-2 py-1.5 font-medium">{row.asset_name}</td>
                       <td className="px-2 py-1.5 text-xs">{row.asset_type || "-"}</td>
                       <td className="px-2 py-1.5 text-xs">{row.operational_status}</td>
+                      {validated.some((r) => r.operational_status === "IN_MAINTENANCE") ? (
+                        <td className="max-w-[12rem] truncate px-2 py-1.5 text-xs" title={row.maintenance_reason ?? undefined}>
+                          {row.operational_status === "IN_MAINTENANCE"
+                            ? row.maintenance_reason || "—"
+                            : "—"}
+                        </td>
+                      ) : null}
                       <td className="px-2 py-1.5 text-xs">{row.assignee_name ?? "-"}</td>
                       <td className="px-2 py-1.5 font-mono text-xs">
                         {row.employee_code ?? "-"}

@@ -22,9 +22,10 @@ from modules.foundation.domain.value_objects import TenantContext
 
 Ready = AssetOperationalStatus.READY_TO_MOVE.value
 Assigned = AssetOperationalStatus.ASSIGNED.value
+InMaintenance = AssetOperationalStatus.IN_MAINTENANCE.value
+Disposed = AssetOperationalStatus.DISPOSED.value
 Retired = AssetOperationalStatus.RETIRED.value
 Pending = AssetOperationalStatus.PENDING_DISPOSAL.value
-Disposed = AssetOperationalStatus.DISPOSED.value
 
 
 def _ctx() -> TenantContext:
@@ -69,12 +70,14 @@ def _engine():
     assignments = MagicMock()
     operational = MagicMock()
     components = MagicMock()
+    maintenances = MagicMock()
     engine = AssetExcelImportEngine(
         MagicMock(),
         assets=assets,
         assignments=assignments,
         operational=operational,
         components=components,
+        maintenances=maintenances,
     )
     return engine, assets, assignments, operational
 
@@ -255,74 +258,81 @@ def test_assigned_without_employee_fails() -> None:
     assert "employee_id" in (result.reason or "")
 
 
-def test_retired_via_employee_assign_and_return_outdated() -> None:
-    engine, assets, assignments, _ = _engine()
-    asset_id = uuid4()
-    assignment_id = uuid4()
-    employee_id = uuid4()
-    assets.find_by_asset_code.return_value = None
-    assets.find_by_serial_number.return_value = None
-    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
-    assets.submit.return_value = SimpleNamespace(id=asset_id)
-    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
-    assignments.create.return_value = SimpleNamespace(id=assignment_id)
-    assignments.submit.return_value = SimpleNamespace(id=assignment_id)
-    assignments.approve.return_value = SimpleNamespace(id=assignment_id)
+def test_legacy_retired_status_rejected() -> None:
+    engine, assets, _, _ = _engine()
     result = engine.import_row(
         _ctx(),
-        _row(operational_status=Retired, employee_id=employee_id),
+        _row(operational_status=Retired),
         defaults=_defaults(),
         confirm_warnings=False,
     )
-    assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
-    assert result.operational_status == Retired
-    assignments.return_assignment.assert_called_once()
-    assert assignments.return_assignment.call_args.kwargs["return_condition"] == "outdated"
+    assert result.outcome == ExcelImportRowOutcome.FAILED.value
+    assert "invalid_operational_status" in (result.reason or "")
+    assets.create_for_import.assert_not_called()
 
 
-def test_retired_without_employee_uses_branch_allocation() -> None:
-    engine, assets, assignments, _ = _engine()
-    asset_id = uuid4()
-    assignment_id = uuid4()
-    assets.find_by_asset_code.return_value = None
-    assets.find_by_serial_number.return_value = None
-    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
-    assets.submit.return_value = SimpleNamespace(id=asset_id)
-    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
-    assignments.create.return_value = SimpleNamespace(id=assignment_id)
-    assignments.submit.return_value = SimpleNamespace(id=assignment_id)
-    assignments.approve.return_value = SimpleNamespace(id=assignment_id)
-    result = engine.import_row(
-        _ctx(),
-        _row(operational_status=Retired, employee_id=None),
-        defaults=_defaults(),
-        confirm_warnings=False,
-    )
-    assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
-    assert assignments.create.call_args.kwargs["allocation_type"] == "branch"
-
-
-def test_pending_disposal_return_dead() -> None:
-    engine, assets, assignments, _ = _engine()
-    asset_id = uuid4()
-    assignment_id = uuid4()
-    assets.find_by_asset_code.return_value = None
-    assets.find_by_serial_number.return_value = None
-    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
-    assets.submit.return_value = SimpleNamespace(id=asset_id)
-    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
-    assignments.create.return_value = SimpleNamespace(id=assignment_id)
-    assignments.submit.return_value = SimpleNamespace(id=assignment_id)
-    assignments.approve.return_value = SimpleNamespace(id=assignment_id)
+def test_legacy_pending_disposal_status_rejected() -> None:
+    engine, assets, _, _ = _engine()
     result = engine.import_row(
         _ctx(),
         _row(operational_status=Pending),
         defaults=_defaults(),
         confirm_warnings=False,
     )
+    assert result.outcome == ExcelImportRowOutcome.FAILED.value
+    assert "invalid_operational_status" in (result.reason or "")
+    assets.create_for_import.assert_not_called()
+
+
+def test_in_maintenance_starts_via_maintenance_service() -> None:
+    engine, assets, _, _ = _engine()
+    asset_id = uuid4()
+    assets.find_by_asset_code.return_value = None
+    assets.find_by_serial_number.return_value = None
+    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
+    assets.submit.return_value = SimpleNamespace(id=asset_id)
+    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
+    engine._maintenances.start_from_asset.return_value = (
+        SimpleNamespace(id=uuid4()),
+        "started",
+        None,
+    )
+    result = engine.import_row(
+        _ctx(),
+        _row(
+            operational_status=InMaintenance,
+            maintenance_reason="Screen flicker",
+            expected_duration_days=7,
+        ),
+        defaults=_defaults(),
+        confirm_warnings=False,
+    )
     assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
-    assert result.operational_status == Pending
-    assert assignments.return_assignment.call_args.kwargs["return_condition"] == "dead"
+    assert result.operational_status == InMaintenance
+    engine._maintenances.start_from_asset.assert_called_once()
+    kwargs = engine._maintenances.start_from_asset.call_args.kwargs
+    assert kwargs["asset_id"] == asset_id
+    assert kwargs["reason"] == "Screen flicker"
+    assert kwargs["expected_duration_days"] == 7
+
+
+def test_in_maintenance_requires_reason() -> None:
+    engine, assets, _, _ = _engine()
+    asset_id = uuid4()
+    assets.find_by_asset_code.return_value = None
+    assets.find_by_serial_number.return_value = None
+    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
+    assets.submit.return_value = SimpleNamespace(id=asset_id)
+    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
+    result = engine.import_row(
+        _ctx(),
+        _row(operational_status=InMaintenance, maintenance_reason=None),
+        defaults=_defaults(),
+        confirm_warnings=False,
+    )
+    assert result.outcome == ExcelImportRowOutcome.FAILED.value
+    assert "maintenance_reason" in (result.reason or "")
+    engine._maintenances.start_from_asset.assert_not_called()
 
 
 def test_disposed_rejected_without_complete_disposal() -> None:
@@ -484,7 +494,7 @@ def test_assigned_defaults_not_applicable_delivery_status_to_pending() -> None:
 
 @pytest.mark.parametrize(
     "status",
-    [Ready, Assigned, Retired, Pending],
+    [Ready, Assigned, InMaintenance],
 )
 def test_all_ops_statuses_accepted_as_targets(status: str) -> None:
     engine, assets, assignments, operational = _engine()
@@ -499,9 +509,15 @@ def test_all_ops_statuses_accepted_as_targets(status: str) -> None:
     assignments.create.return_value = SimpleNamespace(id=assignment_id)
     assignments.submit.return_value = SimpleNamespace(id=assignment_id)
     assignments.approve.return_value = SimpleNamespace(id=assignment_id)
+    engine._maintenances.start_from_asset.return_value = (
+        SimpleNamespace(id=uuid4()),
+        "started",
+        None,
+    )
     row = _row(
         operational_status=status,
         employee_id=uuid4() if status == Assigned else None,
+        maintenance_reason="Import maintenance" if status == InMaintenance else None,
     )
     result = engine.import_row(_ctx(), row, defaults=_defaults(), confirm_warnings=False)
     assert result.outcome == ExcelImportRowOutcome.IMPORTED.value

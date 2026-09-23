@@ -37,6 +37,29 @@ describe("parseConfigurationString", () => {
     });
   });
 
+  it("parses free-text IT inventory styles", () => {
+    expect(parseConfigurationString("i5 10th GEN 16/512GB")).toEqual({
+      processor: "Intel i5",
+      generation: "10th",
+      ram: "16 GB",
+      storage: "512 GB",
+    });
+    expect(parseConfigurationString("Intel Core i5(11th gen) 16 GB Ram, 512GB SSD")).toEqual({
+      processor: "Intel i5",
+      generation: "11th",
+      ram: "16 GB",
+      storage: "512 GB",
+    });
+    expect(
+      parseConfigurationString("Intel Core i5-10310U CPU @ 1.70GHz, 16 GB RAM, 512GB SSD"),
+    ).toEqual({
+      processor: "Intel i5",
+      generation: "10th",
+      ram: "16 GB",
+      storage: "512 GB",
+    });
+  });
+
   it("round-trips with buildConfigurationString", () => {
     const built = buildConfigurationString({
       processor: "Intel i7",

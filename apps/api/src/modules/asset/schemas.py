@@ -1664,6 +1664,8 @@ class AssetExcelImportRow(BaseModel):
     assignment_remarks: str | None = Field(default=None, max_length=4000)
     company_id: UUID | None = None
     charger_serial: str | None = Field(default=None, max_length=100)
+    maintenance_reason: str | None = Field(default=None, max_length=4000)
+    expected_duration_days: int | None = Field(default=None, ge=1, le=3650)
 
 
 class AssetExcelImportRequest(BaseModel):

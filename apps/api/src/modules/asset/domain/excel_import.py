@@ -15,11 +15,11 @@ VALID_IMPORT_OPERATIONAL_STATUSES = frozenset(
     {
         "READY_TO_MOVE",
         "ASSIGNED",
-        "RETIRED",
-        "PENDING_DISPOSAL",
-        "IN_USE_AS_COMPONENT",
+        "IN_MAINTENANCE",
     }
 )
+
+DEFAULT_IMPORT_MAINTENANCE_DURATION_DAYS = 7
 
 
 class ExcelImportRowOutcome(str, Enum):
@@ -71,6 +71,8 @@ class ExcelImportRowInput:
     assignment_remarks: str | None = None
     company_id: UUID | None = None
     charger_serial: str | None = None
+    maintenance_reason: str | None = None
+    expected_duration_days: int | None = None
 
 
 @dataclass

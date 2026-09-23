@@ -118,8 +118,14 @@ describe("normalizeOperationalStatus", () => {
   it("accepts Ready to Move", () => {
     expect(normalizeOperationalStatus("Ready to Move")).toBe("READY_TO_MOVE");
   });
-  it("accepts Not Working", () => {
-    expect(normalizeOperationalStatus("Not Working")).toBe("PENDING_DISPOSAL");
+  it("accepts In Maintenance aliases", () => {
+    expect(normalizeOperationalStatus("In Maintenance")).toBe("IN_MAINTENANCE");
+    expect(normalizeOperationalStatus("maintenance")).toBe("IN_MAINTENANCE");
+    expect(normalizeOperationalStatus("maintaince")).toBe("IN_MAINTENANCE");
+  });
+  it("rejects legacy queue statuses", () => {
+    expect(normalizeOperationalStatus("Not Working")).toBeNull();
+    expect(normalizeOperationalStatus("Retired")).toBeNull();
   });
   it("rejects garbage", () => {
     expect(normalizeOperationalStatus("broken")).toBeNull();

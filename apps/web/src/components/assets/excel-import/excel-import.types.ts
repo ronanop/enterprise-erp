@@ -139,6 +139,17 @@ export const EXCEL_IMPORT_TARGET_FIELDS = [
     aliases: ["configuration", "config", "specs"],
   },
   {
+    key: "maintenanceReason",
+    label: "Maintenance Reason",
+    required: false,
+    aliases: [
+      "maintenance reason",
+      "maintenance_reason",
+      "reason",
+      "maintenance remarks",
+    ],
+  },
+  {
     key: "serialNumber",
     label: "Serial Number",
     required: false,
@@ -170,9 +181,7 @@ export type ExcelImportFieldDef = {
 export const VALID_OPERATIONAL_STATUSES = [
   "READY_TO_MOVE",
   "ASSIGNED",
-  "RETIRED",
-  "PENDING_DISPOSAL",
-  "IN_USE_AS_COMPONENT",
+  "IN_MAINTENANCE",
 ] as const;
 
 /** Human labels / Excel tab names → enum. */
@@ -181,13 +190,11 @@ export const OPERATIONAL_STATUS_ALIASES: Record<string, (typeof VALID_OPERATIONA
   "ready to move": "READY_TO_MOVE",
   ready: "READY_TO_MOVE",
   assigned: "ASSIGNED",
-  retired: "RETIRED",
-  "not given to anyone": "RETIRED",
-  pending_disposal: "PENDING_DISPOSAL",
-  "pending disposal": "PENDING_DISPOSAL",
-  "not working": "PENDING_DISPOSAL",
-  in_use_as_component: "IN_USE_AS_COMPONENT",
-  "in use as component": "IN_USE_AS_COMPONENT",
+  in_maintenance: "IN_MAINTENANCE",
+  "in maintenance": "IN_MAINTENANCE",
+  maintenance: "IN_MAINTENANCE",
+  maintaince: "IN_MAINTENANCE",
+  "in maintaince": "IN_MAINTENANCE",
 };
 
 export const VALID_DELIVERY_STATUSES = [

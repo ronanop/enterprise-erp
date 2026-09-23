@@ -445,6 +445,8 @@ def import_assets_from_excel(
             assignment_remarks=r.assignment_remarks,
             company_id=r.company_id or body.company_id,
             charger_serial=r.charger_serial,
+            maintenance_reason=r.maintenance_reason,
+            expected_duration_days=r.expected_duration_days,
         )
         for r in body.rows
     ]

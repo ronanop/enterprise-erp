@@ -19,6 +19,7 @@ from modules.asset.domain.enums import (
     AssignmentDeliveryReferenceStatus,
 )
 from modules.asset.domain.excel_import import (
+    DEFAULT_IMPORT_MAINTENANCE_DURATION_DAYS,
     ExcelImportDefaults,
     ExcelImportRowInput,
     ExcelImportRowOutcome,
@@ -26,19 +27,22 @@ from modules.asset.domain.excel_import import (
     ExcelImportSkipReason,
     VALID_IMPORT_OPERATIONAL_STATUSES,
 )
-from modules.asset.domain.exceptions import DuplicateAssetRegistrationError
+from modules.asset.domain.exceptions import (
+    DuplicateAssetRegistrationError,
+    MaintenanceApprovalPendingError,
+)
 from modules.asset.repository.site_location_repository import SiteLocationRepository
 from modules.asset.service.asset_operational_status_service import AssetOperationalStatusService
 from modules.asset.service.asset_scope_validator import AssetScopeValidator
 from modules.asset.service.asset_service import AssetService
 from modules.asset.service.assignment_service import AssignmentService
 from modules.asset.service.component_service import AssetComponentService
+from modules.asset.service.maintenance_service import MaintenanceService
 from modules.foundation.domain.value_objects import TenantContext
 
 Ready = AssetOperationalStatus.READY_TO_MOVE.value
 Assigned = AssetOperationalStatus.ASSIGNED.value
-Retired = AssetOperationalStatus.RETIRED.value
-Pending = AssetOperationalStatus.PENDING_DISPOSAL.value
+InMaintenance = AssetOperationalStatus.IN_MAINTENANCE.value
 Disposed = AssetOperationalStatus.DISPOSED.value
 
 
@@ -53,12 +57,14 @@ class AssetExcelImportEngine:
         assignments: AssignmentService | None = None,
         operational: AssetOperationalStatusService | None = None,
         components: AssetComponentService | None = None,
+        maintenances: MaintenanceService | None = None,
     ) -> None:
         self._db = db
         self._assets = assets or AssetService(db)
         self._assignments = assignments or AssignmentService(db)
         self._operational = operational or AssetOperationalStatusService(db)
         self._components = components or AssetComponentService(db)
+        self._maintenances = maintenances or MaintenanceService(db)
 
     def import_row(
         self,
@@ -121,20 +127,24 @@ class AssetExcelImportEngine:
             asset = self._create_and_activate_asset(ctx, row=row, defaults=defaults, company_id=cid)
             assignment_id: UUID | None = None
             final_ops = Ready
+            warning = preview == "warning"
+            warning_reason: str | None = None
 
             if target_ops == Ready:
                 final_ops = Ready
             elif target_ops == Assigned:
                 if row.employee_id is None:
                     raise ValueError("ASSIGNED rows require employee_id")
-                assignment_id = self._assign_to_employee(ctx, asset_id=asset.id, row=row, company_id=cid)
+                assignment_id = self._assign_to_employee(
+                    ctx, asset_id=asset.id, row=row, company_id=cid
+                )
                 final_ops = Assigned
-            elif target_ops == Retired:
-                assignment_id = self._path_to_retired(ctx, asset_id=asset.id, row=row, company_id=cid)
-                final_ops = Retired
-            elif target_ops == Pending:
-                assignment_id = self._path_to_pending(ctx, asset_id=asset.id, row=row, company_id=cid)
-                final_ops = Pending
+            elif target_ops == InMaintenance:
+                final_ops, warning_reason = self._path_to_maintenance(
+                    ctx, asset_id=asset.id, row=row, company_id=cid
+                )
+                if warning_reason:
+                    warning = True
 
             self._install_charger_if_present(ctx, row=row, asset_id=asset.id, company_id=cid)
 
@@ -144,7 +154,8 @@ class AssetExcelImportEngine:
                 asset_id=asset.id,
                 assignment_id=assignment_id,
                 operational_status=final_ops,
-                warning=preview == "warning",
+                reason=warning_reason,
+                warning=warning,
             )
         except DuplicateAssetRegistrationError as exc:
             return ExcelImportRowResult(
@@ -292,74 +303,38 @@ class AssetExcelImportEngine:
         activated = self._assignments.approve(ctx, assignment.id)
         return activated.id
 
-    def _path_to_retired(
+    def _path_to_maintenance(
         self,
         ctx: TenantContext,
         *,
         asset_id: UUID,
         row: ExcelImportRowInput,
         company_id: UUID | None,
-    ) -> UUID:
-        """READY→ASSIGNED→RETIRED via assignment workflows (matrix forbids READY→RETIRED)."""
-        if row.employee_id is not None:
-            assignment_id = self._assign_to_employee(
-                ctx, asset_id=asset_id, row=row, company_id=company_id
-            )
-        else:
-            assignment_id = self._assign_to_branch(
-                ctx, asset_id=asset_id, row=row, company_id=company_id
-            )
-        self._assignments.return_assignment(
-            ctx,
-            assignment_id,
-            return_condition="outdated",
-            reason="excel_import",
-            remarks=row.assignment_remarks or "excel_import_retired",
-        )
-        return assignment_id
+    ) -> tuple[str, str | None]:
+        """Create asset then start maintenance (Ready → In Maintenance).
 
-    def _path_to_pending(
-        self,
-        ctx: TenantContext,
-        *,
-        asset_id: UUID,
-        row: ExcelImportRowInput,
-        company_id: UUID | None,
-    ) -> UUID:
-        """READY→ASSIGNED→PENDING_DISPOSAL via return dead."""
-        if row.employee_id is not None:
-            assignment_id = self._assign_to_employee(
-                ctx, asset_id=asset_id, row=row, company_id=company_id
+        Returns (final_ops, optional_warning_reason).
+        """
+        reason = (row.maintenance_reason or "").strip()
+        if not reason:
+            raise ValueError("IN_MAINTENANCE rows require maintenance_reason")
+        duration = row.expected_duration_days or DEFAULT_IMPORT_MAINTENANCE_DURATION_DAYS
+        if duration < 1:
+            duration = DEFAULT_IMPORT_MAINTENANCE_DURATION_DAYS
+        try:
+            _row, outcome, _message = self._maintenances.start_from_asset(
+                ctx,
+                asset_id=asset_id,
+                reason=reason,
+                expected_duration_days=duration,
+                maintenance_type="preventive",
+                scheduled_date=date.today(),
+                company_id=company_id,
             )
-        else:
-            assignment_id = self._assign_to_branch(
-                ctx, asset_id=asset_id, row=row, company_id=company_id
+        except MaintenanceApprovalPendingError as exc:
+            return Ready, str(exc) or (
+                "Maintenance submitted; approval from another user is required before start."
             )
-        self._assignments.return_assignment(
-            ctx,
-            assignment_id,
-            return_condition="dead",
-            reason="excel_import",
-            remarks=row.assignment_remarks or "excel_import_pending_disposal",
-        )
-        return assignment_id
-
-    def _assign_to_branch(
-        self,
-        ctx: TenantContext,
-        *,
-        asset_id: UUID,
-        row: ExcelImportRowInput,
-        company_id: UUID | None,
-    ) -> UUID:
-        assignment = self._assignments.create(
-            ctx,
-            branch_id=row.branch_id,
-            company_id=company_id,
-            asset_id=asset_id,
-            allocation_type="branch",
-            assignment_remarks=row.assignment_remarks or "excel_import_status_path",
-        )
-        self._assignments.submit(ctx, assignment.id)
-        activated = self._assignments.approve(ctx, assignment.id)
-        return activated.id
+        if outcome == "started":
+            return InMaintenance, None
+        return Ready, _message or "Maintenance approval pending before start."

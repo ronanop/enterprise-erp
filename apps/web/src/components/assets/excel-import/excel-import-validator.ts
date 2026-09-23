@@ -282,6 +282,19 @@ export function validateImportRows(
       });
     }
 
+    if (
+      values.operationalStatus === "IN_MAINTENANCE" &&
+      !values.maintenanceReason?.trim()
+    ) {
+      issues.push({
+        severity: "error",
+        code: "empty_mandatory",
+        message: "In Maintenance status requires Maintenance Reason",
+        rowNumber: row.rowNumber,
+        field: "maintenanceReason",
+      });
+    }
+
     const hasError = issues.some((i) => i.severity === "error");
     const hasWarning = issues.some((i) => i.severity === "warning");
     const status = hasError ? "invalid" : hasWarning ? "warning" : "valid";
