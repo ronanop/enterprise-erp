@@ -1,10 +1,18 @@
 # App-only stack for coexistence with other host services.
-# Shared infra: 172.16.200.26 (Postgres, Redis, RabbitMQ, OpenSearch) + AWS S3.
+# Infra on this VM: docker compose -f docker-compose.infra.yml (Redis, RabbitMQ, OpenSearch).
+# Postgres: AWS RDS via DATABASE_URL. Object storage: AWS S3.
+# Shares Docker network `erp-net` with infra (REDIS_URL=redis://redis:6379/0, etc.).
 # Does NOT bind 80/443/5432/6379/5672/9200.
 # Host ports: API :8010  |  Web :3000  |  Employee :3001  |  Nginx TLS :8443
 
+networks:
+  erp-net:
+    name: erp-net
+    external: true
+
 services:
   api:
+    networks: [erp-net]
     build:
       context: ./apps/api
       dockerfile: Dockerfile
@@ -54,6 +62,7 @@ services:
       retries: 10
 
   celery-worker:
+    networks: [erp-net]
     build:
       context: ./apps/api
       dockerfile: Dockerfile
@@ -94,6 +103,7 @@ services:
       - "host.docker.internal:host-gateway"
 
   web:
+    networks: [erp-net]
     build:
       context: ./apps/web
       dockerfile: Dockerfile
@@ -118,6 +128,7 @@ services:
         condition: service_healthy
 
   employee-app:
+    networks: [erp-net]
     build:
       context: ./apps/employee-app
       dockerfile: Dockerfile
@@ -141,6 +152,7 @@ services:
         condition: service_healthy
 
   nginx:
+    networks: [erp-net]
     image: nginx:1.27-alpine
     container_name: erp-nginx
     restart: unless-stopped

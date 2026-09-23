@@ -1,0 +1,72 @@
+# Shared backend infra for this VM (172.16.200.30).
+# Replaces the former LAN infra host 172.16.200.26 for Redis / RabbitMQ / OpenSearch.
+# Postgres remains AWS RDS (see DATABASE_URL in .env).
+# Usage: docker compose -f docker-compose.infra.yml up -d
+# Shares network `erp-net` with docker-compose.app.yml (DNS: redis, rabbitmq, opensearch).
+
+networks:
+  erp-net:
+    name: erp-net
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: erp-redis
+    restart: unless-stopped
+    networks: [erp-net]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - erp_redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: erp-rabbitmq
+    restart: unless-stopped
+    networks: [erp-net]
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-erp}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-erp_dev_password}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    volumes:
+      - erp_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  opensearch:
+    image: opensearchproject/opensearch:2
+    container_name: erp-opensearch
+    restart: unless-stopped
+    networks: [erp-net]
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "${OPENSEARCH_PORT:-9200}:9200"
+    volumes:
+      - erp_opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+volumes:
+  erp_redis_data:
+    name: erp_redis_data
+  erp_rabbitmq_data:
+    name: erp_rabbitmq_data
+  erp_opensearch_data:
+    name: erp_opensearch_data

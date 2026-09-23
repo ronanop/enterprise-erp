@@ -106,29 +106,37 @@ export const navigation: NavGroup[] = [
       },
     ],
   },
-  ...(["foundation", "organization", "master-data", "operations"] as const).map((group) => ({
-    title: groupTitles[group],
-    items: [
-      ...erpModules
-        .filter((m) => m.group === group)
-        .map((m) => ({
-          title: m.title,
-          href: m.href,
-          description: m.description,
-          icon: iconMap[m.icon],
-          inApp: IN_APP_NAV_GROUPS.has(group),
-        })),
-      ...(group === "organization"
-        ? [
-            {
-              title: "Users",
-              href: "/organization/users",
-              description: "ERP users in your organization tenant",
-              icon: Users,
-              inApp: true,
-            } satisfies NavItem,
-          ]
-        : []),
-    ],
-  })),
+  ...(["foundation", "organization", "master-data", "operations"] as const).map((group) => {
+    const moduleItems = erpModules
+      .filter((m) => m.group === group)
+      .map((m) => ({
+        title: m.title,
+        href: m.href,
+        description: m.description,
+        icon: iconMap[m.icon],
+        inApp: IN_APP_NAV_GROUPS.has(group),
+      }));
+    // Operations sidebar: alphabetical by label (Analytics, Asset Management, …).
+    const items =
+      group === "operations"
+        ? [...moduleItems].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }))
+        : moduleItems;
+    return {
+      title: groupTitles[group],
+      items: [
+        ...items,
+        ...(group === "organization"
+          ? [
+              {
+                title: "Users",
+                href: "/organization/users",
+                description: "ERP users in your organization tenant",
+                icon: Users,
+                inApp: true,
+              } satisfies NavItem,
+            ]
+          : []),
+      ],
+    };
+  }),
 ];

@@ -9,6 +9,7 @@ import redis
 from redis.exceptions import RedisError
 
 from core.config import settings
+from core.exceptions import RedisUnavailableException
 
 logger = logging.getLogger(__name__)
 
@@ -104,28 +105,54 @@ class SessionStore:
     def set_oauth_state(
         self, state: str, payload: dict[str, Any], *, ttl_seconds: int = 600
     ) -> None:
-        self._client.setex(f"oauth:state:{state}", ttl_seconds, json.dumps(payload))
+        try:
+            self._client.setex(f"oauth:state:{state}", ttl_seconds, json.dumps(payload))
+        except RedisError as exc:
+            logger.error("Redis unavailable for set_oauth_state: %s", exc)
+            raise RedisUnavailableException(
+                "Sign-in temporarily unavailable (session store unreachable)"
+            ) from exc
 
     def pop_oauth_state(self, state: str) -> dict[str, Any] | None:
         key = f"oauth:state:{state}"
-        raw = cast(str | None, self._client.get(key))
-        if raw is None:
-            return None
-        self._client.delete(key)
-        return json.loads(raw)
+        try:
+            raw = cast(str | None, self._client.get(key))
+            if raw is None:
+                return None
+            self._client.delete(key)
+            return json.loads(raw)
+        except RedisError as exc:
+            logger.error("Redis unavailable for pop_oauth_state: %s", exc)
+            raise RedisUnavailableException(
+                "Sign-in temporarily unavailable (session store unreachable)"
+            ) from exc
 
     def set_oauth_exchange(
         self, exchange_code: str, payload: dict[str, Any], *, ttl_seconds: int = 120
     ) -> None:
-        self._client.setex(f"oauth:exchange:{exchange_code}", ttl_seconds, json.dumps(payload))
+        try:
+            self._client.setex(
+                f"oauth:exchange:{exchange_code}", ttl_seconds, json.dumps(payload)
+            )
+        except RedisError as exc:
+            logger.error("Redis unavailable for set_oauth_exchange: %s", exc)
+            raise RedisUnavailableException(
+                "Sign-in temporarily unavailable (session store unreachable)"
+            ) from exc
 
     def pop_oauth_exchange(self, exchange_code: str) -> dict[str, Any] | None:
         key = f"oauth:exchange:{exchange_code}"
-        raw = cast(str | None, self._client.get(key))
-        if raw is None:
-            return None
-        self._client.delete(key)
-        return json.loads(raw)
+        try:
+            raw = cast(str | None, self._client.get(key))
+            if raw is None:
+                return None
+            self._client.delete(key)
+            return json.loads(raw)
+        except RedisError as exc:
+            logger.error("Redis unavailable for pop_oauth_exchange: %s", exc)
+            raise RedisUnavailableException(
+                "Sign-in temporarily unavailable (session store unreachable)"
+            ) from exc
 
     def set_user_avatar(
         self,

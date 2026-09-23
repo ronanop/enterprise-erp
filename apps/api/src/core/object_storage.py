@@ -82,10 +82,13 @@ def _client():
         ) from exc
 
     cfg = get_settings()
+    endpoint = cfg.s3_endpoint_url.strip()
+    # Path-style required for MinIO / IP endpoints; virtual-hosted for AWS.
+    s3_cfg: dict[str, str] = {"addressing_style": "path"} if endpoint else {}
     kwargs: dict[str, object] = {
         "service_name": "s3",
         "region_name": cfg.s3_region.strip() or None,
-        "config": Config(signature_version="s3v4"),
+        "config": Config(signature_version="s3v4", s3=s3_cfg),
     }
     access = cfg.aws_access_key_id.strip()
     secret = cfg.aws_secret_access_key.strip()
@@ -94,8 +97,7 @@ def _client():
         kwargs["aws_secret_access_key"] = secret
     if cfg.aws_session_token.strip():
         kwargs["aws_session_token"] = cfg.aws_session_token.strip()
-    # Optional custom endpoint (LocalStack / rare private gateways) — not MinIO default.
-    endpoint = cfg.s3_endpoint_url.strip()
+    # Optional custom endpoint (MinIO / LocalStack). Empty = real AWS S3.
     if endpoint:
         kwargs["endpoint_url"] = endpoint
     return boto3.client(**kwargs)

@@ -37,6 +37,11 @@ class DatabaseUnavailableException(AppException):
         super().__init__(message, status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
 
 
+class RedisUnavailableException(AppException):
+    def __init__(self, message: str = "Session store unavailable") -> None:
+        super().__init__(message, status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
+
+
 class UnauthorizedException(AppException):
     def __init__(self, message: str = "Unauthorized") -> None:
         super().__init__(message, status_code=status.HTTP_401_UNAUTHORIZED)
