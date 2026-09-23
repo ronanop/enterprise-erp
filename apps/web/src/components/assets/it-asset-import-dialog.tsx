@@ -562,7 +562,9 @@ export function ItAssetImportDialog({
         empByCode.set(normalizeEmployeeCodeKey(e.employeeCode), e.id);
       }
 
-      const revalidated = validateRows(preview, employees, latestLocations, assetTypes);
+      const revalidated = validateRows(preview, employees, locations, assetTypes, {
+        skipEmployeeLookup: employeesLoadFailed,
+      });
       const stillInvalid = revalidated.filter((r) => r.errors.length > 0);
       if (stillInvalid.length > 0) {
         setError(
@@ -573,16 +575,11 @@ export function ItAssetImportDialog({
         return;
       }
 
-      const empByCode = new Map(
-        employees
-          .filter((e) => e.employeeCode)
-          .map((e) => [e.employeeCode!.toLowerCase(), e.id]),
-      );
       const typeByName = new Map(
         assetTypes.filter((t) => t.active).map((t) => [normalizeName(t.name), t.id]),
       );
       const locByName = new Map(
-        latestLocations.map((l) => [normalizeName(l.name), l]),
+        locations.map((l) => [normalizeName(l.name), l]),
       );
 
       const apiRows = revalidated.map((row) => {
@@ -619,8 +616,8 @@ export function ItAssetImportDialog({
 
       const resolvedCompanyId =
         companyId ||
-        latestLocations.find((l) => l.company_id)?.company_id ||
-        latestLocations[0]?.company_id ||
+        locations.find((l) => l.company_id)?.company_id ||
+        locations[0]?.company_id ||
         undefined;
 
       const result = await assetOperationsService.importExcelRegister({
