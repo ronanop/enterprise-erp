@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { isAuthenticated } from "@/lib/auth";
 import {
   assetRegisterService,
-  buildSelfServiceUrl,
+  buildAssetQrUrl,
   type AssetsRow,
 } from "@/services/assets-service";
 import { ApiClientError } from "@/services/api-client";
@@ -48,7 +48,7 @@ export function AssetQrWorkspace() {
 
   const selfUrl = useMemo(() => {
     if (!asset?.id) return "";
-    return buildSelfServiceUrl(String(asset.id));
+    return buildAssetQrUrl(String(asset.id));
   }, [asset?.id]);
 
   const canvasId = asset ? `qr-${asset.id}` : "qr-preview";
@@ -78,7 +78,7 @@ export function AssetQrWorkspace() {
     <div className="space-y-4">
       <PageHeader
         title="QR / Barcode"
-        description="Generate labels, print, and open asset details from a scan target URL."
+        description="Generate labels that open the authenticated Information Portal after Microsoft sign-in."
       />
 
       <Card>

@@ -27,9 +27,9 @@ import {
 import {
   handleInventoryMenuWorkflow,
 } from "@/components/assets/inventory/inventory-workflow";
-import { openMaintenanceForAsset } from "@/components/assets/asset-maintenance-workspace";
+import { ItMaintenanceStartDialog } from "@/components/assets/it-maintenance-start-dialog";
+import { ItAssetDisposeDialog } from "@/components/assets/it-asset-dispose-dialog";
 import { DeleteAssetConfirmDialog } from "@/components/assets/delete-asset-confirm-dialog";
-import { StartDisposalConfirmDialog } from "@/components/assets/start-disposal-confirm-dialog";
 import { ReinstateConfirmDialog } from "@/components/assets/reinstate-confirm-dialog";
 import {
   exportInventoryRegister,
@@ -229,13 +229,10 @@ export function AssetInventoryContainer({
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
   const [startDisposalRow, setStartDisposalRow] = useState<InventoryRowViewModel | null>(null);
-  const [startDisposalSubmitting, setStartDisposalSubmitting] = useState(false);
   const [startDisposalError, setStartDisposalError] = useState<string | null>(null);
-  const [reinstateRow, setReinstateRow] = useState<InventoryRowViewModel | null>(null);
+  const [maintenanceRow, setMaintenanceRow] = useState<InventoryRowViewModel | null>(null);
   const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false);
   const [maintenanceError, setMaintenanceError] = useState<string | null>(null);
-  const [reinstateSubmitting, setReinstateSubmitting] = useState(false);
-  const [reinstateError, setReinstateError] = useState<string | null>(null);
   const [deleteRow, setDeleteRow] = useState<InventoryRowViewModel | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -481,23 +478,12 @@ export function AssetInventoryContainer({
         return;
       }
       if (action === "reinstate") {
-        closeDrawer();
-        setReinstateError(null);
-        setReinstateRow(row);
         return;
       }
       if (action === "maintenance") {
         closeDrawer();
         setMaintenanceError(null);
-        setMaintenanceSubmitting(true);
-        void openMaintenanceForAsset(row.id, (href) => router.push(href))
-          .catch((err) => {
-            const message =
-              err instanceof ApiClientError ? err.message : "Could not create maintenance draft";
-            setMaintenanceError(message);
-            setExportError(message);
-          })
-          .finally(() => setMaintenanceSubmitting(false));
+        setMaintenanceRow(row);
         return;
       }
       if (action === "assign" || action === "return") {
@@ -512,42 +498,6 @@ export function AssetInventoryContainer({
     },
     [closeDrawer, navigation, router, snapshotUiForWorkflow],
   );
-
-  const confirmStartDisposal = useCallback(async () => {
-    if (!startDisposalRow) return;
-    setStartDisposalSubmitting(true);
-    setStartDisposalError(null);
-    try {
-      await assetRegisterService.startDisposal(startDisposalRow.id);
-      setStartDisposalRow(null);
-      setReloadToken((t) => t + 1);
-      navigation.openDisposal(startDisposalRow.id);
-    } catch (err) {
-      setStartDisposalError(
-        err instanceof ApiClientError ? err.message : "Could not start disposal",
-      );
-    } finally {
-      setStartDisposalSubmitting(false);
-    }
-  }, [navigation, startDisposalRow]);
-
-  const confirmReinstate = useCallback(async () => {
-    if (!reinstateRow) return;
-    setReinstateSubmitting(true);
-    setReinstateError(null);
-    try {
-      await assetRegisterService.reinstate(reinstateRow.id);
-      setReinstateRow(null);
-      setExportSuccess("Asset reinstated and is Ready to Move.");
-      setReloadToken((t) => t + 1);
-    } catch (err) {
-      setReinstateError(
-        err instanceof ApiClientError ? err.message : "Could not reinstate asset",
-      );
-    } finally {
-      setReinstateSubmitting(false);
-    }
-  }, [reinstateRow]);
 
   const confirmDelete = useCallback(async () => {
     if (!deleteRow) return;
@@ -689,7 +639,7 @@ export function AssetInventoryContainer({
         onExportExcel={() => void runExport("xlsx")}
         onExportCsv={() => void runExport("csv")}
       />
-      <StartDisposalConfirmDialog
+      <ItAssetDisposeDialog
         open={startDisposalRow != null}
         asset={
           startDisposalRow
@@ -697,43 +647,61 @@ export function AssetInventoryContainer({
                 id: startDisposalRow.id,
                 assetCode: startDisposalRow.assetTag,
                 assetName: startDisposalRow.laptopName,
-                serialNumber: startDisposalRow.serialNumber,
-                lifecycleStatus: startDisposalRow.lifecycleStatus,
-                operationalStatus: startDisposalRow.operationalStatus,
+                branchId: startDisposalRow.branchId,
               }
             : null
         }
-        submitting={startDisposalSubmitting}
-        error={startDisposalError}
         onCancel={() => {
-          if (startDisposalSubmitting) return;
           setStartDisposalRow(null);
           setStartDisposalError(null);
         }}
-        onConfirm={() => void confirmStartDisposal()}
+        onDisposed={() => {
+          setStartDisposalRow(null);
+          setStartDisposalError(null);
+          setExportSuccess("Asset disposed successfully.");
+          setReloadToken((t) => t + 1);
+          navigation.openDisposal();
+        }}
       />
-      <ReinstateConfirmDialog
-        open={reinstateRow != null}
+      <ItMaintenanceStartDialog
+        open={maintenanceRow != null}
         asset={
-          reinstateRow
+          maintenanceRow
             ? {
-                id: reinstateRow.id,
-                assetCode: reinstateRow.assetTag,
-                assetName: reinstateRow.laptopName,
-                serialNumber: reinstateRow.serialNumber,
-                lifecycleStatus: reinstateRow.lifecycleStatus,
-                operationalStatus: reinstateRow.operationalStatus,
+                id: maintenanceRow.id,
+                assetCode: maintenanceRow.assetTag,
+                assetName: maintenanceRow.laptopName,
               }
             : null
         }
-        submitting={reinstateSubmitting}
-        error={reinstateError}
+        submitting={maintenanceSubmitting}
         onCancel={() => {
-          if (reinstateSubmitting) return;
-          setReinstateRow(null);
-          setReinstateError(null);
+          if (maintenanceSubmitting) return;
+          setMaintenanceRow(null);
+          setMaintenanceError(null);
         }}
-        onConfirm={() => void confirmReinstate()}
+        onStarted={(result) => {
+          setMaintenanceSubmitting(false);
+          setMaintenanceRow(null);
+          setMaintenanceError(null);
+          setReloadToken((t) => t + 1);
+          if (result.status === "approval_pending") {
+            const message =
+              result.message ??
+              "Submitted for approval. Another user must approve before maintenance can start.";
+            setMaintenanceError(message);
+            setExportError(message);
+            return;
+          }
+          setExportSuccess(
+            result.maintenance.asset_code
+              ? `${result.maintenance.asset_code} is now in maintenance.`
+              : "Asset is now in maintenance.",
+          );
+          router.push(
+            `/assets/asset-maintenances?maintenanceId=${encodeURIComponent(result.maintenance.id)}`,
+          );
+        }}
       />
       <DeleteAssetConfirmDialog
         open={deleteRow != null}

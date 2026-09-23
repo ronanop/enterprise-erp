@@ -241,7 +241,7 @@ function directoryToEmployeeLookup(
   return out;
 }
 
-const REGISTER_COL_COUNT = 10;
+const REGISTER_COL_COUNT = 9;
 
 export function AssetAssignmentWorkspace() {
   const searchParams = useSearchParams();
@@ -832,9 +832,6 @@ export function AssetAssignmentWorkspace() {
                     Employee ID
                   </th>
                   <th scope="col" className="px-3 py-2 font-medium">
-                    Department
-                  </th>
-                  <th scope="col" className="px-3 py-2 font-medium">
                     Location
                   </th>
                   <th scope="col" className="px-3 py-2 font-medium">
@@ -877,10 +874,6 @@ export function AssetAssignmentWorkspace() {
                   rows.map((row, index) => {
                     const asset = assetMap.get(row.asset_id);
                     const location = locationByAssetId[row.asset_id];
-                    const empDept =
-                      row.employee_id != null
-                        ? employeeDeptById[String(row.employee_id)]
-                        : null;
                     const assignee = assigneeSummary(row);
                     const returned = isReturnedAssignment(row);
                     return (
@@ -922,14 +915,6 @@ export function AssetAssignmentWorkspace() {
                           data-testid="assignment-employee-id-cell"
                         >
                           {resolveRegisterEmployeeId(row, employeeLookup)}
-                        </td>
-                        <td className="px-3 py-2" data-testid="assignment-department-cell">
-                          {resolveRegisterDepartment(
-                            row,
-                            asset,
-                            empDept,
-                            departmentLabels,
-                          )}
                         </td>
                         <td className="px-3 py-2" data-testid="assignment-location-cell">
                           {resolveRegisterLocation(asset, location, siteLocationLabels)}

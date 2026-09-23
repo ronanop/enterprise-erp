@@ -110,6 +110,27 @@ class AssetService:
             raise NotFoundException("Asset not found")
         return row
 
+    def attach_current_location(self, ctx: TenantContext, row: AstAsset) -> AstAsset:
+        """Expose current site location ids/label on the asset row for API responses."""
+        from modules.asset.repository.asset_location_repository import (
+            AssetLocationRepository,
+        )
+
+        current = AssetLocationRepository(self._db).find_current_for_asset(
+            ctx,
+            company_id=row.company_id,
+            asset_id=row.id,
+        )
+        if current is None:
+            object.__setattr__(row, "current_location_label", None)
+            object.__setattr__(row, "location_id", None)
+            object.__setattr__(row, "building_id", None)
+            return row
+        object.__setattr__(row, "current_location_label", current.location_label)
+        object.__setattr__(row, "location_id", getattr(current, "location_id", None))
+        object.__setattr__(row, "building_id", getattr(current, "building_id", None))
+        return row
+
     def prefill_from_grn(self, ctx: TenantContext, grn_id: UUID):
         return self._procurement.prefill_from_grn(ctx, grn_id)
 
@@ -374,20 +395,28 @@ class AssetService:
         charger_code = fields.pop("charger_code", None)
         self._normalize_optional_text_fields(fields)
         location_label = fields.pop("location_label", None)
+        location_id = fields.pop("location_id", None)
+        building_id = fields.pop("building_id", None)
         self._validator.validate_update_fields(ctx, row, fields)
         updated = self._repo.update(ctx, row_id, **fields) if fields else row
         if updated is None:
             raise NotFoundException("Asset not found")
-        if location_label:
+        if location_label or (location_id is not None and building_id is not None):
             persisted = self._persist_registration_location(
                 ctx,
                 asset_id=updated.id,
                 branch_id=updated.branch_id,
                 company_id=updated.company_id,
                 location_label=location_label,
+                location_id=location_id,
+                building_id=building_id,
             )
             if persisted:
                 object.__setattr__(updated, "current_location_label", persisted)
+                if location_id is not None:
+                    object.__setattr__(updated, "location_id", location_id)
+                if building_id is not None:
+                    object.__setattr__(updated, "building_id", building_id)
         if sync_charger:
             self._charger.sync(
                 ctx,

@@ -14,8 +14,8 @@ from modules.asset.domain.exceptions import AssignmentValidationError
     [
         ("good", "return_to_ready"),
         ("GOOD", "return_to_ready"),
-        ("outdated", "retire"),
-        ("dead", "mark_pending_disposal"),
+        ("outdated", "return_to_ready"),
+        ("dead", "return_to_ready"),
     ],
 )
 def test_return_condition_maps_to_action(condition: str, action: str) -> None:

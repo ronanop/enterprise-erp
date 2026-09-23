@@ -576,8 +576,8 @@ def test_return_audit_component_outcome_json_safe(issue_status: str) -> None:
     ("return_condition", "ops_action"),
     [
         ("good", "return_to_ready"),
-        ("outdated", "retire"),
-        ("dead", "retire"),
+        ("outdated", "return_to_ready"),
+        ("dead", "return_to_ready"),
     ],
 )
 def test_return_audit_condition_with_components_json_safe(

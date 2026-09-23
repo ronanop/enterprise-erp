@@ -223,11 +223,12 @@ export function isAssignmentEligibleAsset(row: {
   return ops === "READY_TO_MOVE" && life === "active";
 }
 
-/** Phase 5D: Start Disposal is only valid for operational RETIRED. */
+/** Dispose is available for Ready / Assigned (Assigned still blocked if open assignment on API). */
 export function canStartDisposalFromOperationalStatus(
   operationalStatus: string | null | undefined,
 ): boolean {
-  return String(operationalStatus ?? "").toUpperCase() === "RETIRED";
+  const ops = String(operationalStatus ?? "").toUpperCase();
+  return ops === "READY_TO_MOVE" || ops === "ASSIGNED";
 }
 
 /** Phase 5E: Reinstate is only valid for operational PENDING_DISPOSAL. */

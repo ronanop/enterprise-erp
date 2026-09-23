@@ -1,20 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
-import {
-  ArrowLeft,
-  Download,
-  ExternalLink,
-  Loader2,
-  Printer,
-  QrCode,
-  Shield,
-  UserRound,
-} from "lucide-react";
-import { QRCodeCanvas } from "qrcode.react";
-
+import { useRouter, useSearchParams } from "next/navigation";
 import { AssetDiscoveryPanel } from "@/components/assets/asset-discovery-panel";
+import { MaintenanceWorkOrderDetailDrawer } from "@/components/assets/maintenance-work-order-detail-drawer";
+import { PortalLifecycleTimeline } from "@/components/assets/portal/portal-lifecycle-timeline";
+import { PortalOverviewPanel } from "@/components/assets/portal/portal-overview-panel";
 import {
   mapAssignmentHistoryEntries,
   type EmployeeLookup,
@@ -24,15 +15,16 @@ import {
   tableRowSerialFromIndex,
   tableSerialCellClassName,
   tableSerialHeaderClassName,
-  StatusBadge,
-  formatPortalOverviewStatus,
-  isOperationalStatus,
 } from "@/components/assets/shared";
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { buildRecentActivity } from "@/domain/asset-prd";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  buildAssignmentTimeline,
+  buildClientLifecycleTimeline,
+  buildMaintenanceTimeline,
+  mapApiLifecycleEvents,
+} from "@/domain/asset-lifecycle-timeline";
 import { isAuthenticated } from "@/lib/auth";
 import {
   employeeDirectoryById,
@@ -42,46 +34,33 @@ import {
 import { ApiClientError, resourceService } from "@/services/api-client";
 import {
   type AssetInformationPortal,
+  type AssetLifecycleTimelineEvent,
   type AssetsRow,
   assetInformationPortalService,
-  buildSelfServiceUrl,
+  buildAssetQrUrl,
 } from "@/services/assets-service";
+import { Eye, ArrowLeft, Download, ExternalLink, Loader2, Printer, QrCode } from "lucide-react";
+import { QRCodeCanvas } from "qrcode.react";
 
 function dash(value?: string | null): string {
   return value && String(value).trim() ? String(value) : "—";
 }
 
-function PortalOverviewStatus({
-  operationalStatus,
-  lifecycleStatus,
-}: {
-  operationalStatus?: string | null;
-  lifecycleStatus?: string | null;
-}) {
-  const label = formatPortalOverviewStatus({
-    operational_status: operationalStatus,
-    status: lifecycleStatus,
-  });
-  const opsKey = String(operationalStatus ?? "")
-    .trim()
-    .replace(/-/g, "_")
-    .toUpperCase();
-  return (
-    <div data-testid="portal-overview-status">
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">Status</div>
-      {label === "—" ? (
-        <div className="mt-0.5">—</div>
-      ) : isOperationalStatus(opsKey) ? (
-        <div className="mt-1">
-          <StatusBadge kind="operational" status={opsKey} />
-        </div>
-      ) : (
-        <Badge variant="secondary" className="mt-1 text-xs">
-          {label}
-        </Badge>
-      )}
-    </div>
-  );
+function portalErrorMessage(err: unknown): string {
+  if (!(err instanceof ApiClientError)) {
+    return "Failed to load asset portal";
+  }
+  const status = typeof err.status === "number" ? err.status : null;
+  if (status === 401) {
+    return "Sign in with Microsoft is required to view this asset.";
+  }
+  if (status === 403) {
+    return "You are signed in, but you do not have Asset Management access for this asset. Ask an admin to grant asset permissions.";
+  }
+  if (status === 404) {
+    return "Asset not found.";
+  }
+  return err.message || "Failed to load asset portal";
 }
 
 type PortalTab =
@@ -107,27 +86,34 @@ type Props = {
 
 export function AssetInformationPortalView({ assetId }: Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromQr = searchParams.get("from") === "qr";
   const [tab, setTab] = useState<PortalTab>("overview");
   const [portal, setPortal] = useState<AssetInformationPortal | null>(null);
   const [assignments, setAssignments] = useState<AssetsRow[]>([]);
   const [maintenances, setMaintenances] = useState<AssetsRow[]>([]);
   const [documents, setDocuments] = useState<AssetsRow[]>([]);
+  const [lifecycleEvents, setLifecycleEvents] = useState<AssetLifecycleTimelineEvent[]>([]);
   const [employeeLookup, setEmployeeLookup] = useState<EmployeeLookup>({});
   const [loading, setLoading] = useState(true);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [maintenanceDetailId, setMaintenanceDetailId] = useState<string | null>(null);
   const qrCanvasId = `asset-qr-${assetId}`;
 
-  const selfServiceUrl = useMemo(() => {
+  const qrUrl = useMemo(() => {
     if (typeof window === "undefined") {
-      return portal?.self_service_path ?? `/assets/self-service/${assetId}`;
+      return (
+        portal?.self_service_path ??
+        `/assets/information-portal/${encodeURIComponent(assetId)}?from=qr`
+      );
     }
-    return buildSelfServiceUrl(assetId);
+    return buildAssetQrUrl(assetId);
   }, [assetId, portal?.self_service_path]);
 
   const loadPortal = useCallback(async () => {
     if (!isAuthenticated()) {
-      setError("Sign in required.");
+      setError("Sign in with Microsoft is required to view this asset.");
       setLoading(false);
       return;
     }
@@ -138,7 +124,7 @@ export function AssetInformationPortalView({ assetId }: Props) {
       setPortal(data);
     } catch (err) {
       setPortal(null);
-      setError(err instanceof ApiClientError ? err.message : "Failed to load asset portal");
+      setError(portalErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -148,11 +134,14 @@ export function AssetInformationPortalView({ assetId }: Props) {
     if (!isAuthenticated()) return;
     setHistoryLoading(true);
     try {
-      const [asnRes, maintRes, docRes, empDir] = await Promise.all([
+      const [asnRes, maintRes, docRes, empDir, timeline] = await Promise.all([
         resourceService.list(`/assets/asset-assignments?asset_id=${assetId}&page_size=50`),
         resourceService.list(`/assets/asset-maintenances?asset_id=${assetId}&page_size=50`),
         resourceService.list(`/assets/asset-documents?asset_id=${assetId}&page_size=50`),
         listEmployeeDirectory().catch(() => [] as EmployeeDirectoryEntry[]),
+        assetInformationPortalService
+          .getLifecycleTimeline(assetId)
+          .catch(() => [] as AssetLifecycleTimelineEvent[]),
       ]);
       const pick = (data: unknown) => {
         if (data && typeof data === "object" && "items" in data) {
@@ -163,6 +152,7 @@ export function AssetInformationPortalView({ assetId }: Props) {
       setAssignments(pick(asnRes.data));
       setMaintenances(pick(maintRes.data));
       setDocuments(pick(docRes.data));
+      setLifecycleEvents(timeline);
       const byId = employeeDirectoryById(empDir);
       const lookup: EmployeeLookup = {};
       for (const [id, e] of Object.entries(byId)) {
@@ -194,25 +184,66 @@ export function AssetInformationPortalView({ assetId }: Props) {
     [assignments, employeeLookup],
   );
 
-  const activity = useMemo(
-    () =>
-      buildRecentActivity(
-        portal
-          ? [
-              {
-                id: portal.asset_id,
-                asset_code: portal.asset_code,
-                asset_name: portal.asset_name,
-                status: portal.status,
-              } as AssetsRow,
-            ]
-          : [],
-        assignments,
-        maintenances,
-        12,
-      ),
-    [portal, assignments, maintenances],
+  const assignmentTimeline = useMemo(() => {
+    const byId = new Map(assignments.map((row) => [String(row.id ?? ""), row]));
+    return buildAssignmentTimeline(
+      assignmentHistory.map((entry) => {
+        const raw = byId.get(entry.id);
+        return {
+          ...entry,
+          allocatedAtRaw:
+            raw?.allocated_at != null
+              ? String(raw.allocated_at)
+              : raw?.created_at != null
+                ? String(raw.created_at)
+                : null,
+          returnedAtRaw: raw?.returned_at != null ? String(raw.returned_at) : null,
+        };
+      }),
+    );
+  }, [assignmentHistory, assignments]);
+
+  const maintenanceTimeline = useMemo(
+    () => buildMaintenanceTimeline(maintenances),
+    [maintenances],
   );
+
+  const activityTimeline = useMemo(() => {
+    if (lifecycleEvents.length > 0) {
+      return mapApiLifecycleEvents(lifecycleEvents);
+    }
+    return buildClientLifecycleTimeline({
+      assetId,
+      assetCode: portal?.asset_code,
+      assetName: portal?.asset_name,
+      createdAt: portal?.created_at ?? null,
+      updatedAt: portal?.updated_at ?? null,
+      assignments: assignmentHistory.map((entry) => {
+        const raw = assignments.find((a) => String(a.id ?? "") === entry.id);
+        return {
+          ...entry,
+          allocatedAtRaw:
+            raw?.allocated_at != null
+              ? String(raw.allocated_at)
+              : raw?.created_at != null
+                ? String(raw.created_at)
+                : null,
+          returnedAtRaw: raw?.returned_at != null ? String(raw.returned_at) : null,
+        };
+      }),
+      maintenances,
+    });
+  }, [
+    assetId,
+    assignmentHistory,
+    assignments,
+    lifecycleEvents,
+    maintenances,
+    portal?.asset_code,
+    portal?.asset_name,
+    portal?.created_at,
+    portal?.updated_at,
+  ]);
 
   function getQrCanvas(): HTMLCanvasElement | null {
     return document.getElementById(qrCanvasId) as HTMLCanvasElement | null;
@@ -243,7 +274,7 @@ export function AssetInformationPortalView({ assetId }: Props) {
       <h1>${portal.asset_code}</h1>
       <div>${portal.asset_name}</div>
       <img src="${dataUrl}" alt="QR" />
-      <p>${selfServiceUrl}</p>
+      <p>${qrUrl}</p>
       <script>window.onload=()=>{window.print();}</script>
       </body></html>`);
     win.document.close();
@@ -260,40 +291,66 @@ export function AssetInformationPortalView({ assetId }: Props) {
 
   if (error || !portal) {
     return (
-      <div className="space-y-3">
-        <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+      <div className="mx-auto max-w-lg space-y-3 px-1" data-testid="asset-information-portal-error">
+        <p className="rounded-xl border border-destructive/40 bg-destructive/5 px-3 py-3 text-sm text-destructive">
           {error ?? "Asset not found"}
         </p>
-        <Button
-          type="button"
-          variant="outline"
-          className="cursor-pointer"
-          onClick={() => router.push("/assets/assets")}
-        >
-          <ArrowLeft className="size-4" aria-hidden />
-          Back to assets
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="cursor-pointer transition-colors duration-200"
+            onClick={() =>
+              router.push(
+                `/login?next=${encodeURIComponent(
+                  `/assets/information-portal/${assetId}?from=qr`,
+                )}`,
+              )
+            }
+          >
+            Sign in with Microsoft
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="cursor-pointer transition-colors duration-200"
+            onClick={() => router.push("/assets/assets")}
+          >
+            <ArrowLeft className="size-4" aria-hidden />
+            Back to assets
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4" data-testid="asset-information-portal">
+    <div
+      className="space-y-4"
+      data-testid="asset-information-portal"
+      data-from-qr={fromQr ? "true" : undefined}
+    >
       <PageHeader
         title="Asset Information Portal"
-        description={`${portal.asset_code} — overview, history, documents, activity, and discovery.`}
+        description={
+          fromQr
+            ? `${portal.asset_code} — scanned asset profile (authenticated).`
+            : `${portal.asset_code} — overview, history, documents, activity, and discovery.`
+        }
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="cursor-pointer transition-colors duration-200"
-              onClick={() => router.push("/assets/assets")}
-            >
-              <ArrowLeft className="size-4" aria-hidden />
-              Register
-            </Button>
+            {!fromQr ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="cursor-pointer transition-colors duration-200"
+                onClick={() => router.push("/assets/assets")}
+              >
+                <ArrowLeft className="size-4" aria-hidden />
+                Register
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="outline"
@@ -311,7 +368,7 @@ export function AssetInformationPortalView({ assetId }: Props) {
       />
 
       <div
-        className="flex flex-wrap gap-2 border-b border-border/70 pb-2"
+        className="-mx-1 sticky top-0 z-10 flex flex-nowrap gap-2 overflow-x-auto border-b border-border/70 bg-background/95 px-1 pb-2 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:mx-0 sm:flex-wrap sm:overflow-visible"
         role="tablist"
         aria-label="Information Portal sections"
       >
@@ -323,7 +380,7 @@ export function AssetInformationPortalView({ assetId }: Props) {
             aria-selected={tab === item.id}
             data-testid={`portal-tab-${item.id}`}
             onClick={() => setTab(item.id)}
-            className={`cursor-pointer rounded-md px-3 py-1.5 text-sm transition-colors duration-200 ${
+            className={`shrink-0 cursor-pointer rounded-md px-3 py-1.5 text-sm transition-colors duration-200 ${
               tab === item.id
                 ? "bg-primary/10 font-medium text-foreground"
                 : "text-muted-foreground hover:bg-muted/50"
@@ -335,122 +392,52 @@ export function AssetInformationPortalView({ assetId }: Props) {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-12">
-        <div className="space-y-4 lg:col-span-8">
-          {tab === "overview" ? (
-            <>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Overview</CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-3 sm:grid-cols-2 text-sm">
-                  <Field label="Asset code" value={portal.asset_code} mono />
-                  <PortalOverviewStatus
-                    operationalStatus={portal.operational_status}
-                    lifecycleStatus={portal.status}
-                  />
-                  <Field label="Asset name" value={portal.asset_name} />
-                  <Field label="Type" value={portal.asset_type} />
-                  <Field
-                    label="Category"
-                    value={
-                      portal.category_code
-                        ? `${portal.category_code} — ${portal.category_name ?? ""}`
-                        : portal.category_name
-                    }
-                  />
-                  <Field label="Serial number" value={portal.serial_number} mono />
-                  <Field label="Manufacturer" value={portal.manufacturer} />
-                  <Field label="Model" value={portal.model} />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <UserRound className="size-4" aria-hidden />
-                    Assignment
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="grid gap-3 sm:grid-cols-2 text-sm">
-                  {portal.assignment ? (
-                    <>
-                      <Field label="Document" value={portal.assignment.document_number} mono />
-                      <Field label="Status" value={portal.assignment.status} badge />
-                      <Field label="Allocation" value={portal.assignment.allocation_type} />
-                      <Field label="Assignee" value={portal.assignment.assignee_label} />
-                    </>
-                  ) : (
-                    <p className="text-muted-foreground sm:col-span-2">No active assignment.</p>
-                  )}
-                </CardContent>
-              </Card>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <Shield className="size-4" aria-hidden />
-                      Warranty
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid gap-3 text-sm">
-                    {portal.warranty ? (
-                      <>
-                        <Field label="Type" value={portal.warranty.warranty_type} />
-                        <Field label="Status" value={portal.warranty.status} badge />
-                        <Field label="Start" value={portal.warranty.start_date} />
-                        <Field label="End" value={portal.warranty.end_date} />
-                      </>
-                    ) : (
-                      <p className="text-muted-foreground">No open warranty.</p>
-                    )}
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Insurance</CardTitle>
-                  </CardHeader>
-                  <CardContent className="grid gap-3 text-sm">
-                    {portal.insurance ? (
-                      <>
-                        <Field label="Policy" value={portal.insurance.policy_number} mono />
-                        <Field label="Insurer" value={portal.insurance.insurer_name} />
-                        <Field label="Status" value={portal.insurance.status} badge />
-                        <Field label="End" value={portal.insurance.end_date} />
-                      </>
-                    ) : (
-                      <p className="text-muted-foreground">No open insurance policy.</p>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </>
-          ) : null}
+        <div className={`space-y-4 ${fromQr ? "lg:col-span-12" : "order-2 lg:order-1 lg:col-span-8"}`}>
+          {tab === "overview" ? <PortalOverviewPanel portal={portal} /> : null}
 
           {tab === "assignments" ? (
             <PortalSection
               title="Assignment History"
+              description="Who used this asset, when it was assigned, and when it was returned."
               loading={historyLoading}
-              empty={assignmentHistory.length === 0}
+              empty={assignmentTimeline.length === 0}
             >
-              <AssignmentHistoryTable entries={assignmentHistory} />
+              <PortalLifecycleTimeline
+                events={assignmentTimeline}
+                emptyTitle="No assignment history"
+                emptyDescription="Assignment and return cycles will appear here once this asset is issued."
+                testId="portal-assignment-history"
+              />
             </PortalSection>
           ) : null}
 
           {tab === "maintenance" ? (
             <PortalSection
               title="Maintenance History"
+              description="Each maintenance cycle — when it started, when it completed, and work-order details."
               loading={historyLoading}
-              empty={maintenances.length === 0}
+              empty={maintenanceTimeline.length === 0}
             >
-              <SimpleHistoryTable
-                rows={maintenances}
-                columns={[
-                  ["document_number", "Document"],
-                  ["status", "Status"],
-                  ["maintenance_type", "Type"],
-                  ["scheduled_date", "Scheduled"],
-                ]}
+              <PortalLifecycleTimeline
+                events={maintenanceTimeline.map((event) => ({
+                  ...event,
+                  action: event.maintenanceId ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 cursor-pointer transition-colors duration-200"
+                      data-testid={`portal-maintenance-view-${event.maintenanceId}`}
+                      onClick={() => setMaintenanceDetailId(event.maintenanceId)}
+                    >
+                      <Eye className="mr-1 size-3.5" aria-hidden />
+                      View Details
+                    </Button>
+                  ) : null,
+                }))}
+                emptyTitle="No maintenance history"
+                emptyDescription="Maintenance cycles will appear here when work orders are started or completed."
+                testId="portal-maintenance-history"
               />
             </PortalSection>
           ) : null}
@@ -473,15 +460,20 @@ export function AssetInformationPortalView({ assetId }: Props) {
           ) : null}
 
           {tab === "activity" ? (
-            <PortalSection title="Activity Logs" loading={historyLoading} empty={activity.length === 0}>
-              <Card>
-                <CardContent className="divide-y pt-4">
-                  {activity.map((item) => (
-                    <div key={item.id} className="py-2 text-sm">
-                      <p className="font-medium">{item.title}</p>
-                      <p className="text-xs text-muted-foreground">{item.at}</p>
-                    </div>
-                  ))}
+            <PortalSection
+              title="Activity Logs"
+              description="Complete lifecycle — creation, assignments, maintenance cycles, edits, and status changes."
+              loading={historyLoading}
+              empty={activityTimeline.length === 0}
+            >
+              <Card className="border-border/80 shadow-sm">
+                <CardContent className="pt-5">
+                  <PortalLifecycleTimeline
+                    events={activityTimeline}
+                    emptyTitle="No activity yet"
+                    emptyDescription="Lifecycle events will appear here as this asset is created, assigned, maintained, or updated."
+                    testId="portal-activity-timeline"
+                  />
                 </CardContent>
               </Card>
             </PortalSection>
@@ -497,74 +489,95 @@ export function AssetInformationPortalView({ assetId }: Props) {
           ) : null}
         </div>
 
-        <div className="space-y-4 lg:col-span-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <QrCode className="size-4" aria-hidden />
-                QR Code
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-center rounded-md border bg-white p-4">
-                <QRCodeCanvas
-                  id={qrCanvasId}
-                  value={selfServiceUrl}
-                  size={200}
-                  level="M"
-                  includeMargin
-                />
+        <div className="order-1 space-y-4 lg:order-2 lg:col-span-4">
+          {fromQr ? null : (
+            <section className="overflow-hidden rounded-xl border border-indigo-500/30 bg-card/80 shadow-sm lg:sticky lg:top-14">
+              <div className="border-b border-border/60 bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 px-4 py-3.5">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200">
+                    <QrCode className="size-3.5" aria-hidden />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="inline-flex rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-800 ring-1 ring-inset ring-indigo-200">
+                      Scan target
+                    </span>
+                    <h3 className="mt-1 text-sm font-medium text-foreground">QR Code</h3>
+                  </div>
+                </div>
               </div>
-              <p className="break-all text-xs text-muted-foreground">{selfServiceUrl}</p>
-              <p className="text-xs text-muted-foreground">
-                QR is generated in the browser only — never stored on the server.
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="cursor-pointer transition-colors duration-200"
-                  onClick={downloadQr}
-                >
-                  <Download className="size-4" aria-hidden />
-                  Download QR
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="cursor-pointer transition-colors duration-200"
-                  onClick={printQr}
-                >
-                  <Printer className="size-4" aria-hidden />
-                  Print QR
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  className="cursor-pointer transition-colors duration-200"
-                  onClick={() => router.push(portal.self_service_path)}
-                >
-                  <ExternalLink className="size-4" aria-hidden />
-                  Open Self-Service
-                </Button>
+              <div className="space-y-3 p-4">
+                <div className="flex justify-center rounded-xl border border-border/70 bg-white p-4 shadow-sm">
+                  <QRCodeCanvas
+                    id={qrCanvasId}
+                    value={qrUrl}
+                    size={200}
+                    level="M"
+                    includeMargin
+                  />
+                </div>
+                <p className="break-all font-mono text-[11px] text-muted-foreground">{qrUrl}</p>
+                <p className="text-xs text-muted-foreground">
+                  Scanning opens Microsoft sign-in, then this Information Portal for authorized Asset
+                  Management users. QR is generated in the browser only — never stored on the server.
+                </p>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="w-full cursor-pointer transition-colors duration-200"
+                    onClick={downloadQr}
+                  >
+                    <Download className="size-4" aria-hidden />
+                    Download QR
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="w-full cursor-pointer transition-colors duration-200"
+                    onClick={printQr}
+                  >
+                    <Printer className="size-4" aria-hidden />
+                    Print QR
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="w-full cursor-pointer transition-colors duration-200"
+                    onClick={() => window.open(qrUrl, "_blank", "noopener,noreferrer")}
+                  >
+                    <ExternalLink className="size-4" aria-hidden />
+                    Open scan link
+                  </Button>
+                </div>
               </div>
-            </CardContent>
-          </Card>
+            </section>
+          )}
         </div>
       </div>
+
+      <MaintenanceWorkOrderDetailDrawer
+        open={maintenanceDetailId != null}
+        maintenanceId={maintenanceDetailId}
+        onClose={() => setMaintenanceDetailId(null)}
+        onUpdated={() => {
+          void loadHistory();
+        }}
+      />
     </div>
   );
 }
 
 function PortalSection({
   title,
+  description,
   loading,
   empty,
   children,
 }: {
   title: string;
+  description?: string;
   loading: boolean;
   empty: boolean;
   children: ReactNode;
@@ -577,62 +590,21 @@ function PortalSection({
       </div>
     );
   }
-  if (empty) {
-    return <p className="text-sm text-muted-foreground">No records.</p>;
-  }
-  return <>{children}</>;
-}
-
-function AssignmentHistoryTable({
-  entries,
-}: {
-  entries: ReturnType<typeof mapAssignmentHistoryEntries>;
-}) {
   return (
-    <div className="overflow-x-auto rounded-lg border" data-testid="portal-assignment-history">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-          <tr>
-            <th className={tableSerialHeaderClassName()} scope="col">
-              {TABLE_SERIAL_HEADER_LABEL}
-            </th>
-            <th className="px-3 py-2">Document</th>
-            <th className="px-3 py-2">Assignee</th>
-            <th className="px-3 py-2">Status</th>
-            <th className="px-3 py-2">Issued</th>
-            <th className="px-3 py-2">Returned</th>
-            <th className="px-3 py-2">Delivery</th>
-            <th className="px-3 py-2">Assignment remarks</th>
-            <th className="px-3 py-2">Return remarks</th>
-          </tr>
-        </thead>
-        <tbody>
-          {entries.map((row, index) => (
-            <tr key={row.id} className="border-t">
-              <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
-              <td className="px-3 py-2 font-mono text-xs">{row.documentNumber}</td>
-              <td className="px-3 py-2">{row.assigneeLabel}</td>
-              <td className="px-3 py-2">{row.status}</td>
-              <td className="px-3 py-2 whitespace-nowrap">{row.allocatedAt}</td>
-              <td className="px-3 py-2 whitespace-nowrap">{row.returnedAt}</td>
-              <td className="px-3 py-2">
-                {row.deliveryChallanSummary ||
-                  `${row.deliveryReferenceNumber}${
-                    row.deliveryReferenceStatus !== "—"
-                      ? ` (${row.deliveryReferenceStatus})`
-                      : ""
-                  }`}
-              </td>
-              <td className="max-w-[12rem] truncate px-3 py-2" title={row.assignmentRemarks}>
-                {row.assignmentRemarks}
-              </td>
-              <td className="max-w-[12rem] truncate px-3 py-2" title={row.returnRemarks}>
-                {row.returnRemarks}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-3">
+      <div>
+        <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+        {description ? (
+          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+        ) : null}
+      </div>
+      {empty ? (
+        <p className="rounded-xl border border-dashed border-border/80 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
+          No records.
+        </p>
+      ) : (
+        children
+      )}
     </div>
   );
 }
@@ -672,32 +644,6 @@ function SimpleHistoryTable({
           ))}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  value,
-  mono,
-  badge,
-}: {
-  label: string;
-  value?: string | null;
-  mono?: boolean;
-  badge?: boolean;
-}) {
-  const display = dash(value);
-  return (
-    <div>
-      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      {badge && display !== "—" ? (
-        <Badge variant="secondary" className="mt-1 font-mono text-xs">
-          {display}
-        </Badge>
-      ) : (
-        <div className={`mt-0.5 ${mono ? "font-mono text-xs" : ""}`}>{display}</div>
-      )}
     </div>
   );
 }

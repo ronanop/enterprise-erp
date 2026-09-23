@@ -10,11 +10,49 @@ import { EMPTY_ASSIGNMENT_WIZARD_STATE } from "@/components/assets/assignment-wi
 afterEach(() => cleanup());
 
 describe("DeliveryStep", () => {
-  it("renders DC number, status, and signature fields", () => {
+  it("hides DC number/status/signature for employee Handle later (defaults apply)", () => {
+    render(
+      <DeliveryStep state={EMPTY_ASSIGNMENT_WIZARD_STATE} onChange={vi.fn()} />,
+    );
+    expect(screen.getByText("Delivery Challan")).toBeTruthy();
+    expect(screen.queryByLabelText(/DC Number/i)).toBeNull();
+    expect(screen.queryByLabelText(/DC Status/i)).toBeNull();
+    expect(screen.queryByLabelText(/^Signature/i)).toBeNull();
+    expect(screen.getByTestId("dc-handle-later-hint")).toHaveTextContent(/Pending · Not signed/i);
+    expect(screen.getByLabelText(/Assignment remarks/i)).toBeTruthy();
+  });
+
+  it("resets delivery reference defaults when selecting Handle later", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
     render(
       <DeliveryStep
         state={{
           ...EMPTY_ASSIGNMENT_WIZARD_STATE,
+          dcChallanMode: "create_now",
+          deliveryReferenceNumber: "DC-OLD",
+          deliveryReferenceStatus: "issued",
+          deliveryChallanSignatureStatus: "signed",
+        }}
+        onChange={onChange}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /Handle later/i }));
+    expect(onChange).toHaveBeenCalledWith({
+      dcChallanMode: "later",
+      dcChallanId: "",
+      deliveryReferenceNumber: "",
+      deliveryReferenceStatus: "pending",
+      deliveryChallanSignatureStatus: "not_signed",
+    });
+  });
+
+  it("shows DC number, status, and signature for warehouse allocation", () => {
+    render(
+      <DeliveryStep
+        state={{
+          ...EMPTY_ASSIGNMENT_WIZARD_STATE,
+          allocationType: "warehouse",
           deliveryReferenceNumber: "DC-2026-001",
           deliveryReferenceStatus: "issued",
           deliveryChallanSignatureStatus: "signed",
@@ -22,17 +60,19 @@ describe("DeliveryStep", () => {
         onChange={vi.fn()}
       />,
     );
-    expect(screen.getByText("Delivery Challan")).toBeTruthy();
     expect(screen.getByLabelText(/DC Number/i)).toHaveValue("DC-2026-001");
     expect(screen.getByLabelText(/DC Status/i)).toBeTruthy();
     expect(screen.getByLabelText(/^Signature/i)).toBeTruthy();
   });
 
-  it("updates DC number via onChange", async () => {
+  it("updates DC number via onChange for non-employee allocation", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(
-      <DeliveryStep state={EMPTY_ASSIGNMENT_WIZARD_STATE} onChange={onChange} />,
+      <DeliveryStep
+        state={{ ...EMPTY_ASSIGNMENT_WIZARD_STATE, allocationType: "warehouse" }}
+        onChange={onChange}
+      />,
     );
     await user.type(screen.getByLabelText(/DC Number/i), "X");
     expect(onChange).toHaveBeenCalled();

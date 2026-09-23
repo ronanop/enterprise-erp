@@ -43,8 +43,8 @@ export function applyOperationalGatesToInventoryPermissions(
     return: base.return && ops === "ASSIGNED",
     transfer: base.transfer && canUserTransferFromOperationalStatus(ops),
     maintenance: base.maintenance && !maintenanceBlocked,
-    startDisposal: base.startDisposal && ops === "RETIRED",
-    reinstate: base.reinstate && ops === "PENDING_DISPOSAL",
+    startDisposal: base.startDisposal && (ops === "READY_TO_MOVE" || ops === "ASSIGNED"),
+    reinstate: false,
   };
 }
 

@@ -1,7 +1,8 @@
-"""Excel import engine — one validated row → existing business services (CR-004 Phase 8B).
+"""Excel import engine - one validated row → existing business services (CR-004 Phase 8B).
 
 Never writes via repository/ORM directly. Reuses AssetService, AssignmentService,
-and AssetOperationalStatusService workflows (including audit embedded in those services).
+AssetOperationalStatusService, and AssetComponentService workflows (including audit
+embedded in those services).
 """
 
 from __future__ import annotations
@@ -12,7 +13,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from modules.asset.domain.enums import AssetOperationalStatus
+from modules.asset.domain.enums import (
+    AssetComponentType,
+    AssetOperationalStatus,
+    AssignmentDeliveryReferenceStatus,
+)
 from modules.asset.domain.excel_import import (
     ExcelImportDefaults,
     ExcelImportRowInput,
@@ -24,8 +29,10 @@ from modules.asset.domain.excel_import import (
 from modules.asset.domain.exceptions import DuplicateAssetRegistrationError
 from modules.asset.repository.site_location_repository import SiteLocationRepository
 from modules.asset.service.asset_operational_status_service import AssetOperationalStatusService
+from modules.asset.service.asset_scope_validator import AssetScopeValidator
 from modules.asset.service.asset_service import AssetService
 from modules.asset.service.assignment_service import AssignmentService
+from modules.asset.service.component_service import AssetComponentService
 from modules.foundation.domain.value_objects import TenantContext
 
 Ready = AssetOperationalStatus.READY_TO_MOVE.value
@@ -45,11 +52,13 @@ class AssetExcelImportEngine:
         assets: AssetService | None = None,
         assignments: AssignmentService | None = None,
         operational: AssetOperationalStatusService | None = None,
+        components: AssetComponentService | None = None,
     ) -> None:
         self._db = db
         self._assets = assets or AssetService(db)
         self._assignments = assignments or AssignmentService(db)
         self._operational = operational or AssetOperationalStatusService(db)
+        self._components = components or AssetComponentService(db)
 
     def import_row(
         self,
@@ -95,7 +104,10 @@ class AssetExcelImportEngine:
             )
 
         try:
-            cid = company_id or row.company_id
+            # Prefer request/row company; otherwise use login session company context.
+            cid = AssetScopeValidator(self._db).resolve_company_id(
+                ctx, company_id or row.company_id
+            )
             if row.branch_id is None:
                 return ExcelImportRowResult(
                     row_number=row.row_number,
@@ -124,6 +136,8 @@ class AssetExcelImportEngine:
                 assignment_id = self._path_to_pending(ctx, asset_id=asset.id, row=row, company_id=cid)
                 final_ops = Pending
 
+            self._install_charger_if_present(ctx, row=row, asset_id=asset.id, company_id=cid)
+
             return ExcelImportRowResult(
                 row_number=row.row_number,
                 outcome=ExcelImportRowOutcome.IMPORTED.value,
@@ -139,13 +153,33 @@ class AssetExcelImportEngine:
                 reason=str(exc),
                 warning=preview == "warning",
             )
-        except Exception as exc:  # noqa: BLE001 — row isolation; continue import
+        except Exception as exc:  # noqa: BLE001 - row isolation; continue import
             return ExcelImportRowResult(
                 row_number=row.row_number,
                 outcome=ExcelImportRowOutcome.FAILED.value,
                 reason=str(exc) or exc.__class__.__name__,
                 warning=preview == "warning",
             )
+
+    def _install_charger_if_present(
+        self,
+        ctx: TenantContext,
+        *,
+        row: ExcelImportRowInput,
+        asset_id: UUID,
+        company_id: UUID | None,
+    ) -> None:
+        serial = (row.charger_serial or "").strip()
+        if not serial:
+            return
+        self._components.install(
+            ctx,
+            company_id=company_id,
+            asset_id=asset_id,
+            branch_id=row.branch_id,
+            component_type=AssetComponentType.CHARGER.value,
+            serial_number=serial,
+        )
 
     def _detect_duplicate(
         self,
@@ -194,12 +228,16 @@ class AssetExcelImportEngine:
         location_label = (row.location_label or "").strip() or None
         location_id = row.location_id
         if location_label and location_id is None:
-            cid = company_id or row.company_id
-            if cid is None:
-                raise ValueError("company_id is required to resolve location")
+            # company_id is already resolved from request/row/session in import_row.
+            cid = company_id or AssetScopeValidator(self._db).resolve_company_id(
+                ctx, row.company_id
+            )
             site_loc = SiteLocationRepository(self._db).get_by_name(ctx, cid, location_label)
             if site_loc is None:
-                raise ValueError(f"Location '{location_label}' not found in Locations master")
+                raise ValueError(
+                    f"Location '{location_label}' not found. "
+                    "Please add it under Assets → Locations first."
+                )
             location_id = site_loc.id
             location_label = site_loc.name
         asset = self._assets.create_for_import(
@@ -233,6 +271,11 @@ class AssetExcelImportEngine:
         row: ExcelImportRowInput,
         company_id: UUID | None,
     ) -> UUID:
+        # Excel templates often omit Delivery Status. Employee assignments cannot use
+        # not_applicable — default blank/missing to pending (no challan number required).
+        delivery_status = (row.delivery_reference_status or "").strip().lower() or None
+        if delivery_status in (None, "", AssignmentDeliveryReferenceStatus.NOT_APPLICABLE.value):
+            delivery_status = AssignmentDeliveryReferenceStatus.PENDING.value
         assignment = self._assignments.create(
             ctx,
             branch_id=row.branch_id,
@@ -241,7 +284,7 @@ class AssetExcelImportEngine:
             allocation_type="employee",
             employee_id=row.employee_id,
             delivery_reference_number=row.delivery_reference_number,
-            delivery_reference_status=row.delivery_reference_status,
+            delivery_reference_status=delivery_status,
             delivery_challan_signature_status=row.delivery_challan_signature_status,
             assignment_remarks=row.assignment_remarks or "excel_import",
         )

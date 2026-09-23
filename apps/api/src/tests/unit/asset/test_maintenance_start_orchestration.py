@@ -116,3 +116,63 @@ def test_start_maintenance_surfaces_approval_pending_when_still_submitted(_gov) 
                 reason="Battery",
                 expected_duration_days=2,
             )
+
+
+@patch("modules.asset.service.maintenance_service.asset_workflow_governance_enabled", return_value=False)
+def test_start_from_asset_creates_then_starts(_gov) -> None:
+    svc = MaintenanceService(MagicMock())
+    ctx = _ctx()
+    asset_id = uuid4()
+    row_id = uuid4()
+    asset = SimpleNamespace(id=asset_id, branch_id=ctx.branch_id)
+    draft = SimpleNamespace(id=row_id, status="draft", version=1, asset_id=asset_id)
+    started = SimpleNamespace(id=row_id, status="in_progress", version=3, asset_id=asset_id)
+
+    with (
+        patch.object(svc._assets, "get", return_value=asset),
+        patch.object(svc._repo, "find_open_for_asset", return_value=None),
+        patch.object(svc, "create", return_value=draft) as create,
+        patch.object(svc, "start_maintenance", return_value=(started, "started", None)) as start,
+    ):
+        row, outcome, _msg = svc.start_from_asset(
+            ctx,
+            asset_id=asset_id,
+            reason="Screen issue",
+            expected_duration_days=5,
+        )
+
+    assert outcome == "started"
+    assert row.status == "in_progress"
+    create.assert_called_once()
+    start.assert_called_once()
+    assert start.call_args.kwargs["reason"] == "Screen issue"
+    assert start.call_args.kwargs["expected_duration_days"] == 5
+
+
+@patch("modules.asset.service.maintenance_service.asset_workflow_governance_enabled", return_value=False)
+def test_start_from_asset_reuses_existing_draft(_gov) -> None:
+    svc = MaintenanceService(MagicMock())
+    ctx = _ctx()
+    asset_id = uuid4()
+    row_id = uuid4()
+    asset = SimpleNamespace(id=asset_id, branch_id=ctx.branch_id)
+    draft = SimpleNamespace(id=row_id, status="draft", version=2, asset_id=asset_id)
+    started = SimpleNamespace(id=row_id, status="in_progress", version=4, asset_id=asset_id)
+
+    with (
+        patch.object(svc._assets, "get", return_value=asset),
+        patch.object(svc._repo, "find_open_for_asset", return_value=draft),
+        patch.object(svc, "create") as create,
+        patch.object(svc, "start_maintenance", return_value=(started, "started", None)) as start,
+    ):
+        row, outcome, _msg = svc.start_from_asset(
+            ctx,
+            asset_id=asset_id,
+            reason="Battery",
+            expected_duration_days=3,
+        )
+
+    assert outcome == "started"
+    assert row.status == "in_progress"
+    create.assert_not_called()
+    assert start.call_args.args[1] == row_id

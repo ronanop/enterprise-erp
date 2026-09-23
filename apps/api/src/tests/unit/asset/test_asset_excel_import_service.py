@@ -1,4 +1,4 @@
-"""Unit tests — AssetExcelImportService batching & summary (CR-004 Phase 8B)."""
+"""Unit tests - AssetExcelImportService batching & summary (CR-004 Phase 8B)."""
 
 from __future__ import annotations
 
@@ -222,6 +222,16 @@ def test_company_id_forwarded() -> None:
         row_number=1, outcome=ExcelImportRowOutcome.IMPORTED.value
     )
     svc.import_rows(ctx, [_row(1)], defaults=_defaults(), company_id=ctx.company_id)
+    assert eng.import_row.call_args.kwargs["company_id"] == ctx.company_id
+
+
+def test_resolves_company_id_from_session_when_body_omits_it() -> None:
+    svc, _, eng, _ = _service_with_engine()
+    ctx = _ctx()
+    eng.import_row.return_value = ExcelImportRowResult(
+        row_number=1, outcome=ExcelImportRowOutcome.IMPORTED.value
+    )
+    svc.import_rows(ctx, [_row(1)], defaults=_defaults(), company_id=None)
     assert eng.import_row.call_args.kwargs["company_id"] == ctx.company_id
 
 

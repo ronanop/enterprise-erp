@@ -341,7 +341,7 @@ describe("AssetAssignmentWorkspace register", () => {
     expect(within(table).queryByText(/^Assigned$/)).not.toBeInTheDocument();
   });
 
-  it("shows employee id, asset name/code under Asset, department, location, building, date, status, DC", async () => {
+  it("shows employee id, asset name/code under Asset, location, building, date, status, DC", async () => {
     render(<AssetAssignmentWorkspace />);
     const row = await screen.findByTestId("assignment-row-asg-1");
 
@@ -352,9 +352,7 @@ describe("AssetAssignmentWorkspace register", () => {
     expect(within(row).getByTestId("assignment-asset-cell")).toHaveTextContent(
       "AST-2026-000002",
     );
-    expect(within(row).getByTestId("assignment-department-cell")).toHaveTextContent(
-      "Accountant",
-    );
+    expect(within(row).queryByTestId("assignment-department-cell")).not.toBeInTheDocument();
     expect(within(row).getByTestId("assignment-location-cell")).toHaveTextContent(
       "Noida Campus",
     );

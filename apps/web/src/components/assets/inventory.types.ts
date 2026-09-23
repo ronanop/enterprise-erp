@@ -16,8 +16,6 @@ export const INVENTORY_PRESETS: Array<{ id: InventoryPresetId; label: string }> 
   { id: "assigned", label: "Assigned" },
   { id: "in_maintenance", label: "In Maintenance" },
   { id: "in_use_as_component", label: "In Use as Component" },
-  { id: "retired", label: "Retired" },
-  { id: "pending_disposal", label: "Pending Disposal" },
   { id: "disposed", label: "Disposed" },
 ];
 

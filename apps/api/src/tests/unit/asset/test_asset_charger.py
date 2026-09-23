@@ -59,6 +59,16 @@ def test_asset_update_schema_requires_code_when_yes() -> None:
         AssetUpdate(charger_available=True, charger_code="  ")
 
 
+def test_asset_update_schema_accepts_location_ids() -> None:
+    loc = uuid4()
+    bldg = uuid4()
+    body = AssetUpdate(location_id=loc, building_id=bldg, charger_available=False)
+    dumped = body.model_dump(exclude_none=True)
+    assert dumped["location_id"] == loc
+    assert dumped["building_id"] == bldg
+    assert dumped["charger_available"] is False
+
+
 def test_sync_yes_installs_charger() -> None:
     db = MagicMock()
     svc = AssetChargerService(db)

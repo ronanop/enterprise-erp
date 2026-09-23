@@ -70,6 +70,7 @@ class ExcelImportRowInput:
     delivery_challan_signature_status: str | None = None
     assignment_remarks: str | None = None
     company_id: UUID | None = None
+    charger_serial: str | None = None
 
 
 @dataclass

@@ -61,7 +61,9 @@ def _list_entra_users(token: str) -> list[dict]:
         "$select": "id,displayName,mail,userPrincipalName,accountEnabled",
         "$top": "999",
     }
-    rows: list[dict] = []
+    # Dedupe by email — Graph can return multiple directory objects that
+    # resolve to the same mail/UPN (unique constraint on sec_user.email).
+    by_email: dict[str, dict] = {}
     url: str | None = GRAPH_USERS_URL
     with httpx.Client(timeout=60.0) as client:
         while url:
@@ -80,16 +82,14 @@ def _list_entra_users(token: str) -> list[dict]:
                     continue
                 if domain and not mail.endswith(f"@{domain}"):
                     continue
-                rows.append(
-                    {
-                        "email": mail,
-                        "display_name": str(item.get("displayName") or mail.split("@")[0]),
-                        "external_id": str(item.get("id") or ""),
-                    }
-                )
+                by_email[mail] = {
+                    "email": mail,
+                    "display_name": str(item.get("displayName") or mail.split("@")[0]),
+                    "external_id": str(item.get("id") or ""),
+                }
             url = body.get("@odata.nextLink")
             params = None
-    return rows
+    return list(by_email.values())
 
 
 def _ensure_role(db, tenant_id, role_code: str, role_name: str) -> SecRole:
@@ -161,11 +161,11 @@ def main() -> None:
             email = spec["email"]
             synced_emails.add(email)
             is_admin = email in admin_emails
+            # Include soft-deleted rows — unique (tenant_id, email) still blocks insert.
             user = db.scalar(
                 select(SecUser).where(
                     SecUser.tenant_id == tenant.id,
                     SecUser.email == email,
-                    SecUser.is_deleted.is_(False),
                 )
             )
             if user is None:
@@ -179,6 +179,13 @@ def main() -> None:
                 user = db.scalar(select(SecUser).where(SecUser.id == user_row.id))
                 created += 1
             else:
+                if user.is_deleted:
+                    user.is_deleted = False
+                    user.deleted_at = None
+                    user.deleted_by = None
+                    created += 1
+                else:
+                    updated += 1
                 user.display_name = spec["display_name"]
                 user.status = "active"
                 if is_admin:
@@ -186,7 +193,6 @@ def main() -> None:
                 else:
                     user.user_type = "employee"
                     _strip_admin_roles(db, user.id)
-                updated += 1
 
             assert user is not None
             if is_admin:

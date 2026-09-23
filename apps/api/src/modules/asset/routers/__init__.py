@@ -5,7 +5,7 @@ from datetime import date, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 from urllib.parse import quote
 
@@ -68,6 +68,7 @@ from modules.asset.schemas import (
     AssetDocumentUpdate,
     AssetDocumentUploadLimits,
     AssetInformationPortalResponse,
+    AssetLifecycleTimelineResult,
     DiscoveryApplyRequest,
     DiscoveryApplyResult,
     DiscoveryCommandResponse,
@@ -108,6 +109,7 @@ from modules.asset.schemas import (
     AssetMaintenanceListResult,
     AssetMaintenanceQuickDraftCreate,
     AssetMaintenanceResponse,
+    AssetMaintenanceStartFromAssetRequest,
     AssetMaintenanceStartRequest,
     AssetMaintenanceUpdate,
     AssetNotificationCreate,
@@ -442,6 +444,7 @@ def import_assets_from_excel(
             ),
             assignment_remarks=r.assignment_remarks,
             company_id=r.company_id or body.company_id,
+            charger_serial=r.charger_serial,
         )
         for r in body.rows
     ]
@@ -525,7 +528,8 @@ def get_assets(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    row = AssetService(db).get(ctx, row_id)
+    svc = AssetService(db)
+    row = svc.attach_current_location(ctx, svc.get(ctx, row_id))
     type_names = _asset_type_name_map(db, ctx, [row])
     return APIResponse(message="OK", data=_to_asset_response(row, type_names))
 
@@ -559,6 +563,20 @@ def get_asset_self_service(
         message="OK",
         data=AssetInformationPortalService(db).get_self_service(ctx, row_id),
     )
+
+
+@assets_router.get(
+    "/{row_id}/lifecycle-timeline",
+    response_model=APIResponse[AssetLifecycleTimelineResult],
+)
+def get_asset_lifecycle_timeline(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Full asset lifecycle timeline for Information Portal Activity Logs."""
+    events = AssetInformationPortalService(db).get_lifecycle_timeline(ctx, row_id)
+    return APIResponse(message="OK", data=AssetLifecycleTimelineResult(events=events))
 
 
 @assets_router.get(
@@ -639,8 +657,11 @@ def update_assets(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="Updated", data=AssetService(db).update(ctx, row_id, **extract_update_fields(body)))
-
+    svc = AssetService(db)
+    row = svc.update(ctx, row_id, **extract_update_fields(body))
+    row = svc.attach_current_location(ctx, row)
+    type_names = _asset_type_name_map(db, ctx, [row])
+    return APIResponse(message="Updated", data=_to_asset_response(row, type_names))
 
 @assets_router.delete("/{row_id}", response_model=APIResponse[AssetResponse])
 def delete_assets(
@@ -1729,6 +1750,38 @@ def quick_draft_asset_maintenances(
         ),
     )
 
+@asset_maintenances_router.post(
+    "/start-from-asset",
+    response_model=APIResponse[MaintenanceStartResult],
+)
+def start_maintenance_from_asset(
+    body: AssetMaintenanceStartFromAssetRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.maintenance:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """All Assets → Maintenance: dialog fields → in_progress WO + IN_MAINTENANCE ops."""
+    svc = MaintenanceService(db)
+    row, outcome, message = svc.start_from_asset(
+        ctx,
+        asset_id=body.asset_id,
+        reason=body.reason,
+        expected_duration_days=body.expected_duration_days,
+        maintenance_type=body.maintenance_type,
+        scheduled_date=body.scheduled_date,
+        vendor_id=body.vendor_id,
+        cost_amount=body.cost_amount,
+        technician_employee_id=body.technician_employee_id,
+        company_id=body.company_id,
+    )
+    return APIResponse(
+        message="OK",
+        data=MaintenanceStartResult(
+            status=outcome,
+            message=message,
+            maintenance=svc.to_response(ctx, row),
+        ),
+    )
+
 @asset_maintenances_router.get("/{row_id}", response_model=APIResponse[AssetMaintenanceResponse])
 def get_asset_maintenances(
     row_id: UUID,
@@ -2143,8 +2196,27 @@ def list_asset_disposals(
         offset=pagination.offset,
         limit=pagination.page_size,
     )
+    from modules.asset.repository.asset_repository import AssetRepository
+
+    asset_repo = AssetRepository(db)
+    enriched: list[AssetDisposalResponse] = []
+    for row in items:
+        base = AssetDisposalResponse.model_validate(row)
+        asset = asset_repo.get(ctx, row.asset_id)
+        if asset is not None:
+            base = base.model_copy(
+                update={
+                    "asset_code": getattr(asset, "asset_code", None),
+                    "asset_name": getattr(asset, "asset_name", None),
+                    "make": getattr(asset, "make", None),
+                    "model": getattr(asset, "model", None),
+                    "configuration": getattr(asset, "configuration", None),
+                    "serial_number": getattr(asset, "serial_number", None),
+                }
+            )
+        enriched.append(base)
     payload = AssetDisposalListResult(
-        items=items,
+        items=enriched,
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
@@ -2157,7 +2229,23 @@ def get_asset_disposals(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.disposal:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=DisposalService(db).get(ctx, row_id))
+    row = DisposalService(db).get(ctx, row_id)
+    base = AssetDisposalResponse.model_validate(row)
+    from modules.asset.repository.asset_repository import AssetRepository
+
+    asset = AssetRepository(db).get(ctx, row.asset_id)
+    if asset is not None:
+        base = base.model_copy(
+            update={
+                "asset_code": getattr(asset, "asset_code", None),
+                "asset_name": getattr(asset, "asset_name", None),
+                "make": getattr(asset, "make", None),
+                "model": getattr(asset, "model", None),
+                "configuration": getattr(asset, "configuration", None),
+                "serial_number": getattr(asset, "serial_number", None),
+            }
+        )
+    return APIResponse(message="OK", data=base)
 
 @asset_disposals_router.post("", response_model=APIResponse[AssetDisposalResponse])
 def create_asset_disposals(
@@ -2623,26 +2711,22 @@ def get_asset_document_content(
 ):
     disp = disposition if disposition in {"inline", "attachment"} else "inline"
     service = DocumentService(db)
-    handle, filename, content_type, file_size = service.open_stored_content(ctx, row_id)
-
-    def _iter():
-        try:
-            while True:
-                chunk = handle.read(_ASSET_DOC_CHUNK)
-                if not chunk:
-                    break
-                yield chunk
-        finally:
-            handle.close()
+    handle, filename, content_type, _meta_size = service.open_stored_content(ctx, row_id)
+    try:
+        # Buffer the full file (upload cap is 10 MB). StreamingResponse + CORS
+        # left browsers stuck on "pending" after HTTP 200 for cross-origin view.
+        payload = handle.read()
+    finally:
+        handle.close()
 
     headers = {
         "Content-Disposition": _asset_doc_content_disposition(disp, filename or "document"),
+        "Content-Length": str(len(payload)),
         "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-store",
     }
-    if file_size:
-        headers["Content-Length"] = str(file_size)
-    return StreamingResponse(
-        _iter(),
+    return Response(
+        content=payload,
         media_type=content_type or "application/octet-stream",
         headers=headers,
     )

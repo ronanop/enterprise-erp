@@ -31,18 +31,28 @@ export default function LoginPage() {
     }
   }, [searchParams]);
 
-  useEffect(() => {
+  const loadMicrosoftConfig = () => {
+    setMicrosoftEnabled(null);
     void authService
       .microsoftConfig()
-      .then((res) => setMicrosoftEnabled(Boolean(res.data?.enabled)))
+      .then((res) => {
+        setMicrosoftEnabled(Boolean(res.data?.enabled));
+        // Keep OAuth callback errors from the URL; clear connection errors only.
+        if (!searchParams.get("error")) setError(null);
+      })
       .catch((err) => {
-        setMicrosoftEnabled(false);
+        // Network / proxy failures are not the same as SSO being disabled.
+        setMicrosoftEnabled(null);
         setError(
           err instanceof Error
             ? err.message
             : "Cannot reach the API to check Microsoft sign-in.",
         );
       });
+  };
+
+  useEffect(() => {
+    loadMicrosoftConfig();
   }, []);
 
   const returnTo = searchParams.get("next")?.startsWith("/")
@@ -69,7 +79,23 @@ export default function LoginPage() {
         </div>
 
         <div className="rounded-2xl border border-border/80 bg-card/95 p-6 shadow-lg backdrop-blur-sm">
-          {error ? <p className="mb-4 text-sm text-destructive">{error}</p> : null}
+          {error ? (
+            <div className="mb-4 space-y-3">
+              <p className="text-sm text-destructive">{error}</p>
+              <p className="text-xs text-muted-foreground">
+                Usually the API on port 8000 is still starting or was restarting. Confirm uvicorn is
+                running, then retry.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 w-full cursor-pointer transition-colors duration-200"
+                onClick={loadMicrosoftConfig}
+              >
+                Retry connection
+              </Button>
+            </div>
+          ) : null}
 
           {microsoftEnabled === false ? (
             <p className="text-sm text-muted-foreground">
@@ -81,13 +107,15 @@ export default function LoginPage() {
             <Button
               type="button"
               className="h-11 w-full cursor-pointer gap-2 font-medium transition-colors duration-200"
-              disabled={microsoftEnabled === null}
+              disabled={microsoftEnabled !== true}
               onClick={() => {
                 window.location.href = authService.microsoftLoginUrl(returnTo);
               }}
             >
               <MicrosoftIcon className="size-4" />
-              {microsoftEnabled === null ? "Checking sign-in…" : "Sign in with Microsoft"}
+              {microsoftEnabled === null && !error
+                ? "Checking sign-in…"
+                : "Sign in with Microsoft"}
             </Button>
           )}
         </div>

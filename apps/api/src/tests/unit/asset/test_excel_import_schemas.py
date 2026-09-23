@@ -111,6 +111,21 @@ def test_summary_response_shape() -> None:
     assert payload.imported == 7
 
 
+def test_import_row_accepts_configuration_and_charger_serial() -> None:
+    row = AssetExcelImportRow(
+        row_number=1,
+        preview_status="valid",
+        asset_name="Laptop",
+        branch_id=uuid4(),
+        operational_status="READY_TO_MOVE",
+        asset_type_id=uuid4(),
+        configuration="Intel Core i5 / Gen 11 / 512 GB",
+        charger_serial="CHG-1001",
+    )
+    assert row.configuration == "Intel Core i5 / Gen 11 / 512 GB"
+    assert row.charger_serial == "CHG-1001"
+
+
 def test_row_number_must_be_positive() -> None:
     with pytest.raises(ValidationError):
         AssetExcelImportRow(

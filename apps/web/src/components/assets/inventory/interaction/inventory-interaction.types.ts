@@ -145,8 +145,7 @@ export const INVENTORY_MENU_ITEMS: Array<{
   { id: "qr", label: "QR Code", permissionKey: "qr" },
   { id: "transfer", label: "User Transfer", permissionKey: "transfer" },
   { id: "maintenance", label: "Maintenance", permissionKey: "maintenance" },
-  { id: "startDisposal", label: "Start Disposal", permissionKey: "startDisposal" },
-  { id: "reinstate", label: "Reinstate", permissionKey: "reinstate" },
+  { id: "startDisposal", label: "Dispose", permissionKey: "startDisposal" },
   // Destructive action — always last in the overflow menu.
   { id: "delete", label: "Delete", permissionKey: "delete" },
 ];

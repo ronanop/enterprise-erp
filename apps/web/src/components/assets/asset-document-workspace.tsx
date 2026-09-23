@@ -76,7 +76,6 @@ type AssetListItem = {
 
 type DraftDocumentErrors = {
   documentType?: string;
-  documentName?: string;
   file?: string;
   form?: string;
 };
@@ -84,7 +83,6 @@ type DraftDocumentErrors = {
 type DraftDocument = {
   key: string;
   documentType: AssetDocumentTypeValue | "";
-  documentName: string;
   documentDate: string;
   remarks: string;
   file: File | null;
@@ -176,38 +174,6 @@ function formatUploadedAt(value?: string | null): string {
   });
 }
 
-function friendlyUploadError(err: unknown): string {
-  if (err instanceof ApiClientError) {
-    const msg = (err.message || "").toLowerCase();
-    if (msg.includes("larger") || msg.includes("type") || msg.includes("allowed") || msg.includes("empty")) {
-      return "Unable to upload this file. Please check the file type and size and try again.";
-    }
-    if (err.status === 0) {
-      return "Unable to upload this file. Please check your connection and try again.";
-    }
-  }
-  return "Unable to upload this file. Please check the file type and size and try again.";
-}
-
-function validateSelectedFile(file: File, limits: DocumentUploadLimits): string | null {
-  const maxBytes = Math.max(limits.max_upload_mb, 1) * 1024 * 1024;
-  if (file.size <= 0) {
-    return "Unable to upload this file. Please check the file type and size and try again.";
-  }
-  if (file.size > maxBytes) {
-    return "Unable to upload this file. Please check the file type and size and try again.";
-  }
-  const allowed = new Set(limits.allowed_content_types.map((t) => t.toLowerCase()));
-  const mime = (file.type || "").toLowerCase();
-  const ext = file.name.includes(".") ? file.name.split(".").pop()?.toLowerCase() : "";
-  const extAllowed = limits.accepted_extensions.map((e) => e.toLowerCase());
-  if (mime && allowed.has(mime)) return null;
-  if (mime === "image/jpg" && allowed.has("image/jpeg")) return null;
-  if (ext && extAllowed.includes(ext)) return null;
-  if (!mime && ext && extAllowed.includes(ext)) return null;
-  return "Unable to upload this file. Please check the file type and size and try again.";
-}
-
 function acceptAttribute(limits: DocumentUploadLimits): string {
   const mimes = limits.allowed_content_types.join(",");
   const exts = limits.accepted_extensions.map((e) => `.${e.replace(/^\./, "")}`).join(",");
@@ -222,6 +188,60 @@ function acceptedFormatsLabel(limits: DocumentUploadLimits): string {
   return exts.join(", ");
 }
 
+function friendlyUploadError(err: unknown, maxMb: number): string {
+  if (err instanceof ApiClientError) {
+    if (err.status === 0) {
+      return "Cannot reach the API. Confirm the backend is running and try again.";
+    }
+    const raw = (err.message || "").trim();
+    const msg = raw.toLowerCase();
+    if (msg.includes("larger") || msg.includes("upload limit") || msg.includes("too large")) {
+      return `This file exceeds the ${maxMb} MB upload limit. Choose a smaller file.`;
+    }
+    if (
+      msg.includes("type") ||
+      msg.includes("allowed") ||
+      msg.includes("supported") ||
+      msg.includes("contents do not match") ||
+      msg.includes("empty")
+    ) {
+      return raw || `This file type is not supported. Maximum size is ${maxMb} MB.`;
+    }
+    if (raw && raw.toLowerCase() !== "api request failed") {
+      return raw;
+    }
+  }
+  return `Unable to upload this file. Use PDF, DOC, DOCX, XLS, XLSX, JPG, or PNG up to ${maxMb} MB.`;
+}
+
+function normalizeExtension(ext: string): string {
+  return ext.replace(/^\./, "").toLowerCase();
+}
+
+function validateSelectedFile(file: File, limits: DocumentUploadLimits): string | null {
+  const maxMb = Math.max(limits.max_upload_mb, 1);
+  const maxBytes = maxMb * 1024 * 1024;
+  if (file.size <= 0) {
+    return "The selected file is empty. Choose a valid document file.";
+  }
+  if (file.size > maxBytes) {
+    return `This file is ${formatBytes(file.size)}. Maximum allowed size is ${maxMb} MB.`;
+  }
+  const allowed = new Set(limits.allowed_content_types.map((t) => t.toLowerCase()));
+  const mime = (file.type || "").toLowerCase().split(";")[0]?.trim() ?? "";
+  const ext = file.name.includes(".")
+    ? normalizeExtension(file.name.split(".").pop() || "")
+    : "";
+  const extAllowed = new Set(limits.accepted_extensions.map(normalizeExtension));
+
+  if (mime && allowed.has(mime)) return null;
+  if (mime === "image/jpg" && allowed.has("image/jpeg")) return null;
+  // Browsers sometimes omit MIME for PDFs/Office files — accept by extension.
+  if (ext && extAllowed.has(ext)) return null;
+  const formats = acceptedFormatsLabel(limits);
+  return `This file type is not supported. Accepted formats: ${formats} (up to ${maxMb} MB).`;
+}
+
 function createDraftKey(): string {
   return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
@@ -230,8 +250,7 @@ function createEmptyDraft(): DraftDocument {
   return {
     key: createDraftKey(),
     documentType: "",
-    documentName: "",
-    documentDate: "",
+    documentDate: new Date().toISOString().slice(0, 10),
     remarks: "",
     file: null,
     errors: {},
@@ -248,18 +267,10 @@ function resolveUiTypeLabel(uiType: AssetDocumentTypeValue | ""): string {
   return ASSET_DOCUMENT_TYPE_OPTIONS.find((o) => o.value === uiType)?.label ?? "Document";
 }
 
-/** Build a storage filename from the display name, preserving the source file extension. */
-function buildUploadFilename(documentName: string, file: File): string {
-  const trimmed = documentName.trim() || "document";
-  const safeBase = trimmed.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, " ").trim() || "document";
-  const fileExt = file.name.includes(".")
-    ? `.${file.name.split(".").pop()!.toLowerCase()}`
-    : "";
-  if (!fileExt) return safeBase.slice(0, 255);
-  const lower = safeBase.toLowerCase();
-  if (lower.endsWith(fileExt)) return safeBase.slice(0, 255);
-  const withoutTrailingDot = safeBase.replace(/\.[^.]+$/, "");
-  return `${withoutTrailingDot.slice(0, 255 - fileExt.length)}${fileExt}`;
+/** Prefer the original uploaded filename for storage / display. */
+function resolveDocumentNameFromFile(file: File): string {
+  const raw = file.name.replace(/[\\/:*?"<>|]/g, "_").trim() || "document";
+  return raw.slice(0, 255);
 }
 
 export function AssetDocumentWorkspace() {
@@ -426,9 +437,25 @@ export function AssetDocumentWorkspace() {
   };
 
   const handleDraftFilePick = (key: string, file: File | null) => {
-    if (!file || !uploadLimits) {
-      updateDraft(key, { file: null, errors: {} });
-      clearDraftFieldError(key, "file");
+    if (!file) {
+      updateDraft(key, { file: null, errors: { file: undefined } });
+      return;
+    }
+    if (!uploadLimits) {
+      setDrafts((prev) =>
+        prev.map((d) =>
+          d.key === key
+            ? {
+                ...d,
+                file: null,
+                errors: {
+                  ...d.errors,
+                  file: "Upload limits are still loading. Wait a moment and try again.",
+                },
+              }
+            : d,
+        ),
+      );
       return;
     }
     const validationError = validateSelectedFile(file, uploadLimits);
@@ -449,16 +476,12 @@ export function AssetDocumentWorkspace() {
     setDrafts((prev) =>
       prev.map((d) => {
         if (d.key !== key) return d;
-        const nextName =
-          d.documentName.trim() ||
-          file.name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
         const nextErrors = { ...d.errors };
         delete nextErrors.file;
-        if (nextName) delete nextErrors.documentName;
+        delete nextErrors.form;
         return {
           ...d,
           file,
-          documentName: d.documentName.trim() ? d.documentName : nextName,
           errors: nextErrors,
         };
       }),
@@ -471,10 +494,6 @@ export function AssetDocumentWorkspace() {
       const errors: DraftDocumentErrors = {};
       if (!d.documentType) {
         errors.documentType = "Document type is required.";
-        ok = false;
-      }
-      if (!d.documentName.trim()) {
-        errors.documentName = "Document name is required.";
         ok = false;
       }
       if (!d.file) {
@@ -504,6 +523,7 @@ export function AssetDocumentWorkspace() {
 
     const remaining: DraftDocument[] = [];
     let successCount = 0;
+    const maxMb = Math.max(uploadLimits.max_upload_mb, 1);
 
     for (const draft of next) {
       if (!draft.file || !draft.documentType) {
@@ -511,10 +531,9 @@ export function AssetDocumentWorkspace() {
         continue;
       }
       try {
-        const uploadName = buildUploadFilename(draft.documentName.trim(), draft.file);
         await documentService.upload(selectedAsset.id, draft.file, {
           documentType: resolveApiDocumentType(draft.documentType),
-          documentName: uploadName,
+          documentName: resolveDocumentNameFromFile(draft.file),
         });
         successCount += 1;
       } catch (err) {
@@ -522,7 +541,7 @@ export function AssetDocumentWorkspace() {
           ...draft,
           errors: {
             ...draft.errors,
-            form: friendlyUploadError(err),
+            form: friendlyUploadError(err, maxMb),
           },
         });
       }
@@ -563,6 +582,10 @@ export function AssetDocumentWorkspace() {
     setError(null);
     try {
       const { blob, filename } = await documentService.getContentBlob(doc.id, disposition);
+      if (!blob || blob.size === 0) {
+        setError("Unable to open this document — the file appears empty.");
+        return;
+      }
       const url = URL.createObjectURL(blob);
       if (disposition === "inline") {
         window.open(url, "_blank", "noopener,noreferrer");
@@ -574,8 +597,12 @@ export function AssetDocumentWorkspace() {
         a.click();
         URL.revokeObjectURL(url);
       }
-    } catch {
-      setError("Unable to open this document. Please try again.");
+    } catch (err) {
+      const message =
+        err instanceof ApiClientError && err.message
+          ? err.message
+          : "Unable to open this document. Please try again.";
+      setError(message);
     } finally {
       setActionLoadingId(null);
     }
@@ -597,8 +624,8 @@ export function AssetDocumentWorkspace() {
   };
 
   const limits = uploadLimits;
-  const summaryDrafts = drafts.filter((d) => d.documentType || d.documentName.trim() || d.file);
   const existingDocuments = uploadOpen && selectedAssetId ? documents : [];
+  const readyDraftCount = drafts.filter((d) => d.file && d.documentType).length;
 
   return (
     <div className="space-y-5" data-testid="asset-document-workspace">
@@ -761,7 +788,7 @@ export function AssetDocumentWorkspace() {
 
       {uploadOpen && selectedAsset && limits ? (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-3 backdrop-blur-[1px] sm:p-4"
           role="presentation"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget && !uploading) closeUpload();
@@ -772,23 +799,30 @@ export function AssetDocumentWorkspace() {
             aria-modal="true"
             aria-labelledby="asset-doc-upload-title"
             data-testid="asset-document-upload-dialog"
-            className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-md border border-border bg-background shadow-lg"
+            className="flex w-full max-w-2xl max-h-[min(90vh,720px)] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl"
           >
-            <div className="flex shrink-0 items-start justify-between gap-3 border-b px-5 py-4">
-              <div>
-                <h2 id="asset-doc-upload-title" className="text-base font-semibold">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border px-4 py-3.5 sm:px-5">
+              <div className="min-w-0 space-y-1">
+                <h2
+                  id="asset-doc-upload-title"
+                  className="text-base font-semibold tracking-tight text-foreground sm:text-lg"
+                >
                   Add Asset Document
                 </h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {selectedAsset.assetName} —{" "}
-                  <span className="font-mono text-xs">{selectedAsset.assetCode}</span>
-                </p>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+                  <span className="truncate font-medium text-foreground/90">
+                    {selectedAsset.assetName}
+                  </span>
+                  <span className="rounded-md bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-foreground/80 ring-1 ring-border/70">
+                    {selectedAsset.assetCode}
+                  </span>
+                </div>
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-8 cursor-pointer"
+                className="size-8 shrink-0 cursor-pointer transition-colors duration-200"
                 disabled={uploading}
                 aria-label="Close"
                 onClick={closeUpload}
@@ -797,307 +831,332 @@ export function AssetDocumentWorkspace() {
               </Button>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
-              <div data-testid="asset-documents-existing">
-                <p className="mb-2 text-sm font-medium">Existing documents</p>
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+              <section data-testid="asset-documents-existing" className="space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Existing documents
+                  </h3>
+                  <span className="text-xs text-muted-foreground">
+                    {docsLoading
+                      ? "Loading…"
+                      : `${existingDocuments.length} file${existingDocuments.length === 1 ? "" : "s"}`}
+                  </span>
+                </div>
                 {docsLoading ? (
-                  <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+                  <div className="flex min-h-[72px] items-center gap-2 rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Loading documents…
                   </div>
                 ) : existingDocuments.length === 0 ? (
-                  <p className="rounded-md border border-dashed px-3 py-4 text-sm text-muted-foreground">
+                  <p className="flex min-h-[72px] items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 px-3 py-4 text-center text-sm text-muted-foreground">
                     No documents uploaded yet for this asset.
                   </p>
                 ) : (
-                  <div className="overflow-x-auto rounded-md border">
-                    <table
-                      className="w-full text-left text-sm"
-                      data-testid="asset-documents-file-table"
-                    >
-                      <thead className="border-b bg-muted/50 text-muted-foreground">
-                        <tr>
-                          <th className="px-3 py-2 font-medium">Document Name</th>
-                          <th className="px-3 py-2 font-medium">Document Type</th>
-                          <th className="px-3 py-2 font-medium">File Type</th>
-                          <th className="px-3 py-2 font-medium">Date</th>
-                          <th className="px-3 py-2 text-right font-medium">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {existingDocuments.map((doc) => (
-                          <tr key={doc.id} className="border-b">
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-2">
-                                <FileTypeIcon doc={doc} />
-                                <span className="font-medium break-all">{doc.document_name}</span>
-                              </div>
-                            </td>
-                            <td className="px-3 py-2">{documentTypeLabel(doc.document_type)}</td>
-                            <td className="px-3 py-2">{fileTypeLabel(doc)}</td>
-                            <td className="px-3 py-2">{formatUploadedAt(doc.created_at)}</td>
-                            <td className="px-3 py-2">
-                              <div className="flex flex-wrap items-center justify-end gap-1.5">
-                                <Button
-                                  type="button"
-                                  variant="default"
-                                  size="sm"
-                                  className="cursor-pointer transition-colors duration-200"
-                                  disabled={actionLoadingId === doc.id || uploading}
-                                  onClick={() => void handleViewOrDownload(doc, "inline")}
-                                >
-                                  <Eye className="size-3.5" aria-hidden />
-                                  View
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="secondary"
-                                  size="sm"
-                                  className="cursor-pointer transition-colors duration-200"
-                                  disabled={actionLoadingId === doc.id || uploading}
-                                  onClick={() => void handleViewOrDownload(doc, "attachment")}
-                                >
-                                  <Download className="size-3.5" aria-hidden />
-                                  Download
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="destructive"
-                                  size="sm"
-                                  className="cursor-pointer transition-colors duration-200"
-                                  disabled={actionLoadingId === doc.id || uploading}
-                                  onClick={() => void handleRemove(doc)}
-                                >
-                                  <Trash2 className="size-3.5" aria-hidden />
-                                  Delete
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {summaryDrafts.length > 0 ? (
-                <div data-testid="asset-document-upload-summary">
-                  <p className="mb-2 text-sm font-medium">Documents to upload</p>
-                  <ul className="space-y-2">
-                    {summaryDrafts.map((draft, index) => (
-                      <li
-                        key={`summary-${draft.key}`}
-                        className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 px-3 py-2 text-sm"
-                        data-testid={`asset-document-summary-${index + 1}`}
-                      >
-                        <div className="min-w-0">
-                          <p className="font-medium">
-                            {index + 1}. {resolveUiTypeLabel(draft.documentType)}
-                          </p>
-                          <p className="mt-0.5 break-all text-muted-foreground">
-                            {draft.documentName.trim() || "Untitled"}
-                          </p>
-                          <p className="mt-0.5 break-all text-xs text-muted-foreground">
-                            {draft.file?.name || "No file selected"}
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="shrink-0 cursor-pointer text-destructive transition-colors duration-200 hover:text-destructive"
-                          disabled={uploading}
-                          onClick={() => removeDraft(draft.key)}
-                        >
-                          Remove
-                        </Button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-
-              <div className="space-y-4">
-                {drafts.map((draft, index) => (
-                  <div
-                    key={draft.key}
-                    className="space-y-3 rounded-md border p-4"
-                    data-testid={`asset-document-draft-${index + 1}`}
+                  <ul
+                    className="divide-y divide-border overflow-hidden rounded-lg border border-border"
+                    data-testid="asset-documents-file-table"
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium">Document {index + 1}</p>
-                      {drafts.length > 1 ? (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="cursor-pointer text-destructive transition-colors duration-200 hover:text-destructive"
-                          disabled={uploading}
-                          onClick={() => removeDraft(draft.key)}
+                    {existingDocuments.map((doc) => (
+                      <li
+                        key={doc.id}
+                        className="flex flex-col gap-2 px-3 py-2.5 transition-colors duration-150 hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+                      >
+                        <div className="flex min-w-0 flex-1 items-start gap-2.5">
+                          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/70 ring-1 ring-border/60">
+                            <FileTypeIcon doc={doc} />
+                          </span>
+                          <div className="min-w-0 space-y-0.5">
+                            <p
+                              className="truncate text-sm font-medium text-foreground"
+                              title={doc.document_name}
+                            >
+                              {doc.document_name}
+                            </p>
+                            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-muted-foreground">
+                              <span>{documentTypeLabel(doc.document_type)}</span>
+                              <span className="text-border" aria-hidden>
+                                ·
+                              </span>
+                              <span>{fileTypeLabel(doc)}</span>
+                              <span className="text-border" aria-hidden>
+                                ·
+                              </span>
+                              <span>{formatUploadedAt(doc.created_at)}</span>
+                            </p>
+                          </div>
+                        </div>
+                        <div
+                          className="flex shrink-0 items-center gap-1 self-end sm:self-center"
+                          role="group"
+                          aria-label={`Actions for ${doc.document_name}`}
                         >
-                          Remove
-                        </Button>
-                      ) : null}
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div>
-                        <Label htmlFor={`doc-type-${draft.key}`}>
-                          Document Type <span className="text-destructive">*</span>
-                        </Label>
-                        <Select
-                          value={draft.documentType}
-                          disabled={uploading}
-                          onValueChange={(value) => {
-                            updateDraftField(
-                              draft.key,
-                              "documentType",
-                              value as AssetDocumentTypeValue,
-                              "documentType",
-                            );
-                          }}
-                        >
-                          <SelectTrigger
-                            id={`doc-type-${draft.key}`}
-                            className="cursor-pointer"
-                            aria-label={`Document type ${index + 1}`}
-                          >
-                            <SelectValue placeholder="Select document type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {ASSET_DOCUMENT_TYPE_OPTIONS.map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value} className="cursor-pointer">
-                                {opt.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {draft.errors.documentType ? (
-                          <p className="mt-1 text-xs text-destructive" role="alert">
-                            {draft.errors.documentType}
-                          </p>
-                        ) : null}
-                      </div>
-
-                      <div>
-                        <Label htmlFor={`doc-name-${draft.key}`}>
-                          Document Name <span className="text-destructive">*</span>
-                        </Label>
-                        <Input
-                          id={`doc-name-${draft.key}`}
-                          value={draft.documentName}
-                          placeholder="e.g. Dell Invoice 2026"
-                          disabled={uploading}
-                          onChange={(e) => {
-                            updateDraftField(
-                              draft.key,
-                              "documentName",
-                              e.target.value,
-                              "documentName",
-                            );
-                          }}
-                        />
-                        {draft.errors.documentName ? (
-                          <p className="mt-1 text-xs text-destructive" role="alert">
-                            {draft.errors.documentName}
-                          </p>
-                        ) : null}
-                      </div>
-
-                      <div>
-                        <Label htmlFor={`doc-date-${draft.key}`}>Document Date</Label>
-                        <Input
-                          id={`doc-date-${draft.key}`}
-                          type="date"
-                          value={draft.documentDate}
-                          disabled={uploading}
-                          onChange={(e) =>
-                            updateDraftField(draft.key, "documentDate", e.target.value)
-                          }
-                        />
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <Label htmlFor={`doc-remarks-${draft.key}`}>Description / Remarks</Label>
-                        <textarea
-                          id={`doc-remarks-${draft.key}`}
-                          value={draft.remarks}
-                          placeholder="Optional notes"
-                          disabled={uploading}
-                          rows={2}
-                          className={cn(
-                            "flex min-h-[64px] w-full rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none transition-colors duration-200",
-                            "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-                            "disabled:pointer-events-none disabled:opacity-50",
-                          )}
-                          onChange={(e) =>
-                            updateDraftField(draft.key, "remarks", e.target.value)
-                          }
-                        />
-                      </div>
-
-                      <div className="sm:col-span-2">
-                        <Label>
-                          File <span className="text-destructive">*</span>
-                        </Label>
-                        <input
-                          type="file"
-                          className="sr-only"
-                          id={`doc-file-${draft.key}`}
-                          accept={acceptAttribute(limits)}
-                          disabled={uploading}
-                          data-testid={`asset-document-file-input-${index + 1}`}
-                          onChange={(e) => {
-                            handleDraftFilePick(draft.key, e.target.files?.[0] ?? null);
-                            e.target.value = "";
-                          }}
-                        />
-                        <div className="mt-1 flex flex-wrap items-center gap-2">
                           <Button
                             type="button"
                             variant="outline"
-                            className="cursor-pointer transition-colors duration-200"
-                            disabled={uploading}
-                            onClick={() => document.getElementById(`doc-file-${draft.key}`)?.click()}
+                            size="sm"
+                            className="h-8 cursor-pointer gap-1 px-2 transition-colors duration-200"
+                            disabled={actionLoadingId === doc.id || uploading}
+                            aria-label={`View ${doc.document_name}`}
+                            title="View"
+                            onClick={() => void handleViewOrDownload(doc, "inline")}
                           >
-                            <Upload className="mr-2 h-4 w-4" />
-                            {draft.file ? "Change File" : "Choose File"}
+                            {actionLoadingId === doc.id ? (
+                              <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                            ) : (
+                              <Eye className="size-3.5 shrink-0" aria-hidden />
+                            )}
+                            <span className="text-xs">View</span>
                           </Button>
-                          {draft.file ? (
-                            <span
-                              className="text-sm text-muted-foreground break-all"
-                              data-testid={`asset-document-selected-file-${index + 1}`}
-                            >
-                              {draft.file.name} · {formatBytes(draft.file.size)}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="size-8 cursor-pointer transition-colors duration-200"
+                            disabled={actionLoadingId === doc.id || uploading}
+                            aria-label={`Download ${doc.document_name}`}
+                            title="Download"
+                            onClick={() => void handleViewOrDownload(doc, "attachment")}
+                          >
+                            <Download className="size-3.5" aria-hidden />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="size-8 cursor-pointer text-destructive transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive"
+                            disabled={actionLoadingId === doc.id || uploading}
+                            aria-label={`Delete ${doc.document_name}`}
+                            title="Delete"
+                            onClick={() => void handleRemove(doc)}
+                          >
+                            <Trash2 className="size-3.5" aria-hidden />
+                          </Button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
+
+              <section className="space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    New uploads
+                  </h3>
+                  {readyDraftCount > 0 ? (
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                      {readyDraftCount} ready
+                    </span>
+                  ) : null}
+                </div>
+
+                <div className="space-y-3">
+                  {drafts.map((draft, index) => (
+                    <div
+                      key={draft.key}
+                      className="space-y-3 rounded-lg border border-border bg-background p-3 sm:p-4"
+                      data-testid={`asset-document-draft-${index + 1}`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-foreground">
+                          Document {index + 1}
+                          {draft.documentType ? (
+                            <span className="ml-2 font-normal text-muted-foreground">
+                              · {resolveUiTypeLabel(draft.documentType)}
                             </span>
                           ) : null}
-                        </div>
-                        <p className="mt-1.5 text-xs text-muted-foreground">
-                          Accepted formats: {acceptedFormatsLabel(limits)} (up to{" "}
-                          {limits.max_upload_mb} MB).
                         </p>
-                        {draft.errors.file ? (
-                          <p className="mt-1 text-xs text-destructive" role="alert">
-                            {draft.errors.file}
-                          </p>
+                        {drafts.length > 1 ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 cursor-pointer text-destructive transition-colors duration-200 hover:text-destructive"
+                            disabled={uploading}
+                            onClick={() => removeDraft(draft.key)}
+                          >
+                            Remove
+                          </Button>
                         ) : null}
                       </div>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label htmlFor={`doc-type-${draft.key}`}>
+                            Document Type <span className="text-destructive">*</span>
+                          </Label>
+                          <Select
+                            value={draft.documentType}
+                            disabled={uploading}
+                            onValueChange={(value) => {
+                              updateDraftField(
+                                draft.key,
+                                "documentType",
+                                value as AssetDocumentTypeValue,
+                                "documentType",
+                              );
+                            }}
+                          >
+                            <SelectTrigger
+                              id={`doc-type-${draft.key}`}
+                              className="h-9 w-full cursor-pointer"
+                              aria-label={`Document type ${index + 1}`}
+                            >
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ASSET_DOCUMENT_TYPE_OPTIONS.map((opt) => (
+                                <SelectItem
+                                  key={opt.value}
+                                  value={opt.value}
+                                  className="cursor-pointer"
+                                >
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {draft.errors.documentType ? (
+                            <p className="text-xs text-destructive" role="alert">
+                              {draft.errors.documentType}
+                            </p>
+                          ) : null}
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label htmlFor={`doc-date-${draft.key}`}>Document Date</Label>
+                          <Input
+                            id={`doc-date-${draft.key}`}
+                            type="date"
+                            value={draft.documentDate}
+                            disabled={uploading}
+                            className="h-9 w-full cursor-pointer"
+                            onChange={(e) =>
+                              updateDraftField(draft.key, "documentDate", e.target.value)
+                            }
+                          />
+                        </div>
+
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label htmlFor={`doc-remarks-${draft.key}`}>Description / Remarks</Label>
+                          <textarea
+                            id={`doc-remarks-${draft.key}`}
+                            value={draft.remarks}
+                            placeholder="Optional notes about this document"
+                            disabled={uploading}
+                            rows={2}
+                            className={cn(
+                              "flex min-h-[56px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none transition-colors duration-200",
+                              "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+                              "disabled:pointer-events-none disabled:opacity-50",
+                            )}
+                            onChange={(e) =>
+                              updateDraftField(draft.key, "remarks", e.target.value)
+                            }
+                          />
+                        </div>
+
+                        <div className="space-y-1.5 sm:col-span-2">
+                          <Label>
+                            File <span className="text-destructive">*</span>
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            The uploaded filename is used as the document name.
+                          </p>
+                          <input
+                            type="file"
+                            className="sr-only"
+                            id={`doc-file-${draft.key}`}
+                            accept={acceptAttribute(limits)}
+                            disabled={uploading}
+                            data-testid={`asset-document-file-input-${index + 1}`}
+                            onChange={(e) => {
+                              handleDraftFilePick(draft.key, e.target.files?.[0] ?? null);
+                              e.target.value = "";
+                            }}
+                          />
+                          <div
+                            className={cn(
+                              "flex flex-col gap-2.5 rounded-md border border-dashed px-3 py-3 transition-colors duration-200 sm:flex-row sm:items-center sm:justify-between",
+                              draft.errors.file
+                                ? "border-destructive/50 bg-destructive/5"
+                                : draft.file
+                                  ? "border-emerald-300/80 bg-emerald-50/50"
+                                  : "border-border bg-muted/15 hover:border-border hover:bg-muted/25",
+                            )}
+                          >
+                            <div className="min-w-0 flex-1">
+                              {draft.file ? (
+                                <div
+                                  className="space-y-0.5"
+                                  data-testid={`asset-document-selected-file-${index + 1}`}
+                                >
+                                  <p className="truncate text-sm font-medium text-foreground">
+                                    {draft.file.name}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {formatBytes(draft.file.size)} · will save as document name
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="space-y-0.5">
+                                  <p className="text-sm font-medium text-foreground">
+                                    Drop or choose a file to upload
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {acceptedFormatsLabel(limits)} · max {limits.max_upload_mb} MB
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                            <Button
+                              type="button"
+                              variant={draft.file ? "outline" : "default"}
+                              className="h-9 shrink-0 cursor-pointer transition-colors duration-200"
+                              disabled={uploading}
+                              onClick={() =>
+                                document.getElementById(`doc-file-${draft.key}`)?.click()
+                              }
+                            >
+                              <Upload className="mr-2 h-4 w-4" />
+                              {draft.file ? "Change File" : "Choose File"}
+                            </Button>
+                          </div>
+                          {draft.errors.file ? (
+                            <p className="text-xs text-destructive" role="alert">
+                              {draft.errors.file}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      {draft.errors.form ? (
+                        <p
+                          className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive"
+                          role="alert"
+                        >
+                          {draft.errors.form}
+                        </p>
+                      ) : null}
+
+                      {draft.file || draft.documentType ? (
+                        <div className="sr-only" data-testid={`asset-document-summary-${index + 1}`}>
+                          {resolveUiTypeLabel(draft.documentType)}{" "}
+                          {draft.file?.name || "No file selected"}
+                        </div>
+                      ) : null}
                     </div>
+                  ))}
+                </div>
+              </section>
+            </div>
 
-                    {draft.errors.form ? (
-                      <p className="text-xs text-destructive" role="alert">
-                        {draft.errors.form}
-                      </p>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-border bg-muted/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
               <Button
                 type="button"
                 variant="outline"
-                className="cursor-pointer transition-colors duration-200"
+                className="h-9 cursor-pointer border-dashed transition-colors duration-200"
                 disabled={uploading}
                 onClick={addAnotherDocument}
                 data-testid="asset-document-add-another"
@@ -1105,28 +1164,27 @@ export function AssetDocumentWorkspace() {
                 <Plus className="mr-2 h-4 w-4" />
                 Add Another Document
               </Button>
-            </div>
-
-            <div className="flex shrink-0 justify-end gap-2 border-t px-5 py-4">
-              <Button
-                type="button"
-                variant="outline"
-                className="cursor-pointer transition-colors duration-200"
-                disabled={uploading}
-                onClick={closeUpload}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                className="cursor-pointer transition-colors duration-200"
-                disabled={uploading}
-                onClick={() => void handleSaveDocuments()}
-                data-testid="asset-document-save"
-              >
-                {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save Documents
-              </Button>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-9 cursor-pointer transition-colors duration-200"
+                  disabled={uploading}
+                  onClick={closeUpload}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  className="h-9 min-w-[140px] cursor-pointer transition-colors duration-200"
+                  disabled={uploading}
+                  onClick={() => void handleSaveDocuments()}
+                  data-testid="asset-document-save"
+                >
+                  {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Save Documents
+                </Button>
+              </div>
             </div>
           </div>
         </div>

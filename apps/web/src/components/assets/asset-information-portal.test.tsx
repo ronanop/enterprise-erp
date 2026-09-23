@@ -7,6 +7,7 @@ const push = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push, replace: vi.fn(), prefetch: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("@/lib/auth", () => ({
@@ -27,13 +28,21 @@ vi.mock("@/services/assets-service", async (importOriginal) => {
     assetInformationPortalService: {
       getPortal: (...args: unknown[]) => getPortal(...args),
       getSelfService: vi.fn(),
+      getLifecycleTimeline: vi.fn(async () => []),
     },
-    buildSelfServiceUrl: (id: string) => `/assets/self-service/${id}`,
+    buildSelfServiceUrl: (id: string) => `/assets/information-portal/${id}?from=qr`,
+    buildAssetQrUrl: (id: string) => `/assets/information-portal/${id}?from=qr`,
   };
 });
 
 vi.mock("@/services/api-client", () => ({
-  ApiClientError: class ApiClientError extends Error {},
+  ApiClientError: class ApiClientError extends Error {
+    status: number;
+    constructor(message: string, status = 400) {
+      super(message);
+      this.status = status;
+    }
+  },
   resourceService: {
     list: vi.fn(async () => ({ data: { items: [], total: 0 } })),
   },
@@ -59,7 +68,7 @@ describe("AssetInformationPortalView Overview status", () => {
       asset_type: "fixed",
       status: "submitted",
       operational_status: "READY_TO_MOVE",
-      self_service_path: "/assets/self-service/a1",
+      self_service_path: "/assets/information-portal/a1?from=qr",
       assignment: null,
       warranty: null,
       insurance: null,
@@ -79,7 +88,7 @@ describe("AssetInformationPortalView Overview status", () => {
       asset_type: "fixed",
       status: "active",
       operational_status: "ASSIGNED",
-      self_service_path: "/assets/self-service/a1",
+      self_service_path: "/assets/information-portal/a1?from=qr",
     });
     render(<AssetInformationPortalView assetId="a1" />);
     const status = await screen.findByTestId("portal-overview-status");
@@ -95,7 +104,7 @@ describe("AssetInformationPortalView Overview status", () => {
       asset_type: "fixed",
       status: "submitted",
       operational_status: null,
-      self_service_path: "/assets/self-service/a1",
+      self_service_path: "/assets/information-portal/a1?from=qr",
     });
     render(<AssetInformationPortalView assetId="a1" />);
     const status = await screen.findByTestId("portal-overview-status");

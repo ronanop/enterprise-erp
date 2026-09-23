@@ -1,6 +1,7 @@
 """Authentication service."""
 
 import base64
+import secrets
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
@@ -16,7 +17,7 @@ from modules.foundation.domain.exceptions import (
     InvalidCredentialsException,
 )
 from modules.foundation.domain.erp_modules import resolve_session_user_type
-from modules.foundation.models.security import SecRole, SecUser, SecUserRole
+from modules.foundation.models.security import SecRole, SecTenant, SecUser, SecUserRole
 from modules.foundation.repository.session_repository import SessionRepository
 from modules.foundation.repository.user_repository import UserRepository
 from modules.foundation.service.audit_service import AuditService
@@ -92,17 +93,113 @@ class AuthService:
         self,
         *,
         email: str,
+        display_name: str | None = None,
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> dict:
         user = self._users.get_active_by_email(email)
         if user is None:
-            raise InvalidCredentialsException("No ERP account is linked to this Microsoft identity")
+            user = self._provision_microsoft_user(email=email, display_name=display_name)
+        if user is None:
+            raise InvalidCredentialsException(
+                "No ERP account is linked to this Microsoft identity"
+            )
 
         if user.locked_until and user.locked_until > datetime.now(timezone.utc):
             raise AccountLockedException()
 
         return self._issue_tokens(user, ip_address=ip_address, user_agent=user_agent)
+
+    def _microsoft_email_allowed(self, email: str) -> bool:
+        normalized = email.strip().lower()
+        if normalized in settings.microsoft_platform_admin_email_set():
+            return True
+        domain = settings.microsoft_user_email_domain.strip().lower().lstrip("@")
+        return bool(domain and normalized.endswith(f"@{domain}"))
+
+    def _provision_microsoft_user(
+        self,
+        *,
+        email: str,
+        display_name: str | None,
+    ) -> SecUser | None:
+        """Just-in-time link for org-domain (or platform-admin) Microsoft accounts."""
+        if not self._microsoft_email_allowed(email):
+            return None
+
+        tenant = self._db.scalar(
+            select(SecTenant).where(
+                SecTenant.tenant_code == "BOOTSTRAP",
+                SecTenant.is_deleted.is_(False),
+            )
+        )
+        if tenant is None:
+            return None
+
+        from core.exceptions import ConflictException
+        from modules.foundation.service.org_context_service import OrgContextService
+        from modules.foundation.service.user_service import UserService
+
+        normalized = email.strip().lower()
+        existing = self._db.scalar(
+            select(SecUser).where(
+                SecUser.tenant_id == tenant.id,
+                SecUser.email == normalized,
+            )
+        )
+        if existing is not None:
+            if existing.is_deleted:
+                existing.is_deleted = False
+                existing.deleted_at = None
+                existing.deleted_by = None
+                existing.status = "active"
+                self._db.flush()
+            return existing
+
+        is_admin = normalized in settings.microsoft_platform_admin_email_set()
+        name = (display_name or "").strip() or normalized.split("@")[0]
+        service = UserService(self._db)
+        try:
+            user_row = service.create_user(
+                tenant_id=tenant.id,
+                email=normalized,
+                password=f"Ms0!{secrets.token_urlsafe(18)}",
+                display_name=name,
+                user_type="super_admin" if is_admin else "employee",
+            )
+        except ConflictException:
+            return self._users.get_active_by_email(normalized)
+
+        user = self._db.get(SecUser, user_row.id)
+        if user is None:
+            return None
+
+        if is_admin:
+            role = self._db.scalar(
+                select(SecRole).where(
+                    SecRole.tenant_id == tenant.id,
+                    SecRole.role_code == "SUPER_ADMIN",
+                    SecRole.is_deleted.is_(False),
+                )
+            )
+            if role is not None:
+                service.assign_role(
+                    tenant_id=tenant.id,
+                    user_id=user.id,
+                    role_id=role.id,
+                    assigned_by=None,
+                )
+
+        org = OrgContextService(self._db)
+        company, branch = org.get_tenant_primary_org(tenant.id)
+        if company is not None:
+            org.ensure_default_scope(
+                tenant_id=tenant.id,
+                user_id=user.id,
+                company_id=company.id,
+                branch_id=branch.id if branch else None,
+            )
+        return user
 
     def complete_microsoft_oauth(
         self,
@@ -133,8 +230,13 @@ class AuthService:
         if not email:
             raise InvalidCredentialsException("Microsoft account did not include an email address")
 
+        display_name = claims.get("name")
+        if not isinstance(display_name, str):
+            display_name = None
+
         tokens = self.login_with_microsoft(
             email=email,
+            display_name=display_name,
             ip_address=ip_address,
             user_agent=user_agent,
         )

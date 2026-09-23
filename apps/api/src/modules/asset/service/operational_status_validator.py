@@ -27,6 +27,7 @@ _ACTION_TARGETS: dict[str, str] = {
     "start_disposal": Pending,
     "reinstate": Ready,
     "complete_disposal": Disposed,
+    "dispose": Disposed,
     "attach_as_component": InUseAsComponent,
     "detach_as_component": Ready,
     "start_maintenance": InMaintenance,

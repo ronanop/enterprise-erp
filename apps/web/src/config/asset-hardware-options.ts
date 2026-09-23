@@ -71,3 +71,40 @@ export function buildConfigurationString(parts: {
   if (parts.storage?.trim()) chunks.push(`Storage: ${parts.storage.trim()}`);
   return chunks.length > 0 ? chunks.join("; ") : undefined;
 }
+
+/** Best-effort parse of stored configuration back into form fields. */
+export function parseConfigurationString(configuration?: string | null): {
+  processor: string;
+  generation: string;
+  ram: string;
+  storage: string;
+} {
+  const empty = { processor: "", generation: "", ram: "", storage: "" };
+  const text = (configuration ?? "").trim();
+  if (!text) return empty;
+
+  const labeled = {
+    processor: text.match(/Processor:\s*([^;]+)/i)?.[1]?.trim() ?? "",
+    generation: text.match(/Generation:\s*([^;]+)/i)?.[1]?.trim() ?? "",
+    ram: text.match(/RAM:\s*([^;]+)/i)?.[1]?.trim() ?? "",
+    storage: text.match(/Storage:\s*([^;]+)/i)?.[1]?.trim() ?? "",
+  };
+  if (labeled.processor || labeled.ram || labeled.storage || labeled.generation) {
+    return labeled;
+  }
+
+  // Compact formats like "Apple M1 / 16 GB / 512 GB" or "Intel i5 / 16 GB / 512 GB"
+  const parts = text
+    .split(/[|/·•]/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length >= 3) {
+    return {
+      processor: parts[0] ?? "",
+      generation: "",
+      ram: parts[1] ?? "",
+      storage: parts[2] ?? "",
+    };
+  }
+  return empty;
+}

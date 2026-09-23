@@ -111,6 +111,9 @@ vi.mock("@/services/assets-service", () => ({
   componentService: {
     search: vi.fn().mockResolvedValue({ items: [], total: 0 }),
   },
+  assetLocationService: {
+    search: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+  },
   assetRegisterService: {
     create: (...args: unknown[]) => create(...args),
     update: (...args: unknown[]) => update(...args),

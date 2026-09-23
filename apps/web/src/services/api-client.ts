@@ -229,63 +229,90 @@ export type BlobFetchResult =
 export async function apiGetBlob(
   path: string,
   query?: RequestOptions["query"],
-  options: { _retried?: boolean } = {},
+  options: { _retried?: boolean; baseUrl?: string; timeoutMs?: number } = {},
 ): Promise<BlobFetchResult> {
   const token = getAccessToken();
   await ensureApiBase();
-  let response: Response;
+  const base = options.baseUrl ? options.baseUrl.replace(/\/+$/, "") : getApiUrl();
+  const timeoutMs = options.timeoutMs ?? 45_000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    response = await fetch(buildUrl(path, query), {
-      method: "GET",
-      headers: {
-        Accept: "application/pdf,image/jpeg,image/png,application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      cache: "no-store",
-    });
-  } catch {
-    throw new ApiClientError(
-      "Cannot reach the API. Confirm the backend is running.",
-      0,
-    );
-  }
-
-  if (response.status === 401 && !options._retried) {
-    const refreshed = await tryRefreshAccessToken();
-    if (refreshed) {
-      return apiGetBlob(path, query, { _retried: true });
+    let response: Response;
+    try {
+      response = await fetch(buildUrl(path, query, base), {
+        method: "GET",
+        headers: {
+          Accept: "application/pdf,image/jpeg,image/png,application/json,*/*",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new ApiClientError(
+          "Document download timed out. Please try again.",
+          0,
+        );
+      }
+      throw new ApiClientError(
+        "Cannot reach the API. Confirm the backend is running.",
+        0,
+      );
     }
-    clearTokens();
-    throw new ApiClientError(await parseErrorMessage(response), 401);
-  }
 
-  if (!response.ok) {
-    throw new ApiClientError(await parseErrorMessage(response), response.status);
-  }
-
-  const contentType = (response.headers.get("content-type") || "").toLowerCase();
-  if (contentType.includes("application/json")) {
-    const payload = (await response.json()) as ApiResponse<{
-      is_legacy?: boolean;
-      external_url?: string;
-    }>;
-    const url = payload.data?.external_url;
-    if (payload.data?.is_legacy && url) {
-      return { kind: "legacy", externalUrl: url };
+    if (response.status === 401 && !options._retried) {
+      const refreshed = await tryRefreshAccessToken();
+      if (refreshed) {
+        return apiGetBlob(path, query, { ...options, _retried: true });
+      }
+      clearTokens();
+      throw new ApiClientError(await parseErrorMessage(response), 401);
     }
-    throw new ApiClientError(payload.message ?? "Document is not available for preview", 400);
-  }
 
-  const blob = await response.blob();
-  const disposition = response.headers.get("content-disposition") || "";
-  const match = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"/i.exec(disposition);
-  const filename = decodeURIComponent(match?.[1] || match?.[2] || "document");
-  return {
-    kind: "file",
-    blob,
-    contentType: response.headers.get("content-type") || blob.type || "application/octet-stream",
-    filename,
-  };
+    if (!response.ok) {
+      throw new ApiClientError(await parseErrorMessage(response), response.status);
+    }
+
+    const contentType = (response.headers.get("content-type") || "").toLowerCase();
+    if (contentType.includes("application/json")) {
+      const payload = (await response.json()) as ApiResponse<{
+        is_legacy?: boolean;
+        external_url?: string;
+      }>;
+      const url = payload.data?.external_url;
+      if (payload.data?.is_legacy && url) {
+        return { kind: "legacy", externalUrl: url };
+      }
+      throw new ApiClientError(payload.message ?? "Document is not available for preview", 400);
+    }
+
+    let blob: Blob;
+    try {
+      blob = await response.blob();
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        throw new ApiClientError(
+          "Document download timed out. Please try again.",
+          0,
+        );
+      }
+      throw err;
+    }
+    const disposition = response.headers.get("content-disposition") || "";
+    const match = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"/i.exec(disposition);
+    const filename = decodeURIComponent(match?.[1] || match?.[2] || "document");
+    return {
+      kind: "file",
+      blob,
+      contentType: response.headers.get("content-type") || blob.type || "application/octet-stream",
+      filename,
+    };
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 export const healthService = {

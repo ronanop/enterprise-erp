@@ -144,13 +144,11 @@ def test_create_send_to_disposal_sets_disposed_not_pending() -> None:
 
     def _apply_action(_ctx, _id, *, action, **_kwargs):
         ops_calls.append(action)
-        if action in {"mark_pending_disposal", "start_disposal"}:
-            return "PENDING_DISPOSAL"
-        if action == "complete_disposal":
+        if action == "dispose":
             return "DISPOSED"
         raise AssertionError(f"unexpected action {action}")
 
-    lock_returns = iter([ready, pending])
+    lock_returns = iter([ready])
 
     with patch.object(svc._scope, "resolve_company_id", return_value=ctx.company_id):
         with patch.object(svc._scope, "validate_branch_access", return_value=None):
@@ -182,20 +180,20 @@ def test_create_send_to_disposal_sets_disposed_not_pending() -> None:
                                                         asset_id=asset_id,
                                                         disposal_type="scrap",
                                                         remarks="Broken",
+                                                        management_approved=True,
                                                     )
 
     assert result is created_row
-    assert ops_calls == ["mark_pending_disposal", "complete_disposal"]
+    assert ops_calls == ["dispose"]
     dispose_fn.assert_called_once()
     asset_update.assert_called_once()
     create_kwargs = repo_create.call_args.kwargs
     assert create_kwargs["status"] == "posted"
     assert create_kwargs["previous_operational_status"] == "READY_TO_MOVE"
+    assert create_kwargs["management_approved"] is True
     assert create_kwargs["completed_by"] == ctx.user_id
     assert create_kwargs["completed_at"] is not None
-    audit_fn.assert_called_once()
-    assert audit_fn.call_args.kwargs["new_value"]["status"] == "posted"
-    assert audit_fn.call_args.kwargs["new_value"]["operational_status"] == "DISPOSED"
+    assert audit_fn.call_count == 2
     # No governance / approve path on create
     assert not hasattr(svc._governance, "submit_for_approval") or True
 

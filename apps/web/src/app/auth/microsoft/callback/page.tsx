@@ -16,6 +16,11 @@ type ReadyState = {
   redirectTo: string;
 };
 
+function safeReturnPath(value: string | null | undefined): string | null {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return null;
+  return value;
+}
+
 function MicrosoftAuthCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -35,17 +40,21 @@ function MicrosoftAuthCallbackContent() {
       try {
         const result = await authService.exchangeMicrosoftCode(code);
         if (cancelled) return;
-        let redirect = result.data?.redirect_to ?? "/home";
+        // Prefer the OAuth return_to (e.g. scanned asset QR) over demo module defaults.
+        const oauthReturn = safeReturnPath(result.data?.redirect_to ?? null);
+        let redirect = oauthReturn ?? "/home";
         let userName = "there";
         try {
           const profile = await authService.me();
           const { user } = parseAuthMe(profile.data);
           if (user) {
             userName = welcomeDisplayName(user.displayName, user.email);
-            if (user.email) {
-              redirect = getPostLoginRedirect(user.email);
-            } else if (user.userType === "super_admin") {
-              redirect = "/home";
+            if (!oauthReturn) {
+              if (user.email) {
+                redirect = getPostLoginRedirect(user.email);
+              } else if (user.userType === "super_admin") {
+                redirect = "/home";
+              }
             }
           }
         } catch {

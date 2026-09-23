@@ -44,7 +44,7 @@ const buttonVariants = cva(
 
 type ButtonProps = ButtonPrimitive.Props &
   VariantProps<typeof buttonVariants> & {
-    /** Merge button styles onto a single child (e.g. Next.js Link). */
+    /** Radix/shadcn compatibility: merge styles onto the single child (via Base UI `render`). */
     asChild?: boolean
   }
 
@@ -58,11 +58,17 @@ function Button({
 }: ButtonProps) {
   const classes = cn(buttonVariants({ variant, size, className }))
 
-  if (asChild && React.isValidElement<{ className?: string }>(children)) {
-    return React.cloneElement(children, {
-      ...props,
-      className: cn(classes, children.props.className),
-    })
+  if (asChild) {
+    const child = React.Children.only(children) as React.ReactElement
+    return (
+      <ButtonPrimitive
+        data-slot="button"
+        className={classes}
+        nativeButton={false}
+        render={child}
+        {...props}
+      />
+    )
   }
 
   return (
@@ -77,3 +83,4 @@ function Button({
 }
 
 export { Button, buttonVariants }
+export type { ButtonProps }

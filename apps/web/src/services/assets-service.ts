@@ -431,7 +431,17 @@ export const documentService = {
     id: string,
     disposition: "inline" | "attachment" = "inline",
   ): Promise<{ blob: Blob; contentType: string; filename: string }> {
-    const result = await apiGetBlob(`${ASSET_DOCUMENTS_PATH}/${id}/content`, { disposition });
+    // Prefer same-origin /api/v1 (Next rewrite). Buffered API Response + accurate
+    // Content-Length avoids prior stream hang / ERR_CONTENT_LENGTH_MISMATCH.
+    // Fall back to direct API origin only when NEXT_PUBLIC_API_URL is absolute.
+    const configured = (process.env.NEXT_PUBLIC_API_URL || "").trim().replace(/\/+$/, "");
+    const binaryBase = /^https?:\/\//i.test(configured) ? configured : undefined;
+
+    const result = await apiGetBlob(
+      `${ASSET_DOCUMENTS_PATH}/${id}/content`,
+      { disposition },
+      { ...(binaryBase ? { baseUrl: binaryBase } : {}), timeoutMs: 45_000 },
+    );
     if (result.kind === "legacy") {
       throw new ApiClientError("External document links cannot be previewed here.", 400);
     }
@@ -817,7 +827,7 @@ export type MaintenanceTimelineEvent = {
   id: string;
   kind: string;
   label: string;
-  occurred_at: string;
+  occurred_at?: string | null;
   performed_by?: string | null;
   detail?: string | null;
 };
@@ -876,6 +886,23 @@ export const maintenanceService = {
       { asset_id: assetId },
     );
     return res.data as MaintenanceRow;
+  },
+
+  async startFromAsset(body: {
+    asset_id: string;
+    reason: string;
+    expected_duration_days: number;
+    maintenance_type?: string;
+    scheduled_date?: string;
+    vendor_id?: string;
+    cost_amount?: number;
+    technician_employee_id?: string;
+  }): Promise<MaintenanceStartResult> {
+    const res = await resourceService.create<MaintenanceStartResult>(
+      `${ASSET_MAINTENANCES_PATH}/start-from-asset`,
+      body,
+    );
+    return res.data as MaintenanceStartResult;
   },
 
   async startMaintenance(
@@ -1059,10 +1086,48 @@ export type ReportCatalogItem = {
   category: string;
 };
 
+export type ReportNamedCount = {
+  name?: string;
+  status?: string;
+  document_type?: string;
+  component_type?: string;
+  stage?: string;
+  month?: string;
+  count: number;
+};
+
 export type ReportDashboard = {
   generated_at: string;
   horizon_days: number;
   kpis: Record<string, number>;
+  analytics_kpis?: Record<string, number>;
+  by_status?: Array<Record<string, unknown>>;
+  by_operational_status?: Array<Record<string, unknown>>;
+  documents?: {
+    total?: number;
+    coverage_pct?: number;
+    by_type?: Array<Record<string, unknown>>;
+    by_status?: Array<Record<string, unknown>>;
+  };
+  components?: {
+    total?: number;
+    by_type?: Array<Record<string, unknown>>;
+    by_status?: Array<Record<string, unknown>>;
+  };
+  lifecycle?: {
+    stages?: Array<Record<string, unknown>>;
+    open_maintenance?: number;
+    open_disposals?: number;
+    depreciation_summary?: Record<string, number>;
+  };
+  usage?: {
+    active_assignments?: number;
+    closed_assignments?: number;
+    assets_currently_assigned?: number;
+    utilization_pct?: number;
+    available_assets?: number;
+    registrations_by_month?: Array<Record<string, unknown>>;
+  };
   by_category: Array<Record<string, unknown>>;
   by_department: Array<Record<string, unknown>>;
   recent_transfers: Array<Record<string, unknown>>;
@@ -1612,6 +1677,24 @@ export type AssetInformationPortal = {
   self_service_path: string;
   discovery_profile_json?: Record<string, unknown> | null;
   version?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type AssetLifecycleTimelineEvent = {
+  id: string;
+  kind: string;
+  stage: string;
+  title: string;
+  detail?: string | null;
+  occurred_at?: string | null;
+  actor_label?: string | null;
+  reference_id?: string | null;
+  reference_label?: string | null;
+};
+
+export type AssetLifecycleTimelineResult = {
+  events: AssetLifecycleTimelineEvent[];
 };
 
 export type DiscoveryPlatform = "windows" | "linux" | "macos";
@@ -1678,12 +1761,21 @@ export const assetDiscoveryService = {
   },
 };
 
-/** Absolute self-service URL for QR payload (CR-002). Never persist QR images. */
-export function buildSelfServiceUrl(assetId: string, origin?: string): string {
+/** Absolute QR / scan URL for an asset (CR-002). Never persist QR images. */
+export function buildAssetQrUrl(assetId: string, origin?: string): string {
   const base =
     origin ??
     (typeof window !== "undefined" ? window.location.origin : "");
-  return `${base.replace(/\/$/, "")}/assets/self-service/${assetId}`;
+  const path = `/assets/information-portal/${encodeURIComponent(assetId)}?from=qr`;
+  return `${base.replace(/\/$/, "")}${path}`;
+}
+
+/**
+ * @deprecated Prefer {@link buildAssetQrUrl}. Kept so existing imports keep working;
+ * both QR entry points now resolve to the authenticated Information Portal.
+ */
+export function buildSelfServiceUrl(assetId: string, origin?: string): string {
+  return buildAssetQrUrl(assetId, origin);
 }
 
 export const assetInformationPortalService = {
@@ -1701,6 +1793,16 @@ export const assetInformationPortalService = {
       { method: "GET" },
     );
     return res.data as AssetInformationPortal;
+  },
+
+  async getLifecycleTimeline(assetId: string): Promise<AssetLifecycleTimelineEvent[]> {
+    const res = await apiClient<AssetLifecycleTimelineResult>(
+      `/assets/assets/${assetId}/lifecycle-timeline`,
+      { method: "GET" },
+    );
+    const data = res.data as AssetLifecycleTimelineResult | AssetLifecycleTimelineEvent[];
+    if (Array.isArray(data)) return data;
+    return data?.events ?? [];
   },
 };
 

@@ -20,6 +20,14 @@ OPEN_WO_STATUSES = (
     AssetMaintenanceStatus.IN_PROGRESS.value,
 )
 
+# Default Maintenance tab list: hide orphan drafts; start-from-asset goes straight to in_progress.
+LIST_OPEN_WO_STATUSES = (
+    AssetMaintenanceStatus.SUBMITTED.value,
+    AssetMaintenanceStatus.APPROVED.value,
+    AssetMaintenanceStatus.SCHEDULED.value,
+    AssetMaintenanceStatus.IN_PROGRESS.value,
+)
+
 
 @dataclass(frozen=True)
 class AssetMaintenanceListFilters:
@@ -77,7 +85,7 @@ class AssetMaintenanceRepository(AstScopedRepository):
         if filters.status is not None:
             stmt = stmt.where(AstAssetMaintenance.status == filters.status)
         if filters.open_only:
-            stmt = stmt.where(AstAssetMaintenance.status.in_(OPEN_WO_STATUSES))
+            stmt = stmt.where(AstAssetMaintenance.status.in_(LIST_OPEN_WO_STATUSES))
         if filters.maintenance_type is not None:
             stmt = stmt.where(AstAssetMaintenance.maintenance_type == filters.maintenance_type)
         if filters.search:

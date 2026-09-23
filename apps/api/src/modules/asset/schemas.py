@@ -157,6 +157,8 @@ class AssetUpdate(BaseModel):
     quality_inspection_id: UUID | None = None
     is_shared: bool | None = None
     location_label: str | None = None
+    location_id: UUID | None = None
+    building_id: UUID | None = None
     version: int | None = None
     charger_available: bool | None = None
     charger_code: str | None = None
@@ -277,6 +279,8 @@ class AssetResponse(OrmModel):
     version: int
     discovery_profile_json: dict | None = None
     current_location_label: str | None = None
+    location_id: UUID | None = None
+    building_id: UUID | None = None
 
 
 class AssetPortalAssignmentSummary(BaseModel):
@@ -326,6 +330,26 @@ class AssetInformationPortalResponse(BaseModel):
     self_service_path: str
     discovery_profile_json: dict | None = None
     version: int | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class AssetLifecycleTimelineEvent(BaseModel):
+    """One lifecycle milestone for Information Portal activity / history timelines."""
+
+    id: str
+    kind: str
+    stage: str
+    title: str
+    detail: str | None = None
+    occurred_at: datetime | None = None
+    actor_label: str | None = None
+    reference_id: UUID | None = None
+    reference_label: str | None = None
+
+
+class AssetLifecycleTimelineResult(BaseModel):
+    events: list[AssetLifecycleTimelineEvent]
 
 
 class DiscoveryCommandResponse(BaseModel):
@@ -1006,6 +1030,19 @@ class AssetMaintenanceStartRequest(BaseModel):
     technician_employee_id: UUID | None = None
     version: int | None = None
 
+class AssetMaintenanceStartFromAssetRequest(BaseModel):
+    """All Assets → Maintenance: collect start fields and start WO in one step."""
+
+    asset_id: UUID
+    reason: str
+    expected_duration_days: int = Field(ge=1)
+    maintenance_type: str | None = None
+    scheduled_date: date | None = None
+    vendor_id: UUID | None = None
+    cost_amount: Decimal | None = None
+    technician_employee_id: UUID | None = None
+    company_id: UUID | None = None
+
 class AssetMaintenanceUpdate(BaseModel):
     maintenance_type: str | None = None
     maintenance_plan_id: UUID | None = None
@@ -1044,6 +1081,8 @@ class AssetMaintenanceResponse(OrmModel):
     branch_id: UUID
     version: int
     created_by: UUID | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -1072,7 +1111,7 @@ class MaintenanceTimelineEvent(BaseModel):
     id: str
     kind: str
     label: str
-    occurred_at: datetime
+    occurred_at: datetime | None = None
     performed_by: UUID | None = None
     detail: str | None = None
 
@@ -1181,11 +1220,12 @@ class AssetDisposalCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID
     asset_id: UUID
-    disposal_type: str
+    disposal_type: str = "scrap"
     disposal_date: date | None = None
     proceeds_amount: Decimal | None = None
     book_value_at_disposal: Decimal | None = None
-    remarks: str | None = Field(default=None, max_length=4000)
+    remarks: str = Field(..., min_length=1, max_length=4000)
+    management_approved: bool
 
 class AssetDisposalUpdate(BaseModel):
     disposal_type: str | None = None
@@ -1193,6 +1233,7 @@ class AssetDisposalUpdate(BaseModel):
     proceeds_amount: Decimal | None = None
     book_value_at_disposal: Decimal | None = None
     remarks: str | None = Field(default=None, max_length=4000)
+    management_approved: bool | None = None
     version: int
 
 class AssetDisposalApproveRequest(BaseModel):
@@ -1212,6 +1253,7 @@ class AssetDisposalResponse(OrmModel):
     proceeds_amount: Decimal | None
     book_value_at_disposal: Decimal | None
     remarks: str | None = None
+    management_approved: bool | None = None
     ceo_instruction: str | None = None
     rejection_reason: str | None = None
     previous_operational_status: str | None = None
@@ -1228,6 +1270,13 @@ class AssetDisposalResponse(OrmModel):
     version: int
     created_by: UUID | None = None
     created_at: datetime | None = None
+    # Optional enrichment for Disposed tab / View Details
+    asset_code: str | None = None
+    asset_name: str | None = None
+    make: str | None = None
+    model: str | None = None
+    configuration: str | None = None
+    serial_number: str | None = None
 
 
 class AssetDisposalListResult(BaseModel):
@@ -1541,6 +1590,13 @@ class AssetReportDashboardResponse(BaseModel):
     recent_transfers: list[dict]
     recent_notifications: list[dict]
     health: dict
+    analytics_kpis: dict = {}
+    by_status: list[dict] = []
+    by_operational_status: list[dict] = []
+    documents: dict = {}
+    components: dict = {}
+    lifecycle: dict = {}
+    usage: dict = {}
 
 
 class AssetReportRunResult(BaseModel):
@@ -1607,6 +1663,7 @@ class AssetExcelImportRow(BaseModel):
     delivery_challan_signature_status: str | None = None
     assignment_remarks: str | None = Field(default=None, max_length=4000)
     company_id: UUID | None = None
+    charger_serial: str | None = Field(default=None, max_length=100)
 
 
 class AssetExcelImportRequest(BaseModel):

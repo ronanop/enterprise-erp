@@ -454,7 +454,7 @@ class MaintenanceService:
         )
 
     def quick_create_draft(self, ctx: TenantContext, *, asset_id: UUID, company_id: UUID | None = None):
-        """Create a minimal draft WO for an asset (inventory Maintenance action)."""
+        """Create a minimal draft WO for an asset (legacy inventory path)."""
         asset = self._assets.get(ctx, asset_id)
         if asset is None:
             raise NotFoundException("Asset not found")
@@ -465,6 +465,70 @@ class MaintenanceService:
             asset_id=asset_id,
             maintenance_type="preventive",
             scheduled_date=date.today(),
+        )
+
+    def start_from_asset(
+        self,
+        ctx: TenantContext,
+        *,
+        asset_id: UUID,
+        reason: str,
+        expected_duration_days: int,
+        maintenance_type: str | None = None,
+        scheduled_date: date | None = None,
+        vendor_id: UUID | None = None,
+        cost_amount=None,
+        technician_employee_id: UUID | None = None,
+        company_id: UUID | None = None,
+    ) -> tuple[AstAssetMaintenance, str, str | None]:
+        """All Assets → Maintenance: create (or reuse draft) then start in one step.
+
+        Leaves the work order in ``in_progress`` and sets operational status to
+        ``IN_MAINTENANCE`` when governance allows an immediate start.
+        """
+        asset = self._assets.get(ctx, asset_id)
+        if asset is None:
+            raise NotFoundException("Asset not found")
+
+        existing = self._repo.find_open_for_asset(ctx, asset_id)
+        if existing is not None:
+            if existing.status == AssetMaintenanceStatus.IN_PROGRESS.value:
+                raise MaintenanceValidationError(
+                    "This asset already has maintenance in progress"
+                )
+            if existing.status not in {
+                AssetMaintenanceStatus.DRAFT.value,
+                AssetMaintenanceStatus.SUBMITTED.value,
+                AssetMaintenanceStatus.APPROVED.value,
+                AssetMaintenanceStatus.SCHEDULED.value,
+            }:
+                raise MaintenanceValidationError(
+                    f"Cannot start maintenance while an open work order is {existing.status}"
+                )
+            row = existing
+        else:
+            row = self.create(
+                ctx,
+                branch_id=asset.branch_id,
+                company_id=company_id,
+                asset_id=asset_id,
+                maintenance_type=maintenance_type or "preventive",
+                scheduled_date=scheduled_date or date.today(),
+                reason=reason.strip(),
+                expected_duration_days=expected_duration_days,
+            )
+
+        return self.start_maintenance(
+            ctx,
+            row.id,
+            reason=reason,
+            expected_duration_days=expected_duration_days,
+            maintenance_type=maintenance_type,
+            scheduled_date=scheduled_date,
+            vendor_id=vendor_id,
+            cost_amount=cost_amount,
+            technician_employee_id=technician_employee_id,
+            version=int(row.version or 1),
         )
 
     def start_maintenance(
@@ -582,7 +646,7 @@ class MaintenanceService:
                     "id": f"audit-{entry.id}",
                     "kind": "audit",
                     "label": op_labels.get(entry.operation, entry.operation.title()),
-                    "occurred_at": entry.performed_at,
+                    "occurred_at": entry.performed_at or utcnow(),
                     "performed_by": entry.performed_by,
                     "detail": detail,
                 }
@@ -601,7 +665,9 @@ class MaintenanceService:
                     "id": f"service-{hist.id}",
                     "kind": "service_history",
                     "label": "Service recorded",
-                    "occurred_at": hist.serviced_at or getattr(hist, "created_at", None),
+                    "occurred_at": hist.serviced_at
+                    or getattr(hist, "created_at", None)
+                    or utcnow(),
                     "performed_by": hist.created_by,
                     "detail": hist.service_summary,
                 }

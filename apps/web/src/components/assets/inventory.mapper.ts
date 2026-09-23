@@ -73,6 +73,8 @@ export type InventoryRowViewModel = {
   employeeId: string;
   department: string;
   branch: string;
+  /** Raw branch UUID for APIs that require branch_id (e.g. dispose). */
+  branchId: string;
   operationalStatus: string;
   lifecycleStatus: string;
   issueDate: string;
@@ -291,6 +293,7 @@ export function mapAssetToInventoryRow(
     employeeId: employeeCode,
     department: ctx.departmentLabels[deptKey] ?? (deptKey ? deptKey.slice(0, 8) : "—"),
     branch: ctx.branchLabels[branchKey] ?? (branchKey ? branchKey.slice(0, 8) : "—"),
+    branchId: branchKey,
     operationalStatus: operational,
     lifecycleStatus: lifecycle,
     // Issued Date = allocated_at only (system set on activation).

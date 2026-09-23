@@ -49,6 +49,7 @@ def _create_fields(asset_id, **extra):
         "asset_id": asset_id,
         "disposal_type": "scrap",
         "remarks": "End of life — send to scrap",
+        "management_approved": True,
         **extra,
     }
 
@@ -64,11 +65,32 @@ def test_create_requires_remarks() -> None:
     ctx = _ctx()
     asset = _pending_asset(company_id=ctx.company_id)
     with patch.object(validator._assets, "get", return_value=asset):
-        with pytest.raises(DisposalValidationError, match="Remarks are required"):
+        with pytest.raises(DisposalValidationError, match="Reason for disposal is required"):
             validator.validate_create_fields(
                 ctx,
                 company_id=ctx.company_id,
-                fields={"asset_id": asset.id, "disposal_type": "scrap"},
+                fields={
+                    "asset_id": asset.id,
+                    "disposal_type": "scrap",
+                    "management_approved": True,
+                },
+            )
+
+
+def test_create_requires_management_approval() -> None:
+    validator = DisposalValidator(MagicMock())
+    ctx = _ctx()
+    asset = _pending_asset(company_id=ctx.company_id)
+    with patch.object(validator._assets, "get", return_value=asset):
+        with pytest.raises(DisposalValidationError, match="Management approval"):
+            validator.validate_create_fields(
+                ctx,
+                company_id=ctx.company_id,
+                fields={
+                    "asset_id": asset.id,
+                    "disposal_type": "scrap",
+                    "remarks": "Broken",
+                },
             )
 
 

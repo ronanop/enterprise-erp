@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 import { AssetsModuleSidebar } from "@/components/assets/assets-module-sidebar";
 import { CrmSidebar } from "@/components/crm/crm-workspace-nav";
@@ -23,6 +23,7 @@ interface AppShellProps {
 /** Primary application chrome: sidebar + topbar + content. */
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const standalone = useStandaloneChrome();
   const hrMode = isHrPath(pathname);
   const isCrm = pathname === "/crm" || pathname.startsWith("/crm/");
@@ -32,6 +33,9 @@ export function AppShell({ children }: AppShellProps) {
   const isAssets = pathname === "/assets" || pathname.startsWith("/assets/");
   const isService = pathname === "/service" || pathname.startsWith("/service/");
   const isMarketing = pathname === "/marketing" || pathname.startsWith("/marketing/");
+  /** QR scan focus mode — full portal without the assets dock (better on phones). */
+  const qrScanMode =
+    searchParams.get("from") === "qr" && pathname.startsWith("/assets/information-portal/");
 
   return (
     <div className="flex min-h-dvh w-full max-w-[100dvw] overflow-x-clip bg-background">
@@ -42,7 +46,7 @@ export function AppShell({ children }: AppShellProps) {
           {isCrm ? <CrmSidebar /> : null}
           {isProjects ? <ProjectsSidebar /> : null}
           {isProcurement ? <ProcurementSidebar /> : null}
-          {isAssets ? <AssetsModuleSidebar /> : null}
+          {isAssets && !qrScanMode ? <AssetsModuleSidebar /> : null}
           {isService ? <ServiceSidebar /> : null}
           {isMarketing ? <MarketingSidebar /> : null}
         </>
@@ -51,7 +55,11 @@ export function AppShell({ children }: AppShellProps) {
       )}
       <div id="erp-workspace-main" className="flex min-w-0 flex-1 flex-col overflow-x-clip">
         <AppTopbar />
-        <main className="min-w-0 flex-1 overflow-x-clip px-4 py-6 sm:px-6 lg:px-8">
+        <main
+          className={`min-w-0 flex-1 overflow-x-clip px-3 py-4 sm:px-6 sm:py-6 lg:px-8 ${
+            qrScanMode ? "pb-[max(1.5rem,env(safe-area-inset-bottom))]" : ""
+          }`}
+        >
           <div className="mx-auto w-full min-w-0 max-w-[1400px] animate-in fade-in-50 slide-in-from-bottom-2 duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:animate-none">
             {children}
           </div>

@@ -52,7 +52,9 @@ class AssetExcelImportService:
             summary.duration_ms = int((time.perf_counter() - started) * 1000)
             return summary
 
-        resolved_defaults = self._resolve_defaults(ctx, defaults, company_id)
+        # Resolve once from body or login session so location/name lookups never lack company_id.
+        resolved_company_id = AssetScopeValidator(self._db).resolve_company_id(ctx, company_id)
+        resolved_defaults = self._resolve_defaults(ctx, defaults, resolved_company_id)
         resolved_rows = [self._resolve_row_branch(ctx, row) for row in rows]
 
         batches = [resolved_rows[i : i + size] for i in range(0, len(resolved_rows), size)]
@@ -64,7 +66,7 @@ class AssetExcelImportService:
                 batch,
                 defaults=resolved_defaults,
                 confirm_warnings=confirm_warnings,
-                company_id=company_id,
+                company_id=resolved_company_id,
                 summary=summary,
             )
 
@@ -108,7 +110,7 @@ class AssetExcelImportService:
                         )
                     )
             self._db.commit()
-        except Exception as exc:  # noqa: BLE001 — rollback only this batch
+        except Exception as exc:  # noqa: BLE001 - rollback only this batch
             self._db.rollback()
             reason = f"{ExcelImportSkipReason.BATCH_ROLLED_BACK.value}: {exc}"
             batch_results = [

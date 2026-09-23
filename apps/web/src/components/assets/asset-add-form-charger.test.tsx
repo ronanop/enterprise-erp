@@ -40,6 +40,9 @@ vi.mock("@/services/assets-service", () => ({
   componentService: {
     search: vi.fn(async () => ({ items: [], total: 0 })),
   },
+  assetLocationService: {
+    search: vi.fn(async () => ({ items: [], total: 0 })),
+  },
   buildSelfServiceUrl: () => "https://example.test/ss",
 }));
 
@@ -160,5 +163,130 @@ describe("AssetAddForm charger fields", () => {
     const body = create.mock.calls[0]![0] as Record<string, unknown>;
     expect(body.charger_available).toBe(false);
     expect(body.charger_code).toBeUndefined();
+  });
+
+  it("prefills location and charger on edit and syncs both on save", async () => {
+    const user = userEvent.setup();
+    const { componentService, assetLocationService } = await import(
+      "@/services/assets-service"
+    );
+    vi.mocked(componentService.search).mockResolvedValue({
+      items: [
+        {
+          id: "comp-1",
+          asset_id: "asset-edit-1",
+          component_type: "CHARGER",
+          component_code: "CHARGER-0001",
+          serial_number: "CHARGER-0001",
+          status: "active",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 20,
+    } as never);
+    vi.mocked(assetLocationService.search).mockResolvedValue({
+      items: [
+        {
+          id: "loc-row-1",
+          asset_id: "asset-edit-1",
+          location_label: "HQ · Building A",
+          location_id: "loc-1",
+          building_id: "bldg-1",
+          is_current: true,
+          status: "active",
+          company_id: "c1",
+          version: 1,
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 5,
+    } as never);
+    get.mockResolvedValue({
+      id: "asset-edit-1",
+      asset_name: "Lenovo ThinkCentre M70 - 01",
+      serial_number: "LTCM70SN001",
+      asset_category_id: "cat-1",
+      asset_type_id: "type-1",
+      make: "Lenovo",
+      model: "ThinkCentre M70",
+      location_id: "loc-1",
+      building_id: "bldg-1",
+      configuration: "Processor: Intel i5; RAM: 16 GB; Storage: 512 GB",
+      version: 3,
+    });
+    update.mockResolvedValue({ id: "asset-edit-1" });
+
+    render(<AssetAddForm assetId="asset-edit-1" />);
+
+    await waitFor(() => {
+      expect(screen.getByDisplayValue("Lenovo ThinkCentre M70 - 01")).toBeInTheDocument();
+    });
+    expect(screen.getByDisplayValue("LTCM70SN001")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Lenovo")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: /^Location/i })).toHaveTextContent("HQ");
+    expect(screen.getByRole("combobox", { name: /Building/i })).toHaveTextContent("Building A");
+    expect(screen.getByRole("combobox", { name: /Charger Available/i })).toHaveTextContent(
+      /Yes/i,
+    );
+    expect(await screen.findByTestId("charger-code-input")).toHaveValue("CHARGER-0001");
+
+    await user.clear(screen.getByTestId("charger-code-input"));
+    await user.type(screen.getByTestId("charger-code-input"), "CHARGER-9999");
+    await user.click(screen.getByTestId("asset-edit-save"));
+
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    const body = update.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body.location_id).toBe("loc-1");
+    expect(body.building_id).toBe("bldg-1");
+    expect(body.charger_available).toBe(true);
+    expect(body.charger_code).toBe("CHARGER-9999");
+    expect(body.version).toBe(3);
+  });
+
+  it("sends charger_available false on edit to unlink charger component", async () => {
+    const user = userEvent.setup();
+    const { componentService } = await import("@/services/assets-service");
+    vi.mocked(componentService.search).mockResolvedValue({
+      items: [
+        {
+          id: "comp-1",
+          asset_id: "asset-edit-2",
+          component_type: "CHARGER",
+          component_code: "CHARGER-0001",
+          status: "active",
+        },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 20,
+    } as never);
+    get.mockResolvedValue({
+      id: "asset-edit-2",
+      asset_name: "MacBook Pro 14",
+      serial_number: "SN-1001",
+      asset_category_id: "cat-1",
+      asset_type_id: "type-1",
+      location_id: "loc-1",
+      building_id: "bldg-1",
+      version: 1,
+    });
+    update.mockResolvedValue({ id: "asset-edit-2" });
+
+    render(<AssetAddForm assetId="asset-edit-2" />);
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: /Charger Available/i })).toHaveTextContent(
+        /Yes/i,
+      ),
+    );
+
+    await selectByLabel(user, /Charger Available/i, "no");
+    await user.click(screen.getByTestId("asset-edit-save"));
+
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    const body = update.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body.charger_available).toBe(false);
+    expect(body.charger_code).toBeNull();
   });
 });

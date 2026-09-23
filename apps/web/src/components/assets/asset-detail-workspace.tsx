@@ -5,12 +5,10 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, Pencil, QrCode, Trash2, UserPlus, Wrench } from "lucide-react";
 
-import { openMaintenanceForAsset } from "@/components/assets/asset-maintenance-workspace";
-
+import { ItMaintenanceStartDialog } from "@/components/assets/it-maintenance-start-dialog";
+import { ItAssetDisposeDialog } from "@/components/assets/it-asset-dispose-dialog";
 import { AssetDiscoveryPanel } from "@/components/assets/asset-discovery-panel";
 import { DeleteAssetConfirmDialog } from "@/components/assets/delete-asset-confirm-dialog";
-import { StartDisposalConfirmDialog } from "@/components/assets/start-disposal-confirm-dialog";
-import { ReinstateConfirmDialog } from "@/components/assets/reinstate-confirm-dialog";
 import { buildReturnWizardHref } from "@/components/assets/navigation/assignment-navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +22,6 @@ import {
   tableSerialHeaderClassName,
 } from "@/components/assets/shared";
 import {
-  canReinstateFromOperationalStatus,
   canStartDisposalFromOperationalStatus,
   isOpsBlockedForNormalOperations,
   isOpsBlockedForTransferOrMaintenance,
@@ -91,11 +88,6 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [startDisposalOpen, setStartDisposalOpen] = useState(false);
-  const [startDisposalSubmitting, setStartDisposalSubmitting] = useState(false);
-  const [startDisposalError, setStartDisposalError] = useState<string | null>(null);
-  const [reinstateOpen, setReinstateOpen] = useState(false);
-  const [reinstateSubmitting, setReinstateSubmitting] = useState(false);
-  const [reinstateError, setReinstateError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -103,6 +95,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
   const [employeeLookup, setEmployeeLookup] = useState<EmployeeLookup>({});
   const [currentLocationLabel, setCurrentLocationLabel] = useState<string | null>(null);
   const [branchLabel, setBranchLabel] = useState<string>("—");
+  const [maintenanceOpen, setMaintenanceOpen] = useState(false);
   const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false);
 
   useEffect(() => {
@@ -185,39 +178,6 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
     [assignments],
   );
 
-  async function confirmStartDisposal() {
-    setStartDisposalSubmitting(true);
-    setStartDisposalError(null);
-    try {
-      const updated = await assetRegisterService.startDisposal(assetId);
-      setAsset(updated);
-      setStartDisposalOpen(false);
-    } catch (err) {
-      setStartDisposalError(
-        err instanceof ApiClientError ? err.message : "Could not start disposal",
-      );
-    } finally {
-      setStartDisposalSubmitting(false);
-    }
-  }
-
-  async function confirmReinstate() {
-    setReinstateSubmitting(true);
-    setReinstateError(null);
-    try {
-      const updated = await assetRegisterService.reinstate(assetId);
-      setAsset(updated);
-      setReinstateOpen(false);
-      setActionSuccess("Asset reinstated and is Ready to Move.");
-    } catch (err) {
-      setReinstateError(
-        err instanceof ApiClientError ? err.message : "Could not reinstate asset",
-      );
-    } finally {
-      setReinstateSubmitting(false);
-    }
-  }
-
   async function confirmDelete() {
     setDeleteSubmitting(true);
     setDeleteError(null);
@@ -280,7 +240,6 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
   const opsBlocked = isOpsBlockedForNormalOperations(opsStatus);
   const transferMaintBlocked = isOpsBlockedForTransferOrMaintenance(opsStatus);
   const showStartDisposal = canStartDisposalFromOperationalStatus(opsStatus);
-  const showReinstate = canReinstateFromOperationalStatus(opsStatus);
   const opsHelp = operationalStatusHelpText(opsStatus);
   const returnHref = buildReturnWizardHref({ assetId, intent: "return" });
 
@@ -368,12 +327,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
                 size="sm"
                 className="cursor-pointer"
                 disabled={maintenanceSubmitting}
-                onClick={() => {
-                  setMaintenanceSubmitting(true);
-                  void openMaintenanceForAsset(assetId, (href) => router.push(href)).finally(
-                    () => setMaintenanceSubmitting(false),
-                  );
-                }}
+                onClick={() => setMaintenanceOpen(true)}
               >
                 <Wrench className="mr-1 size-4" />
                 Maintenance
@@ -385,31 +339,13 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
                 size="sm"
                 className="cursor-pointer transition-colors duration-200"
                 data-testid="asset-detail-start-disposal"
-                onClick={() => {
-                  setStartDisposalError(null);
-                  setStartDisposalOpen(true);
-                }}
+                onClick={() => setStartDisposalOpen(true)}
               >
                 <Trash2 className="mr-1 size-4" aria-hidden />
-                Start Disposal
+                Dispose
               </Button>
             ) : null}
-            {showReinstate ? (
-              <Button
-                variant="default"
-                size="sm"
-                className="cursor-pointer transition-colors duration-200"
-                data-testid="asset-detail-reinstate"
-                onClick={() => {
-                  setReinstateError(null);
-                  setActionSuccess(null);
-                  setReinstateOpen(true);
-                }}
-              >
-                Reinstate
-              </Button>
-            ) : null}
-            {opsStatus.toUpperCase() === "PENDING_DISPOSAL" ? (
+            {opsStatus.toUpperCase() === "DISPOSED" ? (
               <Button variant="outline" size="sm" asChild className="cursor-pointer">
                 <Link href={`/assets/asset-disposals?assetId=${assetId}`}>
                   Open Disposal
@@ -748,43 +684,54 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
           </CardContent>
         </Card>
       ) : null}
-      <StartDisposalConfirmDialog
+      <ItMaintenanceStartDialog
+        open={maintenanceOpen}
+        asset={{
+          id: assetId,
+          assetCode: String(asset.asset_code ?? ""),
+          assetName: String(asset.asset_name ?? ""),
+        }}
+        submitting={maintenanceSubmitting}
+        onCancel={() => {
+          if (maintenanceSubmitting) return;
+          setMaintenanceOpen(false);
+        }}
+        onStarted={(result) => {
+          setMaintenanceSubmitting(false);
+          setMaintenanceOpen(false);
+          if (result.status === "approval_pending") {
+            setError(
+              result.message ??
+                "Submitted for approval. Another user must approve before maintenance can start.",
+            );
+            void load();
+            return;
+          }
+          setActionSuccess(
+            result.maintenance.asset_code
+              ? `${result.maintenance.asset_code} is now in maintenance.`
+              : "Asset is now in maintenance.",
+          );
+          router.push(
+            `/assets/asset-maintenances?maintenanceId=${encodeURIComponent(result.maintenance.id)}`,
+          );
+        }}
+      />
+      <ItAssetDisposeDialog
         open={startDisposalOpen}
         asset={{
           id: assetId,
           assetCode: String(asset.asset_code ?? ""),
           assetName: String(asset.asset_name ?? ""),
-          serialNumber: String(asset.serial_number ?? ""),
-          lifecycleStatus: String(asset.status ?? ""),
-          operationalStatus: String(asset.operational_status ?? ""),
+          branchId: String(asset.branch_id ?? ""),
         }}
-        submitting={startDisposalSubmitting}
-        error={startDisposalError}
-        onCancel={() => {
-          if (startDisposalSubmitting) return;
+        onCancel={() => setStartDisposalOpen(false)}
+        onDisposed={async () => {
           setStartDisposalOpen(false);
-          setStartDisposalError(null);
+          setActionSuccess("Asset disposed successfully.");
+          await load();
+          router.push("/assets/asset-disposals");
         }}
-        onConfirm={() => void confirmStartDisposal()}
-      />
-      <ReinstateConfirmDialog
-        open={reinstateOpen}
-        asset={{
-          id: assetId,
-          assetCode: String(asset.asset_code ?? ""),
-          assetName: String(asset.asset_name ?? ""),
-          serialNumber: String(asset.serial_number ?? ""),
-          lifecycleStatus: String(asset.status ?? ""),
-          operationalStatus: String(asset.operational_status ?? ""),
-        }}
-        submitting={reinstateSubmitting}
-        error={reinstateError}
-        onCancel={() => {
-          if (reinstateSubmitting) return;
-          setReinstateOpen(false);
-          setReinstateError(null);
-        }}
-        onConfirm={() => void confirmReinstate()}
       />
       <DeleteAssetConfirmDialog
         open={deleteOpen}

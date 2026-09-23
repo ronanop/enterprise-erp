@@ -64,7 +64,7 @@ const uploadedInvoice = {
   id: "doc-2",
   asset_id: "asset-1",
   document_type: "invoice",
-  document_name: "Dell Invoice 2026.pdf",
+  document_name: "invoice.pdf",
   status: "active",
   company_id: "c1",
   version: 1,
@@ -78,7 +78,7 @@ const uploadedWarranty = {
   id: "doc-3",
   asset_id: "asset-1",
   document_type: "warranty",
-  document_name: "Dell Warranty.pdf",
+  document_name: "warranty.pdf",
   status: "active",
   company_id: "c1",
   version: 1,
@@ -188,18 +188,19 @@ describe("AssetDocumentWorkspace", () => {
         "Other",
       ]),
     );
+    expect(within(dialog).queryByLabelText(/Document Name/i)).not.toBeInTheDocument();
+    expect(within(dialog).getByLabelText(/Document Date/i)).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Save Documents" })).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeInTheDocument();
     expect(within(dialog).getByTestId("asset-document-add-another")).toBeInTheDocument();
   });
 
-  it("adds one document and uploads via existing API", async () => {
+  it("adds one document and uploads using the file name", async () => {
     const user = userEvent.setup();
     render(<AssetDocumentWorkspace />);
     const dialog = await openAddDocumentDialog(user);
 
     await user.selectOptions(within(dialog).getByLabelText(/Document type 1/i), "invoice");
-    await user.type(within(dialog).getByPlaceholderText(/Dell Invoice 2026/i), "Dell Invoice 2026");
 
     const file = new File(["%PDF-1.4 test"], "invoice.pdf", { type: "application/pdf" });
     await user.upload(within(dialog).getByTestId("asset-document-file-input-1"), file);
@@ -208,9 +209,7 @@ describe("AssetDocumentWorkspace", () => {
       "invoice.pdf",
     );
     expect(within(dialog).getByTestId("asset-document-summary-1")).toHaveTextContent("Invoice");
-    expect(within(dialog).getByTestId("asset-document-summary-1")).toHaveTextContent(
-      "Dell Invoice 2026",
-    );
+    expect(within(dialog).getByTestId("asset-document-summary-1")).toHaveTextContent("invoice.pdf");
 
     await user.click(within(dialog).getByRole("button", { name: "Save Documents" }));
 
@@ -220,7 +219,7 @@ describe("AssetDocumentWorkspace", () => {
         expect.any(File),
         expect.objectContaining({
           documentType: "invoice",
-          documentName: "Dell Invoice 2026.pdf",
+          documentName: "invoice.pdf",
         }),
       );
     });
@@ -265,9 +264,6 @@ describe("AssetDocumentWorkspace", () => {
     const dialog = await openAddDocumentDialog(user);
 
     await user.selectOptions(within(dialog).getByLabelText(/Document type 1/i), "invoice");
-    const name1 = within(dialog).getByPlaceholderText(/Dell Invoice 2026/i);
-    await user.clear(name1);
-    await user.type(name1, "Dell Invoice 2026");
     await user.upload(
       within(dialog).getByTestId("asset-document-file-input-1"),
       new File(["%PDF-1.4 a"], "invoice.pdf", { type: "application/pdf" }),
@@ -277,9 +273,6 @@ describe("AssetDocumentWorkspace", () => {
     expect(within(dialog).getByTestId("asset-document-draft-2")).toBeInTheDocument();
 
     await user.selectOptions(within(dialog).getByLabelText(/Document type 2/i), "warranty");
-    const nameInputs = within(dialog).getAllByPlaceholderText(/Dell Invoice 2026/i);
-    await user.clear(nameInputs[1]!);
-    await user.type(nameInputs[1]!, "Dell Warranty");
     await user.upload(
       within(dialog).getByTestId("asset-document-file-input-2"),
       new File(["%PDF-1.4 b"], "warranty.pdf", { type: "application/pdf" }),
@@ -297,13 +290,13 @@ describe("AssetDocumentWorkspace", () => {
       1,
       "asset-1",
       expect.any(File),
-      expect.objectContaining({ documentType: "invoice", documentName: "Dell Invoice 2026.pdf" }),
+      expect.objectContaining({ documentType: "invoice", documentName: "invoice.pdf" }),
     );
     expect(uploadDoc).toHaveBeenNthCalledWith(
       2,
       "asset-1",
       expect.any(File),
-      expect.objectContaining({ documentType: "warranty", documentName: "Dell Warranty.pdf" }),
+      expect.objectContaining({ documentType: "warranty", documentName: "warranty.pdf" }),
     );
 
     await waitFor(() => {
@@ -313,8 +306,8 @@ describe("AssetDocumentWorkspace", () => {
     await user.click(screen.getByRole("button", { name: "View Documents" }));
     const reopened = await screen.findByTestId("asset-document-upload-dialog");
     await waitFor(() => {
-      expect(within(reopened).getByText("Dell Invoice 2026.pdf")).toBeInTheDocument();
-      expect(within(reopened).getByText("Dell Warranty.pdf")).toBeInTheDocument();
+      expect(within(reopened).getByText("invoice.pdf")).toBeInTheDocument();
+      expect(within(reopened).getByText("warranty.pdf")).toBeInTheDocument();
       expect(within(reopened).getByText("warranty_card.pdf")).toBeInTheDocument();
     });
   }, 20_000);
@@ -325,7 +318,6 @@ describe("AssetDocumentWorkspace", () => {
     const dialog = await openAddDocumentDialog(user);
 
     await user.selectOptions(within(dialog).getByLabelText(/Document type 1/i), "invoice");
-    await user.type(within(dialog).getByPlaceholderText(/Dell Invoice 2026/i), "Keep Me");
     await user.upload(
       within(dialog).getByTestId("asset-document-file-input-1"),
       new File(["%PDF-1.4"], "keep.pdf", { type: "application/pdf" }),
@@ -333,26 +325,24 @@ describe("AssetDocumentWorkspace", () => {
 
     await user.click(within(dialog).getByTestId("asset-document-add-another"));
     await user.selectOptions(within(dialog).getByLabelText(/Document type 2/i), "warranty");
-    const nameInputs = within(dialog).getAllByPlaceholderText(/Dell Invoice 2026/i);
-    await user.type(nameInputs[1]!, "Remove Me");
     await user.upload(
       within(dialog).getByTestId("asset-document-file-input-2"),
       new File(["%PDF-1.4"], "drop.pdf", { type: "application/pdf" }),
     );
 
-    const summary2 = within(dialog).getByTestId("asset-document-summary-2");
-    await user.click(within(summary2).getByRole("button", { name: "Remove" }));
+    const draft2 = within(dialog).getByTestId("asset-document-draft-2");
+    await user.click(within(draft2).getByRole("button", { name: "Remove" }));
 
     expect(within(dialog).queryByTestId("asset-document-draft-2")).not.toBeInTheDocument();
-    expect(within(dialog).getByTestId("asset-document-summary-1")).toHaveTextContent("Keep Me");
-    expect(within(dialog).queryByText("Remove Me")).not.toBeInTheDocument();
+    expect(within(dialog).getByTestId("asset-document-summary-1")).toHaveTextContent("keep.pdf");
+    expect(within(dialog).queryByText("drop.pdf")).not.toBeInTheDocument();
 
     await user.click(within(dialog).getByRole("button", { name: "Save Documents" }));
     await waitFor(() => expect(uploadDoc).toHaveBeenCalledTimes(1));
     expect(uploadDoc).toHaveBeenCalledWith(
       "asset-1",
       expect.any(File),
-      expect.objectContaining({ documentName: "Keep Me.pdf" }),
+      expect.objectContaining({ documentName: "keep.pdf" }),
     );
   });
 
@@ -364,18 +354,17 @@ describe("AssetDocumentWorkspace", () => {
     await user.click(within(dialog).getByRole("button", { name: "Save Documents" }));
 
     expect(await within(dialog).findByText("Document type is required.")).toBeInTheDocument();
-    expect(within(dialog).getByText("Document name is required.")).toBeInTheDocument();
+    expect(within(dialog).queryByText("Document name is required.")).not.toBeInTheDocument();
     expect(within(dialog).getByText("A file is required.")).toBeInTheDocument();
     expect(uploadDoc).not.toHaveBeenCalled();
   });
 
-  it("validates unsupported file type and oversized files", async () => {
+  it("validates unsupported file type and oversized files with clear messages", async () => {
     const user = userEvent.setup();
     render(<AssetDocumentWorkspace />);
     const dialog = await openAddDocumentDialog(user);
 
     await user.selectOptions(within(dialog).getByLabelText(/Document type 1/i), "invoice");
-    await user.type(within(dialog).getByPlaceholderText(/Dell Invoice 2026/i), "Bad file");
 
     const fileInput = within(dialog).getByTestId(
       "asset-document-file-input-1",
@@ -385,18 +374,35 @@ describe("AssetDocumentWorkspace", () => {
     fireEvent.change(fileInput, { target: { files: [badType] } });
 
     expect(
-      await within(dialog).findByText(
-        /Unable to upload this file. Please check the file type and size/,
-      ),
+      await within(dialog).findByText(/This file type is not supported/i),
     ).toBeInTheDocument();
 
     const oversized = new File(["%PDF"], "big.pdf", { type: "application/pdf" });
     Object.defineProperty(oversized, "size", { value: 11 * 1024 * 1024 });
     fireEvent.change(fileInput, { target: { files: [oversized] } });
     expect(
-      within(dialog).getByText(/Unable to upload this file. Please check the file type and size/),
+      within(dialog).getByText(/Maximum allowed size is 10 MB/i),
     ).toBeInTheDocument();
     expect(uploadDoc).not.toHaveBeenCalled();
+  });
+
+  it("accepts a small PDF without client-side type/size errors", async () => {
+    const user = userEvent.setup();
+    render(<AssetDocumentWorkspace />);
+    const dialog = await openAddDocumentDialog(user);
+
+    await user.selectOptions(within(dialog).getByLabelText(/Document type 1/i), "invoice");
+    const smallPdf = new File(["%PDF-1.4 content"], "SpareManagement-SOW.pdf", {
+      type: "application/pdf",
+    });
+    Object.defineProperty(smallPdf, "size", { value: 43 * 1024 });
+    await user.upload(within(dialog).getByTestId("asset-document-file-input-1"), smallPdf);
+
+    expect(within(dialog).getByTestId("asset-document-selected-file-1")).toHaveTextContent(
+      "SpareManagement-SOW.pdf",
+    );
+    expect(within(dialog).queryByText(/not supported/i)).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/Maximum allowed size/i)).not.toBeInTheDocument();
   });
 
   it("keeps existing documents visible after successful upload", async () => {
@@ -428,7 +434,6 @@ describe("AssetDocumentWorkspace", () => {
     const dialog = await openAddDocumentDialog(user);
 
     await user.selectOptions(within(dialog).getByLabelText(/Document type 1/i), "invoice");
-    await user.type(within(dialog).getByPlaceholderText(/Dell Invoice 2026/i), "Dell Invoice 2026");
     await user.upload(
       within(dialog).getByTestId("asset-document-file-input-1"),
       new File(["%PDF-1.4"], "invoice.pdf", { type: "application/pdf" }),
@@ -443,7 +448,7 @@ describe("AssetDocumentWorkspace", () => {
     const reopened = await screen.findByTestId("asset-document-upload-dialog");
     await waitFor(() => {
       expect(within(reopened).getByText("warranty_card.pdf")).toBeInTheDocument();
-      expect(within(reopened).getByText("Dell Invoice 2026.pdf")).toBeInTheDocument();
+      expect(within(reopened).getByText("invoice.pdf")).toBeInTheDocument();
     });
   });
 

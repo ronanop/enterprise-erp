@@ -24,11 +24,13 @@ import {
   STORAGE_OPTIONS,
   buildConfigurationString,
   isIntelProcessor,
+  parseConfigurationString,
 } from "@/config/asset-hardware-options";
 import { isAuthenticated } from "@/lib/auth";
 import { buildSelfServiceUrl } from "@/services/assets-service";
 import {
   assetCategoryService,
+  assetLocationService,
   assetRegisterService,
   assetRegistrationQueueService,
   componentService,
@@ -148,17 +150,43 @@ export function AssetAddForm({
         setAssetTypes(types);
 
         if (assetId) {
-          const [row, comps] = await Promise.all([
+          const [row, comps, locationRows] = await Promise.all([
             assetRegisterService.get(assetId),
             componentService.search({
               asset_id: assetId,
+              component_type: "CHARGER",
               status: "active",
               page: 1,
-              page_size: 100,
+              page_size: 20,
             }),
+            assetLocationService
+              .search({
+                asset_id: assetId,
+                is_current: true,
+                status: "active",
+                page: 1,
+                page_size: 5,
+              })
+              .catch(() => ({ items: [] as Array<{ location_id?: string | null; building_id?: string | null }> })),
           ]);
           const charger = comps.items.find(
             (c) => String(c.component_type ?? "").toUpperCase() === "CHARGER",
+          );
+          const currentLoc = locationRows.items[0];
+          const locationId = String(
+            row.location_id ?? currentLoc?.location_id ?? "",
+          );
+          const buildingId = String(
+            row.building_id ?? currentLoc?.building_id ?? "",
+          );
+          if (locationId) {
+            const buildingsForLoc = await listSiteBuildings(locationId).catch(
+              () => [] as SiteBuilding[],
+            );
+            setSiteBuildings(buildingsForLoc);
+          }
+          const hardware = parseConfigurationString(
+            typeof row.configuration === "string" ? row.configuration : null,
           );
           setEditVersion(typeof row.version === "number" ? row.version : null);
           setForm((f) => ({
@@ -173,6 +201,12 @@ export function AssetAddForm({
             currency_code: String(row.currency_code ?? f.currency_code),
             make: String(row.make ?? ""),
             model: String(row.model ?? ""),
+            processor: hardware.processor,
+            generation: hardware.generation,
+            ram: hardware.ram,
+            storage: hardware.storage,
+            location_id: locationId,
+            building_id: buildingId,
             charger_available: charger ? "yes" : "no",
             charger_code: charger
               ? String(charger.component_code || charger.serial_number || "")
@@ -252,10 +286,8 @@ export function AssetAddForm({
       next.asset_category_id = "No active asset category is available. Contact an administrator.";
     }
     if (!form.asset_type_id) next.asset_type_id = "Asset type is required.";
-    if (!isEdit) {
-      if (!form.location_id) next.location_id = "Location is required.";
-      if (!form.building_id) next.building_id = "Building is required.";
-    }
+    if (!form.location_id) next.location_id = "Location is required.";
+    if (!form.building_id) next.building_id = "Building is required.";
 
     if (!form.charger_available) {
       next.charger_available = "Select Yes or No for Charger Available.";
@@ -289,15 +321,35 @@ export function AssetAddForm({
     setSaving(true);
     try {
       if (isEdit && assetId) {
+        const configuration = requiresHardware
+          ? buildConfigurationString({
+              processor: form.processor,
+              generation: showGeneration ? form.generation : "",
+              ram: form.ram,
+              storage: form.storage,
+            })
+          : undefined;
         const updateBody: Record<string, unknown> = {
           asset_name: form.asset_name.trim(),
           serial_number: form.serial_number.trim() || null,
           make: form.make.trim() || null,
           model: form.model.trim() || null,
+          location_id: form.location_id,
+          building_id: form.building_id,
           charger_available: form.charger_available === "yes",
           charger_code:
             form.charger_available === "yes" ? form.charger_code.trim() : null,
         };
+        if (configuration !== undefined) {
+          updateBody.configuration = configuration;
+        } else if (form.processor || form.ram || form.storage) {
+          updateBody.configuration = buildConfigurationString({
+            processor: form.processor,
+            generation: form.generation,
+            ram: form.ram,
+            storage: form.storage,
+          });
+        }
         if (editVersion != null) updateBody.version = editVersion;
         await assetRegisterService.update(assetId, updateBody);
         router.push(`/assets/assets/${assetId}?saved=1`);

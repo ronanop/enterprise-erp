@@ -99,6 +99,13 @@ class AssetReportService:
             recent_notifications=raw["recent_notifications"],
             health={**raw["health"], "depreciation_summary": raw["depreciation_summary"]},
             horizon_days=horizon_days,
+            analytics_kpis=raw.get("analytics_kpis"),
+            by_status=raw.get("by_status"),
+            by_operational_status=raw.get("by_operational_status"),
+            documents=raw.get("documents"),
+            components=raw.get("components"),
+            lifecycle=raw.get("lifecycle"),
+            usage=raw.get("usage"),
         )
 
     def run(
