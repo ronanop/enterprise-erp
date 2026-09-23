@@ -1,4 +1,4 @@
-# FP-ASSET-008 - Asset Audit (Feature Package)
+# FP-ASSET-008 — Asset Audit (Feature Package)
 
 **Status:** Implemented  
 **ADR:** ADR-ASSET-AUD-001

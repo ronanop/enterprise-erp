@@ -1,4 +1,4 @@
-# FP-ASSET-008 - Deployment Guide
+# FP-ASSET-008 — Deployment Guide
 
 1. Deploy API with FP-ASSET-008.
 2. Alembic upgrade to `0473_ast_audit_governance`.

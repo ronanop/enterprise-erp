@@ -1,5 +1,5 @@
 /**
- * Asset Management - domain-picker sidebar + per-domain workspace nav.
+ * Asset Management — domain-picker sidebar + per-domain workspace nav.
  *
  * Top level: IT Assets | Non-IT Assets.
  * Active domain expands its workspace tabs; Users nests at the end when
@@ -20,7 +20,6 @@ import {
   PackageCheck,
   PackagePlus,
   Plus,
-  QrCode,
   Scale,
   ScrollText,
   Tags,
@@ -42,7 +41,7 @@ export type AssetManagementNavItem = {
   icon: LucideIcon;
   /** Match exact path or prefix for nested routes */
   match?: "exact" | "prefix";
-  /** Nested Users tab - shown only for domain/module admins */
+  /** Nested Users tab — shown only for domain/module admins */
   requiresDomainAdmin?: boolean;
 };
 
@@ -192,7 +191,6 @@ export const itAssetWorkspaceNav: AssetManagementNavGroup[] = [
     items: [
       { title: "Components", href: "/assets/asset-components", icon: Boxes },
       { title: "Documents", href: "/assets/asset-documents", icon: FileText },
-      { title: "QR / Barcode", href: "/assets/qr-barcode", icon: QrCode },
       { title: "Reports", href: "/assets/reports", icon: BarChart3 },
       {
         title: "Users",
@@ -331,7 +329,7 @@ export type AssetsWorkspaceGroup = {
   resourceKeys: string[];
 };
 
-/** Dashboard workspace cards - aligned with locked sidebar sections. */
+/** Dashboard workspace cards — aligned with locked sidebar sections. */
 export const assetsWorkspaceGroups: AssetsWorkspaceGroup[] = [
   {
     key: "configuration",

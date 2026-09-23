@@ -1,5 +1,6 @@
-"""DisposalService - retirement governance (FP-ASSET-005)."""
+"""DisposalService — retirement governance (FP-ASSET-005)."""
 
+from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
@@ -8,13 +9,13 @@ from sqlalchemy.orm import Session
 from core.exceptions import NotFoundException
 from modules.asset.adapters.finance_port import AssetFinanceAdapter
 from modules.asset.adapters.master_data_port import AssetMasterDataAdapter
-from modules.asset.domain.enums import AssetDisposalStatus, AstEntityType
+from modules.asset.domain.enums import AssetDisposalStatus, AssetOperationalStatus, AstEntityType
 from modules.asset.domain.exceptions import (
     DisposalValidationError,
     InvalidAssetWorkflowState,
     SegregationOfDutiesError,
 )
-from modules.asset.domain.workflow_codes import ENTITY_AST_DISPOSAL
+from modules.asset.domain.workflow_codes import ENTITY_AST_ASSET, ENTITY_AST_DISPOSAL
 from modules.asset.models import AstAssetDisposal
 from modules.asset.repository.asset_component_repository import AssetComponentRepository
 from modules.asset.repository.asset_disposal_repository import (
@@ -31,6 +32,7 @@ from modules.asset.service.governance_service import AssetGovernanceService
 from modules.asset.service.workflow_governance_settings import asset_workflow_governance_enabled
 from modules.foundation.domain.enums import WorkflowStatus
 from modules.foundation.domain.value_objects import TenantContext
+from modules.foundation.repository.base import utcnow
 from modules.foundation.service.audit_service import AuditService
 
 
@@ -99,11 +101,16 @@ class DisposalService:
         return row
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
+        """Send to Disposal: create posted record + set operational DISPOSED atomically.
+
+        Simplified scrap flow — no pending-disposal stage, no approval workflow on create.
+        """
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
         self._validator.validate_create_fields(ctx, company_id=cid, fields=fields)
 
-        asset = self._assets.get(ctx, fields["asset_id"])
+        asset_id = fields["asset_id"]
+        asset = self._assets.lock_for_update(ctx, asset_id)
         if asset is None:
             raise NotFoundException("Asset not found")
         self._assert_no_active_components(ctx, asset.id)
@@ -112,6 +119,20 @@ class DisposalService:
                 "Disposal branch must match the asset's current branch"
             )
 
+        remarks = str(fields.get("remarks") or "").strip()
+        previous_ops = str(getattr(asset, "operational_status", "") or "").strip().upper() or None
+        disposal_type = fields.get("disposal_type") or "scrap"
+        disposal_date = fields.get("disposal_date") or date.today()
+        management_approved = bool(fields.get("management_approved"))
+
+        # Ready/Assigned/Retired/Pending → DISPOSED
+        asset = self._ensure_disposed_ops(
+            ctx,
+            asset,
+            remarks=remarks,
+            disposal_type=disposal_type,
+        )
+
         doc = self._numbers.generate(
             AstEntityType.DISPOSAL,
             cid,
@@ -119,17 +140,25 @@ class DisposalService:
             "document_number",
             ctx=ctx,
         )
+        now = utcnow()
         row = self._repo.create(
             ctx,
             company_id=cid,
             branch_id=branch_id,
             document_number=doc,
             asset_id=asset.id,
-            disposal_type=fields["disposal_type"],
-            disposal_date=fields.get("disposal_date"),
+            disposal_type=disposal_type,
+            disposal_date=disposal_date,
             proceeds_amount=fields.get("proceeds_amount"),
             book_value_at_disposal=fields.get("book_value_at_disposal"),
-            status=AssetDisposalStatus.DRAFT.value,
+            remarks=remarks,
+            management_approved=management_approved,
+            previous_operational_status=previous_ops,
+            status=AssetDisposalStatus.POSTED.value,
+            completed_at=now,
+            completed_by=ctx.user_id,
+            approved_at=now if management_approved else None,
+            approved_by=ctx.user_id if management_approved else None,
         )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
@@ -141,9 +170,92 @@ class DisposalService:
                 "document_number": row.document_number,
                 "asset_id": str(asset.id),
                 "disposal_type": row.disposal_type,
+                "disposal_date": str(disposal_date),
+                "remarks": remarks,
+                "management_approved": management_approved,
+                "previous_operational_status": previous_ops,
+                "operational_status": getattr(asset, "operational_status", None),
+                "status": AssetDisposalStatus.POSTED.value,
+            },
+        )
+        # Also stamp the asset entity so portal Activity Logs show disposal details.
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name=ENTITY_AST_ASSET,
+            entity_id=asset.id,
+            operation="Disposed",
+            performed_by=ctx.user_id,
+            new_value={
+                "action": "dispose",
+                "operational_status": AssetOperationalStatus.DISPOSED.value,
+                "disposal_id": str(row.id),
+                "disposal_document_number": row.document_number,
+                "disposal_date": str(disposal_date),
+                "reason": remarks,
+                "management_approved": management_approved,
+                "disposal_type": disposal_type,
+            },
+            old_value={
+                "operational_status": previous_ops,
             },
         )
         return row
+
+    def _ensure_disposed_ops(
+        self,
+        ctx: TenantContext,
+        asset,
+        *,
+        remarks: str,
+        disposal_type: str,
+    ):
+        """Move Ready/Assigned/Retired/Pending → DISPOSED in one action.
+
+        Does not physically delete the asset.
+        """
+        disposed = AssetOperationalStatus.DISPOSED.value
+        ops = str(getattr(asset, "operational_status", "") or "").strip().upper()
+        if ops == disposed:
+            raise DisposalValidationError("Disposed assets cannot be disposed again")
+
+        eligible = {
+            AssetOperationalStatus.READY_TO_MOVE.value,
+            AssetOperationalStatus.ASSIGNED.value,
+            AssetOperationalStatus.RETIRED.value,
+            AssetOperationalStatus.PENDING_DISPOSAL.value,
+        }
+        if ops not in eligible:
+            raise DisposalValidationError(
+                "Asset operational status cannot be sent to disposal from "
+                f"{ops or 'unknown'}"
+            )
+
+        # Lifecycle terminal status (disposed / written_off) — not a physical delete.
+        self._asset_engine.dispose(asset, disposal_type=disposal_type)
+        updated_asset = self._assets.update(ctx, asset.id, status=asset.status)
+        asset_version = int((updated_asset or asset).version or 1)
+
+        if asset.master_asset_id is not None:
+            self._master.mark_master_disposed(ctx, asset.master_asset_id)
+
+        final_ops = self._operational.apply_action(
+            ctx,
+            asset.id,
+            action="dispose",
+            expected_version=asset_version,
+            reason="dispose_asset",
+            remarks=remarks or None,
+            source_entity=ENTITY_AST_DISPOSAL,
+            source_entity_id=asset.id,
+        )
+        fresh = self._assets.get(ctx, asset.id)
+        if fresh is None:
+            raise NotFoundException("Asset not found")
+        if str(getattr(fresh, "operational_status", "") or "").upper() != disposed:
+            raise DisposalValidationError(
+                f"Failed to set asset to disposed (got {final_ops})"
+            )
+        return fresh
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
         row = self.get(ctx, row_id)
@@ -180,20 +292,35 @@ class DisposalService:
             workflow_instance_id=instance.id,
         )
 
-    def approve(self, ctx: TenantContext, row_id: UUID, comments: str | None = None):
+    def approve(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        comments: str | None = None,
+        *,
+        ceo_instruction: str | None = None,
+    ):
+        instruction = str(ceo_instruction or comments or "").strip()
+        if not instruction:
+            raise DisposalValidationError(
+                "CEO Instruction is required when approving a disposal request"
+            )
         row = self.get(ctx, row_id)
-        if not asset_workflow_governance_enabled():
-            return self._legacy_approve(ctx, row_id, row)
-        self._validator.validate_approve_readiness(ctx, row)
-        self._assert_no_active_components(ctx, row.asset_id)
         if row.created_by == ctx.user_id:
             raise SegregationOfDutiesError("Creator cannot approve own disposal")
-        if row.workflow_instance_id is None:
-            raise InvalidAssetWorkflowState("Disposal has no workflow instance")
+        self._validator.validate_approve_readiness(ctx, row)
+        self._assert_no_active_components(ctx, row.asset_id)
+
+        if not asset_workflow_governance_enabled() or row.workflow_instance_id is None:
+            return self._finalize_approval(
+                ctx,
+                row_id,
+                ceo_instruction=instruction,
+                comments=comments,
+            )
 
         def on_approved() -> None:
             fresh = self.get(ctx, row_id)
-            # Re-check gates immediately before irreversible document approval.
             self._validator.validate_approve_readiness(ctx, fresh)
             self._assert_no_active_components(ctx, fresh.asset_id)
             self._engine.approve(fresh)
@@ -202,6 +329,9 @@ class DisposalService:
                 row_id,
                 status=fresh.status,
                 workflow_status=WorkflowStatus.APPROVED.value,
+                ceo_instruction=instruction,
+                approved_at=utcnow(),
+                approved_by=ctx.user_id,
             )
             self._audit.log_entity_change(
                 tenant_id=ctx.tenant_id,
@@ -209,6 +339,7 @@ class DisposalService:
                 entity_id=row_id,
                 operation="approve",
                 performed_by=ctx.user_id,
+                new_value={"ceo_instruction": instruction},
             )
 
         instance = self._governance.approve(
@@ -217,19 +348,69 @@ class DisposalService:
             entity_name=ENTITY_AST_DISPOSAL,
             entity_id=row_id,
             on_approved=on_approved,
-            comments=comments,
+            comments=comments or instruction,
             recipient_user_id=row.created_by,
         )
         if instance.status == WorkflowStatus.APPROVED:
             return self.get(ctx, row_id)
         return self._repo.update(ctx, row_id, workflow_status=instance.status.value)
 
-    def reject(self, ctx: TenantContext, row_id: UUID, comments: str | None = None):
+    def _finalize_approval(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        *,
+        ceo_instruction: str,
+        comments: str | None,
+    ):
         row = self.get(ctx, row_id)
-        if not asset_workflow_governance_enabled():
-            raise InvalidAssetWorkflowState("Workflow governance is disabled")
-        if row.workflow_instance_id is None:
-            raise InvalidAssetWorkflowState("Disposal has no workflow instance")
+        if row.status == AssetDisposalStatus.DRAFT.value:
+            self._validator.validate_submit_readiness(ctx, row)
+            self._engine.submit(row)
+            self._repo.update(ctx, row_id, status=row.status)
+            row = self.get(ctx, row_id)
+        self._validator.validate_approve_readiness(ctx, row)
+        self._assert_no_active_components(ctx, row.asset_id)
+        self._engine.approve(row)
+        updated = self._repo.update(
+            ctx,
+            row_id,
+            status=row.status,
+            workflow_status=WorkflowStatus.APPROVED.value,
+            ceo_instruction=ceo_instruction,
+            approved_at=utcnow(),
+            approved_by=ctx.user_id,
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name=ENTITY_AST_DISPOSAL,
+            entity_id=row_id,
+            operation="approve",
+            performed_by=ctx.user_id,
+            new_value={
+                "ceo_instruction": ceo_instruction,
+                "comments": comments,
+            },
+        )
+        return updated
+
+    def reject(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        comments: str | None = None,
+        *,
+        rejection_reason: str | None = None,
+    ):
+        reason = str(rejection_reason or comments or "").strip()
+        if not reason:
+            raise DisposalValidationError("Rejection reason is required")
+        row = self.get(ctx, row_id)
+        if row.status not in {
+            AssetDisposalStatus.DRAFT.value,
+            AssetDisposalStatus.SUBMITTED.value,
+        }:
+            raise DisposalValidationError("Only pending disposal requests can be rejected")
 
         def on_rejected() -> None:
             self._repo.update(
@@ -237,18 +418,118 @@ class DisposalService:
                 row_id,
                 status=AssetDisposalStatus.CANCELLED.value,
                 workflow_status=WorkflowStatus.REJECTED.value,
+                rejection_reason=reason,
+            )
+            self._restore_previous_ops(ctx, row_id, remarks=reason)
+
+        if asset_workflow_governance_enabled() and row.workflow_instance_id is not None:
+            self._governance.reject(
+                ctx,
+                instance_id=row.workflow_instance_id,
+                entity_name=ENTITY_AST_DISPOSAL,
+                entity_id=row_id,
+                on_rejected=on_rejected,
+                comments=reason,
+                recipient_user_id=row.created_by,
+            )
+        else:
+            on_rejected()
+            self._audit.log_entity_change(
+                tenant_id=ctx.tenant_id,
+                entity_name=ENTITY_AST_DISPOSAL,
+                entity_id=row_id,
+                operation="reject",
+                performed_by=ctx.user_id,
+                new_value={"rejection_reason": reason},
+            )
+        return self.get(ctx, row_id)
+
+    def _restore_previous_ops(self, ctx: TenantContext, row_id: UUID, *, remarks: str) -> None:
+        row = self.get(ctx, row_id)
+        asset = self._assets.lock_for_update(ctx, row.asset_id)
+        if asset is None:
+            return
+        current = str(getattr(asset, "operational_status", "") or "").upper()
+        pending = AssetOperationalStatus.PENDING_DISPOSAL.value
+        if current != pending:
+            return
+        target = str(row.previous_operational_status or AssetOperationalStatus.READY_TO_MOVE.value).upper()
+        if target == pending:
+            target = AssetOperationalStatus.READY_TO_MOVE.value
+        allowed = {
+            AssetOperationalStatus.READY_TO_MOVE.value,
+            AssetOperationalStatus.ASSIGNED.value,
+            AssetOperationalStatus.RETIRED.value,
+        }
+        if target not in allowed:
+            target = AssetOperationalStatus.READY_TO_MOVE.value
+        self._operational.transition(
+            ctx,
+            asset.id,
+            target_status=target,
+            expected_version=int(asset.version or 1),
+            reason="disposal_rejected",
+            remarks=remarks,
+            source_entity=ENTITY_AST_DISPOSAL,
+            source_entity_id=row_id,
+        )
+
+    def complete(self, ctx: TenantContext, row_id: UUID):
+        """IT Admin completes physical disposal after CEO approval (no finance required)."""
+        row = self.get(ctx, row_id)
+        if row.status != AssetDisposalStatus.APPROVED.value:
+            raise DisposalValidationError(
+                "Only CEO-approved disposals can be completed"
+            )
+        self._assert_no_active_components(ctx, row.asset_id)
+        asset = self._assets.lock_for_update(ctx, row.asset_id)
+        if asset is None:
+            raise NotFoundException("Asset not found")
+        ops = str(getattr(asset, "operational_status", "") or "").upper()
+        if ops != AssetOperationalStatus.PENDING_DISPOSAL.value:
+            raise DisposalValidationError(
+                "Asset must remain in Disposal status until completion"
             )
 
-        self._governance.reject(
+        disposal_date = row.disposal_date or date.today()
+        self._engine.post(row)
+        updated = self._repo.update(
             ctx,
-            instance_id=row.workflow_instance_id,
+            row_id,
+            status=row.status,
+            disposal_date=disposal_date,
+            completed_at=utcnow(),
+            completed_by=ctx.user_id,
+            version=int(row.version or 1),
+        )
+
+        self._asset_engine.dispose(asset, disposal_type=row.disposal_type)
+        updated_asset = self._assets.update(ctx, asset.id, status=asset.status)
+        asset_version = int((updated_asset or asset).version or 1)
+        if asset.master_asset_id is not None:
+            self._master.mark_master_disposed(ctx, asset.master_asset_id)
+        self._operational.apply_action(
+            ctx,
+            asset.id,
+            action="complete_disposal",
+            expected_version=asset_version,
+            reason="disposal_complete",
+            remarks=row.ceo_instruction or row.remarks,
+            source_entity=ENTITY_AST_DISPOSAL,
+            source_entity_id=row_id,
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
             entity_name=ENTITY_AST_DISPOSAL,
             entity_id=row_id,
-            on_rejected=on_rejected,
-            comments=comments,
-            recipient_user_id=row.created_by,
+            operation="complete",
+            performed_by=ctx.user_id,
+            new_value={
+                "status": AssetDisposalStatus.POSTED.value,
+                "completed_at": str(updated.completed_at) if updated else None,
+            },
         )
-        return self.get(ctx, row_id)
+        return updated
 
     def cancel_draft(self, ctx: TenantContext, row_id: UUID):
         row = self.get(ctx, row_id)

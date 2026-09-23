@@ -1,4 +1,4 @@
-# Asset Service History - Deployment Guide (FP-ASSET-013)
+# Asset Service History — Deployment Guide (FP-ASSET-013)
 
 ## Prerequisites
 

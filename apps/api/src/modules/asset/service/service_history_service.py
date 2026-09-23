@@ -1,4 +1,4 @@
-"""ServiceHistoryService - asset service history management (FP-ASSET-013)."""
+"""ServiceHistoryService — asset service history management (FP-ASSET-013)."""
 
 from datetime import datetime
 from decimal import Decimal

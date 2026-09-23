@@ -1,7 +1,7 @@
-# Asset CMP - Implementation Report (FP-ASSET-019)
+# Asset CMP — Implementation Report (FP-ASSET-019)
 
 **Date:** 2026-07-30  
-**Status:** Implementation complete - ready for architecture review  
+**Status:** Implementation complete — ready for architecture review  
 **ADR:** ADR-ASSET-COMPONENT-001
 
 ---
@@ -22,16 +22,16 @@ FP-ASSET-019 productizes Asset Components as **Option B** lightweight child reco
 
 ## 3. Backend Changes
 
-- `ComponentValidator` - parent/company/branch/code/serial/quantity/status/immutability/replace/dispose
-- `AssetComponentEngine` - install defaults, replace, dispose
-- `AssetComponentRepository` - search, tree-by-asset, active code/serial lookups, code history, optimistic update
-- `AssetComponentService` (+ `ComponentService` alias) - orchestration, audit, scope
+- `ComponentValidator` — parent/company/branch/code/serial/quantity/status/immutability/replace/dispose
+- `AssetComponentEngine` — install defaults, replace, dispose
+- `AssetComponentRepository` — search, tree-by-asset, active code/serial lookups, code history, optimistic update
+- `AssetComponentService` (+ `ComponentService` alias) — orchestration, audit, scope
 - Schemas: Create / Update / Replace / List / Tree / History / ReplaceResult
 - Router `/asset-components` with dedicated `asset.component:*` permissions
 
 ## 4. Frontend Changes
 
-- `AssetComponentsWorkspace` - asset selector, list, hierarchy panel, history timeline, install / replace / dispose
+- `AssetComponentsWorkspace` — asset selector, list, hierarchy panel, history timeline, install / replace / dispose
 - `componentService` in `assets-service.ts`
 - Wired in `assets/[resource]/page.tsx` and modules description update
 - Follows MASTER / existing asset workspace density (Swiss/data-dense dashboard)

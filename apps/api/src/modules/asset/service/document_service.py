@@ -1,19 +1,36 @@
-"""DocumentService - asset document metadata management (FP-ASSET-016)."""
+"""DocumentService — asset document metadata + binary upload (FP-ASSET-016)."""
 
+from __future__ import annotations
+
+import hashlib
+from io import BytesIO
+from typing import BinaryIO
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
 from modules.asset.domain.enums import AssetDocumentStatus
+from modules.asset.domain.exceptions import DocumentValidationError
 from modules.asset.models import AstAssetDocument
 from modules.asset.repository.asset_document_repository import (
     AssetDocumentListFilters,
     AssetDocumentRepository,
 )
+from modules.asset.schemas import AssetDocumentResponse, AssetDocumentUploadLimits
 from modules.asset.service.asset_scope_validator import AssetScopeValidator
+from modules.asset.service.document_file import (
+    build_asset_doc_uri,
+    build_storage_key,
+    document_type_for_content_type,
+    is_https_pointer,
+    parse_asset_doc_uri,
+    upload_limits_payload,
+    validate_upload_bytes,
+)
 from modules.asset.service.document_validator import DocumentValidator
 from modules.asset.service.engines import AssetDocumentEngine
+from modules.asset.storage import StorageBackend, get_storage
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 
@@ -21,12 +38,37 @@ ENTITY_AST_DOCUMENT = "ast_asset_document"
 
 
 class DocumentService:
-    def __init__(self, db: Session) -> None:
+    def __init__(self, db: Session, storage: StorageBackend | None = None) -> None:
         self._repo = AssetDocumentRepository(db)
         self._scope = AssetScopeValidator(db)
         self._engine = AssetDocumentEngine()
         self._audit = AuditService(db)
         self._validator = DocumentValidator(db)
+        self._storage = storage if storage is not None else get_storage()
+
+    def upload_limits(self) -> AssetDocumentUploadLimits:
+        payload = upload_limits_payload()
+        return AssetDocumentUploadLimits(**payload)
+
+    def to_response(self, row: AstAssetDocument) -> AssetDocumentResponse:
+        meta = parse_asset_doc_uri(row.storage_uri)
+        downloadable = bool(meta.is_stored or is_https_pointer(row.storage_uri))
+        return AssetDocumentResponse(
+            id=row.id,
+            branch_id=row.branch_id,
+            asset_id=row.asset_id,
+            document_type=row.document_type,
+            document_name=row.document_name,
+            storage_uri=row.storage_uri,
+            content_hash=row.content_hash,
+            status=row.status,
+            company_id=row.company_id,
+            version=int(row.version or 1),
+            created_at=getattr(row, "created_at", None),
+            content_type=meta.content_type,
+            file_size_bytes=meta.file_size_bytes,
+            downloadable=downloadable,
+        )
 
     def search(
         self,
@@ -95,6 +137,68 @@ class DocumentService:
             },
         )
         return row
+
+    def upload(
+        self,
+        ctx: TenantContext,
+        *,
+        asset_id: UUID,
+        file_bytes: bytes,
+        original_filename: str | None,
+        declared_content_type: str | None = None,
+        document_type: str | None = None,
+        company_id: UUID | None = None,
+        branch_id: UUID | None = None,
+    ) -> AstAssetDocument:
+        content_type, filename, size = validate_upload_bytes(
+            file_bytes,
+            declared_content_type=declared_content_type,
+            original_filename=original_filename,
+        )
+        resolved_type = (document_type or document_type_for_content_type(content_type)).strip()
+        storage_key = build_storage_key(str(asset_id), content_type)
+        self._storage.save(BytesIO(file_bytes), storage_key)
+        storage_uri = build_asset_doc_uri(
+            storage_key,
+            content_type=content_type,
+            file_size_bytes=size,
+        )
+        content_hash = hashlib.sha256(file_bytes).hexdigest()
+        try:
+            return self.create(
+                ctx,
+                company_id=company_id,
+                branch_id=branch_id,
+                asset_id=asset_id,
+                document_type=resolved_type,
+                document_name=filename,
+                storage_uri=storage_uri,
+                content_hash=content_hash,
+            )
+        except Exception:
+            try:
+                self._storage.delete(storage_key)
+            except Exception:
+                pass
+            raise
+
+    def open_stored_content(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+    ) -> tuple[BinaryIO, str, str | None, int | None]:
+        row = self.get(ctx, row_id)
+        meta = parse_asset_doc_uri(row.storage_uri)
+        if not meta.is_stored or not meta.storage_key:
+            if is_https_pointer(row.storage_uri):
+                raise DocumentValidationError(
+                    "This document is an external link. Open it from the document URL."
+                )
+            raise DocumentValidationError("No downloadable file is attached to this document")
+        if not self._storage.exists(meta.storage_key):
+            raise NotFoundException("Stored document file is missing")
+        handle = self._storage.open(meta.storage_key)
+        return handle, row.document_name, meta.content_type, meta.file_size_bytes
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
         row = self.get(ctx, row_id)

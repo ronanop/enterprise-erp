@@ -123,7 +123,7 @@ export function NonItAddAssetPage() {
       className="relative -mx-1 min-h-[calc(100dvh-6rem)] sm:-mx-2 md:mx-0"
       data-testid="nonit-add-asset-page"
     >
-      {/* Atmosphere - design-system navy/sky, no purple */}
+      {/* Atmosphere — design-system navy/sky, no purple */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 overflow-hidden rounded-xl"
@@ -161,7 +161,7 @@ export function NonItAddAssetPage() {
 
         <form onSubmit={(e) => void onSubmit(e)} className="flex flex-1 flex-col gap-5">
           <div className="flex flex-1 flex-col gap-5">
-          {/* Type + provisional code - full width hero strip */}
+          {/* Type + provisional code — full width hero strip */}
           <Card className="overflow-hidden border-border/70 bg-background/90 shadow-md backdrop-blur-sm">
             <CardContent className="grid gap-5 p-5 md:grid-cols-[minmax(0,1.4fr)_minmax(12rem,0.8fr)] md:items-end md:p-6">
               <div className="space-y-2">
@@ -215,14 +215,14 @@ export function NonItAddAssetPage() {
                 </div>
                 <p className="mt-1 font-mono text-2xl font-semibold tabular-nums tracking-tight text-foreground">
                   {!selectedType
-                    ? "-"
+                    ? "—"
                     : codePreviewLoading
                       ? "…"
                       : (codePreview ?? `${selectedType.prefix}…`)}
                 </p>
                 <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
                   {selectedType
-                    ? "Provisional - locked at save if others create concurrently."
+                    ? "Provisional — locked at save if others create concurrently."
                     : "Select a type to preview the next code."}
                 </p>
               </div>
@@ -371,7 +371,7 @@ export function NonItAddAssetPage() {
           )}
           </div>
 
-          {/* Footer actions - in-flow, pinned to bottom of content column (never overlaps sidebar) */}
+          {/* Footer actions — in-flow, pinned to bottom of content column (never overlaps sidebar) */}
           <div className="mt-auto border-t border-border/60 bg-background/80 pt-4 backdrop-blur-sm">
             <div className="flex min-h-12 w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-border/80 bg-card px-4 py-3 shadow-sm">
               <p className="hidden min-w-0 flex-1 truncate text-xs leading-none text-muted-foreground sm:block">

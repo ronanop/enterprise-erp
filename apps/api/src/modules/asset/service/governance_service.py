@@ -1,4 +1,4 @@
-"""Asset governance - workflow, audit, notifications (FP-ASSET-WF-GOV-001)."""
+"""Asset governance — workflow, audit, notifications (FP-ASSET-WF-GOV-001)."""
 
 from uuid import UUID
 

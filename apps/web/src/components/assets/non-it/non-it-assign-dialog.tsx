@@ -81,7 +81,7 @@ export function NonItAssignDialog({ open, asset, onOpenChange, onDone }: Props) 
             {isReassign ? "Reassign" : "Assign"} {asset.asset_code}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {asset.asset_type_name ?? "Non-IT asset"} - choose the new holder.
+            {asset.asset_type_name ?? "Non-IT asset"} — choose the new holder.
           </p>
         </div>
 

@@ -1,4 +1,4 @@
-"""Delivery challan tracking (IT → SCM paperwork) - standalone from assignment DC fields."""
+"""Delivery challan tracking (IT → SCM paperwork) — standalone from assignment DC fields."""
 
 from __future__ import annotations
 

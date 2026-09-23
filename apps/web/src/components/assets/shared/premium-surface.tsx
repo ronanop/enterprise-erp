@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-/** Subtle navy/sky wash used on Non-IT premium pages - reuse for IT parity. */
+/** Subtle navy/sky wash used on Non-IT premium pages — reuse for IT parity. */
 export function AssetsAtmosphere({ className }: { className?: string }) {
   return (
     <div

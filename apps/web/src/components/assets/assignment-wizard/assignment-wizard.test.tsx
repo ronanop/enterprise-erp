@@ -266,7 +266,7 @@ describe("AssignmentWizard", () => {
         onCancel={vi.fn()}
         initialState={{
           employeeId: "emp-1",
-          // asset intentionally omitted - cannot pass step 1
+          // asset intentionally omitted — cannot pass step 1
         }}
       />,
     );

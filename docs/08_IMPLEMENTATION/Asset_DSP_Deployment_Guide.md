@@ -1,4 +1,4 @@
-# FP-ASSET-005 - Disposal Deployment Guide
+# FP-ASSET-005 — Disposal Deployment Guide
 
 ## Prerequisites
 

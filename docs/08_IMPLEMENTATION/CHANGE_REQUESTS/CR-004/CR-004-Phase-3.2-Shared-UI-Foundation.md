@@ -1,4 +1,4 @@
-# CR-004 Phase 3.2 - Shared UI Foundation
+# CR-004 Phase 3.2 — Shared UI Foundation
 
 **Status:** Complete (components only)  
 **Date:** 2026-08-03  
@@ -32,7 +32,7 @@ Barrel export: `index.ts` (includes `FilterBar` alias).
 ## Design alignment
 
 - Uses existing ShadCN `Card`, `Badge`, `Button`, `Input`, `Select`, `Label`.
-- Tokens: `border-border`, `bg-card`, `text-muted-foreground`, `primary` accent - matches ERP MASTER.
+- Tokens: `border-border`, `bg-card`, `text-muted-foreground`, `primary` accent — matches ERP MASTER.
 - Light theme default; operational badge colors include `dark:` variants.
 - Interaction: `cursor-pointer`, 200ms transitions, focus rings on controls.
 
@@ -53,7 +53,7 @@ See TypeScript exports in each file. All data is **props-in**; parents own state
 
 ## Next
 
-Phase 3.3 - Dashboard page composition (wire `dashboard-summary` client + shared components).
+Phase 3.3 — Dashboard page composition (wire `dashboard-summary` client + shared components).
 
 ---
 

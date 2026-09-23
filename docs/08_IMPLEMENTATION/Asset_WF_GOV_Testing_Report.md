@@ -1,4 +1,4 @@
-# Asset Workflow Governance - Testing Report
+# Asset Workflow Governance — Testing Report
 
 **Feature:** FP-ASSET-WF-GOV-001  
 **Date:** 2026-07-29  
@@ -33,7 +33,7 @@
 | ID | Test | Behaviour verified |
 |----|------|-------------------|
 | INT-WF-01 | `test_int_wf_01_submit_creates_workflow_instance` | Real `WorkflowService` + 0266-shaped seed; submit sets instance + fields |
-| INT-WF-02 | `test_int_wf_02_three_step_approve_activates_only_on_final` | Steps 1-2 stay `submitted`; step 3 → `active` + master id |
+| INT-WF-02 | `test_int_wf_02_three_step_approve_activates_only_on_final` | Steps 1–2 stay `submitted`; step 3 → `active` + master id |
 | INT-WF-06 | `test_int_wf_06_reject_sets_cancelled_and_workflow_rejected` | Reject → `cancelled` / `workflow_status=rejected` |
 
 **Harness:** SQLite in-memory with real `WfDefinition` / `WfStep` / `WfInstance` / `WfAction` / `AstAsset` tables; **WorkflowService not mocked**. Audit/notification persistence silenced to isolate WF path. Master adapter mocked only on INT-WF-02 terminal activate.

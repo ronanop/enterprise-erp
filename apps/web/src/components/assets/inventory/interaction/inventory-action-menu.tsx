@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Eye, MoreVertical } from "lucide-react";
 
 import {
@@ -22,6 +23,16 @@ export type InventoryActionMenuProps = {
   className?: string;
 };
 
+type MenuPlacement = {
+  top: number;
+  left: number;
+  openUp: boolean;
+};
+
+const MENU_MIN_WIDTH = 200;
+const MENU_VIEWPORT_PAD = 8;
+const MENU_GAP = 4;
+
 export function InventoryActionMenu({
   asset,
   onView,
@@ -32,18 +43,60 @@ export function InventoryActionMenu({
 }: InventoryActionMenuProps) {
   const permissions = { ...DEFAULT_INVENTORY_ACTION_PERMISSIONS, ...permissionsProp };
   const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<MenuPlacement | null>(null);
   const menuId = useId();
-  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
+  // View is the only direct row action. Edit and all other actions live in the overflow menu.
   const menuItems = INVENTORY_MENU_ITEMS.filter((item) => {
     if (item.id === "viewDetails") return false;
     return permissions[item.permissionKey];
   });
 
+  const updatePlacement = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const menuEl = menuRef.current;
+    const menuHeight = menuEl?.offsetHeight ?? menuItems.length * 36 + 8;
+    const menuWidth = Math.max(menuEl?.offsetWidth ?? MENU_MIN_WIDTH, MENU_MIN_WIDTH);
+    const spaceBelow = window.innerHeight - rect.bottom - MENU_VIEWPORT_PAD;
+    const spaceAbove = rect.top - MENU_VIEWPORT_PAD;
+    const openUp = spaceBelow < menuHeight + MENU_GAP && spaceAbove > spaceBelow;
+    let top = openUp ? rect.top - menuHeight - MENU_GAP : rect.bottom + MENU_GAP;
+    top = Math.min(
+      Math.max(MENU_VIEWPORT_PAD, top),
+      Math.max(MENU_VIEWPORT_PAD, window.innerHeight - menuHeight - MENU_VIEWPORT_PAD),
+    );
+    let left = rect.right - menuWidth;
+    left = Math.min(
+      Math.max(MENU_VIEWPORT_PAD, left),
+      Math.max(MENU_VIEWPORT_PAD, window.innerWidth - menuWidth - MENU_VIEWPORT_PAD),
+    );
+    setPlacement({ top, left, openUp });
+  }, [menuItems.length, setPlacement]);
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    updatePlacement();
+    const frame = requestAnimationFrame(() => updatePlacement());
+    window.addEventListener("resize", updatePlacement);
+    window.addEventListener("scroll", updatePlacement, true);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", updatePlacement);
+      window.removeEventListener("scroll", updatePlacement, true);
+    };
+  }, [open, updatePlacement]);
+
   useEffect(() => {
     if (!open) return;
     function onDocClick(e: MouseEvent) {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setOpen(false);
@@ -56,15 +109,69 @@ export function InventoryActionMenu({
     };
   }, [open]);
 
+  const menu =
+    open && menuItems.length > 0 && typeof document !== "undefined"
+      ? createPortal(
+          <div
+            ref={menuRef}
+            id={menuId}
+            role="menu"
+            data-testid={`inventory-action-menu-${asset.assetTag}`}
+            data-placement={placement?.openUp ? "top" : "bottom"}
+            className="z-[100] min-w-[200px] rounded-md border border-border bg-popover p-1 shadow-md"
+            style={{
+              position: "fixed",
+              top: placement?.top ?? -9999,
+              left: placement?.left ?? -9999,
+              visibility: placement ? "visible" : "hidden",
+            }}
+          >
+            {menuItems.map((item, index) => {
+              const prev = menuItems[index - 1];
+              const showSeparatorBefore =
+                item.id === "delete" && prev != null && prev.id !== "delete";
+              return (
+                <div key={item.id}>
+                  {showSeparatorBefore ? (
+                    <div
+                      role="separator"
+                      className="my-1 h-px bg-border"
+                      data-testid="inventory-menu-delete-separator"
+                    />
+                  ) : null}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    data-testid={`inventory-menu-${item.id}`}
+                    className={cn(
+                      "flex w-full cursor-pointer rounded-sm px-2 py-1.5 text-left text-sm transition-colors duration-150 hover:bg-muted",
+                      item.id === "delete" && "text-destructive hover:bg-destructive/10",
+                    )}
+                    onClick={() => {
+                      setOpen(false);
+                      onMenuAction?.(item.id, asset);
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                </div>
+              );
+            })}
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
-    <div ref={containerRef} className={cn("relative inline-flex items-center gap-1", className)}>
+    <div className={cn("relative inline-flex items-center gap-1", className)}>
       {permissions.viewDetails ? (
         <Button
           type="button"
           variant="ghost"
           size="sm"
-          className="cursor-pointer"
+          className="cursor-pointer transition-colors duration-200"
           disabled={disabled}
+          data-testid="inventory-action-view"
           onClick={() => onView?.(asset)}
         >
           <Eye className="mr-1 size-4" aria-hidden />
@@ -74,41 +181,22 @@ export function InventoryActionMenu({
       {menuItems.length > 0 ? (
         <>
           <Button
+            ref={triggerRef}
             type="button"
             variant="ghost"
             size="icon"
-            className="size-8 cursor-pointer"
+            className="size-8 cursor-pointer transition-colors duration-200"
             disabled={disabled}
             aria-haspopup="menu"
             aria-expanded={open}
             aria-controls={menuId}
             aria-label="More actions"
+            data-testid="inventory-action-more"
             onClick={() => setOpen((v) => !v)}
           >
             <MoreVertical className="size-4" aria-hidden />
           </Button>
-          {open ? (
-            <div
-              id={menuId}
-              role="menu"
-              className="absolute right-0 top-full z-50 mt-1 min-w-[200px] rounded-md border border-border bg-popover p-1 shadow-md"
-            >
-              {menuItems.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  role="menuitem"
-                  className="flex w-full cursor-pointer rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted"
-                  onClick={() => {
-                    setOpen(false);
-                    onMenuAction?.(item.id, asset);
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
+          {menu}
         </>
       ) : null}
     </div>

@@ -1,4 +1,4 @@
-# FP-ASSET-007 - Deployment Guide
+# FP-ASSET-007 — Deployment Guide
 
 1. Deploy API with FP-ASSET-007.
 2. Alembic upgrade to `0472_ast_revaluation_governance`.

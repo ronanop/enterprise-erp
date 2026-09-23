@@ -29,6 +29,10 @@ import {
   EmptyState,
   StatCard,
   StatusBadge,
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
 } from "@/components/assets/shared";
 import { DC_CHALLAN_STATUS_LABELS, type DcChallanStatusValue } from "@/components/assets/shared/asset-status";
 import { isAuthenticated } from "@/lib/auth";
@@ -76,7 +80,7 @@ function emptySummary(): DcChallanSummary {
 }
 
 function formatWhen(value?: string | null): string {
-  if (!value) return "-";
+  if (!value) return "—";
   return value.replace("T", " ").slice(0, 16);
 }
 
@@ -269,6 +273,11 @@ export function AssetDcChallanWorkspace() {
     drawerRow && isManualEmployee && !String(drawerRow.employee_email ?? "").trim();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
+  const applyStatusKpiFilter = (status: string) => {
+    setStatusFilter((prev) => (prev === status ? "" : status));
+    setPage(1);
+  };
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -308,64 +317,58 @@ export function AssetDcChallanWorkspace() {
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6" data-testid="dc-challan-kpi-strip">
         <StatCard
           title="Pending"
           value={summary.pending}
           icon={FileText}
           loading={loading}
-          onClick={() => {
-            setStatusFilter("PENDING");
-            setPage(1);
-          }}
+          selected={statusFilter === "PENDING"}
+          aria-label="Filter by Pending"
+          onClick={() => applyStatusKpiFilter("PENDING")}
         />
         <StatCard
           title="Sent to SCM"
           value={summary.sent_to_scm}
           icon={Send}
           loading={loading}
-          onClick={() => {
-            setStatusFilter("SENT_TO_SCM");
-            setPage(1);
-          }}
+          selected={statusFilter === "SENT_TO_SCM"}
+          aria-label="Filter by Sent to SCM"
+          onClick={() => applyStatusKpiFilter("SENT_TO_SCM")}
         />
         <StatCard
           title="Document received"
           value={summary.document_received}
           icon={Truck}
           loading={loading}
-          onClick={() => {
-            setStatusFilter("DOCUMENT_RECEIVED");
-            setPage(1);
-          }}
+          selected={statusFilter === "DOCUMENT_RECEIVED"}
+          aria-label="Filter by Document received"
+          onClick={() => applyStatusKpiFilter("DOCUMENT_RECEIVED")}
         />
         <StatCard
           title="Signed"
           value={summary.signed}
           loading={loading}
-          onClick={() => {
-            setStatusFilter("SIGNED");
-            setPage(1);
-          }}
+          selected={statusFilter === "SIGNED"}
+          aria-label="Filter by Signed"
+          onClick={() => applyStatusKpiFilter("SIGNED")}
         />
         <StatCard
           title="Received"
           value={summary.received}
           icon={CheckCircle2}
           loading={loading}
-          onClick={() => {
-            setStatusFilter("RECEIVED");
-            setPage(1);
-          }}
+          selected={statusFilter === "RECEIVED"}
+          aria-label="Filter by Received"
+          onClick={() => applyStatusKpiFilter("RECEIVED")}
         />
         <StatCard
           title="Cancelled"
           value={summary.cancelled}
           loading={loading}
-          onClick={() => {
-            setStatusFilter("CANCELLED");
-            setPage(1);
-          }}
+          selected={statusFilter === "CANCELLED"}
+          aria-label="Filter by Cancelled"
+          onClick={() => applyStatusKpiFilter("CANCELLED")}
         />
       </div>
 
@@ -518,7 +521,10 @@ export function AssetDcChallanWorkspace() {
           <table className="w-full min-w-[64rem] text-left text-sm">
             <thead className="border-b border-border/70 bg-muted/30 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-3 py-2">
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="px-3 py-2">
                   <input
                     type="checkbox"
                     className="cursor-pointer"
@@ -538,24 +544,25 @@ export function AssetDcChallanWorkspace() {
             <tbody>
               {loading && items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
                     Loading…
                   </td>
                 </tr>
               ) : items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6">
+                  <td colSpan={8} className="px-3 py-6">
                     <EmptyState variant="no-results" title="No DC challans" description="Create a challan from an employee assignment or a Ready to Move asset." />
                   </td>
                 </tr>
               ) : (
-                items.map((row) => (
+                items.map((row, index) => (
                   <tr
                     key={row.id}
                     className="cursor-pointer border-b border-border/50 transition-colors duration-200 hover:bg-muted/30"
                     onClick={() => setDrawerRow(row)}
                   >
-                    <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                    <td className={tableSerialCellClassName()}>{tableRowSerial(page, pageSize, index)}</td>
+                          <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         className="cursor-pointer"
@@ -570,11 +577,11 @@ export function AssetDcChallanWorkspace() {
                       <StatusBadge kind="dcChallan" status={row.status} />
                     </td>
                     <td className="px-3 py-2">
-                      <div className="font-medium">{row.asset_name ?? "-"}</div>
+                      <div className="font-medium">{row.asset_name ?? "—"}</div>
                       <div className="font-mono text-xs text-muted-foreground">{row.asset_tag}</div>
                     </td>
                     <td className="px-3 py-2">
-                      <div>{row.employee_name ?? "-"}</div>
+                      <div>{row.employee_name ?? "—"}</div>
                       <div className="text-xs text-muted-foreground">{row.employee_code}</div>
                     </td>
                     <td className="px-3 py-2">{row.assignment_id ? "Yes" : "No"}</td>
@@ -645,16 +652,16 @@ export function AssetDcChallanWorkspace() {
               <dl className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <dt className="text-xs text-muted-foreground">Tag</dt>
-                  <dd className="font-mono text-xs">{drawerRow.asset_tag ?? "-"}</dd>
+                  <dd className="font-mono text-xs">{drawerRow.asset_tag ?? "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Serial</dt>
-                  <dd>{drawerRow.serial_number ?? "-"}</dd>
+                  <dd>{drawerRow.serial_number ?? "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Make / model</dt>
                   <dd>
-                    {[drawerRow.make, drawerRow.model].filter(Boolean).join(" ") || "-"}
+                    {[drawerRow.make, drawerRow.model].filter(Boolean).join(" ") || "—"}
                   </dd>
                 </div>
               </dl>
@@ -665,7 +672,7 @@ export function AssetDcChallanWorkspace() {
               <dl className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <dt className="text-xs text-muted-foreground">Name</dt>
-                  <dd>{drawerRow.employee_name ?? "-"}</dd>
+                  <dd>{drawerRow.employee_name ?? "—"}</dd>
                 </div>
                 {isManualEmployee ? (
                   <div>
@@ -675,16 +682,16 @@ export function AssetDcChallanWorkspace() {
                 ) : (
                   <div>
                     <dt className="text-xs text-muted-foreground">Code</dt>
-                    <dd>{drawerRow.employee_code ?? "-"}</dd>
+                    <dd>{drawerRow.employee_code ?? "—"}</dd>
                   </div>
                 )}
                 <div>
                   <dt className="text-xs text-muted-foreground">Email</dt>
-                  <dd>{drawerRow.employee_email ?? "-"}</dd>
+                  <dd>{drawerRow.employee_email ?? "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Phone</dt>
-                  <dd>{drawerRow.employee_phone || "-"}</dd>
+                  <dd>{drawerRow.employee_phone || "—"}</dd>
                 </div>
               </dl>
             </section>

@@ -51,7 +51,7 @@ Send-to-SCM employee snapshot rules, branched by assignment `employee_source`:
 | Source | Required | Optional | Notes |
 |---|---|---|---|
 | `MASTER_DATA` (directory) | `employee_code`, `employee_name`, `employee_email` | `employee_phone` (soft warning if blank) | Unchanged from the previous lock. |
-| `MANUAL_ENTRY` (off-directory / deployed staff) | `employee_name`, `employee_phone` | `employee_email` (soft warning if blank: sending is still allowed) | `employee_code` is **absent / null** - it is not required and must not be treated as missing. `deployed_to` is snapshotted from the assignment (free text, e.g. `"Airtel - Gurugram office"`) and may be present on the outbound payload. |
+| `MANUAL_ENTRY` (off-directory / deployed staff) | `employee_name`, `employee_phone` | `employee_email` (soft warning if blank: sending is still allowed) | `employee_code` is **absent / null** — it is not required and must not be treated as missing. `deployed_to` is snapshotted from the assignment (free text, e.g. `"Airtel — Gurugram office"`) and may be present on the outbound payload. |
 
 `employee_code` may legitimately be null for manually-entered employees. `deployed_to` is null for directory employees.
 
@@ -59,7 +59,7 @@ Send-to-SCM employee snapshot rules, branched by assignment `employee_source`:
 
 Emitted conceptually when status moves to `SIGNED` or `RECEIVED`. Adapter is **log-only** (`AssetScmAdapter.push_status_update`); no HTTP in this phase.
 
-**Expected later endpoint:** `POST {scm_base}/delivery-challans/{dc_number}/status` (or equivalent). Payload contains metadata only - **never file bytes**. Emitted when status first becomes `SIGNED` or `RECEIVED`. Re-uploading a signed copy (correction) does **not** emit a second push.
+**Expected later endpoint:** `POST {scm_base}/delivery-challans/{dc_number}/status` (or equivalent). Payload contains metadata only — **never file bytes**. Emitted when status first becomes `SIGNED` or `RECEIVED`. Re-uploading a signed copy (correction) does **not** emit a second push.
 
 ```json
 {
@@ -103,9 +103,9 @@ Auth: `X-ERP-Service-Key` as above. SCM may deliver the issued challan document 
 }
 ```
 
-`document_url` must be `http` or `https` with a host (max 500 chars). Asset **downloads the file server-side and stores its own copy**. `external_url` is provenance only - preview/print never depend on SCM’s link staying alive.
+`document_url` must be `http` or `https` with a host (max 500 chars). Asset **downloads the file server-side and stores its own copy**. `external_url` is provenance only — preview/print never depend on SCM’s link staying alive.
 
-URL intake is SSRF-guarded: the hostname is resolved to IPs before fetch; loopback, private, link-local (including `169.254.169.254`), multicast, and reserved addresses are rejected. Redirects are not followed blindly - each hop is re-validated. Optional allowlist: `ASSET_DC_CHALLAN_SCM_ALLOWED_HOSTS` (comma-separated). Empty in non-production allows any **public** host; empty in production rejects all URL-based intake.
+URL intake is SSRF-guarded: the hostname is resolved to IPs before fetch; loopback, private, link-local (including `169.254.169.254`), multicast, and reserved addresses are rejected. Redirects are not followed blindly — each hop is re-validated. Optional allowlist: `ASSET_DC_CHALLAN_SCM_ALLOWED_HOSTS` (comma-separated). Empty in non-production allows any **public** host; empty in production rejects all URL-based intake.
 
 If the download fails (timeout, 404, empty body, disallowed content, or SSRF block), the callback returns a 422 with a clear message and the challan stays `SENT_TO_SCM`. Blocked hosts are audited (`document_url_blocked`).
 

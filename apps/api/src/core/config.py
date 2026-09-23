@@ -111,6 +111,11 @@ class Settings(BaseSettings):
         alias="ASSET_DC_CHALLAN_MAX_UPLOAD_MB",
         description="Max upload size (MB) for asset DC challan documents.",
     )
+    asset_document_max_upload_mb: int = Field(
+        default=10,
+        alias="ASSET_DOCUMENT_MAX_UPLOAD_MB",
+        description="Max upload size (MB) for asset documents (invoice, warranty, etc.).",
+    )
     asset_dc_challan_scm_api_key: str = Field(
         default="",
         alias="ASSET_DC_CHALLAN_SCM_API_KEY",

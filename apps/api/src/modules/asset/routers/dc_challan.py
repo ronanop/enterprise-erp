@@ -1,4 +1,4 @@
-"""Dedicated DC challan router - do not grow routers/__init__.py."""
+"""Dedicated DC challan router — do not grow routers/__init__.py."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ from modules.asset.service.dc_challan_service import DcChallanService
 from modules.foundation.domain.value_objects import TenantContext
 from shared.schemas import APIResponse
 
-dc_challan_router = APIRouter(prefix="/asset-dc-challans", tags=["Asset - DC Challan"])
+dc_challan_router = APIRouter(prefix="/asset-dc-challans", tags=["Asset — DC Challan"])
 
 _CHUNK = 64 * 1024
 

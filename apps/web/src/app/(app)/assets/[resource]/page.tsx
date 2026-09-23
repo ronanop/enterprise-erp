@@ -10,7 +10,6 @@ import { AssetDepreciationWorkspace } from "@/components/assets/asset-depreciati
 import { AssetDisposalWorkspace } from "@/components/assets/asset-disposal-workspace";
 import { AssetMaintenanceWorkspace } from "@/components/assets/asset-maintenance-workspace";
 import { AssetRevaluationWorkspace } from "@/components/assets/asset-revaluation-workspace";
-import { AssetTransferWorkspace } from "@/components/assets/asset-transfer-workspace";
 import { AssetInsuranceWorkspace } from "@/components/assets/asset-insurance-workspace";
 import { AssetChecklistWorkspace } from "@/components/assets/asset-checklist-workspace";
 import { AssetMeterReadingWorkspace } from "@/components/assets/asset-meter-reading-workspace";
@@ -31,6 +30,7 @@ import { AssetOrgMasterWrapper } from "@/components/assets/asset-org-master-wrap
 import { AssetQrWorkspacePage } from "@/components/assets/asset-qr-workspace-page";
 import { AssetSettingsWorkspace } from "@/components/assets/asset-settings-workspace";
 import { AssetTypesWorkspace } from "@/components/assets/asset-types-workspace";
+import { AssetTransferRegister } from "@/components/assets/asset-transfer-register";
 import { getModule, getResource } from "@/config/modules";
 
 interface PageProps {
@@ -76,7 +76,11 @@ export default async function AssetsResourcePage({ params }: PageProps) {
   }
 
   if (resourceKey === "asset-transfers") {
-    return <AssetTransferWorkspace />;
+    return (
+      <Suspense fallback={null}>
+        <AssetTransferRegister />
+      </Suspense>
+    );
   }
 
   if (resourceKey === "asset-maintenances") {

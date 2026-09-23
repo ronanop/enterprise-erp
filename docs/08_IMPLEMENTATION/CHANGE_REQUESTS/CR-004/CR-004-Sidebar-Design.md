@@ -1,4 +1,4 @@
-# CR-004 - Sidebar Design (Locked)
+# CR-004 — Sidebar Design (Locked)
 
 **Module:** Assets (`/assets/*`)  
 **Alignment:** Replaces ad-hoc horizontal tabs; single vertical IA for IT Admin + asset accountants.
@@ -72,7 +72,7 @@ Settings                           → /assets/settings
 Operational views (Ready, Assigned, etc.) are **not** separate sidebar nodes in 3.1 freeze. Access via:
 
 - Dashboard KPI clicks
-- Optional future “Inventory” subsection under Assets (Phase 3.4) - **secondary** to KPI entry
+- Optional future “Inventory” subsection under Assets (Phase 3.4) — **secondary** to KPI entry
 
 If product adds subsection later:
 
@@ -88,7 +88,7 @@ Default freeze: **KPI + All Assets only** in sidebar; filtered views via dashboa
 
 ---
 
-## Icon mapping (Lucide - implementation reference)
+## Icon mapping (Lucide — implementation reference)
 
 | Item | Icon |
 |------|------|

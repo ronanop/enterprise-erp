@@ -1,6 +1,6 @@
 /**
  * Persist inventory view chrome across soft Issue/Return navigation.
- * No full page reload required - remount restores snapshot then refreshes data.
+ * No full page reload required — remount restores snapshot then refreshes data.
  */
 
 import type { InventoryPresetId } from "@/components/assets/inventory.types";

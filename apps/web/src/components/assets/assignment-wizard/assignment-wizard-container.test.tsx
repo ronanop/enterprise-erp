@@ -112,7 +112,7 @@ beforeEach(() => {
   );
 });
 
-describe("AssignmentWizardContainer - loading", () => {
+describe("AssignmentWizardContainer — loading", () => {
   it("shows wizard after lookups load", async () => {
     render(
       <AssignmentWizardContainer service={service} listEmployees={listEmployees} onCancel={vi.fn()} />,
@@ -217,7 +217,7 @@ describe("AssignmentWizardContainer - loading", () => {
   });
 });
 
-describe("AssignmentWizardContainer - draft create", () => {
+describe("AssignmentWizardContainer — draft create", () => {
   it("calls createDraft on Save draft", async () => {
     const user = userEvent.setup();
     render(
@@ -271,7 +271,7 @@ describe("AssignmentWizardContainer - draft create", () => {
   });
 });
 
-describe("AssignmentWizardContainer - draft update", () => {
+describe("AssignmentWizardContainer — draft update", () => {
   it("calls updateDraft when draft already loaded", async () => {
     const user = userEvent.setup();
     render(
@@ -322,7 +322,7 @@ describe("AssignmentWizardContainer - draft update", () => {
   });
 });
 
-describe("AssignmentWizardContainer - submit and activate", () => {
+describe("AssignmentWizardContainer — submit and activate", () => {
   it("create → submit → activate on Submit", async () => {
     const onSuccess = vi.fn();
     const user = userEvent.setup();
@@ -426,7 +426,7 @@ describe("AssignmentWizardContainer - submit and activate", () => {
   });
 });
 
-describe("AssignmentWizardContainer - cancel and UX", () => {
+describe("AssignmentWizardContainer — cancel and UX", () => {
   it("invokes onCancel", async () => {
     const onCancel = vi.fn();
     const user = userEvent.setup();
@@ -484,7 +484,7 @@ describe("AssignmentWizardContainer - cancel and UX", () => {
   });
 });
 
-describe("AssignmentWizardContainer - payload mapping", () => {
+describe("AssignmentWizardContainer — payload mapping", () => {
   it("maps delivery enrichment on create", async () => {
     const user = userEvent.setup();
     render(
@@ -524,7 +524,7 @@ describe("AssignmentWizardContainer - payload mapping", () => {
   });
 });
 
-describe("AssignmentWizardContainer - asset change", () => {
+describe("AssignmentWizardContainer — asset change", () => {
   it("blocks deep-link when asset is not in ready list", async () => {
     const user = userEvent.setup();
     listReadyAssets.mockResolvedValue(readyAssets());
@@ -603,7 +603,7 @@ describe("AssignmentWizardContainer - asset change", () => {
   });
 });
 
-describe("AssignmentWizardContainer - service contract", () => {
+describe("AssignmentWizardContainer — service contract", () => {
   it("never calls submitDraft on Save draft alone", async () => {
     const user = userEvent.setup();
     render(

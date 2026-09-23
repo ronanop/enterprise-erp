@@ -1,4 +1,4 @@
-"""FP-ASSET-015 regression guards - Checklist and Maintenance unchanged."""
+"""FP-ASSET-015 regression guards — Checklist and Maintenance unchanged."""
 
 from __future__ import annotations
 

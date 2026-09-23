@@ -1,4 +1,4 @@
-"""Startup checks for the asset-module storage backend."""
+"""Startup checks for the asset-module local storage backend."""
 
 from __future__ import annotations
 
@@ -14,18 +14,10 @@ _EPHEMERAL_PREFIXES = ("/tmp", "/var/tmp", "/app")
 
 
 def validate_asset_storage_on_startup() -> None:
-    """Probe configured storage. Log loudly on failure; do not raise."""
+    """Probe the configured storage path. Log loudly on failure; do not raise."""
     settings = get_settings()
     backend = (settings.asset_storage_backend or "local").strip().lower()
-    object_backend = (settings.object_storage_backend or "local").strip().lower()
-    if backend == "local" and object_backend == "s3" and settings.s3_configured:
-        backend = "s3"
-
-    if backend == "s3":
-        _validate_s3(settings)
-        return
-
-    configured = str(settings.resolved_asset_storage_path)
+    configured = settings.asset_storage_path or "./var/asset-storage"
     try:
         root = Path(configured).expanduser().resolve()
     except OSError as exc:
@@ -37,7 +29,8 @@ def validate_asset_storage_on_startup() -> None:
         )
         return
 
-    _warn_if_ephemeral(configured, root)
+    if backend == "local":
+        _warn_if_ephemeral(configured, root)
 
     try:
         root.mkdir(parents=True, exist_ok=True)
@@ -60,22 +53,6 @@ def validate_asset_storage_on_startup() -> None:
         )
 
 
-def _validate_s3(settings) -> None:
-    if not settings.s3_configured:
-        logger.error(
-            "ASSET_STORAGE_BACKEND=s3 but S3_BUCKET / S3_REGION are not set. "
-            "Uploads will fail until object storage is configured."
-        )
-        return
-    from core import object_storage
-
-    ok, detail = object_storage.head_ok()
-    if ok:
-        logger.info("Asset storage S3 OK (%s)", detail)
-    else:
-        logger.error("Asset storage S3 FAIL (%s)", detail)
-
-
 def _warn_if_ephemeral(configured: str, resolved: Path) -> None:
     text = str(resolved)
     relative = not Path(configured).expanduser().is_absolute()
@@ -87,7 +64,7 @@ def _warn_if_ephemeral(configured: str, resolved: Path) -> None:
     logger.warning(
         "ASSET_STORAGE_BACKEND=local at %s looks like process-local disk (relative "
         "path or typical container workdir). Files will be lost on redeploy and are "
-        "not shared across API replicas. Prefer OBJECT_STORAGE_BACKEND=s3 or mount "
-        "a persistent volume. See docs/asset-storage-deployment.md.",
+        "not shared across API replicas. Mount a persistent volume and set "
+        "ASSET_STORAGE_PATH to that absolute path. See docs/asset-storage-deployment.md.",
         resolved,
     )

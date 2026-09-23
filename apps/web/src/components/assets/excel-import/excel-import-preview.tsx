@@ -4,7 +4,12 @@ import type {
   ExcelImportPreviewRow,
   ExcelImportRowStatus,
 } from "@/components/assets/excel-import/excel-import.types";
-import { EmptyState } from "@/components/assets/shared";
+import {
+  EmptyState,
+  TABLE_SERIAL_HEADER_LABEL,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
 import { cn } from "@/lib/utils";
 
 export type ExcelImportPreviewGridProps = {
@@ -44,8 +49,10 @@ export function ExcelImportPreviewGrid({
       <table className="w-full min-w-[64rem] text-left text-sm">
         <thead className="bg-muted/40 text-xs text-muted-foreground">
           <tr>
-            <th className="px-2 py-2">Row</th>
-            <th className="px-2 py-2">Status</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="px-2 py-2">Status</th>
             <th className="px-2 py-2">Asset Tag</th>
             <th className="px-2 py-2">Laptop Name</th>
             <th className="px-2 py-2">Branch</th>
@@ -58,7 +65,7 @@ export function ExcelImportPreviewGrid({
         <tbody>
           {visible.map((row) => (
             <tr key={row.rowNumber} className="border-t border-border/40 align-top">
-              <td className="px-2 py-2 font-mono text-xs">{row.rowNumber}</td>
+              <td className={tableSerialCellClassName()}>{row.rowNumber}</td>
               <td className="px-2 py-2">
                 <span
                   className={cn(
@@ -69,14 +76,14 @@ export function ExcelImportPreviewGrid({
                   {row.status}
                 </span>
               </td>
-              <td className="px-2 py-2 font-mono text-xs">{row.values.assetTag ?? "-"}</td>
-              <td className="max-w-[10rem] truncate px-2 py-2">{row.values.laptopName ?? "-"}</td>
-              <td className="px-2 py-2">{row.values.branch ?? "-"}</td>
+              <td className="px-2 py-2 font-mono text-xs">{row.values.assetTag ?? "—"}</td>
+              <td className="max-w-[10rem] truncate px-2 py-2">{row.values.laptopName ?? "—"}</td>
+              <td className="px-2 py-2">{row.values.branch ?? "—"}</td>
               <td className="px-2 py-2 font-mono text-xs">
-                {row.values.operationalStatus ?? "-"}
+                {row.values.operationalStatus ?? "—"}
               </td>
-              <td className="px-2 py-2">{row.values.assetType ?? "-"}</td>
-              <td className="px-2 py-2 font-mono text-xs">{row.values.employeeId ?? "-"}</td>
+              <td className="px-2 py-2">{row.values.assetType ?? "—"}</td>
+              <td className="px-2 py-2 font-mono text-xs">{row.values.employeeId ?? "—"}</td>
               <td className="px-2 py-2 text-xs text-muted-foreground">
                 {row.issues.length === 0 ? (
                   <span className="text-emerald-700">OK</span>

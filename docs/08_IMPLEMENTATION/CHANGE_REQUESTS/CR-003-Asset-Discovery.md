@@ -1,4 +1,4 @@
-# CR-003 - Asset Discovery Module
+# CR-003 — Asset Discovery Module
 
 **Status:** Implemented  
 **Module:** Asset Management  

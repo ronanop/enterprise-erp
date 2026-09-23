@@ -22,9 +22,10 @@ from modules.foundation.domain.value_objects import TenantContext
 
 Ready = AssetOperationalStatus.READY_TO_MOVE.value
 Assigned = AssetOperationalStatus.ASSIGNED.value
+InMaintenance = AssetOperationalStatus.IN_MAINTENANCE.value
+Disposed = AssetOperationalStatus.DISPOSED.value
 Retired = AssetOperationalStatus.RETIRED.value
 Pending = AssetOperationalStatus.PENDING_DISPOSAL.value
-Disposed = AssetOperationalStatus.DISPOSED.value
 
 
 def _ctx() -> TenantContext:
@@ -69,18 +70,20 @@ def _engine():
     assignments = MagicMock()
     operational = MagicMock()
     components = MagicMock()
+    maintenances = MagicMock()
     engine = AssetExcelImportEngine(
         MagicMock(),
         assets=assets,
         assignments=assignments,
         operational=operational,
         components=components,
+        maintenances=maintenances,
     )
-    return engine, assets, assignments, operational, components
+    return engine, assets, assignments, operational
 
 
 def test_skips_invalid_preview_rows() -> None:
-    engine, assets, _, _, _ = _engine()
+    engine, assets, _, _ = _engine()
     result = engine.import_row(
         _ctx(),
         _row(preview_status="invalid"),
@@ -93,7 +96,7 @@ def test_skips_invalid_preview_rows() -> None:
 
 
 def test_skips_error_preview_alias() -> None:
-    engine, assets, _, _, _ = _engine()
+    engine, assets, _, _ = _engine()
     result = engine.import_row(
         _ctx(), _row(preview_status="error"), defaults=_defaults(), confirm_warnings=True
     )
@@ -102,7 +105,7 @@ def test_skips_error_preview_alias() -> None:
 
 
 def test_skips_warning_without_confirmation() -> None:
-    engine, assets, _, _, _ = _engine()
+    engine, assets, _, _ = _engine()
     result = engine.import_row(
         _ctx(),
         _row(preview_status="warning"),
@@ -116,7 +119,7 @@ def test_skips_warning_without_confirmation() -> None:
 
 
 def test_imports_warning_when_confirmed() -> None:
-    engine, assets, _, _, _ = _engine()
+    engine, assets, _, _ = _engine()
     asset_id = uuid4()
     assets.find_by_asset_code.return_value = None
     assets.find_by_serial_number.return_value = None
@@ -135,7 +138,7 @@ def test_imports_warning_when_confirmed() -> None:
 
 
 def test_duplicate_asset_tag_skips() -> None:
-    engine, assets, _, _, _ = _engine()
+    engine, assets, _, _ = _engine()
     existing_id = uuid4()
     assets.find_by_asset_code.return_value = SimpleNamespace(id=existing_id)
     result = engine.import_row(_ctx(), _row(), defaults=_defaults(), confirm_warnings=False)
@@ -146,7 +149,7 @@ def test_duplicate_asset_tag_skips() -> None:
 
 
 def test_duplicate_serial_skips() -> None:
-    engine, assets, _, _, _ = _engine()
+    engine, assets, _, _ = _engine()
     existing_id = uuid4()
     assets.find_by_asset_code.return_value = None
     assets.find_by_serial_number.return_value = SimpleNamespace(id=existing_id)
@@ -162,7 +165,7 @@ def test_duplicate_serial_skips() -> None:
 
 
 def test_empty_asset_tag_imports_with_auto_code() -> None:
-    engine, assets, _, _, _ = _engine()
+    engine, assets, _, _ = _engine()
     asset_id = uuid4()
     assets.find_by_serial_number.return_value = None
     assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
@@ -177,7 +180,7 @@ def test_empty_asset_tag_imports_with_auto_code() -> None:
 
 
 def test_invalid_operational_status_fails() -> None:
-    engine, assets, _, _, _ = _engine()
+    engine, assets, _, _ = _engine()
     result = engine.import_row(
         _ctx(),
         _row(operational_status="UNKNOWN"),
@@ -190,7 +193,7 @@ def test_invalid_operational_status_fails() -> None:
 
 
 def test_ready_to_move_create_submit_approve() -> None:
-    engine, assets, assignments, operational, _ = _engine()
+    engine, assets, assignments, operational = _engine()
     asset_id = uuid4()
     assets.find_by_asset_code.return_value = None
     assets.find_by_serial_number.return_value = None
@@ -209,7 +212,7 @@ def test_ready_to_move_create_submit_approve() -> None:
 
 
 def test_assigned_creates_employee_assignment_workflow() -> None:
-    engine, assets, assignments, _, _ = _engine()
+    engine, assets, assignments, _ = _engine()
     asset_id = uuid4()
     assignment_id = uuid4()
     employee_id = uuid4()
@@ -238,7 +241,7 @@ def test_assigned_creates_employee_assignment_workflow() -> None:
 
 
 def test_assigned_without_employee_fails() -> None:
-    engine, assets, _, _, _ = _engine()
+    engine, assets, _, _ = _engine()
     asset_id = uuid4()
     assets.find_by_asset_code.return_value = None
     assets.find_by_serial_number.return_value = None
@@ -255,78 +258,85 @@ def test_assigned_without_employee_fails() -> None:
     assert "employee_id" in (result.reason or "")
 
 
-def test_retired_via_employee_assign_and_return_outdated() -> None:
-    engine, assets, assignments, _, _ = _engine()
-    asset_id = uuid4()
-    assignment_id = uuid4()
-    employee_id = uuid4()
-    assets.find_by_asset_code.return_value = None
-    assets.find_by_serial_number.return_value = None
-    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
-    assets.submit.return_value = SimpleNamespace(id=asset_id)
-    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
-    assignments.create.return_value = SimpleNamespace(id=assignment_id)
-    assignments.submit.return_value = SimpleNamespace(id=assignment_id)
-    assignments.approve.return_value = SimpleNamespace(id=assignment_id)
+def test_legacy_retired_status_rejected() -> None:
+    engine, assets, _, _ = _engine()
     result = engine.import_row(
         _ctx(),
-        _row(operational_status=Retired, employee_id=employee_id),
+        _row(operational_status=Retired),
         defaults=_defaults(),
         confirm_warnings=False,
     )
-    assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
-    assert result.operational_status == Retired
-    assignments.return_assignment.assert_called_once()
-    assert assignments.return_assignment.call_args.kwargs["return_condition"] == "outdated"
+    assert result.outcome == ExcelImportRowOutcome.FAILED.value
+    assert "invalid_operational_status" in (result.reason or "")
+    assets.create_for_import.assert_not_called()
 
 
-def test_retired_without_employee_uses_branch_allocation() -> None:
-    engine, assets, assignments, _, _ = _engine()
-    asset_id = uuid4()
-    assignment_id = uuid4()
-    assets.find_by_asset_code.return_value = None
-    assets.find_by_serial_number.return_value = None
-    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
-    assets.submit.return_value = SimpleNamespace(id=asset_id)
-    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
-    assignments.create.return_value = SimpleNamespace(id=assignment_id)
-    assignments.submit.return_value = SimpleNamespace(id=assignment_id)
-    assignments.approve.return_value = SimpleNamespace(id=assignment_id)
-    result = engine.import_row(
-        _ctx(),
-        _row(operational_status=Retired, employee_id=None),
-        defaults=_defaults(),
-        confirm_warnings=False,
-    )
-    assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
-    assert assignments.create.call_args.kwargs["allocation_type"] == "branch"
-
-
-def test_pending_disposal_return_dead() -> None:
-    engine, assets, assignments, _, _ = _engine()
-    asset_id = uuid4()
-    assignment_id = uuid4()
-    assets.find_by_asset_code.return_value = None
-    assets.find_by_serial_number.return_value = None
-    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
-    assets.submit.return_value = SimpleNamespace(id=asset_id)
-    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
-    assignments.create.return_value = SimpleNamespace(id=assignment_id)
-    assignments.submit.return_value = SimpleNamespace(id=assignment_id)
-    assignments.approve.return_value = SimpleNamespace(id=assignment_id)
+def test_legacy_pending_disposal_status_rejected() -> None:
+    engine, assets, _, _ = _engine()
     result = engine.import_row(
         _ctx(),
         _row(operational_status=Pending),
         defaults=_defaults(),
         confirm_warnings=False,
     )
+    assert result.outcome == ExcelImportRowOutcome.FAILED.value
+    assert "invalid_operational_status" in (result.reason or "")
+    assets.create_for_import.assert_not_called()
+
+
+def test_in_maintenance_starts_via_maintenance_service() -> None:
+    engine, assets, _, _ = _engine()
+    asset_id = uuid4()
+    assets.find_by_asset_code.return_value = None
+    assets.find_by_serial_number.return_value = None
+    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
+    assets.submit.return_value = SimpleNamespace(id=asset_id)
+    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
+    engine._maintenances.start_from_asset.return_value = (
+        SimpleNamespace(id=uuid4()),
+        "started",
+        None,
+    )
+    result = engine.import_row(
+        _ctx(),
+        _row(
+            operational_status=InMaintenance,
+            maintenance_reason="Screen flicker",
+            expected_duration_days=7,
+        ),
+        defaults=_defaults(),
+        confirm_warnings=False,
+    )
     assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
-    assert result.operational_status == Pending
-    assert assignments.return_assignment.call_args.kwargs["return_condition"] == "dead"
+    assert result.operational_status == InMaintenance
+    engine._maintenances.start_from_asset.assert_called_once()
+    kwargs = engine._maintenances.start_from_asset.call_args.kwargs
+    assert kwargs["asset_id"] == asset_id
+    assert kwargs["reason"] == "Screen flicker"
+    assert kwargs["expected_duration_days"] == 7
+
+
+def test_in_maintenance_requires_reason() -> None:
+    engine, assets, _, _ = _engine()
+    asset_id = uuid4()
+    assets.find_by_asset_code.return_value = None
+    assets.find_by_serial_number.return_value = None
+    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
+    assets.submit.return_value = SimpleNamespace(id=asset_id)
+    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
+    result = engine.import_row(
+        _ctx(),
+        _row(operational_status=InMaintenance, maintenance_reason=None),
+        defaults=_defaults(),
+        confirm_warnings=False,
+    )
+    assert result.outcome == ExcelImportRowOutcome.FAILED.value
+    assert "maintenance_reason" in (result.reason or "")
+    engine._maintenances.start_from_asset.assert_not_called()
 
 
 def test_disposed_rejected_without_complete_disposal() -> None:
-    engine, assets, assignments, operational, _ = _engine()
+    engine, assets, assignments, operational = _engine()
     result = engine.import_row(
         _ctx(),
         _row(operational_status=Disposed),
@@ -341,7 +351,7 @@ def test_disposed_rejected_without_complete_disposal() -> None:
 
 
 def test_duplicate_registration_error_maps_to_duplicate() -> None:
-    engine, assets, _, _, _ = _engine()
+    engine, assets, _, _ = _engine()
     assets.find_by_asset_code.return_value = None
     assets.find_by_serial_number.return_value = None
     assets.create_for_import.side_effect = DuplicateAssetRegistrationError("dup")
@@ -350,7 +360,7 @@ def test_duplicate_registration_error_maps_to_duplicate() -> None:
 
 
 def test_unexpected_exception_maps_to_failed() -> None:
-    engine, assets, _, _, _ = _engine()
+    engine, assets, _, _ = _engine()
     assets.find_by_asset_code.return_value = None
     assets.find_by_serial_number.return_value = None
     assets.create_for_import.side_effect = RuntimeError("boom")
@@ -360,7 +370,7 @@ def test_unexpected_exception_maps_to_failed() -> None:
 
 
 def test_uses_row_category_over_defaults() -> None:
-    engine, assets, _, _, _ = _engine()
+    engine, assets, _, _ = _engine()
     cat = uuid4()
     asset_id = uuid4()
     assets.find_by_asset_code.return_value = None
@@ -378,7 +388,7 @@ def test_uses_row_category_over_defaults() -> None:
 
 
 def test_passes_serial_and_department() -> None:
-    engine, assets, _, _, _ = _engine()
+    engine, assets, _, _ = _engine()
     asset_id = uuid4()
     dept = uuid4()
     assets.find_by_asset_code.return_value = None
@@ -398,7 +408,7 @@ def test_passes_serial_and_department() -> None:
 
 
 def test_delivery_fields_on_assignment() -> None:
-    engine, assets, assignments, _, _ = _engine()
+    engine, assets, assignments, _ = _engine()
     asset_id = uuid4()
     assignment_id = uuid4()
     employee_id = uuid4()
@@ -428,12 +438,66 @@ def test_delivery_fields_on_assignment() -> None:
     assert kwargs["assignment_remarks"] == "note"
 
 
+def test_assigned_defaults_delivery_status_to_pending_when_blank() -> None:
+    engine, assets, assignments, _ = _engine()
+    asset_id = uuid4()
+    assignment_id = uuid4()
+    employee_id = uuid4()
+    assets.find_by_asset_code.return_value = None
+    assets.find_by_serial_number.return_value = None
+    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
+    assets.submit.return_value = SimpleNamespace(id=asset_id)
+    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
+    assignments.create.return_value = SimpleNamespace(id=assignment_id)
+    assignments.submit.return_value = SimpleNamespace(id=assignment_id)
+    assignments.approve.return_value = SimpleNamespace(id=assignment_id)
+    result = engine.import_row(
+        _ctx(),
+        _row(
+            operational_status=Assigned,
+            employee_id=employee_id,
+            delivery_reference_status=None,
+        ),
+        defaults=_defaults(),
+        confirm_warnings=False,
+    )
+    assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
+    kwargs = assignments.create.call_args.kwargs
+    assert kwargs["delivery_reference_status"] == "pending"
+
+
+def test_assigned_defaults_not_applicable_delivery_status_to_pending() -> None:
+    engine, assets, assignments, _ = _engine()
+    asset_id = uuid4()
+    assignment_id = uuid4()
+    employee_id = uuid4()
+    assets.find_by_asset_code.return_value = None
+    assets.find_by_serial_number.return_value = None
+    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
+    assets.submit.return_value = SimpleNamespace(id=asset_id)
+    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
+    assignments.create.return_value = SimpleNamespace(id=assignment_id)
+    assignments.submit.return_value = SimpleNamespace(id=assignment_id)
+    assignments.approve.return_value = SimpleNamespace(id=assignment_id)
+    engine.import_row(
+        _ctx(),
+        _row(
+            operational_status=Assigned,
+            employee_id=employee_id,
+            delivery_reference_status="not_applicable",
+        ),
+        defaults=_defaults(),
+        confirm_warnings=False,
+    )
+    assert assignments.create.call_args.kwargs["delivery_reference_status"] == "pending"
+
+
 @pytest.mark.parametrize(
     "status",
-    [Ready, Assigned, Retired, Pending],
+    [Ready, Assigned, InMaintenance],
 )
 def test_all_ops_statuses_accepted_as_targets(status: str) -> None:
-    engine, assets, assignments, operational, _ = _engine()
+    engine, assets, assignments, operational = _engine()
     asset_id = uuid4()
     assignment_id = uuid4()
     assets.find_by_asset_code.return_value = None
@@ -445,9 +509,15 @@ def test_all_ops_statuses_accepted_as_targets(status: str) -> None:
     assignments.create.return_value = SimpleNamespace(id=assignment_id)
     assignments.submit.return_value = SimpleNamespace(id=assignment_id)
     assignments.approve.return_value = SimpleNamespace(id=assignment_id)
+    engine._maintenances.start_from_asset.return_value = (
+        SimpleNamespace(id=uuid4()),
+        "started",
+        None,
+    )
     row = _row(
         operational_status=status,
         employee_id=uuid4() if status == Assigned else None,
+        maintenance_reason="Import maintenance" if status == InMaintenance else None,
     )
     result = engine.import_row(_ctx(), row, defaults=_defaults(), confirm_warnings=False)
     assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
@@ -457,7 +527,7 @@ def test_all_ops_statuses_accepted_as_targets(status: str) -> None:
 
 def test_never_calls_repo_directly() -> None:
     """Engine only talks to injected services (architecture guard)."""
-    engine, assets, assignments, operational, _ = _engine()
+    engine, assets, assignments, operational = _engine()
     assert not hasattr(engine, "_repo")
     assert engine._assets is assets
     assert engine._assignments is assignments
@@ -465,7 +535,7 @@ def test_never_calls_repo_directly() -> None:
 
 
 def test_create_for_import_receives_external_asset_code() -> None:
-    engine, assets, _, _, _ = _engine()
+    engine, assets, _, _ = _engine()
     asset_id = uuid4()
     assets.find_by_asset_code.return_value = None
     assets.find_by_serial_number.return_value = None
@@ -481,8 +551,70 @@ def test_create_for_import_receives_external_asset_code() -> None:
     assert assets.create_for_import.call_args.kwargs["asset_code"] == "TAG-9"
 
 
+def test_location_label_resolves_using_session_company_id() -> None:
+    """No body company_id: session ctx.company_id must resolve Asset Locations by name."""
+    from unittest.mock import patch
+
+    engine, assets, _, _ = _engine()
+    ctx = _ctx()
+    loc_id = uuid4()
+    asset_id = uuid4()
+    assets.find_by_asset_code.return_value = None
+    assets.find_by_serial_number.return_value = None
+    assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
+    assets.submit.return_value = SimpleNamespace(id=asset_id)
+    assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
+
+    with patch(
+        "modules.asset.service.excel_import_engine.SiteLocationRepository"
+    ) as repo_cls:
+        repo_cls.return_value.get_by_name.return_value = SimpleNamespace(
+            id=loc_id, name="Mumbai"
+        )
+        result = engine.import_row(
+            ctx,
+            _row(location_label="Mumbai", company_id=None),
+            defaults=_defaults(),
+            confirm_warnings=False,
+            company_id=None,
+        )
+
+    assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
+    repo_cls.return_value.get_by_name.assert_called_once()
+    call_args = repo_cls.return_value.get_by_name.call_args
+    assert call_args.args[1] == ctx.company_id
+    assert call_args.args[2] == "Mumbai"
+    assert assets.create_for_import.call_args.kwargs["location_id"] == loc_id
+    assert assets.create_for_import.call_args.kwargs["company_id"] == ctx.company_id
+
+
+def test_location_label_unknown_fails_clearly() -> None:
+    from unittest.mock import patch
+
+    engine, assets, _, _ = _engine()
+    assets.find_by_asset_code.return_value = None
+    assets.find_by_serial_number.return_value = None
+
+    with patch(
+        "modules.asset.service.excel_import_engine.SiteLocationRepository"
+    ) as repo_cls:
+        repo_cls.return_value.get_by_name.return_value = None
+        result = engine.import_row(
+            _ctx(),
+            _row(location_label="Atlantis"),
+            defaults=_defaults(),
+            confirm_warnings=False,
+        )
+
+    assert result.outcome == ExcelImportRowOutcome.FAILED.value
+    assert "Atlantis" in (result.reason or "")
+    assert "not found" in (result.reason or "").lower()
+    assert "Assets → Locations" in (result.reason or "")
+    assets.create_for_import.assert_not_called()
+
+
 def test_case_insensitive_preview_status() -> None:
-    engine, assets, _, _, _ = _engine()
+    engine, assets, _, _ = _engine()
     result = engine.import_row(
         _ctx(),
         _row(preview_status="INVALID"),
@@ -493,110 +625,8 @@ def test_case_insensitive_preview_status() -> None:
     assets.create_for_import.assert_not_called()
 
 
-def test_location_label_resolves_using_session_company_id() -> None:
-    """Excel Location name matches Locations master using session company_id."""
-    from unittest.mock import patch
-
-    engine, assets, _, _, _ = _engine()
-    ctx = _ctx()
-    loc_id = uuid4()
-    assets.find_by_asset_code.return_value = None
-    assets.find_by_serial_number.return_value = None
-    assets.create_for_import.return_value = SimpleNamespace(id=uuid4())
-    assets.submit.return_value = SimpleNamespace(id=uuid4())
-    assets.approve.return_value = SimpleNamespace(id=uuid4(), version=1)
-
-    site = SimpleNamespace(id=loc_id, name="Mumbai")
-    with patch(
-        "modules.asset.service.excel_import_engine.SiteLocationRepository"
-    ) as repo_cls:
-        repo_cls.return_value.get_by_name.return_value = site
-        result = engine.import_row(
-            ctx,
-            _row(location_label="Mumbai", location_id=None, company_id=None),
-            defaults=_defaults(),
-            confirm_warnings=False,
-            company_id=None,
-        )
-
-    assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
-    repo_cls.return_value.get_by_name.assert_called_once_with(ctx, ctx.company_id, "Mumbai")
-    kwargs = assets.create_for_import.call_args.kwargs
-    assert kwargs["company_id"] == ctx.company_id
-    assert kwargs["location_id"] == loc_id
-    assert kwargs["location_label"] == "Mumbai"
-
-
-def test_location_resolved_from_session_company_id() -> None:
-    """Alias kept for older callers / discovery."""
-    test_location_label_resolves_using_session_company_id()
-
-
-def test_location_label_unknown_fails_clearly() -> None:
-    from unittest.mock import patch
-
-    engine, assets, _, _, _ = _engine()
-    ctx = _ctx()
-    assets.find_by_asset_code.return_value = None
-    assets.find_by_serial_number.return_value = None
-
-    with patch(
-        "modules.asset.service.excel_import_engine.SiteLocationRepository"
-    ) as repo_cls:
-        repo_cls.return_value.get_by_name.return_value = None
-        result = engine.import_row(
-            ctx,
-            _row(location_label="Nowhere", location_id=None),
-            defaults=_defaults(),
-            confirm_warnings=False,
-            company_id=None,
-        )
-
-    assert result.outcome == ExcelImportRowOutcome.FAILED.value
-    assert "Location 'Nowhere' not found" in (result.reason or "")
-    assert "Assets → Locations" in (result.reason or "")
-    assert "company_id is required" not in (result.reason or "").lower()
-    assets.create_for_import.assert_not_called()
-
-
-def test_missing_location_name_gives_clear_error_not_company_id() -> None:
-    test_location_label_unknown_fails_clearly()
-
-
-def test_company_context_error_is_rewritten() -> None:
-    from core.exceptions import ForbiddenException
-    from unittest.mock import patch
-
-    engine, assets, _, _ = _engine()
-    ctx = TenantContext(
-        tenant_id=uuid4(),
-        user_id=uuid4(),
-        user_type="employee",
-        company_id=None,
-        branch_id=uuid4(),
-    )
-    with patch(
-        "modules.asset.service.excel_import_engine.AssetScopeValidator"
-    ) as scope_cls:
-        scope_cls.return_value.resolve_company_id.side_effect = ForbiddenException(
-            "Company context required"
-        )
-        result = engine.import_row(
-            ctx,
-            _row(location_label="Mumbai"),
-            defaults=_defaults(),
-            confirm_warnings=False,
-            company_id=None,
-        )
-
-    assert result.outcome == ExcelImportRowOutcome.FAILED.value
-    assert "Company context is required for import" in (result.reason or "")
-    assert "company_id is required" not in (result.reason or "").lower()
-    assets.create_for_import.assert_not_called()
-
-
 def test_passes_configuration_to_create_for_import() -> None:
-    engine, assets, _, _, components = _engine()
+    engine, assets, _, _ = _engine()
     asset_id = uuid4()
     assets.find_by_asset_code.return_value = None
     assets.find_by_serial_number.return_value = None
@@ -609,13 +639,15 @@ def test_passes_configuration_to_create_for_import() -> None:
         defaults=_defaults(),
         confirm_warnings=False,
     )
-    kwargs = assets.create_for_import.call_args.kwargs
-    assert kwargs["configuration"] == "Intel Core i5 / Gen 11 / 512 GB"
-    components.install.assert_not_called()
+    assert (
+        assets.create_for_import.call_args.kwargs["configuration"]
+        == "Intel Core i5 / Gen 11 / 512 GB"
+    )
+    engine._components.install.assert_not_called()
 
 
-def test_installs_type_only_charger_when_serial_present() -> None:
-    engine, assets, _, _, components = _engine()
+def test_installs_charger_component_when_serial_present() -> None:
+    engine, assets, _, _ = _engine()
     asset_id = uuid4()
     branch_id = uuid4()
     assets.find_by_asset_code.return_value = None
@@ -625,51 +657,51 @@ def test_installs_type_only_charger_when_serial_present() -> None:
     assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
     result = engine.import_row(
         _ctx(),
-        _row(branch_id=branch_id, charger_serial="  CHG12345  "),
+        _row(branch_id=branch_id, charger_serial="  CHG-1001  "),
         defaults=_defaults(),
         confirm_warnings=False,
     )
     assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
-    components.install.assert_called_once()
-    kwargs = components.install.call_args.kwargs
+    engine._components.install.assert_called_once()
+    kwargs = engine._components.install.call_args.kwargs
     assert kwargs["asset_id"] == asset_id
     assert kwargs["branch_id"] == branch_id
     assert kwargs["component_type"] == "CHARGER"
-    assert kwargs["serial_number"] == "CHG12345"
-    assert "component_asset_id" not in kwargs
+    assert kwargs["serial_number"] == "CHG-1001"
 
 
-def test_blank_charger_serial_skips_component_install() -> None:
-    engine, assets, _, _, components = _engine()
+def test_skips_charger_install_when_serial_blank() -> None:
+    engine, assets, _, _ = _engine()
     asset_id = uuid4()
     assets.find_by_asset_code.return_value = None
     assets.find_by_serial_number.return_value = None
     assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
     assets.submit.return_value = SimpleNamespace(id=asset_id)
     assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
-    engine.import_row(
+    result = engine.import_row(
         _ctx(),
         _row(charger_serial="   "),
         defaults=_defaults(),
         confirm_warnings=False,
     )
-    components.install.assert_not_called()
+    assert result.outcome == ExcelImportRowOutcome.IMPORTED.value
+    engine._components.install.assert_not_called()
 
 
 def test_charger_install_failure_fails_row() -> None:
-    engine, assets, _, _, components = _engine()
+    engine, assets, _, _ = _engine()
     asset_id = uuid4()
     assets.find_by_asset_code.return_value = None
     assets.find_by_serial_number.return_value = None
     assets.create_for_import.return_value = SimpleNamespace(id=asset_id)
     assets.submit.return_value = SimpleNamespace(id=asset_id)
     assets.approve.return_value = SimpleNamespace(id=asset_id, version=1)
-    components.install.side_effect = ValueError("serial_number is required for CHARGER components")
+    engine._components.install.side_effect = ValueError("charger serial required")
     result = engine.import_row(
         _ctx(),
-        _row(charger_serial="CHG-BAD"),
+        _row(charger_serial="CHG-X"),
         defaults=_defaults(),
         confirm_warnings=False,
     )
     assert result.outcome == ExcelImportRowOutcome.FAILED.value
-    assert "CHARGER" in (result.reason or "")
+    assert "charger serial required" in (result.reason or "")

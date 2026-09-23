@@ -1,4 +1,4 @@
-"""Phase 5D - Start Disposal (RETIRED → PENDING_DISPOSAL) unit tests."""
+"""Phase 5D — Start Disposal (RETIRED → PENDING_DISPOSAL) unit tests."""
 
 from contextlib import ExitStack
 from types import SimpleNamespace

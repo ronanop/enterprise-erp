@@ -1,4 +1,4 @@
-# CR-004 Phase 3.4B-1 - Inventory Interaction Layer
+# CR-004 Phase 3.4B-1 — Inventory Interaction Layer
 
 **Status:** Complete (components only)  
 **Location:** `apps/web/src/components/assets/inventory/interaction/`
@@ -9,9 +9,9 @@
 
 Reusable interaction UI for inventory rows:
 
-- `InventoryActionMenu` - View + overflow menu (permission-gated)
-- `AssetDetailDrawer` - right-side drawer with section components
-- `mapInventoryRowToDrawerData` - row → drawer DTO (no API)
+- `InventoryActionMenu` — View + overflow menu (permission-gated)
+- `AssetDetailDrawer` — right-side drawer with section components
+- `mapInventoryRowToDrawerData` — row → drawer DTO (no API)
 
 **Not in this phase:** routing, workflow launch, workspace wiring.
 
@@ -39,10 +39,10 @@ Reusable interaction UI for inventory rows:
 
 ## Tests
 
-`inventory-interaction.test.tsx` - run via `npm run test` in `apps/web`.
+`inventory-interaction.test.tsx` — run via `npm run test` in `apps/web`.
 
 ---
 
 ## Next
 
-**Phase 3.4B-2** - Wire menu + drawer into `AssetInventoryWorkspace` with navigation to existing modules.
+**Phase 3.4B-2** — Wire menu + drawer into `AssetInventoryWorkspace` with navigation to existing modules.

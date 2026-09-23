@@ -1,5 +1,5 @@
 /**
- * CR-004 Phase 5B-2B Task 5 - Query → container prop mapping (page hosts only).
+ * CR-004 Phase 5B-2B Task 5 — Query → container prop mapping (page hosts only).
  * Containers never import this; they remain URL-agnostic.
  */
 

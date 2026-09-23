@@ -44,14 +44,15 @@ describe("inventory reinstate / custody gates", () => {
     const ready = applyOperationalGatesToInventoryPermissions(base, "READY_TO_MOVE");
     expect(ready.reinstate).toBe(false);
     expect(ready.assign).toBe(true);
-    expect(ready.transfer).toBe(true);
+    expect(ready.transfer).toBe(false);
     expect(ready.maintenance).toBe(true);
   });
 
-  it("blocks transfer and maintenance while ASSIGNED", () => {
+  it("shows Transfer only while ASSIGNED; blocks maintenance", () => {
     const assigned = applyOperationalGatesToInventoryPermissions(base, "ASSIGNED");
     expect(assigned.return).toBe(true);
-    expect(assigned.transfer).toBe(false);
+    expect(assigned.transfer).toBe(true);
+    expect(assigned.assign).toBe(false);
     expect(assigned.maintenance).toBe(false);
     expect(assigned.reinstate).toBe(false);
   });

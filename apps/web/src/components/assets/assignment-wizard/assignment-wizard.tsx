@@ -58,10 +58,10 @@ export type AssignmentWizardProps = {
 
 const STEPS = ASSIGNMENT_FORM_SECTIONS;
 const STEP_HINTS: Record<string, string> = {
-  allocation: "Who receives this asset - directory employee or manual entry.",
+  allocation: "Who receives this asset — directory employee or manual entry.",
   asset: "Pick one Ready to Move asset for this issue.",
   "issued-items": "Optional accessories or attach an eligible asset as a component.",
-  delivery: "Most issues skip DC at handover - choose only if needed.",
+  delivery: "Most issues skip DC at handover — choose only if needed.",
   review: "Confirm details, then submit or save a draft.",
 };
 
@@ -136,7 +136,7 @@ export function AssignmentWizard({
   const stepMeta = STEPS[step];
   const isLast = step === STEPS.length - 1;
   const assetOptionsForReview: WizardSelectOption[] =
-    assets?.map((a) => ({ id: a.id, label: `${a.code} - ${a.label}` })) ?? [];
+    assets?.map((a) => ({ id: a.id, label: `${a.code} — ${a.label}` })) ?? [];
 
   return (
     <AssetsPremiumPage testId="assignment-issue-wizard">

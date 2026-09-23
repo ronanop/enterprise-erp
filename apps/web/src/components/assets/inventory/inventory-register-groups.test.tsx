@@ -24,6 +24,7 @@ const baseRow = (): InventoryRowViewModel => ({
   manufacturer: "Dell",
   model: "Latitude 5420",
   configuration: "i5 / 16GB / 512GB",
+  chargerCode: "CHG-12345",
   currentHolder: "Rahul Sharma",
   employeeId: "EMP-1024",
   department: "IT",
@@ -41,10 +42,10 @@ const baseRow = (): InventoryRowViewModel => ({
     phoneNumber: "9812345678",
     remarks: "Handle carefully",
     assignmentRemarks: "Handle carefully",
-    returnRemarks: "-",
+    returnRemarks: "—",
     accessories: [
       { typeLabel: "Charger", serialDisplay: "CHG-12345", componentName: "65W" },
-      { typeLabel: "Mouse", serialDisplay: "-" },
+      { typeLabel: "Mouse", serialDisplay: "—" },
     ],
   },
   assignmentHistory: [],
@@ -199,7 +200,7 @@ describe("resolveItRegistrationFields", () => {
   });
 });
 
-describe("mapAssetToInventoryRow - 4E sources", () => {
+describe("mapAssetToInventoryRow — 4E sources", () => {
   it("maps assignment enrichment and location without faking branch as location", () => {
     const row = mapAssetToInventoryRow(
       {
@@ -324,10 +325,10 @@ describe("mapAssetToInventoryRow - 4E sources", () => {
         employeeLookup: {},
       },
     );
-    expect(row.currentHolder).toBe("-");
-    expect(row.employeeId).toBe("-");
-    expect(row.issueDate).toBe("-");
-    expect(row.expandable.phoneNumber).toBe("-");
+    expect(row.currentHolder).toBe("—");
+    expect(row.employeeId).toBe("—");
+    expect(row.issueDate).toBe("—");
+    expect(row.expandable.phoneNumber).toBe("—");
     expect(row.activeAssignmentId).toBeNull();
     expect(row.assignmentAllocationType).toBeNull();
   });

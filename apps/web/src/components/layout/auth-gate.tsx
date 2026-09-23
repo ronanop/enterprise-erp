@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { WelcomeSplash } from "@/components/auth/welcome-splash";
 import { AuthSessionProvider } from "@/hooks/use-auth-user";
@@ -20,10 +20,18 @@ function AuthGatePlaceholder({ message }: { message: string }) {
   );
 }
 
+function safeNextPath(pathname: string | null, search: string): string | null {
+  if (!pathname || pathname === "/") return null;
+  const full = search ? `${pathname}?${search}` : pathname;
+  if (!full.startsWith("/") || full.startsWith("//")) return null;
+  return full;
+}
+
 /** Redirect unauthenticated visitors to login, then load a shared auth session. */
 export function AuthGate({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
   const [authed, setAuthed] = useState(false);
   const [welcome, setWelcome] = useState<WelcomeSplashPayload | null>(null);
@@ -36,9 +44,10 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!mounted || authed) return;
-    const next = pathname && pathname !== "/" ? `?next=${encodeURIComponent(pathname)}` : "";
+    const nextPath = safeNextPath(pathname, searchParams.toString());
+    const next = nextPath ? `?next=${encodeURIComponent(nextPath)}` : "";
     router.replace(`/login${next}`);
-  }, [pathname, router, mounted, authed]);
+  }, [pathname, searchParams, router, mounted, authed]);
 
   // If tokens are cleared mid-session (401), send user back to login.
   useEffect(() => {

@@ -1,5 +1,5 @@
 /**
- * CR-004 Phase 6 Sprint 1 - Excel register parity (read model only).
+ * CR-004 Phase 6 Sprint 1 — Excel register parity (read model only).
  * Derives display fields from existing assignment + asset payloads. No new APIs.
  */
 
@@ -13,6 +13,8 @@ export type RegisterAssignmentLike = {
   status?: string | null;
   employee_id?: string | null;
   assignee_label?: string | null;
+  /** Manual / non-directory assignee name when employee_id is absent. */
+  manual_employee_name?: string | null;
   allocated_at?: string | null;
   returned_at?: string | null;
   created_at?: string | null;
@@ -136,7 +138,7 @@ export const REGISTER_PARITY_FIELDS = [
 
 export type RegisterParityField = (typeof REGISTER_PARITY_FIELDS)[number];
 
-const EMPTY = "-";
+const EMPTY = "—";
 
 export const DELIVERY_REFERENCE_STATUS_LABELS: Record<string, string> = {
   not_applicable: "Not applicable",
@@ -230,13 +232,13 @@ export function formatDeliveryChallanSummary(
   status: string | null | undefined,
   signature: string | null | undefined,
 ): string {
-  const num = number?.trim() || "-";
+  const num = number?.trim() || "—";
   const st = formatDeliveryReferenceStatus(status);
   const sig = formatDeliveryChallanSignatureStatus(signature);
   if (st === EMPTY && (!signature || !String(signature).trim())) {
     return num;
   }
-  return `${num} · ${st === EMPTY ? "-" : st} · ${sig}`;
+  return `${num} · ${st === EMPTY ? "—" : st} · ${sig}`;
 }
 
 /** Excel-facing delivery challan cell: number, or status when N/A. */
@@ -278,18 +280,43 @@ export function groupAssignmentsByAssetId(
   return map;
 }
 
+/**
+ * Resolve the Assignee column display name (real person name).
+ * Prefer: assignee_label → displayName → label (code suffix stripped) → manual name.
+ * Never returns UUID / employee id / the word "Assigned".
+ */
 export function resolveAssigneeLabel(
   row: RegisterAssignmentLike | null | undefined,
   employeeLabels: Record<string, string> | EmployeeLookup = {},
 ): string {
   if (!row) return EMPTY;
+
   const fromApi = row.assignee_label?.trim();
   if (fromApi) return fromApi;
+
   const employeeId = row.employee_id ? String(row.employee_id) : "";
-  const labels = employeeLabelsFromLookup(asEmployeeLookup(employeeLabels));
-  if (employeeId && labels[employeeId]) return labels[employeeId];
-  if (employeeId) return employeeId;
+  if (employeeId) {
+    const entry = normalizeEmployeeLookup(asEmployeeLookup(employeeLabels))[employeeId];
+    if (entry) {
+      const display = entry.displayName?.trim();
+      if (display) return display;
+      const label = entry.label?.trim();
+      if (label) return stripEmployeeCodeSuffix(label);
+    }
+    const labels = employeeLabelsFromLookup(asEmployeeLookup(employeeLabels));
+    if (labels[employeeId]) return stripEmployeeCodeSuffix(labels[employeeId]!);
+  }
+
+  const manual = row.manual_employee_name?.trim();
+  if (manual) return manual;
+
   return EMPTY;
+}
+
+/** Remove trailing " (EMP-001)" / similar from directory labels for Assignee display. */
+function stripEmployeeCodeSuffix(label: string): string {
+  const stripped = label.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  return stripped || label;
 }
 
 /**
@@ -345,7 +372,7 @@ export type RegisterParityExpandable = {
   deliverySignature: string;
   deliveryChallanSummary: string;
   phoneNumber: string;
-  /** @deprecated Prefer assignmentRemarks - kept for Excel “Remarks” label. */
+  /** @deprecated Prefer assignmentRemarks — kept for Excel “Remarks” label. */
   remarks: string;
   assignmentRemarks: string;
   returnRemarks: string;
@@ -404,7 +431,7 @@ export function buildRegisterParityExpandable(
       current?.delivery_reference_status,
       current?.delivery_challan_signature_status,
     ),
-    // Phone only for current active/approved assignee - never from returned fallback.
+    // Phone only for current active/approved assignee — never from returned fallback.
     phoneNumber: resolveEmployeeMobile(
       active?.employee_id ? String(active.employee_id) : null,
       lookup,

@@ -13,22 +13,26 @@ import type {
 export const assetNavigationPaths = {
   inventory: assignmentNavigationPaths.inventory,
   details: (assetId: string) => `/assets/assets/${encodeURIComponent(assetId)}`,
+  edit: (assetId: string) => `/assets/assets/${encodeURIComponent(assetId)}/edit`,
   assignment: (assetId: string) => buildAssignmentWizardHref({ assetId }),
   returnAsset: (assetId: string) => buildReturnWizardHref({ assetId }),
   informationPortal: (assetId: string) =>
     `/assets/information-portal/${encodeURIComponent(assetId)}`,
-  discovery: (assetId: string) => `/assets/assets/${encodeURIComponent(assetId)}`,
+  /** Discovery UI lives on Information Portal — keep path alias for callers. */
+  discovery: (assetId: string) =>
+    `/assets/information-portal/${encodeURIComponent(assetId)}`,
   qr: (assetId: string) => `/assets/qr-barcode?assetId=${encodeURIComponent(assetId)}`,
   transfer: (assetId: string) =>
-    `/assets/asset-transfers?assetId=${encodeURIComponent(assetId)}`,
+    `/assets/asset-transfers/new?assetId=${encodeURIComponent(assetId)}`,
   maintenance: (assetId: string) =>
     `/assets/asset-maintenances?assetId=${encodeURIComponent(assetId)}`,
   disposal: (assetId?: string) =>
     assetId
       ? `/assets/asset-disposals?assetId=${encodeURIComponent(assetId)}`
       : "/assets/asset-disposals",
+  /** Assignment/activity history is surfaced via Information Portal. */
   history: (assetId: string) =>
-    `/assets/assets/${encodeURIComponent(assetId)}?tab=activity`,
+    `/assets/information-portal/${encodeURIComponent(assetId)}`,
   dcChallan: (assetId: string, assignmentId?: string) =>
     buildDcChallanHref({ assetId, assignmentId }),
 } as const;
@@ -38,6 +42,7 @@ export type AssetNavigateFn = (href: string) => void;
 export type AssetNavigation = {
   openInventory: () => void;
   openDetails: (assetId: string) => void;
+  openEdit: (assetId: string) => void;
   openAssignment: (assetId: string) => void;
   openReturn: (assetId: string) => void;
   openPortal: (assetId: string) => void;
@@ -54,6 +59,7 @@ export function createAssetNavigation(push: AssetNavigateFn): AssetNavigation {
   return {
     openInventory: () => push(assetNavigationPaths.inventory),
     openDetails: (assetId) => push(assetNavigationPaths.details(assetId)),
+    openEdit: (assetId) => push(assetNavigationPaths.edit(assetId)),
     openAssignment: (assetId) => push(assetNavigationPaths.assignment(assetId)),
     openReturn: (assetId) => push(assetNavigationPaths.returnAsset(assetId)),
     openPortal: (assetId) => push(assetNavigationPaths.informationPortal(assetId)),
@@ -77,6 +83,12 @@ export function dispatchInventoryMenuAction(
     case "viewDetails":
       navigation.openDetails(assetId);
       break;
+    case "edit":
+      navigation.openEdit(assetId);
+      break;
+    case "delete":
+      // Handled by inventory container (confirm + soft-delete API).
+      break;
     case "assign":
       navigation.openAssignment(assetId);
       break;
@@ -87,7 +99,8 @@ export function dispatchInventoryMenuAction(
       navigation.openPortal(assetId);
       break;
     case "discovery":
-      navigation.openDiscovery(assetId);
+      // Consolidated into Information Portal (Discovery section on that page).
+      navigation.openPortal(assetId);
       break;
     case "qr":
       navigation.openQr(assetId);
@@ -105,7 +118,8 @@ export function dispatchInventoryMenuAction(
       // Handled by inventory container (confirm + API).
       break;
     case "history":
-      navigation.openHistory(assetId);
+      // Consolidated into Information Portal (history sections on that page).
+      navigation.openPortal(assetId);
       break;
     default: {
       const _exhaustive: never = action;
@@ -124,13 +138,13 @@ export function dispatchInventoryQuickLink(
       navigation.openPortal(assetId);
       break;
     case "discovery":
-      navigation.openDiscovery(assetId);
+      navigation.openPortal(assetId);
       break;
     case "qr":
       navigation.openQr(assetId);
       break;
     case "history":
-      navigation.openHistory(assetId);
+      navigation.openPortal(assetId);
       break;
     default: {
       const _exhaustive: never = link;

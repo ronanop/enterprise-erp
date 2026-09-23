@@ -1,4 +1,4 @@
-# FP-ASSET-REG-001 - Remediation Report
+# FP-ASSET-REG-001 — Remediation Report
 
 **Date:** 2026-07-29  
 **Trigger:** Enterprise Code Review (REQUIRES CHANGES)
@@ -14,7 +14,7 @@
 
 ## Test results (post-remediation)
 
-`31 passed, 2 skipped` - skips: SQLite first-row threaded test, PostgreSQL when `TEST_DATABASE_URL` unset.
+`31 passed, 2 skipped` — skips: SQLite first-row threaded test, PostgreSQL when `TEST_DATABASE_URL` unset.
 
 ## PostgreSQL concurrency
 

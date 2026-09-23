@@ -30,6 +30,11 @@ import {
   EmptyState,
   StatCard,
   type BranchOption,
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableRowSerialFromIndex,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
 } from "@/components/assets/shared";
 import { listBranchOptions } from "@/lib/org-options";
 import { isAuthenticated } from "@/lib/auth";
@@ -60,7 +65,7 @@ function formatQty(value: number | string | null | undefined): string {
 }
 
 function formatDate(value?: string | null): string {
-  if (!value) return "-";
+  if (!value) return "—";
   return value.slice(0, 10);
 }
 
@@ -470,6 +475,9 @@ export function IncomingAssetsWorkspace() {
               <table className="w-full min-w-[56rem] text-left text-sm">
                 <thead className="border-b bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
                     <th className="px-3 py-2 font-medium">GRN</th>
                     <th className="px-3 py-2 font-medium">PO</th>
                     <th className="px-3 py-2 font-medium">Asset / Product</th>
@@ -484,13 +492,13 @@ export function IncomingAssetsWorkspace() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td className="px-3 py-10 text-center text-muted-foreground" colSpan={9}>
+                      <td className="px-3 py-10 text-center text-muted-foreground" colSpan={10}>
                         <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                       </td>
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-8" colSpan={9}>
+                      <td className="px-3 py-8" colSpan={10}>
                         <EmptyState
                           variant="no-queue"
                           title="No incoming assets"
@@ -500,7 +508,7 @@ export function IncomingAssetsWorkspace() {
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row) => {
+                    rows.map((row, index) => {
                       const selectedRow = selected?.id === row.id;
                       return (
                         <tr
@@ -510,6 +518,7 @@ export function IncomingAssetsWorkspace() {
                             selectedRow && "bg-muted/50",
                           )}
                         >
+                          <td className={tableSerialCellClassName()}>{tableRowSerial(page, pageSize, index)}</td>
                           <td className="px-3 py-2">
                             <div className="font-medium">{row.grn_document_number}</div>
                             <div className="text-xs text-muted-foreground">
@@ -517,7 +526,7 @@ export function IncomingAssetsWorkspace() {
                             </div>
                           </td>
                           <td className="px-3 py-2 font-mono text-xs">
-                            {row.po_document_number ?? "-"}
+                            {row.po_document_number ?? "—"}
                           </td>
                           <td className="px-3 py-2">
                             <div className="font-medium">
@@ -528,7 +537,7 @@ export function IncomingAssetsWorkspace() {
                             </div>
                           </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">
-                            {row.vendor_id ? row.vendor_id.slice(0, 8) : "-"}
+                            {row.vendor_id ? row.vendor_id.slice(0, 8) : "—"}
                           </td>
                           <td className="px-3 py-2 text-right tabular-nums">
                             {formatQty(row.expected_quantity)}
@@ -615,7 +624,7 @@ export function IncomingAssetsWorkspace() {
                   </div>
                   <div>
                     <div className="text-xs text-muted-foreground">PO</div>
-                    <div className="font-medium">{selected.po_document_number ?? "-"}</div>
+                    <div className="font-medium">{selected.po_document_number ?? "—"}</div>
                   </div>
                   <div>
                     <div className="text-xs text-muted-foreground">Date</div>
@@ -727,14 +736,18 @@ export function IncomingAssetsWorkspace() {
                         <table className="w-full text-left text-sm">
                           <thead className="bg-muted/40 text-xs text-muted-foreground">
                             <tr>
-                              <th className="px-2 py-1.5">Unit / Serial</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th className="px-2 py-1.5">Unit / Serial</th>
                               <th className="px-2 py-1.5">Status</th>
                               <th className="px-2 py-1.5">Action</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {(selected.units ?? []).map((unit) => (
+                            {(selected.units ?? []).map((unit, index) => (
                               <tr key={unit.id} className="border-t">
+                                <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
                                 <td className="px-2 py-1.5 font-mono text-xs">
                                   {unit.serial_number || `Unit ${unit.unit_index}`}
                                 </td>
@@ -756,7 +769,7 @@ export function IncomingAssetsWorkspace() {
                                       Arrive
                                     </Button>
                                   ) : (
-                                    <span className="text-xs text-muted-foreground">-</span>
+                                    <span className="text-xs text-muted-foreground">—</span>
                                   )}
                                 </td>
                               </tr>
@@ -783,7 +796,7 @@ export function IncomingAssetsWorkspace() {
         title="Confirm arrival"
         description={
           confirmPayload?.markAll
-            ? `Mark all remaining (${formatQty(pendingSelected)}) as arrived? This only records IT physical receiving - it does not create an asset.`
+            ? `Mark all remaining (${formatQty(pendingSelected)}) as arrived? This only records IT physical receiving — it does not create an asset.`
             : confirmPayload?.unitIndex != null
               ? `Mark unit ${confirmPayload.unitIndex} as arrived?`
               : `Mark quantity ${formatQty(confirmPayload?.quantity ?? 0)} as arrived? This does not create an asset record.`

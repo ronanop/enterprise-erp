@@ -1,4 +1,4 @@
-# CR-004 - Operational Status Transition Matrix
+# CR-004 — Operational Status Transition Matrix
 
 **Statuses (locked):** `READY_TO_MOVE`, `ASSIGNED`, `RETIRED`, `PENDING_DISPOSAL`, `DISPOSED`
 
@@ -10,8 +10,8 @@
 
 | Status | Terminal? |
 |--------|-----------|
-| `DISPOSED` | **Yes** - no outbound transitions |
-| `RETIRED` | **Effective terminal for assignment** - only allow move to `PENDING_DISPOSAL` or remain retired |
+| `DISPOSED` | **Yes** — no outbound transitions |
+| `RETIRED` | **Effective terminal for assignment** — only allow move to `PENDING_DISPOSAL` or remain retired |
 | Others | Non-terminal |
 
 ---
@@ -25,7 +25,7 @@
 | `READY_TO_MOVE` → `RETIRED` | Yes | IT Admin marks outdated (never assign) |
 | `ASSIGNED` → `RETIRED` | Yes | Return then retire, or forced retire policy |
 | `READY_TO_MOVE` → `PENDING_DISPOSAL` | Yes | Mark not working |
-| `ASSIGNED` → `PENDING_DISPOSAL` | Yes | Mark not working (may require return first - policy) |
+| `ASSIGNED` → `PENDING_DISPOSAL` | Yes | Mark not working (may require return first — policy) |
 | `RETIRED` → `PENDING_DISPOSAL` | Yes | Send to disposal pipeline |
 | `PENDING_DISPOSAL` → `DISPOSED` | Yes | Disposal document **posted** |
 | `PENDING_DISPOSAL` → `READY_TO_MOVE` | Conditional | Only if repair/reinstate policy (maintenance completed) |
@@ -70,9 +70,9 @@ OperationalStatusEngine (new, domain)
     ↑
 OperationalStatusValidator
     ↑
-AssetOperationalService (or extend AssetService - single write path)
+AssetOperationalService (or extend AssetService — single write path)
     ↑
 Router (thin)
 ```
 
-Assignment/Disposal services **call** operational transition hooks - do not set operational status from UI directly.
+Assignment/Disposal services **call** operational transition hooks — do not set operational status from UI directly.

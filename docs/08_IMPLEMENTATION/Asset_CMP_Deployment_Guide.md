@@ -1,4 +1,4 @@
-# Asset CMP - Deployment Guide
+# Asset CMP — Deployment Guide
 
 ## Prerequisites
 

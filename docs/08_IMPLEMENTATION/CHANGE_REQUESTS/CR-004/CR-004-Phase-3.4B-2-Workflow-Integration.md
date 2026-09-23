@@ -1,4 +1,4 @@
-# CR-004 Phase 3.4B-2 - Inventory Workflow Integration
+# CR-004 Phase 3.4B-2 — Inventory Workflow Integration
 
 **Status:** Complete  
 **Date:** 2026-08-03  
@@ -17,7 +17,7 @@ AssetNavigation (createAssetNavigation / useAssetNavigation)
 Existing Next.js routes / modules
 ```
 
-Interaction components emit `(action, asset)` only - **no routing inside UI**.
+Interaction components emit `(action, asset)` only — **no routing inside UI**.
 
 ---
 

@@ -28,7 +28,7 @@ describe("normalizeQueryId", () => {
   });
 });
 
-describe("parseAssignmentWizardQuery - Task 5 params", () => {
+describe("parseAssignmentWizardQuery — Task 5 params", () => {
   it("reads assetId", () => {
     expect(parseAssignmentWizardQuery(new URLSearchParams("assetId=asset-1")).assetId).toBe(
       "asset-1",
@@ -69,7 +69,7 @@ describe("parseAssignmentWizardQuery - Task 5 params", () => {
   });
 });
 
-describe("parseReturnWizardQuery - Task 5 params", () => {
+describe("parseReturnWizardQuery — Task 5 params", () => {
   it("reads assetId", () => {
     expect(parseReturnWizardQuery(new URLSearchParams("assetId=a1")).assetId).toBe("a1");
   });
@@ -270,7 +270,7 @@ describe("returnPropsFromSearchParams", () => {
   });
 });
 
-describe("buildIssueWizardHref - deep links", () => {
+describe("buildIssueWizardHref — deep links", () => {
   it("builds assetId only", () => {
     expect(buildIssueWizardHref({ assetId: "a1" })).toBe(
       "/assets/asset-assignments/new?assetId=a1",
@@ -295,7 +295,7 @@ describe("buildIssueWizardHref - deep links", () => {
   });
 });
 
-describe("buildReturnWizardHref - deep links", () => {
+describe("buildReturnWizardHref — deep links", () => {
   it("builds assetId + intent=return", () => {
     expect(buildReturnWizardHref({ assetId: "aid" })).toBe(
       "/assets/asset-assignments/return?assetId=aid&intent=return",

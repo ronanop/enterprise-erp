@@ -39,6 +39,7 @@ function sampleRow(overrides: Partial<InventoryRowViewModel> = {}): InventoryRow
     manufacturer: "Lenovo",
     model: "T14",
     configuration: "i7 · 16GB",
+    chargerCode: "",
     currentHolder: "Asha Nair",
     employeeId: "emp-1",
     department: "IT",
@@ -51,7 +52,7 @@ function sampleRow(overrides: Partial<InventoryRowViewModel> = {}): InventoryRow
       earlierUsedBy: "Priya",
       deliveryChallan: "DR-42",
       deliveryReferenceStatus: "Issued",
-      phoneNumber: "-",
+      phoneNumber: "—",
       remarks: "Handle carefully",
       assignmentRemarks: "Handle carefully",
       returnRemarks: "ok",
@@ -289,7 +290,7 @@ describe("fetchAllInventoryRowsForExport", () => {
     expect(rows[200].assetTag).toBe("AST-200");
   });
 
-  it("sends department_id to listAssets (server-side filter)", async () => {
+  it("does not send removed advanced filters such as department_id", async () => {
     const listAssets = vi.fn().mockResolvedValue({
       items: [
         {
@@ -316,7 +317,7 @@ describe("fetchAllInventoryRowsForExport", () => {
       deps: { listAssets, listAssignments },
     });
     expect(listAssets).toHaveBeenCalledWith(
-      expect.objectContaining({ department_id: "d1" }),
+      expect.not.objectContaining({ department_id: "d1" }),
     );
     expect(rows).toHaveLength(1);
     expect(rows[0].assetTag).toBe("A");
@@ -633,23 +634,23 @@ describe("workspace export wiring", () => {
   it("maps dash placeholders through", () => {
     const row = mapInventoryRowToExportRow(
       sampleRow({
-        currentHolder: "-",
+        currentHolder: "—",
         expandable: {
-          earlierUsedBy: "-",
-          deliveryChallan: "-",
-          deliveryReferenceStatus: "-",
-          phoneNumber: "-",
-          remarks: "-",
-          assignmentRemarks: "-",
-          returnRemarks: "-",
+          earlierUsedBy: "—",
+          deliveryChallan: "—",
+          deliveryReferenceStatus: "—",
+          phoneNumber: "—",
+          remarks: "—",
+          assignmentRemarks: "—",
+          returnRemarks: "—",
         },
       }),
     );
-    expect(row.currentHolder).toBe("-");
-    expect(row.earlierUsedBy).toBe("-");
+    expect(row.currentHolder).toBe("—");
+    expect(row.earlierUsedBy).toBe("—");
   });
 
-  it("filtered export query includes category", async () => {
+  it("filtered export query ignores removed category filter", async () => {
     const listAssets = vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 200 });
     await fetchAllInventoryRowsForExport({
       preset: "all",
@@ -667,7 +668,7 @@ describe("workspace export wiring", () => {
         listAssignments: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 200 }),
       },
     });
-    expect(listAssets.mock.calls[0][0].asset_category_id).toBe("cat-9");
+    expect(listAssets.mock.calls[0][0].asset_category_id).toBeUndefined();
   });
 
   it("filtered export query includes location header", async () => {
@@ -692,7 +693,7 @@ describe("workspace export wiring", () => {
     expect(listAssets.mock.calls[0][0].branch_id).toBeUndefined();
   });
 
-  it("sends asset_type to listAssets (server-side filter)", async () => {
+  it("does not send removed asset_type filter to listAssets", async () => {
     const listAssets = vi.fn().mockResolvedValue({
       items: [
         {
@@ -724,7 +725,9 @@ describe("workspace export wiring", () => {
         listAssignments: vi.fn().mockResolvedValue({ items: [], total: 0, page: 1, page_size: 200 }),
       },
     });
-    expect(listAssets).toHaveBeenCalledWith(expect.objectContaining({ asset_type_id: "type-uuid-1" }));
+    expect(listAssets).toHaveBeenCalledWith(
+      expect.not.objectContaining({ asset_type_id: "type-uuid-1" }),
+    );
     expect(rows).toHaveLength(1);
     expect(rows[0].assetTag).toBe("A");
   });

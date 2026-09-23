@@ -1,4 +1,4 @@
-"""IT Asset Type master - admin-manageable catalog for ast_asset.asset_type_id."""
+"""IT Asset Type master — admin-manageable catalog for ast_asset.asset_type_id."""
 
 from uuid import UUID, uuid4
 

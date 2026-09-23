@@ -52,7 +52,7 @@ export type InventoryExpandableFields = {
   deliverySignature?: string;
   deliveryChallanSummary?: string;
   phoneNumber: string;
-  /** @deprecated Prefer assignmentRemarks - kept for Excel “Remarks” label. */
+  /** @deprecated Prefer assignmentRemarks — kept for Excel “Remarks” label. */
   remarks: string;
   assignmentRemarks: string;
   returnRemarks: string;
@@ -67,10 +67,14 @@ export type InventoryRowViewModel = {
   manufacturer: string;
   model: string;
   configuration: string;
+  /** Charger component code only; empty string when absent (no placeholder). */
+  chargerCode: string;
   currentHolder: string;
   employeeId: string;
   department: string;
   branch: string;
+  /** Raw branch UUID for APIs that require branch_id (e.g. dispose). */
+  branchId: string;
   operationalStatus: string;
   lifecycleStatus: string;
   issueDate: string;
@@ -79,7 +83,7 @@ export type InventoryRowViewModel = {
   assignmentHistory: AssignmentHistoryEntryView[];
   /** Active assignment id when present (deep-link Case 1). */
   activeAssignmentId?: string | null;
-  /** Active assignment allocation_type - DC create is employee-only this phase. */
+  /** Active assignment allocation_type — DC create is employee-only this phase. */
   assignmentAllocationType?: string | null;
 };
 
@@ -101,38 +105,19 @@ export function buildInventoryListQuery(input: {
   page: number;
   page_size: number;
   q?: string;
-  branch_id?: string;
   operational_status?: string;
-  status?: string;
-  asset_category_id?: string;
-  asset_type_id?: string;
-  department_id?: string;
   location_id?: string;
-  assignment_state?: string;
 } {
-  const branchId =
-    input.filters.branchId !== BRANCH_ALL_VALUE ? input.filters.branchId : undefined;
-
   const operational = resolveOperationalStatusForQuery(input.preset, input.filters);
   const locationId =
-    input.headerLocationId !== BRANCH_ALL_VALUE
-      ? input.headerLocationId
-      : input.filters.locationId && input.filters.locationId !== BRANCH_ALL_VALUE
-        ? input.filters.locationId
-        : undefined;
+    input.headerLocationId !== BRANCH_ALL_VALUE ? input.headerLocationId : undefined;
 
   return {
     page: input.page,
     page_size: input.pageSize,
     q: input.filters.search.trim() || undefined,
-    branch_id: branchId,
     operational_status: operational,
-    status: input.filters.lifecycleStatus || undefined,
-    asset_category_id: input.filters.categoryId || undefined,
-    asset_type_id: input.filters.assetType || undefined,
-    department_id: input.filters.departmentId || undefined,
     location_id: locationId,
-    assignment_state: input.filters.assignmentState || undefined,
   };
 }
 
@@ -151,12 +136,12 @@ export { groupAssignmentsByAssetId };
 
 function discoveryManufacturer(asset: AssetsRow): string {
   const profile = parseDiscoveryProfile(asset);
-  return profile?.manufacturer?.trim() || "-";
+  return profile?.manufacturer?.trim() || "—";
 }
 
 function discoveryModel(asset: AssetsRow): string {
   const profile = parseDiscoveryProfile(asset);
-  return profile?.model?.trim() || "-";
+  return profile?.model?.trim() || "—";
 }
 
 export function persistedOrDiscovery(
@@ -185,9 +170,71 @@ export function configurationSummary(asset: AssetsRow): string {
     return asset.configuration.trim();
   }
   const profile = parseDiscoveryProfile(asset);
-  if (!profile) return "-";
+  if (!profile) return "—";
   const parts = [profile.cpu, profile.ram, profile.os_name].filter(Boolean);
-  return parts.length ? parts.join(" · ") : "-";
+  return parts.length ? parts.join(" · ") : "—";
+}
+
+const CONFIG_COLUMN_LABELS = ["Processor", "RAM", "Storage"] as const;
+
+/**
+ * All Assets Configuration column: Processor / RAM / Storage only.
+ * Excludes Generation, Charger, and other labels. Does not invent values.
+ */
+export function formatConfigurationColumn(raw: string | null | undefined): string {
+  if (!raw?.trim() || raw.trim() === "—") return "—";
+  const text = raw.trim();
+  const parts = text
+    .split(";")
+    .map((p) => p.trim())
+    .filter(Boolean);
+
+  const byLabel = new Map<string, string>();
+  let sawLabeled = false;
+  for (const part of parts) {
+    const m = /^(Processor|Generation|RAM|Storage|Charger)\s*:\s*(.+)$/i.exec(part);
+    if (!m) continue;
+    sawLabeled = true;
+    const key = m[1]!.toLowerCase();
+    const value = m[2]!.trim();
+    if (!value) continue;
+    if (key === "processor") byLabel.set("Processor", value);
+    else if (key === "ram") byLabel.set("RAM", value);
+    else if (key === "storage") byLabel.set("Storage", value);
+    // Generation / Charger intentionally omitted
+  }
+
+  if (sawLabeled) {
+    const lines = CONFIG_COLUMN_LABELS.filter((label) => byLabel.has(label)).map(
+      (label) => `${label}: ${byLabel.get(label)}`,
+    );
+    return lines.length > 0 ? lines.join("\n") : "—";
+  }
+
+  // Legacy unlabelled strings (e.g. discovery "i7 · 16GB") — show as-is, never inject Charger.
+  return text;
+}
+
+/**
+ * Charger column: code only when a charger accessory exists with a real code.
+ * Returns "" (blank cell) — never "—", "No", or "N/A".
+ */
+export function resolveInventoryChargerCode(
+  accessories: InventoryAccessoryLine[] | undefined | null,
+): string {
+  if (!accessories?.length) return "";
+  const charger = accessories.find((a) => {
+    const label = (a.typeLabel ?? "").trim().toLowerCase();
+    return label === "charger" || label.startsWith("charger ·") || label.startsWith("charger ");
+  });
+  if (!charger) return "";
+  const code = (charger.serialDisplay ?? "").trim();
+  if (!code) return "";
+  const lower = code.toLowerCase();
+  if (lower === "—" || lower === "-" || lower === "n/a" || lower === "na" || lower === "no") {
+    return "";
+  }
+  return code;
 }
 
 export function mapAssetToInventoryRow(
@@ -200,9 +247,10 @@ export function mapAssetToInventoryRow(
     ctx.assignmentHistoryByAssetId?.get(id) ??
     (assignment ? [assignment as RegisterAssignmentLike] : []);
   const employeeLookup: EmployeeLookup = ctx.employeeLookup ?? ctx.employeeLabels ?? {};
+  const accessories = ctx.accessoriesByAssetId?.get(id) ?? [];
   const expandable = {
     ...buildRegisterParityExpandable(history, employeeLookup),
-    accessories: ctx.accessoriesByAssetId?.get(id) ?? [],
+    accessories,
   };
   const branchKey = String(asset.branch_id ?? "");
   // Prefer active assignment department (custody); fall back to asset home dept.
@@ -215,35 +263,37 @@ export function mapAssetToInventoryRow(
   const operational =
     typeof asset.operational_status === "string" && asset.operational_status
       ? asset.operational_status
-      : "-";
-  const lifecycle = typeof asset.status === "string" ? asset.status : "-";
+      : "—";
+  const lifecycle = typeof asset.status === "string" ? asset.status : "—";
 
   const holderLabel = assignment
     ? resolveAssigneeLabel(assignment as RegisterAssignmentLike, employeeLookup)
-    : "-";
+    : "—";
   const employeeIdRaw = assignment?.employee_id ? String(assignment.employee_id) : "";
   const employeeCode = employeeIdRaw
     ? resolveEmployeeCode(employeeIdRaw, employeeLookup)
-    : "-";
+    : "—";
 
   const it = resolveItRegistrationFields(asset);
 
   return {
     id,
-    assetTag: String(asset.asset_code ?? asset.document_number ?? "-"),
-    laptopName: String(asset.asset_name ?? "-"),
+    assetTag: String(asset.asset_code ?? asset.document_number ?? "—"),
+    laptopName: String(asset.asset_name ?? "—"),
     serialNumber:
       typeof asset.serial_number === "string" && asset.serial_number.trim()
         ? asset.serial_number.trim()
-        : "-",
+        : "—",
     manufacturer: it.make,
     model: it.model,
-    configuration: it.configuration,
-    currentHolder: holderLabel === "-" && assignment ? "Assigned" : holderLabel,
+    configuration: formatConfigurationColumn(it.configuration),
+    chargerCode: resolveInventoryChargerCode(accessories),
+    currentHolder: holderLabel,
     // Prefer employee_code; do not show raw UUID when code is unavailable.
     employeeId: employeeCode,
-    department: ctx.departmentLabels[deptKey] ?? (deptKey ? deptKey.slice(0, 8) : "-"),
-    branch: ctx.branchLabels[branchKey] ?? (branchKey ? branchKey.slice(0, 8) : "-"),
+    department: ctx.departmentLabels[deptKey] ?? (deptKey ? deptKey.slice(0, 8) : "—"),
+    branch: ctx.branchLabels[branchKey] ?? (branchKey ? branchKey.slice(0, 8) : "—"),
+    branchId: branchKey,
     operationalStatus: operational,
     lifecycleStatus: lifecycle,
     // Issued Date = allocated_at only (system set on activation).
@@ -251,9 +301,9 @@ export function mapAssetToInventoryRow(
       ? formatIssuedDate(
           typeof assignment.allocated_at === "string" ? assignment.allocated_at : null,
         )
-      : "-",
-    // Prefer current ast_asset_location keyed by asset id - never fake with branch.
-    location: ctx.locationLabels[id] ?? "-",
+      : "—",
+    // Prefer current ast_asset_location keyed by asset id — never fake with branch.
+    location: ctx.locationLabels[id] ?? "—",
     expandable,
     assignmentHistory: mapAssignmentHistoryEntries(history, employeeLookup),
     activeAssignmentId: assignment?.id ? String(assignment.id) : null,

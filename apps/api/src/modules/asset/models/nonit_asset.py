@@ -1,4 +1,4 @@
-"""Non-IT asset inventory row - separate register from IT ast_asset."""
+"""Non-IT asset inventory row — separate register from IT ast_asset."""
 
 from datetime import date, datetime
 from decimal import Decimal
@@ -73,6 +73,6 @@ class AstNonitAsset(Base, *AstTransactionMixin):
     maintenance_provider: Mapped[str | None] = mapped_column(String(255), nullable=True)
     maintenance_cost: Mapped[Decimal | None] = mapped_column(Numeric(18, 4), nullable=True)
 
-    # Disposal (status = DISPOSED - terminal)
+    # Disposal (status = DISPOSED — terminal)
     disposal_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     disposal_date: Mapped[date | None] = mapped_column(Date, nullable=True)

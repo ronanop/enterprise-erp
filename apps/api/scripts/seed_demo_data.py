@@ -572,7 +572,7 @@ def main() -> None:
     try:
         tenant = get_or_create_bootstrap_tenant(db)
         users = seed_users(db, tenant)
-        admin = users["admin@example.com"]
+        admin = users.get("techbank@cachedigitech.com") or next(iter(users.values()))
         company, branch = seed_organization(db, tenant, admin)
         from scripts.platform_admin_employee import ensure_platform_admin_employee
 

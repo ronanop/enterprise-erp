@@ -1,4 +1,4 @@
-# ADR-ASSET-REG-001 - Asset Registration
+# ADR-ASSET-REG-001 — Asset Registration
 
 **Status:** Accepted  
 **Package:** FP-ASSET-REG-001  

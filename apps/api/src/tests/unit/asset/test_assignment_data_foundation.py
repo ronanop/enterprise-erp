@@ -1,4 +1,4 @@
-"""CR-004 Phase 5A-1 - assignment data foundation tests."""
+"""CR-004 Phase 5A-1 — assignment data foundation tests."""
 
 from __future__ import annotations
 

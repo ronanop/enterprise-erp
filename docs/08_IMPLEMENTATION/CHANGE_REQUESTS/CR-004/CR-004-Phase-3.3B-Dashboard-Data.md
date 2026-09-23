@@ -1,4 +1,4 @@
-# CR-004 Phase 3.3B - Asset Operations Dashboard (Live Data)
+# CR-004 Phase 3.3B — Asset Operations Dashboard (Live Data)
 
 **Status:** Complete  
 **Date:** 2026-08-03  
@@ -15,7 +15,7 @@ dashboard.mapper.ts (DTO → UI models)
 AssetOperationsDashboard (presentational)
 ```
 
-- **Fetch orchestration:** `asset-operations-fetch.ts` - `Promise.all` parallel reads.
+- **Fetch orchestration:** `asset-operations-fetch.ts` — `Promise.all` parallel reads.
 - **API client:** `assetOperationsService` in `assets-service.ts`.
 
 ---
@@ -53,7 +53,7 @@ Sort order for lists follows API defaults (`created_at` desc).
 
 ## Tests
 
-`npm run test` in `apps/web` - mapper, fetch, container, dashboard, shared components.
+`npm run test` in `apps/web` — mapper, fetch, container, dashboard, shared components.
 
 ---
 

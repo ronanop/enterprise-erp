@@ -1,4 +1,4 @@
-"""Asset report repository - snapshots + read-only aggregations (FP-ASSET-018).
+"""Asset report repository — snapshots + read-only aggregations (FP-ASSET-018).
 
 WRITE: ast_asset_report only.
 READ: other asset tables for aggregations (never mutated here).
@@ -19,6 +19,7 @@ from modules.asset.models import (
     AstAsset,
     AstAssetAssignment,
     AstAssetChecklist,
+    AstAssetComponent,
     AstAssetDepreciation,
     AstAssetDisposal,
     AstAssetDocument,
@@ -164,7 +165,7 @@ class AssetReportRepository(AstScopedRepository):
         self.db.flush()
         return row
 
-    # ── Read aggregations (operational tables - SELECT only) ──────────
+    # ── Read aggregations (operational tables — SELECT only) ──────────
 
     def _asset_base(self, ctx: TenantContext, filters: LiveReportFilters):
         stmt = select(AstAsset).where(
@@ -313,6 +314,183 @@ class AssetReportRepository(AstScopedRepository):
         )
         stmt = self.apply_ast_filter(stmt, AstAssetDepreciation, ctx, branch_scoped=False)
         return {str(s): int(c) for s, c in self.db.execute(stmt).all()}
+
+    def count_documents_by_type(
+        self, ctx: TenantContext, company_id: UUID
+    ) -> list[dict[str, Any]]:
+        stmt = (
+            select(AstAssetDocument.document_type, func.count())
+            .where(
+                AstAssetDocument.company_id == company_id,
+                AstAssetDocument.is_deleted.is_(False),
+            )
+            .group_by(AstAssetDocument.document_type)
+        )
+        stmt = self.apply_ast_filter(stmt, AstAssetDocument, ctx, branch_scoped=False)
+        rows = [
+            {"document_type": str(doc_type), "count": int(cnt)}
+            for doc_type, cnt in self.db.execute(stmt).all()
+        ]
+        return sorted(rows, key=lambda r: r["count"], reverse=True)
+
+    def count_documents_by_status(
+        self, ctx: TenantContext, company_id: UUID
+    ) -> dict[str, int]:
+        stmt = (
+            select(AstAssetDocument.status, func.count())
+            .where(
+                AstAssetDocument.company_id == company_id,
+                AstAssetDocument.is_deleted.is_(False),
+            )
+            .group_by(AstAssetDocument.status)
+        )
+        stmt = self.apply_ast_filter(stmt, AstAssetDocument, ctx, branch_scoped=False)
+        return {str(status): int(cnt) for status, cnt in self.db.execute(stmt).all()}
+
+    def count_assets_with_documents(self, ctx: TenantContext, company_id: UUID) -> int:
+        stmt = select(func.count(func.distinct(AstAssetDocument.asset_id))).where(
+            AstAssetDocument.company_id == company_id,
+            AstAssetDocument.is_deleted.is_(False),
+            AstAssetDocument.status == "active",
+        )
+        stmt = self.apply_ast_filter(stmt, AstAssetDocument, ctx, branch_scoped=False)
+        return int(self.db.scalar(stmt) or 0)
+
+    def count_components_by_type(
+        self, ctx: TenantContext, company_id: UUID
+    ) -> list[dict[str, Any]]:
+        stmt = (
+            select(AstAssetComponent.component_type, func.count())
+            .where(
+                AstAssetComponent.company_id == company_id,
+                AstAssetComponent.is_deleted.is_(False),
+            )
+            .group_by(AstAssetComponent.component_type)
+        )
+        stmt = self.apply_ast_filter(stmt, AstAssetComponent, ctx, branch_scoped=False)
+        rows = [
+            {"component_type": str(comp_type), "count": int(cnt)}
+            for comp_type, cnt in self.db.execute(stmt).all()
+        ]
+        return sorted(rows, key=lambda r: r["count"], reverse=True)
+
+    def count_components_by_status(
+        self, ctx: TenantContext, company_id: UUID
+    ) -> dict[str, int]:
+        stmt = (
+            select(AstAssetComponent.status, func.count())
+            .where(
+                AstAssetComponent.company_id == company_id,
+                AstAssetComponent.is_deleted.is_(False),
+            )
+            .group_by(AstAssetComponent.status)
+        )
+        stmt = self.apply_ast_filter(stmt, AstAssetComponent, ctx, branch_scoped=False)
+        return {str(status): int(cnt) for status, cnt in self.db.execute(stmt).all()}
+
+    def count_assignment_usage(
+        self, ctx: TenantContext, company_id: UUID
+    ) -> dict[str, int]:
+        active_stmt = select(func.count()).where(
+            AstAssetAssignment.company_id == company_id,
+            AstAssetAssignment.is_deleted.is_(False),
+            AstAssetAssignment.status == "active",
+        )
+        active_stmt = self.apply_ast_filter(
+            active_stmt, AstAssetAssignment, ctx, branch_scoped=False
+        )
+        closed_stmt = select(func.count()).where(
+            AstAssetAssignment.company_id == company_id,
+            AstAssetAssignment.is_deleted.is_(False),
+            AstAssetAssignment.status != "active",
+        )
+        closed_stmt = self.apply_ast_filter(
+            closed_stmt, AstAssetAssignment, ctx, branch_scoped=False
+        )
+        unique_stmt = select(
+            func.count(func.distinct(AstAssetAssignment.asset_id))
+        ).where(
+            AstAssetAssignment.company_id == company_id,
+            AstAssetAssignment.is_deleted.is_(False),
+            AstAssetAssignment.status == "active",
+        )
+        unique_stmt = self.apply_ast_filter(
+            unique_stmt, AstAssetAssignment, ctx, branch_scoped=False
+        )
+        return {
+            "active_assignments": int(self.db.scalar(active_stmt) or 0),
+            "closed_assignments": int(self.db.scalar(closed_stmt) or 0),
+            "assets_currently_assigned": int(self.db.scalar(unique_stmt) or 0),
+        }
+
+    def count_disposals_open(self, ctx: TenantContext, company_id: UUID) -> int:
+        stmt = select(func.count()).where(
+            AstAssetDisposal.company_id == company_id,
+            AstAssetDisposal.is_deleted.is_(False),
+            AstAssetDisposal.status.in_(["draft", "submitted", "approved"]),
+        )
+        stmt = self.apply_ast_filter(stmt, AstAssetDisposal, ctx, branch_scoped=False)
+        return int(self.db.scalar(stmt) or 0)
+
+    def count_assets_with_depreciation(self, ctx: TenantContext, company_id: UUID) -> int:
+        stmt = select(func.count(func.distinct(AstAssetDepreciation.asset_id))).where(
+            AstAssetDepreciation.company_id == company_id,
+            AstAssetDepreciation.is_deleted.is_(False),
+        )
+        stmt = self.apply_ast_filter(stmt, AstAssetDepreciation, ctx, branch_scoped=False)
+        return int(self.db.scalar(stmt) or 0)
+
+    def group_asset_registrations_by_month(
+        self, ctx: TenantContext, company_id: UUID, *, months: int = 6
+    ) -> list[dict[str, Any]]:
+        # Postgres date_trunc; fall back to empty if dialect lacks it.
+        month_bucket = func.date_trunc("month", AstAsset.created_at)
+        start = date.today().replace(day=1) - timedelta(days=31 * max(months - 1, 0))
+        stmt = (
+            select(month_bucket.label("month"), func.count())
+            .where(
+                AstAsset.company_id == company_id,
+                AstAsset.is_deleted.is_(False),
+                AstAsset.created_at >= start,
+            )
+            .group_by(month_bucket)
+            .order_by(month_bucket)
+        )
+        stmt = self.apply_ast_filter(stmt, AstAsset, ctx, branch_scoped=False)
+        rows: list[dict[str, Any]] = []
+        for month_val, cnt in self.db.execute(stmt).all():
+            label = (
+                month_val.date().isoformat()[:7]
+                if hasattr(month_val, "date")
+                else str(month_val)[:7]
+            )
+            rows.append({"month": label, "count": int(cnt)})
+        return rows
+
+    def count_assets_by_operational_status(
+        self, ctx: TenantContext, filters: LiveReportFilters
+    ) -> dict[str, int]:
+        stmt = (
+            select(AstAsset.operational_status, func.count())
+            .where(
+                AstAsset.company_id == filters.company_id,
+                AstAsset.is_deleted.is_(False),
+                AstAsset.operational_status.is_not(None),
+            )
+        )
+        if filters.branch_id is not None:
+            stmt = stmt.where(AstAsset.branch_id == filters.branch_id)
+        if filters.category_id is not None:
+            stmt = stmt.where(AstAsset.asset_category_id == filters.category_id)
+        if filters.department_id is not None:
+            stmt = stmt.where(AstAsset.department_id == filters.department_id)
+        stmt = self.apply_ast_filter(stmt, AstAsset, ctx, branch_scoped=False)
+        stmt = stmt.group_by(AstAsset.operational_status)
+        return {
+            str(status): int(cnt)
+            for status, cnt in self.db.execute(stmt).all()
+            if status
+        }
 
     def recent_transfers(
         self, ctx: TenantContext, company_id: UUID, *, limit: int = 10
@@ -520,6 +698,7 @@ class AssetReportRepository(AstScopedRepository):
         self, ctx: TenantContext, filters: LiveReportFilters, *, horizon_days: int = DEFAULT_HORIZON_DAYS
     ) -> dict[str, Any]:
         by_status = self.count_assets_by_status(ctx, filters)
+        by_operational = self.count_assets_by_operational_status(ctx, filters)
         total_assets = sum(by_status.values())
         assigned = self.count_active_assignments(ctx, filters.company_id)
         active = by_status.get("active", 0)
@@ -534,6 +713,45 @@ class AssetReportRepository(AstScopedRepository):
             ctx, filters.company_id, horizon_days=horizon_days
         )
         dep = self.count_depreciation_by_status(ctx, filters.company_id)
+
+        docs_by_type = self.count_documents_by_type(ctx, filters.company_id)
+        docs_by_status = self.count_documents_by_status(ctx, filters.company_id)
+        docs_total = sum(docs_by_status.values())
+        docs_active = docs_by_status.get("active", 0)
+        assets_with_docs = self.count_assets_with_documents(ctx, filters.company_id)
+        doc_coverage_pct = (
+            round((assets_with_docs / total_assets) * 100, 1) if total_assets else 0.0
+        )
+
+        comps_by_type = self.count_components_by_type(ctx, filters.company_id)
+        comps_by_status = self.count_components_by_status(ctx, filters.company_id)
+        comps_total = sum(comps_by_status.values())
+        comps_active = comps_by_status.get("active", 0)
+
+        usage = self.count_assignment_usage(ctx, filters.company_id)
+        assets_assigned = usage["assets_currently_assigned"]
+        utilization_pct = (
+            round((assets_assigned / total_assets) * 100, 1) if total_assets else 0.0
+        )
+        depreciating = self.count_assets_with_depreciation(ctx, filters.company_id)
+        open_disposals = self.count_disposals_open(ctx, filters.company_id)
+        registrations = self.group_asset_registrations_by_month(
+            ctx, filters.company_id, months=6
+        )
+
+        by_status_list = [
+            {"status": status, "count": count}
+            for status, count in sorted(
+                by_status.items(), key=lambda item: item[1], reverse=True
+            )
+        ]
+        by_operational_list = [
+            {"status": status, "count": count}
+            for status, count in sorted(
+                by_operational.items(), key=lambda item: item[1], reverse=True
+            )
+        ]
+
         return {
             "kpis": {
                 "asset_count": total_assets,
@@ -544,6 +762,59 @@ class AssetReportRepository(AstScopedRepository):
                 "insurance_expiry": insurance,
                 "disposed_assets": disposed,
                 "in_maintenance": in_maint,
+            },
+            "analytics_kpis": {
+                "document_count": docs_total,
+                "active_documents": docs_active,
+                "assets_with_documents": assets_with_docs,
+                "assets_without_documents": max(total_assets - assets_with_docs, 0),
+                "document_coverage_pct": doc_coverage_pct,
+                "component_count": comps_total,
+                "active_components": comps_active,
+                "assignment_utilization_pct": utilization_pct,
+                "assets_currently_assigned": assets_assigned,
+                "open_disposals": open_disposals,
+            },
+            "by_status": by_status_list,
+            "by_operational_status": by_operational_list,
+            "documents": {
+                "total": docs_total,
+                "by_type": docs_by_type,
+                "by_status": [
+                    {"status": status, "count": count}
+                    for status, count in sorted(
+                        docs_by_status.items(), key=lambda item: item[1], reverse=True
+                    )
+                ],
+                "coverage_pct": doc_coverage_pct,
+            },
+            "components": {
+                "total": comps_total,
+                "by_type": comps_by_type,
+                "by_status": [
+                    {"status": status, "count": count}
+                    for status, count in sorted(
+                        comps_by_status.items(), key=lambda item: item[1], reverse=True
+                    )
+                ],
+            },
+            "lifecycle": {
+                "stages": [
+                    {"stage": "Registered", "count": total_assets},
+                    {"stage": "Assigned", "count": assets_assigned},
+                    {"stage": "In maintenance", "count": in_maint},
+                    {"stage": "Depreciating", "count": depreciating},
+                    {"stage": "Disposed", "count": disposed},
+                ],
+                "open_maintenance": maint_due,
+                "open_disposals": open_disposals,
+                "depreciation_summary": dep,
+            },
+            "usage": {
+                **usage,
+                "utilization_pct": utilization_pct,
+                "available_assets": available,
+                "registrations_by_month": registrations,
             },
             "by_category": self.group_assets_by_category(ctx, filters),
             "by_department": self.group_assets_by_department(ctx, filters),

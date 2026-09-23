@@ -1,4 +1,4 @@
-# ADR-ASSET-SVH-001 - Asset Service History Management
+# ADR-ASSET-SVH-001 — Asset Service History Management
 
 **Status:** Accepted  
 **Date:** 2026-07-30  
@@ -22,7 +22,7 @@ Service history existed as a thin scaffold while maintenance complete already au
 | SVH-05 | RBAC = `asset.maintenance:read`, `:create` (no new resource) |
 | SVH-06 | Auto-create on `MaintenanceService.complete()` preserved |
 | SVH-07 | Manual POST requires completed maintenance; `asset_id` must match |
-| SVH-08 | Immutable - no PATCH endpoint |
+| SVH-08 | Immutable — no PATCH endpoint |
 | SVH-09 | Multiple rows per maintenance allowed |
 | SVH-10 | `serviced_at` defaults to `utcnow()` |
 | SVH-11 | `cost_amount` informational only |

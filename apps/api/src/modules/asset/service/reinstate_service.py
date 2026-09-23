@@ -1,4 +1,4 @@
-"""Phase 5E - PENDING_DISPOSAL → READY_TO_MOVE (Reinstate) governance.
+"""Phase 5E — PENDING_DISPOSAL → READY_TO_MOVE (Reinstate) governance.
 
 Recovery from the disposal queue after inspection. Does not change lifecycle status.
 AssetOperationalStatusService remains the sole ops writer.

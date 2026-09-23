@@ -10,29 +10,29 @@ import { EMPTY_INVENTORY_FILTERS } from "@/components/assets/shared";
 afterEach(() => cleanup());
 
 describe("listActiveInventoryFilterChips", () => {
-  it("omits operational status and empty defaults", () => {
+  it("only surfaces search chips after advanced filters were removed", () => {
     const chips = listActiveInventoryFilterChips({
       ...EMPTY_INVENTORY_FILTERS,
       operationalStatus: "ASSIGNED",
       branchId: "b1",
       search: "mac",
     }, { branches: [{ id: "b1", label: "Head Office" }] });
-    expect(chips.map((c) => c.key)).toEqual(["search", "branchId"]);
-    expect(chips[1]?.label).toBe("Branch: Head Office");
+    expect(chips.map((c) => c.key)).toEqual(["search"]);
+    expect(chips[0]?.label).toBe("Search: mac");
   });
 });
 
 describe("InventoryActiveFilterChips", () => {
-  it("dismisses a chip", async () => {
+  it("dismisses a search chip", async () => {
     const user = userEvent.setup();
     const onDismiss = vi.fn();
     render(
       <InventoryActiveFilterChips
-        filters={{ ...EMPTY_INVENTORY_FILTERS, lifecycleStatus: "active" }}
+        filters={{ ...EMPTY_INVENTORY_FILTERS, search: "dell" }}
         onDismiss={onDismiss}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /Remove filter Lifecycle: Active/ }));
-    expect(onDismiss).toHaveBeenCalledWith("lifecycleStatus");
+    await user.click(screen.getByRole("button", { name: /Remove filter Search: dell/ }));
+    expect(onDismiss).toHaveBeenCalledWith("search");
   });
 });

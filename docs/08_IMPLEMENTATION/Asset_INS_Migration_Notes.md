@@ -1,4 +1,4 @@
-# FP-ASSET-010 - Migration Notes
+# FP-ASSET-010 — Migration Notes
 
 ## Revision
 
@@ -12,7 +12,7 @@ Down revision: `0474_ast_warranty_governance`
 | CheckConstraint | Expand `ck_ast_asset_insurance_status` to include `draft`, `renewed` |
 | Index | Partial `ix_ast_asset_insurance_asset_status_open` on (`asset_id`,`status`) where `active`/`renewed` |
 | Permissions | Seed `asset.insurance:activate`, `:renew`, `:expire`, `:close` + role grants |
-| Document sequence | N/A - ERD has no insurance `document_number` |
+| Document sequence | N/A — ERD has no insurance `document_number` |
 
 ## Non-changes
 

@@ -1,6 +1,6 @@
 /**
  * Dashboard quick-action and queue "View all" navigation (CR-004).
- * Reuses inventory UI snapshot + existing assignment/asset routes - no new pages.
+ * Reuses inventory UI snapshot + existing assignment/asset routes — no new pages.
  */
 
 import type { InventoryPresetId } from "@/components/assets/inventory.types";

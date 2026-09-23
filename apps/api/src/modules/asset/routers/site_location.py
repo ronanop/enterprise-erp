@@ -13,8 +13,8 @@ from modules.asset.service.site_location_service import SiteLocationService
 from modules.foundation.domain.value_objects import TenantContext
 from shared.schemas import APIResponse
 
-site_locations_router = APIRouter(prefix="/site-locations", tags=["Asset - Site Locations"])
-site_buildings_router = APIRouter(prefix="/site-buildings", tags=["Asset - Site Buildings"])
+site_locations_router = APIRouter(prefix="/site-locations", tags=["Asset — Site Locations"])
+site_buildings_router = APIRouter(prefix="/site-buildings", tags=["Asset — Site Buildings"])
 
 
 class SiteLocationCreate(BaseModel):

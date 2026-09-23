@@ -1,6 +1,6 @@
-# CR-004 - Architecture Recommendation
+# CR-004 — Architecture Recommendation
 
-**Constraint:** Architecture Lock v1.1 - Router → Service → Validator → Engine → Repository. No cross-module DB access.
+**Constraint:** Architecture Lock v1.1 — Router → Service → Validator → Engine → Repository. No cross-module DB access.
 
 **Phase 1.1:** Architecture decisions below are **LOCKED**. See `CR-004-Decision-Log.md`.
 
@@ -21,9 +21,9 @@ Mixing the two dimensions is **forbidden**.
 ### Transition ownership
 
 - **Only** business workflows change operational status (assign, return, retire, mark not working, reinstate, disposal post, IT registration activate default).
-- **`AssetOperationalStatusEngine`** - allowed/blocked transitions, terminal rules; no I/O.
-- **`AssetOperationalStatusValidator`** - cross-check assignment, disposal, registration state.
-- **`AssetOperationalStatusService`** - **sole writer** to `operational_status`.
+- **`AssetOperationalStatusEngine`** — allowed/blocked transitions, terminal rules; no I/O.
+- **`AssetOperationalStatusValidator`** — cross-check assignment, disposal, registration state.
+- **`AssetOperationalStatusService`** — **sole writer** to `operational_status`.
 - **Direct PATCH** of `operational_status` on generic asset update APIs is **forbidden**. Use transition commands only (D-009).
 
 ### Naming (locked)
@@ -37,7 +37,7 @@ Mixing the two dimensions is **forbidden**.
 
 ### Current Holder
 
-- **Derived only** - never stored.
+- **Derived only** — never stored.
 - Source: active employee assignment when `operational_status == ASSIGNED`.
 - `custodian_employee_id` remains legacy denormalization; not IT SSOT (D-014).
 
@@ -53,7 +53,7 @@ Mixing the two dimensions is **forbidden**.
 
 ### Future (not in CR-004 core)
 
-- **Operational Timeline** UI - audit-based history presentation (post Phase 7).
+- **Operational Timeline** UI — audit-based history presentation (post Phase 7).
 
 ---
 
@@ -119,7 +119,7 @@ AssignmentService / DisposalService / Registration activate
 
 ## 4. Frontend architecture
 
-### Workspaces - impact summary
+### Workspaces — impact summary
 
 (Unchanged from Phase 1; all enhancements respect Architecture Lock above.)
 
@@ -179,6 +179,6 @@ Additive column, filters, transition endpoints. No breaking changes.
 
 | CR | Guardrail |
 |----|-----------|
-| CR-001 | Category guard uses registration `status` only - **not** ops status |
+| CR-001 | Category guard uses registration `status` only — **not** ops status |
 | CR-002 | Portal read-only |
 | CR-003 | Discovery apply excludes `operational_status` |

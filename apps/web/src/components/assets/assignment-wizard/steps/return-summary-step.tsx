@@ -38,7 +38,7 @@ export function ReturnSummaryStep({ summary = MOCK_RETURN_SUMMARY }: ReturnSumma
         </div>
       </dl>
       <p className="text-xs text-muted-foreground">
-        {summary === MOCK_RETURN_SUMMARY ? "Demo summary - live data loads in the workflow container." : null}
+        {summary === MOCK_RETURN_SUMMARY ? "Demo summary — live data loads in the workflow container." : null}
       </p>
     </div>
   );

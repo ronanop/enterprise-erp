@@ -1,4 +1,4 @@
-# CR-004 - Import Engine Architecture
+# CR-004 — Import Engine Architecture
 
 **Phase:** 8B  
 **Date:** 2026-08-05

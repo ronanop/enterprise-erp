@@ -1,4 +1,4 @@
-"""Asset operational dashboard summary (CR-004 Phase 2C) - read aggregation only."""
+"""Asset operational dashboard summary (CR-004 Phase 2C) — read aggregation only."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-# CR-004 Phase 7A - Excel Export Foundation
+# CR-004 Phase 7A — Excel Export Foundation
 
 **Date:** 2026-08-05  
 **Scope:** Inventory register export (Excel + CSV) only  
@@ -15,7 +15,7 @@ IT Admins can download the **same Asset Register** shown in Inventory, respectin
 ## Architecture
 
 ```text
-Inventory Workspace (Export dropdown - presentational)
+Inventory Workspace (Export dropdown — presentational)
         ↓
 Inventory Container (loading / success / error; applies current filters)
         ↓
@@ -52,7 +52,7 @@ Reuses **only** existing read APIs:
 
 **Client filters (same as inventory mapper):** department, asset type, location  
 
-**Pagination:** UI page size does **not** limit export. Client loops pages at **`page_size = 200`** (asset module `get_pagination` max `le=200`). Documented - **no new backend endpoint**.
+**Pagination:** UI page size does **not** limit export. Client loops pages at **`page_size = 200`** (asset module `get_pagination` max `le=200`). Documented — **no new backend endpoint**.
 
 ---
 

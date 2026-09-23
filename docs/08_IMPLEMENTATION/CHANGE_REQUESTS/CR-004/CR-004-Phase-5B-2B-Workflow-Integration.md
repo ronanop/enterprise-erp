@@ -1,8 +1,8 @@
-# CR-004 - Phase 5B-2B - Assignment Workflow Integration
+# CR-004 — Phase 5B-2B — Assignment Workflow Integration
 
 **Status:** Complete  
 **Date:** 2026-08-04  
-**Scope:** Frontend only - wire Issue/Return wizards to existing `/assets/asset-assignments` REST API.
+**Scope:** Frontend only — wire Issue/Return wizards to existing `/assets/asset-assignments` REST API.
 
 ---
 
@@ -42,11 +42,11 @@ No `fetch` or `resourceService` calls inside wizard step components.
 | Param | Issue wizard | Return wizard |
 |-------|--------------|---------------|
 | `assetId` | Prefill asset + load components | Resolve active assignment |
-| `draftId` | Load draft (draft status only) | - |
-| `employeeId` | Prefill employee step | - |
-| `submit=true` | After save on finish, submit + try approve | - |
-| `intent=return` | - | Semantic (inventory links) |
-| `assignmentId` | - | Direct assignment load |
+| `draftId` | Load draft (draft status only) | — |
+| `employeeId` | Prefill employee step | — |
+| `submit=true` | After save on finish, submit + try approve | — |
+| `intent=return` | — | Semantic (inventory links) |
+| `assignmentId` | — | Direct assignment load |
 
 Aliases: `asset_id`, `draft_id`, `employee_id`, `assignment_id`.
 
@@ -54,10 +54,10 @@ Aliases: `asset_id`, `draft_id`, `employee_id`, `assignment_id`.
 
 ## Workflow behavior
 
-1. **Save draft** - `POST` or `PATCH` assignment with enrichment fields; updates local `draftId` / `version`; stays on wizard.
-2. **Finish (issue)** - Same persist; if `submit` query set, calls `submit` then `approve` (approve errors ignored when workflow needs more steps).
-3. **Return** - `POST …/{id}/return` with `return_condition`, `return_remarks`, `reason`.
-4. **Inventory** - `buildIssueWizardHref` / `buildReturnWizardHref` used from `assetNavigationPaths`.
+1. **Save draft** — `POST` or `PATCH` assignment with enrichment fields; updates local `draftId` / `version`; stays on wizard.
+2. **Finish (issue)** — Same persist; if `submit` query set, calls `submit` then `approve` (approve errors ignored when workflow needs more steps).
+3. **Return** — `POST …/{id}/return` with `return_condition`, `return_remarks`, `reason`.
+4. **Inventory** — `buildIssueWizardHref` / `buildReturnWizardHref` used from `assetNavigationPaths`.
 
 ---
 
@@ -76,7 +76,7 @@ Vitest (jsdom) under `apps/web`:
 | `asset-navigation.test.ts` | Wizard paths |
 | `asset-inventory-navigation.test.tsx` | Assign menu → `/new` |
 
-**Target:** 50+ tests for this phase - **met** (90+ in assignment integration suites).
+**Target:** 50+ tests for this phase — **met** (90+ in assignment integration suites).
 
 ---
 

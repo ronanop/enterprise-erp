@@ -8,7 +8,7 @@ export type ConfigurationSectionProps = {
 };
 
 export function ConfigurationSection({ configuration, className }: ConfigurationSectionProps) {
-  const empty = !configuration || configuration === "-";
+  const empty = !configuration || configuration === "—";
 
   return (
     <DrawerSectionCard

@@ -1,7 +1,7 @@
-# CR-004 - Phase 1 Business Analysis
+# CR-004 — Phase 1 Business Analysis
 
 **Title:** IT Asset Operations & Inventory Management  
-**Phase:** 1 - Analysis & Architecture Planning (documentation only)  
+**Phase:** 1 — Analysis & Architecture Planning (documentation only)  
 **Baseline:** Architecture Lock v1.1, FP-ASSET-001 → FP-ASSET-019, CR-001 → CR-003  
 **Date:** 2026-08-03
 
@@ -15,7 +15,7 @@ This phase defines **what** to add and **how** it fits the locked architecture. 
 
 ---
 
-## 2. Customer process (Excel) - normalized view
+## 2. Customer process (Excel) — normalized view
 
 | Excel concept | Business meaning |
 |---------------|------------------|
@@ -76,7 +76,7 @@ These are **IT operations statuses**, distinct from but related to existing **`a
 
 1. **One asset row** in `ast_asset` per physical device; Excel rows map to asset + optional components (charger, accessories).
 2. **Employee identity** comes from `master_employee`; phone/name are not stored on assignment except via master read models.
-3. **Brand/model/configuration** come from product/vendor master, discovery JSON, or asset name - not a second laptop table.
+3. **Brand/model/configuration** come from product/vendor master, discovery JSON, or asset name — not a second laptop table.
 4. **Earlier used by** is **assignment history**, not a free-text column on the asset.
 5. **Ready To Move** requires: register `active` (or approved IT policy equivalent), operational `READY_TO_MOVE`, no active assignment.
 6. **Not Working** transitions to `PENDING_DISPOSAL`; disposal **post** sets operational `DISPOSED` and aligns with `AssetEngine.dispose`.
@@ -96,5 +96,5 @@ These are **IT operations statuses**, distinct from but related to existing **`a
 
 - ERD_15 Asset Management (`docs/06_ERD/ERD_15_Asset_Management.md`)
 - CR-001/002/003 change requests
-- `apps/api/src/modules/asset/domain/enums.py` - current lifecycle enums
+- `apps/api/src/modules/asset/domain/enums.py` — current lifecycle enums
 - Locked sidebar: `apps/web/src/config/assets.ts`

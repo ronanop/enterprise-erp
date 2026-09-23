@@ -1,4 +1,4 @@
-# FP-ASSET-014 - Asset Checklist Management (Feature Package)
+# FP-ASSET-014 — Asset Checklist Management (Feature Package)
 
 **Status:** Implemented  
 **ADR:** ADR-ASSET-CHK-001
@@ -10,8 +10,8 @@ Operational checklists linked to assets, maintenance work orders, or audits. Lif
 ## Lifecycle fidelity
 
 - **Draft:** fully editable (`PATCH` with optimistic locking).
-- **Complete:** `POST /{id}/complete` - requires all required `items_json` entries to have `result`.
-- **Cancel:** `POST /{id}/cancel` - draft only.
+- **Complete:** `POST /{id}/complete` — requires all required `items_json` entries to have `result`.
+- **Cancel:** `POST /{id}/cancel` — draft only.
 - Client cannot override `status` or `completed_at` via create/update.
 
 ## API (`/api/v1/assets/asset-checklists`)

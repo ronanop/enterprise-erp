@@ -2,22 +2,26 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Loader2, QrCode, Trash2, UserPlus, Wrench } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Loader2, Pencil, QrCode, Trash2, UserPlus, Wrench } from "lucide-react";
 
-import { openMaintenanceForAsset } from "@/components/assets/asset-maintenance-workspace";
-
+import { ItMaintenanceStartDialog } from "@/components/assets/it-maintenance-start-dialog";
+import { ItAssetDisposeDialog } from "@/components/assets/it-asset-dispose-dialog";
 import { AssetDiscoveryPanel } from "@/components/assets/asset-discovery-panel";
-import { StartDisposalConfirmDialog } from "@/components/assets/start-disposal-confirm-dialog";
-import { ReinstateConfirmDialog } from "@/components/assets/reinstate-confirm-dialog";
+import { DeleteAssetConfirmDialog } from "@/components/assets/delete-asset-confirm-dialog";
 import { buildReturnWizardHref } from "@/components/assets/navigation/assignment-navigation";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatusBadge } from "@/components/assets/shared";
 import {
-  canReinstateFromOperationalStatus,
+  StatusBadge,
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerialFromIndex,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+import {
   canStartDisposalFromOperationalStatus,
   isOpsBlockedForNormalOperations,
   isOpsBlockedForTransferOrMaintenance,
@@ -32,6 +36,7 @@ import {
   parseDiscoveryProfile,
   prdStatusLabel,
 } from "@/domain/asset-prd";
+import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { isAuthenticated } from "@/lib/auth";
 import {
   employeeDirectoryById,
@@ -66,11 +71,14 @@ type Tab = "overview" | "assignments" | "maintenance" | "documents" | "activity"
 
 function displayText(value: unknown): string {
   if (typeof value === "string" && value.trim()) return value.trim();
-  return "-";
+  return "—";
 }
 
 export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const { can } = useUserPermissions();
+  const canEditAsset = can("asset.asset:update");
   const [tab, setTab] = useState<Tab>("overview");
   const [asset, setAsset] = useState<AssetsRow | null>(null);
   const [assignments, setAssignments] = useState<AssetsRow[]>([]);
@@ -80,16 +88,22 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [startDisposalOpen, setStartDisposalOpen] = useState(false);
-  const [startDisposalSubmitting, setStartDisposalSubmitting] = useState(false);
-  const [startDisposalError, setStartDisposalError] = useState<string | null>(null);
-  const [reinstateOpen, setReinstateOpen] = useState(false);
-  const [reinstateSubmitting, setReinstateSubmitting] = useState(false);
-  const [reinstateError, setReinstateError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [employeeLookup, setEmployeeLookup] = useState<EmployeeLookup>({});
   const [currentLocationLabel, setCurrentLocationLabel] = useState<string | null>(null);
-  const [branchLabel, setBranchLabel] = useState<string>("-");
+  const [branchLabel, setBranchLabel] = useState<string>("—");
+  const [maintenanceOpen, setMaintenanceOpen] = useState(false);
   const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("saved") === "1") {
+      setActionSuccess("Asset updated successfully.");
+      router.replace(`/assets/assets/${assetId}`, { scroll: false });
+    }
+  }, [assetId, router, searchParams]);
 
   const load = useCallback(async () => {
     if (!isAuthenticated()) return;
@@ -136,7 +150,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
       setCurrentLocationLabel(currentLoc?.location_label ?? null);
       const branchId = String(row.branch_id ?? "");
       const branchMatch = branches.find((b) => b.id === branchId);
-      setBranchLabel(branchMatch?.label ?? (branchId ? branchId.slice(0, 8) : "-"));
+      setBranchLabel(branchMatch?.label ?? (branchId ? branchId.slice(0, 8) : "—"));
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load asset");
       setAsset(null);
@@ -164,36 +178,19 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
     [assignments],
   );
 
-  async function confirmStartDisposal() {
-    setStartDisposalSubmitting(true);
-    setStartDisposalError(null);
+  async function confirmDelete() {
+    setDeleteSubmitting(true);
+    setDeleteError(null);
     try {
-      const updated = await assetRegisterService.startDisposal(assetId);
-      setAsset(updated);
-      setStartDisposalOpen(false);
+      await assetRegisterService.softDelete(assetId);
+      setDeleteOpen(false);
+      router.push("/assets/assets");
     } catch (err) {
-      setStartDisposalError(
-        err instanceof ApiClientError ? err.message : "Could not start disposal",
+      setDeleteError(
+        err instanceof ApiClientError ? err.message : "Could not delete asset",
       );
     } finally {
-      setStartDisposalSubmitting(false);
-    }
-  }
-
-  async function confirmReinstate() {
-    setReinstateSubmitting(true);
-    setReinstateError(null);
-    try {
-      const updated = await assetRegisterService.reinstate(assetId);
-      setAsset(updated);
-      setReinstateOpen(false);
-      setActionSuccess("Asset reinstated and is Ready to Move.");
-    } catch (err) {
-      setReinstateError(
-        err instanceof ApiClientError ? err.message : "Could not reinstate asset",
-      );
-    } finally {
-      setReinstateSubmitting(false);
+      setDeleteSubmitting(false);
     }
   }
 
@@ -217,7 +214,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
       expandable,
       currentHolder: active
         ? resolveAssigneeLabel(active, employeeLookup)
-        : "-",
+        : "—",
       employeeId: resolveEmployeeCode(employeeId, employeeLookup),
       phone: resolveEmployeeMobile(employeeId, employeeLookup),
       issuedDate: formatIssuedDate(
@@ -230,7 +227,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
   }, [assignments, employeeLookup]);
 
   const itRegistration = useMemo(
-    () => (asset ? resolveItRegistrationFields(asset) : { make: "-", model: "-", configuration: "-" }),
+    () => (asset ? resolveItRegistrationFields(asset) : { make: "—", model: "—", configuration: "—" }),
     [asset],
   );
 
@@ -243,7 +240,6 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
   const opsBlocked = isOpsBlockedForNormalOperations(opsStatus);
   const transferMaintBlocked = isOpsBlockedForTransferOrMaintenance(opsStatus);
   const showStartDisposal = canStartDisposalFromOperationalStatus(opsStatus);
-  const showReinstate = canReinstateFromOperationalStatus(opsStatus);
   const opsHelp = operationalStatusHelpText(opsStatus);
   const returnHref = buildReturnWizardHref({ assetId, intent: "return" });
 
@@ -270,6 +266,35 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
         description={`${asset.asset_code ?? ""} · ${prdStatusLabel(prdStatus)}`}
         actions={
           <div className="flex flex-wrap gap-2">
+            {canEditAsset ? (
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="cursor-pointer transition-colors duration-200"
+                data-testid="asset-detail-edit"
+              >
+                <Link href={`/assets/assets/${assetId}/edit`}>
+                  <Pencil className="mr-1 size-4" aria-hidden />
+                  Edit Asset
+                </Link>
+              </Button>
+            ) : null}
+            {canEditAsset ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="cursor-pointer transition-colors duration-200"
+                data-testid="asset-detail-delete"
+                onClick={() => {
+                  setDeleteError(null);
+                  setDeleteOpen(true);
+                }}
+              >
+                <Trash2 className="mr-1 size-4" aria-hidden />
+                Delete Asset
+              </Button>
+            ) : null}
             {!opsBlocked && opsStatus.toUpperCase() === "READY_TO_MOVE" ? (
               <Button variant="outline" size="sm" asChild className="cursor-pointer">
                 <Link href={`/assets/asset-assignments/new?assetId=${assetId}`}>
@@ -302,12 +327,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
                 size="sm"
                 className="cursor-pointer"
                 disabled={maintenanceSubmitting}
-                onClick={() => {
-                  setMaintenanceSubmitting(true);
-                  void openMaintenanceForAsset(assetId, (href) => router.push(href)).finally(
-                    () => setMaintenanceSubmitting(false),
-                  );
-                }}
+                onClick={() => setMaintenanceOpen(true)}
               >
                 <Wrench className="mr-1 size-4" />
                 Maintenance
@@ -319,31 +339,13 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
                 size="sm"
                 className="cursor-pointer transition-colors duration-200"
                 data-testid="asset-detail-start-disposal"
-                onClick={() => {
-                  setStartDisposalError(null);
-                  setStartDisposalOpen(true);
-                }}
+                onClick={() => setStartDisposalOpen(true)}
               >
                 <Trash2 className="mr-1 size-4" aria-hidden />
-                Start Disposal
+                Dispose
               </Button>
             ) : null}
-            {showReinstate ? (
-              <Button
-                variant="default"
-                size="sm"
-                className="cursor-pointer transition-colors duration-200"
-                data-testid="asset-detail-reinstate"
-                onClick={() => {
-                  setReinstateError(null);
-                  setActionSuccess(null);
-                  setReinstateOpen(true);
-                }}
-              >
-                Reinstate
-              </Button>
-            ) : null}
-            {opsStatus.toUpperCase() === "PENDING_DISPOSAL" ? (
+            {opsStatus.toUpperCase() === "DISPOSED" ? (
               <Button variant="outline" size="sm" asChild className="cursor-pointer">
                 <Link href={`/assets/asset-disposals?assetId=${assetId}`}>
                   Open Disposal
@@ -423,7 +425,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
                       status={String(asset.operational_status)}
                     />
                   ) : (
-                    String(asset.operational_status ?? "-")
+                    String(asset.operational_status ?? "—")
                   )}
                 </span>
               </p>
@@ -435,7 +437,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
               <p>
                 <span className="text-muted-foreground">Lifecycle Status: </span>
                 <span data-testid="asset-detail-lifecycle-status">
-                  <StatusBadge kind="lifecycle" status={String(asset.status ?? "-")} />
+                  <StatusBadge kind="lifecycle" status={String(asset.status ?? "—")} />
                 </span>
               </p>
               {String(asset.status ?? "").toLowerCase() === "in_maintenance" ? (
@@ -513,7 +515,7 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
               <p>
                 <span className="text-muted-foreground">Current Location: </span>
                 <span data-testid="asset-detail-current-location">
-                  {currentLocationLabel?.trim() || "-"}
+                  {currentLocationLabel?.trim() || "—"}
                 </span>
               </p>
             </CardContent>
@@ -535,34 +537,37 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
               {components.length === 0 ? (
                 <p className="text-muted-foreground">No accessories assigned</p>
               ) : (
-                <ul className="m-0 grid list-none gap-2 p-0 sm:grid-cols-2">
-                  {components.map((c) => (
-                    <li
-                      key={c.id}
-                      className="rounded-md border border-border px-3 py-2 transition-colors duration-200"
-                    >
-                      <div className="font-medium">
-                        {c.linked_asset_code
-                          ? `${componentTypeLabel(c.component_type)} · ${c.linked_asset_code}`
-                          : componentTypeLabel(c.component_type)}
-                      </div>
-                      <div className="text-muted-foreground">
-                        {c.linked_asset_name || c.component_name}
-                      </div>
-                      {c.linked_asset_operational_status ? (
-                        <div className="text-xs text-muted-foreground">
-                          Ops: {c.linked_asset_operational_status}
-                        </div>
-                      ) : null}
-                      <div className="text-xs text-muted-foreground">
-                        S/N: {c.serial_number?.trim() || "-"}
-                      </div>
-                      <Badge variant="secondary" className="mt-1">
-                        {c.status}
-                      </Badge>
-                    </li>
-                  ))}
-                </ul>
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[280px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-xs text-muted-foreground">
+                        <th className="px-2 py-1.5 font-medium">Type</th>
+                        <th className="px-2 py-1.5 font-medium">Code</th>
+                        <th className="px-2 py-1.5 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {components.map((c) => (
+                        <tr key={c.id} className="border-b border-border/60 last:border-0">
+                          <td className="px-2 py-2 font-medium">
+                            {c.linked_asset_code
+                              ? `${componentTypeLabel(c.component_type)} · ${c.linked_asset_code}`
+                              : componentTypeLabel(c.component_type)}
+                          </td>
+                          <td className="px-2 py-2 font-mono text-xs text-muted-foreground">
+                            {c.component_code?.trim() ||
+                              c.serial_number?.trim() ||
+                              c.linked_asset_code ||
+                              "—"}
+                          </td>
+                          <td className="px-2 py-2">
+                            <Badge variant="secondary">{c.status}</Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -679,43 +684,70 @@ export function AssetDetailWorkspace({ assetId }: { assetId: string }) {
           </CardContent>
         </Card>
       ) : null}
-      <StartDisposalConfirmDialog
+      <ItMaintenanceStartDialog
+        open={maintenanceOpen}
+        asset={{
+          id: assetId,
+          assetCode: String(asset.asset_code ?? ""),
+          assetName: String(asset.asset_name ?? ""),
+        }}
+        submitting={maintenanceSubmitting}
+        onCancel={() => {
+          if (maintenanceSubmitting) return;
+          setMaintenanceOpen(false);
+        }}
+        onStarted={(result) => {
+          setMaintenanceSubmitting(false);
+          setMaintenanceOpen(false);
+          if (result.status === "approval_pending") {
+            setError(
+              result.message ??
+                "Submitted for approval. Another user must approve before maintenance can start.",
+            );
+            void load();
+            return;
+          }
+          setActionSuccess(
+            result.maintenance.asset_code
+              ? `${result.maintenance.asset_code} is now in maintenance.`
+              : "Asset is now in maintenance.",
+          );
+          router.push(
+            `/assets/asset-maintenances?maintenanceId=${encodeURIComponent(result.maintenance.id)}`,
+          );
+        }}
+      />
+      <ItAssetDisposeDialog
         open={startDisposalOpen}
         asset={{
           id: assetId,
           assetCode: String(asset.asset_code ?? ""),
           assetName: String(asset.asset_name ?? ""),
-          serialNumber: String(asset.serial_number ?? ""),
-          lifecycleStatus: String(asset.status ?? ""),
-          operationalStatus: String(asset.operational_status ?? ""),
+          branchId: String(asset.branch_id ?? ""),
         }}
-        submitting={startDisposalSubmitting}
-        error={startDisposalError}
-        onCancel={() => {
-          if (startDisposalSubmitting) return;
+        onCancel={() => setStartDisposalOpen(false)}
+        onDisposed={async () => {
           setStartDisposalOpen(false);
-          setStartDisposalError(null);
+          setActionSuccess("Asset disposed successfully.");
+          await load();
+          router.push("/assets/asset-disposals");
         }}
-        onConfirm={() => void confirmStartDisposal()}
       />
-      <ReinstateConfirmDialog
-        open={reinstateOpen}
+      <DeleteAssetConfirmDialog
+        open={deleteOpen}
         asset={{
           id: assetId,
           assetCode: String(asset.asset_code ?? ""),
           assetName: String(asset.asset_name ?? ""),
-          serialNumber: String(asset.serial_number ?? ""),
-          lifecycleStatus: String(asset.status ?? ""),
-          operationalStatus: String(asset.operational_status ?? ""),
         }}
-        submitting={reinstateSubmitting}
-        error={reinstateError}
+        submitting={deleteSubmitting}
+        error={deleteError}
         onCancel={() => {
-          if (reinstateSubmitting) return;
-          setReinstateOpen(false);
-          setReinstateError(null);
+          if (deleteSubmitting) return;
+          setDeleteOpen(false);
+          setDeleteError(null);
         }}
-        onConfirm={() => void confirmReinstate()}
+        onConfirm={() => void confirmDelete()}
       />
     </div>
   );
@@ -734,6 +766,9 @@ function AssignmentHistoryDetailList({
       <table className="w-full text-sm">
         <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
           <tr>
+            <th className={tableSerialHeaderClassName()} scope="col">
+              {TABLE_SERIAL_HEADER_LABEL}
+            </th>
             <th className="px-3 py-2">Document</th>
             <th className="px-3 py-2">Assignee</th>
             <th className="px-3 py-2">Status</th>
@@ -745,8 +780,9 @@ function AssignmentHistoryDetailList({
           </tr>
         </thead>
         <tbody>
-          {entries.map((row) => (
+          {entries.map((row, index) => (
             <tr key={row.id} className="border-t">
+              <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
               <td className="px-3 py-2 font-mono text-xs">{row.documentNumber}</td>
               <td className="px-3 py-2">{row.assigneeLabel}</td>
               <td className="px-3 py-2">{row.status}</td>
@@ -755,7 +791,7 @@ function AssignmentHistoryDetailList({
               <td className="px-3 py-2">
                 {row.deliveryChallanSummary ||
                   `${row.deliveryReferenceNumber}${
-                    row.deliveryReferenceStatus !== "-"
+                    row.deliveryReferenceStatus !== "—"
                       ? ` (${row.deliveryReferenceStatus})`
                       : ""
                   }`}
@@ -789,6 +825,9 @@ function HistoryList({
       <table className="w-full text-sm">
         <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
           <tr>
+            <th className={tableSerialHeaderClassName()} scope="col">
+              {TABLE_SERIAL_HEADER_LABEL}
+            </th>
             {columns.map((c) => (
               <th key={c} className="px-3 py-2 capitalize">
                 {c.replace(/_/g, " ")}
@@ -797,11 +836,12 @@ function HistoryList({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {rows.map((row, index) => (
             <tr key={String(row.id)} className="border-t">
+              <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
               {columns.map((c) => (
                 <td key={c} className="px-3 py-2">
-                  {String(row[c] ?? "-")}
+                  {String(row[c] ?? "—")}
                 </td>
               ))}
             </tr>

@@ -1,4 +1,4 @@
-"""Hardware inventory parser (CR-003) - pure domain, no DB access."""
+"""Hardware inventory parser (CR-003) — pure domain, no DB access."""
 
 from __future__ import annotations
 

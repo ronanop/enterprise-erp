@@ -1,4 +1,4 @@
-# Asset Location - Implementation Report (FP-ASSET-012)
+# Asset Location — Implementation Report (FP-ASSET-012)
 
 **Status:** Complete  
 **ADR:** ADR-ASSET-LOC-001  

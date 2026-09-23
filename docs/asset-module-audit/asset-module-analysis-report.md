@@ -1,4 +1,4 @@
-# Asset Management Module - Analysis Report
+# Asset Management Module — Analysis Report
 
 **Generated:** 2026-08-25  
 **Mode:** Static code analysis (read-only). Live API/UI was not executed in this pass.  
@@ -49,7 +49,7 @@
 
 **Tests:** `apps/api/src/tests/unit/asset/` (~100 files), `apps/api/src/tests/integration/asset/`, `apps/api/src/tests/security/asset/`
 
-**Migrations (asset schema / governance):** Alembic revisions `0246`-`0264` (core tables) and `0465`-`0494` (document sequence, governance, incoming, operational status, assignment components). Filename prefix `*_ast_*`.
+**Migrations (asset schema / governance):** Alembic revisions `0246`–`0264` (core tables) and `0465`–`0494` (document sequence, governance, incoming, operational status, assignment components). Filename prefix `*_ast_*`.
 
 ### Frontend files considered in-scope
 
@@ -72,7 +72,7 @@
 
 | File / package | Why uncertain |
 |---|---|
-| `apps/web/src/config/modules.ts` (`key: "assets"` block ~1161-1350) | Global module registry; also contains Master Data `md-assets` |
+| `apps/web/src/config/modules.ts` (`key: "assets"` block ~1161–1350) | Global module registry; also contains Master Data `md-assets` |
 | `apps/web/src/components/layout/app-shell.tsx`, `app-sidebar.tsx`, `app-topbar.tsx` | App chrome wrapping Asset pages |
 | `apps/web/src/components/module/resource-list-view.tsx` | Used by `AssetOrgMasterWrapper` for departments |
 | `apps/web/src/services/api-client.ts` | Shared HTTP client |
@@ -110,24 +110,24 @@ Asset Management is an operations-domain ERP module (`modules.ts` group `"operat
 
 | Sub-feature | Backend | Frontend (sidebar) | Frontend (routed, not in locked sidebar) |
 |---|---|---|---|
-| Dashboard / KPIs | `GET /assets/assets/dashboard-summary` | Yes | - |
+| Dashboard / KPIs | `GET /assets/assets/dashboard-summary` | Yes | — |
 | Asset register / inventory | CRUD + workflow | All Assets | Detail `/assets/assets/[id]` |
-| Incoming receiving | Incoming + arrive | Incoming Assets | - |
-| Incoming QC | QC start/accept/reject | Incoming QC | - |
-| Pending registration | Registration queue + Excel template | Pending Registration | - |
+| Incoming receiving | Incoming + arrive | Incoming Assets | — |
+| Incoming QC | QC start/accept/reject | Incoming QC | — |
+| Pending registration | Registration queue + Excel template | Pending Registration | — |
 | Add / register asset | POST + submit/approve | Add Asset | Prefill from incoming query params |
-| Categories | CRUD + deactivate/reactivate | Categories | - |
-| Asset types | Enum on `ast_asset.asset_type` | Asset Types (UI catalog only) | - |
-| Locations (config) | - | Locations (placeholder) | - |
-| Departments | Org master | Departments (org wrapper) | - |
+| Categories | CRUD + deactivate/reactivate | Categories | — |
+| Asset types | Enum on `ast_asset.asset_type` | Asset Types (UI catalog only) | — |
+| Locations (config) | — | Locations (placeholder) | — |
+| Departments | Org master | Departments (org wrapper) | — |
 | Assignment + return | Full workflow + components | Asset Assignment | Issue wizard, Return wizard |
-| Transfer | Full workflow | Transfers | - |
-| Maintenance WO | Full workflow | Maintenance | - |
+| Transfer | Full workflow | Transfers | — |
+| Maintenance WO | Full workflow | Maintenance | — |
 | Disposal | Full workflow + post | Disposal | Start-disposal / reinstate from inventory & detail |
-| Components | Install / replace / dispose / tree | Components | - |
-| Documents | CRUD + supersede/archive | Documents | - |
+| Components | Install / replace / dispose / tree | Components | — |
+| Documents | CRUD + supersede/archive | Documents | — |
 | QR / barcode | `qr_code` field on asset | QR / Barcode | Self-service + information portal |
-| Reports | Catalog / run / export / snapshots | Reports | - |
+| Reports | Catalog / run / export / snapshots | Reports | — |
 | Excel bulk import | `POST /assets/assets/import` | **Not in sidebar** | `/assets/inventory-import` |
 | Depreciation | Generate / calculate / post / reverse | No | `/assets/asset-depreciations` |
 | Revaluation | Workflow + post | No | `/assets/asset-revaluations` |
@@ -140,9 +140,9 @@ Asset Management is an operations-domain ERP module (`modules.ts` group `"operat
 | Meter readings | Create / void | No | `/assets/meter-readings` |
 | Notifications (asset table) | Mark read/sent/failed / archive | No | `/assets/asset-notifications` |
 | Asset location history | Create / complete (current vs historical) | No | `/assets/asset-locations` |
-| Settings | - | No | `/assets/settings` (copy-only) |
-| IT discovery | Command / parse / apply | - | Embedded on asset detail for IT categories |
-| Information portal / self-service | GET portal payloads | - | Dedicated routes |
+| Settings | — | No | `/assets/settings` (copy-only) |
+| IT discovery | Command / parse / apply | — | Embedded on asset detail for IT categories |
+| Information portal / self-service | GET portal payloads | — | Dedicated routes |
 
 Locked sidebar comment in `config/assets.ts`: *“Visible sidebar (`assetManagementNav`) is the CURRENT implemented scope only.”* Dashboard workspace groups (`assetsWorkspaceGroups`) still advertise Lifecycle (depreciation/revaluation) and Compliance (audits/warranties/insurance) that are routed but hidden from the rail.
 
@@ -179,7 +179,7 @@ All handlers use `Depends(require_permission(...))`. There are **no HTTP DELETE*
 
 Auth column = permission code passed to `require_permission`.
 
-#### Asset categories - prefix `/asset-categories`
+#### Asset categories — prefix `/asset-categories`
 
 | Method | Route | Purpose | Auth |
 |---|---|---|---|
@@ -190,7 +190,7 @@ Auth column = permission code passed to `require_permission`.
 | POST | `/{row_id}/deactivate` | Set inactive | `asset.category:update` |
 | POST | `/{row_id}/reactivate` | Set active | `asset.category:update` |
 
-#### Asset register - prefix `/assets`
+#### Asset register — prefix `/assets`
 
 | Method | Route | Purpose | Auth |
 |---|---|---|---|
@@ -216,7 +216,7 @@ Auth column = permission code passed to `require_permission`.
 | POST | `/{row_id}/start-disposal` | RETIRED → PENDING_DISPOSAL | `asset.disposal:create` |
 | POST | `/{row_id}/reinstate` | PENDING_DISPOSAL → READY_TO_MOVE | `asset.disposal:create` |
 
-#### Components - prefix `/asset-components`
+#### Components — prefix `/asset-components`
 
 | Method | Route | Purpose | Auth |
 |---|---|---|---|
@@ -229,7 +229,7 @@ Auth column = permission code passed to `require_permission`.
 | POST | `/{row_id}/replace` | Replace | `asset.component:update` |
 | POST | `/{row_id}/dispose` | Dispose component | `asset.component:update` |
 
-#### Assignments - prefix `/asset-assignments`
+#### Assignments — prefix `/asset-assignments`
 
 | Method | Route | Purpose | Auth |
 |---|---|---|---|
@@ -247,67 +247,67 @@ Auth column = permission code passed to `require_permission`.
 | POST | `/{row_id}/resubmit` | Resubmit | `asset.assignment:submit` |
 | POST | `/{row_id}/return` | Return with condition + component outcomes | `asset.assignment:return` |
 
-#### Transfers - prefix `/asset-transfers`
+#### Transfers — prefix `/asset-transfers`
 
 GET list/get, POST create, PATCH update, POST `{submit,approve,reject,cancel,reopen,resubmit}`. Permissions: `asset.transfer:read|create|update|submit|approve`.
 
-#### Locations (per-asset history) - prefix `/asset-locations`
+#### Locations (per-asset history) — prefix `/asset-locations`
 
 GET list/get, POST create, PATCH update, POST `{row_id}/complete`. Permissions: `asset.location:read|create|complete` (update uses create/complete family).
 
-#### Warranties - prefix `/asset-warranties`
+#### Warranties — prefix `/asset-warranties`
 
 CRUD + POST `{activate,extend,expire}`. Permissions `asset.warranty:*`.
 
-#### Insurance - prefix `/asset-insurances`
+#### Insurance — prefix `/asset-insurances`
 
 CRUD + POST `{activate,renew,expire,close}`. Permissions `asset.insurance:*`.
 
-#### Maintenance plans - prefix `/maintenance-plans`
+#### Maintenance plans — prefix `/maintenance-plans`
 
 CRUD + POST `{activate,pause,resume,close}`. Permissions `asset.maintenance_plan:*`.
 
-#### Maintenance work orders - prefix `/asset-maintenances`
+#### Maintenance work orders — prefix `/asset-maintenances`
 
 CRUD + POST `{submit,approve,reject,cancel,reopen,resubmit,schedule,start,complete}`. Permissions `asset.maintenance:*`.
 
-#### Service history - prefix `/service-histories`
+#### Service history — prefix `/service-histories`
 
 GET list/get, POST create. Auth: `asset.maintenance:read|create`. **No update/void.**
 
-#### Depreciation - prefix `/asset-depreciations`
+#### Depreciation — prefix `/asset-depreciations`
 
 GET list/get, POST create, POST `/generate-run`, PATCH update, POST `{calculate,post,reverse}`. Permissions `asset.depreciation:read|update|calculate|post`.
 
-#### Disposal - prefix `/asset-disposals`
+#### Disposal — prefix `/asset-disposals`
 
 GET list/get, POST create, PATCH update, POST `{submit,approve,reject,cancel,reopen,resubmit,post}`. Permissions `asset.disposal:*`.
 
-#### Revaluation - prefix `/asset-revaluations`
+#### Revaluation — prefix `/asset-revaluations`
 
 Same workflow pattern as disposal + `post`. Permissions `asset.revaluation:*`.
 
-#### Audits - prefix `/asset-audits`
+#### Audits — prefix `/asset-audits`
 
 CRUD + POST `{start,complete,cancel}`. Permissions `asset.audit:*`.
 
-#### Documents - prefix `/asset-documents`
+#### Documents — prefix `/asset-documents`
 
 CRUD + POST `{supersede,archive}`. Permissions `asset.document:*`.
 
-#### Checklists - prefix `/asset-checklists`
+#### Checklists — prefix `/asset-checklists`
 
 CRUD + POST `{complete,cancel}`. Permissions `asset.checklist:*`.
 
-#### Meter readings - prefix `/meter-readings`
+#### Meter readings — prefix `/meter-readings`
 
 GET list/get, POST create, POST `{row_id}/void`. **No PATCH.** Permissions `asset.meter:read|create|update`.
 
-#### Notifications (asset-owned rows) - prefix `/asset-notifications`
+#### Notifications (asset-owned rows) — prefix `/asset-notifications`
 
 CRUD + POST `{archive,mark-read,mark-sent,mark-failed}`. Permissions `asset.notification:*`.
 
-#### Reports - prefix `/reports`
+#### Reports — prefix `/reports`
 
 | Method | Route | Purpose | Auth |
 |---|---|---|---|
@@ -324,7 +324,7 @@ CRUD + POST `{archive,mark-read,mark-sent,mark-failed}`. Permissions `asset.noti
 
 Live `report_key` values (`AssetLiveReportKey`): `asset_summary`, `asset_inventory`, `asset_allocation`, `asset_transfers`, `asset_maintenance`, `maintenance_due`, `warranty_expiry`, `insurance_expiry`, `asset_depreciation`, `asset_disposal`, `asset_documents`, `asset_checklists`, `asset_meter_readings`, `asset_notifications`, `executive_dashboard`.
 
-#### Incoming assets - prefix `/incoming-assets`
+#### Incoming assets — prefix `/incoming-assets`
 
 | Method | Route | Purpose | Auth |
 |---|---|---|---|
@@ -338,7 +338,7 @@ Live `report_key` values (`AssetLiveReportKey`): `asset_summary`, `asset_invento
 | GET | `/{row_id}` | Incoming line | `asset.incoming:read` |
 | POST | `/{row_id}/arrive` | Mark arrival | `asset.incoming:receive` |
 
-#### Registration queue - prefix `/registration-queue`
+#### Registration queue — prefix `/registration-queue`
 
 | Method | Route | Purpose | Auth |
 |---|---|---|---|
@@ -408,7 +408,7 @@ PostgreSQL schema: **`asset`**. Table prefix: **`ast_`**. Mixins: tenant, compan
 | Document numbers | `document_number_service.py` | Prefixes AST-, AASN-, ATRF-, … (`CODE_PREFIXES`) |
 | Scope | `asset_scope_validator.py` | Tenant/company/branch access |
 
-Category list handler paginates **in memory** after `AssetCategoryService.list` returns the full set (`total = len(items)` in `routers/__init__.py` ~194-198). Other aggregates use repository `search(..., offset, limit)` returning `(items, total)`.
+Category list handler paginates **in memory** after `AssetCategoryService.list` returns the full set (`total = len(items)` in `routers/__init__.py` ~194–198). Other aggregates use repository `search(..., offset, limit)` returning `(items, total)`.
 
 ### 2.5 Background jobs, webhooks, integrations
 
@@ -555,7 +555,7 @@ AssignmentWizardContainer
 **Typical document workspace** (assignment, transfer, maintenance, disposal, …): list + filters + pagination + create panel/modal + selected-row actions (submit/approve/reject/…). Pattern repeated across `asset-*-workspace.tsx` files; local `useState` for rows, selected, draft, filters.
 
 **Asset detail `/assets/assets/[assetId]`:**  
-`AssetDetailWorkspace` - header/status, register fields, assignment snapshot, discovery panel (IT categories), start-disposal / reinstate dialogs, links to QR and issue/return.
+`AssetDetailWorkspace` — header/status, register fields, assignment snapshot, discovery panel (IT categories), start-disposal / reinstate dialogs, links to QR and issue/return.
 
 ### 3.3 State management
 
@@ -571,7 +571,7 @@ AssignmentWizardContainer
 | Form | Steps | Validation | Library |
 |---|---|---|---|
 | Add Asset | **1 page**, 3+ sections (Basic, IT Information, Location, purchase) | Custom `validate()` + `fieldErrors`; inline messages | Native controlled inputs + ShadCN Select. **Not** react-hook-form / Zod |
-| Issue assignment wizard | **5 steps** (`ASSIGNMENT_WIZARD_STEPS`) | Per-step `validateAssignmentStep`; finish re-validates steps 0-3 | Local state |
+| Issue assignment wizard | **5 steps** (`ASSIGNMENT_WIZARD_STEPS`) | Per-step `validateAssignmentStep`; finish re-validates steps 0–3 | Local state |
 | Return wizard | **5 steps** (`RETURN_WIZARD_STEPS`) | `validateReturnStep` is effectively a no-op (`null`) | Local state |
 | Excel import | **6 named steps** (select, parse, template, mapping, validate, preview) | Client template/row validator then API import | `xlsx` parse + local mapping |
 | Document workspaces (create) | Usually **1 panel/modal** on the list page | Ad-hoc required fields / API 422 | Local state |
@@ -611,18 +611,18 @@ Add Asset submit path (`asset-add-form.tsx` `submit()`): `create` → `submit` �
 
 Groups and items:
 
-1. **Assets** - Dashboard, All Assets, Incoming Assets, Incoming QC, Pending Registration, Add Asset  
-2. **Configuration** - Categories, Asset Types, Locations, Departments  
-3. **Operations** - Asset Assignment, Transfers, Maintenance  
-4. **Lifecycle** - Disposal  
-5. **Extended** - Components, Documents, QR / Barcode, Reports  
+1. **Assets** — Dashboard, All Assets, Incoming Assets, Incoming QC, Pending Registration, Add Asset  
+2. **Configuration** — Categories, Asset Types, Locations, Departments  
+3. **Operations** — Asset Assignment, Transfers, Maintenance  
+4. **Lifecycle** — Disposal  
+5. **Extended** — Components, Documents, QR / Barcode, Reports  
 
 Desktop: 64px icon rail (`w-16`) that expands to 256px on hover/focus (`hover:w-64`). `max-h-[calc(100dvh-5.5rem)] overflow-y-auto`. Sticky `lg:top-4`.  
 Mobile: full-label stacked nav (`lg:hidden`).
 
 Active state: `aria-current="page"`, `bg-primary/10` + inset primary ring; special case so `/assets/assets/new` does not mark All Assets active.
 
-**App-level sidebar:** `AppSidebar` still present unless `?standalone=1` / session `erp-standalone`. Module links open **new tab** with `standalone=1` (`standaloneHref` in `app-sidebar.tsx`). CRM/Projects get dedicated sidebars in standalone; **Assets does not** - it uses `AssetsModuleSidebar` from the assets layout instead.
+**App-level sidebar:** `AppSidebar` still present unless `?standalone=1` / session `erp-standalone`. Module links open **new tab** with `standalone=1` (`standaloneHref` in `app-sidebar.tsx`). CRM/Projects get dedicated sidebars in standalone; **Assets does not** — it uses `AssetsModuleSidebar` from the assets layout instead.
 
 **Dead / unused nav:** `AssetsWorkspaceNav` (`assets-workspace-nav.tsx`) is **not imported** by any page. It lists Overview, Assets, Assignments, Transfers, Maintenance, Depreciation, Disposals, Audits (includes items hidden from the locked rail).
 
@@ -658,11 +658,11 @@ Status legend: **working** = implemented in API + UI with tests (not live-verifi
 | Registration Excel template/validate/confirm | working (API+queue UI) | |
 | Categories CRUD / deactivate | working | In-memory pagination |
 | Asset Types CRUD | not implemented | Read-only UI catalog; API uses `asset_type` enum |
-| Configuration Locations | not implemented | `AssetLocationsPlaceholderWorkspace` - Phase R1 copy |
+| Configuration Locations | not implemented | `AssetLocationsPlaceholderWorkspace` — Phase R1 copy |
 | Departments | partially working | Read-only org `ResourceListView` |
 | Assignment list + workflow | working | Also a 5-step wizard for issue |
 | Assignment return | working | 5-step wizard; backend validates component_returns |
-| Transfer CRUD + workflow | working (code) | Historical E2E FAIL (asset_id kwarg) **appears fixed** in `transfer_service.py` 107-119; not re-run live |
+| Transfer CRUD + workflow | working (code) | Historical E2E FAIL (asset_id kwarg) **appears fixed** in `transfer_service.py` 107–119; not re-run live |
 | Maintenance WO workflow | working | |
 | Disposal workflow | working | POST to finance **blocked** if no open fiscal period (env) |
 | Start disposal / reinstate | working | |
@@ -711,13 +711,13 @@ Status legend: **working** = implemented in API + UI with tests (not live-verifi
 
 **Hardcoded frontend catalogs (not APIs)**
 
-- `config/asset-prd-types.ts` - PRD type names mapped to API `asset_type`
-- `config/asset-it-config-rules.ts` - which types require processor/RAM/storage
-- `config/asset-site-catalog.ts` - city / building options for Add Asset location label
+- `config/asset-prd-types.ts` — PRD type names mapped to API `asset_type`
+- `config/asset-it-config-rules.ts` — which types require processor/RAM/storage
+- `config/asset-site-catalog.ts` — city / building options for Add Asset location label
 
 ---
 
-## Appendix A - Permission catalog
+## Appendix A — Permission catalog
 
 90 codes in `ASSET_PERMISSIONS` (`permissions.py`), grouped as `asset.{resource}:{action}` for category, asset, component, assignment, transfer, location, warranty, insurance, maintenance_plan, maintenance, depreciation, disposal, revaluation, audit, document, checklist, meter, notification, report, incoming, incoming_qc.
 
@@ -725,5 +725,5 @@ Role slices: `ASSET_EXECUTIVE_PERMISSIONS` (excludes approve/post/calculate), `A
 
 ---
 
-## Appendix B - Historical runtime evidence (not this pass)
+## Appendix B — Historical runtime evidence (not this pass)
 `docs/ASSET_MANAGEMENT_E2E_VERIFICATION_REPORT.md` (2026-08-09, branch `asset_phase1`): 97 PASS / 1 FAIL (Transfer create TypeError) / 4 BLOCKED (empty incoming queue, finance period for disposal post). UI route smoke 200s. Treat as historical; transfer create code now contains an explicit fix comment.

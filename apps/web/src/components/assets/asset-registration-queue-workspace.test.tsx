@@ -1,5 +1,5 @@
 /**
- * Pending Registration queue - Sub-phase 3.
+ * Pending Registration queue — Sub-phase 3.
  * @vitest-environment jsdom
  */
 

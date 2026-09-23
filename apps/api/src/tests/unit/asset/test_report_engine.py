@@ -44,8 +44,20 @@ def test_shape_dashboard() -> None:
         recent_transfers=[],
         recent_notifications=[],
         health={"pct_in_maintenance": 0},
+        analytics_kpis={"document_count": 4},
+        by_status=[{"status": "active", "count": 3}],
+        documents={"total": 4},
+        components={"total": 2},
+        lifecycle={"stages": []},
+        usage={"utilization_pct": 10},
     )
     assert dash["kpis"]["asset_count"] == 3
+    assert dash["analytics_kpis"]["document_count"] == 4
+    assert dash["by_status"][0]["status"] == "active"
+    assert dash["documents"]["total"] == 4
+    assert dash["components"]["total"] == 2
+    assert "usage" in dash
+    assert "lifecycle" in dash
 
 
 def test_shape_export() -> None:

@@ -46,6 +46,15 @@ export {
   statusColorMap,
   isOperationalStatus,
   isNonItAssetStatus,
+  formatLifecycleStatusLabel,
+  formatPortalOverviewStatus,
   type OperationalStatusValue,
   type NonItAssetStatusValue,
 } from "./asset-status";
+export {
+  tableRowSerial,
+  tableRowSerialFromIndex,
+  TABLE_SERIAL_HEADER_LABEL,
+  tableSerialHeaderClassName,
+  tableSerialCellClassName,
+} from "./table-serial";

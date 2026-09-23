@@ -23,7 +23,7 @@ Router → AssetReportService → ReportValidator → AssetReportEngine → Asse
 
 ## Frontend
 
-`AssetReportsWorkspace` - dashboard, run, export CSV/XLSX, snapshots.
+`AssetReportsWorkspace` — dashboard, run, export CSV/XLSX, snapshots.
 
 ## Migration
 

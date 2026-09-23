@@ -16,7 +16,7 @@ export function AssetLocationsPlaceholderWorkspace() {
     <AssetsPremiumPage testId="asset-locations-placeholder">
       <PageHeader
         title="Locations"
-        description="Asset Location Master - city and building sites used by registration, inventory, transfers, and reports."
+        description="Asset Location Master — city and building sites used by registration, inventory, transfers, and reports."
       />
 
       <Card className={ASSETS_SURFACE_CARD}>
@@ -38,7 +38,7 @@ export function AssetLocationsPlaceholderWorkspace() {
         <CardContent className="space-y-4 p-5">
           <p className="text-sm text-muted-foreground">
             Organization locations remain available under Organization for org-wide master data.
-            Asset workflows will use the Asset Location Master only - not Organization{" "}
+            Asset workflows will use the Asset Location Master only — not Organization{" "}
             <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">/locations</code>.
           </p>
 

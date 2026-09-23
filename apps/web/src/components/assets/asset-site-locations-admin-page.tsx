@@ -289,7 +289,7 @@ export function AssetSiteLocationsAdminPage() {
                   <h2 className="text-base font-semibold tracking-tight">{selected.name}</h2>
                   <p className="text-xs text-muted-foreground">
                     {selected.is_head_office
-                      ? "Head Office - only one Location may hold this flag"
+                      ? "Head Office — only one Location may hold this flag"
                       : "Not Head Office"}
                   </p>
                 </div>

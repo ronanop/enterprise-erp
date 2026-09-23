@@ -1,13 +1,21 @@
 """Asset transfer service (FP-ASSET-002)."""
 
+from __future__ import annotations
+
 from datetime import date, datetime, time, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
 from core.exceptions import NotFoundException
+from core.redis import get_redis
 from modules.asset.adapters.master_data_port import AssetMasterDataAdapter
-from modules.asset.domain.enums import AssetTransferStatus, AstEntityType
+from modules.asset.adapters.organization_port import AssetOrganizationAdapter
+from modules.asset.domain.enums import (
+    AssetTransferStatus,
+    AssignmentComponentIssueStatus,
+    AstEntityType,
+)
 from modules.asset.domain.exceptions import (
     InvalidAssetWorkflowState,
     SegregationOfDutiesError,
@@ -22,15 +30,29 @@ from modules.asset.repository.asset_transfer_repository import (
     AssetTransferRepository,
 )
 from modules.asset.repository.base import utcnow
+from modules.asset.schemas import (
+    UserTransferAssignRequest,
+    UserTransferCompleteResponse,
+    UserTransferComponentItem,
+    UserTransferContextResponse,
+    UserTransferReturnToStockRequest,
+    UserTransferVerificationResponse,
+)
 from modules.asset.service.asset_scope_validator import AssetScopeValidator
+from modules.asset.service.assignment_component_service import AssignmentComponentService
 from modules.asset.service.document_number_service import DocumentNumberService
 from modules.asset.service.engines import AssetLocationEngine, AssetTransferEngine
 from modules.asset.service.governance_service import AssetGovernanceService
 from modules.asset.service.transfer_validator import TransferValidator
+from modules.asset.service.user_transfer_completion_service import (
+    UserTransferCompletionService,
+)
 from modules.asset.service.workflow_governance_settings import asset_workflow_governance_enabled
 from modules.foundation.domain.enums import WorkflowStatus
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
+
+_USER_TRANSFER_VERIFICATION_TTL_SECONDS = 60 * 60 * 8
 
 
 class TransferService:
@@ -44,7 +66,9 @@ class TransferService:
         self._location_engine = AssetLocationEngine()
         self._governance = AssetGovernanceService(db)
         self._master = AssetMasterDataAdapter(db)
+        self._org = AssetOrganizationAdapter(db)
         self._validator = TransferValidator(db)
+        self._assignment_components = AssignmentComponentService(db)
         self._audit = AuditService(db)
         self._db = db
 
@@ -84,6 +108,221 @@ class TransferService:
             raise NotFoundException("Asset transfer not found")
         return row
 
+    def get_user_transfer_context(
+        self, ctx: TenantContext, asset_id: UUID
+    ) -> UserTransferContextResponse:
+        """Load Assigned-asset context for the user-transfer entry page (Step 1/2)."""
+        asset, assignment = self._validator.validate_user_transfer_eligibility(ctx, asset_id)
+
+        current_user = None
+        current_employee_id = assignment.employee_id
+        if current_employee_id is not None:
+            try:
+                emp = self._master.get_employee(ctx, current_employee_id)
+                first = str(getattr(emp, "first_name", "") or "").strip()
+                last = str(getattr(emp, "last_name", "") or "").strip()
+                name = f"{first} {last}".strip()
+                code = str(getattr(emp, "employee_code", "") or "").strip()
+                current_user = f"{code} — {name}".strip(" —") if code else (name or code or None)
+            except NotFoundException:
+                current_user = None
+        elif (
+            str(getattr(assignment, "employee_source", None) or "").strip().upper()
+            == "MANUAL_ENTRY"
+        ):
+            manual_name = str(
+                getattr(assignment, "manual_employee_name", None) or ""
+            ).strip()
+            current_user = manual_name or None
+
+        department_name = None
+        department_id = assignment.department_id or asset.department_id
+        if department_id is not None:
+            try:
+                dept = self._org.get_department(ctx, department_id)
+                department_name = getattr(dept, "department_name", None)
+            except NotFoundException:
+                department_name = None
+
+        location_label = None
+        current_loc = self._locations.find_current_for_asset(
+            ctx, company_id=asset.company_id, asset_id=asset.id
+        )
+        if current_loc is not None:
+            location_label = current_loc.location_label
+        else:
+            currents = self._locations.find_current(ctx, asset.id)
+            if currents:
+                location_label = currents[0].location_label
+
+        component_rows = self._assignment_components.list_for_assignment(ctx, assignment)
+        components: list[UserTransferComponentItem] = []
+        for row in component_rows:
+            status = str(row.get("issue_status") or "").upper()
+            if status != AssignmentComponentIssueStatus.ISSUED.value:
+                continue
+            components.append(
+                UserTransferComponentItem(
+                    component_id=row["component_id"],
+                    assignment_component_id=row["id"],
+                    component_code=row.get("component_code"),
+                    component_name=row.get("component_name") or row.get("linked_asset_name"),
+                    component_type=row.get("component_type"),
+                    serial_number=row.get("serial_number"),
+                    issue_status=status,
+                    linked_asset_code=row.get("linked_asset_code"),
+                    linked_asset_name=row.get("linked_asset_name"),
+                )
+            )
+
+        return UserTransferContextResponse(
+            asset_id=asset.id,
+            asset_code=asset.asset_code,
+            asset_name=asset.asset_name,
+            operational_status=str(asset.operational_status or ""),
+            lifecycle_status=asset.status,
+            current_user=current_user,
+            current_employee_id=current_employee_id,
+            department_id=department_id,
+            department_name=department_name,
+            location_label=location_label,
+            assignment_id=assignment.id,
+            assignment_document_number=assignment.document_number,
+            assignment_allocated_at=assignment.allocated_at,
+            assignment_status=assignment.status,
+            components=components,
+            company_id=asset.company_id,
+            branch_id=asset.branch_id,
+            version=int(asset.version or 1),
+        )
+
+    def submit_user_transfer_verification(
+        self,
+        ctx: TenantContext,
+        asset_id: UUID,
+        *,
+        data_backup_verified: bool,
+        qc_completed: bool,
+        qc_remarks: str | None,
+        physical_condition: str,
+        verified_component_ids: list[UUID],
+        asset_version: int | None = None,
+    ) -> UserTransferVerificationResponse:
+        """Persist Step 2 verification (audit + Redis staging). Does not release assignment."""
+        asset, assignment = self._validator.validate_user_transfer_eligibility(ctx, asset_id)
+        component_rows = self._assignment_components.list_for_assignment(ctx, assignment)
+        issued_ids = self._validator.filter_issued_component_ids(component_rows)
+        condition = self._validator.validate_user_transfer_verification(
+            data_backup_verified=data_backup_verified,
+            qc_completed=qc_completed,
+            physical_condition=physical_condition,
+            verified_component_ids=verified_component_ids,
+            issued_component_ids=issued_ids,
+            asset_version=asset_version,
+            current_asset_version=int(asset.version or 1),
+        )
+
+        previous_user_label = None
+        if assignment.employee_id is not None:
+            try:
+                emp = self._master.get_employee(ctx, assignment.employee_id)
+                first = str(getattr(emp, "first_name", "") or "").strip()
+                last = str(getattr(emp, "last_name", "") or "").strip()
+                name = f"{first} {last}".strip()
+                code = str(getattr(emp, "employee_code", "") or "").strip()
+                previous_user_label = (
+                    f"{code} — {name}".strip(" —") if code else (name or code or None)
+                )
+            except NotFoundException:
+                previous_user_label = None
+
+        verification_id = uuid4()
+        verified_at = utcnow()
+        remarks = (qc_remarks or "").strip() or None
+        verified_ids = list(dict.fromkeys(verified_component_ids)) if issued_ids else []
+
+        response = UserTransferVerificationResponse(
+            verification_id=verification_id,
+            asset_id=asset.id,
+            assignment_id=assignment.id,
+            previous_employee_id=assignment.employee_id,
+            previous_user_label=previous_user_label,
+            data_backup_verified=True,
+            qc_completed=True,
+            qc_remarks=remarks,
+            physical_condition=condition,
+            verified_component_ids=verified_ids,
+            verified_at=verified_at,
+            verified_by=ctx.user_id,
+            status="verified",
+        )
+
+        audit_payload = {
+            "verification_id": str(verification_id),
+            "asset_id": str(asset.id),
+            "assignment_id": str(assignment.id),
+            "previous_employee_id": str(assignment.employee_id)
+            if assignment.employee_id
+            else None,
+            "previous_user": previous_user_label,
+            "data_backup_verified": True,
+            "qc_completed": True,
+            "qc_remarks": remarks,
+            "physical_condition": condition,
+            "verified_component_ids": [str(cid) for cid in verified_ids],
+            "verified_at": verified_at.isoformat(),
+            "verification_type": "user_transfer_pre_check",
+            "verification_result": "passed",
+        }
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name=ENTITY_AST_TRANSFER,
+            entity_id=verification_id,
+            operation="user_transfer_verification",
+            performed_by=ctx.user_id,
+            new_value=audit_payload,
+        )
+
+        self._stage_user_transfer_verification(ctx, response)
+        return response
+
+    def complete_user_transfer_assign(
+        self,
+        ctx: TenantContext,
+        asset_id: UUID,
+        body: UserTransferAssignRequest,
+    ) -> UserTransferCompleteResponse:
+        return UserTransferCompletionService(self._db).assign_to_new_user(ctx, asset_id, body)
+
+    def complete_user_transfer_return_to_stock(
+        self,
+        ctx: TenantContext,
+        asset_id: UUID,
+        body: UserTransferReturnToStockRequest,
+    ) -> UserTransferCompleteResponse:
+        return UserTransferCompletionService(self._db).return_to_stock(ctx, asset_id, body)
+
+    def _stage_user_transfer_verification(
+        self,
+        ctx: TenantContext,
+        payload: UserTransferVerificationResponse,
+    ) -> None:
+        """Best-effort Redis staging so Step 3 can load verified data server-side."""
+        try:
+            client = get_redis()
+            key = (
+                f"asset:user_transfer_verification:{ctx.tenant_id}:"
+                f"{payload.asset_id}:{payload.verification_id}"
+            )
+            client.setex(
+                key,
+                _USER_TRANSFER_VERIFICATION_TTL_SECONDS,
+                payload.model_dump_json(),
+            )
+        except Exception:
+            # Audit already recorded; Step 3 can still use the API response body.
+            return
+
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
@@ -101,7 +340,7 @@ class TransferService:
             fields["to_location_label"] = label
             if fields.get("to_org_location_id") is None:
                 fields["to_org_location_id"] = org_id
-            # Stash for execute - not persisted on transfer row
+            # Stash for execute — not persisted on transfer row
             fields["_site_location_id"] = to_location_id
             fields["_site_building_id"] = to_building_id
 
@@ -138,7 +377,7 @@ class TransferService:
                 "_site_building_id",
             }
         }
-        # Persist site master ids in transfer_notes marker only if unused - instead
+        # Persist site master ids in transfer_notes marker only if unused — instead
         # re-resolve from to_location_label at execute via SiteLocationService.
         row = self._repo.create(
             ctx,

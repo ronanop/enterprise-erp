@@ -58,12 +58,12 @@ function toAssetPreview(row: AssetsRow): AssetPreview | null {
   if (!id) return null;
   return {
     id,
-    assetCode: String(row.asset_code ?? row.document_number ?? "-"),
-    assetName: String(row.asset_name ?? "-"),
+    assetCode: String(row.asset_code ?? row.document_number ?? "—"),
+    assetName: String(row.asset_name ?? "—"),
     serialNumber:
       typeof row.serial_number === "string" && row.serial_number.trim()
         ? row.serial_number
-        : "-",
+        : "—",
     operationalStatus: String(row.operational_status ?? ""),
   };
 }
@@ -73,7 +73,7 @@ function assignmentFromRow(row: AssetsRow): AssignmentOption | null {
   if (!id) return null;
   return {
     id,
-    documentNumber: String(row.document_number ?? "-"),
+    documentNumber: String(row.document_number ?? "—"),
     allocationType: String(row.allocation_type ?? ""),
     status: String(row.status ?? ""),
     employeeId: row.employee_id ? String(row.employee_id) : null,
@@ -315,7 +315,7 @@ export function DcChallanCreateDialog({
                 <div className="min-w-0">
                   <p className="font-mono text-xs text-muted-foreground">{asset.assetCode}</p>
                   <p className="text-sm font-medium">{asset.assetName}</p>
-                  {asset.serialNumber !== "-" ? (
+                  {asset.serialNumber !== "—" ? (
                     <p className="text-xs text-muted-foreground">S/N {asset.serialNumber}</p>
                   ) : null}
                 </div>
@@ -332,7 +332,7 @@ export function DcChallanCreateDialog({
                 </p>
               ) : (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Asset only - no employee assignment will be linked.
+                  Asset only — no employee assignment will be linked.
                 </p>
               )}
             </div>

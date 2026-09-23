@@ -1,4 +1,4 @@
-# FP-ASSET-006 - Deployment Guide
+# FP-ASSET-006 — Deployment Guide
 
 1. Deploy API with FP-ASSET-006.
 2. Alembic upgrade to `0471_ast_depreciation_governance`.

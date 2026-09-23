@@ -150,6 +150,7 @@ def test_submit_requires_actual_change() -> None:
         patch.object(validator._assets, "get", return_value=asset),
         patch.object(validator._assignments, "find_pending_or_active_for_asset", return_value=None),
         patch.object(validator._transfers, "find_pending_for_asset", return_value=None),
+        patch.object(validator._maintenances, "find_open_for_asset", return_value=None),
         pytest.raises(TransferValidationError, match="must differ"),
     ):
         validator.validate_submit_readiness(ctx, row)
@@ -222,4 +223,222 @@ def test_create_blocks_open_assignment() -> None:
             ctx,
             company_id=ctx.company_id,
             fields={"asset_id": asset.id, "to_branch_id": uuid4()},
+        )
+
+
+def test_user_transfer_rejects_ready_to_move() -> None:
+    validator = TransferValidator(MagicMock())
+    ctx = _ctx()
+    asset = _asset(ctx.company_id)
+    asset.operational_status = "READY_TO_MOVE"
+    with patch.object(validator._assets, "get", return_value=asset):
+        with pytest.raises(TransferValidationError, match="Only assigned assets"):
+            validator.validate_user_transfer_eligibility(ctx, asset.id)
+
+
+def test_user_transfer_rejects_missing_active_assignment() -> None:
+    validator = TransferValidator(MagicMock())
+    ctx = _ctx()
+    asset = _asset(ctx.company_id)
+    asset.operational_status = "ASSIGNED"
+    with (
+        patch.object(validator._assets, "get", return_value=asset),
+        patch.object(
+            validator._assignments,
+            "find_pending_or_active_for_asset",
+            return_value=None,
+        ),
+        pytest.raises(TransferValidationError, match="active assignment"),
+    ):
+        validator.validate_user_transfer_eligibility(ctx, asset.id)
+
+
+def test_user_transfer_accepts_assigned_with_active_assignment() -> None:
+    validator = TransferValidator(MagicMock())
+    ctx = _ctx()
+    asset = _asset(ctx.company_id)
+    asset.operational_status = "ASSIGNED"
+    assignment = SimpleNamespace(
+        id=uuid4(),
+        status="active",
+        document_number="AASN-1",
+        employee_id=uuid4(),
+    )
+    with (
+        patch.object(validator._assets, "get", return_value=asset),
+        patch.object(
+            validator._assignments,
+            "find_pending_or_active_for_asset",
+            return_value=assignment,
+        ),
+        patch.object(validator._transfers, "find_pending_for_asset", return_value=None),
+        patch.object(validator._maintenances, "find_open_for_asset", return_value=None),
+    ):
+        got_asset, got_asn = validator.validate_user_transfer_eligibility(ctx, asset.id)
+    assert got_asset is asset
+    assert got_asn is assignment
+
+
+def test_user_transfer_rejects_missing_asset() -> None:
+    validator = TransferValidator(MagicMock())
+    ctx = _ctx()
+    with (
+        patch.object(validator._assets, "get", return_value=None),
+        pytest.raises(NotFoundException, match="Asset not found"),
+    ):
+        validator.validate_user_transfer_eligibility(ctx, uuid4())
+
+
+def test_user_transfer_verification_requires_backup_and_qc() -> None:
+    validator = TransferValidator(MagicMock())
+    with pytest.raises(TransferValidationError, match="data backup"):
+        validator.validate_user_transfer_verification(
+            data_backup_verified=False,
+            qc_completed=True,
+            physical_condition="good",
+            verified_component_ids=[],
+            issued_component_ids=[],
+            asset_version=1,
+            current_asset_version=1,
+        )
+    with pytest.raises(TransferValidationError, match="QC testing"):
+        validator.validate_user_transfer_verification(
+            data_backup_verified=True,
+            qc_completed=False,
+            physical_condition="good",
+            verified_component_ids=[],
+            issued_component_ids=[],
+            asset_version=1,
+            current_asset_version=1,
+        )
+
+
+def test_user_transfer_verification_requires_condition() -> None:
+    validator = TransferValidator(MagicMock())
+    with pytest.raises(TransferValidationError, match="physical_condition"):
+        validator.validate_user_transfer_verification(
+            data_backup_verified=True,
+            qc_completed=True,
+            physical_condition="",
+            verified_component_ids=[],
+            issued_component_ids=[],
+            asset_version=1,
+            current_asset_version=1,
+        )
+
+
+def test_user_transfer_verification_requires_all_issued_components() -> None:
+    validator = TransferValidator(MagicMock())
+    c1, c2 = uuid4(), uuid4()
+    with pytest.raises(TransferValidationError, match="All issued components"):
+        validator.validate_user_transfer_verification(
+            data_backup_verified=True,
+            qc_completed=True,
+            physical_condition="good",
+            verified_component_ids=[c1],
+            issued_component_ids=[c1, c2],
+            asset_version=1,
+            current_asset_version=1,
+        )
+
+
+def test_user_transfer_verification_allows_empty_components() -> None:
+    validator = TransferValidator(MagicMock())
+    condition = validator.validate_user_transfer_verification(
+        data_backup_verified=True,
+        qc_completed=True,
+        physical_condition="outdated",
+        verified_component_ids=[],
+        issued_component_ids=[],
+        asset_version=1,
+        current_asset_version=1,
+    )
+    assert condition == "outdated"
+
+
+def test_user_transfer_assign_requires_good_physical_condition() -> None:
+    validator = TransferValidator(MagicMock())
+    ctx = _ctx()
+    with pytest.raises(TransferValidationError, match="Good"):
+        validator.validate_user_transfer_assign_request(
+            ctx,
+            company_id=ctx.company_id,
+            employee_source="MASTER_DATA",
+            employee_id=uuid4(),
+            manual_employee_name=None,
+            manual_employee_phone=None,
+            manual_employee_email=None,
+            manual_employee_deployed_to=None,
+            department_id=uuid4(),
+            to_location_id=uuid4(),
+            to_building_id=uuid4(),
+            physical_condition="dead",
+            previous_employee_id=uuid4(),
+        )
+
+
+def test_user_transfer_assign_manual_entry_requires_manual_fields() -> None:
+    validator = TransferValidator(MagicMock())
+    validator._org = MagicMock()
+    validator._org.get_department.return_value = SimpleNamespace(company_id=None)
+    ctx = _ctx()
+    with pytest.raises(TransferValidationError, match="manual_employee"):
+        validator.validate_user_transfer_assign_request(
+            ctx,
+            company_id=ctx.company_id,
+            employee_source="MANUAL_ENTRY",
+            employee_id=None,
+            manual_employee_name="Shreya",
+            manual_employee_phone=None,
+            manual_employee_email=None,
+            manual_employee_deployed_to="Site",
+            department_id=uuid4(),
+            to_location_id=uuid4(),
+            to_building_id=uuid4(),
+            physical_condition="good",
+            previous_employee_id=None,
+        )
+
+
+def test_user_transfer_assign_manual_entry_accepts_valid_payload() -> None:
+    validator = TransferValidator(MagicMock())
+    dept_id = uuid4()
+    validator._org = MagicMock()
+    validator._org.get_department.return_value = SimpleNamespace(company_id=None)
+    ctx = _ctx()
+    resolved = validator.validate_user_transfer_assign_request(
+        ctx,
+        company_id=ctx.company_id,
+        employee_source="MANUAL_ENTRY",
+        employee_id=None,
+        manual_employee_name="Shreya Saxena",
+        manual_employee_phone="9876543210",
+        manual_employee_email=None,
+        manual_employee_deployed_to="Client site",
+        department_id=dept_id,
+        to_location_id=uuid4(),
+        to_building_id=uuid4(),
+        physical_condition="good",
+        previous_employee_id=None,
+    )
+    assert resolved == dept_id
+
+
+def test_user_transfer_return_requires_reason() -> None:
+    validator = TransferValidator(MagicMock())
+    with pytest.raises(TransferValidationError, match="reason"):
+        validator.validate_user_transfer_return_request(reason="   ")
+
+
+def test_user_transfer_verification_rejects_stale_asset_version() -> None:
+    validator = TransferValidator(MagicMock())
+    with pytest.raises(TransferValidationError, match="updated while verification"):
+        validator.validate_user_transfer_verification(
+            data_backup_verified=True,
+            qc_completed=True,
+            physical_condition="good",
+            verified_component_ids=[],
+            issued_component_ids=[],
+            asset_version=1,
+            current_asset_version=2,
         )

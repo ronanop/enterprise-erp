@@ -1,4 +1,4 @@
-# Asset Meter Reading - Migration Notes (FP-ASSET-015)
+# Asset Meter Reading — Migration Notes (FP-ASSET-015)
 
 ## Revision
 

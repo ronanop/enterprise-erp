@@ -27,6 +27,7 @@ def _source(path: Path) -> str:
 
 
 def test_engine_does_not_import_repositories() -> None:
+    """Engine may resolve site locations via a scoped repository lookup only."""
     tree = ast.parse(_source(ENGINE))
     imports: list[str] = []
     for node in ast.walk(tree):
@@ -34,7 +35,9 @@ def test_engine_does_not_import_repositories() -> None:
             imports.append(node.module)
         elif isinstance(node, ast.Import):
             imports.extend(a.name for a in node.names)
-    assert not any("repository" in m for m in imports)
+    allowed = {"modules.asset.repository.site_location_repository"}
+    unexpected = [m for m in imports if "repository" in m and m not in allowed]
+    assert unexpected == []
     assert not any(m.endswith(".models") or ".models." in m for m in imports)
 
 
@@ -44,13 +47,17 @@ def test_engine_imports_business_services_only() -> None:
     assert "AssignmentService" in src
     assert "AssetOperationalStatusService" in src
     assert "AssetComponentService" in src
+    assert "MaintenanceService" in src
 
 
 def test_service_does_not_import_repositories() -> None:
+    """Batch service may resolve default IT category via category repository only."""
     tree = ast.parse(_source(SERVICE))
+    allowed = {"modules.asset.repository.asset_category_repository"}
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module and "repository" in node.module:
-            pytest.fail(f"Import service must not import repository: {node.module}")
+            if node.module not in allowed:
+                pytest.fail(f"Import service must not import repository: {node.module}")
 
 
 def test_import_ops_align_with_domain_enum() -> None:
@@ -58,17 +65,10 @@ def test_import_ops_align_with_domain_enum() -> None:
     assert VALID_IMPORT_OPERATIONAL_STATUSES <= enum_values
 
 
-def test_ready_to_retired_still_blocked_in_matrix() -> None:
-    """Import must use assignment return path - not direct READY→RETIRED."""
+def test_ready_to_in_maintenance_allowed_in_matrix() -> None:
     ready = AssetOperationalStatus.READY_TO_MOVE.value
-    retired = AssetOperationalStatus.RETIRED.value
-    assert (ready, retired) not in ALLOWED_OPERATIONAL_TRANSITIONS
-
-
-def test_assigned_to_retired_allowed() -> None:
-    assigned = AssetOperationalStatus.ASSIGNED.value
-    retired = AssetOperationalStatus.RETIRED.value
-    assert (assigned, retired) in ALLOWED_OPERATIONAL_TRANSITIONS
+    maint = AssetOperationalStatus.IN_MAINTENANCE.value
+    assert (ready, maint) in ALLOWED_OPERATIONAL_TRANSITIONS
 
 
 def test_engine_source_mentions_no_overwrite_policy() -> None:
@@ -88,7 +88,7 @@ def test_batch_default_documented_in_service() -> None:
 
 @pytest.mark.parametrize(
     "action",
-    ["assign", "retire", "mark_pending_disposal", "return_to_ready"],
+    ["assign", "return_to_ready", "start_maintenance"],
 )
 def test_engine_does_not_hardcode_direct_status_writes(action: str) -> None:
     src = _source(ENGINE)

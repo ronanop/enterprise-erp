@@ -12,6 +12,10 @@ describe("assetNavigationPaths", () => {
     expect(assetNavigationPaths.details("abc-123")).toBe("/assets/assets/abc-123");
   });
 
+  it("builds encoded asset edit path", () => {
+    expect(assetNavigationPaths.edit("abc-123")).toBe("/assets/assets/abc-123/edit");
+  });
+
   it("builds assignment wizard prefill path", () => {
     expect(assetNavigationPaths.assignment("x")).toContain("assetId=x");
     expect(assetNavigationPaths.assignment("x")).toContain("/assets/asset-assignments/new");
@@ -33,6 +37,9 @@ describe("createAssetNavigation", () => {
     nav.openDetails("a1");
     expect(push).toHaveBeenCalledWith("/assets/assets/a1");
 
+    nav.openEdit("a1");
+    expect(push).toHaveBeenCalledWith("/assets/assets/a1/edit");
+
     nav.openAssignment("a1");
     expect(push).toHaveBeenCalledWith(expect.stringContaining("/assets/asset-assignments/new"));
 
@@ -43,13 +50,15 @@ describe("createAssetNavigation", () => {
     expect(push).toHaveBeenCalledWith("/assets/information-portal/a1");
 
     nav.openDiscovery("a1");
-    expect(push).toHaveBeenCalledWith("/assets/assets/a1");
+    expect(push).toHaveBeenCalledWith("/assets/information-portal/a1");
 
     nav.openQr("a1");
     expect(push).toHaveBeenCalledWith(expect.stringContaining("/assets/qr-barcode"));
 
     nav.openTransfer("a1");
-    expect(push).toHaveBeenCalledWith(expect.stringContaining("/assets/asset-transfers"));
+    expect(push).toHaveBeenCalledWith(
+      expect.stringContaining("/assets/asset-transfers/new?assetId=a1"),
+    );
 
     nav.openMaintenance("a1");
     expect(push).toHaveBeenCalledWith(expect.stringContaining("/assets/asset-maintenances"));
@@ -58,7 +67,7 @@ describe("createAssetNavigation", () => {
     expect(push).toHaveBeenCalledWith(expect.stringContaining("/assets/asset-disposals"));
 
     nav.openHistory("a1");
-    expect(push).toHaveBeenCalledWith(expect.stringContaining("tab=activity"));
+    expect(push).toHaveBeenCalledWith("/assets/information-portal/a1");
 
     nav.openDcChallan("a1");
     expect(push).toHaveBeenCalledWith("/assets/asset-dc-challans?assetId=a1");
@@ -78,6 +87,20 @@ describe("dispatchInventoryMenuAction", () => {
     expect(spy).toHaveBeenCalledWith("asset-1");
   });
 
+  it("routes edit action to openEdit", () => {
+    const nav = createAssetNavigation(vi.fn());
+    const spy = vi.spyOn(nav, "openEdit");
+    dispatchInventoryMenuAction(nav, "edit", "asset-1");
+    expect(spy).toHaveBeenCalledWith("asset-1");
+  });
+
+  it("does not navigate for delete (container owns confirm dialog)", () => {
+    const push = vi.fn();
+    const nav = createAssetNavigation(push);
+    dispatchInventoryMenuAction(nav, "delete", "asset-1");
+    expect(push).not.toHaveBeenCalled();
+  });
+
   it("routes portal action to openPortal", () => {
     const nav = createAssetNavigation(vi.fn());
     const spy = vi.spyOn(nav, "openPortal");
@@ -87,10 +110,17 @@ describe("dispatchInventoryMenuAction", () => {
 });
 
 describe("dispatchInventoryQuickLink", () => {
-  it("routes discovery quick link", () => {
+  it("routes discovery quick link to Information Portal", () => {
     const nav = createAssetNavigation(vi.fn());
-    const spy = vi.spyOn(nav, "openDiscovery");
+    const spy = vi.spyOn(nav, "openPortal");
     dispatchInventoryQuickLink(nav, "discovery", "asset-3");
     expect(spy).toHaveBeenCalledWith("asset-3");
+  });
+
+  it("routes history quick link to Information Portal", () => {
+    const nav = createAssetNavigation(vi.fn());
+    const spy = vi.spyOn(nav, "openPortal");
+    dispatchInventoryQuickLink(nav, "history", "asset-4");
+    expect(spy).toHaveBeenCalledWith("asset-4");
   });
 });

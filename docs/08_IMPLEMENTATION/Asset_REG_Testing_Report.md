@@ -1,4 +1,4 @@
-# Asset Registration - Testing Report
+# Asset Registration — Testing Report
 
 ## Suites
 

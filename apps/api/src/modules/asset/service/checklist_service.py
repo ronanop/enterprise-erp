@@ -1,4 +1,4 @@
-"""ChecklistService - asset checklist management (FP-ASSET-014)."""
+"""ChecklistService — asset checklist management (FP-ASSET-014)."""
 
 from uuid import UUID
 

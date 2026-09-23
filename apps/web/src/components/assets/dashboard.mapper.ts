@@ -77,6 +77,9 @@ export type DashboardTransferRow = {
   reason: string | null;
   status: string;
   workflowStatus: string | null;
+  /** Present when API returns it — used by Transfers register actions. */
+  version?: number;
+  createdBy?: string | null;
 };
 
 export type BranchLabelLookup = Record<string, string>;
@@ -85,12 +88,12 @@ export function resolveBranchLabel(
   branchId: unknown,
   lookup: BranchLabelLookup,
 ): string {
-  if (branchId == null || branchId === "") return "-";
+  if (branchId == null || branchId === "") return "—";
   const key = String(branchId);
   return lookup[key] ?? key.slice(0, 8);
 }
 
-/** Client-side share of fleet total - does not change KPI count calculations. */
+/** Client-side share of fleet total — does not change KPI count calculations. */
 export function kpiShareOfTotal(count: number, total: number): StatCardTrend | undefined {
   if (total <= 0) return undefined;
   const pct = Math.round((count / total) * 100);
@@ -174,12 +177,12 @@ function assetTag(row: AssetsRow): string {
   if (typeof code === "string" && code.trim()) return code;
   const doc = row.document_number;
   if (typeof doc === "string" && doc.trim()) return doc;
-  return "-";
+  return "—";
 }
 
 function assetName(row: AssetsRow): string {
   const name = row.asset_name;
-  return typeof name === "string" && name.trim() ? name : "-";
+  return typeof name === "string" && name.trim() ? name : "—";
 }
 
 function operationalStatus(row: AssetsRow): string {
@@ -224,7 +227,7 @@ export function mapAssetListToDisposalQueueRows(
 }
 
 export function formatAssignmentTimestamp(value: unknown): string {
-  if (typeof value !== "string" || !value.trim()) return "-";
+  if (typeof value !== "string" || !value.trim()) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat(undefined, {
@@ -236,7 +239,7 @@ export function formatAssignmentTimestamp(value: unknown): string {
 function assignmentDoc(row: AssetsRow): string {
   const doc = row.document_number;
   if (typeof doc === "string" && doc.trim()) return doc;
-  return "-";
+  return "—";
 }
 
 function assignmentAssetRef(row: AssetsRow): string {
@@ -244,7 +247,7 @@ function assignmentAssetRef(row: AssetsRow): string {
   if (typeof assetId === "string" && assetId) {
     return assetId.length > 12 ? `${assetId.slice(0, 8)}…` : assetId;
   }
-  return "-";
+  return "—";
 }
 
 /** Prefer allocation time for active assignments; return time for returned; else fall back. */
@@ -252,13 +255,13 @@ export function resolveAssignmentActivityWhen(row: AssetsRow): string {
   const status = typeof row.status === "string" ? row.status : "";
   if (status === "returned") {
     const returned = formatAssignmentTimestamp(row.returned_at);
-    if (returned !== "-") return returned;
+    if (returned !== "—") return returned;
   }
   const allocated = formatAssignmentTimestamp(row.allocated_at);
-  if (allocated !== "-") return allocated;
+  if (allocated !== "—") return allocated;
   if (status !== "returned") {
     const returned = formatAssignmentTimestamp(row.returned_at);
-    if (returned !== "-") return returned;
+    if (returned !== "—") return returned;
   }
   return formatAssignmentTimestamp(row.created_at);
 }
@@ -293,18 +296,20 @@ export function mapTransfersToDashboardRows(
     const asset = assetMap.get(assetId);
     return {
       id: typeof row.id === "string" && row.id ? row.id : `transfer-${index}`,
-      documentNumber: String(row.document_number ?? "-"),
+      documentNumber: String(row.document_number ?? "—"),
       assetId,
-      assetCode: asset?.code || "-",
+      assetCode: asset?.code || "—",
       assetName: asset?.name || assetId.slice(0, 8) || "Unresolved asset",
-      fromLocation: String(row.from_location_label ?? "-"),
-      toLocation: String(row.to_location_label ?? "-"),
+      fromLocation: String(row.from_location_label ?? "—"),
+      toLocation: String(row.to_location_label ?? "—"),
       fromBranchId: row.from_branch_id != null ? String(row.from_branch_id) : null,
       toBranchId: row.to_branch_id != null ? String(row.to_branch_id) : null,
       effectiveDate: row.effective_date != null ? String(row.effective_date) : null,
       reason: row.reason != null ? String(row.reason) : null,
       status: String(row.status ?? "draft"),
       workflowStatus: row.workflow_status != null ? String(row.workflow_status) : null,
+      version: typeof row.version === "number" ? row.version : undefined,
+      createdBy: row.created_by != null ? String(row.created_by) : null,
     };
   });
 }

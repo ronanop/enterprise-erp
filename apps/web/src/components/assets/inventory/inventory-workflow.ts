@@ -1,6 +1,6 @@
 /**
  * Pure helpers for Inventory → Assignment/Return workflow integration.
- * No router imports - callers supply navigation + drawer close.
+ * No router imports — callers supply navigation + drawer close.
  */
 
 import type { InventoryMenuActionId } from "@/components/assets/inventory/interaction/inventory-interaction.types";
@@ -10,6 +10,8 @@ import { assignmentNavigationPaths } from "@/components/assets/navigation/assign
 
 export function isInventoryWorkflowAction(action: InventoryMenuActionId): boolean {
   return (
+    action === "edit" ||
+    action === "delete" ||
     action === "assign" ||
     action === "return" ||
     action === "startDisposal" ||

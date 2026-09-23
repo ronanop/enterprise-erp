@@ -27,24 +27,48 @@ def test_install_requires_asset_id() -> None:
         validator.validate_install_fields(_ctx(), company_id=uuid4(), fields={})
 
 
-def test_install_requires_component_code() -> None:
+def test_install_allows_omitted_component_code_for_service_allocation() -> None:
+    """component_code may be omitted; ComponentService allocates it after validate."""
+    company_id = uuid4()
+    asset_id = uuid4()
     validator = ComponentValidator(MagicMock())
-    with pytest.raises(ComponentValidationError, match="component_code"):
-        validator.validate_install_fields(
-            _ctx(),
-            company_id=uuid4(),
-            fields={"asset_id": uuid4(), "component_name": "Motor"},
-        )
+    asset = SimpleNamespace(
+        id=asset_id,
+        company_id=company_id,
+        branch_id=uuid4(),
+        status="active",
+        operational_status="READY_TO_MOVE",
+    )
+    fields = {"asset_id": asset_id, "component_name": "Motor"}
+    with (
+        patch.object(validator._assets, "get", return_value=asset),
+        patch.object(validator._components, "find_active_by_code", return_value=None),
+        patch.object(validator._components, "find_active_by_serial", return_value=None),
+    ):
+        validator.validate_install_fields(_ctx(), company_id=company_id, fields=fields)
+    assert fields["component_code"] is None
 
 
-def test_install_requires_component_name() -> None:
+def test_install_allows_omitted_component_name_for_service_default() -> None:
+    """component_name may be omitted; ComponentService defaults it after validate."""
+    company_id = uuid4()
+    asset_id = uuid4()
     validator = ComponentValidator(MagicMock())
-    with pytest.raises(ComponentValidationError, match="component_name"):
-        validator.validate_install_fields(
-            _ctx(),
-            company_id=uuid4(),
-            fields={"asset_id": uuid4(), "component_code": "CMP-1"},
-        )
+    asset = SimpleNamespace(
+        id=asset_id,
+        company_id=company_id,
+        branch_id=uuid4(),
+        status="active",
+        operational_status="READY_TO_MOVE",
+    )
+    fields = {"asset_id": asset_id, "component_code": "CMP-1"}
+    with (
+        patch.object(validator._assets, "get", return_value=asset),
+        patch.object(validator._components, "find_active_by_code", return_value=None),
+        patch.object(validator._components, "find_active_by_serial", return_value=None),
+    ):
+        validator.validate_install_fields(_ctx(), company_id=company_id, fields=fields)
+    assert fields["component_name"] is None
 
 
 def test_install_rejects_non_active_status() -> None:

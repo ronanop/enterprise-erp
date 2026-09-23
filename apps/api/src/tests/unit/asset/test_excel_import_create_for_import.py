@@ -1,4 +1,4 @@
-"""Unit tests - create_for_import + registration validator (CR-004 Phase 8B)."""
+"""Unit tests — create_for_import + registration validator (CR-004 Phase 8B)."""
 
 from __future__ import annotations
 

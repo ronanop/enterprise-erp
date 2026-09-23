@@ -1,6 +1,6 @@
-# IT Assets - Maintenance: Full Feature Analysis (Part 1)
+# IT Assets — Maintenance: Full Feature Analysis (Part 1)
 
-**Status:** Analysis only - no code or schema changes in this pass.  
+**Status:** Analysis only — no code or schema changes in this pass.  
 **Scope:** IT Asset Maintenance **work orders** (`ast_asset_maintenance` / `/assets/asset-maintenances`). Related but separate: Maintenance Plans (`maintenance-plans`), Service History (`service-histories`), Non-IT maintenance dialogs.  
 **Date:** 2026-08-31
 
@@ -11,14 +11,14 @@
 | Area | Finding (one line) |
 |------|--------------------|
 | Primary UI | Single page `/assets/asset-maintenances` → `AssetMaintenanceWorkspace` (list + create draft + detail panel) |
-| “Send to Maintenance” | **Navigate only** to `?assetId=…` - **no API create** |
+| “Send to Maintenance” | **Navigate only** to `?assetId=…` — **no API create** |
 | Prefill bug | `assetId` is **read** then **never applied** to the Create Draft form → looks like “nothing happened” |
 | WO statuses | `draft` → `submitted` → `approved` → `scheduled` → `in_progress` → `completed`; plus `cancelled` (draft cancel or WF reject) |
 | Engine location | Central `AssetMaintenanceEngine` + `MaintenanceValidator` + `MaintenanceService` (not ops-status matrix) |
 | Lifecycle `ast_asset.status` | **Start** → `in_maintenance`; **Complete** (no other open WO) → `active` |
 | Ops `operational_status` | **Never written** by Maintenance; gate only via `OPS_BLOCKED_FOR_MAINTENANCE_OR_TRANSFER` |
-| Create required (API) | `branch_id`, `asset_id`, `maintenance_type` - all else optional |
-| Reason / duration | **No columns** today - would be new |
+| Create required (API) | `branch_id`, `asset_id`, `maintenance_type` — all else optional |
+| Reason / duration | **No columns** today — would be new |
 | History | No WO timeline table; Foundation **audit** on transitions; **service history** row only on **complete** |
 | List | All statuses mixed by default; optional status/type/`q` filters exist |
 | Components (`IN_USE_AS_COMPONENT`) | **Blocked** from create/submit/approve/start (same ops block set) |
@@ -41,8 +41,8 @@ There is **no** dedicated create route (e.g. `/asset-maintenances/new`) and **no
 
 Config / sidebar:
 
-- `apps/web/src/config/assets.ts` - Operations → Maintenance → `/assets/asset-maintenances`
-- `apps/web/src/config/modules.ts` - resource key `asset-maintenances`, `apiPath: /assets/asset-maintenances`
+- `apps/web/src/config/assets.ts` — Operations → Maintenance → `/assets/asset-maintenances`
+- `apps/web/src/config/modules.ts` — resource key `asset-maintenances`, `apiPath: /assets/asset-maintenances`
 
 ### Backend endpoints
 
@@ -75,7 +75,7 @@ List query params: `page`, `page_size`, `company_id`, `asset_id`, `branch_id`, `
 
 Related (same permission family for read on histories):
 
-- `GET/POST /service-histories` - gated with `asset.maintenance:read` / `create` (see router after maintenance block).
+- `GET/POST /service-histories` — gated with `asset.maintenance:read` / `create` (see router after maintenance block).
 
 ### Permissions (catalog)
 
@@ -96,7 +96,7 @@ Workflow code (when governance enabled): `AST_MAINTENANCE_APPROVAL` / entity `as
 
 ---
 
-## 2. “Send to Maintenance” from All Assets - bug diagnosis
+## 2. “Send to Maintenance” from All Assets — bug diagnosis
 
 ### What the UI does today
 
@@ -106,7 +106,7 @@ Workflow code (when governance enabled): `AST_MAINTENANCE_APPROVAL` / entity `as
 
    `/assets/asset-maintenances?assetId={assetId}`
 
-   (`asset-navigation.ts` lines 24-25, 63, 98-99).
+   (`asset-navigation.ts` lines 24–25, 63, 98–99).
 
 4. Asset detail uses the same pattern: `<Link href={/assets/asset-maintenances?assetId=…}>`.
 
@@ -126,18 +126,18 @@ That variable is **never used again** (no `useEffect`, no `onDraftAssetChange(pr
 
 | Possibility | Confirmed? |
 |-------------|------------|
-| A. Backend fails silently when “sending” to maintenance | **No** - no create is attempted |
-| B. User lands on Maintenance page; form empty; no new row in list → “nothing happened” | **Yes** - expected with current code |
-| C. User must still pick asset + Create draft manually | **Yes** - that is the only path that creates a WO |
+| A. Backend fails silently when “sending” to maintenance | **No** — no create is attempted |
+| B. User lands on Maintenance page; form empty; no new row in list → “nothing happened” | **Yes** — expected with current code |
+| C. User must still pick asset + Create draft manually | **Yes** — that is the only path that creates a WO |
 
 Secondary friction (after fixing prefill):
 
-- Asset dropdown is loaded from only `status=active` and `status=in_maintenance`, each `page_size=100` - deep-linked asset may be missing from options even if prefill were wired.
+- Asset dropdown is loaded from only `status=active` and `status=in_maintenance`, each `page_size=100` — deep-linked asset may be missing from options even if prefill were wired.
 - FE hides Maintenance for `ASSIGNED` (and terminal ops); BE also rejects create if an open assignment exists (`_validate_no_open_assignment`).
 
 ---
 
-## 3. Full workflow - statuses and transitions
+## 3. Full workflow — statuses and transitions
 
 ### Work-order statuses (`AssetMaintenanceStatus`)
 
@@ -184,7 +184,7 @@ draft ──cancel──► cancelled   (only if no workflow_instance_id)
 
 | Concern | Style |
 |---------|--------|
-| WO status transitions | Dedicated **engine** (`AssetMaintenanceEngine`) - same pattern as assignment/transfer engines |
+| WO status transitions | Dedicated **engine** (`AssetMaintenanceEngine`) — same pattern as assignment/transfer engines |
 | Business gates (asset lifecycle, open WO exclusivity, assignment, pending transfer, ops block, type/vendor/employee refs) | **`MaintenanceValidator`** |
 | WF submit/approve/reject | **`AssetGovernanceService`** + flag `ASSET_WORKFLOW_GOVERNANCE_ENABLED` |
 | Ops status matrix | **Not** used to *drive* maintenance lifecycle; only a **block set** (below) |
@@ -225,9 +225,9 @@ Used by `MaintenanceValidator._validate_operational_allows_maintenance` on creat
 | **Complete** | → `completed` | → **`active`** if no other open WO and was `in_maintenance` | **unchanged** |
 | Reopen | → `draft`, clear WF | **unchanged** | unchanged |
 
-**Implication:** Until Start, a draft/submitted/approved WO does **not** flip the asset to `in_maintenance`. Assignment eligibility still keys off `READY_TO_MOVE` + lifecycle `active|in_maintenance` - open WOs are **not** checked in `assignment_validator` for exclusivity. Ops status can remain `READY_TO_MOVE` throughout an active maintenance lifecycle flip.
+**Implication:** Until Start, a draft/submitted/approved WO does **not** flip the asset to `in_maintenance`. Assignment eligibility still keys off `READY_TO_MOVE` + lifecycle `active|in_maintenance` — open WOs are **not** checked in `assignment_validator` for exclusivity. Ops status can remain `READY_TO_MOVE` throughout an active maintenance lifecycle flip.
 
-Open WO exclusivity (`find_open_for_asset`): statuses draft/submitted/approved/scheduled/in_progress - one open WO per asset.
+Open WO exclusivity (`find_open_for_asset`): statuses draft/submitted/approved/scheduled/in_progress — one open WO per asset.
 
 Start also blocks if a **pending transfer** exists.
 
@@ -240,7 +240,7 @@ Start also blocks if a **pending transfer** exists.
 | UI label | Payload field | Required (UI) | Required (API schema) | Notes |
 |----------|---------------|---------------|------------------------|-------|
 | Asset | `asset_id` | Yes | **Yes** | Select of active + in_maintenance assets (≤100 each) |
-| Branch | `branch_id` | Yes (auto) | **Yes** | **Read-only UUID** copied from selected asset - not free-text edit, also **not** a named branch picker (`listBranchOptions` unused here) |
+| Branch | `branch_id` | Yes (auto) | **Yes** | **Read-only UUID** copied from selected asset — not free-text edit, also **not** a named branch picker (`listBranchOptions` unused here) |
 | Type | `maintenance_type` | Yes | **Yes** | Default `preventive` |
 | Scheduled date | `scheduled_date` | No | No | `date` input |
 | Cost | `cost_amount` | No | No | number |
@@ -263,19 +263,19 @@ DB + validator: `preventive` | `corrective` | `emergency` | `annual_service`.
 
 Downstream: type is stored and used in service-history summary text on complete. **No** type-specific transition rules or required fields beyond enum membership (+ optional plan link rules).
 
-### Technician / Vendor - pickers elsewhere
+### Technician / Vendor — pickers elsewhere
 
 Confirmed raw UUID inputs today (labels explicitly say “UUID”).
 
 Reusable employee resolution already in Assets:
 
-- `listEmployeeOptions` / `listEmployeeDirectory` - `apps/web/src/lib/org-options.ts` (`GET /employees`)
+- `listEmployeeOptions` / `listEmployeeDirectory` — `apps/web/src/lib/org-options.ts` (`GET /employees`)
 - Assignment / Return wizards inject `listEmployees` into `EmployeeStep` select
 
 Vendor:
 
 - FK to `master.master_vendor`
-- Procurement has `listVendorOptions` (`procurement-service.ts`) - not wired into Assets Maintenance today
+- Procurement has `listVendorOptions` (`procurement-service.ts`) — not wired into Assets Maintenance today
 
 ### Reason / duration / expected return
 
@@ -295,7 +295,7 @@ Workflow comments exist only as **approve/reject** request body (not persisted o
 |-----------|------------|--------------|
 | Foundation `AuditService.log_entity_change` | Generic entity audit (create/update/approve/cancel/reopen/schedule/start/complete) | Each service mutation |
 | `ast_asset_service_history` | One **recorded** service event per completed WO (`maintenance_id`, `service_summary`, cost, `serviced_at`) | **Complete only** |
-| Dedicated WO timeline / comments table | **Does not exist** | - |
+| Dedicated WO timeline / comments table | **Does not exist** | — |
 
 “Work order detail” today shows: document number, asset name, status (+ workflow_status), type, scheduled/completed dates, truncated technician/vendor IDs, cost, action buttons, and draft edit fields. **No** chronological event list, **no** audit feed, **no** service-history embed.
 
@@ -306,11 +306,11 @@ A Components-style “View Detail” drawer with **full history** would need eit
 
 Current GET-by-id alone is **insufficient** for a rich history drawer without additional reads.
 
-Service History has its own workspace (`/assets/service-histories`) listing completed events - parallel surface, not embedded in Maintenance detail.
+Service History has its own workspace (`/assets/service-histories`) listing completed events — parallel surface, not embedded in Maintenance detail.
 
 ---
 
-## 6. Maintenance list - what it shows today
+## 6. Maintenance list — what it shows today
 
 - Default load: **no status filter** → **all statuses** mixed (draft, scheduled, completed, cancelled, etc.), newest first (`created_at.desc`).
 - Optional UI filters: status dropdown (all enum values), type, search `q` (document number / asset code via join), pagination.
@@ -324,9 +324,9 @@ Status meanings on the list: same as §3 (raw enum strings in a badge, optionall
 
 | Question | Answer |
 |----------|--------|
-| Can an asset with ops `IN_USE_AS_COMPONENT` get a maintenance WO? | **No** - blocked by `OPS_BLOCKED_FOR_MAINTENANCE_OR_TRANSFER` on create/submit/approve/start |
-| Does Maintenance change or clear component linkage? | **No** - no calls into component attach/detach |
-| Does Start/Complete touch `IN_USE_AS_COMPONENT`? | **No** - only lifecycle `status` |
+| Can an asset with ops `IN_USE_AS_COMPONENT` get a maintenance WO? | **No** — blocked by `OPS_BLOCKED_FOR_MAINTENANCE_OR_TRANSFER` on create/submit/approve/start |
+| Does Maintenance change or clear component linkage? | **No** — no calls into component attach/detach |
+| Does Start/Complete touch `IN_USE_AS_COMPONENT`? | **No** — only lifecycle `status` |
 | Parent hosting linked components while Ready? | Allowed for maintenance if not in block set and no open assignment; **untested product territory** for “maintain parent with linked child assets” |
 | Child currently InUse | Cannot open WO until detached (ops → Ready) |
 
@@ -336,15 +336,15 @@ FE inventory: Maintenance menu also hidden when `isOpsBlockedForTransferOrMainte
 
 ## Related surfaces (non-goals of this report, for context)
 
-- **Maintenance Plans** - separate CRUD/activate/pause/resume/close; can optionally link to a WO via `maintenance_plan_id`.
-- **Non-IT** maintenance start/complete dialogs - different module/API; do not share this WO engine.
-- **Checklists** - can reference a maintenance id in some validators; not the primary Maintenance UX.
+- **Maintenance Plans** — separate CRUD/activate/pause/resume/close; can optionally link to a WO via `maintenance_plan_id`.
+- **Non-IT** maintenance start/complete dialogs — different module/API; do not share this WO engine.
+- **Checklists** — can reference a maintenance id in some validators; not the primary Maintenance UX.
 
 ---
 
 ## What must be decided before Part 2
 
-Do **not** treat the following as implementation proposals - only decision prompts after review.
+Do **not** treat the following as implementation proposals — only decision prompts after review.
 
 ### A. Bug vs product intent for All Assets → Maintenance
 

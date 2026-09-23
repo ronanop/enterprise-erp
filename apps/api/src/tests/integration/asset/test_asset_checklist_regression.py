@@ -1,4 +1,4 @@
-"""FP-ASSET-014 regression guards - Maintenance and Audit remain unchanged."""
+"""FP-ASSET-014 regression guards — Maintenance and Audit remain unchanged."""
 
 from __future__ import annotations
 

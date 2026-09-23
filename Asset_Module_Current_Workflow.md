@@ -1,4 +1,4 @@
-# Asset Module - Current Working Workflow & Status
+# Asset Module — Current Working Workflow & Status
 
 **Scope:** Asset Management only (`apps/api/src/modules/asset/**`, `apps/web` Assets UI)  
 **Method:** Live codebase inspection (August 2026)  
@@ -38,8 +38,8 @@ Add Asset wizard (/assets/assets/new)
 |------|--------|-------|
 | Create with name, category, branch, cost, type, serial | **Working** | Branch is dropdown (not raw UUID) |
 | User-entered Asset Code | **Partial** | UI collects it; API strips `asset_code` and generates its own |
-| Location step (label/building/floor/room) | **Partial** | UI only - **not sent on create** |
-| Technical step (hostname/MAC) | **Partial** | UI only - **not sent on create** |
+| Location step (label/building/floor/room) | **Partial** | UI only — **not sent on create** |
+| Technical step (hostname/MAC) | **Partial** | UI only — **not sent on create** |
 | Persist create (DB commit) | **Working** | Fixed via asset `get_db` commit-on-success |
 | Auto submit/approve | **Breaking risk** | `.catch(() => undefined)` hides workflow failures |
 | Show on All Assets | **Working** | Was blank when assignments `page_size=500` caused 422; now capped/paginated at 200 |
@@ -98,7 +98,7 @@ QR workspace → client QR pointing at /assets/self-service/{id}
 | Feature | Status |
 |---------|--------|
 | Import UI + API | **Working** |
-| Sidebar entry | **Orphan** - reachable by URL only |
+| Sidebar entry | **Orphan** — reachable by URL only |
 
 ---
 
@@ -150,7 +150,7 @@ Router (routers/__init__.py)
 | Notifications | `/asset-notifications` | CRUD + archive/read/sent/failed | **Working** |
 | Reports | `/reports` | Catalog/dashboard/run/export/generate/finalize | **Working** |
 | Operational status | *(no dedicated REST)* | Transitions via assignment/disposal/approve | **Working** (composed) |
-| Soft-delete APIs | - | Columns only | **Not built** |
+| Soft-delete APIs | — | Columns only | **Not built** |
 | Celery expiry/alerts | `tasks.py` | Mostly count/list | **Stub / Untouched** |
 | Depreciation approval WF | constant only | No seed / no approve API | **Not built** |
 
@@ -356,7 +356,7 @@ These were broken in live use and are **fixed in the current tree** (do not re-d
 ## 7. Known remaining gaps / break risks
 
 1. **Add Asset** does not persist Location or Technical steps; user-entered asset code is ignored by API.
-2. Wizard **submit/approve** failures are swallowed - asset may stay draft while UI navigates to detail.
+2. Wizard **submit/approve** failures are swallowed — asset may stay draft while UI navigates to detail.
 3. Detail **quick return** may omit required return body fields.
 4. **Documents**: metadata APIs exist; full multipart upload UX is incomplete vs FRD intent.
 5. **Settings / Asset Types**: intentional shells.
@@ -372,14 +372,14 @@ These were broken in live use and are **fixed in the current tree** (do not re-d
 
 Use after login (`admin@example.com` / configured password):
 
-1. `/assets` - KPIs load (not “Cannot reach API”).
-2. `/assets/assets` - rows appear; no red **Validation error**.
-3. `/assets/assets/new` - pick branch + category → Create → lands on detail; asset visible in All Assets.
+1. `/assets` — KPIs load (not “Cannot reach API”).
+2. `/assets/assets` — rows appear; no red **Validation error**.
+3. `/assets/assets/new` — pick branch + category → Create → lands on detail; asset visible in All Assets.
 4. Issue from inventory → return via return wizard.
-5. Open Categories, Assignments, Transfers, Maintenance, Reports - list loads.
-6. `/assets/qr-barcode?assetId=…` - QR renders.
-7. `/assets/settings` and `/assets/asset-types` - open as shells (expected).
-8. `/assets/inventory-import` - page opens (URL only).
+5. Open Categories, Assignments, Transfers, Maintenance, Reports — list loads.
+6. `/assets/qr-barcode?assetId=…` — QR renders.
+7. `/assets/settings` and `/assets/asset-types` — open as shells (expected).
+8. `/assets/inventory-import` — page opens (URL only).
 
 ---
 

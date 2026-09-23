@@ -1,4 +1,4 @@
-# ADR-ASSET-DSP-001 - Asset Disposal (Retirement & Disposal Governance)
+# ADR-ASSET-DSP-001 — Asset Disposal (Retirement & Disposal Governance)
 
 **Status:** Accepted  
 **Date:** 2026-07-29  

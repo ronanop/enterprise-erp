@@ -1,10 +1,10 @@
 /** @vitest-environment jsdom */
 
 /**
- * Phase 4 Task 6 - E2E / regression coverage for navigation + inventory lifecycle.
+ * Phase 4 Task 6 — E2E / regression coverage for navigation + inventory lifecycle.
  */
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -27,7 +27,13 @@ import {
 import { EMPTY_INVENTORY_FILTERS } from "@/components/assets/shared";
 import { assetOperationsService } from "@/services/assets-service";
 
-const push = vi.fn();
+const { push } = vi.hoisted(() => ({ push: vi.fn() }));
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push, replace: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
+  usePathname: () => "/assets/assets",
+  useSearchParams: () => new URLSearchParams(),
+}));
 
 vi.mock("@/components/assets/navigation/use-asset-navigation", () => ({
   useAssetNavigation: () => createAssetNavigation(push),
@@ -58,6 +64,10 @@ vi.mock("@/lib/org-options", () => ({
   employeeDirectoryById: () => ({}),
 }));
 
+vi.mock("@/services/asset-site-location-service", () => ({
+  listSiteLocations: vi.fn().mockResolvedValue([]),
+}));
+
 const readyAsset = {
   id: "asset-99",
   asset_code: "AST-99",
@@ -85,15 +95,37 @@ beforeEach(() => {
   );
 });
 
-describe("E2E - Inventory → Issue navigation", () => {
+describe("E2E — Inventory → Issue navigation", () => {
+  async function waitForInventoryReady(assetCode: string) {
+    await waitFor(() => expect(screen.getAllByText(assetCode).length).toBeGreaterThan(0));
+    await waitFor(() => {
+      expect(screen.getByTestId("inventory-export-trigger")).not.toBeDisabled();
+    });
+    for (let i = 0; i < 8; i += 1) {
+      const calls = vi.mocked(assetOperationsService.listAssets).mock.calls.length;
+      await new Promise((r) => setTimeout(r, 40));
+      await waitFor(() => {
+        expect(screen.getByTestId("inventory-export-trigger")).not.toBeDisabled();
+      });
+      if (vi.mocked(assetOperationsService.listAssets).mock.calls.length === calls) break;
+    }
+  }
+
+  async function tableRowForAssetCode(assetCode: string) {
+    await waitForInventoryReady(assetCode);
+    const cell = screen.getAllByText(assetCode).find((el) => el.closest("tr"));
+    expect(cell).toBeTruthy();
+    return cell!.closest("tr")!;
+  }
+
   it("Assign closes drawer and opens issue wizard once", async () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
-    await waitFor(() => expect(screen.getAllByText("AST-99")[0]).toBeInTheDocument());
-    await user.click(screen.getAllByRole("button", { name: /View/ })[0]!);
-    expect(screen.getByTestId("asset-detail-drawer")).toBeInTheDocument();
-    await user.click(screen.getAllByRole("button", { name: "More actions" })[0]!);
-    await user.click(screen.getByRole("menuitem", { name: "Assign Asset" }));
+    const row = await tableRowForAssetCode("AST-99");
+    await user.click(within(row).getByRole("button", { name: "View" }));
+    expect(await screen.findByTestId("asset-detail-drawer")).toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Assign Asset" }));
     await waitFor(() => expect(screen.queryByTestId("asset-detail-drawer")).not.toBeInTheDocument());
     expect(push).toHaveBeenCalledTimes(1);
     expect(push).toHaveBeenCalledWith(ASSIGNMENT_DEEP_LINKS.newAsset("asset-99"));
@@ -102,16 +134,16 @@ describe("E2E - Inventory → Issue navigation", () => {
   it("snapshots UI state before assign", async () => {
     const user = userEvent.setup();
     render(<AssetInventoryContainer />);
-    await waitFor(() => expect(screen.getAllByText("AST-99")[0]).toBeInTheDocument());
-    await user.click(screen.getAllByRole("button", { name: "More actions" })[0]!);
-    await user.click(screen.getByRole("menuitem", { name: "Assign Asset" }));
+    const row = await tableRowForAssetCode("AST-99");
+    await user.click(within(row).getByRole("button", { name: "More actions" }));
+    await user.click(await screen.findByRole("menuitem", { name: "Assign Asset" }));
     const snap = consumeInventoryUiSnapshot();
     expect(snap).not.toBeNull();
     expect(snap?.preset).toBe("all");
   });
 });
 
-describe("E2E - refresh lifecycle (no duplicate)", () => {
+describe("E2E — refresh lifecycle (no duplicate)", () => {
   it("stale remount loads inventory without reloadToken storm", async () => {
     markInventoryStale({ reason: "issue", assetId: "asset-99" });
     render(<AssetInventoryContainer />);
@@ -150,7 +182,7 @@ describe("E2E - refresh lifecycle (no duplicate)", () => {
   });
 });
 
-describe("E2E - AssignmentNavigation ↔ AssetNavigation parity", () => {
+describe("E2E — AssignmentNavigation ↔ AssetNavigation parity", () => {
   it("AssetNavigation.assign matches AssignmentNavigation.openIssue href", () => {
     const assetPush = vi.fn();
     const asgPush = vi.fn();
@@ -168,7 +200,7 @@ describe("E2E - AssignmentNavigation ↔ AssetNavigation parity", () => {
   });
 });
 
-describe("E2E - browser navigation contracts (pure)", () => {
+describe("E2E — browser navigation contracts (pure)", () => {
   it("cancel path equals inventory path", () => {
     const push = vi.fn();
     createAssignmentNavigation(push).openInventory();

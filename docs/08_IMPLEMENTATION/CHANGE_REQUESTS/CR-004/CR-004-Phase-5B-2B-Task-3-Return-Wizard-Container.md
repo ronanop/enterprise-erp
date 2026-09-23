@@ -1,4 +1,4 @@
-# CR-004 - Phase 5B-2B Task 3 - Return Wizard Container
+# CR-004 — Phase 5B-2B Task 3 — Return Wizard Container
 
 **Status:** Complete  
 **Date:** 2026-08-05  
@@ -55,9 +55,9 @@ Requires `assignmentId` **or** `assetId`. Only `status === "active"` assignments
 
 ## Workflow
 
-1. **Mount** - validate id props → load assignment → `getAsset` → build summary.
-2. **Steps** - Summary → Condition → Remarks → Review (wizard UI only).
-3. **Confirm return** - map state → `returnAsset` → `onSuccess()`.
+1. **Mount** — validate id props → load assignment → `getAsset` → build summary.
+2. **Steps** — Summary → Condition → Remarks → Review (wizard UI only).
+3. **Confirm return** — map state → `returnAsset` → `onSuccess()`.
 
 ---
 
@@ -69,7 +69,7 @@ Inventory integration, query parameters, navigation inside container, backend, d
 
 ## Tests
 
-`return-wizard-container.test.tsx` - **25+** cases:
+`return-wizard-container.test.tsx` — **25+** cases:
 
 - Load by assignmentId / assetId, preference, summary populate
 - Auth / missing id / non-active / no active / getAsset failure

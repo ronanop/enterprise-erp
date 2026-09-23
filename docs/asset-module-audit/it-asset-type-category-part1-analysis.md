@@ -1,8 +1,8 @@
-# IT Assets - Asset Type & Category Part 1 (Analysis Report)
+# IT Assets — Asset Type & Category Part 1 (Analysis Report)
 
 **Date:** 2026-08-31  
 **Scope:** Read-only map. No schema, migration, or code proposals (those are Part 2).  
-**Status:** Ready for review - Part 2 blocked on sign-off of this report.
+**Status:** Ready for review — Part 2 blocked on sign-off of this report.
 
 ## Core distinction (locked from codebase)
 
@@ -10,9 +10,9 @@ There are **three different “type/category” concepts** that share overlappin
 
 | Layer | What users see | What is persisted | Admin-manageable today? |
 |---|---|---|---|
-| **A. PRD type catalog** | Laptop, Desktop, Monitor, … on Add Asset + `/assets/asset-types` | **Nothing under that name.** Only maps → `ast_asset.asset_type` enum | **No** - hardcoded FE array |
-| **B. API `asset_type` enum** | Inventory filter “Fixed / Digital / …” | `ast_asset.asset_type` ∈ `{fixed, consumable, digital, leased}` | **No** - DB check constraint + validator frozenset |
-| **C. Asset Category master** | Formerly “Category” dropdown (“IT Equipment”); Categories CRUD page | `ast_asset_category` + required `ast_asset.asset_category_id` | **Yes** - full CRUD API (UI nav recently hidden) |
+| **A. PRD type catalog** | Laptop, Desktop, Monitor, … on Add Asset + `/assets/asset-types` | **Nothing under that name.** Only maps → `ast_asset.asset_type` enum | **No** — hardcoded FE array |
+| **B. API `asset_type` enum** | Inventory filter “Fixed / Digital / …” | `ast_asset.asset_type` ∈ `{fixed, consumable, digital, leased}` | **No** — DB check constraint + validator frozenset |
+| **C. Asset Category master** | Formerly “Category” dropdown (“IT Equipment”); Categories CRUD page | `ast_asset_category` + required `ast_asset.asset_category_id` | **Yes** — full CRUD API (UI nav recently hidden) |
 
 The `IT-HW` / `FURN` / `VEH` badges on `/assets/asset-types` belong to layer **A only** (`categoryCode` on the hardcoded catalog). They are **not** rows in `ast_asset_category` and are **not** written to the database.
 
@@ -42,14 +42,14 @@ flowchart LR
 
 | Concept | Backend source | Frontend source | Status |
 |---|---|---|---|
-| PRD type names (Laptop, Desktop, …) | **None** - no `ast_asset_type` table | `ASSET_PRD_TYPES` in `apps/web/src/config/asset-prd-types.ts` | **Hardcoded** |
-| `/assets/asset-types` page | None | `AssetTypesWorkspace` - search/filter over `ASSET_PRD_TYPES` | **100% read-only** UI catalog |
+| PRD type names (Laptop, Desktop, …) | **None** — no `ast_asset_type` table | `ASSET_PRD_TYPES` in `apps/web/src/config/asset-prd-types.ts` | **Hardcoded** |
+| `/assets/asset-types` page | None | `AssetTypesWorkspace` — search/filter over `ASSET_PRD_TYPES` | **100% read-only** UI catalog |
 | Hardware field show/require | None | `ASSET_IT_CONFIG_RULES` keyed by PRD **id** (`laptop`/`desktop`/`mobile`) in `asset-it-config-rules.ts` | **Behavior** keyed on PRD id, not enum |
 | API `asset_type` column | `ast_asset.asset_type` + `ck_ast_asset_type` | Mapped from `apiAssetType`; inventory filter uses Fixed/Digital/… | **Real enum** (4 values); no subtype behavior |
 | Category tags `IT-HW`/`FURN`/`VEH` | **None** | `categoryCode` field on `ASSET_PRD_TYPES` | **Display-only** on Asset Types page |
 | Asset Category master | `asset.ast_asset_category` | Categories workspace + API; Add Asset auto-picks first active | **Real table**; still **required** on create |
 | Add Asset “Category” dropdown | Was `listAssetCategories` → `asset_category_id` | Recently removed from Add Asset UI; silent default remains | **Same concept C**, not `IT-HW` tags |
-| IT asset codes | `CODE_PREFIXES[ASSET] = ("AST-", 6)` - company-wide sequence | - | **Independent** of type/category |
+| IT asset codes | `CODE_PREFIXES[ASSET] = ("AST-", 6)` — company-wide sequence | — | **Independent** of type/category |
 | Non-IT type master | `ast_nonit_asset_type` (+ `assignment_mode`, `prefix`, `category`) | Full admin CRUD | **Separate** mechanism (reference pattern) |
 
 ---
@@ -82,14 +82,14 @@ Nine rows:
 
 File header comment: *“Interim PRD asset type catalog until backend master exists.”*
 
-### 1b. `/assets/asset-types` - confirmed read-only
+### 1b. `/assets/asset-types` — confirmed read-only
 
 `AssetTypesWorkspace` (`apps/web/src/components/assets/asset-types-workspace.tsx`):
 
 - Renders `ASSET_PRD_TYPES` in a table.
 - Search only; **no** Create / Edit / Delete / Activate controls.
 - Copy: *“This list is UI guidance…”* / *“Forms map these labels to the backend asset_type enum.”*
-- `modules.ts` `apiPath` for `asset-types` points at `/assets/assets` (not a types API) - further evidence it is not backed by a resource.
+- `modules.ts` `apiPath` for `asset-types` points at `/assets/assets` (not a types API) — further evidence it is not backed by a resource.
 
 ### 1c. Backend `asset_type` = 4-value classification enum
 
@@ -97,8 +97,8 @@ Persisted on every IT asset:
 
 ```text
 ast_asset.asset_type IN ('fixed','consumable','digital','leased')
-  - ck_ast_asset_type (models/asset.py)
-  - RegistrationValidator.ASSET_TYPES / incoming VALID_ASSET_TYPES
+  — ck_ast_asset_type (models/asset.py)
+  — RegistrationValidator.ASSET_TYPES / incoming VALID_ASSET_TYPES
 ```
 
 **What “API ASSET_TYPE” / `apiAssetType` controls today:**
@@ -112,7 +112,7 @@ ast_asset.asset_type IN ('fixed','consumable','digital','leased')
 
 **Important:** Backend code does **not** branch business logic on `fixed` vs `digital` vs `consumable` vs `leased` beyond “is this one of the four allowed values?” and list filtering. Mobile Device → `digital` is a **label/classification stored for filtering**, not a behavior switch.
 
-**PRD type name is never persisted.** After Add Asset, the DB cannot answer “was this a Laptop or a Monitor?” - only `asset_type=fixed` (and free-text `asset_name` / `configuration`).
+**PRD type name is never persisted.** After Add Asset, the DB cannot answer “was this a Laptop or a Monitor?” — only `asset_type=fixed` (and free-text `asset_name` / `configuration`).
 
 ---
 
@@ -125,7 +125,7 @@ ast_asset.asset_type IN ('fixed','consumable','digital','leased')
 | `asset-it-config-rules.ts` → Add Asset | Show/require Processor, RAM, Storage; Intel generation | **PRD id** (`laptop`, `desktop`, `mobile` → COMPUTER; all others → PERIPHERAL) |
 | `asset-add-form.tsx` | Clears hardware fields on type change; validates per `getItConfigRule`; help text *“Hardware configuration fields apply to Laptop, Desktop, and Mobile Device types”* | PRD id via rules map |
 | `asset-add-form.tsx` submit | Sets `asset_type` from `prd.apiAssetType` | PRD row → enum |
-| Incoming prefill on Add Asset | Maps `prefill.asset_type` (enum) → first PRD with matching `apiAssetType` | **Lossy** - many PRDs share `fixed`, so prefill may pick Laptop for any fixed asset |
+| Incoming prefill on Add Asset | Maps `prefill.asset_type` (enum) → first PRD with matching `apiAssetType` | **Lossy** — many PRDs share `fixed`, so prefill may pick Laptop for any fixed asset |
 
 **This is the main Part 2 risk:** behavior today is **name/id-keyed** on a closed FE list, same class of problem Non-IT solved with `assignment_mode`.
 
@@ -151,22 +151,22 @@ No warranty/insurance/depreciation/meter/disposal/permission code was found that
 | Warranty / insurance | No `asset_type` / category branching in those services. |
 | Dashboard ops summary | Groups by location/status/etc.; not by PRD type. Reports have `by_category` for **Category master** (see §3). |
 | Permissions / RBAC | `asset.category:*` exists for Category CRUD. No permission scoped by type name or enum value. |
-| Code generation | IT assets: company-wide `AST-######` via `CODE_PREFIXES` - **independent** of type and category. (Contrast Non-IT: prefix per type.) |
+| Code generation | IT assets: company-wide `AST-######` via `CODE_PREFIXES` — **independent** of type and category. (Contrast Non-IT: prefix per type.) |
 
 ---
 
-## 3. Category - full map (two different “Category” concepts)
+## 3. Category — full map (two different “Category” concepts)
 
-### 3.1 Concept C1 - PRD `categoryCode` (`IT-HW` / `FURN` / `VEH`)
+### 3.1 Concept C1 — PRD `categoryCode` (`IT-HW` / `FURN` / `VEH`)
 
 - Defined **only** on `ASSET_PRD_TYPES.categoryCode`.
 - Shown as the “Category” column on `/assets/asset-types`.
-- Helper `prdTypesForCategory()` exists to filter PRD types by that code - **no current consumer** found outside the catalog file itself (dead helper after UI changes).
+- Helper `prdTypesForCategory()` exists to filter PRD types by that code — **no current consumer** found outside the catalog file itself (dead helper after UI changes).
 - **Never written to DB. Never used for numbering, permissions, Excel, or reporting.**
 
 Removing these tags from the Asset Types page is UI-only and cannot silently break backend flows.
 
-### 3.2 Concept C2 - `ast_asset_category` (real master)
+### 3.2 Concept C2 — `ast_asset_category` (real master)
 
 **Definition:** table `asset.ast_asset_category` (migration `0246_ast_asset_category`), fields include:
 
@@ -175,7 +175,7 @@ Removing these tags from the Asset Types page is UI-only and cannot silently bre
 - `status` active/inactive
 - `asset_domain` IT / NON_IT / NULL (added in `0500`)
 
-**Demo seed** (`seed_demo_modules.py`): typically `category_code="IT"`, `category_name="IT Equipment"` - **not** `IT-HW` / `FURN` / `VEH`.
+**Demo seed** (`seed_demo_modules.py`): typically `category_code="IT"`, `category_name="IT Equipment"` — **not** `IT-HW` / `FURN` / `VEH`.
 
 **Relationship to Type:** independent FK. Type (enum or PRD) does **not** determine category. Historically the Add Asset form had a **separate** Category dropdown; after recent UX work it silently assigns the **first active** IT-domain category. PRD `categoryCode` is **not** used to pick that row.
 
@@ -200,9 +200,9 @@ Removing these tags from the Asset Types page is UI-only and cannot silently bre
 | Information portal | Resolves `category_code` / `category_name` for display |
 | Master Data adapter | Copies category **code/name** (or falls back to `asset_type` enum) into `master_asset.asset_category` string on approve/link |
 | Excel import | Optional per-row “Category” column resolved by label → id; else batch `defaults.asset_category_id` |
-| Permissions | `asset.category:read|create|update` - CRUD on the master, not per-asset scoping |
-| Asset detail `isItAssetCategory()` | Heuristic on category **code/name** (`IT*`, `*HW*`, name contains hardware/computer) to show **Device Discovery** panel - **behavior** keyed on Category master strings, not PRD tags |
-| Domain filter | Category list defaults `asset_domain=IT`; assets also have `asset_domain` (IT vs Non-IT register split) - orthogonal to PRD types |
+| Permissions | `asset.category:read|create|update` — CRUD on the master, not per-asset scoping |
+| Asset detail `isItAssetCategory()` | Heuristic on category **code/name** (`IT*`, `*HW*`, name contains hardware/computer) to show **Device Discovery** panel — **behavior** keyed on Category master strings, not PRD tags |
+| Domain filter | Category list defaults `asset_domain=IT`; assets also have `asset_domain` (IT vs Non-IT register split) — orthogonal to PRD types |
 
 ### 3.5 Removal risk for Category (C2)
 
@@ -225,7 +225,7 @@ Removing only the **PRD tags** (`IT-HW` etc.) and the Categories **nav** is larg
 | Type storage | No type master; PRD names FE-only; enum on asset | `ast_nonit_asset_type` table, FK `asset_type_id` on each asset |
 | Admin CRUD | Types page read-only | Full create/edit; active flag; peek next code |
 | Behavior classification | Hardcoded map by PRD **id** (`ASSET_IT_CONFIG_RULES`) | `assignment_mode` ∈ `EMPLOYEE\|LOCATION\|BOTH` on the type row |
-| Secondary grouping | PRD `categoryCode` (unused) + separate `ast_asset_category` | Enum `category` on type (`FURNITURE`, `APPLIANCE`, …) - UX/filter grouping, not assignment logic |
+| Secondary grouping | PRD `categoryCode` (unused) + separate `ast_asset_category` | Enum `category` on type (`FURNITURE`, `APPLIANCE`, …) — UX/filter grouping, not assignment logic |
 | Code numbering | Global `AST-######` | Per-type `prefix` + gapless sequence (`CH001`, …) |
 | Structural similarity | **None** shared with Non-IT type table | Separate, newer design |
 
@@ -233,8 +233,8 @@ Removing only the **PRD tags** (`IT-HW` etc.) and the Categories **nav** is larg
 
 1. A real IT type master table (name, active, company scope, audit columns).  
 2. FK from `ast_asset` to that type (today only enum + category FK).  
-3. A **behavior field** (or fields) replacing `ASSET_IT_CONFIG_RULES` keyed by id - e.g. something like `hardware_config_mode` / `requires_hardware` analogous to `assignment_mode`.  
-4. (Optional, if desired) per-type code `prefix` - IT does not have this today; would be a product choice, not a parity requirement.  
+3. A **behavior field** (or fields) replacing `ASSET_IT_CONFIG_RULES` keyed by id — e.g. something like `hardware_config_mode` / `requires_hardware` analogous to `assignment_mode`.  
+4. (Optional, if desired) per-type code `prefix` — IT does not have this today; would be a product choice, not a parity requirement.  
 5. Migration/backfill strategy for existing assets that only have `asset_type=fixed|digital|…` and no Laptop/Monitor identity.  
 6. Decision on what happens to `ast_asset_category` and the 4-value enum once a real type master exists (keep, collapse, or redefine).
 
@@ -266,7 +266,7 @@ No other IT-side hardcoded “classification catalog” files were found in `app
    Persist the nine PRD names (Laptop, …) as first-class master rows, or only keep the 4-value financial/classification enum and treat PRD names as disposable UX labels?
 
 2. **Behavior classification for new admin-created types**  
-   Today hardware fields only appear for `laptop`/`desktop`/`mobile` ids. If admins can add “Tablet” or “Server”, what field drives hardware UI - a Non-IT-style enum (e.g. `requires_hardware` / `config_profile`), free-form flags, or keep name-based rules (not recommended)?
+   Today hardware fields only appear for `laptop`/`desktop`/`mobile` ids. If admins can add “Tablet” or “Server”, what field drives hardware UI — a Non-IT-style enum (e.g. `requires_hardware` / `config_profile`), free-form flags, or keep name-based rules (not recommended)?
 
 3. **Fate of API enum `fixed|consumable|digital|leased`**  
    Keep as orthogonal classification on the asset or type row, derive from the new type master, or retire once PRD types are persisted? Mobile → `digital` is the only non-`fixed` PRD mapping today; is that intentional product meaning?

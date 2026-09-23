@@ -142,7 +142,7 @@ describe("wizardStateToCreateBody", () => {
         employeeSource: "MANUAL_ENTRY",
         manualEmployeeName: "Riya Shah",
         manualEmployeePhone: "9876543210",
-        manualEmployeeDeployedTo: "Airtel - Gurugram office",
+        manualEmployeeDeployedTo: "Airtel — Gurugram office",
         deliveryReferenceStatus: "pending",
       },
       [],
@@ -151,7 +151,7 @@ describe("wizardStateToCreateBody", () => {
     expect(body.employee_id).toBeUndefined();
     expect(body.manual_employee_name).toBe("Riya Shah");
     expect(body.manual_employee_phone).toBe("9876543210");
-    expect(body.manual_employee_deployed_to).toBe("Airtel - Gurugram office");
+    expect(body.manual_employee_deployed_to).toBe("Airtel — Gurugram office");
     expect(body.expected_return_at).toBeUndefined();
   });
 });

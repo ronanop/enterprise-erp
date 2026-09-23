@@ -487,6 +487,22 @@ class AssignmentService:
         self._activate_assignment(ctx, row_id)
         return self.get(ctx, row_id)
 
+    def activate_submitted_immediately(
+        self, ctx: TenantContext, row_id: UUID
+    ) -> AstAssetAssignment:
+        """Activate a submitted assignment without workflow (orchestrated custody flows)."""
+        row = self.get(ctx, row_id)
+        if row.status == AssetAssignmentStatus.DRAFT.value:
+            self._validator.validate_submit_readiness(ctx, row)
+            self._engine.submit(row)
+            self._repo.update(ctx, row_id, status=row.status)
+        elif row.status != AssetAssignmentStatus.SUBMITTED.value:
+            raise AssignmentValidationError(
+                "Only draft or submitted assignments can be activated immediately"
+            )
+        self._activate_assignment(ctx, row_id)
+        return self.get(ctx, row_id)
+
     def _activate_assignment(self, ctx: TenantContext, row_id: UUID) -> None:
         assignment = self.get(ctx, row_id)
         asset = self._assets.get(ctx, assignment.asset_id)

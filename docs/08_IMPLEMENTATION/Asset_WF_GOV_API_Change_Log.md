@@ -1,4 +1,4 @@
-# Asset Workflow Governance - API Change Log
+# Asset Workflow Governance — API Change Log
 
 **Feature:** FP-ASSET-WF-GOV-001 / C-AST-01  
 **Date:** 2026-07-29  

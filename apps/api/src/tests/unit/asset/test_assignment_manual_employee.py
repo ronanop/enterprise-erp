@@ -90,7 +90,7 @@ def test_manual_entry_create_succeeds_with_required_fields() -> None:
                 "manual_employee_name": "Riya Shah",
                 "manual_employee_phone": "9876543210",
                 "manual_employee_email": None,
-                "manual_employee_deployed_to": "Airtel - Gurugram office",
+                "manual_employee_deployed_to": "Airtel — Gurugram office",
             },
         )
 
@@ -106,7 +106,7 @@ def test_manual_entry_create_fails_without_required_field(missing: str) -> None:
         "employee_source": AssignmentEmployeeSource.MANUAL_ENTRY.value,
         "manual_employee_name": "Riya Shah",
         "manual_employee_phone": "9876543210",
-        "manual_employee_deployed_to": "Airtel - Gurugram office",
+        "manual_employee_deployed_to": "Airtel — Gurugram office",
     }
     fields[missing] = None
     with (
@@ -281,7 +281,7 @@ def test_check_accepts_manual_entry_row() -> None:
         manual_employee_name="Riya Shah",
         manual_employee_phone="9876543210",
         manual_employee_email=None,
-        manual_employee_deployed_to="Airtel - Gurugram office",
+        manual_employee_deployed_to="Airtel — Gurugram office",
         status="draft",
         delivery_reference_status="pending",
         delivery_challan_signature_status="not_signed",
@@ -320,7 +320,7 @@ def test_dc_create_snapshots_manual_employee() -> None:
         manual_employee_name="Riya Shah",
         manual_employee_phone="9876543210",
         manual_employee_email=None,
-        manual_employee_deployed_to="Airtel - Gurugram office",
+        manual_employee_deployed_to="Airtel — Gurugram office",
         document_number="ASN-1",
         delivery_reference_status="pending",
         delivery_reference_number=None,
@@ -343,7 +343,7 @@ def test_dc_create_snapshots_manual_employee() -> None:
         assert kwargs["employee_name"] == "Riya Shah"
         assert kwargs["employee_phone"] == "9876543210"
         assert kwargs["employee_email"] is None
-        assert kwargs["deployed_to"] == "Airtel - Gurugram office"
+        assert kwargs["deployed_to"] == "Airtel — Gurugram office"
 
 
 def test_send_to_scm_manual_requires_name_and_phone() -> None:

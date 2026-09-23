@@ -1,4 +1,4 @@
-# CR-004 - Phase 5B-2B Task 5 - Query Parameters & Draft Resume
+# CR-004 — Phase 5B-2B Task 5 — Query Parameters & Draft Resume
 
 **Status:** Complete  
 **Date:** 2026-08-05  
@@ -22,7 +22,7 @@ Containers never read URLs.
 
 ## Supported query parameters
 
-### Assignment - `/assets/asset-assignments/new`
+### Assignment — `/assets/asset-assignments/new`
 
 | Param | Container mapping |
 |-------|-------------------|
@@ -32,7 +32,7 @@ Containers never read URLs.
 
 Aliases: `asset_id`, `employee_id`, `draft_id`. Blank/whitespace → treated as missing.
 
-### Return - `/assets/asset-assignments/return`
+### Return — `/assets/asset-assignments/return`
 
 | Param | Behavior |
 |-------|----------|

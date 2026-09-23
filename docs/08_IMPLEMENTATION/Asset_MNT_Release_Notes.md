@@ -1,4 +1,4 @@
-# Asset Maintenance - Release Notes (FP-ASSET-004)
+# Asset Maintenance — Release Notes (FP-ASSET-004)
 
 ## Highlights
 
@@ -18,8 +18,8 @@
 
 ## Flag
 
-`ASSET_WORKFLOW_GOVERNANCE_ENABLED` - production must be `true`.
+`ASSET_WORKFLOW_GOVERNANCE_ENABLED` — production must be `true`.
 
 ## Accepted architectural risk
 
-Open work-order exclusivity is enforced in the application layer (`MaintenanceValidator` / `find_open_for_asset`). Migration `0469` adds a **non-unique** partial index for lookup performance only - it does **not** provide a database UNIQUE constraint. Concurrent create requests can theoretically race; operators should retry on conflict. This matches the Assignment exclusivity approach and is an accepted platform risk for FP-ASSET-004.
+Open work-order exclusivity is enforced in the application layer (`MaintenanceValidator` / `find_open_for_asset`). Migration `0469` adds a **non-unique** partial index for lookup performance only — it does **not** provide a database UNIQUE constraint. Concurrent create requests can theoretically race; operators should retry on conflict. This matches the Assignment exclusivity approach and is an accepted platform risk for FP-ASSET-004.

@@ -1,4 +1,4 @@
-"""Silent component_code allocation - type prefix + sequence, FOR UPDATE-safe."""
+"""Silent component_code allocation — type prefix + sequence, FOR UPDATE-safe."""
 
 from __future__ import annotations
 

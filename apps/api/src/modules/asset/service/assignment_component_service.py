@@ -215,7 +215,7 @@ class AssignmentComponentService:
                 ),
             )
             # When setting draft selection, exclude own assignment's current ISSUED rows.
-            # find_blocking with exclude_assignment_id skips own - good for both draft replace and activate.
+            # find_blocking with exclude_assignment_id skips own — good for both draft replace and activate.
             if blocking is not None:
                 if blocking.issue_status == AssignmentComponentIssueStatus.ISSUED.value:
                     raise AssignmentValidationError(

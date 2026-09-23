@@ -19,6 +19,8 @@ export type AccessGateSession = {
 };
 
 const STORAGE_KEY = "icp.accessGateToken";
+const VERIFY_RETRY_ATTEMPTS = 3;
+const VERIFY_RETRY_DELAY_MS = 700;
 
 export function getAccessGateToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -47,48 +49,90 @@ export function clearAccessGateToken(): void {
   }
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+function isTransientGatewayFailure(status: number, message: string): boolean {
+  const msg = message.toLowerCase();
+  if (status === 502 || status === 503 || status === 504) return true;
+  if (status === 0) return true;
+  if (
+    status === 500 &&
+    (msg.includes("internal server error") || msg.includes("socket") || !msg.trim())
+  ) {
+    return true;
+  }
+  return false;
+}
+
 async function parseJson<T>(response: Response): Promise<ApiResponse<T>> {
   const raw = await response.text();
   let payload: (ApiResponse<T> & { errors?: string[]; message?: string }) | null = null;
   try {
-    payload = raw ? (JSON.parse(raw) as ApiResponse<T> & { errors?: string[]; message?: string }) : null;
+    payload = raw
+      ? (JSON.parse(raw) as ApiResponse<T> & { errors?: string[]; message?: string })
+      : null;
   } catch {
-    throw new ApiClientError(
-      raw.trim().slice(0, 160) || `Request failed (${response.status})`,
-      response.status,
-    );
+    const fallback =
+      response.status >= 500
+        ? "Cannot reach the API right now. The backend may be restarting — wait a moment and try again."
+        : raw.trim().slice(0, 160) || `Request failed (${response.status})`;
+    throw new ApiClientError(fallback, response.status);
   }
   if (!payload || !response.ok || payload.success === false) {
-    throw new ApiClientError(
-      payload?.message || raw.trim().slice(0, 160) || "Request failed",
-      response.status,
-      payload?.errors ?? [],
-    );
+    const message = payload?.message || raw.trim().slice(0, 160) || "Request failed";
+    if (isTransientGatewayFailure(response.status, message)) {
+      throw new ApiClientError(
+        "Cannot reach the API right now. The backend may be restarting — wait a moment and try again.",
+        response.status,
+        payload?.errors ?? [],
+      );
+    }
+    throw new ApiClientError(message, response.status, payload?.errors ?? []);
   }
   return payload;
 }
 
 export async function verifyAccessCode(code: string): Promise<AccessGateVerifyResult> {
   await resolveApiUrl();
-  const response = await fetch(`${getApiUrl()}/public/access-gate/verify`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({ code }),
-    cache: "no-store",
-  });
-  const payload = await parseJson<AccessGateVerifyResult>(response);
-  if (!payload.data) {
-    throw new ApiClientError("Invalid response from access gate", response.status);
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= VERIFY_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(`${getApiUrl()}/public/access-gate/verify`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ code }),
+        cache: "no-store",
+      });
+      const payload = await parseJson<AccessGateVerifyResult>(response);
+      if (!payload.data) {
+        throw new ApiClientError("Invalid response from access gate", response.status);
+      }
+      return payload.data;
+    } catch (err) {
+      lastError = err;
+      const transient =
+        err instanceof ApiClientError && isTransientGatewayFailure(err.status, err.message);
+      if (!transient || attempt === VERIFY_RETRY_ATTEMPTS) {
+        throw err;
+      }
+      await sleep(VERIFY_RETRY_DELAY_MS * attempt);
+    }
   }
-  return payload.data;
+
+  throw lastError instanceof Error
+    ? lastError
+    : new ApiClientError("Cannot reach the API right now. Try again.", 0);
 }
 
-export async function fetchAccessGateSession(
-  token: string,
-): Promise<AccessGateSession> {
+export async function fetchAccessGateSession(token: string): Promise<AccessGateSession> {
   await resolveApiUrl();
   const response = await fetch(`${getApiUrl()}/public/access-gate/session`, {
     method: "GET",

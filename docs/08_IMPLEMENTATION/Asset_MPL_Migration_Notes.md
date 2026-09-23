@@ -1,4 +1,4 @@
-# FP-ASSET-011 - Maintenance Plan Migration Notes
+# FP-ASSET-011 — Maintenance Plan Migration Notes
 
 **Migration:** `0476_ast_maint_plan_governance`  
 **Down revision:** `0475_ast_insurance_governance`

@@ -1,4 +1,4 @@
-# ADR-ASSET-DOC-001 - Asset Document Management
+# ADR-ASSET-DOC-001 — Asset Document Management
 
 **Status:** Accepted  
 **Date:** 2026-07-30  
@@ -28,7 +28,7 @@ Asset documents existed as a thin CRUD scaffold without validator, lifecycle act
 | DOC-11 | Migration `0481` indexes only |
 | DOC-12 | Optimistic locking on update / supersede / archive |
 | DOC-13 | Dedicated `AssetDocumentWorkspace` |
-| DOC-14 | **Metadata only** - no binary upload; `storage_uri` / `content_hash` are pointers |
+| DOC-14 | **Metadata only** — no binary upload; `storage_uri` / `content_hash` are pointers |
 | DOC-15 | No auto-supersede on create; multiple active docs per asset allowed |
 
 ## storage_uri validation policy (DOC-14)

@@ -1,4 +1,4 @@
-# CR-004 Phase 5B-2A - Assignment Wizard Foundation
+# CR-004 Phase 5B-2A — Assignment Wizard Foundation
 
 **Status:** Complete (UI shell only)  
 **Date:** 2026-08-03  
@@ -59,7 +59,7 @@ components/assets/assignment-wizard/
 
 ## Tests
 
-`assignment-wizard.test.tsx` - **36** Vitest cases (navigation, validation placeholders, a11y, empty/loading states).
+`assignment-wizard.test.tsx` — **36** Vitest cases (navigation, validation placeholders, a11y, empty/loading states).
 
 ```bash
 cd apps/web && npm run test -- --run src/components/assets/assignment-wizard/assignment-wizard.test.tsx

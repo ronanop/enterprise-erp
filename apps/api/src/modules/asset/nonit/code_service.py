@@ -1,4 +1,4 @@
-"""Non-IT asset code generation - gapless per (company, asset_type), never reuses after disposal.
+"""Non-IT asset code generation — gapless per (company, asset_type), never reuses after disposal.
 
 Locks the asset-type row (FOR UPDATE), then allocates MAX(existing numeric suffix) + 1.
 Format: ``{prefix}{n:03d}`` with automatic width growth past 999 (CH1000).

@@ -1,4 +1,4 @@
-"""IT Asset Building Master - child of AstLocation."""
+"""IT Asset Building Master — child of AstLocation."""
 
 from uuid import UUID, uuid4
 

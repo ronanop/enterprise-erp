@@ -1,4 +1,4 @@
-"""AssetAuditService - physical verification (FP-ASSET-008)."""
+"""AssetAuditService — physical verification (FP-ASSET-008)."""
 
 from uuid import UUID
 

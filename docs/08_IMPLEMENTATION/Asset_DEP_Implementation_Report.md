@@ -1,4 +1,4 @@
-# FP-ASSET-006 - Implementation Report
+# FP-ASSET-006 — Implementation Report
 
 **Feature:** Asset Depreciation  
 **ADR:** ADR-ASSET-DEP-001  
@@ -27,7 +27,7 @@ Permissions, exceptions, workflow_codes, schemas, routers, asset repository (cur
 
 ## 5. APIs Updated
 
-`/api/v1/assets/asset-depreciations` - paginated list, generate-run, calculate, post, reverse; PATCH requires `:update`.
+`/api/v1/assets/asset-depreciations` — paginated list, generate-run, calculate, post, reverse; PATCH requires `:update`.
 
 ## 6. Frontend
 

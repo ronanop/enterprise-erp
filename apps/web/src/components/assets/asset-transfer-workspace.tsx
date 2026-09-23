@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Loader2, RefreshCw, Send, ShieldCheck, SquarePen } from "lucide-react";
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -63,7 +70,14 @@ type ListPayload<T> = {
   page_size: number;
 };
 
-const STATUS_OPTIONS = ["", "draft", "submitted", "approved", "completed", "cancelled"] as const;
+const STATUS_OPTIONS = [
+  { value: "", label: "All" },
+  { value: "draft", label: "Draft" },
+  { value: "submitted", label: "Submitted" },
+  { value: "approved", label: "Approved" },
+  { value: "completed", label: "Completed" },
+  { value: "cancelled", label: "Cancelled" },
+] as const;
 
 function parseListItems<T>(data: unknown): T[] {
   if (Array.isArray(data)) return data as T[];
@@ -74,13 +88,23 @@ function parseListItems<T>(data: unknown): T[] {
   return [];
 }
 
-function shortId(value?: string | null): string {
-  return value ? value.slice(0, 8) : "None";
+function formatPlace(label?: string | null, id?: string | null): string {
+  if (label && label.trim()) return label.trim();
+  if (id && id.trim()) return id.slice(0, 8);
+  return "—";
+}
+
+function formatStatusLabel(status: string): string {
+  const key = status.trim().toLowerCase();
+  if (!key) return "—";
+  return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
 export function AssetTransferWorkspace() {
   const apiPath = "/assets/asset-transfers";
   const assetsPath = "/assets/assets";
+  const searchParams = useSearchParams();
+  const focusDocument = (searchParams.get("document") || "").trim();
 
   const [rows, setRows] = useState<TransferRow[]>([]);
   const [assetOptions, setAssetOptions] = useState<AssetRow[]>([]);
@@ -89,7 +113,7 @@ export function AssetTransferWorkspace() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
   const [statusFilter, setStatusFilter] = useState("");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(focusDocument);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -176,20 +200,41 @@ export function AssetTransferWorkspace() {
         page_size: String(pageSize),
       });
       if (statusFilter) query.set("status", statusFilter);
-      if (search.trim()) query.set("q", search.trim());
+      const searchTerm = search.trim();
+      if (searchTerm) query.set("q", searchTerm);
       const res = await resourceService.list<ListPayload<TransferRow>>(
         `${apiPath}?${query.toString()}`,
       );
       const payload = res.data as ListPayload<TransferRow> | TransferRow[];
+      let nextRows: TransferRow[] = [];
       if (payload && typeof payload === "object" && "items" in payload) {
-        setRows(payload.items ?? []);
+        nextRows = payload.items ?? [];
+        setRows(nextRows);
         setTotal(payload.total ?? 0);
       } else if (Array.isArray(payload)) {
+        nextRows = payload;
         setRows(payload);
         setTotal(payload.length);
       } else {
         setRows([]);
         setTotal(0);
+      }
+      if (focusDocument) {
+        const match = nextRows.find((row) => row.document_number === focusDocument);
+        if (match) {
+          setSelected(match);
+          setEdit({
+            to_branch_id: match.to_branch_id ?? "",
+            to_department_id: match.to_department_id ?? "",
+            to_employee_id: match.to_employee_id ?? "",
+            to_location_id: "",
+            to_building_id: "",
+            reason: match.reason ?? "",
+            effective_date: match.effective_date ?? "",
+            transfer_notes: match.transfer_notes ?? "",
+          });
+          setEditBuildings([]);
+        }
       }
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to load transfers");
@@ -198,14 +243,18 @@ export function AssetTransferWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [apiPath, page, pageSize, search, statusFilter]);
+  }, [apiPath, focusDocument, page, pageSize, search, statusFilter]);
 
   useEffect(() => {
-    void loadAssets();
+    void Promise.resolve().then(() => {
+      void loadAssets();
+    });
   }, [loadAssets]);
 
   useEffect(() => {
-    void load();
+    void Promise.resolve().then(() => {
+      void load();
+    });
   }, [load]);
 
   useEffect(() => {
@@ -214,20 +263,20 @@ export function AssetTransferWorkspace() {
       .catch(() => setSiteLocations([]));
   }, []);
 
-  useEffect(() => {
-    if (!selected) return;
+  function selectTransfer(row: TransferRow) {
+    setSelected(row);
     setEdit({
-      to_branch_id: selected.to_branch_id ?? "",
-      to_department_id: selected.to_department_id ?? "",
-      to_employee_id: selected.to_employee_id ?? "",
+      to_branch_id: row.to_branch_id ?? "",
+      to_department_id: row.to_department_id ?? "",
+      to_employee_id: row.to_employee_id ?? "",
       to_location_id: "",
       to_building_id: "",
-      reason: selected.reason ?? "",
-      effective_date: selected.effective_date ?? "",
-      transfer_notes: selected.transfer_notes ?? "",
+      reason: row.reason ?? "",
+      effective_date: row.effective_date ?? "",
+      transfer_notes: row.transfer_notes ?? "",
     });
     setEditBuildings([]);
-  }, [selected]);
+  }
 
   function onDraftAssetChange(assetId: string) {
     const asset = assetMap.get(assetId);
@@ -355,21 +404,20 @@ export function AssetTransferWorkspace() {
     }
   }
 
-  const statusBadge = useMemo(
-    () => (row: TransferRow) => (
+  function renderStatusBadge(row: TransferRow) {
+    return (
       <Badge variant="secondary" className="font-mono text-xs">
-        {row.status}
+        {formatStatusLabel(row.status)}
         {row.workflow_status ? ` / ${row.workflow_status}` : ""}
       </Badge>
-    ),
-    [],
-  );
+    );
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="asset-transfer-workspace">
       <PageHeader
-        title="Asset transfers"
-        description="Draft, submit, approve, execute, and audit branch, department, custodian, and location transfers."
+        title="Transfers"
+        description="Manage asset transfer requests and their approval status."
       />
 
       {error ? (
@@ -386,9 +434,9 @@ export function AssetTransferWorkspace() {
         <Card>
           <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <CardTitle>Transfer list</CardTitle>
+              <CardTitle>Transfer register</CardTitle>
               <p className="text-sm text-muted-foreground">
-                {total} records with server-side filtering and workflow status.
+                {total} transfer documents — filter by status or search by document / reason.
               </p>
             </div>
             <Button
@@ -417,14 +465,20 @@ export function AssetTransferWorkspace() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="transfer-status">Status</Label>
-                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <Select
+                  value={statusFilter || "all"}
+                  onValueChange={(value) => {
+                    setPage(1);
+                    setStatusFilter(value === "all" ? "" : value);
+                  }}
+                >
                   <SelectTrigger id="transfer-status" aria-label="Filter transfers by status">
-                    <SelectValue placeholder="All statuses" />
+                    <SelectValue placeholder="All" />
                   </SelectTrigger>
                   <SelectContent>
-                    {STATUS_OPTIONS.map((status) => (
-                      <SelectItem key={status || "all"} value={status}>
-                        {status || "all"}
+                    {STATUS_OPTIONS.map((option) => (
+                      <SelectItem key={option.value || "all"} value={option.value || "all"}>
+                        {option.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -458,51 +512,101 @@ export function AssetTransferWorkspace() {
             </div>
 
             <div className="overflow-x-auto rounded-md border">
-              <table className="min-w-full text-sm">
+              <table className="min-w-full text-sm" data-testid="transfer-register-table">
                 <thead className="bg-muted/40 text-left">
                   <tr>
-                    <th scope="col" className="px-3 py-2 font-medium">Document</th>
-                    <th scope="col" className="px-3 py-2 font-medium">Asset</th>
-                    <th scope="col" className="px-3 py-2 font-medium">Move</th>
-                    <th scope="col" className="px-3 py-2 font-medium">Status</th>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
+                    <th scope="col" className="px-3 py-2 font-medium">
+                      Document
+                    </th>
+                    <th scope="col" className="px-3 py-2 font-medium">
+                      Asset
+                    </th>
+                    <th scope="col" className="px-3 py-2 font-medium">
+                      From
+                    </th>
+                    <th scope="col" className="px-3 py-2 font-medium">
+                      To
+                    </th>
+                    <th scope="col" className="px-3 py-2 font-medium">
+                      Status
+                    </th>
+                    <th scope="col" className="px-3 py-2 font-medium">
+                      Effective
+                    </th>
+                    <th scope="col" className="px-3 py-2 font-medium">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={4}>
+                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={8}>
                         <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                       </td>
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={4}>
+                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={8}>
                         No transfers found.
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row) => {
+                    rows.map((row, index) => {
                       const asset = assetMap.get(row.asset_id);
                       const isSelected = selected?.id === row.id;
+                      const assetLabel = asset
+                        ? `${asset.asset_code} — ${asset.asset_name}`
+                        : row.asset_id.slice(0, 8);
                       return (
                         <tr
                           key={row.id}
                           className={`cursor-pointer border-t transition-colors hover:bg-muted/40 ${
                             isSelected ? "bg-muted/50" : ""
                           }`}
-                          onClick={() => setSelected(row)}
+                          onClick={() => selectTransfer(row)}
+                          data-testid={`transfer-row-${row.document_number}`}
                         >
+                          <td className={tableSerialCellClassName()}>
+                            {tableRowSerial(page, pageSize, index)}
+                          </td>
                           <td className="px-3 py-2 font-mono text-xs">{row.document_number}</td>
                           <td className="px-3 py-2">
-                            <div className="font-medium">{asset?.asset_name ?? row.asset_id}</div>
+                            <div className="font-medium">{asset?.asset_name ?? "Unresolved asset"}</div>
                             <div className="text-xs text-muted-foreground">
-                              {asset?.asset_code ?? "Unresolved asset"}
+                              {asset?.asset_code ?? assetLabel}
                             </div>
                           </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">
-                            {shortId(row.from_branch_id)} to {shortId(row.to_branch_id || row.from_branch_id)}
+                            {formatPlace(row.from_location_label, row.from_branch_id)}
                           </td>
-                          <td className="px-3 py-2">{statusBadge(row)}</td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground">
+                            {formatPlace(
+                              row.to_location_label,
+                              row.to_branch_id || row.from_branch_id,
+                            )}
+                          </td>
+                          <td className="px-3 py-2">{renderStatusBadge(row)}</td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground">
+                            {row.effective_date || "—"}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 cursor-pointer px-2 text-xs transition-colors duration-200"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                selectTransfer(row);
+                              }}
+                            >
+                              Open
+                            </Button>
+                          </td>
                         </tr>
                       );
                     })
@@ -665,7 +769,7 @@ export function AssetTransferWorkspace() {
                         {assetMap.get(selected.asset_id)?.asset_name ?? selected.asset_id}
                       </div>
                     </div>
-                    {statusBadge(selected)}
+                    {renderStatusBadge(selected)}
                   </div>
 
                   <div className="grid gap-3 text-sm md:grid-cols-2">

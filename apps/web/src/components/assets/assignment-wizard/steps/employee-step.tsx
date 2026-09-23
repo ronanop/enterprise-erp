@@ -24,7 +24,7 @@ const EMPLOYEE_MODES: Array<{ value: EmployeeSource; label: string; hint: string
   {
     value: "MANUAL_ENTRY",
     label: "Enter manually",
-    hint: "Not in directory - deployed elsewhere.",
+    hint: "Not in directory — deployed elsewhere.",
   },
 ];
 
@@ -192,7 +192,7 @@ export function EmployeeStep({
               id="wiz-manual-deployed"
               value={state.manualEmployeeDeployedTo}
               onChange={(e) => onChange({ manualEmployeeDeployedTo: e.target.value })}
-              placeholder="e.g. Airtel - Gurugram office"
+              placeholder="e.g. Airtel — Gurugram office"
             />
             {fieldErrors["deployed-to"] ? (
               <p className="text-xs text-destructive">{fieldErrors["deployed-to"]}</p>

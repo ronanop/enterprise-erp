@@ -1,4 +1,4 @@
-# Asset Location - Migration Notes (FP-ASSET-012)
+# Asset Location — Migration Notes (FP-ASSET-012)
 
 ## Revision
 

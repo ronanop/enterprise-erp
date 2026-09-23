@@ -190,16 +190,7 @@ class DcChallanService:
         self._master = AssetMasterDataAdapter(db)
         self._scm = AssetScmAdapter(db)
         self._audit = AuditService(db)
-        self._storage_override = storage
-        self._storage_instance: StorageBackend | None = None
-
-    @property
-    def _storage(self) -> StorageBackend:
-        if self._storage_override is not None:
-            return self._storage_override
-        if self._storage_instance is None:
-            self._storage_instance = get_storage()
-        return self._storage_instance
+        self._storage = storage if storage is not None else get_storage()
 
     def to_response(self, row: AstDcChallan) -> DcChallanResponse:
         return to_dc_challan_response(row, self._docs.list_active(row.id))
@@ -431,7 +422,7 @@ class DcChallanService:
                 reason = getattr(exc, "message", None) or str(exc)
                 results.append(DcChallanBulkSendItem(id=row_id, ok=False, reason=reason))
                 skipped += 1
-            except Exception as exc:  # noqa: BLE001 - per-item skip, do not abort batch
+            except Exception as exc:  # noqa: BLE001 — per-item skip, do not abort batch
                 results.append(DcChallanBulkSendItem(id=row_id, ok=False, reason=str(exc)))
                 skipped += 1
         return DcChallanBulkSendResult(results=results, sent_count=sent, skipped_count=skipped)

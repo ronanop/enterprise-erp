@@ -1,8 +1,8 @@
-# CR-004 - Go-Live Checklist
+# CR-004 — Go-Live Checklist
 
-**Phase:** 8C - Migration Validation & Reconciliation  
+**Phase:** 8C — Migration Validation & Reconciliation  
 **Date:** 2026-08-05  
-**Mode:** Checklist / validation only - **no product code changes in this phase**  
+**Mode:** Checklist / validation only — **no product code changes in this phase**  
 **Purpose:** Gate decisions for pilot ops, quarantine import dry-run, and org-wide Excel retirement
 
 ---
@@ -110,7 +110,7 @@ Reconciliation detail: `CR-004-Migration-Reconciliation.md`
 
 | # | Item | Owner | Done |
 |---|------|-------|------|
-| G1 | UAT checklist B-I (ops) passed | IT Admin | `[ ]` |
+| G1 | UAT checklist B–I (ops) passed | IT Admin | `[ ]` |
 | G2 | UAT J (Excel stop criteria) passed | Business | `[ ]` |
 | G3 | Import Validation Report updated with measured scores | PMO | `[ ]` |
 | G4 | IT Admin sign-off | IT Admin | `[ ]` |
@@ -136,7 +136,7 @@ Do **not** declare Excel retired while any remain open:
 
 - [ ] Critical cutover gaps M-1 / M-2 / M-9 / M-10  
 - [ ] Unmeasured Migration Accuracy (still N/A)  
-- [ ] Dual assignment UI confusion unmitigated (legacy vs wizard) - optional but recommended  
+- [ ] Dual assignment UI confusion unmitigated (legacy vs wizard) — optional but recommended  
 - [ ] Accessories / serial completeness waived without Business sign-off  
 
 ---
@@ -150,4 +150,4 @@ Do **not** declare Excel retired while any remain open:
 | Engineering | | | Import technical | GO / NO-GO |
 | PMO | | | Overall | GO / NO-GO |
 
-**Current overall (unsigned analysis):** **NO-GO** for Excel stop · **CONDITIONAL GO** for quarantine dry-run after B1-B8.
+**Current overall (unsigned analysis):** **NO-GO** for Excel stop · **CONDITIONAL GO** for quarantine dry-run after B1–B8.

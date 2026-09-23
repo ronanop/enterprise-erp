@@ -1,5 +1,5 @@
 /**
- * Excel import service - parse & validate only. Never writes to the database.
+ * Excel import service — parse & validate only. Never writes to the database.
  */
 
 import * as XLSX from "xlsx";

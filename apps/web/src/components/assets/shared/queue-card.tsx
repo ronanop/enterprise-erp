@@ -6,6 +6,12 @@ import { cn } from "@/lib/utils";
 
 import { EmptyState } from "./empty-state";
 import { QueueCardSkeleton } from "./loading-skeleton";
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerialFromIndex,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "./table-serial";
 
 export type QueueCardRow = {
   id: string;
@@ -85,6 +91,14 @@ export function QueueCard({
               {columnLabels?.length ? (
                 <thead>
                   <tr className="border-b border-border/60 text-[11px] text-muted-foreground">
+                    <th
+                      className={tableSerialHeaderClassName(
+                        cn("font-medium", dense ? "pb-1.5 pr-2" : "pb-2 pr-3"),
+                      )}
+                      scope="col"
+                    >
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
                     {columnLabels.map((label) => (
                       <th key={label} className={cn("font-medium", dense ? "pb-1.5 pr-2" : "pb-2 pr-3")}>
                         {label}
@@ -94,11 +108,18 @@ export function QueueCard({
                 </thead>
               ) : null}
               <tbody>
-                {rows.map((row) => (
+                {rows.map((row, index) => (
                   <tr
                     key={row.id}
                     className="border-b border-border/40 transition-colors duration-150 last:border-0 hover:bg-muted/30"
                   >
+                    <td
+                      className={tableSerialCellClassName(
+                        dense ? "py-1.5 pr-2 text-[13px]" : "py-2 pr-3",
+                      )}
+                    >
+                      {tableRowSerialFromIndex(index)}
+                    </td>
                     {row.cells.map((cell, i) => (
                       <td
                         key={`${row.id}-${i}`}

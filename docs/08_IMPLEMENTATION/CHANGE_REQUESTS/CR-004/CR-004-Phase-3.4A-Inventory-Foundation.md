@@ -1,8 +1,8 @@
-# CR-004 Phase 3.4A - Inventory Foundation
+# CR-004 Phase 3.4A — Inventory Foundation
 
 **Status:** Complete  
 **Date:** 2026-08-03  
-**Route:** `/assets/assets` (single register - filter-driven)
+**Route:** `/assets/assets` (single register — filter-driven)
 
 ---
 
@@ -70,4 +70,4 @@ Assign, Return, Discovery, QR, Portal actions; sidebar; reports; new backend.
 
 ## Tests
 
-`npm run test` in `apps/web` - mapper, container, workspace suites.
+`npm run test` in `apps/web` — mapper, container, workspace suites.

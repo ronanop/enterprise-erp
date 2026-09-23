@@ -237,7 +237,7 @@ def test_create_draft_success_same_and_cross_branch(
         assert same_body["company_id"] == str(route_ids["company_id"])
         assert same_body["to_location_label"] == "Same branch room"
 
-        # Second create would hit pending-transfer gate - cancel first via status update in DB
+        # Second create would hit pending-transfer gate — cancel first via status update in DB
         row = route_db.scalar(
             select(AstAssetTransfer).where(AstAssetTransfer.id == UUID(same_body["id"]))
         )

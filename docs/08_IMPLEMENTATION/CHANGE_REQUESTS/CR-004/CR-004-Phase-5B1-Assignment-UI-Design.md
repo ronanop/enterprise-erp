@@ -1,10 +1,10 @@
-# CR-004 Phase 5B-1 - Assignment & Return UI/UX Design Freeze
+# CR-004 Phase 5B-1 — Assignment & Return UI/UX Design Freeze
 
-**Status:** LOCKED - design freeze (documentation only)  
+**Status:** LOCKED — design freeze (documentation only)  
 **Date:** 2026-08-03  
 **Audience:** IT Administrators  
 **Prerequisite:** Phase 5A-1/5A-2 (enrichment + return API)  
-**Design baseline:** iConnect Plus - Data-Dense Dashboard + Swiss Minimalism (`design-system/enterprise-erp-platform/MASTER.md`)
+**Design baseline:** Enterprise ERP Platform — Data-Dense Dashboard + Swiss Minimalism (`design-system/enterprise-erp-platform/MASTER.md`)
 
 ---
 
@@ -35,7 +35,7 @@ Phase 5B-1 replaces the **single-modal assignment form** and **one-click return*
 
 ---
 
-## Analysis - current state
+## Analysis — current state
 
 ### Assignment UI (`asset-assignment-workspace.tsx`)
 
@@ -52,8 +52,8 @@ Phase 5B-1 replaces the **single-modal assignment form** and **one-click return*
 | Entry | Behavior today |
 |-------|----------------|
 | Assignment detail **Return** button | Immediate `POST …/return` (no dialog) |
-| Inventory **Return Asset** | Navigates `?assetId=&intent=return` - **intent not handled** in workspace |
-| Asset detail | Return on active assignment - same no-body call |
+| Inventory **Return Asset** | Navigates `?assetId=&intent=return` — **intent not handled** in workspace |
+| Asset detail | Return on active assignment — same no-body call |
 
 **Freeze:** `intent=return` must open **Return wizard** pre-resolved to active assignment for that asset (or error if none).
 
@@ -94,27 +94,27 @@ Phase 5B-1 replaces the **single-modal assignment form** and **one-click return*
 
 ---
 
-## Design - assignment wizard
+## Design — assignment wizard
 
 ### Shell
 
 - **Pattern:** Full-height **wizard sheet** on desktop (`max-w-2xl`, centered) or dedicated sub-route `/assets/asset-assignments/new` (implementation choice in 5B-2; freeze prefers **route + step query** `?step=employee` for deep links and back button).
-- **Chrome:** Step indicator (1-5), title “Issue asset”, branch context chip (from session / asset), Cancel (confirm if dirty), **Save draft** on steps 2-4, **Next** / **Back**.
+- **Chrome:** Step indicator (1–5), title “Issue asset”, branch context chip (from session / asset), Cancel (confirm if dirty), **Save draft** on steps 2–4, **Next** / **Back**.
 - **Permissions:** `asset.assignment:create` to start; branch scope unchanged from today.
 
-### Step 1 - Employee
+### Step 1 — Employee
 
 | Control | Required | Notes |
 |---------|----------|--------|
 | Employee search / select | Yes (employee allocation default) | Master Data employees; roster chips remain on list page as shortcut into Step 1 with employee locked |
-| Allocation type | Visible, default `employee` | Advanced: department / project / branch / warehouse - collapsible “Other allocation” to avoid clutter; non-employee skips strict delivery rule at submit |
+| Allocation type | Visible, default `employee` | Advanced: department / project / branch / warehouse — collapsible “Other allocation” to avoid clutter; non-employee skips strict delivery rule at submit |
 | Expected return date | Optional | Maps `expected_return_at` |
 
 **Validation (client):** Employee required when type = employee. Show branch from employee’s company context if needed.
 
 **Excel parity:** Matches “who receives the laptop” first.
 
-### Step 2 - Asset
+### Step 2 — Asset
 
 | Control | Required | Notes |
 |---------|----------|--------|
@@ -124,17 +124,17 @@ Phase 5B-1 replaces the **single-modal assignment form** and **one-click return*
 
 Prefill: `assetId` query skips picker when valid.
 
-### Step 3 - Issued items
+### Step 3 — Issued items
 
 | Control | Required | Notes |
 |---------|----------|--------|
 | Component checklist | No | Load `GET` asset components for selected asset; show code, description, status |
-| “Issue with asset” toggles | Optional | UX records selections; persist via `assignment_remarks` bullet list and/or future component issue API - **5B-2 minimum:** append selected labels to `assignment_remarks` prefix block `[Issued: charger, bag]` if no separate API (documented shortcut; D-011 long-term is component lifecycle) |
-| Empty state | - | “No registered accessories” + link to asset detail / components workspace |
+| “Issue with asset” toggles | Optional | UX records selections; persist via `assignment_remarks` bullet list and/or future component issue API — **5B-2 minimum:** append selected labels to `assignment_remarks` prefix block `[Issued: charger, bag]` if no separate API (documented shortcut; D-011 long-term is component lifecycle) |
+| Empty state | — | “No registered accessories” + link to asset detail / components workspace |
 
 **Excel parity:** Charger and extras called out on issue row.
 
-### Step 4 - Delivery
+### Step 4 — Delivery
 
 | Control | Required | Notes |
 |---------|----------|--------|
@@ -144,7 +144,7 @@ Prefill: `assetId` query skips picker when valid.
 
 **Validation (client):** Mirror 5A rules before save; inline messages from API on submit.
 
-### Step 5 - Review
+### Step 5 — Review
 
 | Block | Content |
 |-------|---------|
@@ -157,7 +157,7 @@ Post-create: toast + navigate to assignment **view** with draft status (existing
 
 ---
 
-## Design - return wizard
+## Design — return wizard
 
 ### Shell
 
@@ -165,7 +165,7 @@ Post-create: toast + navigate to assignment **view** with draft status (existing
 - **Entry:** List (active row), inventory return, `intent=return`, asset detail return.
 - **Permissions:** `asset.assignment:return`
 
-### Step 1 - Asset summary
+### Step 1 — Asset summary
 
 | Block | Content |
 |-------|---------|
@@ -173,24 +173,24 @@ Post-create: toast + navigate to assignment **view** with draft status (existing
 | Assignment | Document number, assignee, allocated date, delivery ref (if any) |
 | Warning | If status ≠ active → block with explanation |
 
-### Step 2 - Return condition
+### Step 2 — Return condition
 
 | Option | Label (user) | API `return_condition` | Excel / ops result |
 |--------|----------------|------------------------|---------------------|
-| A | **Good - return to stock** | `good` | Ready To Move |
-| B | **Outdated - retire** | `outdated` | Retired |
-| C | **Not working - pending disposal** | `dead` | Pending disposal |
+| A | **Good — return to stock** | `good` | Ready To Move |
+| B | **Outdated — retire** | `outdated` | Retired |
+| C | **Not working — pending disposal** | `dead` | Pending disposal |
 
 **Control:** Radio card group (icon + short description); default **Good**. Destructive styling on C only.
 
-### Step 3 - Return remarks
+### Step 3 — Return remarks
 
 | Control | Required | Notes |
 |---------|----------|--------|
 | Return remarks | Optional | Textarea → `return_remarks` |
 | Reason | Optional | Short text → `reason` (audit / ops) |
 
-### Step 4 - Review
+### Step 4 — Review
 
 Summary + **Confirm return** → `POST …/return` with body. Success: toast, close wizard, refresh list / inventory holder column.
 
@@ -205,7 +205,7 @@ Summary + **Confirm return** → `POST …/return` with body. Success: toast, cl
 | Return wizard | Compact stepper; single column |
 | Mobile | Full-screen sheet; bottom sticky **Next** / **Confirm** |
 
-Density: 9/10 - compact labels `text-xs` muted, `text-sm` values, 8px grid gaps per MASTER.
+Density: 9/10 — compact labels `text-xs` muted, `text-sm` values, 8px grid gaps per MASTER.
 
 ---
 
@@ -232,7 +232,7 @@ sequenceDiagram
 
 | UI action | API | Assignment status | Asset ops |
 |-----------|-----|-------------------|-----------|
-| Create draft (wizard) | `POST` + enrichment | `draft` | - |
+| Create draft (wizard) | `POST` + enrichment | `draft` | — |
 | Submit / approve (existing) | unchanged | → `active` | `ASSIGNED` |
 | Return Good | `POST return` `{ return_condition: good }` | `returned` | `READY_TO_MOVE` |
 | Return Outdated | `{ outdated }` | `returned` | `RETIRED` |
@@ -243,7 +243,7 @@ sequenceDiagram
 ## Accessibility & motion
 
 - Focus trap in wizards; step change announces via `aria-live="polite"`.
-- All click targets `cursor-pointer`; transitions 150-200ms; respect `prefers-reduced-motion`.
+- All click targets `cursor-pointer`; transitions 150–200ms; respect `prefers-reduced-motion`.
 - Return condition cards: full keyboard operable, visible focus ring (`--color-ring`).
 
 ---

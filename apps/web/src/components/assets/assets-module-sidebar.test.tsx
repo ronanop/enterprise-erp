@@ -100,6 +100,7 @@ describe("AssetsModuleSidebar", () => {
     ]);
     const extended = nav.find((g) => g.title === "Extended");
     expect(extended?.items.map((i) => i.title)).toContain("Users");
+    expect(extended?.items.map((i) => i.title)).not.toContain("QR / Barcode");
     expect(nonItAssetWorkspaceNav[0]?.items.map((i) => i.title)).toEqual([
       "Dashboard",
       "Inventory",
@@ -168,6 +169,7 @@ describe("AssetsModuleSidebar", () => {
       "href",
       "/assets/asset-components",
     );
+    expect(within(nav).queryByRole("link", { name: "QR / Barcode" })).not.toBeInTheDocument();
   });
 
   it("does not treat Add Asset as All Assets", () => {

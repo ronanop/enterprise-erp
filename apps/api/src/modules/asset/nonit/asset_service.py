@@ -549,7 +549,7 @@ class NonItAssetService:
         if updated is None:
             raise ConflictException("Version conflict")
 
-        # Soft-deleted rows still count toward code MAX - dispose must not free codes.
+        # Soft-deleted rows still count toward code MAX — dispose must not free codes.
         self._timeline.append(
             ctx,
             asset_id=row_id,
@@ -792,14 +792,14 @@ class NonItAssetService:
             return f"Status changed to {data.get('status') or 'unknown'}"
         if event_type == NonItTimelineEventType.MAINTENANCE_STARTED.value:
             reason = data.get("reason")
-            return f"Maintenance started - {reason}" if reason else "Maintenance started"
+            return f"Maintenance started — {reason}" if reason else "Maintenance started"
         if event_type == NonItTimelineEventType.MAINTENANCE_COMPLETED.value:
             if data.get("restored_prior_holder") and data.get("prior_holder"):
-                return f"Maintenance completed - reassigned to {data.get('prior_holder')}"
+                return f"Maintenance completed — reassigned to {data.get('prior_holder')}"
             return "Maintenance completed"
         if event_type == NonItTimelineEventType.DISPOSED.value:
             reason = data.get("reason")
-            return f"Disposed - {reason}" if reason else "Disposed"
+            return f"Disposed — {reason}" if reason else "Disposed"
         return event_type.replace("_", " ").title()
 
     def _prior_holder_from_maintenance(self, asset_id: UUID) -> dict:

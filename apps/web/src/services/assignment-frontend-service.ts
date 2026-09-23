@@ -1,5 +1,5 @@
 /**
- * CR-004 Phase 5B-2B Task 1 - Assignment Frontend Service
+ * CR-004 Phase 5B-2B Task 1 — Assignment Frontend Service
  *
  * Single source of truth for Assignment REST communication.
  * Pure API wrapper: no UI, hooks, routing, or state.
@@ -159,7 +159,7 @@ async function withAssignmentErrors<T>(fn: () => Promise<T>, fallback: string): 
 
 export const assignmentFrontendService = {
   /**
-   * POST /assets/asset-assignments - create draft assignment.
+   * POST /assets/asset-assignments — create draft assignment.
    */
   async createDraft(body: AssignmentDraft): Promise<AssignmentResponse> {
     return withAssignmentErrors(async () => {
@@ -169,7 +169,7 @@ export const assignmentFrontendService = {
   },
 
   /**
-   * GET /assets/asset-assignments/{id} - load any assignment.
+   * GET /assets/asset-assignments/{id} — load any assignment.
    */
   async loadAssignment(id: string): Promise<AssignmentResponse> {
     return withAssignmentErrors(async () => {
@@ -195,7 +195,7 @@ export const assignmentFrontendService = {
   },
 
   /**
-   * PATCH /assets/asset-assignments/{id} - update draft fields.
+   * PATCH /assets/asset-assignments/{id} — update draft fields.
    */
   async updateDraft(id: string, body: AssignmentDraft): Promise<AssignmentResponse> {
     return withAssignmentErrors(async () => {
@@ -215,7 +215,7 @@ export const assignmentFrontendService = {
   },
 
   /**
-   * POST /assets/asset-assignments/{id}/approve - activate / advance workflow.
+   * POST /assets/asset-assignments/{id}/approve — activate / advance workflow.
    */
   async activateAssignment(id: string, comments?: string): Promise<AssignmentResponse> {
     return withAssignmentErrors(async () => {
@@ -342,14 +342,14 @@ function assetRowToWizardAsset(row: AssetsRow): WizardAssetOption {
     code,
     operationalStatus: String(row.operational_status ?? "READY_TO_MOVE"),
     lifecycleStatus: String(row.status ?? "active"),
-    branchLabel: String(row.branch_id ?? "").slice(0, 8) || "-",
+    branchLabel: String(row.branch_id ?? "").slice(0, 8) || "—",
     branchId: String(row.branch_id ?? ""),
     serialNumber:
       typeof row.serial_number === "string" && row.serial_number.trim()
         ? row.serial_number.trim()
-        : "-",
-    make: make || "-",
-    model: model || "-",
+        : "—",
+    make: make || "—",
+    model: model || "—",
   };
 }
 

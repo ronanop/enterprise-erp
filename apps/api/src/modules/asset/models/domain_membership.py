@@ -1,4 +1,4 @@
-"""Asset domain membership - IT / Non-IT team assignment (per-user, per-domain)."""
+"""Asset domain membership — IT / Non-IT team assignment (per-user, per-domain)."""
 
 from datetime import datetime
 from uuid import UUID, uuid4

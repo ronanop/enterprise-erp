@@ -82,6 +82,9 @@ class AssetDisposalRepository(AstScopedRepository):
                     AstAssetDisposal.document_number.ilike(term),
                     AstAsset.asset_code.ilike(term),
                     AstAsset.asset_name.ilike(term),
+                    AstAsset.make.ilike(term),
+                    AstAsset.model.ilike(term),
+                    AstAsset.configuration.ilike(term),
                 )
             )
         stmt = self.apply_ast_filter(stmt, AstAssetDisposal, ctx, branch_scoped=True)
@@ -140,6 +143,15 @@ class AssetDisposalRepository(AstScopedRepository):
                 "proceeds_amount",
                 "book_value_at_disposal",
                 "finance_journal_id",
+                "remarks",
+                "management_approved",
+                "ceo_instruction",
+                "rejection_reason",
+                "previous_operational_status",
+                "approved_at",
+                "approved_by",
+                "completed_at",
+                "completed_by",
             }:
                 setattr(row, k, v)
         row.updated_at = utcnow()

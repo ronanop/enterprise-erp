@@ -6,9 +6,9 @@
 
 ---
 
-**Project:** Connect Plus
-**Generated:** 2026-09-16 15:57:23
-**Category:** Luxury/Premium Brand
+**Project:** iConnect Plus
+**Generated:** 2026-09-22 13:20:05
+**Category:** Non-profit/Charity
 
 ---
 
@@ -18,29 +18,29 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#2563FF` | `--color-primary` |
+| Primary | `#1E40AF` | `--color-primary` |
 | On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#00D9C7` | `--color-secondary` |
-| Accent/CTA | `#FF594D` | `--color-accent` |
-| Background | `#FFFFFF` | `--color-background` |
-| Foreground | `#0A0A0F` | `--color-foreground` |
-| Muted | `#F5F7FF` | `--color-muted` |
-| Border | `#E4E8F5` | `--color-border` |
+| Secondary | `#3B82F6` | `--color-secondary` |
+| Accent/CTA | `#D97706` | `--color-accent` |
+| Background | `#F8FAFC` | `--color-background` |
+| Foreground | `#1E3A8A` | `--color-foreground` |
+| Muted | `#E9EEF6` | `--color-muted` |
+| Border | `#DBEAFE` | `--color-border` |
 | Destructive | `#DC2626` | `--color-destructive` |
-| Ring | `#2563FF` | `--color-ring` |
+| Ring | `#1E40AF` | `--color-ring` |
 
-**Color Notes:** Electric blue + cyan + coral — Apple whitespace + Stripe energy (no AI purple)
+**Color Notes:** Blue data + amber highlights [Accent adjusted from #F59E0B for WCAG 3:1]
 
 ### Typography
 
-- **Heading Font:** Plus Jakarta Sans
-- **Body Font:** Plus Jakarta Sans
-- **Mood:** enterprise, saas, b2b, professional, indigo, modern, approachable, legible, ios dynamic type, android scaling
-- **Google Fonts:** [Plus Jakarta Sans + Plus Jakarta Sans](https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400)
+- **Heading Font:** Fira Code
+- **Body Font:** Fira Sans
+- **Mood:** dashboard, data, analytics, code, technical, precise
+- **Google Fonts:** [Fira Code + Fira Sans](https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap)
 
 **CSS Import:**
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,600;0,700;0,800;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
 ```
 
 ### Spacing Variables
@@ -73,7 +73,7 @@
 ```css
 /* Primary Button */
 .btn-primary {
-  background: #EC4899;
+  background: #D97706;
   color: white;
   padding: 12px 24px;
   border-radius: 8px;
@@ -90,8 +90,8 @@
 /* Secondary Button */
 .btn-secondary {
   background: transparent;
-  color: #7C3AED;
-  border: 2px solid #7C3AED;
+  color: #1E40AF;
+  border: 2px solid #1E40AF;
   padding: 12px 24px;
   border-radius: 8px;
   font-weight: 600;
@@ -104,7 +104,7 @@
 
 ```css
 .card {
-  background: #FAF5FF;
+  background: #F8FAFC;
   border-radius: 12px;
   padding: 24px;
   box-shadow: var(--shadow-md);
@@ -130,9 +130,9 @@
 }
 
 .input:focus {
-  border-color: #7C3AED;
+  border-color: #1E40AF;
   outline: none;
-  box-shadow: 0 0 0 3px #7C3AED20;
+  box-shadow: 0 0 0 3px #1E40AF20;
 }
 ```
 
@@ -158,13 +158,13 @@
 
 ## Style Guidelines
 
-**Style:** Liquid Glass
+**Style:** Accessible & Ethical
 
-**Keywords:** Flowing glass, morphing, smooth transitions, fluid effects, translucent, animated blur, iridescent, chromatic aberration
+**Keywords:** High contrast, large text (16px+), keyboard navigation, screen reader friendly, WCAG compliant, focus state, semantic
 
-**Best For:** Premium SaaS, high-end e-commerce, creative platforms, branding experiences, luxury portfolios
+**Best For:** Government, healthcare, education, inclusive products, large audience, legal compliance, public
 
-**Key Effects:** Morphing elements (SVG/CSS), fluid animations (400-600ms curves), dynamic blur (backdrop-filter), color transitions
+**Key Effects:** Clear focus rings (3-4px), ARIA labels, skip links, responsive design, reduced motion, 44x44px touch targets
 
 ### Page Pattern
 
@@ -178,8 +178,8 @@
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ Cheap visuals
-- ❌ Fast animations
+- ❌ No impact data
+- ❌ Hidden financials
 
 ### Additional Forbidden Patterns
 

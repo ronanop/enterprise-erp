@@ -1,4 +1,4 @@
-# Asset Workflow Governance - Notification Deployment Guide
+# Asset Workflow Governance — Notification Deployment Guide
 
 **Feature:** FP-ASSET-WF-GOV-001 (WF-04)  
 **Date:** 2026-07-29
@@ -54,15 +54,15 @@ Repeat for all four codes. Payload keys available: `entity_name`, `entity_id`.
 
 | Condition | Behaviour |
 |-----------|-----------|
-| Template missing | **Silent skip** - WF/audit still succeed |
+| Template missing | **Silent skip** — WF/audit still succeed |
 | Template inactive | Skip (same as missing) |
-| Celery/broker down | `send` may raise and fail the request transaction - treat as ops incident; ensure worker health before enablement |
+| Celery/broker down | `send` may raise and fail the request transaction — treat as ops incident; ensure worker health before enablement |
 | Recipient null | Event still created with `recipient_user_id=null` (creator preferred when available) |
 
 ---
 
 ## Rollback
 
-1. Disable governance flag **or** deactivate templates - either stops user-visible notifies.
+1. Disable governance flag **or** deactivate templates — either stops user-visible notifies.
 2. Flag off restores legacy approve path (no governance notifies).
 3. Do not delete WF definitions solely for notification rollback.

@@ -1,5 +1,5 @@
 /**
- * CR-004 Phase 8B - map preview rows → POST /assets/assets/import payload.
+ * CR-004 Phase 8B — map preview rows → POST /assets/assets/import payload.
  */
 
 import {
@@ -34,6 +34,8 @@ export type AssetExcelImportApiRow = {
   delivery_reference_status?: string | null;
   delivery_challan_signature_status?: string | null;
   assignment_remarks?: string | null;
+  maintenance_reason?: string | null;
+  expected_duration_days?: number | null;
 };
 
 export type AssetExcelImportApiRequest = {
@@ -125,6 +127,12 @@ export function buildImportPayloadRows(
       delivery_reference_status: (row.values.deliveryStatus ?? "").trim() || null,
       delivery_challan_signature_status: (row.values.deliverySignature ?? "").trim() || null,
       assignment_remarks: (row.values.assignmentRemarks ?? "").trim() || null,
+      ...(ops === "IN_MAINTENANCE"
+        ? {
+            maintenance_reason: (row.values.maintenanceReason ?? "").trim() || null,
+            expected_duration_days: 7,
+          }
+        : {}),
     });
   }
   return out;

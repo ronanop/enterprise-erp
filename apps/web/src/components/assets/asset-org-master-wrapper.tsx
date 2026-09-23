@@ -44,6 +44,7 @@ export function AssetOrgMasterWrapper({ kind }: Props) {
         title={meta.title}
         description="Read-only view from organization master."
         apiPath={meta.apiPath}
+        showRowSerial
       />
     </div>
   );

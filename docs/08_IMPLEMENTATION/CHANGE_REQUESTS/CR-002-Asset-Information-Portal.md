@@ -1,4 +1,4 @@
-# CR-002 - Asset Information Portal + QR Self-Service
+# CR-002 — Asset Information Portal + QR Self-Service
 
 **Status:** Implemented  
 **Module:** Asset Management  
@@ -60,8 +60,8 @@ Payload: `/assets/self-service/{assetId}` (absolute with origin).
 
 ## Backend Changes
 
-- `schemas.py` - `AssetInformationPortalResponse` (+ assignment/warranty/insurance summaries)
-- `information_portal_service.py` - composition service
+- `schemas.py` — `AssetInformationPortalResponse` (+ assignment/warranty/insurance summaries)
+- `information_portal_service.py` — composition service
 - Router additive:
   - `GET /assets/assets/{id}/information-portal`
   - `GET /assets/assets/{id}/self-service`
@@ -73,10 +73,10 @@ Manufacturer ← supplier vendor name; Model ← linked product name (no new col
 ## Frontend Changes
 
 - Registration table **View** → `/assets/information-portal/{id}`
-- `asset-information-portal.tsx` - portal sections + QR download/print/open
-- `asset-self-service-view.tsx` - redacted self-service page
+- `asset-information-portal.tsx` — portal sections + QR download/print/open
+- `asset-self-service-view.tsx` — redacted self-service page
 - Routes under `(app)/assets/...` (auth shell)
-- `assets-service.ts` - portal client + `buildSelfServiceUrl`
+- `assets-service.ts` — portal client + `buildSelfServiceUrl`
 - Dependency: `qrcode.react`
 
 ---
@@ -100,8 +100,8 @@ Existing asset CRUD/workflow APIs unchanged.
 
 ## Testing
 
-- `test_information_portal_service.py` - AssetService usage, redaction, aliases
-- `asset-self-service-url.test.mjs` - URL builder
+- `test_information_portal_service.py` — AssetService usage, redaction, aliases
+- `asset-self-service-url.test.mjs` — URL builder
 - Regression: category + registration unit suites remain green
 
 ---

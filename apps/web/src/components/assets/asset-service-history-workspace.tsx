@@ -2,6 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ClipboardList, Loader2, Plus, RefreshCw } from "lucide-react";
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+
 
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -76,7 +83,7 @@ function isValidPartsJson(value: string): boolean {
 }
 
 function formatDateTime(value?: string | null): string {
-  if (!value) return "-";
+  if (!value) return "—";
   return value.slice(0, 16).replace("T", " ");
 }
 
@@ -319,7 +326,7 @@ export function AssetServiceHistoryWorkspace() {
     <div className="space-y-6">
       <PageHeader
         title="Service history"
-        description="Append-only maintenance service log - auto-recorded on work order completion. Immutable after creation."
+        description="Append-only maintenance service log — auto-recorded on work order completion. Immutable after creation."
       />
 
       {error ? (
@@ -496,6 +503,9 @@ export function AssetServiceHistoryWorkspace() {
               <table className="min-w-full text-sm">
                 <thead className="bg-muted/40 text-left">
                   <tr>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
                     <th scope="col" className="px-3 py-2 font-medium">
                       Summary
                     </th>
@@ -513,18 +523,18 @@ export function AssetServiceHistoryWorkspace() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={4}>
+                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={5}>
                         <Loader2 className="mx-auto h-5 w-5 animate-spin" />
                       </td>
                     </tr>
                   ) : rows.length === 0 ? (
                     <tr>
-                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={4}>
+                      <td className="px-3 py-8 text-center text-muted-foreground" colSpan={5}>
                         No service history records found.
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row) => {
+                    rows.map((row, index) => {
                       const asset = assetMap.get(row.asset_id);
                       const isSelected = selected?.id === row.id;
                       return (
@@ -535,6 +545,7 @@ export function AssetServiceHistoryWorkspace() {
                           }`}
                           onClick={() => setSelected(row)}
                         >
+                          <td className={tableSerialCellClassName()}>{tableRowSerial(page, pageSize, index)}</td>
                           <td className="px-3 py-2">
                             <div className="flex items-start gap-2">
                               <ClipboardList className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -551,7 +562,7 @@ export function AssetServiceHistoryWorkspace() {
                             {formatDateTime(row.serviced_at)}
                           </td>
                           <td className="px-3 py-2 font-mono text-xs">
-                            {row.cost_amount ?? "-"}
+                            {row.cost_amount ?? "—"}
                           </td>
                         </tr>
                       );
@@ -584,7 +595,7 @@ export function AssetServiceHistoryWorkspace() {
                     <SelectContent>
                       {assetOptions.map((asset) => (
                         <SelectItem key={asset.id} value={asset.id} className="cursor-pointer">
-                          {asset.asset_code} - {asset.asset_name}
+                          {asset.asset_code} — {asset.asset_name}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -625,7 +636,7 @@ export function AssetServiceHistoryWorkspace() {
                       ) : null}
                       {pickerMaintenances.map((row) => (
                         <SelectItem key={row.id} value={row.id} className="cursor-pointer">
-                          {row.document_number} - {row.maintenance_type}
+                          {row.document_number} — {row.maintenance_type}
                         </SelectItem>
                       ))}
                       {pickerPage * MAINTENANCE_PAGE_SIZE < pickerTotal ? (
@@ -756,7 +767,7 @@ export function AssetServiceHistoryWorkspace() {
                   </div>
                   <div>
                     <span className="text-muted-foreground">Cost:</span>{" "}
-                    {selected.cost_amount ?? "-"}
+                    {selected.cost_amount ?? "—"}
                   </div>
                   {selected.parts_replaced_json ? (
                     <div>

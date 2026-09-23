@@ -40,8 +40,8 @@ export function StartDisposalConfirmDialog({
   const opsRaw = String(asset.operationalStatus ?? "");
   const opsLabel = isOperationalStatus(opsRaw)
     ? OPERATIONAL_STATUS_LABELS[opsRaw]
-    : opsRaw || "-";
-  const lifeLabel = formatLifecycleStatusLabel(String(asset.lifecycleStatus ?? "")) || "-";
+    : opsRaw || "—";
+  const lifeLabel = formatLifecycleStatusLabel(String(asset.lifecycleStatus ?? "")) || "—";
 
   return (
     <div
@@ -68,15 +68,15 @@ export function StartDisposalConfirmDialog({
         <div className="mt-3 space-y-2 text-sm">
           <p>
             <span className="text-muted-foreground">Asset Code: </span>
-            <span className="font-mono text-xs">{asset.assetCode || "-"}</span>
+            <span className="font-mono text-xs">{asset.assetCode || "—"}</span>
           </p>
           <p>
             <span className="text-muted-foreground">Name: </span>
-            {asset.assetName || "-"}
+            {asset.assetName || "—"}
           </p>
           <p>
             <span className="text-muted-foreground">Serial Number: </span>
-            <span className="font-mono text-xs">{asset.serialNumber || "-"}</span>
+            <span className="font-mono text-xs">{asset.serialNumber || "—"}</span>
           </p>
           <p className="pt-1">
             <span className="text-muted-foreground">Lifecycle: </span>

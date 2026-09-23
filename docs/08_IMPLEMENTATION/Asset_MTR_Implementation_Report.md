@@ -1,4 +1,4 @@
-# Asset Meter Reading - Implementation Report (FP-ASSET-015)
+# Asset Meter Reading — Implementation Report (FP-ASSET-015)
 
 **Status:** Complete  
 **ADR:** ADR-ASSET-MTR-001  

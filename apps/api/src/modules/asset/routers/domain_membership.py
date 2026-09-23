@@ -1,4 +1,4 @@
-"""Asset domain membership API - module admin or domain admin gated in service."""
+"""Asset domain membership API — module admin or domain admin gated in service."""
 
 from typing import Annotated
 from uuid import UUID
@@ -22,7 +22,7 @@ from shared.schemas import APIResponse
 
 domain_membership_router = APIRouter(
     prefix="/asset-domain-memberships",
-    tags=["Asset - Domain Membership"],
+    tags=["Asset — Domain Membership"],
 )
 
 
@@ -117,7 +117,7 @@ def deactivate_domain_membership(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Soft-delete membership (branch convention - no hard DELETE)."""
+    """Soft-delete membership (branch convention — no hard DELETE)."""
     DomainMembershipService(db).deactivate(ctx, row_id)
     db.commit()
     return APIResponse(message="Removed", data=None)

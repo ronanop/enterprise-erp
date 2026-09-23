@@ -1,4 +1,4 @@
-# CR-004 - Phase 4 Task 6 - Navigation & End-to-End Integration
+# CR-004 — Phase 4 Task 6 — Navigation & End-to-End Integration
 
 **Status:** Complete  
 **Date:** 2026-08-05  
@@ -30,14 +30,14 @@ Duplicate href builders consolidated: `buildAssignmentWizardHref` / `buildReturn
 
 ## End-to-end workflow
 
-1. **Assign** - snapshot inventory UI → close drawer → Issue wizard (`?assetId=`)  
-2. **Success / Cancel** - mark stale (success) → `openInventory` (soft nav)  
-3. **Inventory remount** - restore search/filters/page/branch/preset → single list fetch → drawer closed  
-4. **Return** - same pattern with Return wizard  
+1. **Assign** — snapshot inventory UI → close drawer → Issue wizard (`?assetId=`)  
+2. **Success / Cancel** — mark stale (success) → `openInventory` (soft nav)  
+3. **Inventory remount** — restore search/filters/page/branch/preset → single list fetch → drawer closed  
+4. **Return** — same pattern with Return wizard  
 
 Operational status updates via backend-driven list reload (no client mutation).
 
-### Dashboard KPI refresh - Deferred
+### Dashboard KPI refresh — Deferred
 
 No shared dashboard cache/store. Documented deferred (unchanged from Task 4).
 
@@ -93,5 +93,5 @@ npm run test -- src/components/assets/navigation src/components/assets/inventory
 |------|------------|
 | Soft nav remount loses React state | UI snapshot in sessionStorage |
 | Stale + remount double fetch | Consume stale without reloadToken bump |
-| Dashboard KPIs stale | Deferred - no cache |
+| Dashboard KPIs stale | Deferred — no cache |
 | Focus asset stash unused by UI | Stored for future highlight; optional |

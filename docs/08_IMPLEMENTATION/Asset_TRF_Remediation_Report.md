@@ -1,4 +1,4 @@
-# FP-ASSET-002 - Remediation Report
+# FP-ASSET-002 — Remediation Report
 
 **Date:** 2026-07-29  
 **Review:** Enterprise Code Review (APPROVED WITH REMEDIATION)

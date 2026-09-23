@@ -1,4 +1,4 @@
-# FP-ASSET-004 - Asset Maintenance (Work Order) Feature Package
+# FP-ASSET-004 — Asset Maintenance (Work Order) Feature Package
 
 **Status:** Implemented  
 **ADR:** ADR-ASSET-MNT-001
@@ -38,7 +38,7 @@ List query: `page`, `page_size`, `company_id`, `asset_id`, `branch_id`, `status`
 
 ## Migrations
 
-- `0469_ast_maintenance_governance` - update permission, open WO index, AMNT sequence backfill
+- `0469_ast_maintenance_governance` — update permission, open WO index, AMNT sequence backfill
 
 ## Out of Scope
 

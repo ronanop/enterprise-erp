@@ -1,4 +1,4 @@
-# ADR-ASSET-MNT-001 - Asset Maintenance (Work Order Governance)
+# ADR-ASSET-MNT-001 — Asset Maintenance (Work Order Governance)
 
 **Status:** Accepted  
 **Date:** 2026-07-29  

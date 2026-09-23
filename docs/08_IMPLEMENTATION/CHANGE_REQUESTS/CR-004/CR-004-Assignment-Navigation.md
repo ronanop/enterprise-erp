@@ -1,4 +1,4 @@
-# CR-004 - Assignment Navigation
+# CR-004 — Assignment Navigation
 
 **Owner:** `apps/web/src/components/assets/navigation/assignment-navigation.ts`  
 
@@ -39,6 +39,6 @@ Aliases: `buildIssueWizardHref` ≡ `buildAssignmentWizardHref`.
 
 ## Rules
 
-- Navigation only - no UI, fetch, or business rules.
+- Navigation only — no UI, fetch, or business rules.
 - Containers remain URL-agnostic; page hosts map query → props.
 - Do not duplicate href builders in inventory or wizard folders.

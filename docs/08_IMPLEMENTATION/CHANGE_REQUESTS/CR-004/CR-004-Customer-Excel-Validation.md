@@ -1,6 +1,6 @@
-# CR-004 - Customer Excel Template Validation
+# CR-004 — Customer Excel Template Validation
 
-**Phase:** 8A.5 - Analysis only (no code, no UI, no backend, no import)  
+**Phase:** 8A.5 — Analysis only (no code, no UI, no backend, no import)  
 **Date:** 2026-08-05  
 **Purpose:** Compare the **customer Excel register contract** with the **Phase 8A Import Foundation** before Phase 8B Import Engine.
 
@@ -40,11 +40,11 @@
 | Branch dimension | Noida / Mumbai / Dubai filters / columns | Branch **column** validated against `/branches` labels |
 | Active sheet | Register or current bucket tab | Always `SheetNames[0]` |
 | Hidden sheets | Possible (archives, pivots) | Ignored |
-| Merged cells | Common in Excel headers / title rows | **Not detected**; SheetJS flattens - risk of shifted headers |
+| Merged cells | Common in Excel headers / title rows | **Not detected**; SheetJS flattens — risk of shifted headers |
 | Formulas | Possible (counts, lookups) | Parsed as **cached values** if present; formulas themselves not executed |
-| Multi-sheet import | Historical / branch sheets optional | **Out of scope** (8A) - only first sheet |
+| Multi-sheet import | Historical / branch sheets optional | **Out of scope** (8A) — only first sheet |
 
-### 1.2 Verdict - workbook structure
+### 1.2 Verdict — workbook structure
 
 | Finding | Severity | Notes |
 |---------|----------|-------|
@@ -66,20 +66,20 @@ Legend: **Match** exact/alias · **Partial** name drift · **Gap** missing in 8A
 | 3 | Branch / Location (branch) | `branch` | **Match** | Required; location also separate field |
 | 4 | Ready/Assigned/… (tab or Status) | `operationalStatus` | **Partial** | Aliases include tab names (*Not Working*, *Not Given To Anyone*); **fails if status only implied by sheet name** |
 | 5 | Employee ID | `employeeId` | **Match** | Optional; required-by-rule when ASSIGNED is only a **warning** in 8A (Migration Plan = **Error**) |
-| 6 | Employee Name | - | **Gap / Skip** | Derived from master; should **not** import as SSOT |
-| 7 | Phone Number | - | **Gap** | Not in 8A targets; employee master only |
+| 6 | Employee Name | — | **Gap / Skip** | Derived from master; should **not** import as SSOT |
+| 7 | Phone Number | — | **Gap** | Not in 8A targets; employee master only |
 | 8 | Manufacturer / Brand | `manufacturer` | **Match** | Optional |
 | 9 | Model | `model` | **Match** | Optional |
 | 10 | Configuration / CPU / RAM | `configuration` | **Partial** | Single field; separate CPU/RAM columns need concat rule |
-| 11 | Charger | - | **Gap** | Components path; Migration Plan: optional parse - **not in 8A** |
-| 12 | Other Items | - | **Gap** | Same as charger |
+| 11 | Charger | — | **Gap** | Components path; Migration Plan: optional parse — **not in 8A** |
+| 12 | Other Items | — | **Gap** | Same as charger |
 | 13 | Issue Date | `issueDate` | **Match** | Date parser present |
-| 14 | Earlier Used By | - | **Skip (correct)** | Must **not** import; recompute from history |
-| 15 | Current Holder | - | **Skip (correct)** | Derived when ASSIGNED |
+| 14 | Earlier Used By | — | **Skip (correct)** | Must **not** import; recompute from history |
+| 15 | Current Holder | — | **Skip (correct)** | Derived when ASSIGNED |
 | 16 | Delivery Challan | `deliveryReference` | **Partial** | Aliases include “delivery challan”; ERP stores `delivery_reference_number` |
 | 17 | Remarks (issue) | `assignmentRemarks` | **Partial** | Alias `remarks`; **Return Remarks** not mapped for import |
-| 18 | Return Remarks | - | **Gap** | Exists in register/export parity; **absent from 8A import targets** |
-| 19 | Serial | - | **Gap** | Migration Plan includes serial → `serial_number` |
+| 18 | Return Remarks | — | **Gap** | Exists in register/export parity; **absent from 8A import targets** |
+| 19 | Serial | — | **Gap** | Migration Plan includes serial → `serial_number` |
 | 20 | Department | `department` | **Extra / optional** | May not exist on customer grid |
 | 21 | Asset Category | `category` | **Extra / optional** | ERP-centric; may be blank in Excel |
 | 22 | Delivery Status | `deliveryStatus` | **Extra** | ERP enrichment; unlikely in legacy Excel |
@@ -141,13 +141,13 @@ Asset Tag · Laptop Name · Branch · Employee ID · Manufacturer · Model · Is
 
 | Issue | 8A coverage | Gap |
 |-------|-------------|-----|
-| Duplicate Asset Tags | **Yes** (error) | - |
+| Duplicate Asset Tags | **Yes** (error) | — |
 | Blank rows | Skipped if fully empty | Title/spacer rows with partial junk still parse |
 | Merged cells | **No** | High risk on header row |
-| Unexpected values | Row validators | - |
+| Unexpected values | Row validators | — |
 | Whitespace / case | Normalize lookups | OK |
-| Invalid dates | **Yes** | Future dates only Warning in Migration Plan - **not** in 8A |
-| Invalid branch | **Yes** | - |
+| Invalid dates | **Yes** | Future dates only Warning in Migration Plan — **not** in 8A |
+| Invalid branch | **Yes** | — |
 | Missing employees | **Yes** (error if ID present) | ASSIGNED w/o employee = **Warning** (should be Error per Migration Plan) |
 
 ### 3.3 Business rules
@@ -155,7 +155,7 @@ Asset Tag · Laptop Name · Branch · Employee ID · Manufacturer · Model · Is
 | Excel concept | ERP / 8A | Finding |
 |---------------|----------|---------|
 | Ready To Move | `READY_TO_MOVE` | Alias OK |
-| Assigned | `ASSIGNED` + employee | Warning-only without employee - **policy mismatch** |
+| Assigned | `ASSIGNED` + employee | Warning-only without employee — **policy mismatch** |
 | Retired / Not Given To Anyone | `RETIRED` | Alias OK |
 | Pending Disposal / Not Working | `PENDING_DISPOSAL` | Alias OK |
 | Disposed | `DISPOSED` | Alias OK; lifecycle align deferred to 8B |
@@ -257,4 +257,4 @@ Before Import Engine (8B), adjust foundation / process as follows:
 |------|-------|
 | Mode | Analysis only |
 | Code changes | None |
-| Next phase | 8B Import Engine - only after Critical items in §4 / §6 |
+| Next phase | 8B Import Engine — only after Critical items in §4 / §6 |

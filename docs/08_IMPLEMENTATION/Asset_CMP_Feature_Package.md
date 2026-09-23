@@ -1,4 +1,4 @@
-# FP-ASSET-019 - Asset Components (Feature Package)
+# FP-ASSET-019 — Asset Components (Feature Package)
 
 **Status:** Implemented  
 **ADR:** ADR-ASSET-COMPONENT-001
@@ -9,10 +9,10 @@ Option B lightweight child components under a parent asset. Depth 1 only. No inv
 
 ## Lifecycle fidelity
 
-- **Install:** `POST /` - creates `active`; client cannot override `status`.
-- **Update:** `PATCH /{id}` - active only; `asset_id` / `component_code` immutable; requires `version`.
-- **Replace:** `POST /{id}/replace` - marks source `replaced`, creates successor `active` (same code allowed via partial UK).
-- **Dispose:** `POST /{id}/dispose` - active → `disposed` (terminal).
+- **Install:** `POST /` — creates `active`; client cannot override `status`.
+- **Update:** `PATCH /{id}` — active only; `asset_id` / `component_code` immutable; requires `version`.
+- **Replace:** `POST /{id}/replace` — marks source `replaced`, creates successor `active` (same code allowed via partial UK).
+- **Dispose:** `POST /{id}/dispose` — active → `disposed` (terminal).
 
 ## API (`/api/v1/assets/asset-components`)
 

@@ -46,6 +46,7 @@ def test_validate_transition_blocked() -> None:
         ("return_to_ready", Assigned, Ready),
         ("retire", Assigned, Retired),
         ("mark_pending_disposal", Assigned, Pending),
+        ("mark_pending_disposal", Ready, Pending),
         ("start_disposal", Retired, Pending),
         ("reinstate", Pending, Ready),
         ("complete_disposal", Pending, Disposed),

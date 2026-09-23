@@ -1,4 +1,4 @@
-# Asset Checklist - Implementation Report (FP-ASSET-014)
+# Asset Checklist — Implementation Report (FP-ASSET-014)
 
 **Status:** Complete  
 **ADR:** ADR-ASSET-CHK-001  
@@ -34,7 +34,7 @@ All CHK-01 through CHK-15 decisions implemented.
 - Employees referencing a cross-company asset receive **404** (asset not visible under repository scoping).
 - Privileged users (`tenant_admin`, `super_admin`) receive **422** when asset and checklist companies mismatch (explicit validator guard).
 
-## Security note - explicit asset-company validation
+## Security note — explicit asset–company validation
 
 Repository scoping hides cross-company assets from employees (404).  
 `tenant_admin` and `super_admin` bypass company filters on asset reads and could link an asset from Company A to a checklist in Company B without an explicit validator check.  

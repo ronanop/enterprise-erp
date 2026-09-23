@@ -1,4 +1,4 @@
-# ADR-ASSET-MPL-001 - Asset Maintenance Plan Management
+# ADR-ASSET-MPL-001 — Asset Maintenance Plan Management
 
 **Status:** Accepted  
 **Date:** 2026-07-30  

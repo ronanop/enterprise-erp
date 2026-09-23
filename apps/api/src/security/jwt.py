@@ -12,7 +12,11 @@ from core.exceptions import UnauthorizedException
 
 class JWTService:
     def __init__(self) -> None:
-        self._secret = settings.jwt_secret_key
+        # PyJWT recommends >= 32 bytes for HS256; pad short local secrets so encode never fails.
+        secret = (settings.jwt_secret_key or "").strip() or "change-me-in-production"
+        if len(secret.encode("utf-8")) < 32:
+            secret = (secret * ((32 // max(len(secret), 1)) + 1))[:48]
+        self._secret = secret
         self._algorithm = settings.jwt_algorithm
         self._access_minutes = settings.jwt_access_token_expire_minutes
         self._refresh_days = settings.jwt_refresh_token_expire_days

@@ -88,7 +88,7 @@ describe("AssetOperationsDashboard layout", () => {
     expect(screen.getByRole("heading", { level: 1, name: "IT Asset Operations" })).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Operational status, location mix, and transfer activity - click a KPI to open All Assets filtered.",
+        "Operational status, location mix, and transfer activity — click a KPI to open All Assets filtered.",
       ),
     ).toBeInTheDocument();
   });
@@ -140,7 +140,7 @@ describe("AssetOperationsDashboard layout", () => {
 
   it("shows KPI loading skeletons when loading", () => {
     renderDashboard({ kpisLoading: true, kpis: null });
-    expect(screen.getAllByLabelText("Loading statistic")).toHaveLength(6);
+    expect(screen.getAllByLabelText("Loading statistic")).toHaveLength(7);
   });
 
   it("renders KPI values from props", () => {
@@ -156,13 +156,13 @@ describe("AssetOperationsDashboard layout", () => {
 
   it("shows empty KPI dashes when kpis null and not loading", () => {
     renderDashboard({ kpis: null, kpisLoading: false });
-    expect(screen.getAllByText("-").length).toBeGreaterThanOrEqual(6);
+    expect(screen.getAllByText("—").length).toBeGreaterThanOrEqual(6);
   });
 
   it("applies responsive KPI grid classes", () => {
     renderDashboard();
     const grid = screen.getByTestId("asset-ops-kpi-grid");
-    expect(grid.className).toMatch(/xl:grid-cols-6/);
+    expect(grid.className).toMatch(/xl:grid-cols-7/);
     expect(grid.className).toMatch(/sm:grid-cols-3/);
   });
 
@@ -218,11 +218,11 @@ describe("AssetOperationsDashboard layout", () => {
     expect(push).toHaveBeenCalledWith("/assets/asset-transfers");
   });
 
-  it("renders six quick action cards", () => {
+  it("renders five quick action cards", () => {
     renderDashboard();
     const grid = screen.getByTestId("asset-ops-quick-actions-grid");
     expect(within(grid).getByRole("button", { name: /Register Asset/ })).toBeInTheDocument();
-    expect(within(grid).getByRole("button", { name: /QR \/ Barcode/ })).toBeInTheDocument();
+    expect(within(grid).queryByRole("button", { name: /QR \/ Barcode/ })).not.toBeInTheDocument();
   });
 
   it("navigates quick actions to existing routes", async () => {
@@ -235,8 +235,6 @@ describe("AssetOperationsDashboard layout", () => {
     expect(push).toHaveBeenCalledWith("/assets/asset-assignments/new");
     await user.click(within(grid).getByRole("button", { name: /Return Asset/ }));
     expect(push).toHaveBeenCalledWith("/assets/asset-assignments/return");
-    await user.click(within(grid).getByRole("button", { name: /QR \/ Barcode/ }));
-    expect(push).toHaveBeenCalledWith("/assets/qr-barcode");
   });
 
   it("does not cap dashboard with an inner max-width", () => {

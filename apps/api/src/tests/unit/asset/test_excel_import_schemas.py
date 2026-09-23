@@ -1,4 +1,4 @@
-"""Unit tests - Excel import schemas & domain constants (CR-004 Phase 8B)."""
+"""Unit tests — Excel import schemas & domain constants (CR-004 Phase 8B)."""
 
 from __future__ import annotations
 
@@ -29,9 +29,13 @@ def test_default_batch_size() -> None:
 
 def test_valid_ops_statuses() -> None:
     assert "READY_TO_MOVE" in VALID_IMPORT_OPERATIONAL_STATUSES
+    assert "ASSIGNED" in VALID_IMPORT_OPERATIONAL_STATUSES
+    assert "IN_MAINTENANCE" in VALID_IMPORT_OPERATIONAL_STATUSES
     assert "DISPOSED" not in VALID_IMPORT_OPERATIONAL_STATUSES
-    assert "PENDING_DISPOSAL" in VALID_IMPORT_OPERATIONAL_STATUSES
-    assert len(VALID_IMPORT_OPERATIONAL_STATUSES) == 5
+    assert "RETIRED" not in VALID_IMPORT_OPERATIONAL_STATUSES
+    assert "PENDING_DISPOSAL" not in VALID_IMPORT_OPERATIONAL_STATUSES
+    assert "IN_USE_AS_COMPONENT" not in VALID_IMPORT_OPERATIONAL_STATUSES
+    assert len(VALID_IMPORT_OPERATIONAL_STATUSES) == 3
 
 
 def test_skip_reasons() -> None:
@@ -126,6 +130,21 @@ def test_summary_response_shape() -> None:
         rows=[],
     )
     assert payload.imported == 7
+
+
+def test_import_row_accepts_configuration_and_charger_serial() -> None:
+    row = AssetExcelImportRow(
+        row_number=1,
+        preview_status="valid",
+        asset_name="Laptop",
+        branch_id=uuid4(),
+        operational_status="READY_TO_MOVE",
+        asset_type_id=uuid4(),
+        configuration="Intel Core i5 / Gen 11 / 512 GB",
+        charger_serial="CHG-1001",
+    )
+    assert row.configuration == "Intel Core i5 / Gen 11 / 512 GB"
+    assert row.charger_serial == "CHG-1001"
 
 
 def test_row_number_must_be_positive() -> None:

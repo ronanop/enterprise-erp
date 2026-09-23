@@ -1,4 +1,4 @@
-"""Incoming asset arrival + QC tracking (IT receiving / Sub-phase 1-2).
+"""Incoming asset arrival + QC tracking (IT receiving / Sub-phase 1–2).
 
 Arrival tracks expected vs arrived against Procurement GRN lines.
 QC dispositions (accept/reject) are Asset-owned and do not create ast_asset

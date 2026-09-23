@@ -13,25 +13,28 @@ Disposed = AssetOperationalStatus.DISPOSED.value
 InUseAsComponent = AssetOperationalStatus.IN_USE_AS_COMPONENT.value
 
 # --- Allowed transitions ---
-# READY_TO_MOVE → ASSIGNED
-# ASSIGNED → READY_TO_MOVE | RETIRED | PENDING_DISPOSAL
-# RETIRED → PENDING_DISPOSAL
-# PENDING_DISPOSAL → DISPOSED | READY_TO_MOVE
-# READY_TO_MOVE → IN_USE_AS_COMPONENT (attach as component)
-# IN_USE_AS_COMPONENT → READY_TO_MOVE (detach / parent return)
-# IN_USE_AS_COMPONENT → DISPOSED (cascade dispose from component row)
-# READY_TO_MOVE → IN_MAINTENANCE (maintenance start)
-# IN_MAINTENANCE → READY_TO_MOVE (maintenance complete)
+# READY_TO_MOVE → ASSIGNED | DISPOSED | IN_MAINTENANCE | IN_USE_AS_COMPONENT
+# ASSIGNED → READY_TO_MOVE | DISPOSED (legacy retire/pending kept for history only)
+# PENDING_DISPOSAL → DISPOSED | READY_TO_MOVE (legacy reinstate)
+# RETIRED → DISPOSED | PENDING_DISPOSAL (legacy)
+# IN_USE_AS_COMPONENT → READY_TO_MOVE | DISPOSED
+# IN_MAINTENANCE → READY_TO_MOVE
 
 ALLOWED_OPERATIONAL_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
     {
         (Ready, Assigned),
         (Assigned, Ready),
-        (Assigned, Retired),
-        (Assigned, Pending),
-        (Retired, Pending),
+        (Assigned, Retired),  # legacy
+        (Assigned, Pending),  # legacy
+        (Assigned, Disposed),
+        (Ready, Pending),  # legacy
+        (Ready, Disposed),
+        (Retired, Pending),  # legacy
+        (Retired, Disposed),
         (Pending, Disposed),
         (Pending, Ready),
+        (Pending, Assigned),
+        (Pending, Retired),
         (Ready, InUseAsComponent),
         (InUseAsComponent, Ready),
         (InUseAsComponent, Disposed),
@@ -43,7 +46,6 @@ ALLOWED_OPERATIONAL_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
 # --- Explicitly blocked (documented; also blocked if not in ALLOWED) ---
 BLOCKED_OPERATIONAL_TRANSITIONS: frozenset[tuple[str, str]] = frozenset(
     {
-        (Ready, Disposed),
         (Ready, Retired),
         (Retired, Assigned),
         (Retired, Ready),

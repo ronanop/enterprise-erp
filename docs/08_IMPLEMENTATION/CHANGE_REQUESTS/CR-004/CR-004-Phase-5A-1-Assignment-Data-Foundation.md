@@ -1,4 +1,4 @@
-# CR-004 Phase 5A-1 - Assignment Data Foundation
+# CR-004 Phase 5A-1 — Assignment Data Foundation
 
 **Scope:** Data layer only (Excel migration preparation). No service, workflow, validator, or router changes.
 
@@ -22,7 +22,7 @@
 
 ## Tests
 
-- `apps/api/src/tests/unit/asset/test_assignment_data_foundation.py` - migration metadata, ORM, schemas, repository, OpenAPI response surface (40+ cases).
+- `apps/api/src/tests/unit/asset/test_assignment_data_foundation.py` — migration metadata, ORM, schemas, repository, OpenAPI response surface (40+ cases).
 
 ## Next phase (out of scope for 5A-1)
 

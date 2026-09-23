@@ -4,8 +4,10 @@ from typing import Annotated
 from datetime import date, datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
+from urllib.parse import quote
 
 from modules.asset.models import AstAssetMaintenance
 from modules.asset.dependencies import (
@@ -56,13 +58,17 @@ from modules.asset.schemas import (
     DepreciationGenerateRunResult,
     AssetDisposalCreate,
     AssetDisposalListResult,
+    AssetDisposalApproveRequest,
+    AssetDisposalRejectRequest,
     AssetDisposalResponse,
     AssetDisposalUpdate,
     AssetDocumentCreate,
     AssetDocumentListResult,
     AssetDocumentResponse,
     AssetDocumentUpdate,
+    AssetDocumentUploadLimits,
     AssetInformationPortalResponse,
+    AssetLifecycleTimelineResult,
     DiscoveryApplyRequest,
     DiscoveryApplyResult,
     DiscoveryCommandResponse,
@@ -103,6 +109,7 @@ from modules.asset.schemas import (
     AssetMaintenanceListResult,
     AssetMaintenanceQuickDraftCreate,
     AssetMaintenanceResponse,
+    AssetMaintenanceStartFromAssetRequest,
     AssetMaintenanceStartRequest,
     AssetMaintenanceUpdate,
     AssetNotificationCreate,
@@ -127,6 +134,12 @@ from modules.asset.schemas import (
     AssetTransferListResult,
     AssetTransferResponse,
     AssetTransferUpdate,
+    UserTransferAssignRequest,
+    UserTransferCompleteResponse,
+    UserTransferContextResponse,
+    UserTransferReturnToStockRequest,
+    UserTransferVerificationRequest,
+    UserTransferVerificationResponse,
     AssetUpdate,
     AssetWarrantyCreate,
     AssetWarrantyExtend,
@@ -186,7 +199,7 @@ from modules.asset.service.discovery_service import AssetDiscoveryService
 from modules.foundation.domain.value_objects import TenantContext
 from shared.schemas import APIResponse
 
-asset_categories_router = APIRouter(prefix="/asset-categories", tags=["Asset - AssetCategory"])
+asset_categories_router = APIRouter(prefix="/asset-categories", tags=["Asset — AssetCategory"])
 
 @asset_categories_router.get("", response_model=APIResponse[AssetCategoryListResult])
 def list_asset_categories(
@@ -269,7 +282,7 @@ def reactivate_asset_category(
         data=AssetCategoryService(db).reactivate(ctx, row_id),
     )
 
-assets_router = APIRouter(prefix="/assets", tags=["Asset - Asset"])
+assets_router = APIRouter(prefix="/assets", tags=["Asset — Asset"])
 
 
 def _asset_type_name_map(db: Session, ctx: TenantContext, items: list) -> dict:
@@ -392,7 +405,7 @@ def import_assets_from_excel(
 ):
     """Import preview-validated Excel rows via business services (CR-004 Phase 8B).
 
-    Not a new asset CRUD API - orchestration over AssetService / AssignmentService /
+    Not a new asset CRUD API — orchestration over AssetService / AssignmentService /
     AssetOperationalStatusService only.
     """
     from modules.asset.domain.excel_import import ExcelImportDefaults, ExcelImportRowInput
@@ -432,6 +445,8 @@ def import_assets_from_excel(
             ),
             assignment_remarks=r.assignment_remarks,
             company_id=r.company_id or body.company_id,
+            maintenance_reason=r.maintenance_reason,
+            expected_duration_days=r.expected_duration_days,
         )
         for r in body.rows
     ]
@@ -515,7 +530,8 @@ def get_assets(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    row = AssetService(db).get(ctx, row_id)
+    svc = AssetService(db)
+    row = svc.attach_current_location(ctx, svc.get(ctx, row_id))
     type_names = _asset_type_name_map(db, ctx, [row])
     return APIResponse(message="OK", data=_to_asset_response(row, type_names))
 
@@ -549,6 +565,20 @@ def get_asset_self_service(
         message="OK",
         data=AssetInformationPortalService(db).get_self_service(ctx, row_id),
     )
+
+
+@assets_router.get(
+    "/{row_id}/lifecycle-timeline",
+    response_model=APIResponse[AssetLifecycleTimelineResult],
+)
+def get_asset_lifecycle_timeline(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Full asset lifecycle timeline for Information Portal Activity Logs."""
+    events = AssetInformationPortalService(db).get_lifecycle_timeline(ctx, row_id)
+    return APIResponse(message="OK", data=AssetLifecycleTimelineResult(events=events))
 
 
 @assets_router.get(
@@ -614,7 +644,7 @@ def create_assets(
     db: Annotated[Session, Depends(get_db)],
 ):
     payload = body.model_dump(exclude_none=True)
-    branch_id = payload.pop("branch_id")
+    branch_id = payload.pop("branch_id", None)
     row = AssetService(db).create(ctx, branch_id=branch_id, **payload)
     type_names = _asset_type_name_map(db, ctx, [row])
     return APIResponse(
@@ -629,7 +659,23 @@ def update_assets(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="Updated", data=AssetService(db).update(ctx, row_id, **extract_update_fields(body)))
+    svc = AssetService(db)
+    row = svc.update(ctx, row_id, **extract_update_fields(body))
+    row = svc.attach_current_location(ctx, row)
+    type_names = _asset_type_name_map(db, ctx, [row])
+    return APIResponse(message="Updated", data=_to_asset_response(row, type_names))
+
+@assets_router.delete("/{row_id}", response_model=APIResponse[AssetResponse])
+def delete_assets(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.asset:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Soft-delete (deactivate) an asset. Never physically DELETEs the row."""
+    row = AssetService(db).soft_delete(ctx, row_id)
+    type_names = _asset_type_name_map(db, ctx, [row])
+    return APIResponse(message="Deleted", data=_to_asset_response(row, type_names))
+
 
 @assets_router.post("/{row_id}/submit", response_model=APIResponse[AssetResponse])
 def submit_assets(
@@ -718,7 +764,7 @@ def reinstate_assets(
     )
 
 
-asset_components_router = APIRouter(prefix="/asset-components", tags=["Asset - AssetComponent"])
+asset_components_router = APIRouter(prefix="/asset-components", tags=["Asset — AssetComponent"])
 
 @asset_components_router.get("", response_model=APIResponse[AssetComponentListResult])
 def list_asset_components(
@@ -873,7 +919,7 @@ def dispose_asset_components(
         message="dispose", data=AssetComponentService(db).dispose(ctx, row_id)
     )
 
-asset_assignments_router = APIRouter(prefix="/asset-assignments", tags=["Asset - AssetAssignment"])
+asset_assignments_router = APIRouter(prefix="/asset-assignments", tags=["Asset — AssetAssignment"])
 
 @asset_assignments_router.get("", response_model=APIResponse[AssetAssignmentListResult])
 def list_asset_assignments(
@@ -1063,7 +1109,7 @@ def return_asset_assignments(
         ),
     )
 
-asset_transfers_router = APIRouter(prefix="/asset-transfers", tags=["Asset - AssetTransfer"])
+asset_transfers_router = APIRouter(prefix="/asset-transfers", tags=["Asset — AssetTransfer"])
 
 @asset_transfers_router.get("", response_model=APIResponse[AssetTransferListResult])
 def list_asset_transfers(
@@ -1097,6 +1143,87 @@ def list_asset_transfers(
         page_size=pagination.page_size,
     )
     return APIResponse(message="OK", data=payload)
+
+
+@asset_transfers_router.get(
+    "/user-transfer-context/{asset_id}",
+    response_model=APIResponse[UserTransferContextResponse],
+)
+def get_user_transfer_context(
+    asset_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.transfer:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Assigned-asset entry context for inventory → user transfer (Step 1/2).
+
+    Rejects READY_TO_MOVE and any asset that is not operationally ASSIGNED
+    with an active assignment. Does not mutate records.
+    """
+    return APIResponse(
+        message="OK",
+        data=TransferService(db).get_user_transfer_context(ctx, asset_id),
+    )
+
+
+@asset_transfers_router.post(
+    "/user-transfer-verification/{asset_id}",
+    response_model=APIResponse[UserTransferVerificationResponse],
+)
+def submit_user_transfer_verification(
+    asset_id: UUID,
+    body: UserTransferVerificationRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.transfer:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Step 2 pre-transfer verification. Audits + stages payload; does not release custody."""
+    return APIResponse(
+        message="Verification recorded",
+        data=TransferService(db).submit_user_transfer_verification(
+            ctx,
+            asset_id,
+            data_backup_verified=body.data_backup_verified,
+            qc_completed=body.qc_completed,
+            qc_remarks=body.qc_remarks,
+            physical_condition=body.physical_condition,
+            verified_component_ids=list(body.verified_component_ids),
+            asset_version=body.asset_version,
+        ),
+    )
+
+
+@asset_transfers_router.post(
+    "/user-transfer-assign/{asset_id}",
+    response_model=APIResponse[UserTransferCompleteResponse],
+)
+def complete_user_transfer_assign(
+    asset_id: UUID,
+    body: UserTransferAssignRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.transfer:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Step 3 — close active assignment and assign asset to a new employee."""
+    return APIResponse(
+        message="Transfer completed",
+        data=TransferService(db).complete_user_transfer_assign(ctx, asset_id, body),
+    )
+
+
+@asset_transfers_router.post(
+    "/user-transfer-return/{asset_id}",
+    response_model=APIResponse[UserTransferCompleteResponse],
+)
+def complete_user_transfer_return_to_stock(
+    asset_id: UUID,
+    body: UserTransferReturnToStockRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.transfer:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Step 3 — return assigned asset to READY_TO_MOVE after verification."""
+    return APIResponse(
+        message="Asset returned to stock",
+        data=TransferService(db).complete_user_transfer_return_to_stock(ctx, asset_id, body),
+    )
+
 
 @asset_transfers_router.get("/{row_id}", response_model=APIResponse[AssetTransferResponse])
 def get_asset_transfers(
@@ -1194,7 +1321,7 @@ def resubmit_asset_transfers(
 ):
     return APIResponse(message="resubmit", data=TransferService(db).resubmit(ctx, row_id))
 
-asset_locations_router = APIRouter(prefix="/asset-locations", tags=["Asset - AssetLocation"])
+asset_locations_router = APIRouter(prefix="/asset-locations", tags=["Asset — AssetLocation"])
 
 @asset_locations_router.get("", response_model=APIResponse[AssetLocationListResult])
 def list_asset_locations(
@@ -1266,7 +1393,7 @@ def complete_asset_locations(
 ):
     return APIResponse(message="complete", data=LocationService(db).complete(ctx, row_id))
 
-asset_warranties_router = APIRouter(prefix="/asset-warranties", tags=["Asset - AssetWarranty"])
+asset_warranties_router = APIRouter(prefix="/asset-warranties", tags=["Asset — AssetWarranty"])
 
 @asset_warranties_router.get("", response_model=APIResponse[AssetWarrantyListResult])
 def list_asset_warranties(
@@ -1360,7 +1487,7 @@ def expire_asset_warranties(
 ):
     return APIResponse(message="expire", data=WarrantyService(db).expire(ctx, row_id))
 
-asset_insurances_router = APIRouter(prefix="/asset-insurances", tags=["Asset - AssetInsurance"])
+asset_insurances_router = APIRouter(prefix="/asset-insurances", tags=["Asset — AssetInsurance"])
 
 @asset_insurances_router.get("", response_model=APIResponse[AssetInsuranceListResult])
 def list_asset_insurances(
@@ -1460,7 +1587,7 @@ def close_asset_insurances(
 ):
     return APIResponse(message="close", data=InsuranceService(db).close(ctx, row_id))
 
-maintenance_plans_router = APIRouter(prefix="/maintenance-plans", tags=["Asset - MaintenancePlan"])
+maintenance_plans_router = APIRouter(prefix="/maintenance-plans", tags=["Asset — MaintenancePlan"])
 
 @maintenance_plans_router.get("", response_model=APIResponse[MaintenancePlanListResult])
 def list_maintenance_plans(
@@ -1558,7 +1685,7 @@ def close_maintenance_plans(
 ):
     return APIResponse(message="close", data=MaintenancePlanService(db).close(ctx, row_id))
 
-asset_maintenances_router = APIRouter(prefix="/asset-maintenances", tags=["Asset - AssetMaintenance"])
+asset_maintenances_router = APIRouter(prefix="/asset-maintenances", tags=["Asset — AssetMaintenance"])
 
 
 def _maintenance_response(
@@ -1622,6 +1749,38 @@ def quick_draft_asset_maintenances(
                 asset_id=body.asset_id,
                 company_id=body.company_id,
             ),
+        ),
+    )
+
+@asset_maintenances_router.post(
+    "/start-from-asset",
+    response_model=APIResponse[MaintenanceStartResult],
+)
+def start_maintenance_from_asset(
+    body: AssetMaintenanceStartFromAssetRequest,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.maintenance:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """All Assets → Maintenance: dialog fields → in_progress WO + IN_MAINTENANCE ops."""
+    svc = MaintenanceService(db)
+    row, outcome, message = svc.start_from_asset(
+        ctx,
+        asset_id=body.asset_id,
+        reason=body.reason,
+        expected_duration_days=body.expected_duration_days,
+        maintenance_type=body.maintenance_type,
+        scheduled_date=body.scheduled_date,
+        vendor_id=body.vendor_id,
+        cost_amount=body.cost_amount,
+        technician_employee_id=body.technician_employee_id,
+        company_id=body.company_id,
+    )
+    return APIResponse(
+        message="OK",
+        data=MaintenanceStartResult(
+            status=outcome,
+            message=message,
+            maintenance=svc.to_response(ctx, row),
         ),
     )
 
@@ -1828,7 +1987,7 @@ def start_maintenance_asset_maintenances(
         ),
     )
 
-service_histories_router = APIRouter(prefix="/service-histories", tags=["Asset - ServiceHistory"])
+service_histories_router = APIRouter(prefix="/service-histories", tags=["Asset — ServiceHistory"])
 
 @service_histories_router.get("", response_model=APIResponse[ServiceHistoryListResult])
 def list_service_histories(
@@ -1882,7 +2041,7 @@ def create_service_histories(
         data=ServiceHistoryService(db).create(ctx, **body.model_dump(exclude_none=True)),
     )
 
-asset_depreciations_router = APIRouter(prefix="/asset-depreciations", tags=["Asset - AssetDepreciation"])
+asset_depreciations_router = APIRouter(prefix="/asset-depreciations", tags=["Asset — AssetDepreciation"])
 
 @asset_depreciations_router.get("", response_model=APIResponse[AssetDepreciationListResult])
 def list_asset_depreciations(
@@ -2014,7 +2173,7 @@ def reverse_asset_depreciations(
     )
     return APIResponse(message="Reversed", data=data)
 
-asset_disposals_router = APIRouter(prefix="/asset-disposals", tags=["Asset - AssetDisposal"])
+asset_disposals_router = APIRouter(prefix="/asset-disposals", tags=["Asset — AssetDisposal"])
 
 @asset_disposals_router.get("", response_model=APIResponse[AssetDisposalListResult])
 def list_asset_disposals(
@@ -2039,8 +2198,27 @@ def list_asset_disposals(
         offset=pagination.offset,
         limit=pagination.page_size,
     )
+    from modules.asset.repository.asset_repository import AssetRepository
+
+    asset_repo = AssetRepository(db)
+    enriched: list[AssetDisposalResponse] = []
+    for row in items:
+        base = AssetDisposalResponse.model_validate(row)
+        asset = asset_repo.get(ctx, row.asset_id)
+        if asset is not None:
+            base = base.model_copy(
+                update={
+                    "asset_code": getattr(asset, "asset_code", None),
+                    "asset_name": getattr(asset, "asset_name", None),
+                    "make": getattr(asset, "make", None),
+                    "model": getattr(asset, "model", None),
+                    "configuration": getattr(asset, "configuration", None),
+                    "serial_number": getattr(asset, "serial_number", None),
+                }
+            )
+        enriched.append(base)
     payload = AssetDisposalListResult(
-        items=items,
+        items=enriched,
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
@@ -2053,7 +2231,23 @@ def get_asset_disposals(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.disposal:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=DisposalService(db).get(ctx, row_id))
+    row = DisposalService(db).get(ctx, row_id)
+    base = AssetDisposalResponse.model_validate(row)
+    from modules.asset.repository.asset_repository import AssetRepository
+
+    asset = AssetRepository(db).get(ctx, row.asset_id)
+    if asset is not None:
+        base = base.model_copy(
+            update={
+                "asset_code": getattr(asset, "asset_code", None),
+                "asset_name": getattr(asset, "asset_name", None),
+                "make": getattr(asset, "make", None),
+                "model": getattr(asset, "model", None),
+                "configuration": getattr(asset, "configuration", None),
+                "serial_number": getattr(asset, "serial_number", None),
+            }
+        )
+    return APIResponse(message="OK", data=base)
 
 @asset_disposals_router.post("", response_model=APIResponse[AssetDisposalResponse])
 def create_asset_disposals(
@@ -2093,22 +2287,47 @@ def submit_asset_disposals(
 @asset_disposals_router.post("/{row_id}/approve", response_model=APIResponse[AssetDisposalResponse])
 def approve_asset_disposals(
     row_id: UUID,
+    body: AssetDisposalApproveRequest,
     ctx: Annotated[TenantContext, Depends(require_permission("asset.disposal:approve"))],
     db: Annotated[Session, Depends(get_db)],
-    body: WorkflowActionRequest | None = None,
 ):
-    comments = body.comments if body else None
-    return APIResponse(message="approve", data=DisposalService(db).approve(ctx, row_id, comments=comments))
+    return APIResponse(
+        message="approve",
+        data=DisposalService(db).approve(
+            ctx,
+            row_id,
+            comments=body.comments,
+            ceo_instruction=body.ceo_instruction,
+        ),
+    )
 
 @asset_disposals_router.post("/{row_id}/reject", response_model=APIResponse[AssetDisposalResponse])
 def reject_asset_disposals(
     row_id: UUID,
+    body: AssetDisposalRejectRequest,
     ctx: Annotated[TenantContext, Depends(require_permission("asset.disposal:approve"))],
     db: Annotated[Session, Depends(get_db)],
-    body: WorkflowActionRequest | None = None,
 ):
-    comments = body.comments if body else None
-    return APIResponse(message="reject", data=DisposalService(db).reject(ctx, row_id, comments=comments))
+    return APIResponse(
+        message="reject",
+        data=DisposalService(db).reject(
+            ctx,
+            row_id,
+            comments=body.comments,
+            rejection_reason=body.rejection_reason,
+        ),
+    )
+
+@asset_disposals_router.post("/{row_id}/complete", response_model=APIResponse[AssetDisposalResponse])
+def complete_asset_disposals(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.disposal:post"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="complete",
+        data=DisposalService(db).complete(ctx, row_id),
+    )
 
 @asset_disposals_router.post("/{row_id}/cancel", response_model=APIResponse[AssetDisposalResponse])
 def cancel_asset_disposals(
@@ -2150,7 +2369,7 @@ def post_asset_disposals(
     )
     return APIResponse(message="Posted", data=data)
 
-asset_revaluations_router = APIRouter(prefix="/asset-revaluations", tags=["Asset - AssetRevaluation"])
+asset_revaluations_router = APIRouter(prefix="/asset-revaluations", tags=["Asset — AssetRevaluation"])
 
 @asset_revaluations_router.get("", response_model=APIResponse[AssetRevaluationListResult])
 def list_asset_revaluations(
@@ -2284,7 +2503,7 @@ def post_asset_revaluations(
     )
     return APIResponse(message="Posted", data=data)
 
-asset_audits_router = APIRouter(prefix="/asset-audits", tags=["Asset - AssetAudit"])
+asset_audits_router = APIRouter(prefix="/asset-audits", tags=["Asset — AssetAudit"])
 
 @asset_audits_router.get("", response_model=APIResponse[AssetAuditListResult])
 def list_asset_audits(
@@ -2376,7 +2595,37 @@ def cancel_asset_audits(
 ):
     return APIResponse(message="cancel", data=AssetAuditService(db).cancel(ctx, row_id))
 
-asset_documents_router = APIRouter(prefix="/asset-documents", tags=["Asset - AssetDocument"])
+asset_documents_router = APIRouter(prefix="/asset-documents", tags=["Asset — AssetDocument"])
+
+_ASSET_DOC_CHUNK = 64 * 1024
+
+
+def _asset_doc_content_disposition(disposition: str, filename: str) -> str:
+    safe = filename.replace('"', "")
+    encoded = quote(filename)
+    return f"{disposition}; filename=\"{safe}\"; filename*=UTF-8''{encoded}"
+
+
+async def _read_asset_document_upload(upload: UploadFile) -> tuple[bytes, str | None, str | None]:
+    from modules.asset.service.document_file import allowed_types_message, max_upload_bytes
+    from modules.asset.domain.exceptions import DocumentValidationError
+
+    limit = max_upload_bytes()
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await upload.read(_ASSET_DOC_CHUNK)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            mb = limit // (1024 * 1024)
+            raise DocumentValidationError(
+                f"File is larger than the {mb} MB upload limit. {allowed_types_message()}"
+            )
+        chunks.append(chunk)
+    return b"".join(chunks), upload.filename, upload.content_type
+
 
 @asset_documents_router.get("", response_model=APIResponse[AssetDocumentListResult])
 def list_asset_documents(
@@ -2390,7 +2639,8 @@ def list_asset_documents(
     status: str | None = None,
     q: str | None = None,
 ):
-    items, total = DocumentService(db).search(
+    service = DocumentService(db)
+    items, total = service.search(
         ctx,
         company_id=company_id,
         asset_id=asset_id,
@@ -2402,12 +2652,47 @@ def list_asset_documents(
         limit=pagination.page_size,
     )
     payload = AssetDocumentListResult(
-        items=items,
+        items=[service.to_response(row) for row in items],
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,
     )
     return APIResponse(message="OK", data=payload)
+
+
+@asset_documents_router.get(
+    "/upload-limits",
+    response_model=APIResponse[AssetDocumentUploadLimits],
+)
+def get_asset_document_upload_limits(
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.document:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=DocumentService(db).upload_limits())
+
+
+@asset_documents_router.post("/upload", response_model=APIResponse[AssetDocumentResponse])
+async def upload_asset_document(
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.document:create"))],
+    db: Annotated[Session, Depends(get_db)],
+    file: Annotated[UploadFile, File()],
+    asset_id: Annotated[UUID, Form()],
+    document_type: Annotated[str | None, Form()] = None,
+    branch_id: Annotated[UUID | None, Form()] = None,
+):
+    data, filename, content_type = await _read_asset_document_upload(file)
+    service = DocumentService(db)
+    row = service.upload(
+        ctx,
+        asset_id=asset_id,
+        file_bytes=data,
+        original_filename=filename,
+        declared_content_type=content_type,
+        document_type=document_type,
+        branch_id=branch_id,
+    )
+    return APIResponse(message="Uploaded", data=service.to_response(row))
+
 
 @asset_documents_router.get("/{row_id}", response_model=APIResponse[AssetDocumentResponse])
 def get_asset_documents(
@@ -2415,7 +2700,39 @@ def get_asset_documents(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.document:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="OK", data=DocumentService(db).get(ctx, row_id))
+    service = DocumentService(db)
+    return APIResponse(message="OK", data=service.to_response(service.get(ctx, row_id)))
+
+
+@asset_documents_router.get("/{row_id}/content")
+def get_asset_document_content(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("asset.document:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    disposition: Annotated[str, Query()] = "inline",
+):
+    disp = disposition if disposition in {"inline", "attachment"} else "inline"
+    service = DocumentService(db)
+    handle, filename, content_type, _meta_size = service.open_stored_content(ctx, row_id)
+    try:
+        # Buffer the full file (upload cap is 10 MB). StreamingResponse + CORS
+        # left browsers stuck on "pending" after HTTP 200 for cross-origin view.
+        payload = handle.read()
+    finally:
+        handle.close()
+
+    headers = {
+        "Content-Disposition": _asset_doc_content_disposition(disp, filename or "document"),
+        "Content-Length": str(len(payload)),
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-store",
+    }
+    return Response(
+        content=payload,
+        media_type=content_type or "application/octet-stream",
+        headers=headers,
+    )
+
 
 @asset_documents_router.post("", response_model=APIResponse[AssetDocumentResponse])
 def create_asset_documents(
@@ -2423,10 +2740,10 @@ def create_asset_documents(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.document:create"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(
-        message="Created",
-        data=DocumentService(db).create(ctx, **body.model_dump(exclude_none=True)),
-    )
+    service = DocumentService(db)
+    row = service.create(ctx, **body.model_dump(exclude_none=True))
+    return APIResponse(message="Created", data=service.to_response(row))
+
 
 @asset_documents_router.patch("/{row_id}", response_model=APIResponse[AssetDocumentResponse])
 def update_asset_documents(
@@ -2435,10 +2752,10 @@ def update_asset_documents(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.document:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(
-        message="Updated",
-        data=DocumentService(db).update(ctx, row_id, **body.model_dump(exclude_unset=True)),
-    )
+    service = DocumentService(db)
+    row = service.update(ctx, row_id, **body.model_dump(exclude_unset=True))
+    return APIResponse(message="Updated", data=service.to_response(row))
+
 
 @asset_documents_router.post("/{row_id}/supersede", response_model=APIResponse[AssetDocumentResponse])
 def supersede_asset_documents(
@@ -2446,7 +2763,9 @@ def supersede_asset_documents(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.document:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="supersede", data=DocumentService(db).supersede(ctx, row_id))
+    service = DocumentService(db)
+    return APIResponse(message="supersede", data=service.to_response(service.supersede(ctx, row_id)))
+
 
 @asset_documents_router.post("/{row_id}/archive", response_model=APIResponse[AssetDocumentResponse])
 def archive_asset_documents(
@@ -2454,9 +2773,10 @@ def archive_asset_documents(
     ctx: Annotated[TenantContext, Depends(require_permission("asset.document:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="archive", data=DocumentService(db).archive(ctx, row_id))
+    service = DocumentService(db)
+    return APIResponse(message="archive", data=service.to_response(service.archive(ctx, row_id)))
 
-asset_checklists_router = APIRouter(prefix="/asset-checklists", tags=["Asset - AssetChecklist"])
+asset_checklists_router = APIRouter(prefix="/asset-checklists", tags=["Asset — AssetChecklist"])
 
 @asset_checklists_router.get("", response_model=APIResponse[AssetChecklistListResult])
 def list_asset_checklists(
@@ -2538,7 +2858,7 @@ def cancel_asset_checklists(
 ):
     return APIResponse(message="cancel", data=ChecklistService(db).cancel(ctx, row_id))
 
-meter_readings_router = APIRouter(prefix="/meter-readings", tags=["Asset - MeterReading"])
+meter_readings_router = APIRouter(prefix="/meter-readings", tags=["Asset — MeterReading"])
 
 @meter_readings_router.get("", response_model=APIResponse[MeterReadingListResult])
 def list_meter_readings(
@@ -2602,7 +2922,7 @@ def void_meter_readings(
 ):
     return APIResponse(message="void", data=MeterReadingService(db).void(ctx, row_id))
 
-asset_notifications_router = APIRouter(prefix="/asset-notifications", tags=["Asset - AssetNotification"])
+asset_notifications_router = APIRouter(prefix="/asset-notifications", tags=["Asset — AssetNotification"])
 
 @asset_notifications_router.get("", response_model=APIResponse[AssetNotificationListResult])
 def list_asset_notifications(
@@ -2704,7 +3024,7 @@ def mark_failed_asset_notifications(
 ):
     return APIResponse(message="mark-failed", data=AssetNotificationService(db).mark_failed(ctx, row_id))
 
-reports_router = APIRouter(prefix="/reports", tags=["Asset - AssetReport"])
+reports_router = APIRouter(prefix="/reports", tags=["Asset — AssetReport"])
 
 @reports_router.get("/catalog", response_model=APIResponse[list[AssetReportCatalogItem]])
 def catalog_asset_reports(
@@ -2877,7 +3197,7 @@ def finalize_reports(
     return APIResponse(message="finalize", data=AssetReportService(db).finalize(ctx, row_id))
 
 
-incoming_assets_router = APIRouter(prefix="/incoming-assets", tags=["Asset - IncomingAssets"])
+incoming_assets_router = APIRouter(prefix="/incoming-assets", tags=["Asset — IncomingAssets"])
 
 
 @incoming_assets_router.get("/summary", response_model=APIResponse[IncomingAssetSummaryResponse])
@@ -3070,7 +3390,7 @@ def arrive_incoming_asset(
 
 
 registration_queue_router = APIRouter(
-    prefix="/registration-queue", tags=["Asset - RegistrationQueue"]
+    prefix="/registration-queue", tags=["Asset — RegistrationQueue"]
 )
 
 

@@ -1,4 +1,4 @@
-# Asset Document Management - Deployment Guide (FP-ASSET-016)
+# Asset Document Management — Deployment Guide (FP-ASSET-016)
 
 1. Deploy API with FP-ASSET-016 code.
 2. Run `alembic upgrade head` (applies `0481_ast_document_governance`).

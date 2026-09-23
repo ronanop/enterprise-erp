@@ -1,4 +1,4 @@
-# FP-ASSET-003 - Asset Assignment (Allocation) Feature Package
+# FP-ASSET-003 — Asset Assignment (Allocation) Feature Package
 
 **Status:** Implemented  
 **ADR:** ADR-ASSET-ASN-001
@@ -36,7 +36,7 @@ List query: `page`, `page_size`, `company_id`, `asset_id`, `branch_id`, `status`
 
 ## Migrations
 
-- `0468_ast_assignment_governance` - update permission, pending/active index, AASN sequence backfill
+- `0468_ast_assignment_governance` — update permission, pending/active index, AASN sequence backfill
 
 ## Tests
 

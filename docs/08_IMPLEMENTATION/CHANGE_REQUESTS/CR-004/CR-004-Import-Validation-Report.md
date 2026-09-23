@@ -1,8 +1,8 @@
-# CR-004 - Import Validation Report
+# CR-004 — Import Validation Report
 
-**Phase:** 8C - Migration Validation & Reconciliation  
+**Phase:** 8C — Migration Validation & Reconciliation  
 **Date:** 2026-08-05  
-**Mode:** Analysis / validation only - **no backend, frontend, or business-logic changes**  
+**Mode:** Analysis / validation only — **no backend, frontend, or business-logic changes**  
 **Scope:** Verify Phase 8B import behaviour against Excel contract, CR-004 rules, and production cutover readiness
 
 ---
@@ -67,7 +67,7 @@
 |------|--------|
 | Not imported as writable | **PASS** |
 | Derived from returned history in UI | **PASS** (register-parity) |
-| Matches Excel free-text history after bulk load | **FAIL / PARTIAL** - synthetic returns distort history |
+| Matches Excel free-text history after bulk load | **FAIL / PARTIAL** — synthetic returns distort history |
 
 ### 1.6 Branch / department / category
 
@@ -75,7 +75,7 @@
 |------|--------|
 | Branch required + mapped | **PASS** (design) |
 | Department optional | **PARTIAL** |
-| Category optional + default | **PARTIAL** - default skews distribution |
+| Category optional + default | **PARTIAL** — default skews distribution |
 
 ### 1.7 Import summary
 
@@ -89,8 +89,8 @@
 
 | Verification | Result |
 |--------------|--------|
-| No duplicate assets (by design) | **PASS** - skip policy; measured uniqueness **N/A** |
-| Operational status matches Excel | **PARTIAL** - path OK; tab/date/history gaps |
+| No duplicate assets (by design) | **PASS** — skip policy; measured uniqueness **N/A** |
+| Operational status matches Excel | **PARTIAL** — path OK; tab/date/history gaps |
 | Assignment history matches Excel | **FAIL** for multi-holder Excel; **PARTIAL** for single current assignment |
 | Inventory totals match Excel | **N/A** |
 | Dashboard totals match inventory | **PASS** (same ops summary service) / **N/A** post-import |
@@ -115,7 +115,7 @@ Full register: `CR-004-Migration-Reconciliation.md` §10.
 1. Importing RETIRED/PENDING/DISPOSED creates **transit assignment history** Excel never showed.  
 2. Default **purchase_cost = 0** and default **category** will pollute finance/category reports.  
 3. `confirm_warnings` can admit ASSIGNED rows without employee if operators check the box incorrectly.  
-4. First sheet only - silent under-import of other tabs.  
+4. First sheet only — silent under-import of other tabs.  
 5. Parallel Excel edits during/after import will invalidate any future reconciliation.
 
 ---
@@ -179,9 +179,9 @@ These prove **workflow wiring**, not Excel↔ERP numeric parity.
 | Quarantine **dry-run** import (Status-column sheet, trained operator, snapshot) | **CONDITIONAL GO** |
 | Day-to-day ops for assets **already in ERP** | **CONDITIONAL GO** (unchanged from Phase 5) |
 
-**Next actions (process / future phases - not implemented in 8C):**
+**Next actions (process / future phases — not implemented in 8C):**
 
-1. Obtain frozen workbook (hash + date) - M-10  
+1. Obtain frozen workbook (hash + date) — M-10  
 2. Close M-1 / M-2 / M-9  
 3. Execute quarantine import + fill measured tables in §1 / Reconciliation §1  
 4. Two-week parallel run with zero Excel writes for in-scope assets  

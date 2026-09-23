@@ -1,218 +1,263 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
 import {
-  Download,
-  FileSpreadsheet,
+  Activity,
+  Boxes,
+  FileStack,
+  GitBranch,
+  Layers3,
   Loader2,
   RefreshCw,
-  Save,
   ShieldCheck,
 } from "lucide-react";
 
+import {
+  ASSETS_SURFACE_CARD,
+  StatCard,
+} from "@/components/assets/shared";
 import { PageHeader } from "@/components/layout/page-header";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  exportTabularCsv,
-  exportTabularXlsx,
-  type ExportColumn,
-} from "@/lib/finance/report-export";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { isAuthenticated } from "@/lib/auth";
-import {
-  type ReportCatalogItem,
-  type ReportDashboard,
-  type ReportRunResult,
-  type ReportSnapshotRow,
-  reportService,
-} from "@/services/assets-service";
+import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
+import { type ReportDashboard, reportService } from "@/services/assets-service";
 
-const PAGE_SIZE = 25;
+/** Cool progressive report palette — no purple; matches assets design override. */
+const CHART = {
+  sky: "#0369A1",
+  teal: "#0F766E",
+  emerald: "#047857",
+  amber: "#B45309",
+  slate: "#475569",
+  rose: "#BE123C",
+  skySoft: "#7DD3FC",
+  tealSoft: "#5EEAD4",
+  amberSoft: "#FCD34D",
+  track: "#E2E8F0",
+  tick: "#64748B",
+} as const;
 
-type TabKey = "dashboard" | "run" | "snapshots";
+const STATUS_COLORS = [
+  CHART.sky,
+  CHART.teal,
+  CHART.emerald,
+  CHART.amber,
+  CHART.slate,
+  CHART.rose,
+  CHART.skySoft,
+] as const;
+
+const DOC_TYPE_COLORS: Record<string, string> = {
+  invoice: CHART.sky,
+  warranty: CHART.teal,
+  insurance: CHART.emerald,
+  manual: CHART.amber,
+  photo: CHART.slate,
+  other: CHART.rose,
+};
+
+function titleCase(value: string): string {
+  return value
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+function formatMonthLabel(month: string): string {
+  const [year, mon] = month.split("-");
+  if (!year || !mon) return month;
+  const date = new Date(Number(year), Number(mon) - 1, 1);
+  return date.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
+}
+
+function asCountRows(
+  rows: Array<Record<string, unknown>> | undefined,
+  key: "status" | "document_type" | "component_type" | "stage" | "month" | "name",
+): Array<{ name: string; count: number; fill: string; raw: string }> {
+  if (!rows?.length) return [];
+  return rows.map((row, index) => {
+    const raw = String(row[key] ?? row.name ?? "—");
+    const count = Number(row.count ?? 0);
+    return {
+      name: key === "month" ? formatMonthLabel(raw) : titleCase(raw),
+      count,
+      fill: STATUS_COLORS[index % STATUS_COLORS.length],
+      raw,
+    };
+  });
+}
+
+function ChartTooltip({
+  active,
+  payload,
+  label,
+  unit = "items",
+}: {
+  active?: boolean;
+  payload?: Array<{ name?: string; value?: number; color?: string; payload?: { fill?: string } }>;
+  label?: string;
+  unit?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0];
+  const color = row.color ?? row.payload?.fill;
+  return (
+    <div className="rounded-lg border border-border/80 bg-card px-3 py-2 text-xs shadow-md">
+      <div className="flex items-center gap-2">
+        {color ? (
+          <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+        ) : null}
+        <p className="font-medium text-foreground">{label ?? row.name}</p>
+      </div>
+      <p className="mt-1 font-mono text-[11px] tabular-nums text-muted-foreground">
+        {Number(row.value ?? 0).toLocaleString("en-IN")} {unit}
+      </p>
+    </div>
+  );
+}
+
+function EmptyChart({ message }: { message: string }) {
+  return (
+    <div className="flex h-full min-h-[200px] items-center justify-center rounded-lg border border-dashed border-border/70 bg-muted/20 px-4 text-center text-sm text-muted-foreground">
+      {message}
+    </div>
+  );
+}
+
+function SectionHeading({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="space-y-0.5">
+      <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
+      <p className="text-xs text-muted-foreground">{description}</p>
+    </div>
+  );
+}
 
 export function AssetReportsWorkspace() {
-  const [tab, setTab] = useState<TabKey>("dashboard");
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   const [dashboard, setDashboard] = useState<ReportDashboard | null>(null);
-  const [catalog, setCatalog] = useState<ReportCatalogItem[]>([]);
-  const [reportKey, setReportKey] = useState("asset_inventory");
-  const [runResult, setRunResult] = useState<ReportRunResult | null>(null);
-  const [page, setPage] = useState(1);
-
-  const [snapshots, setSnapshots] = useState<ReportSnapshotRow[]>([]);
-  const [snapTotal, setSnapTotal] = useState(0);
-  const [snapPage, setSnapPage] = useState(1);
-  const [selectedSnap, setSelectedSnap] = useState<ReportSnapshotRow | null>(null);
-  const [snapStatus, setSnapStatus] = useState("");
-  const [snapSearch, setSnapSearch] = useState("");
 
   const loadDashboard = useCallback(async () => {
     if (!isAuthenticated()) return;
     setLoading(true);
     setError(null);
     try {
-      const [dash, cat] = await Promise.all([
-        reportService.dashboard(),
-        reportService.catalog(),
-      ]);
+      const dash = await reportService.dashboard();
       setDashboard(dash);
-      setCatalog(cat);
-      if (cat.length && !cat.find((c) => c.key === reportKey)) {
-        setReportKey(cat[0].key);
-      }
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to load dashboard");
+      setError(err instanceof ApiClientError ? err.message : "Failed to load reports");
     } finally {
       setLoading(false);
     }
-  }, [reportKey]);
-
-  const loadRun = useCallback(async () => {
-    if (!isAuthenticated() || !reportKey) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const result = await reportService.run(reportKey, {
-        page,
-        page_size: PAGE_SIZE,
-      });
-      setRunResult(result);
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to run report");
-      setRunResult(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [reportKey, page]);
-
-  const loadSnapshots = useCallback(async () => {
-    if (!isAuthenticated()) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const payload = await reportService.searchSnapshots({
-        page: snapPage,
-        page_size: PAGE_SIZE,
-        status: snapStatus || undefined,
-        q: snapSearch.trim() || undefined,
-      });
-      setSnapshots(payload.items);
-      setSnapTotal(payload.total);
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to load snapshots");
-      setSnapshots([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [snapPage, snapStatus, snapSearch]);
+  }, []);
 
   useEffect(() => {
-    if (tab === "dashboard") void loadDashboard();
-    if (tab === "run") void loadRun();
-    if (tab === "snapshots") void loadSnapshots();
-  }, [tab, loadDashboard, loadRun, loadSnapshots]);
+    void Promise.resolve().then(() => {
+      void loadDashboard();
+    });
+  }, [loadDashboard]);
 
-  const handleExport = async (format: "csv" | "xlsx") => {
-    setActionLoading(true);
-    setError(null);
-    try {
-      const payload = await reportService.export(reportKey);
-      const columns: ExportColumn<Record<string, unknown>>[] = payload.columns.map((c) => ({
-        key: c.key,
-        label: c.label,
-      }));
-      const rows = payload.rows as Record<string, unknown>[];
-      if (format === "csv") {
-        exportTabularCsv(`${reportKey}.csv`, rows, columns);
-      } else {
-        exportTabularXlsx(`${reportKey}.xlsx`, reportKey, rows, columns);
-      }
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Export failed");
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  const analytics = dashboard?.analytics_kpis ?? {};
+  const documents = dashboard?.documents;
+  const components = dashboard?.components;
+  const lifecycle = dashboard?.lifecycle;
+  const usage = dashboard?.usage;
 
-  const handleGenerate = async () => {
-    setActionLoading(true);
-    setError(null);
-    try {
-      const row = await reportService.generate({ report_key: reportKey });
-      setSelectedSnap(row);
-      setTab("snapshots");
-      setSnapPage(1);
-      await loadSnapshots();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Generate failed");
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  const statusChart = useMemo(
+    () => asCountRows(dashboard?.by_status, "status"),
+    [dashboard?.by_status],
+  );
+  const operationalChart = useMemo(
+    () => asCountRows(dashboard?.by_operational_status, "status"),
+    [dashboard?.by_operational_status],
+  );
+  const docTypeChart = useMemo(() => {
+    const rows = asCountRows(documents?.by_type, "document_type");
+    return rows.map((row) => ({
+      ...row,
+      fill: DOC_TYPE_COLORS[row.raw.toLowerCase()] ?? row.fill,
+    }));
+  }, [documents?.by_type]);
+  const componentTypeChart = useMemo(
+    () => asCountRows(components?.by_type, "component_type"),
+    [components?.by_type],
+  );
+  const lifecycleChart = useMemo(
+    () => asCountRows(lifecycle?.stages, "stage"),
+    [lifecycle?.stages],
+  );
+  const registrationTrend = useMemo(
+    () => asCountRows(usage?.registrations_by_month, "month"),
+    [usage?.registrations_by_month],
+  );
+  const usageBars = useMemo(
+    () => [
+      {
+        name: "Active",
+        count: Number(usage?.active_assignments ?? 0),
+        fill: CHART.sky,
+      },
+      {
+        name: "Closed",
+        count: Number(usage?.closed_assignments ?? 0),
+        fill: CHART.slate,
+      },
+      {
+        name: "Available",
+        count: Number(usage?.available_assets ?? 0),
+        fill: CHART.emerald,
+      },
+    ],
+    [usage],
+  );
 
-  const handleFinalize = async () => {
-    if (!selectedSnap || selectedSnap.status !== "draft") return;
-    setActionLoading(true);
-    setError(null);
-    try {
-      const row = await reportService.finalize(selectedSnap.id);
-      setSelectedSnap(row);
-      await loadSnapshots();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Finalize failed");
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const kpis = dashboard?.kpis ?? {};
-  const categoryChart = (dashboard?.by_category ?? []).map((row) => ({
-    name: String(row.category_code || row.category_name || "-"),
-    count: Number(row.count ?? 0),
-  }));
-
-  const totalPages = Math.max(1, Math.ceil((runResult?.total ?? 0) / PAGE_SIZE));
-  const snapPages = Math.max(1, Math.ceil(snapTotal / PAGE_SIZE));
+  const generatedLabel = useMemo(() => {
+    if (!dashboard?.generated_at) return "—";
+    const parsed = new Date(dashboard.generated_at);
+    if (Number.isNaN(parsed.getTime())) return dashboard.generated_at;
+    return parsed.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }, [dashboard?.generated_at]);
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="space-y-5 p-4 md:p-6" data-testid="asset-reports-workspace">
       <PageHeader
         title="Asset Reports"
-        description="Operational dashboards and read-only analytics. Snapshots freeze metrics without changing assets."
+        description="Analytics for documents, components, status mix, usage, and lifecycle — distinct from the operational dashboard."
         actions={
           <Button
             type="button"
             variant="outline"
-            className="cursor-pointer transition-colors duration-200"
-            onClick={() => {
-              if (tab === "dashboard") void loadDashboard();
-              if (tab === "run") void loadRun();
-              if (tab === "snapshots") void loadSnapshots();
-            }}
+            className="h-9 cursor-pointer transition-colors duration-200"
+            onClick={() => void loadDashboard()}
             disabled={loading}
           >
             {loading ? (
@@ -226,364 +271,367 @@ export function AssetReportsWorkspace() {
       />
 
       {error ? (
-        <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <p
+          className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+          role="alert"
+        >
           {error}
         </p>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {(
-          [
-            ["dashboard", "Dashboard"],
-            ["run", "Run report"],
-            ["snapshots", "Saved snapshots"],
-          ] as const
-        ).map(([key, label]) => (
-          <Button
-            key={key}
-            type="button"
-            size="sm"
-            variant={tab === key ? "default" : "outline"}
-            className="cursor-pointer transition-colors duration-200"
-            onClick={() => setTab(key)}
-          >
-            {label}
-          </Button>
-        ))}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Documents"
+          value={loading ? "—" : String(analytics.document_count ?? documents?.total ?? 0)}
+          icon={FileStack}
+          tone="sky"
+          trend={{
+            label: `${analytics.document_coverage_pct ?? documents?.coverage_pct ?? 0}% coverage`,
+            direction: "neutral",
+          }}
+          loading={loading}
+        />
+        <StatCard
+          title="Components"
+          value={loading ? "—" : String(analytics.component_count ?? components?.total ?? 0)}
+          icon={Boxes}
+          tone="slate"
+          trend={{
+            label: `${analytics.active_components ?? 0} active`,
+            direction: "neutral",
+          }}
+          loading={loading}
+        />
+        <StatCard
+          title="Assignment usage"
+          value={
+            loading
+              ? "—"
+              : `${analytics.assignment_utilization_pct ?? usage?.utilization_pct ?? 0}%`
+          }
+          icon={Activity}
+          tone="emerald"
+          trend={{
+            label: `${analytics.assets_currently_assigned ?? usage?.assets_currently_assigned ?? 0} assigned`,
+            direction: "neutral",
+          }}
+          loading={loading}
+        />
+        <StatCard
+          title="Lifecycle open"
+          value={
+            loading
+              ? "—"
+              : String(
+                  Number(lifecycle?.open_maintenance ?? 0) +
+                    Number(lifecycle?.open_disposals ?? analytics.open_disposals ?? 0),
+                )
+          }
+          icon={GitBranch}
+          tone="amber"
+          trend={{
+            label: `${lifecycle?.open_maintenance ?? 0} maint · ${lifecycle?.open_disposals ?? analytics.open_disposals ?? 0} disposal`,
+            direction: "neutral",
+          }}
+          loading={loading}
+        />
       </div>
 
-      {tab === "dashboard" ? (
-        <div className="space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              ["Assets", kpis.asset_count],
-              ["Assigned", kpis.assigned_assets],
-              ["Available", kpis.available_assets],
-              ["Maintenance due", kpis.maintenance_due],
-              ["Warranty expiry", kpis.warranty_expiry],
-              ["Insurance expiry", kpis.insurance_expiry],
-              ["Disposed", kpis.disposed_assets],
-              ["In maintenance", kpis.in_maintenance],
-            ].map(([label, value]) => (
-              <Card key={String(label)}>
-                <CardHeader className="pb-1">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">
-                    {label}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-semibold tabular-nums">{value ?? 0}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Assets by category</CardTitle>
-              </CardHeader>
-              <CardContent className="h-64">
-                {categoryChart.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">No category data.</p>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={categoryChart}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                      <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                      <Tooltip />
-                      <Bar dataKey="count" fill="hsl(var(--primary))" radius={2} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                )}
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">Health</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                <p>
-                  In maintenance:{" "}
-                  <strong>{String(dashboard?.health?.pct_in_maintenance ?? 0)}%</strong>
-                </p>
-                <p>
-                  Open maintenance:{" "}
-                  <strong>{String(dashboard?.health?.open_maintenance ?? 0)}</strong>
-                </p>
-                <p>
-                  Policies expiring:{" "}
-                  <strong>{String(dashboard?.health?.policies_expiring ?? 0)}</strong>
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Generated {dashboard?.generated_at ?? "-"}
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      ) : null}
-
-      {tab === "run" ? (
-        <div className="space-y-4">
-          <Card>
-            <CardContent className="grid gap-3 pt-4 md:grid-cols-3">
-              <div className="space-y-1">
-                <Label>Report</Label>
-                <Select
-                  value={reportKey}
-                  onValueChange={(v) => {
-                    setPage(1);
-                    setReportKey(v);
-                  }}
-                >
-                  <SelectTrigger className="cursor-pointer">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {catalog.map((c) => (
-                      <SelectItem key={c.key} value={c.key}>
-                        {c.title}
-                      </SelectItem>
+      <div className="grid gap-4 xl:grid-cols-12">
+        <Card className={cn(ASSETS_SURFACE_CARD, "xl:col-span-7")}>
+          <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
+            <SectionHeading
+              title="Asset status mix"
+              description="Register lifecycle status distribution"
+            />
+            <Layers3 className="size-4 text-muted-foreground" aria-hidden />
+          </CardHeader>
+          <CardContent className="h-72 pt-0">
+            {statusChart.length === 0 ? (
+              <EmptyChart message="No status data yet." />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={statusChart} barCategoryGap="18%">
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART.track} vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 11, fill: CHART.tick }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: CHART.tick }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={36}
+                  />
+                  <Tooltip content={<ChartTooltip unit="assets" />} />
+                  <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={44}>
+                    {statusChart.map((entry) => (
+                      <Cell key={entry.name} fill={entry.fill} />
                     ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-wrap items-end gap-2">
-                <Button
-                  type="button"
-                  className="cursor-pointer transition-colors duration-200"
-                  disabled={actionLoading}
-                  onClick={() => void handleExport("csv")}
-                >
-                  <Download className="mr-1 h-4 w-4" />
-                  CSV
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="cursor-pointer transition-colors duration-200"
-                  disabled={actionLoading}
-                  onClick={() => void handleExport("xlsx")}
-                >
-                  <FileSpreadsheet className="mr-1 h-4 w-4" />
-                  Excel
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="cursor-pointer transition-colors duration-200"
-                  disabled={actionLoading}
-                  onClick={() => void handleGenerate()}
-                >
-                  <Save className="mr-1 h-4 w-4" />
-                  Snapshot
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">
-                Results ({runResult?.total ?? 0})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {!runResult?.items?.length ? (
-                <p className="text-sm text-muted-foreground">No rows.</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b text-muted-foreground">
-                        {Object.keys(runResult.items[0]).map((k) => (
-                          <th key={k} className="py-2 pr-2 font-medium">
-                            {k}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {runResult.items.map((row, idx) => (
-                        <tr key={idx} className="border-b">
-                          {Object.keys(runResult.items[0]).map((k) => (
-                            <td key={k} className="py-2 pr-2">
-                              {String(row[k] ?? "")}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <div className="mt-3 flex justify-between">
-                <p className="text-xs text-muted-foreground">
-                  Page {page} of {totalPages}
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="cursor-pointer"
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+        <Card className={cn(ASSETS_SURFACE_CARD, "xl:col-span-5")}>
+          <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
+            <SectionHeading
+              title="Operational status"
+              description="Ready / assigned / in-use / retired"
+            />
+            <ShieldCheck className="size-4 text-muted-foreground" aria-hidden />
+          </CardHeader>
+          <CardContent className="h-72 pt-0">
+            {operationalChart.length === 0 ? (
+              <EmptyChart message="No operational status recorded." />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={operationalChart}
+                    dataKey="count"
+                    nameKey="name"
+                    innerRadius={58}
+                    outerRadius={88}
+                    paddingAngle={2}
+                    stroke="transparent"
                   >
-                    Previous
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="cursor-pointer"
-                    disabled={page >= totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
+                    {operationalChart.map((entry) => (
+                      <Cell key={entry.name} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<ChartTooltip unit="assets" />} />
+                  <Legend
+                    verticalAlign="bottom"
+                    height={48}
+                    formatter={(value) => (
+                      <span className="text-xs text-muted-foreground">{value}</span>
+                    )}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
-      {tab === "snapshots" ? (
-        <div className="grid gap-4 lg:grid-cols-5">
-          <Card className="lg:col-span-3">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Saved reports ({snapTotal})</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid gap-2 md:grid-cols-2">
-                <Input
-                  value={snapSearch}
-                  onChange={(e) => {
-                    setSnapPage(1);
-                    setSnapSearch(e.target.value);
-                  }}
-                  placeholder="Search code/type…"
-                  className="transition-colors duration-200"
+      <div className="grid gap-4 xl:grid-cols-12">
+        <Card className={cn(ASSETS_SURFACE_CARD, "xl:col-span-6")}>
+          <CardHeader className="pb-2">
+            <SectionHeading
+              title="Documents by type"
+              description={`${analytics.assets_with_documents ?? 0} assets with files · ${analytics.assets_without_documents ?? 0} without`}
+            />
+          </CardHeader>
+          <CardContent className="h-72 pt-0">
+            {docTypeChart.length === 0 ? (
+              <EmptyChart message="No documents uploaded yet." />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={docTypeChart} layout="vertical" margin={{ left: 8, right: 12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART.track} horizontal={false} />
+                  <XAxis
+                    type="number"
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: CHART.tick }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={88}
+                    tick={{ fontSize: 11, fill: CHART.tick }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <Tooltip content={<ChartTooltip unit="files" />} />
+                  <Bar dataKey="count" radius={[0, 6, 6, 0]} maxBarSize={22}>
+                    {docTypeChart.map((entry) => (
+                      <Cell key={entry.name} fill={entry.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className={cn(ASSETS_SURFACE_CARD, "xl:col-span-6")}>
+          <CardHeader className="pb-2">
+            <SectionHeading
+              title="Components by type"
+              description={`${analytics.active_components ?? 0} active of ${analytics.component_count ?? components?.total ?? 0} total`}
+            />
+          </CardHeader>
+          <CardContent className="h-72 pt-0">
+            {componentTypeChart.length === 0 ? (
+              <EmptyChart message="No components registered yet." />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={componentTypeChart} barCategoryGap="16%">
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART.track} vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 10, fill: CHART.tick }}
+                    axisLine={false}
+                    tickLine={false}
+                    interval={0}
+                    angle={-18}
+                    textAnchor="end"
+                    height={56}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: CHART.tick }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={32}
+                  />
+                  <Tooltip content={<ChartTooltip unit="components" />} />
+                  <Bar dataKey="count" fill={CHART.teal} radius={[6, 6, 0, 0]} maxBarSize={40} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-12">
+        <Card className={cn(ASSETS_SURFACE_CARD, "xl:col-span-7")}>
+          <CardHeader className="pb-2">
+            <SectionHeading
+              title="Lifecycle funnel"
+              description="Registered → assigned → maintenance → depreciation → disposed"
+            />
+          </CardHeader>
+          <CardContent className="h-72 pt-0">
+            {lifecycleChart.every((row) => row.count === 0) ? (
+              <EmptyChart message="No lifecycle activity to chart." />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={lifecycleChart} barCategoryGap="20%">
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART.track} vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 11, fill: CHART.tick }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    allowDecimals={false}
+                    tick={{ fontSize: 11, fill: CHART.tick }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={36}
+                  />
+                  <Tooltip content={<ChartTooltip unit="assets" />} />
+                  <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                    {lifecycleChart.map((entry, index) => (
+                      <Cell
+                        key={entry.name}
+                        fill={
+                          [CHART.sky, CHART.teal, CHART.amber, CHART.emerald, CHART.slate][
+                            index % 5
+                          ]
+                        }
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className={cn(ASSETS_SURFACE_CARD, "xl:col-span-5")}>
+          <CardHeader className="pb-2">
+            <SectionHeading
+              title="Assignment usage"
+              description={`${usage?.utilization_pct ?? 0}% of register currently assigned`}
+            />
+          </CardHeader>
+          <CardContent className="h-72 pt-0">
+            {usageBars.every((row) => row.count === 0) ? (
+              <EmptyChart message="No assignment usage yet." />
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={usageBars}
+                    dataKey="count"
+                    nameKey="name"
+                    innerRadius={54}
+                    outerRadius={86}
+                    paddingAngle={3}
+                    stroke="transparent"
+                  >
+                    {usageBars.map((entry) => (
+                      <Cell key={entry.name} fill={entry.fill} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<ChartTooltip unit="count" />} />
+                  <Legend
+                    verticalAlign="bottom"
+                    height={44}
+                    formatter={(value) => (
+                      <span className="text-xs text-muted-foreground">{value}</span>
+                    )}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className={cn(ASSETS_SURFACE_CARD)}>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 pb-2">
+          <SectionHeading
+            title="Registration trend"
+            description="New assets registered over the last 6 months"
+          />
+          <p className="text-[11px] text-muted-foreground">Generated {generatedLabel}</p>
+        </CardHeader>
+        <CardContent className="h-64 pt-0">
+          {registrationTrend.length === 0 ? (
+            <EmptyChart message="No registration history in this window." />
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={registrationTrend} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART.track} vertical={false} />
+                <XAxis
+                  dataKey="name"
+                  tick={{ fontSize: 11, fill: CHART.tick }}
+                  axisLine={false}
+                  tickLine={false}
                 />
-                <Select
-                  value={snapStatus || "__all__"}
-                  onValueChange={(v) => {
-                    setSnapPage(1);
-                    setSnapStatus(v === "__all__" ? "" : v);
-                  }}
-                >
-                  <SelectTrigger className="cursor-pointer">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__all__">All status</SelectItem>
-                    <SelectItem value="draft">draft</SelectItem>
-                    <SelectItem value="finalized">finalized</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b text-muted-foreground">
-                      <th className="py-2 pr-2 font-medium">Code</th>
-                      <th className="py-2 pr-2 font-medium">Type</th>
-                      <th className="py-2 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {snapshots.map((row) => (
-                      <tr
-                        key={row.id}
-                        className={`cursor-pointer border-b transition-colors duration-200 hover:bg-muted/50 ${
-                          selectedSnap?.id === row.id ? "bg-muted/60" : ""
-                        }`}
-                        onClick={() => setSelectedSnap(row)}
-                      >
-                        <td className="py-2 pr-2">{row.report_code}</td>
-                        <td className="py-2 pr-2">{row.report_type}</td>
-                        <td className="py-2">
-                          <Badge variant={row.status === "finalized" ? "secondary" : "default"}>
-                            {row.status}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex justify-between">
-                <p className="text-xs text-muted-foreground">
-                  Page {snapPage} of {snapPages}
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="cursor-pointer"
-                    disabled={snapPage <= 1}
-                    onClick={() => setSnapPage((p) => Math.max(1, p - 1))}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="cursor-pointer"
-                    disabled={snapPage >= snapPages}
-                    onClick={() => setSnapPage((p) => p + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="lg:col-span-2">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Snapshot detail</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              {!selectedSnap ? (
-                <p className="text-muted-foreground">Select a snapshot.</p>
-              ) : (
-                <>
-                  <p>
-                    <span className="text-muted-foreground">Code:</span> {selectedSnap.report_code}
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Type:</span> {selectedSnap.report_type}
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Generated:</span>{" "}
-                    {selectedSnap.generated_at ?? "-"}
-                  </p>
-                  <pre className="max-h-64 overflow-auto rounded border bg-muted/30 p-2 text-xs">
-                    {JSON.stringify(selectedSnap.metrics_json, null, 2)}
-                  </pre>
-                  {selectedSnap.status === "draft" ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="cursor-pointer transition-colors duration-200"
-                      disabled={actionLoading}
-                      onClick={() => void handleFinalize()}
-                    >
-                      <ShieldCheck className="mr-1 h-4 w-4" />
-                      Finalize
-                    </Button>
-                  ) : null}
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
+                <YAxis
+                  allowDecimals={false}
+                  tick={{ fontSize: 11, fill: CHART.tick }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={32}
+                />
+                <Tooltip content={<ChartTooltip unit="assets" />} />
+                <Line
+                  type="monotone"
+                  dataKey="count"
+                  stroke={CHART.sky}
+                  strokeWidth={2.5}
+                  dot={{ r: 3.5, fill: CHART.sky, strokeWidth: 0 }}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

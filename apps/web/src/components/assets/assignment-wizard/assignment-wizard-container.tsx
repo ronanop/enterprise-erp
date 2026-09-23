@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * CR-004 Phase 5B-2B Task 2 - Assignment Wizard Container
+ * CR-004 Phase 5B-2B Task 2 — Assignment Wizard Container
  *
  * Owns load/save/submit/activate orchestration. Wizard stays presentational.
- * No router, no query params, no fetch() - AssignmentFrontendService only.
+ * No router, no query params, no fetch() — AssignmentFrontendService only.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -24,6 +24,8 @@ import {
   EMPTY_ASSIGNMENT_WIZARD_STATE,
   type AssignmentWizardState,
 } from "@/components/assets/assignment-wizard/wizard-types";
+import { PendingTransferErrorBanner } from "@/components/assets/pending-transfer-error-banner";
+import { parsePendingTransferError } from "@/components/assets/pending-transfer-error";
 import { isAuthenticated } from "@/lib/auth";
 import { listEmployeeOptions } from "@/lib/org-options";
 import { dcChallanService } from "@/services/assets-service";
@@ -54,7 +56,7 @@ export type AssignmentWizardContainerService = {
 export type AssignmentWizardContainerProps = {
   /** When set, loads an existing draft via loadDraft. */
   draftId?: string;
-  /** Optional seed values (not from URL - parent-provided). */
+  /** Optional seed values (not from URL — parent-provided). */
   initialState?: Partial<AssignmentWizardState>;
   onCancel?: () => void;
   /** Called after successful submit (+ best-effort activate). */
@@ -106,7 +108,7 @@ export function AssignmentWizardContainer({
   const [employees, setEmployees] = useState<WizardSelectOption[]>([]);
   const [assets, setAssets] = useState<WizardAssetOption[]>([]);
   const [issuedItems, setIssuedItems] = useState<WizardIssuedItemOption[]>([]);
-  const [branchLabel, setBranchLabel] = useState("-");
+  const [branchLabel, setBranchLabel] = useState("—");
   const [unavailableAssetMessage, setUnavailableAssetMessage] = useState<string | null>(null);
   const [unlinkedDcChallans, setUnlinkedDcChallans] = useState<
     Array<{ id: string; dcNumber: string; employeeName?: string | null }>
@@ -148,12 +150,15 @@ export function AssignmentWizardContainer({
           components,
         );
         const match = readyAssets.find((a) => a.id === row.asset_id);
-        setBranchLabel(match?.branchLabel ?? (row.branch_id.slice(0, 8) || "-"));
+        setBranchLabel(match?.branchLabel ?? (row.branch_id.slice(0, 8) || "—"));
       } else if (next.assetId) {
         const match = readyAssets.find((a) => a.id === next.assetId);
         if (match) {
           components = await service.listComponents(next.assetId);
           next.branchId = match.branchId || next.branchId;
+          if (next.issuedItemIds.length === 0) {
+            next.issuedItemIds = components.filter((i) => !i.disabled).map((i) => i.id);
+          }
           setBranchLabel(match.branchLabel);
           setUnavailableAssetMessage(null);
         } else {
@@ -188,18 +193,28 @@ export function AssignmentWizardContainer({
       void (async () => {
         if (!assetId) {
           setIssuedItems([]);
+          setWizardState((prev) => ({ ...prev, assetId: "", issuedItemIds: [] }));
           return;
         }
         try {
           const list = await service.listComponents(assetId);
           setIssuedItems(list);
           const match = assets.find((a) => a.id === assetId);
+          // Pre-select available accessories (including CHARGER) so they follow the asset.
+          const availableIds = list.filter((i) => !i.disabled).map((i) => i.id);
           if (match) {
             setBranchLabel(match.branchLabel);
             setWizardState((prev) => ({
               ...prev,
               assetId,
               branchId: match.branchId || prev.branchId,
+              issuedItemIds: availableIds,
+            }));
+          } else {
+            setWizardState((prev) => ({
+              ...prev,
+              assetId,
+              issuedItemIds: availableIds,
             }));
           }
         } catch {
@@ -319,7 +334,7 @@ export function AssignmentWizardContainer({
         try {
           await service.activateAssignment(row.id);
         } catch {
-          /* Multi-step workflow may leave status=submitted - still success for caller. */
+          /* Multi-step workflow may leave status=submitted — still success for caller. */
         }
         onSuccessRef.current?.(row.id);
       } catch (err) {
@@ -344,7 +359,14 @@ export function AssignmentWizardContainer({
   return (
     <div className="space-y-3">
       {actionError ? (
-        <WizardLoadErrorBanner message={actionError} onRetry={() => setActionError(null)} />
+        parsePendingTransferError(actionError) ? (
+          <PendingTransferErrorBanner
+            message={actionError}
+            onDismiss={() => setActionError(null)}
+          />
+        ) : (
+          <WizardLoadErrorBanner message={actionError} onRetry={() => setActionError(null)} />
+        )
       ) : null}
       <AssignmentWizard
         key={hydrationKey}

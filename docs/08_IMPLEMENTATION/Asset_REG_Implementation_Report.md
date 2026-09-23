@@ -1,4 +1,4 @@
-# FP-ASSET-REG-001 - Implementation Report
+# FP-ASSET-REG-001 — Implementation Report
 
 ## Summary
 
@@ -13,7 +13,7 @@ Asset registration business layer implemented on top of FP-ASSET-WF-GOV-001: FRD
 
 ## Tests
 
-`pytest src/tests/unit/asset src/tests/security/asset src/tests/integration/asset` - 15 passed (local).
+`pytest src/tests/unit/asset src/tests/security/asset src/tests/integration/asset` — 15 passed (local).
 
 ## Rollout
 

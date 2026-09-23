@@ -70,7 +70,7 @@ describe("resolveBranchLabel", () => {
   });
 
   it("returns dash for empty branch", () => {
-    expect(resolveBranchLabel(null, branchLookup)).toBe("-");
+    expect(resolveBranchLabel(null, branchLookup)).toBe("—");
   });
 
   it("falls back to short id", () => {
@@ -177,8 +177,8 @@ describe("mapAssignmentsToActivityRows", () => {
 
 describe("formatAssignmentTimestamp", () => {
   it("returns dash for invalid values", () => {
-    expect(formatAssignmentTimestamp(null)).toBe("-");
-    expect(formatAssignmentTimestamp("")).toBe("-");
+    expect(formatAssignmentTimestamp(null)).toBe("—");
+    expect(formatAssignmentTimestamp("")).toBe("—");
   });
 });
 
@@ -223,6 +223,7 @@ describe("mapDashboardPayloadToViewModel", () => {
         retired: 2,
         pendingDisposal: 2,
         disposed: 1,
+        inUseAsComponent: 0,
       },
     ]);
     expect(view.byLocation).toEqual([]);
@@ -260,6 +261,7 @@ describe("mapDashboardPayloadToViewModel", () => {
         retired: 2,
         pendingDisposal: 2,
         disposed: 1,
+        inUseAsComponent: 0,
       },
     ]);
   });
@@ -306,6 +308,8 @@ describe("mapTransfersToDashboardRows", () => {
         reason: "Relocation",
         status: "submitted",
         workflowStatus: null,
+        version: undefined,
+        createdBy: null,
       },
     ]);
   });

@@ -1,4 +1,4 @@
-# CR-004 Phase 2B-2 - Workflow Integration
+# CR-004 Phase 2B-2 — Workflow Integration
 
 **Date:** 2026-08-03  
 **Scope:** Wire `AssetOperationalStatusService` into registration, assignment, return, and disposal. Audit + optimistic locking. **No** UI, dashboard, sidebar, or new routes.
@@ -43,7 +43,7 @@ After registration activate / legacy approve → `initialize_ready_to_move()` (i
 
 ## Audit
 
-`service/operational_status_audit.py` - `log_operational_status_change()` using `OperationalStatusAuditEvent` operation names. Emitted **after** successful `set_operational_status`.
+`service/operational_status_audit.py` — `log_operational_status_change()` using `OperationalStatusAuditEvent` operation names. Emitted **after** successful `set_operational_status`.
 
 ---
 

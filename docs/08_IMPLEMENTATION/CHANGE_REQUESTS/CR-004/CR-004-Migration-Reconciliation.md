@@ -1,8 +1,8 @@
-# CR-004 - Migration Reconciliation
+# CR-004 — Migration Reconciliation
 
-**Phase:** 8C - Migration Validation & Reconciliation  
+**Phase:** 8C — Migration Validation & Reconciliation  
 **Date:** 2026-08-05  
-**Mode:** Analysis / validation only - **no code, no UI, no business-logic changes**  
+**Mode:** Analysis / validation only — **no code, no UI, no business-logic changes**  
 **Sources:** Phase 8A preview contract, Phase 8A.5 customer Excel validation, Phase 8B import engine, Excel Migration Plan, register parity, inventory/dashboard APIs
 
 ---
@@ -24,14 +24,14 @@
 
 | Metric | Excel (expected) | ERP / Import summary | Delta | Status |
 |--------|------------------|----------------------|-------|--------|
-| Total source rows | N/A - no frozen file | N/A | - | **N/A** |
-| Preview VALID | N/A | N/A | - | **N/A** |
-| Preview WARNING | N/A | N/A | - | **N/A** |
-| Preview ERROR / INVALID | N/A | Must not import | - | **PASS** (rule) |
-| Imported | N/A | `summary.imported` | - | **N/A** |
-| Skipped | N/A | `summary.skipped` | - | **N/A** |
-| Failed | N/A | `summary.failed` | - | **N/A** |
-| Duplicates | N/A | `summary.duplicates` | - | **N/A** |
+| Total source rows | N/A — no frozen file | N/A | — | **N/A** |
+| Preview VALID | N/A | N/A | — | **N/A** |
+| Preview WARNING | N/A | N/A | — | **N/A** |
+| Preview ERROR / INVALID | N/A | Must not import | — | **PASS** (rule) |
+| Imported | N/A | `summary.imported` | — | **N/A** |
+| Skipped | N/A | `summary.skipped` | — | **N/A** |
+| Failed | N/A | `summary.failed` | — | **N/A** |
+| Duplicates | N/A | `summary.duplicates` | — | **N/A** |
 
 ### Design checks (asset identity)
 
@@ -40,7 +40,7 @@
 | Asset Tag → `asset_code` via `create_for_import` | **PASS** | External tag preserved; `document_number` system-assigned |
 | Duplicate Asset Tag → skip, no overwrite | **PASS** | Engine + validator |
 | Duplicate Serial → skip when serial present | **PASS** | Serial optional on FE mapping (8B added) |
-| First-sheet-only vs multi-tab Excel buckets | **FAIL** (cutover) | 8A.5 M-1 still open - mass under-count risk |
+| First-sheet-only vs multi-tab Excel buckets | **FAIL** (cutover) | 8A.5 M-1 still open — mass under-count risk |
 | Title / merged header rows | **FAIL** (cutover) | 8A.5 M-2 still open |
 
 ---
@@ -59,10 +59,10 @@
 
 | ID | Difference | Severity |
 |----|------------|----------|
-| R-OPS-1 | Matrix blocks READY→RETIRED; import synthesizes assignment (employee or **branch**) then return | Medium - ERP history shows a transit assignment Excel never had |
-| R-OPS-2 | DISPOSED may lack full Disposal document workflow; uses ops `apply_action` after pending | Medium - audit/disposal register may not match day-to-day dispose UI |
-| R-OPS-3 | Status implied **only by sheet/tab name** is not imported correctly without Status column or multi-tab strategy | **Critical** - 8A.5 M-1 |
-| R-OPS-4 | ASSIGNED without Employee ID is preview **Warning** (Migration Plan = **Error**); import only if `confirm_warnings` | High - policy mismatch |
+| R-OPS-1 | Matrix blocks READY→RETIRED; import synthesizes assignment (employee or **branch**) then return | Medium — ERP history shows a transit assignment Excel never had |
+| R-OPS-2 | DISPOSED may lack full Disposal document workflow; uses ops `apply_action` after pending | Medium — audit/disposal register may not match day-to-day dispose UI |
+| R-OPS-3 | Status implied **only by sheet/tab name** is not imported correctly without Status column or multi-tab strategy | **Critical** — 8A.5 M-1 |
+| R-OPS-4 | ASSIGNED without Employee ID is preview **Warning** (Migration Plan = **Error**); import only if `confirm_warnings` | High — policy mismatch |
 
 ---
 
@@ -94,7 +94,7 @@
 |-------|--------|
 | Must not import as writable Excel column | **PASS** (8A correctly skips) |
 | Derived when `ASSIGNED` + active employee assignment | **PASS** (inventory mapper / register parity) |
-| Live Excel vs ERP holder sample (50 rows) | **N/A** - no measured import |
+| Live Excel vs ERP holder sample (50 rows) | **N/A** — no measured import |
 
 **Warning:** If ASSIGNED imported with wrong employee lookup, holder will disagree with Excel without failing duplicate checks.
 
@@ -106,8 +106,8 @@
 |-------|--------|
 | Must not import Excel “Earlier Used By” as SSOT | **PASS** |
 | Derived from returned assignment history in inventory UI | **PASS** (Phase 6 register-parity derivation) |
-| After import of RETIRED via synthetic assign+return | **PARTIAL** - history may show branch/employee transit assignee, not Excel’s earlier holder text |
-| Multi-holder Excel history without assignment log | **FAIL** to reconstruct - Migration Plan discourages inferring from Excel column |
+| After import of RETIRED via synthetic assign+return | **PARTIAL** — history may show branch/employee transit assignee, not Excel’s earlier holder text |
+| Multi-holder Excel history without assignment log | **FAIL** to reconstruct — Migration Plan discourages inferring from Excel column |
 
 ---
 
@@ -118,7 +118,7 @@
 | Branch required on preview; resolved to `branch_id` | **PASS** (design) |
 | Engine creates asset on mapped branch | **PASS** |
 | Dashboard / inventory branch KPI vs Excel pivot | **N/A** measured |
-| Label drift (e.g. “Noida HO” vs “Noida”) | **WARNING** - false invalid_branch or wrong bucket |
+| Label drift (e.g. “Noida HO” vs “Noida”) | **WARNING** — false invalid_branch or wrong bucket |
 
 ---
 
@@ -127,7 +127,7 @@
 | Check | Result |
 |-------|--------|
 | Optional department map → `department_id` on create | **PASS** (when present & resolvable) |
-| Excel often omits department | **PARTIAL** - ERP totals under-populated vs informal Excel |
+| Excel often omits department | **PARTIAL** — ERP totals under-populated vs informal Excel |
 | Live department pivot match | **N/A** |
 
 ---
@@ -138,7 +138,7 @@
 |-------|--------|
 | Optional Excel category → `asset_category_id` | **PASS** when mapped |
 | Default category required at import UI | **PASS** (process control) |
-| Risk: all uncategorized Excel rows collapse to one default category | **WARNING** - category distribution ≠ Excel reality |
+| Risk: all uncategorized Excel rows collapse to one default category | **WARNING** — category distribution ≠ Excel reality |
 
 ---
 
@@ -147,7 +147,7 @@
 | Check | Design | Live |
 |-------|--------|------|
 | Import summary counters (imported/skipped/duplicates/warnings/failed/duration/batches) | **PASS** | N/A |
-| Inventory total for quarantine branch = imported - disposed filter policy | Expected after dry-run | **N/A** |
+| Inventory total for quarantine branch = imported − disposed filter policy | Expected after dry-run | **N/A** |
 | Dashboard ops KPIs = inventory ops counts | Same read model (dashboard-summary) | **N/A** |
 | No duplicate `asset_code` post-import | Enforced by skip + unique registration checks | **N/A** measured |
 
@@ -211,8 +211,8 @@
 
 | Question | Answer |
 |----------|--------|
-| Can we certify Excel ↔ ERP parity today? | **No** - no measured import |
-| Is the reconciliation framework ready? | **Yes** - this document + validation report + go-live checklist |
-| Are structural blockers still open? | **Yes** - D-1…D-3 (8A.5 Critical) |
+| Can we certify Excel ↔ ERP parity today? | **No** — no measured import |
+| Is the reconciliation framework ready? | **Yes** — this document + validation report + go-live checklist |
+| Are structural blockers still open? | **Yes** — D-1…D-3 (8A.5 Critical) |
 
 **Companion reports:** `CR-004-Import-Validation-Report.md`, `CR-004-GoLive-Checklist.md`

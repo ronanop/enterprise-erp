@@ -16,12 +16,10 @@ export const INVENTORY_PRESETS: Array<{ id: InventoryPresetId; label: string }> 
   { id: "assigned", label: "Assigned" },
   { id: "in_maintenance", label: "In Maintenance" },
   { id: "in_use_as_component", label: "In Use as Component" },
-  { id: "retired", label: "Retired" },
-  { id: "pending_disposal", label: "Pending Disposal" },
   { id: "disposed", label: "Disposed" },
 ];
 
-/** Selected pill tints - aligned with `statusColorMap` operational colors. */
+/** Selected pill tints — aligned with `statusColorMap` operational colors. */
 export const INVENTORY_PRESET_PILL_CLASS: Record<InventoryPresetId, string> = {
   all: "border-primary bg-primary text-primary-foreground shadow-sm",
   ready: "border-sky-700 bg-sky-700 text-white shadow-sm",

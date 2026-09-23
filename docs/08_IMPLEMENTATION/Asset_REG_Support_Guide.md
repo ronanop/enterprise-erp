@@ -1,4 +1,4 @@
-# Asset Registration - Support Guide
+# Asset Registration — Support Guide
 
 ## Stuck in draft
 

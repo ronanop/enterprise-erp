@@ -36,7 +36,7 @@ describe("IssuedItemsStep 4C", () => {
     expect(screen.getByText("Charger")).toBeInTheDocument();
     expect(screen.getByText("Dell 65W")).toBeInTheDocument();
     expect(screen.getByText("S/N: CHG001")).toBeInTheDocument();
-    expect(screen.getByText("S/N: -")).toBeInTheDocument();
+    expect(screen.getByText("S/N: —")).toBeInTheDocument();
   });
 
   it("disables currently issued components", async () => {

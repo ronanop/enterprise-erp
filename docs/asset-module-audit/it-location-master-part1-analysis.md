@@ -1,8 +1,8 @@
-# IT Assets - Location Master Part 1 (Analysis Report)
+# IT Assets — Location Master Part 1 (Analysis Report)
 
 **Date:** 2026-08-30  
 **Scope:** Read-only map. No schema, migration, or code proposals (those are Part 2).  
-**Status:** Ready for review - Part 2 blocked on sign-off of this report.
+**Status:** Ready for review — Part 2 blocked on sign-off of this report.
 
 ## Core distinction (locked from codebase)
 
@@ -36,31 +36,31 @@ flowchart LR
 | Concept | Backend source | Frontend source | Status |
 |---|---|---|---|
 | Add Asset Location (city) | None (no DB) | `ASSET_SITE_CATALOG` in `apps/web/src/config/asset-site-catalog.ts` via `apps/web/src/components/assets/asset-add-form.tsx` | **Hardcoded** |
-| Add Asset Building | None (no DB) | Same catalog `buildings[]` via `buildingsForCity` - select, not freeform | **Hardcoded** |
+| Add Asset Building | None (no DB) | Same catalog `buildings[]` via `buildingsForCity` — select, not freeform | **Hardcoded** |
 | Persisted site string | `ast_asset_location.location_label` | `composeLocationLabel` → e.g. `"Mumbai · CRC-1"` | **Real write** of opaque text |
 | Asset org branch | `ast_asset.branch_id` → `org_branch` | Silent: first `/branches` option (or incoming prefill); **no Branch picker on Add Asset** | **Real**, background |
 | `org_location_id` on create | Column exists, nullable, **no FK** | Add Asset **never sends** it | **Unused** on registration path |
-| Config → Locations sidebar | - | `AssetLocationsPlaceholderWorkspace` (`apps/web/src/components/assets/asset-locations-placeholder-workspace.tsx`) at `/assets/locations` | **Placeholder** |
+| Config → Locations sidebar | — | `AssetLocationsPlaceholderWorkspace` (`apps/web/src/components/assets/asset-locations-placeholder-workspace.tsx`) at `/assets/locations` | **Placeholder** |
 | Per-asset location history UI | `GET/POST /assets/asset-locations` | `apps/web/src/components/assets/asset-location-workspace.tsx` | **Real** (not in IT Configuration nav) |
 | Inventory Location **column** | Current `location_label` | `fetchCurrentAssetLocationLabels` in `apps/web/src/components/assets/asset-inventory-container.tsx` | **Real** |
 | Inventory Location **filter** | `org_location` UUID ↔ `org_location_id` | `listLocationOptions` in `apps/web/src/lib/org-options.ts` → `/locations` | **Real but disconnected** from catalog / Add Asset |
-| Org Locations page | `organization.org_location` | Organization module `/locations` | **Independent** - Asset Location Master must not mutate it |
+| Org Locations page | `organization.org_location` | Organization module `/locations` | **Independent** — Asset Location Master must not mutate it |
 | Non-IT locations | `ast_nonit_location` | Non-IT admin | **Independent** (out of Part 2 IT master) |
 
 ---
 
-## 1. Add Asset form - current source (confirmed)
+## 1. Add Asset form — current source (confirmed)
 
 **Location dropdown** (Mumbai / Delhi / Noida / Gurgaon / Bangalore / Hyderabad / Pune): sourced **only** from `ASSET_SITE_CATALOG` in `apps/web/src/config/asset-site-catalog.ts`. Not any DB table.
 
-**Building:** also hardcoded per city in the same catalog (`buildings: [{ id, label }]`). Cascading select via `buildingsForCity(city_id)` - **not** freeform text.
+**Building:** also hardcoded per city in the same catalog (`buildings: [{ id, label }]`). Cascading select via `buildingsForCity(city_id)` — **not** freeform text.
 
-**On submit** (`apps/web/src/components/assets/asset-add-form.tsx` ~L235-250):
+**On submit** (`apps/web/src/components/assets/asset-add-form.tsx` ~L235–250):
 
 | Field sent | Value | Lands on |
 |---|---|---|
 | `location_label` | `composeLocationLabel(city_id, building_id)` → `` `${city.label} · ${building.label}` `` | `ast_asset_location.location_label` via `AssetService._persist_registration_location` → `LocationService.create` |
-| `branch_id` | Org branch UUID from `listBranchOptions()` - auto first branch or incoming prefill | `ast_asset.branch_id` **and** copied onto the new location row’s `branch_id` |
+| `branch_id` | Org branch UUID from `listBranchOptions()` — auto first branch or incoming prefill | `ast_asset.branch_id` **and** copied onto the new location row’s `branch_id` |
 | `org_location_id` | **Not sent** | Stays `NULL` |
 | `city_id` / `building_id` | UI-only | Never persisted as IDs |
 
@@ -93,7 +93,7 @@ Backend path: `apps/api/src/modules/asset/service/asset_service.py` pops `locati
 
 ### Transfer execute (critical)
 
-`apps/api/src/modules/asset/service/transfer_service.py` `_execute_transfer` (~L286-321):
+`apps/api/src/modules/asset/service/transfer_service.py` `_execute_transfer` (~L286–321):
 
 1. If `to_branch_id` set and ≠ `from_branch_id` → **updates `ast_asset.branch_id`**.
 2. If branch / `to_location_label` / `to_org_location_id` changed → marks current location historical, **creates new `ast_asset_location`** with new `location_label` and destination `branch_id`.
@@ -152,7 +152,7 @@ Backend path: `apps/api/src/modules/asset/service/asset_service.py` pops `locati
 | Use | Relationship to Add Asset catalog |
 |---|---|
 | Inventory filter “Location” | `listLocationOptions()` → `GET /locations` → filter `location_id` matches **`ast_asset_location.org_location_id` only** (`apps/api/src/modules/asset/repository/asset_repository.py`) |
-| Add Asset catalog | **Unrelated** - different data; Add Asset never sets `org_location_id` → **catalog-registered assets never match this filter** |
+| Add Asset catalog | **Unrelated** — different data; Add Asset never sets `org_location_id` → **catalog-registered assets never match this filter** |
 | Organization `/locations` page | Org master; Asset Location Master work must **not** change Organization APIs/tables |
 | Transfer `to_org_location_id` | Schema/validator support exists; current Transfer UI does not meaningfully drive it |
 
@@ -162,9 +162,9 @@ Backend path: `apps/api/src/modules/asset/service/asset_service.py` pops `locati
 
 **Canonical catalog (runtime):**
 
-- `apps/web/src/config/asset-site-catalog.ts` - all cities/buildings (CRC-1/CRC-2, Mumbai IT Park, Delhi Head Office, etc.)
-- `apps/web/src/components/assets/asset-add-form.tsx` - only consumer of catalog helpers
-- `apps/web/src/components/assets/asset-add-form.test.tsx` - asserts `"Mumbai · CRC-1"`, building options
+- `apps/web/src/config/asset-site-catalog.ts` — all cities/buildings (CRC-1/CRC-2, Mumbai IT Park, Delhi Head Office, etc.)
+- `apps/web/src/components/assets/asset-add-form.tsx` — only consumer of catalog helpers
+- `apps/web/src/components/assets/asset-add-form.test.tsx` — asserts `"Mumbai · CRC-1"`, building options
 
 **No other production imports** of `ASSET_SITE_CATALOG` / `composeLocationLabel` / `buildingsForCity`.
 
@@ -188,7 +188,7 @@ Assumption for impact: UI no longer exposes Branch selectors/pickers in Assets, 
 | **Transfer** | **Not fully safe** | Cross-branch moves need explicit `to_branch_id`; hiding without replacement blocks or silently mis-routes; execute still rewrites asset + `ast_asset_location` |
 | **Incoming / QC / reg queue filters** | UI hide = lose filter UX | Data still branch-scoped from GRN; wrong silent branch breaks RBAC visibility |
 | **DC Challan** | Yes for display | Pinning + branch-scoped list remain; post-transfer visibility edge case unchanged |
-| **Dashboard All / By branch** | Partial | Hiding selector ⇒ effectively always “All” KPIs unless replaced; breakdown still groups on `branch_id` - **not** Location Master |
+| **Dashboard All / By branch** | Partial | Hiding selector ⇒ effectively always “All” KPIs unless replaced; breakdown still groups on `branch_id` — **not** Location Master |
 | **Inventory Branch filter** | Same as dashboard | List APIs still accept `branch_id`; silent wrong value hides assets for branch-scoped users |
 | **Excel import Branch column** | Keep column or map silently | Still required domain field today |
 | **Maintenance / disposal / revaluation** | Yes | Already read-only from asset |

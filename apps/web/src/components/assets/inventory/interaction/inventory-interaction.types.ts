@@ -1,7 +1,9 @@
-/** Permission flags for inventory row actions (UI only - no routing in 3.4B-1). */
+/** Permission flags for inventory row actions (UI only — no routing in 3.4B-1). */
 
 export type InventoryMenuActionId =
   | "viewDetails"
+  | "edit"
+  | "delete"
   | "assign"
   | "return"
   | "portal"
@@ -15,6 +17,8 @@ export type InventoryMenuActionId =
 
 export type InventoryActionPermissions = {
   viewDetails: boolean;
+  edit: boolean;
+  delete: boolean;
   assign: boolean;
   return: boolean;
   portal: boolean;
@@ -29,6 +33,8 @@ export type InventoryActionPermissions = {
 
 export const DEFAULT_INVENTORY_ACTION_PERMISSIONS: InventoryActionPermissions = {
   viewDetails: true,
+  edit: true,
+  delete: true,
   assign: true,
   return: true,
   portal: true,
@@ -130,14 +136,16 @@ export const INVENTORY_MENU_ITEMS: Array<{
   permissionKey: keyof InventoryActionPermissions;
 }> = [
   { id: "viewDetails", label: "View Details", permissionKey: "viewDetails" },
+  // Edit is shown in the overflow menu (not as a direct row button).
+  { id: "edit", label: "Edit", permissionKey: "edit" },
   { id: "assign", label: "Assign Asset", permissionKey: "assign" },
   { id: "return", label: "Return Asset", permissionKey: "return" },
+  // History + Discovery live inside Information Portal — single menu entry.
   { id: "portal", label: "Information Portal", permissionKey: "portal" },
-  { id: "discovery", label: "Discovery", permissionKey: "discovery" },
   { id: "qr", label: "QR Code", permissionKey: "qr" },
-  { id: "transfer", label: "Transfer", permissionKey: "transfer" },
+  { id: "transfer", label: "User Transfer", permissionKey: "transfer" },
   { id: "maintenance", label: "Maintenance", permissionKey: "maintenance" },
-  { id: "startDisposal", label: "Start Disposal", permissionKey: "startDisposal" },
-  { id: "reinstate", label: "Reinstate", permissionKey: "reinstate" },
-  { id: "history", label: "History", permissionKey: "history" },
+  { id: "startDisposal", label: "Dispose", permissionKey: "startDisposal" },
+  // Destructive action — always last in the overflow menu.
+  { id: "delete", label: "Delete", permissionKey: "delete" },
 ];

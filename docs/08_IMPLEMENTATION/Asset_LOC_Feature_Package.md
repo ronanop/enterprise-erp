@@ -1,4 +1,4 @@
-# FP-ASSET-012 - Asset Location Management (Feature Package)
+# FP-ASSET-012 — Asset Location Management (Feature Package)
 
 **Status:** Implemented  
 **ADR:** ADR-ASSET-LOC-001

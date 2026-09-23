@@ -1,7 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
-import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
@@ -9,11 +7,17 @@ import {
   ChevronUp,
   Eye,
   Loader2,
-  Play,
   RefreshCw,
-  X,
 } from "lucide-react";
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerial,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
 
+
+import { MaintenanceWorkOrderDetailDrawer } from "@/components/assets/maintenance-work-order-detail-drawer";
 import {
   ASSETS_ACCENT_BTN,
   ASSETS_SURFACE_CARD,
@@ -33,35 +37,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { isAuthenticated } from "@/lib/auth";
-import { listBranchOptions, listEmployeeOptions, type OrgOption } from "@/lib/org-options";
+import { listEmployeeOptions, type OrgOption } from "@/lib/org-options";
 import { listVendorOptions, type VendorOption } from "@/services/procurement-service";
 import {
   maintenanceService,
   type MaintenanceRow,
-  type MaintenanceTimelineEvent,
 } from "@/services/assets-service";
 import { ApiClientError } from "@/services/api-client";
 import { cn } from "@/lib/utils";
 
 const MAINTENANCE_TYPES = ["preventive", "corrective", "emergency", "annual_service"] as const;
 const PAGE_SIZE = 25;
-const TABLE_COLS = 8;
+const TABLE_COLS = 9;
 
 function formatMaintenanceType(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
-function assetMakeModel(row: MaintenanceRow): string {
-  return [row.make, row.model].filter(Boolean).join(" · ") || "-";
-}
-
-function DetailRow({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="flex justify-between gap-4 border-b border-border/40 py-2 text-sm last:border-0">
-      <span className="shrink-0 text-muted-foreground">{label}</span>
-      <span className="text-right font-medium">{value ?? "-"}</span>
-    </div>
-  );
 }
 
 function errMessage(err: unknown, fallback: string): string {
@@ -85,7 +75,6 @@ export function AssetMaintenanceWorkspace() {
   const deepMaintenanceId = searchParams.get("maintenanceId") ?? "";
 
   const [rows, setRows] = useState<MaintenanceRow[]>([]);
-  const [branchLabels, setBranchLabels] = useState<Record<string, string>>({});
   const [employees, setEmployees] = useState<OrgOption[]>([]);
   const [vendors, setVendors] = useState<VendorOption[]>([]);
   const [total, setTotal] = useState(0);
@@ -97,8 +86,6 @@ export function AssetMaintenanceWorkspace() {
 
   const [selected, setSelected] = useState<MaintenanceRow | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [timeline, setTimeline] = useState<MaintenanceTimelineEvent[]>([]);
-  const [timelineLoading, setTimelineLoading] = useState(false);
 
   const [startOpen, setStartOpen] = useState(false);
   const [startSaving, setStartSaving] = useState(false);
@@ -116,12 +103,6 @@ export function AssetMaintenanceWorkspace() {
   });
   const [employeeQuery, setEmployeeQuery] = useState("");
   const [vendorQuery, setVendorQuery] = useState("");
-
-  const employeeMap = useMemo(
-    () => new Map(employees.map((e) => [e.id, e.label])),
-    [employees],
-  );
-  const vendorMap = useMemo(() => new Map(vendors.map((v) => [v.id, v.label])), [vendors]);
 
   const filteredEmployees = useMemo(() => {
     const q = employeeQuery.trim().toLowerCase();
@@ -157,51 +138,31 @@ export function AssetMaintenanceWorkspace() {
     }
   }, [page, q, showHistory]);
 
-  const loadTimeline = useCallback(async (id: string) => {
-    setTimelineLoading(true);
-    try {
-      setTimeline(await maintenanceService.timeline(id));
-    } catch {
-      setTimeline([]);
-    } finally {
-      setTimelineLoading(false);
-    }
+  const openDetail = useCallback((row: MaintenanceRow) => {
+    setSelected(row);
+    setDetailOpen(true);
+    setPendingApproval(
+      row.status === "submitted" ? "Awaiting approval before maintenance can start." : null,
+    );
+    setForm((f) => ({
+      ...f,
+      reason: row.reason ?? "",
+      expected_duration_days: row.expected_duration_days
+        ? String(row.expected_duration_days)
+        : f.expected_duration_days,
+      maintenance_type: row.maintenance_type || "preventive",
+      scheduled_date: row.scheduled_date ?? todayIso(),
+      cost_amount: row.cost_amount != null ? String(row.cost_amount) : "",
+      technician_employee_id: row.technician_employee_id ?? "",
+      vendor_id: row.vendor_id ?? "",
+    }));
   }, []);
-
-  const openDetail = useCallback(
-    (row: MaintenanceRow) => {
-      setSelected(row);
-      setDetailOpen(true);
-      setPendingApproval(
-        row.status === "submitted" ? "Awaiting approval before maintenance can start." : null,
-      );
-      setForm((f) => ({
-        ...f,
-        reason: row.reason ?? "",
-        expected_duration_days: row.expected_duration_days
-          ? String(row.expected_duration_days)
-          : f.expected_duration_days,
-        maintenance_type: row.maintenance_type || "preventive",
-        scheduled_date: row.scheduled_date ?? todayIso(),
-        cost_amount: row.cost_amount != null ? String(row.cost_amount) : "",
-        technician_employee_id: row.technician_employee_id ?? "",
-        vendor_id: row.vendor_id ?? "",
-      }));
-      void loadTimeline(row.id);
-    },
-    [loadTimeline],
-  );
 
   useEffect(() => {
     void load();
   }, [load]);
 
   useEffect(() => {
-    void listBranchOptions()
-      .then((opts) => {
-        setBranchLabels(Object.fromEntries(opts.map((o) => [o.id, o.label])));
-      })
-      .catch(() => setBranchLabels({}));
     void listEmployeeOptions().then(setEmployees).catch(() => setEmployees([]));
     void listVendorOptions().then(setVendors).catch(() => setVendors([]));
   }, []);
@@ -220,6 +181,15 @@ export function AssetMaintenanceWorkspace() {
         /* ignore invalid deep link */
       });
   }, [deepMaintenanceId, loading, openDetail, rows]);
+
+  useEffect(() => {
+    if (!startOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [startOpen]);
 
   async function handleStartMaintenance() {
     if (!selected) return;
@@ -260,7 +230,6 @@ export function AssetMaintenanceWorkspace() {
         setDetailOpen(true);
       }
       await load();
-      await loadTimeline(result.maintenance.id);
     } catch (err) {
       const msg = errMessage(err, "Could not start maintenance");
       if (msg.toLowerCase().includes("approval")) {
@@ -271,35 +240,6 @@ export function AssetMaintenanceWorkspace() {
       setStartSaving(false);
     }
   }
-
-  async function handleComplete() {
-    if (!selected) return;
-    setStartSaving(true);
-    setError(null);
-    try {
-      const updated = await maintenanceService.complete(selected.id);
-      setSelected(updated);
-      await load();
-      await loadTimeline(updated.id);
-    } catch (err) {
-      setError(errMessage(err, "Could not complete maintenance"));
-    } finally {
-      setStartSaving(false);
-    }
-  }
-
-  const canStart =
-    selected &&
-    (selected.status === "draft" ||
-      selected.status === "submitted" ||
-      selected.status === "approved" ||
-      selected.status === "scheduled");
-
-  const canComplete =
-    selected &&
-    (selected.status === "in_progress" ||
-      selected.status === "approved" ||
-      selected.status === "scheduled");
 
   return (
     <AssetsPremiumPage testId="asset-maintenance-workspace">
@@ -381,6 +321,9 @@ export function AssetMaintenanceWorkspace() {
               <table className="min-w-full text-sm">
                 <thead className="bg-muted/40 text-left">
                   <tr>
+                    <th className={tableSerialHeaderClassName()} scope="col">
+                      {TABLE_SERIAL_HEADER_LABEL}
+                    </th>
                     <th className="px-3 py-2 font-medium">Asset code</th>
                     <th className="px-3 py-2 font-medium">Asset name</th>
                     <th className="px-3 py-2 font-medium">Serial</th>
@@ -403,28 +346,29 @@ export function AssetMaintenanceWorkspace() {
                       <td colSpan={TABLE_COLS} className="px-3 py-10 text-center text-muted-foreground">
                         {showHistory
                           ? "No work orders found."
-                          : "No open work orders. Use Maintenance on an asset to create one."}
+                          : "No open work orders. Use Maintenance on an asset in All Assets to start one."}
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row) => (
+                    rows.map((row, index) => (
                         <tr key={row.id} className="border-t border-border/60">
+                          <td className={tableSerialCellClassName()}>{tableRowSerial(page, PAGE_SIZE, index)}</td>
                           <td className="px-3 py-2 font-mono text-xs">
-                            {row.asset_code ?? "-"}
+                            {row.asset_code ?? "—"}
                           </td>
                           <td className="px-3 py-2 font-medium">
                             {row.asset_name ?? row.asset_id.slice(0, 8)}
                           </td>
                           <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                            {row.serial_number ?? "-"}
+                            {row.serial_number ?? "—"}
                           </td>
                           <td className="max-w-[12rem] truncate px-3 py-2 text-muted-foreground">
-                            {row.reason ?? "-"}
+                            {row.reason ?? "—"}
                           </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">
                             {row.expected_duration_days != null
                               ? `${row.expected_duration_days}d`
-                              : "-"}
+                              : "—"}
                           </td>
                           <td className="px-3 py-2">
                             <Badge variant={statusVariant(row.status)} className="font-mono text-xs">
@@ -433,7 +377,7 @@ export function AssetMaintenanceWorkspace() {
                             </Badge>
                           </td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">
-                            {row.expected_return_date ?? "-"}
+                            {row.expected_return_date ?? "—"}
                           </td>
                           <td className="px-3 py-2 text-right">
                             <Button
@@ -457,180 +401,28 @@ export function AssetMaintenanceWorkspace() {
         </Card>
       </div>
 
-      {detailOpen && selected ? (
-        <div className="fixed inset-0 z-50 flex justify-end" data-testid="maintenance-detail-drawer">
-          <button
-            type="button"
-            className="absolute inset-0 cursor-pointer bg-black/40"
-            aria-label="Close detail drawer"
-            onClick={() => setDetailOpen(false)}
-          />
-          <aside
-            role="dialog"
-            aria-modal
-            className="relative z-10 flex h-full w-full max-w-xl flex-col border-l border-border bg-background shadow-xl"
-          >
-            <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
-              <div>
-                <h2 className="text-base font-semibold">Work order detail</h2>
-                <p className="font-mono text-xs text-muted-foreground">{selected.document_number}</p>
-              </div>
-              <Button
-                type="button"
-                size="icon"
-                variant="ghost"
-                className="cursor-pointer"
-                onClick={() => setDetailOpen(false)}
-              >
-                <X className="size-4" />
-              </Button>
-            </div>
-
-            <div className="flex-1 space-y-4 overflow-y-auto p-4">
-              {pendingApproval ? (
-                <div
-                  className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100"
-                  role="status"
-                  data-testid="maintenance-approval-pending"
-                >
-                  {pendingApproval}
-                </div>
-              ) : null}
-
-              <section className="space-y-1 rounded-lg border border-border/60 bg-muted/20 p-3">
-                <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  Work order
-                </h3>
-                <DetailRow label="Document" value={selected.document_number} />
-                <DetailRow
-                  label="Type"
-                  value={formatMaintenanceType(selected.maintenance_type)}
-                />
-                <DetailRow
-                  label="Status"
-                  value={
-                    <>
-                      {selected.status}
-                      {selected.workflow_status ? ` / ${selected.workflow_status}` : ""}
-                    </>
-                  }
-                />
-                <DetailRow label="Start date" value={selected.scheduled_date ?? "-"} />
-                <DetailRow
-                  label="Duration"
-                  value={
-                    selected.expected_duration_days != null
-                      ? `${selected.expected_duration_days} days`
-                      : "-"
-                  }
-                />
-                <DetailRow label="Expected return" value={selected.expected_return_date ?? "-"} />
-                <DetailRow label="Reason" value={selected.reason ?? "-"} />
-                <DetailRow
-                  label="Cost"
-                  value={selected.cost_amount != null ? String(selected.cost_amount) : "-"}
-                />
-                <DetailRow
-                  label="Technician"
-                  value={
-                    selected.technician_employee_id
-                      ? (employeeMap.get(selected.technician_employee_id) ??
-                        selected.technician_employee_id.slice(0, 8))
-                      : "-"
-                  }
-                />
-                <DetailRow
-                  label="Vendor"
-                  value={
-                    selected.vendor_id
-                      ? (vendorMap.get(selected.vendor_id) ?? selected.vendor_id.slice(0, 8))
-                      : "-"
-                  }
-                />
-              </section>
-
-              <section className="space-y-1 rounded-lg border border-border/60 bg-muted/20 p-3">
-                <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  Asset
-                </h3>
-                <DetailRow label="Name" value={selected.asset_name ?? selected.asset_id} />
-                <DetailRow label="Asset code" value={selected.asset_code ?? "-"} />
-                <DetailRow label="Serial" value={selected.serial_number ?? "-"} />
-                <DetailRow label="Make / model" value={assetMakeModel(selected)} />
-                <DetailRow
-                  label="Branch"
-                  value={branchLabels[selected.branch_id] ?? selected.branch_id.slice(0, 8)}
-                />
-                <div className="pt-2">
-                  <Link
-                    href={`/assets/assets?assetId=${encodeURIComponent(selected.asset_id)}`}
-                    className="text-xs font-medium text-primary underline-offset-2 hover:underline"
-                  >
-                    Open in All Assets
-                  </Link>
-                </div>
-              </section>
-
-              <div className="flex flex-wrap gap-2">
-                {canStart ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className={cn("cursor-pointer", ASSETS_ACCENT_BTN)}
-                    onClick={() => {
-                      setStartError(null);
-                      setStartOpen(true);
-                    }}
-                  >
-                    <Play className="mr-1 size-4" />
-                    Start maintenance
-                  </Button>
-                ) : null}
-                {canComplete && selected.status === "in_progress" ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="cursor-pointer"
-                    disabled={startSaving}
-                    onClick={() => void handleComplete()}
-                  >
-                    Complete maintenance
-                  </Button>
-                ) : null}
-              </div>
-
-              <section className="space-y-2">
-                <h3 className="text-sm font-medium">Timeline</h3>
-                {timelineLoading ? (
-                  <Loader2 className="size-4 animate-spin text-muted-foreground" />
-                ) : timeline.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No timeline events yet.</p>
-                ) : (
-                  <ul className="space-y-2 border-l border-border/70 pl-3">
-                    {timeline.map((ev) => (
-                      <li key={ev.id} className="text-xs">
-                        <p className="font-medium">{ev.label}</p>
-                        <p className="text-muted-foreground">
-                          {ev.occurred_at
-                            ? new Date(ev.occurred_at).toLocaleString()
-                            : "-"}
-                        </p>
-                        {ev.detail ? (
-                          <p className="mt-0.5 text-muted-foreground">{ev.detail}</p>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-            </div>
-          </aside>
-        </div>
-      ) : null}
+      <MaintenanceWorkOrderDetailDrawer
+        open={detailOpen && selected != null}
+        workOrder={selected}
+        onClose={() => setDetailOpen(false)}
+        onUpdated={(row) => {
+          setSelected(row);
+          void load();
+        }}
+        allowStart
+        onRequestStart={() => {
+          setStartError(null);
+          setStartOpen(true);
+        }}
+        pendingApprovalMessage={pendingApproval}
+      />
 
       {startOpen && selected ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div
+          className="fixed inset-0 z-[60] flex items-end justify-center overflow-hidden p-3 sm:items-center sm:p-4"
+          onWheel={(e) => e.stopPropagation()}
+          onTouchMove={(e) => e.stopPropagation()}
+        >
           <button
             type="button"
             className="absolute inset-0 cursor-pointer bg-black/50"
@@ -640,21 +432,23 @@ export function AssetMaintenanceWorkspace() {
           <div
             role="dialog"
             aria-modal
-            className="relative z-10 w-full max-w-md rounded-xl border border-border bg-background p-5 shadow-xl"
+            className="relative z-10 flex max-h-[min(92dvh,40rem)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-border bg-background shadow-xl"
             data-testid="maintenance-start-modal"
+            onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="text-base font-semibold">Start maintenance</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Asset: {selected.asset_name ?? selected.asset_code ?? selected.asset_id}
-            </p>
-
-            {startError ? (
-              <p className="mt-3 text-xs text-destructive" role="alert">
-                {startError}
+            <div className="shrink-0 border-b border-border/70 px-5 pb-3 pt-5">
+              <h2 className="text-base font-semibold">Start maintenance</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Asset: {selected.asset_name ?? selected.asset_code ?? selected.asset_id}
               </p>
-            ) : null}
+              {startError ? (
+                <p className="mt-3 text-xs text-destructive" role="alert">
+                  {startError}
+                </p>
+              ) : null}
+            </div>
 
-            <div className="mt-4 space-y-3">
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-5 py-4">
               <div className="space-y-1.5">
                 <Label htmlFor="mnt-reason">Reason *</Label>
                 <textarea
@@ -690,7 +484,7 @@ export function AssetMaintenanceWorkspace() {
 
               <button
                 type="button"
-                className="flex w-full cursor-pointer items-center justify-between rounded-md border border-border/70 px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40"
+                className="flex w-full cursor-pointer items-center justify-between rounded-md border border-border/70 px-3 py-2 text-left text-sm transition-colors duration-200 hover:bg-muted/40"
                 onClick={() => setMoreOpen((v) => !v)}
               >
                 <span>More details (optional)</span>
@@ -792,18 +586,18 @@ export function AssetMaintenanceWorkspace() {
               ) : null}
             </div>
 
-            <div className="mt-5 flex justify-end gap-2">
+            <div className="flex shrink-0 justify-end gap-2 border-t border-border/70 bg-background px-5 py-4">
               <Button
                 type="button"
                 variant="ghost"
-                className="cursor-pointer"
+                className="cursor-pointer transition-colors duration-200"
                 onClick={() => setStartOpen(false)}
               >
                 Cancel
               </Button>
               <Button
                 type="button"
-                className={cn("cursor-pointer", ASSETS_ACCENT_BTN)}
+                className={cn("cursor-pointer transition-colors duration-200", ASSETS_ACCENT_BTN)}
                 disabled={startSaving}
                 onClick={() => void handleStartMaintenance()}
               >
@@ -818,7 +612,7 @@ export function AssetMaintenanceWorkspace() {
   );
 }
 
-/** Inventory / asset detail: create draft then navigate to maintenance workspace. */
+/** @deprecated Prefer ItMaintenanceStartDialog + startFromAsset (Option B). */
 export async function openMaintenanceForAsset(
   assetId: string,
   push: (href: string) => void,

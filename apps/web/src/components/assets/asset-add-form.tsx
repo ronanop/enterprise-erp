@@ -24,6 +24,7 @@ import {
   STORAGE_OPTIONS,
   buildConfigurationString,
   isIntelProcessor,
+  parseConfigurationString,
 } from "@/config/asset-hardware-options";
 import { isAuthenticated } from "@/lib/auth";
 import { getStoredOrgContext } from "@/lib/org-context-storage";
@@ -31,8 +32,10 @@ import { listBranchOptions, type OrgOption } from "@/lib/org-options";
 import { buildSelfServiceUrl } from "@/services/assets-service";
 import {
   assetCategoryService,
+  assetLocationService,
   assetRegisterService,
   assetRegistrationQueueService,
+  componentService,
   filterActiveCategories,
   type IncomingRegistrationPrefill,
 } from "@/services/assets-service";
@@ -64,7 +67,8 @@ type FieldErrors = Partial<
     | "storage"
     | "location_id"
     | "building_id"
-    | "branch_id",
+    | "charger_available"
+    | "charger_code",
     string
   >
 >;
@@ -72,14 +76,17 @@ type FieldErrors = Partial<
 type AssetAddFormProps = {
   incomingUnitId?: string;
   incomingLineId?: string;
+  /** When set, form loads the asset and PATCHes on save (Edit Asset). */
+  assetId?: string;
 };
 
 export function AssetAddForm({
   incomingUnitId,
   incomingLineId,
+  assetId,
 }: AssetAddFormProps = {}) {
   const router = useRouter();
-  const [branches, setBranches] = useState<OrgOption[]>([]);
+  const isEdit = Boolean(assetId);
   const [siteLocations, setSiteLocations] = useState<SiteLocation[]>([]);
   const [siteBuildings, setSiteBuildings] = useState<SiteBuilding[]>([]);
   const [assetTypes, setAssetTypes] = useState<ItAssetType[]>([]);
@@ -89,6 +96,7 @@ export function AssetAddForm({
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [activationWarning, setActivationWarning] = useState<string | null>(null);
   const [createdAssetId, setCreatedAssetId] = useState<string | null>(null);
+  const [editVersion, setEditVersion] = useState<number | null>(null);
   const [incomingPrefill, setIncomingPrefill] = useState<IncomingRegistrationPrefill | null>(
     null,
   );
@@ -97,7 +105,6 @@ export function AssetAddForm({
     serial_number: "",
     asset_category_id: "",
     asset_type_id: "",
-    branch_id: "",
     purchase_date: new Date().toISOString().slice(0, 10),
     purchase_cost: "0",
     currency_code: "INR",
@@ -109,6 +116,8 @@ export function AssetAddForm({
     storage: "",
     location_id: "",
     building_id: "",
+    charger_available: "" as "" | "yes" | "no",
+    charger_code: "",
   });
 
   const fromIncoming = Boolean(incomingUnitId);
@@ -127,20 +136,86 @@ export function AssetAddForm({
     void (async () => {
       if (!isAuthenticated()) return;
       try {
-        const [categoryPayload, branchOptions, locs, types] = await Promise.all([
+        const [categoryPayload, locs, types, buildings] = await Promise.all([
           assetCategoryService.search({
             page: 1,
             page_size: 200,
             status: "active",
           }),
-          listBranchOptions(),
           listSiteLocations().catch(() => [] as SiteLocation[]),
           listItAssetTypes({ active: true }).catch(() => [] as ItAssetType[]),
+          listSiteBuildings().catch(() => [] as SiteBuilding[]),
         ]);
         const active = filterActiveCategories(categoryPayload.items);
-        setBranches(branchOptions);
         setSiteLocations(locs);
+        setSiteBuildings(buildings);
         setAssetTypes(types);
+
+        if (assetId) {
+          const [row, comps, locationRows] = await Promise.all([
+            assetRegisterService.get(assetId),
+            componentService.search({
+              asset_id: assetId,
+              component_type: "CHARGER",
+              status: "active",
+              page: 1,
+              page_size: 20,
+            }),
+            assetLocationService
+              .search({
+                asset_id: assetId,
+                is_current: true,
+                status: "active",
+                page: 1,
+                page_size: 5,
+              })
+              .catch(() => ({ items: [] as Array<{ location_id?: string | null; building_id?: string | null }> })),
+          ]);
+          const charger = comps.items.find(
+            (c) => String(c.component_type ?? "").toUpperCase() === "CHARGER",
+          );
+          const currentLoc = locationRows.items[0];
+          const locationId = String(
+            row.location_id ?? currentLoc?.location_id ?? "",
+          );
+          const buildingId = String(
+            row.building_id ?? currentLoc?.building_id ?? "",
+          );
+          if (locationId) {
+            const buildingsForLoc = await listSiteBuildings(locationId).catch(
+              () => [] as SiteBuilding[],
+            );
+            setSiteBuildings(buildingsForLoc);
+          }
+          const hardware = parseConfigurationString(
+            typeof row.configuration === "string" ? row.configuration : null,
+          );
+          setEditVersion(typeof row.version === "number" ? row.version : null);
+          setForm((f) => ({
+            ...f,
+            asset_name: String(row.asset_name ?? ""),
+            serial_number: String(row.serial_number ?? ""),
+            asset_category_id: String(row.asset_category_id ?? f.asset_category_id),
+            asset_type_id: String(row.asset_type_id ?? f.asset_type_id),
+            purchase_date: String(row.purchase_date ?? f.purchase_date).slice(0, 10),
+            purchase_cost:
+              row.purchase_cost != null ? String(row.purchase_cost) : f.purchase_cost,
+            currency_code: String(row.currency_code ?? f.currency_code),
+            make: String(row.make ?? ""),
+            model: String(row.model ?? ""),
+            processor: hardware.processor,
+            generation: hardware.generation,
+            ram: hardware.ram,
+            storage: hardware.storage,
+            location_id: locationId,
+            building_id: buildingId,
+            charger_available: charger ? "yes" : "no",
+            charger_code: charger
+              ? String(charger.component_code || charger.serial_number || "")
+              : "",
+          }));
+          return;
+        }
 
         let prefill: IncomingRegistrationPrefill | null = null;
         if (incomingUnitId) {
@@ -158,7 +233,6 @@ export function AssetAddForm({
               ...next,
               asset_name: prefill.asset_name || next.asset_name,
               serial_number: prefill.serial_number || "",
-              branch_id: prefill.branch_id || next.branch_id,
               asset_category_id: prefill.asset_category_id || next.asset_category_id,
               purchase_date:
                 (prefill.purchase_date || "").slice(0, 10) || next.purchase_date,
@@ -181,20 +255,19 @@ export function AssetAddForm({
           if (!next.asset_type_id && types.length > 0) {
             next = { ...next, asset_type_id: types[0]!.id };
           }
-          if (!next.branch_id && branchOptions.length > 0) {
-            next = { ...next, branch_id: branchOptions[0].id };
-          }
           return next;
         });
       } catch (err) {
         setError(
           err instanceof ApiClientError
             ? err.message
-            : "Failed to load registration defaults (branch / location / types).",
+            : isEdit
+              ? "Failed to load asset for editing."
+              : "Failed to load registration defaults (categories / location / types).",
         );
       }
     })();
-  }, [incomingUnitId, incomingLineId]);
+  }, [incomingUnitId, incomingLineId, assetId, isEdit]);
 
   const onAssetType = useCallback((assetTypeId: string) => {
     setFieldErrors((e) => ({ ...e, asset_type_id: undefined }));
@@ -215,11 +288,16 @@ export function AssetAddForm({
       next.asset_category_id = "No active asset category is available. Contact an administrator.";
     }
     if (!form.asset_type_id) next.asset_type_id = "Asset type is required.";
-    if (!form.branch_id) next.branch_id = "Branch is required.";
     if (!form.location_id) next.location_id = "Location is required.";
     if (!form.building_id) next.building_id = "Building is required.";
 
-    if (requiresHardware) {
+    if (!form.charger_available) {
+      next.charger_available = "Select Yes or No for Charger Available.";
+    } else if (form.charger_available === "yes" && !form.charger_code.trim()) {
+      next.charger_code = "Charger Code is required when Charger Available is Yes.";
+    }
+
+    if (requiresHardware && !isEdit) {
       if (!form.processor.trim()) next.processor = "Processor is required.";
       if (isIntelProcessor(form.processor) && !form.generation.trim()) {
         next.generation = "Generation is required for Intel processors.";
@@ -244,6 +322,42 @@ export function AssetAddForm({
 
     setSaving(true);
     try {
+      if (isEdit && assetId) {
+        const configuration = requiresHardware
+          ? buildConfigurationString({
+              processor: form.processor,
+              generation: showGeneration ? form.generation : "",
+              ram: form.ram,
+              storage: form.storage,
+            })
+          : undefined;
+        const updateBody: Record<string, unknown> = {
+          asset_name: form.asset_name.trim(),
+          serial_number: form.serial_number.trim() || null,
+          make: form.make.trim() || null,
+          model: form.model.trim() || null,
+          location_id: form.location_id,
+          building_id: form.building_id,
+          charger_available: form.charger_available === "yes",
+          charger_code:
+            form.charger_available === "yes" ? form.charger_code.trim() : null,
+        };
+        if (configuration !== undefined) {
+          updateBody.configuration = configuration;
+        } else if (form.processor || form.ram || form.storage) {
+          updateBody.configuration = buildConfigurationString({
+            processor: form.processor,
+            generation: form.generation,
+            ram: form.ram,
+            storage: form.storage,
+          });
+        }
+        if (editVersion != null) updateBody.version = editVersion;
+        await assetRegisterService.update(assetId, updateBody);
+        router.push(`/assets/assets/${assetId}?saved=1`);
+        return;
+      }
+
       let id = createdAssetId;
       if (!id) {
         const configuration = requiresHardware
@@ -254,8 +368,8 @@ export function AssetAddForm({
               storage: form.storage,
             })
           : undefined;
+        // branch_id omitted — API resolves from the authenticated user's org scope / session.
         const createBody: Record<string, unknown> = {
-          branch_id: form.branch_id,
           asset_category_id: form.asset_category_id,
           asset_name: form.asset_name.trim(),
           asset_type_id: form.asset_type_id,
@@ -268,10 +382,15 @@ export function AssetAddForm({
           configuration,
           location_id: form.location_id,
           building_id: form.building_id,
+          charger_available: form.charger_available === "yes",
         };
+        if (form.charger_available === "yes") {
+          createBody.charger_code = form.charger_code.trim();
+        }
         if (fromIncoming && incomingUnitId) {
           createBody.incoming_unit_id = incomingUnitId;
           if (incomingLineId) createBody.incoming_line_id = incomingLineId;
+          if (incomingPrefill?.branch_id) createBody.branch_id = incomingPrefill.branch_id;
           if (incomingPrefill?.grn_id) createBody.grn_id = incomingPrefill.grn_id;
           if (incomingPrefill?.purchase_order_id) {
             createBody.purchase_order_id = incomingPrefill.purchase_order_id;
@@ -383,7 +502,7 @@ export function AssetAddForm({
         setError(
           err instanceof ApiClientError
             ? err.message
-            : "Activation failed. The asset may already exist - retry without creating again.",
+            : "Activation failed. The asset may already exist — retry without creating again.",
         );
       } else {
         setError(err instanceof ApiClientError ? err.message : "Failed to create asset");
@@ -396,11 +515,15 @@ export function AssetAddForm({
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Add Asset"
-        description="Register a new IT asset or import many from Excel"
+        title={isEdit ? "Edit Asset" : "Add Asset"}
+        description={
+          isEdit
+            ? "Update asset details and charger accessory"
+            : "Register a new IT asset or import many from Excel"
+        }
         actions={
           <div className="flex flex-wrap gap-2">
-            {!fromIncoming ? (
+            {!fromIncoming && !isEdit ? (
               <Button
                 type="button"
                 variant="outline"
@@ -413,7 +536,9 @@ export function AssetAddForm({
               </Button>
             ) : null}
             <Button variant="outline" size="sm" asChild className="cursor-pointer">
-              <Link href="/assets/assets">Cancel</Link>
+              <Link href={isEdit && assetId ? `/assets/assets/${assetId}` : "/assets/assets"}>
+                Cancel
+              </Link>
             </Button>
           </div>
         }
@@ -481,7 +606,7 @@ export function AssetAddForm({
             </div>
             <div>
               <div className="text-xs text-muted-foreground">PO</div>
-              <div className="font-medium">{incomingPrefill.po_document_number ?? "-"}</div>
+              <div className="font-medium">{incomingPrefill.po_document_number ?? "—"}</div>
             </div>
             <div>
               <div className="text-xs text-muted-foreground">QC</div>
@@ -560,7 +685,7 @@ export function AssetAddForm({
           IT Information
         </h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Manufacturer" htmlFor="make">
+          <Field label="Make" htmlFor="make">
             <Input
               id="make"
               value={form.make}
@@ -752,18 +877,78 @@ export function AssetAddForm({
         </p>
       </section>
 
+      <section
+        aria-labelledby="add-asset-charger"
+        className="rounded-md border border-border/80 bg-card p-3 shadow-sm sm:p-4"
+        data-testid="asset-charger-section"
+      >
+        <h2 id="add-asset-charger" className="mb-3 text-sm font-semibold text-foreground">
+          Charger
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Charger Available *" error={fieldErrors.charger_available}>
+            <Select
+              value={form.charger_available || undefined}
+              onValueChange={(v) => {
+                const next = v === "yes" || v === "no" ? v : "";
+                setFieldErrors((err) => ({
+                  ...err,
+                  charger_available: undefined,
+                  charger_code: undefined,
+                }));
+                setForm((f) => ({
+                  ...f,
+                  charger_available: next,
+                  charger_code: next === "yes" ? f.charger_code : "",
+                }));
+              }}
+            >
+              <SelectTrigger
+                className="cursor-pointer"
+                aria-label="Charger Available"
+                data-testid="charger-available-select"
+              >
+                <SelectValue placeholder="Select Yes or No" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="yes">Yes</SelectItem>
+                <SelectItem value="no">No</SelectItem>
+              </SelectContent>
+            </Select>
+          </Field>
+          {form.charger_available === "yes" ? (
+            <Field label="Charger Code *" error={fieldErrors.charger_code} htmlFor="charger_code">
+              <Input
+                id="charger_code"
+                value={form.charger_code}
+                placeholder="Enter charger code"
+                aria-invalid={Boolean(fieldErrors.charger_code)}
+                data-testid="charger-code-input"
+                onChange={(e) => {
+                  setFieldErrors((err) => ({ ...err, charger_code: undefined }));
+                  setForm((f) => ({ ...f, charger_code: e.target.value }));
+                }}
+              />
+            </Field>
+          ) : null}
+        </div>
+      </section>
+
       <div className="flex flex-wrap justify-end gap-2">
         <Button variant="outline" asChild className="cursor-pointer">
-          <Link href="/assets/assets">Cancel</Link>
+          <Link href={isEdit && assetId ? `/assets/assets/${assetId}` : "/assets/assets"}>
+            Cancel
+          </Link>
         </Button>
         <Button
           type="button"
           onClick={() => void submit()}
           disabled={saving}
           className="cursor-pointer"
+          data-testid={isEdit ? "asset-edit-save" : "asset-add-save"}
         >
           {saving ? <Loader2 className="mr-1 size-4 animate-spin" aria-hidden /> : null}
-          {createdAssetId ? "Retry activation" : "Add Asset"}
+          {isEdit ? "Save Changes" : createdAssetId ? "Retry activation" : "Add Asset"}
         </Button>
       </div>
     </div>

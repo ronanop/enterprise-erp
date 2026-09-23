@@ -1,4 +1,4 @@
-# CR-004 Phase 2B-1 - Business Layer (Operational Status)
+# CR-004 Phase 2B-1 — Business Layer (Operational Status)
 
 **Scope:** Domain engine, validator, internal service, repository persist helper, audit event names. **No** routes, APIs, assignment/disposal hooks, or UI.
 
@@ -16,7 +16,7 @@
 | Engine | Service / engines | `service/engines/asset_operational_status_engine.py` |
 | Validator | Service | `service/operational_status_validator.py` |
 | Service | Service | `service/asset_operational_status_service.py` |
-| Repository | Infra | `repository/asset_repository.py` - `set_operational_status()` |
+| Repository | Infra | `repository/asset_repository.py` — `set_operational_status()` |
 
 Flow (internal):
 
@@ -49,7 +49,7 @@ AssetOperationalStatusService
 |------|-----|--------|
 | `READY_TO_MOVE` | `DISPOSED` | Must go through assignment/disposal workflows (later phases) |
 | `READY_TO_MOVE` | `RETIRED` | Retire only from assigned custody in this phase |
-| `DISPOSED` | * | Terminal - no outbound transitions |
+| `DISPOSED` | * | Terminal — no outbound transitions |
 | `RETIRED` | `ASSIGNED` | Violates retire policy |
 | `RETIRED` | `READY_TO_MOVE` | Violates “never assign again” |
 
@@ -87,7 +87,7 @@ All other pairs not in the allowed set are rejected with `InvalidTransition`.
 
 ## 4. Audit (prepared only)
 
-`OperationalStatusAuditEvent`: `OperationalStatusChanged`, `AssignmentReturned`, `Retired`, `Disposed` - **not** wired to Audit engine in 2B-1.
+`OperationalStatusAuditEvent`: `OperationalStatusChanged`, `AssignmentReturned`, `Retired`, `Disposed` — **not** wired to Audit engine in 2B-1.
 
 ---
 

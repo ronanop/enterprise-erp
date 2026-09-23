@@ -11,7 +11,7 @@ from database.base import Base
 
 
 class AstNonitAssetTimeline(Base):
-    """No soft-delete / update API - append-only audit trail."""
+    """No soft-delete / update API — append-only audit trail."""
 
     __tablename__ = "ast_nonit_asset_timeline"
     __table_args__ = (

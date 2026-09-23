@@ -18,6 +18,7 @@ _ACTION_AUDIT_EVENT: dict[str, str] = {
     "start_disposal": OperationalStatusAuditEvent.OPERATIONAL_STATUS_CHANGED,
     "reinstate": OperationalStatusAuditEvent.OPERATIONAL_STATUS_CHANGED,
     "complete_disposal": OperationalStatusAuditEvent.DISPOSED,
+    "dispose": OperationalStatusAuditEvent.DISPOSED,
     "initialize_ready_to_move": OperationalStatusAuditEvent.OPERATIONAL_STATUS_CHANGED,
     "attach_as_component": OperationalStatusAuditEvent.OPERATIONAL_STATUS_CHANGED,
     "detach_as_component": OperationalStatusAuditEvent.OPERATIONAL_STATUS_CHANGED,

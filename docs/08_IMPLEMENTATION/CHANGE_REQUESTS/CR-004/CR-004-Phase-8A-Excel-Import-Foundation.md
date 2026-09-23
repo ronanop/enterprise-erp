@@ -1,4 +1,4 @@
-# CR-004 Phase 8A - Excel Import Foundation (Preview & Validation)
+# CR-004 Phase 8A — Excel Import Foundation (Preview & Validation)
 
 **Date:** 2026-08-05  
 **Scope:** Safe, **read-only** upload → parse → map → validate → preview  
@@ -45,7 +45,7 @@ Master data lookups only (existing APIs):
 4. Review / adjust column mapping  
 5. Validate rows  
 6. Preview (valid / warning / invalid)  
-7. **STOP** - Import button disabled  
+7. **STOP** — Import button disabled  
 
 ---
 
@@ -81,7 +81,7 @@ Targets reuse CR-004 register ownership (`EXCEL_IMPORT_TARGET_FIELDS`), with ali
 
 ## Tests
 
-`excel-import.test.tsx` - **62** tests (parse, template, mapping, duplicates, invalid masters, dates, delivery, preview UI, disabled import, regression purity).
+`excel-import.test.tsx` — **62** tests (parse, template, mapping, duplicates, invalid masters, dates, delivery, preview UI, disabled import, regression purity).
 
 ---
 

@@ -75,3 +75,6 @@ backups/
 
 # TLS certs (Coolify/local nginx) — never commit
 docker/nginx/certs/
+
+.pgdata/
+.env1

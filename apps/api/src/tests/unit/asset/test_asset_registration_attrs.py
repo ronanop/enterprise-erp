@@ -1,4 +1,4 @@
-"""Sub-phase 4A - make/model/configuration + location on registration."""
+"""Sub-phase 4A — make/model/configuration + location on registration."""
 
 from datetime import date
 from decimal import Decimal
@@ -28,6 +28,7 @@ def test_asset_create_schema_accepts_registration_attrs() -> None:
         branch_id=uuid4(),
         asset_name="Laptop",
         asset_category_id=uuid4(),
+        asset_type_id=uuid4(),
         asset_type="fixed",
         purchase_date=date.today(),
         purchase_cost=Decimal("1000"),
@@ -44,6 +45,20 @@ def test_asset_create_schema_accepts_registration_attrs() -> None:
     assert dumped["location_label"] == "Rack A"
 
 
+def test_asset_create_schema_allows_omitted_branch_id() -> None:
+    """Single-branch tenants resolve branch from TenantContext on the server."""
+    body = AssetCreate(
+        asset_name="Laptop",
+        asset_category_id=uuid4(),
+        asset_type_id=uuid4(),
+        purchase_date=date.today(),
+        purchase_cost=Decimal("1000"),
+        currency_code="INR",
+    )
+    assert body.branch_id is None
+    assert "branch_id" not in body.model_dump(exclude_none=True)
+
+
 def test_asset_update_schema_accepts_registration_attrs() -> None:
     body = AssetUpdate(make="HP", model="", configuration=None, location_label="Floor 2")
     assert body.make == "HP"
@@ -58,6 +73,9 @@ def test_asset_response_includes_registration_attrs() -> None:
     row.asset_name = "Laptop"
     row.asset_category_id = uuid4()
     row.asset_type = "fixed"
+    row.asset_type_id = None
+    row.asset_type_name = None
+    row.asset_domain = "IT"
     row.master_asset_id = None
     row.product_id = None
     row.supplier_vendor_id = None

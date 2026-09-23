@@ -137,7 +137,7 @@ export function IssuedItemsStep({
                         {a.asset_code} · {a.asset_name}
                       </span>
                       <span className="block text-xs text-muted-foreground">
-                        S/N: {a.serial_number?.trim() || "-"}
+                        S/N: {a.serial_number?.trim() || "—"}
                       </span>
                     </span>
                   </label>
@@ -192,7 +192,7 @@ export function IssuedItemsStep({
                       </span>
                     ) : null}
                     <span className="mt-0.5 block text-xs text-muted-foreground">
-                      S/N: {item.serialNumber?.trim() || "-"}
+                      S/N: {item.serialNumber?.trim() || "—"}
                     </span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">
                       {disabled ? "Currently issued" : `Status: ${item.status}`}

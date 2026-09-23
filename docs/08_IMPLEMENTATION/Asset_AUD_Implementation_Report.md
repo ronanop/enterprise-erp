@@ -1,4 +1,4 @@
-# FP-ASSET-008 - Implementation Report
+# FP-ASSET-008 — Implementation Report
 
 ## Summary
 

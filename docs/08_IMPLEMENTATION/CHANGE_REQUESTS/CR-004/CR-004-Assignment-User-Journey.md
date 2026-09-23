@@ -1,6 +1,6 @@
-# CR-004 - Assignment & Return User Journeys
+# CR-004 — Assignment & Return User Journeys
 
-**Phase:** 5B-1 - UI/UX design freeze  
+**Phase:** 5B-1 — UI/UX design freeze  
 **Persona:** IT Administrator (branch-scoped daily operations)
 
 ---
@@ -14,11 +14,11 @@
 | J3 | Return from inventory | Register row **Return** | Return |
 | J4 | Return from assignment list | Active row **Return** | Return |
 | J5 | Draft correction | Draft **Continue issue** | Assignment (resume) |
-| J6 | Approver (unchanged) | Assignment view modal | - (no wizard) |
+| J6 | Approver (unchanged) | Assignment view modal | — (no wizard) |
 
 ---
 
-## J1 - New hire laptop issue
+## J1 — New hire laptop issue
 
 **Goal:** Employee receives laptop; Excel “Assigned” tab equivalent.
 
@@ -37,13 +37,13 @@ flowchart LR
 
 | Step | User action | System |
 |------|-------------|--------|
-| 1 | Pick employee from roster or search | - |
+| 1 | Pick employee from roster or search | — |
 | 2 | Select Ready To Move laptop | Validates branch match |
 | 3 | Tick charger / bag | Remarks prefix optional |
 | 4 | Set delivery Pending or Issued + DC number | Maps 5A fields |
 | 5 | Confirm | `POST` draft |
-| - | Open assignment, Submit | Workflow if enabled |
-| - | Approver approves | Activate → ops ASSIGNED |
+| — | Open assignment, Submit | Workflow if enabled |
+| — | Approver approves | Activate → ops ASSIGNED |
 
 **Success:** Inventory shows employee as current holder; ops **Assigned**.
 
@@ -54,7 +54,7 @@ flowchart LR
 
 ---
 
-## J2 - Assign from inventory
+## J2 — Assign from inventory
 
 **Goal:** IT already found asset in register; issue to someone.
 
@@ -68,7 +68,7 @@ flowchart LR
 
 ---
 
-## J3 - Return from inventory
+## J3 — Return from inventory
 
 **Goal:** Employee returned machine at desk; IT processes in system.
 
@@ -94,7 +94,7 @@ flowchart LR
 
 ---
 
-## J4 - Return from assignment list
+## J4 — Return from assignment list
 
 Same as J3 but assignment row known; **Step 1** shows document + assignee.
 
@@ -102,7 +102,7 @@ Same as J3 but assignment row known; **Step 1** shows document + assignee.
 
 ---
 
-## J5 - Resume draft
+## J5 — Resume draft
 
 | State | UX |
 |-------|-----|
@@ -114,7 +114,7 @@ Persist wizard progress in draft row only (no localStorage authority).
 
 ---
 
-## J6 - Approver (out of wizard scope)
+## J6 — Approver (out of wizard scope)
 
 Unchanged from Phase 3.1: view modal, comments, approve/reject. Wizard does not replace governance UI.
 
@@ -122,10 +122,10 @@ Unchanged from Phase 3.1: view modal, comments, approve/reject. Wizard does not 
 
 ## Cross-journey rules
 
-1. **Single active assignment** per non-shared asset - surface API validation on Step 2 save or Review.
-2. **Return remarks** only in Return wizard - never on assignment PATCH form.
-3. **Operational status** never editable in wizards - outcome via return condition only.
-4. **Permissions** - hide Issue / Return entry points when RBAC denies; same as inventory menu gating.
+1. **Single active assignment** per non-shared asset — surface API validation on Step 2 save or Review.
+2. **Return remarks** only in Return wizard — never on assignment PATCH form.
+3. **Operational status** never editable in wizards — outcome via return condition only.
+4. **Permissions** — hide Issue / Return entry points when RBAC denies; same as inventory menu gating.
 
 ---
 
@@ -137,7 +137,7 @@ Unchanged from Phase 3.1: view modal, comments, approve/reject. Wizard does not 
 | Pick asset from Ready pool | J1 Step 2 |
 | Note charger | J1 Step 3 |
 | Delivery challan column | J1 Step 4 |
-| Issue date / active row | Approve activate (not backdated in 5B - Phase 7 import) |
+| Issue date / active row | Approve activate (not backdated in 5B — Phase 7 import) |
 | Return dropdown outcome | J3/J4 Step 2 |
 | Return notes column | J3/J4 Step 3 |
 

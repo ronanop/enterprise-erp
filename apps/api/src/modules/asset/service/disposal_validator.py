@@ -29,13 +29,18 @@ ELIGIBLE_ASSET_STATUSES = frozenset(
 
 _PENDING = AssetOperationalStatus.PENDING_DISPOSAL.value
 _RETIRED = AssetOperationalStatus.RETIRED.value
+_READY = AssetOperationalStatus.READY_TO_MOVE.value
+_ASSIGNED = AssetOperationalStatus.ASSIGNED.value
+_DISPOSED_OPS = AssetOperationalStatus.DISPOSED.value
+
+# Ops statuses that can enter scrap send-to-disposal (after ensuring PENDING).
+_SEND_ELIGIBLE_OPS = frozenset({_READY, _ASSIGNED, _RETIRED, _PENDING})
 
 _CREATE_PENDING_MESSAGE = (
-    "Asset must be in PENDING_DISPOSAL status before creating a disposal request. "
-    "Return the asset with condition 'Dead', or use Start Disposal on a retired asset."
+    "Asset must be Ready to Move or Assigned (with no open assignment) before disposing."
 )
 _RETIRED_MESSAGE = (
-    "Retired assets must use Start Disposal before creating a disposal request."
+    "Asset must be Ready to Move or Assigned before disposing."
 )
 _PHASE_NO_LONGER_PENDING: dict[str, str] = {
     "submit": (
@@ -77,8 +82,11 @@ class DisposalValidator:
         if asset.company_id != company_id:
             raise DisposalValidationError("Asset does not belong to this company")
         self._validate_asset_eligible(asset.status)
-        self._validate_pending_disposal_operational_status(asset, phase="create")
+        self._validate_send_eligible_operational_status(asset)
         self._validate_disposal_type(fields)
+        self._validate_remarks(fields)
+        if "management_approved" not in fields or fields.get("management_approved") is None:
+            raise DisposalValidationError("Management approval (Yes/No) is required")
         self._validate_open_disposal(ctx, asset_id, exclude_id=None)
         self._validate_open_maintenance(ctx, asset_id)
         self._validate_open_assignment(ctx, asset_id)
@@ -103,6 +111,9 @@ class DisposalValidator:
             "book_value_at_disposal": fields.get(
                 "book_value_at_disposal", row.book_value_at_disposal
             ),
+            "remarks": fields.get(
+                "remarks", getattr(row, "remarks", None)
+            ),
         }
         asset = self._assets.get(ctx, row.asset_id)
         if asset is None:
@@ -110,6 +121,8 @@ class DisposalValidator:
         self._validate_asset_eligible(asset.status)
         self._validate_pending_disposal_operational_status(asset, phase="update")
         self._validate_disposal_type(merged)
+        if "remarks" in fields:
+            self._validate_remarks(merged)
         self._validate_open_disposal(ctx, row.asset_id, exclude_id=row.id)
         self._validate_open_maintenance(ctx, row.asset_id)
         self._validate_open_assignment(ctx, row.asset_id)
@@ -167,15 +180,24 @@ class DisposalValidator:
         self._validate_pending_transfer(ctx, row.asset_id)
 
     @staticmethod
+    def _validate_send_eligible_operational_status(asset) -> None:
+        """Create/send may start from Ready/Assigned/Retired/Pending; service moves to Pending."""
+        ops = getattr(asset, "operational_status", None)
+        key = str(ops).strip().upper() if ops is not None else ""
+        if key == _DISPOSED_OPS:
+            raise DisposalValidationError("Disposed assets cannot be disposed again")
+        if key not in _SEND_ELIGIBLE_OPS:
+            raise DisposalValidationError(_CREATE_PENDING_MESSAGE)
+
+    @staticmethod
     def _validate_pending_disposal_operational_status(asset, *, phase: str) -> None:
+        # Legacy draft workflow paths still require pending; create uses send-eligible.
         ops = getattr(asset, "operational_status", None)
         key = str(ops).strip().upper() if ops is not None else ""
         if key == _PENDING:
             return
-        if key == _RETIRED:
-            raise DisposalValidationError(_RETIRED_MESSAGE)
         if phase == "create":
-            raise DisposalValidationError(_CREATE_PENDING_MESSAGE)
+            return
         message = _PHASE_NO_LONGER_PENDING.get(
             phase,
             "Disposal cannot proceed because the asset is no longer pending disposal.",
@@ -186,6 +208,15 @@ class DisposalValidator:
         disposal_type = fields.get("disposal_type")
         if disposal_type not in DISPOSAL_TYPES:
             raise DisposalValidationError("disposal_type is required and must be valid")
+
+    @staticmethod
+    def _validate_remarks(fields: dict) -> None:
+        remarks = fields.get("remarks")
+        text = str(remarks).strip() if remarks is not None else ""
+        if not text:
+            raise DisposalValidationError(
+                "Reason for disposal is required"
+            )
 
     def _validate_open_disposal(
         self,

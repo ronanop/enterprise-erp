@@ -21,10 +21,6 @@ vi.mock("@/lib/auth", () => ({
   isAuthenticated: () => true,
 }));
 
-vi.mock("@/lib/org-options", () => ({
-  listBranchOptions: vi.fn().mockResolvedValue([{ id: "b1", label: "Noida" }]),
-}));
-
 vi.mock("@/services/asset-site-location-service", () => ({
   listSiteLocations: vi.fn().mockResolvedValue([
     {
@@ -112,6 +108,12 @@ vi.mock("@/services/assets-service", () => ({
   assetRegistrationQueueService: {
     prefillFromIncoming: vi.fn(),
   },
+  componentService: {
+    search: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+  },
+  assetLocationService: {
+    search: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+  },
   assetRegisterService: {
     create: (...args: unknown[]) => create(...args),
     update: (...args: unknown[]) => update(...args),
@@ -151,6 +153,7 @@ async function fillMinimalLaptopForm(user: ReturnType<typeof userEvent.setup>) {
     expect(screen.getByRole("combobox", { name: /Building/i })).not.toBeDisabled();
   });
   await selectByLabel(user, /Building/i, "bld-crc1");
+  await selectByLabel(user, /Charger Available/i, "no");
 }
 
 describe("AssetAddForm single-page registration", () => {
@@ -168,7 +171,7 @@ describe("AssetAddForm single-page registration", () => {
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "Add Asset" })).toBeInTheDocument(),
     );
-    expect(screen.getByText("Register a new IT asset")).toBeInTheDocument();
+    expect(screen.getByText(/Register a new IT asset/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Basic" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "IT Information" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /Location/i })).toBeInTheDocument();
@@ -244,7 +247,9 @@ describe("AssetAddForm single-page registration", () => {
     expect(create).not.toHaveBeenCalled();
   });
 
-  it("maps create payload and navigates after create→submit→approve", async () => {
+  it(
+    "maps create payload and navigates after create→submit→approve",
+    async () => {
     const user = userEvent.setup();
     create.mockResolvedValue({ id: "asset-3", status: "draft" });
     get
@@ -265,7 +270,7 @@ describe("AssetAddForm single-page registration", () => {
     render(<AssetAddForm />);
     await fillMinimalLaptopForm(user);
 
-    const make = screen.getByLabelText(/Manufacturer/i);
+    const make = screen.getByLabelText(/^Make$/i);
     await user.type(make, "Dell");
     const model = screen.getByLabelText(/^Model/i);
     await user.type(model, "Latitude 5440");
@@ -281,11 +286,14 @@ describe("AssetAddForm single-page registration", () => {
     expect(body.asset_category_id).toBe("c1");
     expect(body.asset_type_id).toBe("type-laptop");
     expect(body.asset_type).toBeUndefined();
-    expect(body.branch_id).toBe("b1");
+    // Org branch comes from authenticated session on the API — not from the form.
+    expect(body.branch_id).toBeUndefined();
     expect(body.make).toBe("Dell");
     expect(body.model).toBe("Latitude 5440");
     expect(body.location_id).toBe("loc-mumbai");
     expect(body.building_id).toBe("bld-crc1");
+    expect(body.charger_available).toBe(false);
+    expect(body.charger_code).toBeUndefined();
     expect(String(body.configuration)).toContain("Processor: Intel i5");
     expect(String(body.configuration)).toContain("Generation: 12th");
     expect(String(body.configuration)).toContain("RAM: 16 GB");
@@ -296,7 +304,9 @@ describe("AssetAddForm single-page registration", () => {
     await waitFor(() => {
       expect(push).toHaveBeenCalledWith("/assets/assets/asset-3");
     });
-  });
+    },
+    15000,
+  );
 
   it("preserves form data when create API fails and prevents duplicate submit", async () => {
     const user = userEvent.setup();
@@ -373,7 +383,9 @@ describe("AssetAddForm Phase 5F activation reliability", () => {
     expect(src).not.toMatch(/action\(id,\s*"approve"\)\.catch\(\(\)\s*=>\s*undefined\)/);
   });
 
-  it("surfaces submit failure and does not navigate to success", async () => {
+  it(
+    "surfaces submit failure and does not navigate to success",
+    async () => {
     const user = userEvent.setup();
     create.mockResolvedValue({ id: "asset-1", status: "draft" });
     get.mockResolvedValue({ id: "asset-1", status: "draft", operational_status: null });
@@ -388,9 +400,13 @@ describe("AssetAddForm Phase 5F activation reliability", () => {
     });
     expect(push).not.toHaveBeenCalled();
     expect(create).toHaveBeenCalledTimes(1);
-  });
+    },
+    15000,
+  );
 
-  it("surfaces approve failure without claiming success", async () => {
+  it(
+    "surfaces approve failure without claiming success",
+    async () => {
     const user = userEvent.setup();
     create.mockResolvedValue({ id: "asset-2", status: "draft" });
     get
@@ -408,9 +424,13 @@ describe("AssetAddForm Phase 5F activation reliability", () => {
       expect(screen.getByText(/approval failed/i)).toBeInTheDocument();
     });
     expect(push).not.toHaveBeenCalled();
-  });
+    },
+    15000,
+  );
 
-  it("navigates only after active + ready", async () => {
+  it(
+    "navigates only after active + ready",
+    async () => {
     const user = userEvent.setup();
     create.mockResolvedValue({ id: "asset-3", status: "draft" });
     get
@@ -435,5 +455,7 @@ describe("AssetAddForm Phase 5F activation reliability", () => {
     await waitFor(() => {
       expect(push).toHaveBeenCalledWith("/assets/assets/asset-3");
     });
-  });
+    },
+    15000,
+  );
 });

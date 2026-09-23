@@ -1,4 +1,4 @@
-# CR-004 - Gap Analysis
+# CR-004 — Gap Analysis
 
 **Classification:** Already Implemented | Needs Enhancement | Missing | Future Scope
 

@@ -1,4 +1,4 @@
-"""InsuranceService - asset insurance management (FP-ASSET-010)."""
+"""InsuranceService — asset insurance management (FP-ASSET-010)."""
 
 from datetime import date
 from uuid import UUID

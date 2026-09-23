@@ -44,7 +44,7 @@ export function isNonItAssetStatus(value: string): value is NonItAssetStatusValu
 
 /**
  * Distinct badge/pill colors for operational + lifecycle states.
- * Reuse everywhere in Asset Management - do not invent per-screen palettes.
+ * Reuse everywhere in Asset Management — do not invent per-screen palettes.
  */
 export const statusColorMap = {
   operational: {
@@ -164,6 +164,55 @@ export function formatLifecycleStatusLabel(status: string): string {
     .join(" ");
 }
 
+const WORKFLOW_LIFECYCLE_VALUES = new Set([
+  "draft",
+  "submitted",
+  "approved",
+  "cancelled",
+]);
+
+/**
+ * Information Portal / Self-Service Overview Status label.
+ * Prefers operational custody status; never surfaces raw workflow values
+ * (draft / submitted / approved) to end users.
+ */
+export function formatPortalOverviewStatus(input: {
+  operational_status?: string | null;
+  status?: string | null;
+}): string {
+  const opsRaw = String(input.operational_status ?? "").trim();
+  if (opsRaw) {
+    const opsKey = opsRaw.replace(/-/g, "_").toUpperCase();
+    if (isOperationalStatus(opsKey)) {
+      return OPERATIONAL_STATUS_LABELS[opsKey];
+    }
+  }
+
+  const life = String(input.status ?? "").trim();
+  if (!life) return "—";
+  const lifeKey = life.replace(/-/g, "_").toLowerCase();
+
+  // Lifecycle values that match an operational concept (legacy / mis-mapped payloads).
+  const asOps = lifeKey.toUpperCase();
+  if (isOperationalStatus(asOps)) {
+    return OPERATIONAL_STATUS_LABELS[asOps];
+  }
+
+  if (WORKFLOW_LIFECYCLE_VALUES.has(lifeKey)) {
+    if (lifeKey === "submitted" || lifeKey === "approved") return "Registered";
+    if (lifeKey === "draft") return "Registered";
+    return "—";
+  }
+
+  if (lifeKey === "active") return "Active";
+  if (lifeKey === "in_maintenance") return "In Maintenance";
+  if (lifeKey === "disposed") return "Disposed";
+  if (lifeKey === "transferred") return "Transferred";
+  if (lifeKey === "written_off") return "Written Off";
+
+  return formatLifecycleStatusLabel(life);
+}
+
 /** Assignment eligibility: operational READY_TO_MOVE + lifecycle active only. */
 export function isAssignmentEligibleAsset(row: {
   operational_status?: string | null;
@@ -174,11 +223,12 @@ export function isAssignmentEligibleAsset(row: {
   return ops === "READY_TO_MOVE" && life === "active";
 }
 
-/** Phase 5D: Start Disposal is only valid for operational RETIRED. */
+/** Dispose is available for Ready / Assigned (Assigned still blocked if open assignment on API). */
 export function canStartDisposalFromOperationalStatus(
   operationalStatus: string | null | undefined,
 ): boolean {
-  return String(operationalStatus ?? "").toUpperCase() === "RETIRED";
+  const ops = String(operationalStatus ?? "").toUpperCase();
+  return ops === "READY_TO_MOVE" || ops === "ASSIGNED";
 }
 
 /** Phase 5E: Reinstate is only valid for operational PENDING_DISPOSAL. */
@@ -201,7 +251,7 @@ export function isOpsBlockedForNormalOperations(
   );
 }
 
-/** Phase 5E: Transfer/Maintenance require no employee custody (not ASSIGNED). */
+/** Phase 5E: Maintenance requires no employee custody (not ASSIGNED). */
 export function isOpsBlockedForTransferOrMaintenance(
   operationalStatus: string | null | undefined,
 ): boolean {
@@ -209,24 +259,34 @@ export function isOpsBlockedForTransferOrMaintenance(
   return isOpsBlockedForNormalOperations(ops) || ops === "ASSIGNED" || ops === "IN_MAINTENANCE";
 }
 
+/**
+ * Inventory → user transfer entry: only operationally ASSIGNED assets.
+ * Location/branch transfers (Transfers workspace) remain a separate flow.
+ */
+export function canUserTransferFromOperationalStatus(
+  operationalStatus: string | null | undefined,
+): boolean {
+  return String(operationalStatus ?? "").toUpperCase() === "ASSIGNED";
+}
+
 export function operationalStatusHelpText(
   operationalStatus: string | null | undefined,
 ): string | null {
   const ops = String(operationalStatus ?? "").toUpperCase();
   if (ops === "RETIRED") {
-    return "Retired - not available for assignment.";
+    return "Retired — not available for assignment.";
   }
   if (ops === "PENDING_DISPOSAL") {
-    return "Pending Disposal - disposal workflow in progress.";
+    return "Pending Disposal — disposal workflow in progress.";
   }
   if (ops === "DISPOSED") {
-    return "Disposed - asset has completed the disposal workflow.";
+    return "Disposed — asset has completed the disposal workflow.";
   }
   if (ops === "IN_USE_AS_COMPONENT") {
-    return "In use as a component - not available for assignment or transfer.";
+    return "In use as a component — not available for assignment or transfer.";
   }
   if (ops === "IN_MAINTENANCE") {
-    return "In maintenance - not available for assignment or transfer.";
+    return "In maintenance — not available for assignment or transfer.";
   }
   return null;
 }

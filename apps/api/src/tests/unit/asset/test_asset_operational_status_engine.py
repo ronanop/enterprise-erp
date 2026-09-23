@@ -60,13 +60,10 @@ def test_disposed_to_disposed_raises_invalid_not_terminal_first() -> None:
 @pytest.mark.parametrize(
     ("current", "target"),
     [
-        (Ready, Pending),
         (Ready, Ready),
         (Assigned, Assigned),
         (Retired, Disposed),
         (Retired, Ready),
-        (Pending, Assigned),
-        (Pending, Retired),
         (Assigned, Disposed),
     ],
 )

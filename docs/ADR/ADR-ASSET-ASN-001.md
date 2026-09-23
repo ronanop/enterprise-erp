@@ -1,4 +1,4 @@
-# ADR-ASSET-ASN-001 - Asset Assignment (Allocation)
+# ADR-ASSET-ASN-001 — Asset Assignment (Allocation)
 
 **Status:** Accepted  
 **Date:** 2026-07-29  
@@ -26,7 +26,7 @@ Asset allocation (assignment) existed as a thin scaffold without custody side ef
 | ASN-09 | Expand create schemas; paginated list; keep `/return`; add `:update` |
 | ASN-10 | No new business columns |
 | ASN-11 | Additive migration: update permission, index, AASN backfill |
-| ASN-12-15 | RBAC+SoD, audit activate/return, `AST_WF_*` notifications, pending/active index |
+| ASN-12–15 | RBAC+SoD, audit activate/return, `AST_WF_*` notifications, pending/active index |
 
 ## Consequences
 

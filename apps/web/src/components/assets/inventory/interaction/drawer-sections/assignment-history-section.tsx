@@ -33,8 +33,8 @@ export function AssignmentHistorySection({ history, className }: AssignmentHisto
               </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 {entry.status}
-                {entry.allocatedAt !== "-" ? ` · Issued ${entry.allocatedAt}` : ""}
-                {entry.returnedAt !== "-" ? ` · Returned ${entry.returnedAt}` : ""}
+                {entry.allocatedAt !== "—" ? ` · Issued ${entry.allocatedAt}` : ""}
+                {entry.returnedAt !== "—" ? ` · Returned ${entry.returnedAt}` : ""}
               </p>
               <dl className="mt-2 grid grid-cols-1 gap-x-8 gap-y-2 text-xs">
                 <div className="min-w-0">
@@ -42,7 +42,7 @@ export function AssignmentHistorySection({ history, className }: AssignmentHisto
                   <dd className="mt-0.5 break-words" data-testid="drawer-history-delivery">
                     {entry.deliveryChallanSummary ||
                       `${entry.deliveryReferenceNumber}${
-                        entry.deliveryReferenceStatus !== "-"
+                        entry.deliveryReferenceStatus !== "—"
                           ? ` (${entry.deliveryReferenceStatus})`
                           : ""
                       }`}

@@ -1,4 +1,4 @@
-# FP-ASSET-006 - Asset Depreciation Feature Package
+# FP-ASSET-006 — Asset Depreciation Feature Package
 
 **Status:** Implemented  
 **ADR:** ADR-ASSET-DEP-001

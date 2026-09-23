@@ -1,5 +1,5 @@
 /**
- * CR-004 Phase 7A - Inventory register export service.
+ * CR-004 Phase 7A — Inventory register export service.
  *
  * Workspace → Container → this service → inventory mapper → CSV/XLSX
  * Reuses existing listAssets / listAssignments read APIs (paginated; max page_size 200).
@@ -87,7 +87,7 @@ export async function fetchAllAssignmentPages(
 /**
  * Fetches every asset page matching server-side inventory filters, then applies
  * Phase 5F: filters are applied server-side via GET /assets query params.
- * Pagination note: asset module caps `page_size` at 200 - no new API; we loop pages.
+ * Pagination note: asset module caps `page_size` at 200 — no new API; we loop pages.
  */
 export async function fetchAllInventoryRowsForExport(input: {
   preset: InventoryPresetId;
@@ -105,17 +105,9 @@ export async function fetchAllInventoryRowsForExport(input: {
     input.deps?.listAssignments ??
     assetOperationsService.listAssignments.bind(assetOperationsService);
 
-  const baseQuery = buildInventoryListQuery({
-    preset: input.preset,
-    filters: input.filters,
-    headerLocationId: input.headerLocationId,
-    page: 1,
-    pageSize: INVENTORY_EXPORT_API_PAGE_SIZE,
-  });
-
   let assignmentItems: AssetsRow[];
   try {
-    assignmentItems = await fetchAllAssignmentPages(listAssignments, baseQuery.branch_id);
+    assignmentItems = await fetchAllAssignmentPages(listAssignments, undefined);
   } catch (err) {
     throw new InventoryExportError(
       "fetch_failed",

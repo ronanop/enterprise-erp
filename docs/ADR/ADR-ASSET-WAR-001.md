@@ -1,4 +1,4 @@
-# ADR-ASSET-WAR-001 - Asset Warranty Management
+# ADR-ASSET-WAR-001 — Asset Warranty Management
 
 **Status:** Accepted  
 **Date:** 2026-07-30  
@@ -34,7 +34,7 @@ Asset warranty existed as a thin scaffold (CRUD only) without validator, lifecyc
 
 ## Status constraint note
 
-ERD historically listed `active|expired|void`. Productization adds `draft` and `extended` via additive CheckConstraint expansion only - no new business columns.
+ERD historically listed `active|expired|void`. Productization adds `draft` and `extended` via additive CheckConstraint expansion only — no new business columns.
 
 ## References
 

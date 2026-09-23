@@ -1,4 +1,4 @@
-"""Incoming Assets service - IT receiving against Procurement GRN lines (Sub-phase 1).
+"""Incoming Assets service — IT receiving against Procurement GRN lines (Sub-phase 1).
 
 Does not create ast_asset records. Does not write to Procurement/Inventory.
 """

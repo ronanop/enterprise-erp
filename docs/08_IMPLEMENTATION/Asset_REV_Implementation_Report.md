@@ -1,4 +1,4 @@
-# FP-ASSET-007 - Implementation Report
+# FP-ASSET-007 — Implementation Report
 
 ## Summary
 

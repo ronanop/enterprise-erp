@@ -1,4 +1,4 @@
-# CR-004 - Phase 5B-2B Task 2 - Assignment Wizard Container
+# CR-004 — Phase 5B-2B Task 2 — Assignment Wizard Container
 
 **Status:** Complete  
 **Date:** 2026-08-05  
@@ -53,9 +53,9 @@ AssignmentWizard (presentational)
 
 ## Workflow
 
-1. **Mount** - list employees + ready assets; if `draftId`, `loadDraft` + components.
-2. **Save draft** - create or update; keep user on wizard; store `draftId` / `version`.
-3. **Submit** - create/update → `submitDraft` → try `activateAssignment` → `onSuccess`.
+1. **Mount** — list employees + ready assets; if `draftId`, `loadDraft` + components.
+2. **Save draft** — create or update; keep user on wizard; store `draftId` / `version`.
+3. **Submit** — create/update → `submitDraft` → try `activateAssignment` → `onSuccess`.
 4. Activate failure after successful submit still calls `onSuccess` (multi-step workflow).
 
 ---
@@ -68,7 +68,7 @@ Return wizard, inventory, query parameters, navigation inside container, backend
 
 ## Tests
 
-`assignment-wizard-container.test.tsx` - **30+** cases:
+`assignment-wizard-container.test.tsx` — **30+** cases:
 
 - Loading / auth / retry / load errors
 - Draft create + update

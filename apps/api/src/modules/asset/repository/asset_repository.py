@@ -25,10 +25,10 @@ class AssetListFilters:
     operational_status: str | None = None
     asset_category_id: UUID | None = None
     search: str | None = None
-    # Phase 5F - server-authoritative inventory filters
+    # Phase 5F — server-authoritative inventory filters
     asset_type: str | None = None  # legacy enum filter (kept for API compat)
     asset_type_id: UUID | None = None  # IT type master filter
-    # IT / Non-IT partition - callers default to IT when omitted
+    # IT / Non-IT partition — callers default to IT when omitted
     asset_domain: str | None = "IT"
     department_id: UUID | None = None
     location_id: UUID | None = None
@@ -255,6 +255,7 @@ class AssetRepository(AstScopedRepository):
         search = (filters.search or "").strip()
         if search:
             term = f"%{search}%"
+            status_term = f"%{search.replace(' ', '_')}%"
             stmt = stmt.where(
                 or_(
                     AstAsset.asset_name.ilike(term),
@@ -263,6 +264,9 @@ class AssetRepository(AstScopedRepository):
                     AstAsset.serial_number.ilike(term),
                     AstAsset.make.ilike(term),
                     AstAsset.model.ilike(term),
+                    AstAsset.operational_status.ilike(term),
+                    AstAsset.operational_status.ilike(status_term),
+                    AstAsset.status.ilike(term),
                     self._exists_active_assignment_employee_search(
                         filters.company_id, term
                     ),
@@ -631,7 +635,7 @@ class AssetRepository(AstScopedRepository):
             from core.exceptions import ConflictException
 
             raise ConflictException("Asset version conflict; refresh and retry")
-        # CR-004 Phase 2A: operational transitions not implemented - ignore writes.
+        # CR-004 Phase 2A: operational transitions not implemented — ignore writes.
         fields.pop("operational_status", None)
         for k, v in fields.items():
             if v is not None or k in {
@@ -646,6 +650,19 @@ class AssetRepository(AstScopedRepository):
                 "configuration",
             }:
                 setattr(row, k, v)
+        row.updated_at = utcnow()
+        row.updated_by = ctx.user_id
+        if hasattr(row, "version"):
+            row.version = int(row.version or 1) + 1
+        self.db.flush()
+        return row
+
+    def soft_delete(self, ctx: TenantContext, row_id: UUID) -> AstAsset | None:
+        """Lifecycle deactivation — sets is_deleted; never physically DELETEs."""
+        row = self.get(ctx, row_id)
+        if row is None:
+            return None
+        row.is_deleted = True
         row.updated_at = utcnow()
         row.updated_by = ctx.user_id
         if hasattr(row, "version"):

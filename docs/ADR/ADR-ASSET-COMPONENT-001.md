@@ -1,4 +1,4 @@
-# ADR-ASSET-COMPONENT-001 - Asset Component Management (Option B)
+# ADR-ASSET-COMPONENT-001 — Asset Component Management (Option B)
 
 **Status:** Accepted  
 **Date:** 2026-07-30  

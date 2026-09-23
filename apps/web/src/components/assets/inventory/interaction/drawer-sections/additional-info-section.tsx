@@ -10,14 +10,14 @@ export type AdditionalInfoSectionProps = {
 
 export function AdditionalInfoSection({ additional, className }: AdditionalInfoSectionProps) {
   const info = additional ?? {
-    earlierUsedBy: "-",
-    deliveryChallan: "-",
-    deliveryReferenceStatus: "-",
+    earlierUsedBy: "—",
+    deliveryChallan: "—",
+    deliveryReferenceStatus: "—",
     deliverySignature: "Not Signed",
-    deliveryChallanSummary: "-",
-    remarks: "-",
-    assignmentRemarks: "-",
-    returnRemarks: "-",
+    deliveryChallanSummary: "—",
+    remarks: "—",
+    assignmentRemarks: "—",
+    returnRemarks: "—",
   };
 
   return (
@@ -37,7 +37,7 @@ export function AdditionalInfoSection({ additional, className }: AdditionalInfoS
           label="Delivery Challan"
           value={
             info.deliveryChallanSummary ??
-            `${info.deliveryChallan} · ${info.deliveryReferenceStatus ?? "-"}${
+            `${info.deliveryChallan} · ${info.deliveryReferenceStatus ?? "—"}${
               info.deliverySignature ? ` · ${info.deliverySignature}` : ""
             }`
           }
@@ -50,7 +50,7 @@ export function AdditionalInfoSection({ additional, className }: AdditionalInfoS
           pre
           span
         />
-        <DrawerKvField label="Return remarks" value={info.returnRemarks ?? "-"} pre span />
+        <DrawerKvField label="Return remarks" value={info.returnRemarks ?? "—"} pre span />
       </DrawerKvGrid>
     </DrawerSectionCard>
   );

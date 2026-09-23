@@ -11,17 +11,17 @@ const OPTIONS: {
 }[] = [
   {
     value: "good",
-    title: "Good - return to stock",
+    title: "Good — return to stock",
     description: "Asset goes to Ready To Move (can be re-issued).",
   },
   {
     value: "outdated",
-    title: "Outdated - retire",
+    title: "Outdated — retire",
     description: "Asset marked Retired (not given to anyone).",
   },
   {
     value: "dead",
-    title: "Not working - pending disposal",
+    title: "Not working — pending disposal",
     description: "Asset marked Pending disposal.",
     tone: "destructive",
   },

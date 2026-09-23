@@ -58,10 +58,25 @@ const MODES: Array<{ value: AssignmentWizardState["dcChallanMode"]; label: strin
 export function DeliveryStep({ state, onChange, unlinkedChallans = [] }: DeliveryStepProps) {
   const mode = state.dcChallanMode ?? "later";
   const employeeOnly = isEmployeeAllocation(state.allocationType);
-  const showLegacy =
-    !employeeOnly || mode === "later" || Boolean(state.deliveryReferenceNumber.trim());
+  // Employee path uses the three DC modes; formal DC lives in Operations.
+  // Legacy Number/Status/Signature stay for warehouse/department/project/branch only.
+  const showLegacy = !employeeOnly;
   const numberRequired =
     state.deliveryReferenceStatus === "issued" || state.deliveryReferenceStatus === "received";
+
+  function selectMode(next: AssignmentWizardState["dcChallanMode"]) {
+    if (next === "later") {
+      onChange({
+        dcChallanMode: next,
+        dcChallanId: "",
+        deliveryReferenceNumber: "",
+        deliveryReferenceStatus: "pending",
+        deliveryChallanSignatureStatus: "not_signed",
+      });
+      return;
+    }
+    onChange({ dcChallanMode: next });
+  }
 
   return (
     <div className="grid max-w-lg gap-4">
@@ -69,7 +84,7 @@ export function DeliveryStep({ state, onChange, unlinkedChallans = [] }: Deliver
       {employeeOnly ? (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            Most assets don&apos;t need a DC at handover - choose an option only if this one does.
+            Most assets don&apos;t need a DC at handover — choose an option only if this one does.
           </p>
           <div className="grid gap-1.5 sm:grid-cols-3">
             {MODES.map((modeOption) => {
@@ -78,7 +93,7 @@ export function DeliveryStep({ state, onChange, unlinkedChallans = [] }: Deliver
                 <button
                   key={modeOption.value}
                   type="button"
-                  onClick={() => onChange({ dcChallanMode: modeOption.value })}
+                  onClick={() => selectMode(modeOption.value)}
                   className={cn(
                     "cursor-pointer rounded-lg border px-3 py-2.5 text-left transition-colors duration-200",
                     active
@@ -94,6 +109,11 @@ export function DeliveryStep({ state, onChange, unlinkedChallans = [] }: Deliver
               );
             })}
           </div>
+          {mode === "later" ? (
+            <p className="text-xs text-muted-foreground" data-testid="dc-handle-later-hint">
+              DC stays Pending · Not signed. Create the challan from Operations when needed.
+            </p>
+          ) : null}
         </div>
       ) : (
         <p className="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
@@ -119,7 +139,7 @@ export function DeliveryStep({ state, onChange, unlinkedChallans = [] }: Deliver
               {unlinkedChallans.map((row) => (
                 <SelectItem key={row.id} value={row.id} className="cursor-pointer">
                   {row.dcNumber}
-                  {row.employeeName ? ` - ${row.employeeName}` : ""}
+                  {row.employeeName ? ` — ${row.employeeName}` : ""}
                 </SelectItem>
               ))}
             </SelectContent>

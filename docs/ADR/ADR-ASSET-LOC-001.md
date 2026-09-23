@@ -1,4 +1,4 @@
-# ADR-ASSET-LOC-001 - Asset Location Management
+# ADR-ASSET-LOC-001 — Asset Location Management
 
 **Status:** Accepted  
 **Date:** 2026-07-30  

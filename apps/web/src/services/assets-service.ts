@@ -301,6 +301,10 @@ export type DocumentRow = {
   status: string;
   company_id: string;
   version: number;
+  created_at?: string | null;
+  content_type?: string | null;
+  file_size_bytes?: number | null;
+  downloadable?: boolean;
 };
 
 export type DocumentListResult = {
@@ -310,7 +314,27 @@ export type DocumentListResult = {
   page_size: number;
 };
 
+export type DocumentUploadLimits = {
+  max_upload_mb: number;
+  allowed_content_types: string[];
+  accepted_extensions: string[];
+};
+
 const ASSET_DOCUMENTS_PATH = "/assets/asset-documents";
+
+const FALLBACK_DOCUMENT_UPLOAD_LIMITS: DocumentUploadLimits = {
+  max_upload_mb: 10,
+  allowed_content_types: [
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "image/jpeg",
+    "image/png",
+  ],
+  accepted_extensions: ["pdf", "doc", "docx", "xls", "xlsx", "jpg", "jpeg", "png"],
+};
 
 function parseDocumentList(data: unknown): DocumentListResult {
   if (data && typeof data === "object" && "items" in data) {
@@ -352,6 +376,80 @@ export const documentService = {
   async get(id: string): Promise<DocumentRow> {
     const res = await resourceService.get<DocumentRow>(ASSET_DOCUMENTS_PATH, id);
     return res.data as DocumentRow;
+  },
+
+  async getUploadLimits(): Promise<DocumentUploadLimits> {
+    try {
+      const res = await apiClient<DocumentUploadLimits>(`${ASSET_DOCUMENTS_PATH}/upload-limits`, {
+        method: "GET",
+      });
+      const data = res.data;
+      if (!data) return FALLBACK_DOCUMENT_UPLOAD_LIMITS;
+      return {
+        max_upload_mb: data.max_upload_mb || FALLBACK_DOCUMENT_UPLOAD_LIMITS.max_upload_mb,
+        allowed_content_types:
+          data.allowed_content_types?.length
+            ? data.allowed_content_types
+            : FALLBACK_DOCUMENT_UPLOAD_LIMITS.allowed_content_types,
+        accepted_extensions:
+          data.accepted_extensions?.length
+            ? data.accepted_extensions
+            : FALLBACK_DOCUMENT_UPLOAD_LIMITS.accepted_extensions,
+      };
+    } catch {
+      return FALLBACK_DOCUMENT_UPLOAD_LIMITS;
+    }
+  },
+
+  async upload(
+    assetId: string,
+    file: File,
+    options?: {
+      documentType?: string;
+      documentName?: string;
+    },
+  ): Promise<DocumentRow> {
+    const form = new FormData();
+    const desiredName = options?.documentName?.trim();
+    const uploadFile =
+      desiredName && desiredName !== file.name
+        ? new File([file], desiredName, {
+            type: file.type,
+            lastModified: file.lastModified,
+          })
+        : file;
+    form.append("file", uploadFile);
+    form.append("asset_id", assetId);
+    if (options?.documentType?.trim()) {
+      form.append("document_type", options.documentType.trim());
+    }
+    const res = await apiUpload<DocumentRow>(`${ASSET_DOCUMENTS_PATH}/upload`, form);
+    return res.data as DocumentRow;
+  },
+
+  async getContentBlob(
+    id: string,
+    disposition: "inline" | "attachment" = "inline",
+  ): Promise<{ blob: Blob; contentType: string; filename: string }> {
+    // Prefer same-origin /api/v1 (Next rewrite). Buffered API Response + accurate
+    // Content-Length avoids prior stream hang / ERR_CONTENT_LENGTH_MISMATCH.
+    // Fall back to direct API origin only when NEXT_PUBLIC_API_URL is absolute.
+    const configured = (process.env.NEXT_PUBLIC_API_URL || "").trim().replace(/\/+$/, "");
+    const binaryBase = /^https?:\/\//i.test(configured) ? configured : undefined;
+
+    const result = await apiGetBlob(
+      `${ASSET_DOCUMENTS_PATH}/${id}/content`,
+      { disposition },
+      { ...(binaryBase ? { baseUrl: binaryBase } : {}), timeoutMs: 45_000 },
+    );
+    if (result.kind === "legacy") {
+      throw new ApiClientError("External document links cannot be previewed here.", 400);
+    }
+    return {
+      blob: result.blob,
+      contentType: result.contentType,
+      filename: result.filename,
+    };
   },
 
   async create(body: {
@@ -729,7 +827,7 @@ export type MaintenanceTimelineEvent = {
   id: string;
   kind: string;
   label: string;
-  occurred_at: string;
+  occurred_at?: string | null;
   performed_by?: string | null;
   detail?: string | null;
 };
@@ -788,6 +886,23 @@ export const maintenanceService = {
       { asset_id: assetId },
     );
     return res.data as MaintenanceRow;
+  },
+
+  async startFromAsset(body: {
+    asset_id: string;
+    reason: string;
+    expected_duration_days: number;
+    maintenance_type?: string;
+    scheduled_date?: string;
+    vendor_id?: string;
+    cost_amount?: number;
+    technician_employee_id?: string;
+  }): Promise<MaintenanceStartResult> {
+    const res = await resourceService.create<MaintenanceStartResult>(
+      `${ASSET_MAINTENANCES_PATH}/start-from-asset`,
+      body,
+    );
+    return res.data as MaintenanceStartResult;
   },
 
   async startMaintenance(
@@ -971,10 +1086,48 @@ export type ReportCatalogItem = {
   category: string;
 };
 
+export type ReportNamedCount = {
+  name?: string;
+  status?: string;
+  document_type?: string;
+  component_type?: string;
+  stage?: string;
+  month?: string;
+  count: number;
+};
+
 export type ReportDashboard = {
   generated_at: string;
   horizon_days: number;
   kpis: Record<string, number>;
+  analytics_kpis?: Record<string, number>;
+  by_status?: Array<Record<string, unknown>>;
+  by_operational_status?: Array<Record<string, unknown>>;
+  documents?: {
+    total?: number;
+    coverage_pct?: number;
+    by_type?: Array<Record<string, unknown>>;
+    by_status?: Array<Record<string, unknown>>;
+  };
+  components?: {
+    total?: number;
+    by_type?: Array<Record<string, unknown>>;
+    by_status?: Array<Record<string, unknown>>;
+  };
+  lifecycle?: {
+    stages?: Array<Record<string, unknown>>;
+    open_maintenance?: number;
+    open_disposals?: number;
+    depreciation_summary?: Record<string, number>;
+  };
+  usage?: {
+    active_assignments?: number;
+    closed_assignments?: number;
+    assets_currently_assigned?: number;
+    utilization_pct?: number;
+    available_assets?: number;
+    registrations_by_month?: Array<Record<string, unknown>>;
+  };
   by_category: Array<Record<string, unknown>>;
   by_department: Array<Record<string, unknown>>;
   recent_transfers: Array<Record<string, unknown>>;
@@ -1174,6 +1327,8 @@ export type AssetLocationRow = {
   asset_id: string;
   location_label: string;
   org_location_id?: string | null;
+  location_id?: string | null;
+  building_id?: string | null;
   effective_from?: string | null;
   effective_to?: string | null;
   is_current: boolean;
@@ -1514,12 +1669,32 @@ export type AssetInformationPortal = {
   serial_number?: string | null;
   asset_type: string;
   status: string;
+  /** Custody / ops status for UI display (preferred over lifecycle workflow status). */
+  operational_status?: string | null;
   assignment?: AssetPortalAssignmentSummary | null;
   warranty?: AssetPortalWarrantySummary | null;
   insurance?: AssetPortalInsuranceSummary | null;
   self_service_path: string;
   discovery_profile_json?: Record<string, unknown> | null;
   version?: number | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type AssetLifecycleTimelineEvent = {
+  id: string;
+  kind: string;
+  stage: string;
+  title: string;
+  detail?: string | null;
+  occurred_at?: string | null;
+  actor_label?: string | null;
+  reference_id?: string | null;
+  reference_label?: string | null;
+};
+
+export type AssetLifecycleTimelineResult = {
+  events: AssetLifecycleTimelineEvent[];
 };
 
 export type DiscoveryPlatform = "windows" | "linux" | "macos";
@@ -1586,12 +1761,21 @@ export const assetDiscoveryService = {
   },
 };
 
-/** Absolute self-service URL for QR payload (CR-002). Never persist QR images. */
-export function buildSelfServiceUrl(assetId: string, origin?: string): string {
+/** Absolute QR / scan URL for an asset (CR-002). Never persist QR images. */
+export function buildAssetQrUrl(assetId: string, origin?: string): string {
   const base =
     origin ??
     (typeof window !== "undefined" ? window.location.origin : "");
-  return `${base.replace(/\/$/, "")}/assets/self-service/${assetId}`;
+  const path = `/assets/information-portal/${encodeURIComponent(assetId)}?from=qr`;
+  return `${base.replace(/\/$/, "")}${path}`;
+}
+
+/**
+ * @deprecated Prefer {@link buildAssetQrUrl}. Kept so existing imports keep working;
+ * both QR entry points now resolve to the authenticated Information Portal.
+ */
+export function buildSelfServiceUrl(assetId: string, origin?: string): string {
+  return buildAssetQrUrl(assetId, origin);
 }
 
 export const assetInformationPortalService = {
@@ -1609,6 +1793,16 @@ export const assetInformationPortalService = {
       { method: "GET" },
     );
     return res.data as AssetInformationPortal;
+  },
+
+  async getLifecycleTimeline(assetId: string): Promise<AssetLifecycleTimelineEvent[]> {
+    const res = await apiClient<AssetLifecycleTimelineResult>(
+      `/assets/assets/${assetId}/lifecycle-timeline`,
+      { method: "GET" },
+    );
+    const data = res.data as AssetLifecycleTimelineResult | AssetLifecycleTimelineEvent[];
+    if (Array.isArray(data)) return data;
+    return data?.events ?? [];
   },
 };
 
@@ -2096,6 +2290,11 @@ export const assetRegisterService = {
     return res.data as AssetsRow;
   },
 
+  async softDelete(id: string): Promise<AssetsRow> {
+    const res = await resourceService.delete<AssetsRow>(ASSETS_REGISTER_PATH, id);
+    return res.data as AssetsRow;
+  },
+
   async action(id: string, actionName: string, body?: unknown): Promise<AssetsRow> {
     const res = await resourceService.action<AssetsRow>(
       ASSETS_REGISTER_PATH,
@@ -2114,6 +2313,148 @@ export const assetRegisterService = {
   /** Phase 5E: PENDING_DISPOSAL → READY_TO_MOVE */
   async reinstate(id: string, comments?: string): Promise<AssetsRow> {
     return this.action(id, "reinstate", comments ? { comments } : undefined);
+  },
+};
+
+export type UserTransferComponentItem = {
+  component_id: string;
+  assignment_component_id: string;
+  component_code?: string | null;
+  component_name?: string | null;
+  component_type?: string | null;
+  serial_number?: string | null;
+  issue_status: string;
+  linked_asset_code?: string | null;
+  linked_asset_name?: string | null;
+};
+
+export type UserTransferContext = {
+  asset_id: string;
+  asset_code: string;
+  asset_name: string;
+  operational_status: string;
+  lifecycle_status: string;
+  current_user?: string | null;
+  current_employee_id?: string | null;
+  department_id?: string | null;
+  department_name?: string | null;
+  location_label?: string | null;
+  assignment_id: string;
+  assignment_document_number?: string | null;
+  assignment_allocated_at?: string | null;
+  assignment_status?: string | null;
+  components?: UserTransferComponentItem[];
+  company_id: string;
+  branch_id: string;
+  version: number;
+};
+
+export type UserTransferVerificationPayload = {
+  data_backup_verified: boolean;
+  qc_completed: boolean;
+  qc_remarks?: string | null;
+  physical_condition: string;
+  verified_component_ids: string[];
+  asset_version?: number;
+};
+
+export type UserTransferVerificationResult = {
+  verification_id: string;
+  asset_id: string;
+  assignment_id: string;
+  previous_employee_id?: string | null;
+  previous_user_label?: string | null;
+  data_backup_verified: boolean;
+  qc_completed: boolean;
+  qc_remarks?: string | null;
+  physical_condition: string;
+  verified_component_ids: string[];
+  verified_at: string;
+  verified_by?: string | null;
+  status: string;
+};
+
+export type UserTransferAssignPayload = {
+  verification_id: string;
+  employee_source?: "MASTER_DATA" | "MANUAL_ENTRY";
+  employee_id?: string | null;
+  manual_employee_name?: string | null;
+  manual_employee_phone?: string | null;
+  manual_employee_email?: string | null;
+  manual_employee_deployed_to?: string | null;
+  department_id?: string | null;
+  to_location_id: string;
+  to_building_id: string;
+  allocated_at: string;
+  assignment_remarks?: string | null;
+  asset_version?: number;
+};
+
+export type UserTransferReturnPayload = {
+  verification_id: string;
+  reason: string;
+  remarks?: string | null;
+  asset_version?: number;
+};
+
+export type UserTransferCompleteResult = {
+  outcome: string;
+  transfer_id: string;
+  document_number: string;
+  asset_id: string;
+  operational_status: string;
+  previous_assignment_id: string;
+  new_assignment_id?: string | null;
+  new_assignment_document_number?: string | null;
+  verification_id: string;
+};
+
+const USER_TRANSFER_CONTEXT_PATH = "/assets/asset-transfers/user-transfer-context";
+const USER_TRANSFER_VERIFICATION_PATH =
+  "/assets/asset-transfers/user-transfer-verification";
+const USER_TRANSFER_ASSIGN_PATH = "/assets/asset-transfers/user-transfer-assign";
+const USER_TRANSFER_RETURN_PATH = "/assets/asset-transfers/user-transfer-return";
+
+/** Assigned → user transfer entry (Step 1/2). Backend rejects non-ASSIGNED. */
+export const userTransferService = {
+  async getContext(assetId: string): Promise<UserTransferContext> {
+    const res = await apiClient<UserTransferContext>(
+      `${USER_TRANSFER_CONTEXT_PATH}/${encodeURIComponent(assetId)}`,
+    );
+    return res.data as UserTransferContext;
+  },
+
+  async submitVerification(
+    assetId: string,
+    body: UserTransferVerificationPayload,
+  ): Promise<UserTransferVerificationResult> {
+    const res = await apiClient<UserTransferVerificationResult>(
+      `${USER_TRANSFER_VERIFICATION_PATH}/${encodeURIComponent(assetId)}`,
+      { method: "POST", body },
+    );
+    return res.data as UserTransferVerificationResult;
+  },
+
+  async assignToNewUser(
+    assetId: string,
+    body: UserTransferAssignPayload,
+  ): Promise<UserTransferCompleteResult> {
+    const res = await apiClient<UserTransferCompleteResult>(
+      `${USER_TRANSFER_ASSIGN_PATH}/${encodeURIComponent(assetId)}`,
+      { method: "POST", body },
+    );
+    return res.data as UserTransferCompleteResult;
+  },
+
+  async returnToStock(
+    assetId: string,
+    body: UserTransferReturnPayload,
+  ): Promise<UserTransferCompleteResult> {
+    const res = await apiClient<UserTransferCompleteResult>(
+      `${USER_TRANSFER_RETURN_PATH}/${encodeURIComponent(assetId)}`,
+      { method: "POST", body },
+    );
+    return res.data as UserTransferCompleteResult;
   },
 };
 

@@ -1,4 +1,4 @@
-# Asset Service History - Implementation Report (FP-ASSET-013)
+# Asset Service History — Implementation Report (FP-ASSET-013)
 
 **Status:** Complete  
 **ADR:** ADR-ASSET-SVH-001  
@@ -28,6 +28,6 @@ All SVH-01 through SVH-15 decisions implemented.
 
 ## Known limitations
 
-- No edit/correction API - supplemental entries only.
+- No edit/correction API — supplemental entries only.
 - `cost_amount` is not posted to Finance.
 - Workspace loads completed maintenance list with page cap (200).

@@ -1,6 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  TABLE_SERIAL_HEADER_LABEL,
+  tableRowSerialFromIndex,
+  tableSerialCellClassName,
+  tableSerialHeaderClassName,
+} from "@/components/assets/shared";
+import {
+  DISCOVERY_OS_OPTIONS,
+  DISCOVERY_WINDOWS_SHELL_OPTIONS,
+  formatDiscoveryCommandsForClipboard,
+  getDiscoveryCommandPack,
+  type DiscoveryWindowsShell,
+} from "@/components/assets/discovery-commands";
+
+import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Copy, Loader2, Radar, WandSparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -22,8 +36,6 @@ import {
 } from "@/services/assets-service";
 import { ApiClientError } from "@/services/api-client";
 
-const PLATFORMS: DiscoveryPlatform[] = ["windows", "linux", "macos"];
-
 type Props = {
   assetId: string;
   assetVersion: number;
@@ -38,45 +50,32 @@ export function AssetDiscoveryPanel({
   onApplied,
 }: Props) {
   const [platform, setPlatform] = useState<DiscoveryPlatform>("windows");
-  const [command, setCommand] = useState("");
+  const [windowsShell, setWindowsShell] = useState<DiscoveryWindowsShell>("powershell");
   const [rawOutput, setRawOutput] = useState("");
   const [preview, setPreview] = useState<DiscoveryParseResult | null>(null);
-  const [loadingCommand, setLoadingCommand] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [version, setVersion] = useState(assetVersion);
 
+  const commandPack = useMemo(
+    () => getDiscoveryCommandPack(platform, windowsShell),
+    [platform, windowsShell],
+  );
+
   useEffect(() => {
     setVersion(assetVersion);
   }, [assetVersion]);
 
-  const loadCommand = useCallback(async (selected: DiscoveryPlatform) => {
-    setLoadingCommand(true);
-    setError(null);
+  async function copyCommands() {
+    const text = formatDiscoveryCommandsForClipboard(commandPack);
     try {
-      const payload = await assetDiscoveryService.getCommand(selected);
-      setCommand(payload.command);
-    } catch (err) {
-      setCommand("");
-      setError(err instanceof ApiClientError ? err.message : "Failed to load command");
-    } finally {
-      setLoadingCommand(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadCommand(platform);
-  }, [platform, loadCommand]);
-
-  async function copyCommand() {
-    if (!command) return;
-    try {
-      await navigator.clipboard.writeText(command);
+      await navigator.clipboard.writeText(text);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      setError(null);
+      setTimeout(() => setCopied(false), 2000);
     } catch {
-      setError("Unable to copy command to clipboard");
+      setError("Unable to copy commands to clipboard");
     }
   }
 
@@ -123,71 +122,136 @@ export function AssetDiscoveryPanel({
   }
 
   return (
-    <Card>
+    <Card data-testid="asset-discovery-panel">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           <Radar className="size-4" aria-hidden />
           Discovery
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
         <p className="text-xs text-muted-foreground">
-          Generate a platform command, paste the output, parse for preview, then apply. Nothing is
-          saved until Apply. Finance, category, assignment, and workflow fields are never updated.
+          Select an OS (and Windows shell) to generate read-only inventory commands. Copy them, run
+          them manually in your own terminal, then paste the output here. The ERP never executes
+          these commands — nothing is saved until you click Apply.
         </p>
 
         {error ? (
-          <p className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          <p
+            className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+            role="alert"
+          >
             {error}
           </p>
         ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2 max-w-xl">
           <div className="space-y-1.5">
-            <Label>Platform</Label>
+            <Label htmlFor="discovery-os">Operating System</Label>
             <Select
               value={platform}
               onValueChange={(v) => {
                 setPlatform(v as DiscoveryPlatform);
                 setPreview(null);
+                setCopied(false);
               }}
             >
-              <SelectTrigger className="cursor-pointer">
+              <SelectTrigger id="discovery-os" className="cursor-pointer" data-testid="discovery-os">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PLATFORMS.map((p) => (
-                  <SelectItem key={p} value={p} className="cursor-pointer">
-                    {p}
+                {DISCOVERY_OS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.id} value={opt.id} className="cursor-pointer">
+                    {opt.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-          <div className="flex items-end gap-2">
+
+          {platform === "windows" ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="discovery-shell">Shell</Label>
+              <Select
+                value={windowsShell}
+                onValueChange={(v) => {
+                  setWindowsShell(v as DiscoveryWindowsShell);
+                  setPreview(null);
+                  setCopied(false);
+                }}
+              >
+                <SelectTrigger
+                  id="discovery-shell"
+                  className="cursor-pointer"
+                  data-testid="discovery-shell"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {DISCOVERY_WINDOWS_SHELL_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.id} value={opt.id} className="cursor-pointer">
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="space-y-0.5">
+              <Label>Basic System Information</Label>
+              <p className="text-[11px] text-muted-foreground">
+                Intended for: <span className="font-medium text-foreground">{commandPack.shellLabel}</span>
+              </p>
+            </div>
             <Button
               type="button"
               size="sm"
               variant="outline"
-              className="cursor-pointer"
-              disabled={!command || loadingCommand}
-              onClick={() => void copyCommand()}
+              className="cursor-pointer transition-colors duration-200"
+              data-testid="discovery-copy-commands"
+              onClick={() => void copyCommands()}
             >
               {copied ? (
-                <CheckCircle2 className="size-4" aria-hidden />
+                <CheckCircle2 className="size-4 text-emerald-600" aria-hidden />
               ) : (
                 <Copy className="size-4" aria-hidden />
               )}
-              Copy Command
+              Copy Commands
             </Button>
           </div>
+          {copied ? (
+            <p className="text-xs text-emerald-700" data-testid="discovery-copy-success" role="status">
+              Commands copied
+            </p>
+          ) : null}
+          <pre
+            className="max-h-48 overflow-auto rounded-md border bg-muted/40 p-3 text-[11px] leading-relaxed whitespace-pre-wrap break-all"
+            data-testid="discovery-basic-commands"
+          >
+            {commandPack.basicSystemInformation}
+          </pre>
         </div>
 
-        <div className="space-y-1.5">
-          <Label>Discovery command</Label>
-          <pre className="max-h-28 overflow-auto rounded-md border bg-muted/40 p-2 text-[11px] leading-relaxed whitespace-pre-wrap break-all">
-            {loadingCommand ? "Loading command…" : command || "-"}
-          </pre>
+        <div className="space-y-2">
+          <Label>Optional reference commands</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Labels below are for guidance only — they are not included in Copy Commands.
+          </p>
+          <div
+            className="max-h-40 space-y-2 overflow-auto rounded-md border bg-muted/20 p-3"
+            data-testid="discovery-reference-commands"
+          >
+            {commandPack.referenceCommands.map((item) => (
+              <div key={item.title} className="space-y-0.5">
+                <p className="text-[11px] font-medium text-muted-foreground">{item.title}</p>
+                <code className="block text-[11px] break-all text-foreground">{item.command}</code>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="space-y-1.5">
@@ -202,6 +266,7 @@ export function AssetDiscoveryPanel({
             rows={8}
             className="w-full rounded-md border bg-background px-3 py-2 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
             placeholder={"HOSTNAME=...\nSERIAL=...\nOS_NAME=..."}
+            data-testid="discovery-paste-output"
           />
         </div>
 
@@ -209,8 +274,9 @@ export function AssetDiscoveryPanel({
           <Button
             type="button"
             size="sm"
-            className="cursor-pointer"
+            className="cursor-pointer transition-colors duration-200"
             disabled={actionLoading || !rawOutput.trim()}
+            data-testid="discovery-parse"
             onClick={() => void parseOutput()}
           >
             {actionLoading ? (
@@ -224,8 +290,9 @@ export function AssetDiscoveryPanel({
             type="button"
             size="sm"
             variant="outline"
-            className="cursor-pointer"
+            className="cursor-pointer transition-colors duration-200"
             disabled={actionLoading || !preview}
+            data-testid="discovery-apply"
             onClick={() => void applyDiscovery()}
           >
             Apply
@@ -233,7 +300,7 @@ export function AssetDiscoveryPanel({
         </div>
 
         {preview ? (
-          <div className="space-y-2 rounded-md border p-3">
+          <div className="space-y-2 rounded-md border p-3" data-testid="discovery-preview">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-medium">Preview changes</p>
               <Badge variant="secondary" className="font-mono text-xs">
@@ -241,8 +308,8 @@ export function AssetDiscoveryPanel({
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              Serial: {preview.current_serial_number ?? "-"} →{" "}
-              {preview.proposed_serial_number ?? "-"}
+              Serial: {preview.current_serial_number ?? "—"} →{" "}
+              {preview.proposed_serial_number ?? "—"}
             </p>
             <ChangeTable changes={preview.changes} />
             <pre className="max-h-40 overflow-auto rounded-md border bg-muted/30 p-2 text-[11px]">
@@ -275,14 +342,18 @@ function ChangeTable({ changes }: { changes: DiscoveryChangeItem[] }) {
       <table className="w-full min-w-[420px] text-left text-xs">
         <thead className="bg-muted/50 text-[10px] uppercase tracking-wide text-muted-foreground">
           <tr>
+            <th className={tableSerialHeaderClassName()} scope="col">
+              {TABLE_SERIAL_HEADER_LABEL}
+            </th>
             <th className="px-2 py-1.5">Path</th>
             <th className="px-2 py-1.5">Before</th>
             <th className="px-2 py-1.5">After</th>
           </tr>
         </thead>
         <tbody>
-          {changes.map((c) => (
+          {changes.map((c, index) => (
             <tr key={c.path} className="border-t">
+              <td className={tableSerialCellClassName()}>{tableRowSerialFromIndex(index)}</td>
               <td className="px-2 py-1.5 font-mono">{c.path}</td>
               <td className="px-2 py-1.5">{formatValue(c.before)}</td>
               <td className="px-2 py-1.5">{formatValue(c.after)}</td>
@@ -295,7 +366,7 @@ function ChangeTable({ changes }: { changes: DiscoveryChangeItem[] }) {
 }
 
 function formatValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "-";
+  if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
