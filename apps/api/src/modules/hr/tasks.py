@@ -850,13 +850,14 @@ def birthday_anniversary_reminders() -> dict:
                 select(HrEmployeeProfile).where(
                     HrEmployeeProfile.is_deleted.is_(False),
                     HrEmployeeProfile.date_of_birth.is_not(None),
-                    extract("month", HrEmployeeProfile.date_of_birth) == today.month,
-                    extract("day", HrEmployeeProfile.date_of_birth) == today.day,
                 )
             ).all()
         )
         birthdays = 0
         for profile in profiles:
+            dob = profile.date_of_birth
+            if dob is None or dob.month != today.month or dob.day != today.day:
+                continue
             try:
                 if notify_employee(
                     db,

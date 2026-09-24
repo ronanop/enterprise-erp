@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
 from database.mixins import AuditMixin, SoftDeleteMixin, TenantMixin, VersionMixin
+from security.encrypted_types import EncryptedString
 
 
 class HrDigitalOnboarding(Base, AuditMixin, TenantMixin, SoftDeleteMixin, VersionMixin):
@@ -29,8 +30,8 @@ class HrDigitalOnboarding(Base, AuditMixin, TenantMixin, SoftDeleteMixin, Versio
         DateTime(timezone=True), nullable=True
     )
     status: Mapped[str] = mapped_column(String(40), nullable=False, default="draft", index=True)
-    candidate_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
-    candidate_email: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    candidate_name: Mapped[str] = mapped_column(EncryptedString, nullable=False, default="")
+    candidate_email: Mapped[str] = mapped_column(EncryptedString, nullable=False, default="")
     case_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     terms_accepted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

@@ -273,7 +273,7 @@ export function searchDirectory(dir: AtsDirectory, query: string): SearchHit[] {
 
 export function buildRecruitmentDashboardModel(
   dir: AtsDirectory,
-  opts: { trendRange: TrendRangeKey; query: string; now?: Date },
+  opts: { trendRange: TrendRangeKey; now?: Date },
 ): RecruitmentDashboardModel {
   const now = opts.now ?? new Date();
   const stats = computeAtsStats(dir);
@@ -387,6 +387,6 @@ export function buildRecruitmentDashboardModel(
     recentJobs,
     recentCandidates,
     upcomingInterviews,
-    searchHits: searchDirectory(dir, opts.query),
+    searchHits: [],
   };
 }

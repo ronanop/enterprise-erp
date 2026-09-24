@@ -1768,3 +1768,32 @@ class LeaveAdjustRevertRequest(BaseModel):
     period_end: date
     company_id: UUID | None = None
     payroll_run_id: UUID | None = None
+
+
+class PeopleRoleUpdate(BaseModel):
+    is_hiring_manager: bool | None = None
+    is_recruiter: bool | None = None
+    is_hr: bool | None = None
+    reporting_manager_id: UUID | None = None
+    clear_reporting_manager: bool = False
+
+
+class PeopleRoleResponse(BaseModel):
+    id: UUID
+    employee_code: str
+    first_name: str
+    last_name: str
+    display_name: str
+    designation: str
+    status: str
+    reporting_manager_id: UUID | None = None
+    reporting_manager_name: str | None = None
+    reporting_manager_code: str | None = None
+    reports_count: int = 0
+    is_hiring_manager: bool = False
+    is_recruiter: bool = False
+    is_hr: bool = False
+    has_login: bool = False
+    role_codes: list[str] = []
+    hr_note: str | None = None
+

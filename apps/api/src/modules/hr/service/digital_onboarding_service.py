@@ -13,12 +13,45 @@ from modules.foundation.domain.value_objects import TenantContext
 from modules.hr.models.digital_onboarding import HrDigitalOnboarding
 from modules.hr.service.pii_mask import (
     apply_masks_to_portal,
+    looks_masked,
     mask_email,
     mask_phone,
     mask_portal_for_storage,
     merge_portal_pii,
     restore_portal_pii,
 )
+from security.field_crypto import decrypt_json, encrypt_json, is_encrypted
+
+
+def read_portal_pii(value: object) -> dict:
+    """Return clear portal PII from a stored dict (legacy) or enc1 ciphertext."""
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and is_encrypted(value):
+        loaded = decrypt_json(value)
+        return loaded if isinstance(loaded, dict) else {}
+    return {}
+
+
+def seal_portal_pii(pii: dict | None) -> str | None:
+    if not pii:
+        return None
+    return encrypt_json(pii)
+
+
+def seal_case_payload(payload: dict) -> dict:
+    """Encrypt portalPii and keep duplicate contact fields masked in case JSON."""
+    sealed = dict(payload)
+    pii = sealed.get("portalPii")
+    if isinstance(pii, dict):
+        sealed["portalPii"] = seal_portal_pii(pii)
+    phone = str(sealed.get("candidatePhone") or "").strip()
+    if phone and not looks_masked(phone):
+        sealed["candidatePhone"] = mask_phone(phone)
+    email = str(sealed.get("candidateEmail") or "").strip()
+    if email and not looks_masked(email):
+        sealed["candidateEmail"] = mask_email(email)
+    return sealed
 
 
 class InvalidDigitalOnboardingState(Exception):
@@ -102,9 +135,7 @@ class DigitalOnboardingService:
                 )
             )
             if row is not None and isinstance(row.case_json, dict):
-                prior = row.case_json.get("portalPii")
-                if isinstance(prior, dict):
-                    prior_pii = prior
+                prior_pii = read_portal_pii(row.case_json.get("portalPii")) or None
 
         invitation = case.get("invitation") or {}
         token = str(invitation.get("token") or "").strip()
@@ -198,7 +229,7 @@ class DigitalOnboardingService:
             pii["personal"] = personal
             payload["portalPii"] = pii
 
-        row.case_json = payload
+        row.case_json = seal_case_payload(payload)
         self._db.flush()
         return self._to_case(row, include_pii=False)
 
@@ -229,7 +260,7 @@ class DigitalOnboardingService:
         payload = dict(row.case_json or {})
         payload["termsAcceptedAt"] = now.isoformat()
         payload["termsVersion"] = row.terms_version
-        row.case_json = payload
+        row.case_json = seal_case_payload(payload)
         self._db.flush()
         return self._without_portal_secret(self._to_case(row, include_pii=True))
 
@@ -241,14 +272,14 @@ class DigitalOnboardingService:
                 "Please accept the terms and conditions before continuing"
             )
         payload = dict(row.case_json or {})
-        existing_pii = payload.get("portalPii") if isinstance(payload.get("portalPii"), dict) else None
+        existing_pii = read_portal_pii(payload.get("portalPii")) or None
         masked_portal, portal_pii = mask_portal_for_storage(portal, existing_pii)
         payload["portal"] = masked_portal
         payload["portalPii"] = portal_pii
         if advance_status and row.status in {"draft", "invitation_sent"}:
             row.status = "in_progress"
             payload["status"] = "in_progress"
-        row.case_json = payload
+        row.case_json = seal_case_payload(payload)
         self._db.flush()
         # Return clear PII so the candidate UI can keep editing
         return self._without_portal_secret(self._to_case(row, include_pii=True))
@@ -264,13 +295,13 @@ class DigitalOnboardingService:
         if not submitted.get("submittedAt"):
             submitted["submittedAt"] = datetime.now(timezone.utc).isoformat()
         payload = dict(row.case_json or {})
-        existing_pii = payload.get("portalPii") if isinstance(payload.get("portalPii"), dict) else None
+        existing_pii = read_portal_pii(payload.get("portalPii")) or None
         masked_portal, portal_pii = mask_portal_for_storage(submitted, existing_pii)
         payload["portal"] = masked_portal
         payload["portalPii"] = portal_pii
         payload["status"] = "hr_review"
         row.status = "hr_review"
-        row.case_json = payload
+        row.case_json = seal_case_payload(payload)
         self._db.flush()
         return self._without_portal_secret(self._to_case(row, include_pii=True))
 
@@ -352,7 +383,7 @@ class DigitalOnboardingService:
         email = row.candidate_email or payload.get("candidateEmail") or ""
         phone = str(payload.get("candidatePhone") or "")
         portal = payload.get("portal") if isinstance(payload.get("portal"), dict) else {}
-        portal_pii = payload.get("portalPii") if isinstance(payload.get("portalPii"), dict) else {}
+        portal_pii = read_portal_pii(payload.get("portalPii"))
 
         if include_pii:
             payload["portal"] = restore_portal_pii(portal, portal_pii)

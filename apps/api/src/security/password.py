@@ -13,8 +13,9 @@ _PASSWORD_POLICY = re.compile(
 
 class PasswordHasher:
     @staticmethod
-    def hash_password(plain: str) -> str:
-        validate_password_policy(plain)
+    def hash_password(plain: str, validate: bool = True) -> str:
+        if validate:
+            validate_password_policy(plain)
         salt = bcrypt.gensalt()
         return bcrypt.hashpw(plain.encode(), salt).decode()
 

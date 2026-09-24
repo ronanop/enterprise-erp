@@ -9,6 +9,7 @@ import {
   SetupSelect,
 } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   formatInrGrouping,
   INDIAN_STATES,
@@ -17,6 +18,8 @@ import {
   isValidPincode,
   loadAtsLookups,
   parseInrInput,
+  recruiterSourceHint,
+  type AtsLookupSource,
   type NamedOption,
 } from "@/services/recruitment-ats-lookups";
 import type {
@@ -61,11 +64,13 @@ export function CandidateDrawer({ open, onClose, jobs, initial, onSubmit }: Prop
   const [jobId, setJobId] = useState("");
   const [error, setError] = useState("");
   const [recruiters, setRecruiters] = useState<NamedOption[]>([]);
+  const [recruiterSource, setRecruiterSource] = useState<AtsLookupSource>("demo");
 
   useEffect(() => {
     if (!open) return;
     void loadAtsLookups().then((lookups) => {
       setRecruiters(lookups.recruiters);
+      setRecruiterSource(lookups.recruiterSource);
     });
   }, [open]);
 
@@ -354,18 +359,14 @@ export function CandidateDrawer({ open, onClose, jobs, initial, onSubmit }: Prop
               ))}
             </SetupSelect>
           </SetupField>
-          <SetupField label="Recruiter">
-            <SetupSelect value={recruiter} onChange={(e) => setRecruiter(e.target.value)}>
-              <option value="">Select recruiter…</option>
-              {recruiters.map((r) => (
-                <option key={r.id} value={r.name}>
-                  {r.name}
-                </option>
-              ))}
-              {recruiter && !recruiters.some((r) => r.name === recruiter) ? (
-                <option value={recruiter}>{recruiter}</option>
-              ) : null}
-            </SetupSelect>
+          <SetupField label="Recruiter" hint={recruiterSourceHint(recruiterSource)}>
+            <SearchableSelect
+              value={recruiter}
+              onChange={setRecruiter}
+              placeholder="Select recruiter…"
+              searchPlaceholder="Type a name…"
+              options={recruiters.map((r) => ({ value: r.name, label: r.name }))}
+            />
           </SetupField>
         </div>
         {!editing ? (

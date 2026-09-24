@@ -125,6 +125,11 @@ class Settings(BaseSettings):
     )
 
     jwt_secret_key: str = Field(default="change-me-in-production", alias="JWT_SECRET_KEY")
+    # Passphrase or Fernet key. Changing it makes existing ciphertext unreadable.
+    pii_encryption_key: str = Field(
+        default="change-me-in-production",
+        alias="PII_ENCRYPTION_KEY",
+    )
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     # Long-lived by default so local/demo sessions are not cut short mid-work.
     # Override via env for production hardening.

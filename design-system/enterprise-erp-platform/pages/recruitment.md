@@ -39,6 +39,9 @@
 - Secondary nav: Overview · Requisitions · Postings · Candidates · Applications · Interviews · Offers · Onboarding
 - Lifecycle funnel: Requisition → Posting → Application → Interview → Offer → Onboarding
 - Prefer Lucide; sticky headers; `overflow-x-auto` on wide tables
+- Do not render a duplicate page chrome (global search, Ctrl+K, notification bell, account chip, date pill) — HR shell already omits AppTopbar; recruitment starts at the page title + quick actions
+- Job opening **Hiring manager** prefers employees flagged Hiring manager in Org Setup → People roles (fallback: reporting managers)
+- **Recruiter** prefers employees flagged Recruiter (fallback: recruiter directory, then HR/Talent titles, then demo)
 
 ### Section Order
 

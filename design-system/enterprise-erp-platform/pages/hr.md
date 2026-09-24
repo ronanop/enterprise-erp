@@ -39,6 +39,8 @@
 - Secondary nav: Overview · Profiles · Employment · Attendance · Leave · Performance · Training · Separation
 - Lifecycle funnel: Profiles → Employment → Attendance → Leave → Training
 - Prefer Lucide; sticky headers; `overflow-x-auto` on wide tables
+- Org Setup **People roles** assigns Hiring manager, Recruiter, and HR flags; reporting manager is assigned on the same grid
+- HR flag grants `HR_MANAGER` RBAC when the employee has a login; leave approvals still route to reporting manager first
 
 ### Section Order
 

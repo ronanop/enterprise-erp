@@ -189,8 +189,27 @@ export const authService = {
     password: string;
     captcha_id?: string;
     captcha_answer?: string;
-  }) =>
-    apiClient<TokenData>("/auth/ess/login", {
+  }) => {
+    if (env.useMock) {
+      try {
+        const res = await mockApi.essLogin(
+          body.company_code,
+          body.employee_code,
+          body.password,
+        );
+        if (res.data?.access_token) {
+          setTokens(res.data.access_token, res.data.refresh_token ?? undefined);
+        }
+        return res;
+      } catch (err) {
+        throw new ApiClientError(
+          err instanceof Error ? err.message : "Login failed",
+          400,
+        );
+      }
+    }
+
+    return apiClient<TokenData>("/auth/ess/login", {
       method: "POST",
       auth: false,
       body,
@@ -199,7 +218,8 @@ export const authService = {
         setTokens(res.data.access_token, res.data.refresh_token ?? undefined);
       }
       return res;
-    }),
+    });
+  },
 
   me: () =>
     env.useMock

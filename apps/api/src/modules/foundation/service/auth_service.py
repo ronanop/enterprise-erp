@@ -108,26 +108,59 @@ class AuthService:
             if normalize_employee_code(row.employee_code) == emp_code:
                 employee = row
                 break
-        if employee is None or not employee.user_id:
+        if employee is None:
             raise InvalidCredentialsException()
 
-        user = self._db.get(SecUser, employee.user_id)
-        if user is None or user.is_deleted:
+        from modules.hr.models import HrEmployeeProfile
+        from security.ess_default_password import verify_ess_dob_password
+
+        profile = self._db.scalar(
+            select(HrEmployeeProfile).where(
+                HrEmployeeProfile.employee_id == employee.id,
+                HrEmployeeProfile.is_deleted.is_(False),
+            )
+        )
+
+        user = self._db.get(SecUser, employee.user_id) if employee.user_id else None
+
+        password_valid = False
+        if user and user.password_hash:
+            password_valid = PasswordHasher.verify_password(password, user.password_hash)
+
+        if not password_valid and profile and profile.date_of_birth:
+            if verify_ess_dob_password(password, employee.employee_code, profile.date_of_birth):
+                password_valid = True
+                if user is None:
+                    user = SecUser(
+                        tenant_id=employee.tenant_id,
+                        email=employee.email or f"{emp_code.lower()}@{code.lower()}.local",
+                        display_name=f"{employee.first_name} {employee.last_name or ''}".strip(),
+                        user_type="employee",
+                        status="active",
+                        password_hash=PasswordHasher.hash_password(password, validate=False),
+                    )
+                    self._db.add(user)
+                    self._db.flush()
+                    employee.user_id = user.id
+                    self._db.flush()
+                else:
+                    user.password_hash = PasswordHasher.hash_password(password, validate=False)
+                    self._db.flush()
+
+        if user is None or user.is_deleted or not password_valid:
+            if user:
+                self._users.record_failed_login(user)
+                if user.failed_login_count >= settings.account_lockout_threshold:
+                    locked_until = datetime.now(timezone.utc) + timedelta(
+                        minutes=settings.account_lockout_minutes
+                    )
+                    self._users.lock_account(user, locked_until)
             raise InvalidCredentialsException()
 
         if user.locked_until and user.locked_until > datetime.now(timezone.utc):
             raise AccountLockedException(
                 "Account is temporarily locked. Try again later or contact HR."
             )
-
-        if not PasswordHasher.verify_password(password, user.password_hash):
-            self._users.record_failed_login(user)
-            if user.failed_login_count >= settings.account_lockout_threshold:
-                locked_until = datetime.now(timezone.utc) + timedelta(
-                    minutes=settings.account_lockout_minutes
-                )
-                self._users.lock_account(user, locked_until)
-            raise InvalidCredentialsException()
 
         if user.mfa_enabled:
             challenge = self._jwt.create_access_token(

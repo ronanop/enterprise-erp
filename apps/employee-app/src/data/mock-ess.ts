@@ -46,7 +46,9 @@ const LEAVE_SICK = "lt-sick-002";
 const LEAVE_EARNED = "lt-earned-003";
 
 export const MOCK_DEMO_EMAIL = "demo@company.com";
-export const MOCK_DEMO_PASSWORD = "demo123";
+export const MOCK_DEMO_COMPANY = "CT";
+export const MOCK_DEMO_EMPLOYEE_CODE = "CT5354";
+export const MOCK_DEMO_PASSWORD = "CT535415102003";
 
 export const mockMe: EssMe = {
   employee_id: "emp-demo-001",
@@ -326,6 +328,25 @@ export const mockApi = {
     void password;
     if (!email.trim()) {
       return Promise.reject(new Error("Email is required"));
+    }
+    const token: TokenData = {
+      access_token: "mock-access-token-demo",
+      refresh_token: "mock-refresh-token-demo",
+      token_type: "bearer",
+      session_id: "mock-session-001",
+      mfa_required: false,
+      mfa_challenge_token: null,
+    };
+    return delay(ok(token, "Logged in (demo)"));
+  },
+
+  essLogin(companyCode: string, employeeCode: string, password: string) {
+    void password;
+    if (!companyCode.trim()) {
+      return Promise.reject(new Error("Company code is required"));
+    }
+    if (!employeeCode.trim()) {
+      return Promise.reject(new Error("Employee code is required"));
     }
     const token: TokenData = {
       access_token: "mock-access-token-demo",

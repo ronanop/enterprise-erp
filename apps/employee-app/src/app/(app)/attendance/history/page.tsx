@@ -9,7 +9,7 @@ import {
   IconLogin,
   IconLogout,
 } from "@/components/icons";
-import { AlertBox, EmptyState, ViewportFab } from "@/components/ui";
+import { AlertBox, EmptyState, FilterChips, SearchField, SubHeader, ViewportFab } from "@/components/ui";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
 import type { EssAttendance, EssMe } from "@/types/api";

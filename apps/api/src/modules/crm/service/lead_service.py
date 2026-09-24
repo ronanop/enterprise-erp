@@ -4,10 +4,11 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.exceptions import ConflictException, ForbiddenException, NotFoundException
+from security.field_crypto import pii_lookup
 from modules.crm.domain.enums import CrmEntityType, LeadStatus
 from modules.crm.models import CrmLead
 from modules.crm.repository.company_repository import CompanyRepository
@@ -205,7 +206,7 @@ class LeadService:
                 select(MasterEmployee).where(
                     MasterEmployee.tenant_id == ctx.tenant_id,
                     MasterEmployee.is_deleted.is_(False),
-                    func.lower(MasterEmployee.email) == user.email.lower(),
+                    MasterEmployee.email_lookup == pii_lookup(user.email),
                 )
             )
             if email_row is not None:
@@ -298,7 +299,7 @@ class LeadService:
                 MasterEmployee.tenant_id == ctx.tenant_id,
                 MasterEmployee.company_id == company_id,
                 MasterEmployee.is_deleted.is_(False),
-                func.lower(MasterEmployee.email) == email,
+                MasterEmployee.email_lookup == pii_lookup(email),
             )
         )
         if existing is not None:

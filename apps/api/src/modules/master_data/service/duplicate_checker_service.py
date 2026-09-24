@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.exceptions import ConflictException
+from security.field_crypto import pii_lookup
 
 
 class DuplicateCheckerService:
@@ -41,9 +42,11 @@ class DuplicateCheckerService:
         email: str,
         exclude_id: UUID | None = None,
     ) -> None:
+        email_column = getattr(model, "email_lookup", None)
+        email_value = pii_lookup(email) if email_column is not None else email
         stmt = select(model).where(
             model.company_id == company_id,
-            model.email == email,
+            (email_column if email_column is not None else model.email) == email_value,
             model.is_deleted.is_(False),
         )
         if exclude_id:

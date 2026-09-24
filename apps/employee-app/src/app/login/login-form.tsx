@@ -3,7 +3,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  MOCK_DEMO_EMAIL,
+  MOCK_DEMO_COMPANY,
+  MOCK_DEMO_EMPLOYEE_CODE,
   MOCK_DEMO_PASSWORD,
 } from "@/data/mock-ess";
 import { IconCheck } from "@/components/icons";
@@ -13,15 +14,11 @@ import { essService } from "@/services/ess-service";
 import { clearFaceVerified } from "@/lib/face-auth";
 import { env } from "@/utils/env";
 
-type LoginMode = "email" | "employee";
-
 const REMEMBER_KEY = "ess.login.remember";
 
 type Remembered = {
-  mode: LoginMode;
-  email?: string;
-  companyCode?: string;
-  employeeCode?: string;
+  companyCode: string;
+  employeeCode: string;
 };
 
 function loadRemembered(): Remembered | null {
@@ -62,10 +59,8 @@ const labelClass = "block text-sm font-medium text-[#374151]";
 export default function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [mode, setMode] = useState<LoginMode>("employee");
-  const [email, setEmail] = useState(env.useMock ? MOCK_DEMO_EMAIL : "");
-  const [companyCode, setCompanyCode] = useState("DEMOCO");
-  const [employeeCode, setEmployeeCode] = useState("EMP-004");
+  const [companyCode, setCompanyCode] = useState(env.useMock ? MOCK_DEMO_COMPANY : "CT");
+  const [employeeCode, setEmployeeCode] = useState(env.useMock ? MOCK_DEMO_EMPLOYEE_CODE : "CT5354");
   const [password, setPassword] = useState(env.useMock ? MOCK_DEMO_PASSWORD : "");
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,8 +89,6 @@ export default function LoginForm() {
     const saved = loadRemembered();
     if (!saved) return;
     setRememberMe(true);
-    setMode(saved.mode);
-    if (saved.email) setEmail(saved.email);
     if (saved.companyCode) setCompanyCode(saved.companyCode);
     if (saved.employeeCode) setEmployeeCode(saved.employeeCode);
     setPassword("");
@@ -115,34 +108,21 @@ export default function LoginForm() {
     setInfo(null);
 
     try {
-      if (env.useMock || mode === "email") {
-        const login = await authService.login(email.trim(), password);
-        if (login.data?.mfa_required) {
-          setError("MFA is required for this account. Use the ERP login first.");
-          return;
-        }
-      } else {
-        const login = await authService.essLogin({
-          company_code: companyCode.trim(),
-          employee_code: employeeCode.trim(),
-          password,
-        });
-        if (login.data?.mfa_required) {
-          setError("MFA is required for this account.");
-          return;
-        }
+      const login = await authService.essLogin({
+        company_code: companyCode.trim().toUpperCase(),
+        employee_code: employeeCode.trim().toUpperCase(),
+        password: password.trim(),
+      });
+      if (login.data?.mfa_required) {
+        setError("MFA is required for this account.");
+        return;
       }
 
       if (rememberMe && !env.useMock) {
-        saveRemembered(
-          mode === "email"
-            ? { mode, email: email.trim() }
-            : {
-                mode,
-                companyCode: companyCode.trim(),
-                employeeCode: employeeCode.trim(),
-              },
-        );
+        saveRemembered({
+          companyCode: companyCode.trim().toUpperCase(),
+          employeeCode: employeeCode.trim().toUpperCase(),
+        });
       } else {
         saveRemembered(null);
       }
@@ -158,7 +138,7 @@ export default function LoginForm() {
         } else if (err.status === 404) {
           setError("Logged in, but no employee profile is linked to this user.");
         } else {
-          setError(err.message);
+          setError(err.message || "Invalid company code, employee code, or password.");
         }
       } else {
         setError("Unable to sign in. Check API connection.");
@@ -170,7 +150,7 @@ export default function LoginForm() {
 
   function onForgotPassword() {
     setError(null);
-    setInfo("Password resets are managed by HR. Contact your HR team for help.");
+    setInfo("Default password is your Employee Code + Date of Birth (DDMMYYYY), e.g. CT535415102003. For password resets, contact your HR team.");
   }
 
   function onMicrosoftSignIn() {
@@ -205,7 +185,7 @@ export default function LoginForm() {
             Welcome Back
           </h1>
           <p className="mt-2 max-w-xs text-[0.95rem] leading-relaxed text-[#6b7280]">
-            Log in with SSO or your employee credentials.
+            Log in with your company credentials.
           </p>
         </div>
 
@@ -226,7 +206,7 @@ export default function LoginForm() {
             </button>
             {microsoftEnabled === false ? (
               <p className="text-center text-xs text-[#6b7280]">
-                Ask IT to enable Microsoft SSO, or use employee code / email below.
+                Ask IT to enable Microsoft SSO, or use your employee code below.
               </p>
             ) : (
               <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-wide text-[#9ca3af]">
@@ -239,80 +219,38 @@ export default function LoginForm() {
         ) : null}
 
         <form onSubmit={onSubmit} className="space-y-4">
-          <div className="flex rounded-2xl bg-[#ebebef] p-1">
-            <button
-              type="button"
-              className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-                mode === "employee"
-                  ? "bg-white text-[#7c5cfc] shadow-sm"
-                  : "text-[#6b7280]"
-              }`}
-              onClick={() => setMode("employee")}
-            >
-              Employee code
-            </button>
-            <button
-              type="button"
-              className={`flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-                mode === "email"
-                  ? "bg-white text-[#7c5cfc] shadow-sm"
-                  : "text-[#6b7280]"
-              }`}
-              onClick={() => setMode("email")}
-            >
-              Email
-            </button>
-          </div>
-
           {env.useMock ? (
             <div className="rounded-2xl border border-[#7c5cfc]/20 bg-[#f3efff] px-3.5 py-3 text-xs text-[#5b3fd4]">
               <p className="font-semibold">Demo login</p>
               <p className="mt-0.5 text-[#374151]/80">
-                {MOCK_DEMO_EMAIL} / {MOCK_DEMO_PASSWORD}
+                Company: {MOCK_DEMO_COMPANY} &middot; Code: {MOCK_DEMO_EMPLOYEE_CODE} &middot; Password: {MOCK_DEMO_PASSWORD}
               </p>
             </div>
           ) : null}
 
-          {mode === "email" || env.useMock ? (
-            <label className="block space-y-1.5">
-              <span className={labelClass}>Email</span>
-              <input
-                className={fieldClass}
-                suppressHydrationWarning
-                type="email"
-                autoComplete="username"
-                required={mode === "email" || env.useMock}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email"
-              />
-            </label>
-          ) : (
-            <>
-              <label className="block space-y-1.5">
-                <span className={labelClass}>Company code</span>
-                <input
-                  className={fieldClass}
-                  suppressHydrationWarning
-                  required
-                  value={companyCode}
-                  onChange={(e) => setCompanyCode(e.target.value)}
-                  placeholder="Enter company code"
-                />
-              </label>
-              <label className="block space-y-1.5">
-                <span className={labelClass}>Employee code</span>
-                <input
-                  className={fieldClass}
-                  suppressHydrationWarning
-                  required
-                  value={employeeCode}
-                  onChange={(e) => setEmployeeCode(e.target.value)}
-                  placeholder="Enter employee code"
-                />
-              </label>
-            </>
-          )}
+          <label className="block space-y-1.5">
+            <span className={labelClass}>Company code</span>
+            <input
+              className={fieldClass}
+              suppressHydrationWarning
+              required
+              value={companyCode}
+              onChange={(e) => setCompanyCode(e.target.value.toUpperCase())}
+              placeholder="e.g. CT or DEMOCO"
+            />
+          </label>
+
+          <label className="block space-y-1.5">
+            <span className={labelClass}>Employee code</span>
+            <input
+              className={fieldClass}
+              suppressHydrationWarning
+              required
+              value={employeeCode}
+              onChange={(e) => setEmployeeCode(e.target.value.toUpperCase())}
+              placeholder="e.g. CT5354"
+            />
+          </label>
 
           <label className="block space-y-1.5">
             <span className={labelClass}>Password</span>
@@ -324,8 +262,11 @@ export default function LoginForm() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter your password"
+              placeholder="e.g. CT535415102003"
             />
+            <p className="mt-1 text-xs text-[#6b7280]">
+              Format: Employee Code + DOB (DDMMYYYY), e.g. <span className="font-mono text-[#7c5cfc]">CT535415102003</span>
+            </p>
           </label>
 
           <div className="flex items-center justify-between gap-3 pt-0.5">

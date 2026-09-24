@@ -15,6 +15,7 @@ import { SetupEntityPanel, type FieldDef } from "@/components/hr/setup/setup-ent
 import { HolidayCalendarPanel } from "@/components/hr/setup/holiday-calendar-panel";
 import { AttendancePolicyPanel } from "@/components/hr/setup/attendance-policy-panel";
 import { ManagementGroupPanel } from "@/components/hr/setup/management-group-panel";
+import { PeopleRolesPanel } from "@/components/hr/setup/people-roles-panel";
 import { OnboardingPoliciesPanel } from "@/components/hr/setup/onboarding-policies-panel";
 import { SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { toApiTimeValue, toTimeInputValue } from "@/components/hr/setup/setup-drawer";
@@ -1537,6 +1538,9 @@ function TabPanel({ tab }: { tab: HrSetupTab }) {
   }
   if (tab.id === "employment-types") {
     return <ManagementGroupPanel tab={tab} />;
+  }
+  if (tab.id === "people-roles") {
+    return <PeopleRolesPanel />;
   }
   if (tab.id === "onboarding-policies") {
     return <OnboardingPoliciesPanel />;

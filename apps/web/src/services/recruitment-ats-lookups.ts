@@ -4,10 +4,13 @@
  * falls back to sensible local defaults so forms always work.
  */
 
+import { buildReportingManagerOptions } from "@/lib/hr/reporting-managers";
 import { resourceService } from "@/services/api-client";
 import { formatInr as formatInrBase } from "@/services/recruitment-service";
 
 export type NamedOption = { id: string; name: string };
+
+export type AtsLookupSource = "live" | "employees" | "demo";
 
 const BRANCH_FALLBACK: NamedOption[] = [
   { id: "head-office", name: "Head Office" },
@@ -41,6 +44,34 @@ function rowName(row: Record<string, unknown>): string {
   return String(row.employee_code ?? row.recruiter_code ?? row.document_number ?? row.id ?? "—");
 }
 
+function namedFromEmployee(row: Record<string, unknown>): NamedOption {
+  const name = rowName(row);
+  const code = String(row.employee_code ?? "").trim();
+  return {
+    id: String(row.id ?? crypto.randomUUID()),
+    name: code && !name.includes(code) ? `${name} (${code})` : name,
+  };
+}
+
+function looksLikeRecruiterRole(row: Record<string, unknown>): boolean {
+  const blob = [
+    row.designation,
+    row.job_title,
+    row.display_name,
+    row.department,
+    row.department_name,
+  ]
+    .map((v) => String(v ?? "").toLowerCase())
+    .join(" ");
+  return (
+    blob.includes("recruiter") ||
+    blob.includes("talent") ||
+    blob.includes("staffing") ||
+    /\bhr\b/.test(blob) ||
+    blob.includes("human resource")
+  );
+}
+
 function normalizeList(data: unknown): Record<string, unknown>[] {
   if (Array.isArray(data)) return data.filter((r) => r && typeof r === "object") as Record<string, unknown>[];
   if (data && typeof data === "object") {
@@ -70,23 +101,72 @@ export function formatInrGrouping(value: number | string): string {
   return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 }).format(n);
 }
 
+export function recruiterSourceHint(source: AtsLookupSource): string {
+  if (source === "live") return "From People roles (Recruiter) / recruiter directory. Type a name to search.";
+  if (source === "employees") {
+    return "No recruiter flags yet — showing HR / Talent employees. Assign Recruiter in Org Setup → People roles.";
+  }
+  return "Demo names (Ananya Gupta, Vikram Singh, Meera Nair). Recruiter directory and employees did not load.";
+}
+
+export function hiringManagerSourceHint(source: AtsLookupSource): string {
+  if (source === "live") {
+    return "From People roles (Hiring manager). Type a name to search. Assign flags in Org Setup → People roles.";
+  }
+  if (source === "employees") {
+    return "No hiring-manager flags yet — showing reporting managers. Assign flags in Org Setup → People roles.";
+  }
+  return "Demo names — employee directory did not load. Type a name to search.";
+}
+
 export async function loadAtsLookups(): Promise<{
   employees: NamedOption[];
+  hiringManagers: NamedOption[];
   branches: NamedOption[];
   recruiters: NamedOption[];
+  recruiterSource: AtsLookupSource;
+  managerSource: AtsLookupSource;
 }> {
   let employees = EMPLOYEE_FALLBACK;
+  let hiringManagers = EMPLOYEE_FALLBACK;
+  let managerSource: AtsLookupSource = "demo";
   let branches = BRANCH_FALLBACK;
   let recruiters = RECRUITER_FALLBACK;
+  let recruiterSource: AtsLookupSource = "demo";
+  let empRows: Record<string, unknown>[] = [];
 
   try {
     const empRes = await resourceService.list("/employees", { page_size: 200 });
-    const empRows = normalizeList(empRes.data);
+    empRows = normalizeList(empRes.data);
     if (empRows.length) {
-      employees = empRows.map((r) => ({
-        id: String(r.id ?? crypto.randomUUID()),
-        name: rowName(r),
-      }));
+      employees = empRows.map(namedFromEmployee);
+      const flaggedManagers = empRows.filter((r) => r.is_hiring_manager === true);
+      if (flaggedManagers.length) {
+        hiringManagers = flaggedManagers.map(namedFromEmployee);
+        managerSource = "live";
+      } else {
+        const managers = buildReportingManagerOptions(
+          empRows.map((r) => ({
+            id: String(r.id ?? ""),
+            employee_code: String(r.employee_code ?? ""),
+            first_name: String(r.first_name ?? ""),
+            last_name: String(r.last_name ?? ""),
+            designation: String(r.designation ?? r.job_title ?? ""),
+            job_title: String(r.job_title ?? ""),
+            display_name: rowName(r),
+            reporting_manager_id: r.reporting_manager_id ? String(r.reporting_manager_id) : null,
+            is_deleted: Boolean(r.is_deleted),
+            status: String(r.status ?? "active"),
+          })),
+        );
+        if (managers.length) {
+          hiringManagers = managers.map((m) => ({ id: m.id, name: m.label }));
+          managerSource = "employees";
+        } else {
+          hiringManagers = [];
+          managerSource = "employees";
+        }
+      }
     }
   } catch {
     /* fallback */
@@ -118,18 +198,34 @@ export async function loadAtsLookups(): Promise<{
 
   try {
     const recRes = await resourceService.list("/recruitment/recruiters", { page_size: 100 });
-    const recRows = normalizeList(recRes.data);
+    const recRows = normalizeList(recRes.data).filter((r) => {
+      const status = String(r.status ?? "active").toLowerCase();
+      return status !== "inactive" && status !== "deleted";
+    });
     if (recRows.length) {
       recruiters = recRows.map((r) => ({
-        id: String(r.id ?? crypto.randomUUID()),
+        id: String(r.employee_id ?? r.id ?? crypto.randomUUID()),
         name: rowName(r),
       }));
+      recruiterSource = "live";
     }
   } catch {
-    /* fallback */
+    /* try employees below */
   }
 
-  return { employees, branches, recruiters };
+  const flaggedRecruiters = empRows.filter((r) => r.is_recruiter === true);
+  if (flaggedRecruiters.length) {
+    recruiters = flaggedRecruiters.map(namedFromEmployee);
+    recruiterSource = "live";
+  } else if (recruiterSource !== "live" && empRows.length) {
+    const hrish = empRows.filter(looksLikeRecruiterRole).map(namedFromEmployee);
+    if (hrish.length) {
+      recruiters = hrish;
+      recruiterSource = "employees";
+    }
+  }
+
+  return { employees, hiringManagers, branches, recruiters, recruiterSource, managerSource };
 }
 
 export const INDIAN_STATES = [

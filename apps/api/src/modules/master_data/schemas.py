@@ -91,6 +91,9 @@ class EmployeeResponse(BaseModel):
     reporting_manager_id: UUID | None = None
     date_of_leaving: date | None = None
     user_id: UUID | None = None
+    is_hiring_manager: bool = False
+    is_recruiter: bool = False
+    is_hr: bool = False
 
 
 class CustomerCreateRequest(BaseModel):

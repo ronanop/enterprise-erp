@@ -173,6 +173,7 @@ from modules.hr.service.on_duty_ot_service import OnDutyRequestService, OtAllotm
 from modules.hr.service.compoff_bio_service import BiometricDeviceService, CompoffRequestService
 from modules.hr.service.shift_swap_rotation_service import ShiftRotationService, ShiftSwapService
 from modules.hr.service.management_group_service import ManagementGroupService
+from modules.hr.service.kpi_okr_service import KpiService, OkrService
 from shared.schemas import APIResponse
 
 designations_router = APIRouter(prefix="/designations", tags=["HR - Designations"])

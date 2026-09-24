@@ -8,7 +8,6 @@ import {
   buildRecruitmentDashboardModel,
   formatPostedOn,
   type KpiKey,
-  type SearchHit,
   type TrendRangeKey,
 } from "@/components/hr/recruitment/dashboard/dashboard-model";
 import { DataTable, VerticalKebab } from "@/components/hr/recruitment/dashboard/data-table";
@@ -64,15 +63,11 @@ export function RecruitmentOverviewDashboard({
   /** When true, render dashboard home panels (pipeline/trend/tables). */
   showHome?: boolean;
 }) {
-  const [query, setQuery] = useState("");
   const [trendRange, setTrendRange] = useState<TrendRangeKey>("last_6");
 
   const model = useMemo(
-    () =>
-      dir
-        ? buildRecruitmentDashboardModel(dir, { trendRange, query })
-        : null,
-    [dir, trendRange, query],
+    () => (dir ? buildRecruitmentDashboardModel(dir, { trendRange }) : null),
+    [dir, trendRange],
   );
 
   function handleKpi(key: KpiKey) {
@@ -98,38 +93,9 @@ export function RecruitmentOverviewDashboard({
     }
   }
 
-  function handleHit(hit: SearchHit) {
-    if (!dir) return;
-    switch (hit.kind) {
-      case "job": {
-        const job = dir.jobs.find((j) => j.id === hit.id);
-        if (job) handlers.onOpenJob(job);
-        return;
-      }
-      case "candidate": {
-        const cand = dir.candidates.find((c) => c.id === hit.id);
-        if (cand) handlers.onOpenCandidate(cand);
-        return;
-      }
-      case "interview": {
-        const interview = dir.interviews.find((i) => i.id === hit.id);
-        if (interview) handlers.onOpenInterview(interview);
-        return;
-      }
-      default: {
-        const _exhaustive: never = hit.kind;
-        return _exhaustive;
-      }
-    }
-  }
-
   return (
     <div className="space-y-4 pb-6">
       <DashboardChrome
-        query={query}
-        onQueryChange={setQuery}
-        hits={model?.searchHits ?? []}
-        onHit={handleHit}
         onCreateJob={handlers.onCreateJob}
         onAddCandidate={handlers.onAddCandidate}
         onScheduleInterview={handlers.onScheduleInterview}

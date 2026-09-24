@@ -35,6 +35,7 @@ export type HrSetupTabId =
   | "employment-types"
   | "employment-type"
   | "reporting"
+  | "people-roles"
   | "document-types"
   | "onboarding-policies"
   | "leave-policies"
@@ -162,8 +163,15 @@ export const hrSetupSections: HrSetupSection[] = [
       {
         id: "reporting",
         title: "Reporting Structure",
-        description: "Reporting managers derived from roles",
+        description: "Reporting managers derived from who has direct reports",
         source: "derived",
+      },
+      {
+        id: "people-roles",
+        title: "People roles",
+        description: "Assign hiring manager, recruiter, and HR — used for job dropdowns, approvals, and RBAC",
+        source: "api",
+        apiPath: "/hrms/people-roles",
       },
       // Document Types & Onboarding Policies moved to EDoc (/hr/edoc)
     ],
@@ -238,6 +246,7 @@ export const setupTabIcons: Partial<Record<HrSetupTabId, LucideIcon>> = {
   "employment-types": UserCog,
   "employment-type": Briefcase,
   reporting: Users,
+  "people-roles": UserCog,
   "document-types": FileText,
   "onboarding-policies": Shield,
   "leave-policies": Shield,

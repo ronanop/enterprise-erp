@@ -5,13 +5,14 @@ from __future__ import annotations
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import SecUser
 from modules.foundation.service.org_context_service import OrgContextService
 from modules.master_data.models.employee import MasterEmployee
+from security.field_crypto import pii_lookup
 from modules.master_data.repository.employee_repository import EmployeeRepository
 from modules.master_data.service.employee_service import EmployeeService
 from modules.organization.repository.hierarchy_repository import DepartmentRepository
@@ -73,7 +74,7 @@ class UserEmployeeLinkService:
             select(MasterEmployee).where(
                 MasterEmployee.tenant_id == tenant_id,
                 MasterEmployee.is_deleted.is_(False),
-                func.lower(MasterEmployee.email) == email,
+                MasterEmployee.email_lookup == pii_lookup(email),
             )
         )
 

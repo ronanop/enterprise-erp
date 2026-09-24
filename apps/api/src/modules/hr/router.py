@@ -49,6 +49,7 @@ from modules.hr.routers.employee_import import employee_import_router
 from modules.hr.routers.digital_onboarding import digital_onboarding_router
 from modules.hr.routers.legal_entities import legal_entities_router
 from modules.hr.routers.leave_adjust import leave_adjust_router
+from modules.hr.routers.people_roles import people_roles_router
 from modules.hr.routers.superadmin import hr_nav_access_router, superadmin_router
 
 # Browser Network tab filter: /hrms. UI routes stay under /hr/*. Legacy /api/v1/hr is aliased in middleware.
@@ -98,5 +99,6 @@ hr_router.include_router(ess_policies_router)
 hr_router.include_router(management_groups_router)
 hr_router.include_router(digital_onboarding_router)
 hr_router.include_router(legal_entities_router)
+hr_router.include_router(people_roles_router)
 hr_router.include_router(hr_nav_access_router)
 hr_router.include_router(superadmin_router)
