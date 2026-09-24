@@ -526,12 +526,17 @@ export function invalidateEmployeeDirectoryCache(): void {
 async function listAllPages(apiPath: string): Promise<{ data: HrRow[]; error?: unknown }> {
   const all: HrRow[] = [];
   try {
+    const seenFirstIds = new Set<string>();
     for (let page = 1; page <= API_MAX_PAGES; page += 1) {
       const res = await resourceService.list(apiPath, {
         page_size: API_PAGE_SIZE,
         page,
       });
       const chunk = (Array.isArray(res.data) ? res.data : []) as HrRow[];
+      const firstId = chunk[0] ? String(chunk[0].id ?? "") : "";
+      // Some org endpoints ignore page and return the full list every time.
+      if (page > 1 && firstId && seenFirstIds.has(firstId)) break;
+      if (firstId) seenFirstIds.add(firstId);
       all.push(...chunk);
       if (chunk.length < API_PAGE_SIZE) break;
     }

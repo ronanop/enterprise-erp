@@ -27,9 +27,13 @@ function writeJson(key: string, value: unknown) {
 
 async function listAll(apiPath: string): Promise<HrRow[]> {
   const all: HrRow[] = [];
+  const seenFirstIds = new Set<string>();
   for (let page = 1; page <= 20; page += 1) {
     const res = await resourceService.list(apiPath, { page, page_size: 200 }).catch(() => ({ data: [] }));
     const rows = (Array.isArray(res.data) ? res.data : []) as HrRow[];
+    const firstId = rows[0] ? String(rows[0].id ?? "") : "";
+    if (page > 1 && firstId && seenFirstIds.has(firstId)) break;
+    if (firstId) seenFirstIds.add(firstId);
     all.push(...rows);
     if (rows.length < 200) break;
   }

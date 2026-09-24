@@ -89,11 +89,15 @@ async function safeListAll(apiPath: string): Promise<ListResult> {
   const all: HrRow[] = [];
   let page = 1;
   let lastStatus: number | undefined;
+  const seenFirstIds = new Set<string>();
   while (page <= 20) {
     const chunk = await safeList(apiPath, { page, page_size: 200 });
     if (chunk.error && chunk.rows.length === 0) {
       return { rows: all, error: chunk.error, status: chunk.status };
     }
+    const firstId = chunk.rows[0] ? String(chunk.rows[0].id ?? "") : "";
+    if (page > 1 && firstId && seenFirstIds.has(firstId)) break;
+    if (firstId) seenFirstIds.add(firstId);
     lastStatus = chunk.status;
     all.push(...chunk.rows);
     if (chunk.rows.length < 200) break;
@@ -250,9 +254,13 @@ export async function listHrBranchOptions(): Promise<HrOption[]> {
 export async function listHrEmployeeOptions(): Promise<HrOption[]> {
   try {
     const all: HrRow[] = [];
+    const seenFirstIds = new Set<string>();
     for (let page = 1; page <= 25; page += 1) {
       const res = await resourceService.list("/employees", { page_size: 200, page });
       const chunk = asArray(res.data);
+      const firstId = chunk[0] ? String(chunk[0].id ?? "") : "";
+      if (page > 1 && firstId && seenFirstIds.has(firstId)) break;
+      if (firstId) seenFirstIds.add(firstId);
       all.push(...chunk);
       if (chunk.length < 200) break;
     }

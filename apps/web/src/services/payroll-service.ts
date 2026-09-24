@@ -58,8 +58,12 @@ export async function listAllPayrollRows(
   query?: Record<string, string | number | boolean | null | undefined>,
 ): Promise<PayrollRow[]> {
   const all: PayrollRow[] = [];
+  const seenFirstIds = new Set<string>();
   for (let page = 1; page <= 30; page += 1) {
     const { rows } = await safeList(apiPath, { ...query, page, page_size: 200 });
+    const firstId = rows[0] ? String(rows[0].id ?? "") : "";
+    if (page > 1 && firstId && seenFirstIds.has(firstId)) break;
+    if (firstId) seenFirstIds.add(firstId);
     all.push(...rows);
     if (rows.length < 200) break;
   }

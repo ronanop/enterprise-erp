@@ -599,10 +599,14 @@ export async function listSetupApi(apiPath: string): Promise<SetupRow[]> {
 
 async function listAllNormalized(apiPath: string): Promise<SetupRow[]> {
   const all: SetupRow[] = [];
+  const seenFirstIds = new Set<string>();
   for (let page = 1; page <= 20; page += 1) {
     try {
       const res = await resourceService.list(apiPath, { page_size: 200, page });
       const chunk = normalizeRows(res.data);
+      const firstId = chunk[0] ? String(chunk[0].id ?? "") : "";
+      if (page > 1 && firstId && seenFirstIds.has(firstId)) break;
+      if (firstId) seenFirstIds.add(firstId);
       all.push(...chunk);
       if (chunk.length < 200) break;
     } catch {
