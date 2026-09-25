@@ -1,9 +1,9 @@
 """PO queue handoff - Installation share to Projects PO Queue (server-side)."""
 
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -14,19 +14,17 @@ from modules.project.models.mixins import PrjTransactionMixin
 class PrjPoQueueHandoff(Base, *PrjTransactionMixin):
     __tablename__ = "prj_po_queue_handoff"
     __table_args__ = (
-        UniqueConstraint(
-            "tenant_id",
-            "proc_order_id",
-            name="uk_prj_po_queue_handoff_order",
-        ),
+        # Partial unique for real SCM shares is enforced in migration
+        # (uq_prj_po_queue_handoff_order_active). Keep a no-op UniqueConstraint
+        # out of ORM metadata so seed rows with null proc_order_id are allowed.
         {"schema": "project"},
     )
 
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
-    proc_order_id: Mapped[UUID] = mapped_column(
+    proc_order_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("procurement.proc_order_header.id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     challan_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -40,3 +38,11 @@ class PrjPoQueueHandoff(Base, *PrjTransactionMixin):
     server_quantity: Mapped[str | None] = mapped_column(String(32), nullable=True)
     server_type: Mapped[str | None] = mapped_column(String(255), nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Seed-only denormalized PO fields (no procurement row).
+    is_seed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    customer_po_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    company_po_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    document_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    customer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    seed_marker: Mapped[str | None] = mapped_column(String(80), nullable=True)

@@ -1,8 +1,9 @@
 # App-only stack for coexistence with other host services.
-# Infra on this VM: docker compose -f docker-compose.infra.yml (Redis, RabbitMQ, OpenSearch).
-# Postgres: AWS RDS via DATABASE_URL. Object storage: AWS S3.
+# Infra on this VM: docker compose -f docker-compose.infra.yml
+# (Postgres, Redis, RabbitMQ, OpenSearch, MinIO on erp-net).
+# Object storage: MinIO via S3_ENDPOINT_URL (AWS S3 disabled).
 # Shares Docker network `erp-net` with infra (REDIS_URL=redis://redis:6379/0, etc.).
-# Does NOT bind 80/443/5432/6379/5672/9200.
+# Does NOT bind 80/443/5432/6379/5672/9200/9000.
 # Host ports: API :8010  |  Web :3000  |  Employee :3001  |  Nginx TLS :8443
 
 networks:
@@ -37,11 +38,12 @@ services:
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
       SSL_CERT_DIR: /etc/ssl/certs
-      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-s3}
-      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-s3}
+      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-minio}
+      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-minio}
       ASSET_STORAGE_PATH: /app/var/asset-storage
       S3_BUCKET: ${S3_BUCKET:-}
-      S3_REGION: ${S3_REGION:-ap-south-1}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       ACCESS_CODE_DEMO: ${ACCESS_CODE_DEMO:-ICP-DEMO-2026}
@@ -83,11 +85,12 @@ services:
       SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
       REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
       SSL_CERT_DIR: /etc/ssl/certs
-      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-s3}
-      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-s3}
+      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-minio}
+      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-minio}
       ASSET_STORAGE_PATH: /app/var/asset-storage
       S3_BUCKET: ${S3_BUCKET:-}
-      S3_REGION: ${S3_REGION:-ap-south-1}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL:-http://minio:9000}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       ACCESS_CODE_DEMO: ${ACCESS_CODE_DEMO:-ICP-DEMO-2026}

@@ -29,6 +29,8 @@ class CrmCompany(Base, *CrmTransactionMixin):
     portal_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False)
     partner_names: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Soft link to marketing.mkt_campaign (type=event) — no cross-module FK (C-02).
+    marketing_event_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True, index=True)
     rating: Mapped[str | None] = mapped_column(String(30), nullable=True)
     first_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     last_name: Mapped[str | None] = mapped_column(String(100), nullable=True)

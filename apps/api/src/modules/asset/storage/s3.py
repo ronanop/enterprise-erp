@@ -1,4 +1,4 @@
-"""AWS S3 storage backend for the asset module."""
+"""MinIO (S3-compatible) storage backend for the asset module."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from core import object_storage
 
 
 class S3Storage:
-    """Opaque keys stored in the configured S3 bucket (same keys as local)."""
+    """Opaque keys stored in the configured MinIO bucket (same keys as local)."""
 
     def save(self, file: BinaryIO, key: str) -> str:
         self._validate_key(key)

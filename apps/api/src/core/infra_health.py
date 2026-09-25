@@ -87,13 +87,13 @@ def _check_rabbitmq() -> tuple[bool, str, str]:
 def _check_s3() -> tuple[bool, str, str]:
     from core import object_storage
 
-    backend = (settings.object_storage_backend or "local").strip().lower()
+    endpoint = settings.s3_endpoint_url.strip() or "(no endpoint)"
     bucket = settings.s3_bucket.strip() or "(none)"
-    target = f"s3://{bucket} ({settings.s3_region})"
-    if backend != "s3":
-        return True, target, "OBJECT_STORAGE_BACKEND!=s3 (skipped)"
+    target = f"minio://{bucket} @ {endpoint}"
+    if not settings.uses_minio_object_storage:
+        return True, target, "OBJECT_STORAGE_BACKEND not minio/s3 (skipped)"
     if not settings.s3_configured:
-        return False, target, "S3_BUCKET / S3_REGION empty"
+        return False, target, "S3_BUCKET / S3_ENDPOINT_URL / MinIO keys required"
     ok, detail = object_storage.head_ok()
     return ok, target, detail
 
@@ -118,7 +118,7 @@ def log_infrastructure_connections() -> dict[str, bool]:
         ("postgres", _check_postgres),
         ("redis", _check_redis),
         ("rabbitmq", _check_rabbitmq),
-        ("s3", _check_s3),
+        ("minio", _check_s3),
         ("opensearch", _check_opensearch),
     )
     results: dict[str, bool] = {}

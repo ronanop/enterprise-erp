@@ -222,8 +222,9 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
     fields: [{ key: "remark", label: "Rejection remark", type: "textarea", required: true }],
   },
   send_to_customer: {
-    label: "Quotation send to customer",
+    label: "Quotation Sent to Customer",
     fields: [],
+    description: "Marks this quote as sent to the customer.",
   },
   negotiate: { label: "Move to Negotiation", fields: [REMARK_FIELD_ALT] },
   follow_up: { label: "Move to Follow-up", fields: [REMARK_FIELD_ALT] },
@@ -425,11 +426,8 @@ export function BlueprintActions({
 
   function openAction(action: string) {
     const config = resolveConfig(action);
-    // Convert / navigation actions run immediately without a form popup.
-    if (
-      config.fields.length === 0 &&
-      (action === "convert" || action === "create_quote" || action === "create_ovf")
-    ) {
+    // No form fields → run immediately (e.g. send_to_customer, share_to_scm, convert).
+    if (config.fields.length === 0) {
       void runImmediate(action);
       return;
     }
@@ -620,53 +618,53 @@ export function BlueprintActions({
         </div>
       ) : null}
       {showTransitions ? (
-      <div className="space-y-1.5">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
-          Transitions
-        </span>
-        {orderedActions.map((action, index) => {
-          const config = resolveConfig(action);
-          const label = actionLabelOverrides?.[action] ?? config.label;
-          const isAttach = ATTACH_ACTIONS.has(action);
-          const isApproval = APPROVAL_ACTIONS.has(action);
-          const isLost = action === "lost";
-          const isOemQuote = OEM_QUOTE_ACTIONS.has(action);
-          const isQuoteFlow = QUOTE_FLOW_ACTIONS.has(action);
-          const isPrimaryFlow = PRIMARY_FLOW_ACTIONS.has(action);
-          const colorClass = isLost
-            ? LOST_BUTTON_CLASS
-            : isAttach || isApproval || isOemQuote || isQuoteFlow || isPrimaryFlow
-              ? BLUE_ACTION_BUTTON_CLASS
-              : undefined;
-          const variant = colorClass ? "outline" : config.tone === "destructive" ? "destructive" : "outline";
-          return (
-            <Fragment key={action}>
-              {action === "attach_boq" && orderedActions[index - 1] === "attach_sow" ? (
-                <span className="text-xs font-medium text-muted-foreground" aria-hidden="true">
-                  or
-                </span>
-              ) : null}
-              <Button
-                type="button"
-                size="sm"
-                variant={variant}
-                className={["cursor-pointer", colorClass].filter(Boolean).join(" ")}
-                disabled={disabled || busy || (locked && action !== "lost")}
-                onClick={() => openAction(action)}
-              >
-                {label}
-              </Button>
-            </Fragment>
-          );
-        })}
-      </div>
-      {error && !activeAction ? (
-        <p className="text-xs text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
-      </div>
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+              Transitions
+            </span>
+            {orderedActions.map((action, index) => {
+              const config = resolveConfig(action);
+              const label = actionLabelOverrides?.[action] ?? config.label;
+              const isAttach = ATTACH_ACTIONS.has(action);
+              const isApproval = APPROVAL_ACTIONS.has(action);
+              const isLost = action === "lost";
+              const isOemQuote = OEM_QUOTE_ACTIONS.has(action);
+              const isQuoteFlow = QUOTE_FLOW_ACTIONS.has(action);
+              const isPrimaryFlow = PRIMARY_FLOW_ACTIONS.has(action);
+              const colorClass = isLost
+                ? LOST_BUTTON_CLASS
+                : isAttach || isApproval || isOemQuote || isQuoteFlow || isPrimaryFlow
+                  ? BLUE_ACTION_BUTTON_CLASS
+                  : undefined;
+              const variant = colorClass ? "outline" : config.tone === "destructive" ? "destructive" : "outline";
+              return (
+                <Fragment key={action}>
+                  {action === "attach_boq" && orderedActions[index - 1] === "attach_sow" ? (
+                    <span className="text-xs font-medium text-muted-foreground" aria-hidden="true">
+                      or
+                    </span>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={variant}
+                    className={["cursor-pointer", colorClass].filter(Boolean).join(" ")}
+                    disabled={disabled || busy || (locked && action !== "lost")}
+                    onClick={() => openAction(action)}
+                  >
+                    {label}
+                  </Button>
+                </Fragment>
+              );
+            })}
+          </div>
+          {error && !activeAction ? (
+            <p className="text-xs text-destructive" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       <ConfirmDialog

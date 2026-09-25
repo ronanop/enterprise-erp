@@ -29,6 +29,7 @@ import {
   getSalesLead,
   listCrmMemberOptions,
   listLeadSourceOptions,
+  listMarketingEventOptions,
   markLeadLost,
   type BlueprintState,
   type Company,
@@ -42,6 +43,7 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
   const [company, setCompany] = useState<Company | null>(null);
   const [employees, setEmployees] = useState<Option[]>([]);
   const [leadSources, setLeadSources] = useState<Option[]>([]);
+  const [marketingEvents, setMarketingEvents] = useState<Option[]>([]);
   const [blueprint, setBlueprint] = useState<BlueprintState | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,16 +53,18 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const [leadRow, bp, employeeOptions, leadSourceOptions] = await Promise.all([
+      const [leadRow, bp, employeeOptions, leadSourceOptions, marketingEventOptions] = await Promise.all([
         getSalesLead(leadId),
         getLeadBlueprint(leadId),
         listCrmMemberOptions().catch(() => [] as Option[]),
         listLeadSourceOptions().catch(() => [] as Option[]),
+        listMarketingEventOptions().catch(() => [] as Option[]),
       ]);
       setLead(leadRow);
       setBlueprint(bp);
       setEmployees(employeeOptions);
       setLeadSources(leadSourceOptions);
+      setMarketingEvents(marketingEventOptions);
       setCompany(
         leadRow.company_account_id
           ? await getCompany(leadRow.company_account_id).catch(() => null)
@@ -184,6 +188,7 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
         company={company}
         employees={employees}
         leadSources={leadSources}
+        marketingEvents={marketingEvents}
       />
     </CrmPage>
   );

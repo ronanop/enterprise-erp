@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     asset_storage_backend: str = Field(
         default="local",
         alias="ASSET_STORAGE_BACKEND",
-        description="Asset file storage backend: 'local' or 's3' (follows OBJECT_STORAGE when s3).",
+        description="Asset file storage: 'local' or 'minio' (S3-compatible via S3_ENDPOINT_URL).",
     )
     asset_storage_path: str = Field(
         default="",
@@ -88,17 +88,25 @@ class Settings(BaseSettings):
     object_storage_backend: str = Field(
         default="local",
         alias="OBJECT_STORAGE_BACKEND",
-        description="Shared object storage: 'local' or 's3' (AWS S3).",
+        description="Shared object storage: 'local' or 'minio' (VM MinIO via S3_ENDPOINT_URL). 's3' accepted as alias for minio.",
     )
     s3_bucket: str = Field(default="", alias="S3_BUCKET")
-    s3_region: str = Field(default="ap-south-1", alias="S3_REGION")
+    s3_region: str = Field(default="us-east-1", alias="S3_REGION")
     s3_endpoint_url: str = Field(
         default="",
         alias="S3_ENDPOINT_URL",
-        description="Optional custom S3 API endpoint (leave empty for AWS).",
+        description="Required MinIO API endpoint (e.g. http://minio:9000 or http://172.16.200.30:9000). AWS S3 is not used.",
     )
-    aws_access_key_id: str = Field(default="", alias="AWS_ACCESS_KEY_ID")
-    aws_secret_access_key: str = Field(default="", alias="AWS_SECRET_ACCESS_KEY")
+    aws_access_key_id: str = Field(
+        default="",
+        alias="AWS_ACCESS_KEY_ID",
+        description="MinIO access key (MINIO_ROOT_USER).",
+    )
+    aws_secret_access_key: str = Field(
+        default="",
+        alias="AWS_SECRET_ACCESS_KEY",
+        description="MinIO secret key (MINIO_ROOT_PASSWORD).",
+    )
     aws_session_token: str = Field(default="", alias="AWS_SESSION_TOKEN")
 
     asset_workflow_governance_enabled: bool = Field(
@@ -306,9 +314,24 @@ class Settings(BaseSettings):
         return _API_ROOT / "var" / "asset-storage"
 
     @property
+    def uses_minio_object_storage(self) -> bool:
+        backend = (self.object_storage_backend or "local").strip().lower()
+        return backend in {"minio", "s3"}
+
+    @property
+    def uses_minio_asset_storage(self) -> bool:
+        backend = (self.asset_storage_backend or "local").strip().lower()
+        return backend in {"minio", "s3"}
+
+    @property
     def s3_configured(self) -> bool:
-        """Bucket + region required; credentials use env / IAM role chain when empty."""
-        return bool(self.s3_bucket.strip() and self.s3_region.strip())
+        """MinIO requires bucket, endpoint, and access keys (no AWS IAM fallback)."""
+        return bool(
+            self.s3_bucket.strip()
+            and self.s3_endpoint_url.strip()
+            and self.aws_access_key_id.strip()
+            and self.aws_secret_access_key.strip()
+        )
 
     def resolved_graph_tenant_id(self) -> str:
         return (self.azure_tenant_id or self.microsoft_tenant_id or "").strip()

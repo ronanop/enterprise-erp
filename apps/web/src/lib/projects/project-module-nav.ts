@@ -19,12 +19,11 @@ const ADMIN_ONLY_HREFS = new Set([
 
 const PROJECTS_USERS_ITEM = { title: "Users", href: "/projects/users" } as const;
 
-/** Workspace links available to every Projects user. */
+/** Workspace links available to every Projects user (Completed Jobs nests under My Jobs). */
 const MEMBER_WORKSPACE_HREFS = [
   "/projects",
   "/projects/my-jobs",
   "/projects/projects",
-  "/projects/completed-jobs",
 ] as const;
 
 export function filterProjectsNavGroups(
@@ -50,9 +49,7 @@ export function filterProjectsNavGroups(
                 ? "Dashboard"
                 : href === "/projects/my-jobs"
                   ? "My Jobs"
-                  : href === "/projects/completed-jobs"
-                    ? "Completed Jobs"
-                    : "Projects",
+                  : "Projects",
             href,
           }
         );

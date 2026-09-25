@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ClipboardCheck, IndianRupee } from "lucide-react";
@@ -28,7 +28,6 @@ import {
 } from "@/components/crm/sales/required-fields-dialog";
 import {
   FinanceField,
-  FinanceSelect,
   FinanceTextarea,
 } from "@/components/finance/journals/finance-form-field";
 import { PageHeader } from "@/components/layout/page-header";
@@ -37,11 +36,7 @@ import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { buildLeadDistributorDropdownOptions } from "@/lib/crm/lead-distributor-options";
-import {
-  LEAD_PRODUCT_TYPES,
-  normalizeLeadProductType,
-  subProductOptionsForType,
-} from "@/lib/crm/lead-product-options";
+import { computeFinanceCostPct } from "@/lib/crm/ovf-finance-cost";
 import { resolveSessionEmployeeLabel } from "@/lib/crm/session-employee";
 import {
   addOvfLine,
@@ -319,7 +314,11 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
   }, [load]);
 
   function setField<K extends keyof OvfDraft>(key: K, value: OvfDraft[K]) {
-    if (key === "freight" || key === "finance_cost_pct") {
+    if (
+      key === "freight" ||
+      key === "vendor_payment_days" ||
+      key === "customer_payment_days"
+    ) {
       setMarginInputsDirty(true);
     }
     setForm((current) => ({ ...current, [key]: value }));
@@ -335,14 +334,22 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
     setVendorRows(rows);
   }
 
+  const financeCostPct = useMemo(
+    () =>
+      computeFinanceCostPct(
+        Number(form.vendor_payment_days) || 0,
+        Number(form.customer_payment_days) || 0,
+      ),
+    [form.vendor_payment_days, form.customer_payment_days],
+  );
+
   const { totalMarginAmount, totalMarginPct } = computeOvfMargins({
     customerRows,
     vendorRows,
     freight: form.freight,
-    financeCostPct: form.finance_cost_pct,
+    financeCostPct,
   });
   const freightAmount = Number(form.freight) || 0;
-  const financeCostPct = Number(form.finance_cost_pct) || 0;
   const marginAmountDisplay =
     marginInputsDirty && Number.isFinite(totalMarginAmount) ? totalMarginAmount.toFixed(2) : "";
   const marginPctDisplay =
@@ -499,64 +506,6 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         </div>
       </CrmSection>
 
-      <CrmSection title="Technology Segment & Sub Technology Segment" icon={ClipboardCheck}>
-        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
-          <FinanceField label="Technology Segment">
-            <FinanceSelect
-              value={form.technology_segment}
-              onChange={(event) => {
-                const next = event.target.value;
-                const nextSubs = subProductOptionsForType(next);
-                setForm((current) => ({
-                  ...current,
-                  technology_segment: next,
-                  sub_technology_segment: nextSubs.includes(current.sub_technology_segment)
-                    ? current.sub_technology_segment
-                    : "",
-                }));
-              }}
-            >
-              <option value="">None</option>
-              {LEAD_PRODUCT_TYPES.map((segment) => (
-                <option key={segment} value={segment}>
-                  {segment}
-                </option>
-              ))}
-              {form.technology_segment &&
-              !normalizeLeadProductType(form.technology_segment) ? (
-                <option value={form.technology_segment}>{form.technology_segment}</option>
-              ) : null}
-            </FinanceSelect>
-          </FinanceField>
-          <FinanceField label="Sub Technology Segment">
-            <FinanceSelect
-              value={form.sub_technology_segment}
-              onChange={(event) => setField("sub_technology_segment", event.target.value)}
-              disabled={!normalizeLeadProductType(form.technology_segment)}
-            >
-              <option value="">
-                {normalizeLeadProductType(form.technology_segment)
-                  ? "None"
-                  : "Select technology segment first"}
-              </option>
-              {subProductOptionsForType(form.technology_segment).map((segment) => (
-                <option key={segment} value={segment}>
-                  {segment}
-                </option>
-              ))}
-              {form.sub_technology_segment &&
-              !subProductOptionsForType(form.technology_segment).includes(
-                form.sub_technology_segment,
-              ) ? (
-                <option value={form.sub_technology_segment}>
-                  {form.sub_technology_segment}
-                </option>
-              ) : null}
-            </FinanceSelect>
-          </FinanceField>
-        </div>
-      </CrmSection>
-
       <CrmSection title="Charges and Details" icon={IndianRupee}>
         <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
           <FinanceField label="Total Margin in Amount">
@@ -629,12 +578,11 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           </FinanceField>
           <FinanceField label="Finance Cost (%)">
             <Input
-              type="number"
-              min={0}
-              step="0.01"
-              className={NUMBER_NO_SPIN}
-              value={form.finance_cost_pct}
-              onChange={(event) => setField("finance_cost_pct", event.target.value)}
+              type="text"
+              readOnly
+              className={`${NUMBER_NO_SPIN} cursor-default bg-muted/50`}
+              value={financeCostPct.toFixed(2)}
+              title="max(0, customer days − vendor days − 5) / 15 × 0.5 (2 d.p.)"
             />
           </FinanceField>
           <FinanceField label="Additional Charges (₹)">
@@ -656,6 +604,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         onCustomerRowsChange={onCustomerRowsChange}
         onVendorRowsChange={onVendorRowsChange}
         vendorNameOptions={vendorNameOptions}
+        readOnlyLines
         disabled={saving}
       />
 

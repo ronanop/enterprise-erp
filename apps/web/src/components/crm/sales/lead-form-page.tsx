@@ -33,6 +33,8 @@ import { Input } from "@/components/ui/input";
 import { formatLeadDistributorNames, parseLeadDistributorNames } from "@/lib/crm/lead-distributor-options";
 import {
   companySourceToLeadMatchKey,
+  isEventLeadSourceLabel,
+  isMultiTierLeadSourceLabel,
   normalizeSourceMatchKey,
   sortLeadSourcesByCompanyOrder,
 } from "@/lib/crm/company-lead-sources";
@@ -45,6 +47,14 @@ import {
   parseLeadProductTypes,
   subProductOptionsForTypes,
 } from "@/lib/crm/lead-product-options";
+import {
+  HARDWARE_SOURCING_CHANNELS,
+  SERVICE_SOURCING_CHANNELS,
+  formatLeadSourcingChannels,
+  leadNeedsHardwareSourcing,
+  leadNeedsServiceSourcing,
+  parseLeadSourcingChannels,
+} from "@/lib/crm/lead-sourcing-channels";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { ApiClientError, authService } from "@/services/api-client";
 import type { UserProfile } from "@/types/api";
@@ -54,6 +64,7 @@ import {
   getLeadBlueprint,
   getSalesLead,
   listLeadSourceOptions,
+  listMarketingEventOptions,
   listCrmMemberOptions,
   listSellingEntities,
   markLeadLost,
@@ -73,7 +84,6 @@ const DEFAULT_ENTITY_EMAIL = "info@cachedigitech.com";
 const DEFAULT_ENTITY_CONTACT = "18003094333";
 const REQUIREMENT_TYPES = ["New Requirement", "Expansion"];
 const PURCHASE_MODELS = ["CAPEX", "OPEX"];
-const DEAL_TYPES = ["back to back", "self-generated", "from market"] as const;
 const INDUSTRIES = [
   "IT & Technology",
   "Manufacturing",
@@ -95,6 +105,8 @@ const EMPTY: LeadCreateFromCompanyInput = {
   mobile: "",
   email: "",
   lead_source_id: "",
+  partner_names: "",
+  marketing_event_id: "",
   owner_employee_id: "",
   assign_to_id: "",
   assigned_date: "",
@@ -152,6 +164,7 @@ export function LeadFormPage({
   const [company, setCompany] = useState<Company | null>(null);
   const [existingLead, setExistingLead] = useState<SalesLead | null>(null);
   const [leadSources, setLeadSources] = useState<Option[]>([]);
+  const [marketingEvents, setMarketingEvents] = useState<Option[]>([]);
   const [leadOwnerLabel, setLeadOwnerLabel] = useState("");
   const [industryOther, setIndustryOther] = useState("");
   const [form, setForm] = useState<LeadCreateFromCompanyInput>(EMPTY);
@@ -167,13 +180,17 @@ export function LeadFormPage({
 
   const selectedOemNames = parseLeadOemNames(form.oem_name);
   const selectedDistributorNames = parseLeadDistributorNames(form.distributor_name);
+  const selectedLeadSource = leadSources.find((source) => source.id === form.lead_source_id);
+  const isMultiTierSource = isMultiTierLeadSourceLabel(selectedLeadSource?.label);
+  const isEventSource = isEventLeadSourceLabel(selectedLeadSource?.label);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [companyRow, sources, meResponse, entities, leadRow, memberOptions] = await Promise.all([
+      const [companyRow, sources, events, meResponse, entities, leadRow, memberOptions] = await Promise.all([
         getCompany(companyAccountId),
         listLeadSourceOptions().catch(() => []),
+        listMarketingEventOptions().catch(() => [] as Option[]),
         authService.me().catch(() => null),
         listSellingEntities().catch(() => []),
         leadId ? getSalesLead(leadId).catch(() => null) : Promise.resolve(null),
@@ -207,11 +224,12 @@ export function LeadFormPage({
         meUser?.employee_id && memberOptions.some((member) => member.id === meUser.employee_id)
           ? meUser.employee_id
           : memberOptions.find(
-              (member) =>
-                member.email?.trim().toLowerCase() === meUser?.email?.trim().toLowerCase(),
-            )?.id ?? "";
+            (member) =>
+              member.email?.trim().toLowerCase() === meUser?.email?.trim().toLowerCase(),
+          )?.id ?? "";
       setCompany(companyRow);
       setLeadSources(sortLeadSourcesByCompanyOrder(sources));
+      setMarketingEvents(events);
       setEntityCatalog(entities);
       const rawIndustry = companyRow.industry ?? "";
       if (rawIndustry && !INDUSTRIES.includes(rawIndustry)) {
@@ -235,6 +253,8 @@ export function LeadFormPage({
             mobile: leadRow.mobile ?? "",
             email: leadRow.email ?? "",
             lead_source_id: leadRow.lead_source_id ?? "",
+            partner_names: leadRow.partner_names ?? "",
+            marketing_event_id: leadRow.marketing_event_id ?? "",
             expected_amount: leadRow.expected_amount ?? undefined,
             committed_amount: leadRow.committed_amount ?? undefined,
             expected_closure_date: leadRow.expected_closure_date ?? "",
@@ -284,6 +304,16 @@ export function LeadFormPage({
           mobile: companyRow.phone ?? "",
           email: companyRow.customer_email ?? "",
           lead_source_id: f.lead_source_id || inheritedSource?.id || "",
+          partner_names:
+            f.partner_names ||
+            (isMultiTierLeadSourceLabel(inheritedSource?.label)
+              ? companyRow.partner_names ?? ""
+              : ""),
+          marketing_event_id:
+            f.marketing_event_id ||
+            (isEventLeadSourceLabel(inheritedSource?.label)
+              ? companyRow.marketing_event_id ?? ""
+              : ""),
           industry:
             rawIndustry && !INDUSTRIES.includes(rawIndustry) ? rawIndustry : companyRow.industry,
           portal_link: f.portal_link || companyRow.website || "",
@@ -320,12 +350,16 @@ export function LeadFormPage({
           ? f.sub_product_category
           : "";
       const cloudSelected = types.includes("Cloud");
+      const channels = parseLeadSourcingChannels(f.deal_type);
+      if (!leadNeedsHardwareSourcing(types)) delete channels.hardware;
+      if (!leadNeedsServiceSourcing(types)) delete channels.service;
       return {
         ...f,
         product_type: formatLeadProductTypes(types),
         sub_product_category: keepCategory,
         sub_product: cloudSelected ? "" : f.sub_product,
         sub_product_other: cloudSelected ? "" : f.sub_product_other,
+        deal_type: formatLeadSourcingChannels(channels, types),
       };
     });
   }
@@ -333,6 +367,24 @@ export function LeadFormPage({
   const selectedProductTypes = parseLeadProductTypes(form.product_type);
   const subProductCategoryOptions = subProductOptionsForTypes(selectedProductTypes);
   const isCloudProduct = isCloudLeadProductType(form.product_type);
+  const showHardwareSourcing = leadNeedsHardwareSourcing(selectedProductTypes);
+  const showServiceSourcing = leadNeedsServiceSourcing(selectedProductTypes);
+  const sourcingChannels = parseLeadSourcingChannels(form.deal_type);
+
+  function setSourcingChannel(kind: "hardware" | "service", value: string) {
+    setForm((f) => {
+      const types = parseLeadProductTypes(f.product_type);
+      const next = { ...parseLeadSourcingChannels(f.deal_type) };
+      if (kind === "hardware") {
+        if (value) next.hardware = value;
+        else delete next.hardware;
+      } else {
+        if (value) next.service = value;
+        else delete next.service;
+      }
+      return { ...f, deal_type: formatLeadSourcingChannels(next, types) };
+    });
+  }
 
   function onOemNamesChange(names: string[]) {
     setForm((f) => ({
@@ -403,11 +455,19 @@ export function LeadFormPage({
     if (!form.mobile?.trim()) missing.push("Mobile");
     if (!form.designation?.trim()) missing.push("Designation");
     if (!form.lead_source_id) missing.push("Lead Source");
+    if (isMultiTierSource && !form.partner_names?.trim()) missing.push("Partner Names");
+    if (isEventSource && !form.marketing_event_id) missing.push("Event");
     if (!form.sub_product_category?.trim()) {
       missing.push(isCloudLeadProductType(form.product_type) ? "Sub Product" : "Sub Product Category");
     }
     if (!form.requirement_type) missing.push("Requirement Type");
     if (!form.purchase_model) missing.push("Purchase Model");
+    if (showHardwareSourcing && !sourcingChannels.hardware?.trim()) {
+      missing.push("Hardware Sourcing Channel");
+    }
+    if (showServiceSourcing && !sourcingChannels.service?.trim()) {
+      missing.push("Service Sourcing Channel");
+    }
     if (form.expected_amount === undefined || form.expected_amount === null || Number.isNaN(Number(form.expected_amount))) {
       missing.push("Expected Order Value");
     }
@@ -430,11 +490,14 @@ export function LeadFormPage({
         ...leadBody,
         assign_to_id: null,
         assigned_date: null,
+        partner_names: isMultiTierSource ? form.partner_names?.trim() || null : null,
+        marketing_event_id: isEventSource ? form.marketing_event_id || null : null,
+        deal_type: formatLeadSourcingChannels(sourcingChannels, selectedProductTypes),
         expected_amount: form.expected_amount ? Number(form.expected_amount) : null,
         committed_amount:
           form.committed_amount !== undefined &&
-          form.committed_amount !== null &&
-          !Number.isNaN(Number(form.committed_amount))
+            form.committed_amount !== null &&
+            !Number.isNaN(Number(form.committed_amount))
             ? Number(form.committed_amount)
             : null,
         expected_closure_date: form.expected_closure_date || null,
@@ -511,7 +574,7 @@ export function LeadFormPage({
         <BlueprintActions
           allowedActions={[]}
           currentStageLabel="New"
-          onAction={async () => {}}
+          onAction={async () => { }}
         />
       )}
 
@@ -569,7 +632,23 @@ export function LeadFormPage({
           </FinanceField>
 
           <FinanceField label="Lead Source *">
-            <FinanceSelect value={form.lead_source_id} onChange={(e) => set("lead_source_id", e.target.value)}>
+            <FinanceSelect
+              value={form.lead_source_id}
+              onChange={(e) => {
+                const value = e.target.value;
+                const nextSource = leadSources.find((source) => source.id === value);
+                setForm((f) => ({
+                  ...f,
+                  lead_source_id: value,
+                  partner_names: isMultiTierLeadSourceLabel(nextSource?.label)
+                    ? f.partner_names
+                    : "",
+                  marketing_event_id: isEventLeadSourceLabel(nextSource?.label)
+                    ? f.marketing_event_id
+                    : "",
+                }));
+              }}
+            >
               <option value="">None</option>
               {leadSources.map((source) => (
                 <option key={source.id} value={source.id}>
@@ -578,6 +657,32 @@ export function LeadFormPage({
               ))}
             </FinanceSelect>
           </FinanceField>
+          {isMultiTierSource ? (
+            <FinanceField label="Partner Names *">
+              <Input
+                value={form.partner_names ?? ""}
+                onChange={(e) => set("partner_names", e.target.value)}
+                placeholder="Enter partner company names"
+              />
+            </FinanceField>
+          ) : null}
+          {isEventSource ? (
+            <FinanceField label="Event *">
+              <FinanceSelect
+                value={form.marketing_event_id ?? ""}
+                onChange={(e) => set("marketing_event_id", e.target.value)}
+              >
+                <option value="">
+                  {marketingEvents.length > 0 ? "None" : "No marketing events found"}
+                </option>
+                {marketingEvents.map((event) => (
+                  <option key={event.id} value={event.id}>
+                    {event.label}
+                  </option>
+                ))}
+              </FinanceSelect>
+            </FinanceField>
+          ) : null}
 
           <FinanceField label="Product Type *">
             <LeadProductTypeMultiSelect
@@ -661,16 +766,36 @@ export function LeadFormPage({
             <Input value={form.dr_number ?? ""} onChange={(e) => set("dr_number", e.target.value)} />
           </FinanceField>
 
-          <FinanceField label="Sourcing Channel">
-            <FinanceSelect value={form.deal_type ?? ""} onChange={(e) => set("deal_type", e.target.value)}>
-              <option value="">None</option>
-              {DEAL_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </FinanceSelect>
-          </FinanceField>
+          {showHardwareSourcing ? (
+            <FinanceField label="Hardware Sourcing Channel *">
+              <FinanceSelect
+                value={sourcingChannels.hardware ?? ""}
+                onChange={(e) => setSourcingChannel("hardware", e.target.value)}
+              >
+                <option value="">None</option>
+                {HARDWARE_SOURCING_CHANNELS.map((channel) => (
+                  <option key={channel} value={channel}>
+                    {channel}
+                  </option>
+                ))}
+              </FinanceSelect>
+            </FinanceField>
+          ) : null}
+          {showServiceSourcing ? (
+            <FinanceField label="Service Sourcing Channel *">
+              <FinanceSelect
+                value={sourcingChannels.service ?? ""}
+                onChange={(e) => setSourcingChannel("service", e.target.value)}
+              >
+                <option value="">None</option>
+                {SERVICE_SOURCING_CHANNELS.map((channel) => (
+                  <option key={channel} value={channel}>
+                    {channel}
+                  </option>
+                ))}
+              </FinanceSelect>
+            </FinanceField>
+          ) : null}
 
           <FinanceField label="Lead Owner *">
             {isAdmin ? (

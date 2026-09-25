@@ -55,6 +55,9 @@ class CrmLead(Base, *CrmTransactionMixin):
         nullable=False,
         index=True,
     )
+    partner_names: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Soft link to marketing.mkt_campaign (type=event) — no cross-module FK (C-02).
+    marketing_event_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True, index=True)
     owner_employee_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("master.master_employee.id", ondelete="RESTRICT"),
@@ -125,7 +128,7 @@ class CrmLead(Base, *CrmTransactionMixin):
     purchase_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     dr_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
     new_dr_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    deal_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    deal_type: Mapped[str | None] = mapped_column(Text, nullable=True)
     street: Mapped[str | None] = mapped_column(String(255), nullable=True)
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     state: Mapped[str | None] = mapped_column(String(100), nullable=True)

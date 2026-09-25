@@ -254,13 +254,17 @@ function buildHits(index: ProjectsSearchIndex, rawQuery: string): ProjectsSearch
       continue;
     }
     buckets.po_queue.push({
-      id: row.order_id,
+      id: row.handoff_id || row.order_id || row.document_number,
       kind: "po_queue",
-      title: row.company_po_number || row.document_number,
+      title: row.company_po_number || row.customer_po_number || row.document_number,
       subtitle:
-        [row.customer_name, row.customer_po_number, row.status].filter(Boolean).join(" · ") ||
-        "PO queue",
-      href: `/projects/projects/new?po_id=${row.order_id}`,
+        [row.site_name || row.project_name, row.customer_name, row.customer_po_number, row.status]
+          .filter(Boolean)
+          .join(" · ") || "PO queue",
+      href:
+        row.is_seed || !row.order_id
+          ? `/projects/projects/new?handoff_id=${row.handoff_id}&from_installation=1`
+          : `/projects/projects/new?po_id=${row.order_id}&from_installation=1`,
     });
   }
 

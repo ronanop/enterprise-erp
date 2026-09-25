@@ -5,14 +5,14 @@ Product rules enforced here:
      is locked pending Management approval. A "mixed" quote (both
      hardware/software AND services lines) must meet the stricter (higher)
      of the two thresholds.
-  7. Finance cost: ~0.5% per 15 days of payment gap (customer payment terms
-     minus vendor payment terms).
+  7. Finance cost: ~0.5% per 15 days of payment gap after a 5-day buffer
+     (customer payment terms minus vendor payment terms minus 5).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from decimal import ROUND_CEILING, Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Iterable
 
 MIN_MARGIN_PCT: dict[str, Decimal] = {
@@ -22,6 +22,8 @@ MIN_MARGIN_PCT: dict[str, Decimal] = {
 }
 
 FINANCE_COST_PCT_PER_15_DAYS = Decimal("0.5")
+# First N days of funding gap are free (working-capital buffer).
+FINANCE_COST_BUFFER_DAYS = 5
 
 
 @dataclass(frozen=True)
@@ -103,15 +105,17 @@ def evaluate_quote_margin(
 
 
 def compute_finance_cost_pct(vendor_payment_days: int, customer_payment_days: int) -> Decimal:
-    """~0.5% per 15 days of payment gap.
+    """~0.5% per 15 days of payment gap after a 5-day buffer (exact, 2 d.p.).
 
     The "gap" is how long the business must fund the deal out of pocket:
     the number of days it pays the vendor before it collects from the
-    customer. A non-positive gap (customer pays before/at the same time the
-    vendor is paid) costs nothing.
+    customer. The first ``FINANCE_COST_BUFFER_DAYS`` of that gap are free;
+    a non-positive effective gap costs nothing.
     """
-    gap_days = Decimal(int(customer_payment_days) - int(vendor_payment_days))
+    raw_gap = Decimal(int(customer_payment_days) - int(vendor_payment_days))
+    gap_days = raw_gap - Decimal(FINANCE_COST_BUFFER_DAYS)
     if gap_days <= 0:
-        return Decimal("0.000")
-    periods = (gap_days / Decimal("15")).to_integral_value(rounding=ROUND_CEILING)
-    return (periods * FINANCE_COST_PCT_PER_15_DAYS).quantize(Decimal("0.001"))
+        return Decimal("0.00")
+    return (gap_days / Decimal("15") * FINANCE_COST_PCT_PER_15_DAYS).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )

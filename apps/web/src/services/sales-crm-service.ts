@@ -136,6 +136,7 @@ export type Company = {
   portal_id: string | null;
   source: string;
   partner_names: string | null;
+  marketing_event_id?: string | null;
   rating: string | null;
   first_name: string | null;
   last_name: string | null;
@@ -174,6 +175,7 @@ export type CompanyFormInput = {
   portal_id?: string | null;
   source: string;
   partner_names?: string | null;
+  marketing_event_id?: string | null;
   rating?: string | null;
   first_name?: string | null;
   last_name?: string | null;
@@ -237,6 +239,7 @@ export function companyToFormInput(company: Company, customerName?: string): Com
     portal_id: company.portal_id,
     source: company.source === "partner" ? "multi_tier" : company.source,
     partner_names: company.partner_names,
+    marketing_event_id: company.marketing_event_id,
     rating: company.rating,
     first_name: company.first_name?.trim() || name,
     last_name: company.last_name?.trim() || "-",
@@ -269,6 +272,8 @@ export type LeadCreateFromCompanyInput = {
   mobile?: string | null;
   email?: string | null;
   lead_source_id: string;
+  partner_names?: string | null;
+  marketing_event_id?: string | null;
   owner_employee_id?: string | null;
   assign_to_id?: string | null;
   assigned_date?: string | null;
@@ -504,6 +509,8 @@ export type SalesLead = {
   mobile: string;
   email: string | null;
   lead_source_id: string;
+  partner_names?: string | null;
+  marketing_event_id?: string | null;
   status: string;
   blueprint_state: string;
   locked: boolean;
@@ -953,6 +960,11 @@ export async function listQuotes(params?: {
 
 export async function getQuote(id: string): Promise<Quote> {
   return unwrap(await resourceService.get<Quote>(CRM_QUOTES_API, id));
+}
+
+export async function peekNextQuoteNumber(): Promise<string> {
+  const res = await resourceService.get<{ quote_no: string }>(CRM_QUOTES_API, "next-quote-number");
+  return unwrap(res).quote_no;
 }
 
 export async function createQuote(body: QuoteFormInput): Promise<Quote> {
@@ -1737,6 +1749,16 @@ export async function listLeadSourceOptions(): Promise<Option[]> {
   return rows.map((r) => ({
     id: String(r.id),
     label: String(r.source_name ?? r.source_code ?? r.id),
+  }));
+}
+
+/** Marketing campaigns with TYPE = Event (for Source / Lead Source = Event). */
+export async function listMarketingEventOptions(): Promise<Option[]> {
+  const res = await resourceService.list("/crm/lookups/marketing-events");
+  const rows = asArray(res.data as Record<string, unknown>[] | Record<string, unknown> | null);
+  return rows.map((r) => ({
+    id: String(r.id),
+    label: String(r.label ?? r.code ?? r.id),
   }));
 }
 

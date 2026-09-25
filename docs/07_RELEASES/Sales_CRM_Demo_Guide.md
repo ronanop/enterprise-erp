@@ -274,7 +274,7 @@ OVF_ID=$(curl -s -X POST $BASE/crm/ovf \
     "vendor_payment_days": 30,
     "customer_payment_days": 45
   }' | jq -r '.data.id')
-# finance_cost_pct auto-computed (~0.5% per 15-day gap, Rule #7)
+# finance_cost_pct auto-computed (~0.5% per 15-day gap after 5-day buffer, Rule #7)
 # opportunity blueprint_state -> won  (create_ovf transition)
 
 curl -s -X POST $BASE/crm/ovf/$OVF_ID/lines \
@@ -363,7 +363,8 @@ are untouched and continue to work for non-blueprint records
   threshold, `approve-internally` is rejected with a `409`, and the quote
   must be routed to Management via `send-for-approval`.
 - **Finance cost** (Rule #7): `finance_cost_pct` on the OVF is computed as
-  `ceil(max(0, customer_payment_days - vendor_payment_days) / 15) * 0.5%`.
+  `round((max(0, customer_payment_days - vendor_payment_days - 5) / 15) * 0.5, 2)`
+  (5-day buffer, exact — no ceil).
 - **Locking** (Rule #8): any record sent for approval is `locked = true`
   until the approving team decides; locked records reject further blueprint
   actions (`409 Record Locked`) except the universal `lost` action.

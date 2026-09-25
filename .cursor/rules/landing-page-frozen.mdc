@@ -1,0 +1,22 @@
+# Connect Plus Landing — Frozen
+
+The public homepage is **hardcoded and frozen**.
+
+## Canonical path
+
+- `apps/web/public/site/connect-plus-landing/index.html`
+- Wired by `apps/web/src/app/page.tsx` → `/site/connect-plus-landing/index.html`
+- Lock notes: `apps/web/public/site/connect-plus-landing/LOCK.md`
+
+## Do not
+
+- Re-export / overwrite from Framer (`avenna-template` syncs, `script_main.mjs`, hydrate)
+- Re-enable `data-framer-hydrate-v2` or Framer `script_main` bundle
+- Change `page.tsx` iframe `src` away from `connect-plus-landing` unless the user explicitly asks to unfreeze
+- “Refresh from template” or regenerate this landing on deploy / git push scripts
+
+## Do
+
+- Treat this folder as a locked static artifact shipped with the web app
+- Only edit it when the user explicitly requests a landing-page change
+- Keep Lenis / slider / capsule / brand scripts that already ship inside the frozen HTML

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, FolderKanban, Search } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, FolderKanban, Search } from "lucide-react";
 
 import { SidebarAccountSection } from "@/components/layout/sidebar-account-section";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,8 @@ export type ProjectsNavItem = {
   href: string;
   /** Optional workflow stage key for stage list pages. */
   stage?: string;
+  /** Nested links shown as a sidebar dropdown under this item. */
+  children?: readonly ProjectsNavItem[];
 };
 
 export type ProjectsNavGroup = {
@@ -32,19 +34,24 @@ export const PROJECTS_NAV_GROUPS: readonly ProjectsNavGroup[] = [
     label: "Workspace",
     items: [
       { title: "Dashboard", href: "/projects" },
-      { title: "My Jobs", href: "/projects/my-jobs" },
+      {
+        title: "My Jobs",
+        href: "/projects/my-jobs",
+        children: [
+          { title: "Completed Jobs", href: "/projects/completed-jobs" },
+        ],
+      },
       { title: "PO Queue", href: "/projects/po-queue" },
       { title: "Projects", href: "/projects/projects" },
       { title: "Tracker", href: "/projects/tracker" },
       { title: "All Sites", href: "/projects/site-installations" },
-      { title: "Completed Jobs", href: "/projects/completed-jobs" },
     ],
   },
 ] as const;
 
-/** Flat list for search / legacy callers. */
-export const PROJECTS_NAV: readonly ProjectsNavItem[] = PROJECTS_NAV_GROUPS.flatMap(
-  (g) => g.items,
+/** Flat list for search / legacy callers (includes nested children). */
+export const PROJECTS_NAV: readonly ProjectsNavItem[] = PROJECTS_NAV_GROUPS.flatMap((g) =>
+  g.items.flatMap((item) => [item, ...(item.children ?? [])]),
 );
 
 function isProjectsNavActive(pathname: string, href: string): boolean {
@@ -52,12 +59,20 @@ function isProjectsNavActive(pathname: string, href: string): boolean {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function itemOrChildActive(pathname: string, item: ProjectsNavItem): boolean {
+  if (isProjectsNavActive(pathname, item.href)) return true;
+  return (item.children ?? []).some((child) => isProjectsNavActive(pathname, child.href));
+}
+
 /** Horizontal tab strip (used when Projects shares the main app sidebar). */
 export function ProjectsWorkspaceNav() {
   const pathname = usePathname();
   const { projectModuleAdmin } = useAuthUser();
   const navItems = useMemo(
-    () => filterProjectsNavGroups(PROJECTS_NAV_GROUPS, projectModuleAdmin).flatMap((g) => g.items),
+    () =>
+      filterProjectsNavGroups(PROJECTS_NAV_GROUPS, projectModuleAdmin).flatMap((g) =>
+        g.items.flatMap((item) => [item, ...(item.children ?? [])]),
+      ),
     [projectModuleAdmin],
   );
 
@@ -98,6 +113,7 @@ export function ProjectsSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [query, setQuery] = useState("");
   const { signedIn, projectModuleAdmin } = useAuthUser();
+  const [openDropdowns, setOpenDropdowns] = useState<Record<string, boolean>>({});
 
   const filteredGroups = useMemo(() => {
     const groups = filterProjectsNavGroups(PROJECTS_NAV_GROUPS, projectModuleAdmin);
@@ -106,12 +122,25 @@ export function ProjectsSidebar() {
     return groups
       .map((group) => ({
         ...group,
-        items: group.items.filter((item) => item.title.toLowerCase().includes(q)),
+        items: group.items
+          .map((item) => {
+            const selfMatch = item.title.toLowerCase().includes(q);
+            const childMatches = (item.children ?? []).filter((c) =>
+              c.title.toLowerCase().includes(q),
+            );
+            if (selfMatch) return item;
+            if (childMatches.length > 0) return { ...item, children: childMatches };
+            return null;
+          })
+          .filter((item): item is ProjectsNavItem => item !== null),
       }))
       .filter((group) => group.items.length > 0);
   }, [query, projectModuleAdmin]);
 
-  const paneCount = filteredGroups.reduce((n, g) => n + g.items.length, 0);
+  const paneCount = filteredGroups.reduce(
+    (n, g) => n + g.items.reduce((m, item) => m + 1 + (item.children?.length ?? 0), 0),
+    0,
+  );
 
   return (
     <aside
@@ -176,31 +205,99 @@ export function ProjectsSidebar() {
             ) : null}
             <ul className="space-y-0.5">
               {group.items.map((item) => {
-                const active = isProjectsNavActive(pathname, item.href);
+                const children = item.children ?? [];
+                const hasChildren = children.length > 0 && !collapsed;
+                const childActive = children.some((c) => isProjectsNavActive(pathname, c.href));
+                const active = isProjectsNavActive(pathname, item.href) && !childActive;
+                const dropdownOverride = openDropdowns[item.href];
+                const expandedByDefault =
+                  itemOrChildActive(pathname, item) || Boolean(query.trim());
+                const expanded =
+                  hasChildren &&
+                  (dropdownOverride === undefined ? expandedByDefault : dropdownOverride);
+
                 return (
                   <li key={item.href}>
-                    <Link
-                      href={item.href}
-                      title={item.title}
+                    <div
                       className={cn(
-                        "group relative flex cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-[13px] font-medium transition-all duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] active:scale-[0.985]",
-                        active
+                        "group relative flex items-center gap-0.5 rounded-xl transition-all duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]",
+                        active || (hasChildren && childActive && !expanded)
                           ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm ring-1 ring-white/10 backdrop-blur-xs"
-                          : "text-sidebar-foreground/75 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
-                        collapsed && "justify-center px-0",
+                          : "text-sidebar-foreground/75",
+                        collapsed && "justify-center",
                       )}
                     >
-                      {active ? (
+                      {active || (hasChildren && childActive && !expanded) ? (
                         <span className="absolute inset-y-2 left-0.5 w-1 rounded-full bg-sidebar-primary shadow-[0_0_8px_rgba(255,255,255,0.4)]" />
                       ) : null}
-                      {!collapsed ? (
-                        <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
-                      ) : (
-                        <span className="text-[10px] font-semibold tracking-wide">
-                          {item.title.slice(0, 2).toUpperCase()}
-                        </span>
-                      )}
-                    </Link>
+                      <Link
+                        href={item.href}
+                        title={item.title}
+                        className={cn(
+                          "flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-xl px-2.5 py-2 text-[13px] font-medium transition-colors duration-150",
+                          active || (hasChildren && childActive)
+                            ? "text-sidebar-accent-foreground"
+                            : "hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                          collapsed && "justify-center px-0",
+                        )}
+                      >
+                        {!collapsed ? (
+                          <span className="min-w-0 flex-1 truncate font-medium">{item.title}</span>
+                        ) : (
+                          <span className="text-[10px] font-semibold tracking-wide">
+                            {item.title.slice(0, 2).toUpperCase()}
+                          </span>
+                        )}
+                      </Link>
+                      {hasChildren ? (
+                        <button
+                          type="button"
+                          aria-label={expanded ? `Collapse ${item.title}` : `Expand ${item.title}`}
+                          aria-expanded={expanded}
+                          className="mr-1.5 flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-lg text-sidebar-foreground/60 transition-colors duration-150 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+                          onClick={() =>
+                            setOpenDropdowns((prev) => {
+                              const current =
+                                prev[item.href] === undefined
+                                  ? itemOrChildActive(pathname, item)
+                                  : prev[item.href];
+                              return { ...prev, [item.href]: !current };
+                            })
+                          }
+                        >
+                          <ChevronDown
+                            className={cn(
+                              "size-3.5 transition-transform duration-200",
+                              expanded && "rotate-180",
+                            )}
+                            aria-hidden
+                          />
+                        </button>
+                      ) : null}
+                    </div>
+                    {hasChildren && expanded ? (
+                      <ul className="mt-0.5 ml-3 space-y-0.5 border-l border-sidebar-border/70 pl-2">
+                        {children.map((child) => {
+                          const childIsActive = isProjectsNavActive(pathname, child.href);
+                          return (
+                            <li key={child.href}>
+                              <Link
+                                href={child.href}
+                                title={child.title}
+                                className={cn(
+                                  "relative flex cursor-pointer items-center rounded-lg px-2.5 py-1.5 text-[12px] font-medium transition-all duration-150",
+                                  childIsActive
+                                    ? "bg-sidebar-accent/80 text-sidebar-accent-foreground"
+                                    : "text-sidebar-foreground/65 hover:bg-sidebar-accent/40 hover:text-sidebar-accent-foreground",
+                                )}
+                              >
+                                <span className="min-w-0 truncate">{child.title}</span>
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : null}
                   </li>
                 );
               })}

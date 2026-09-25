@@ -714,7 +714,13 @@ type OvfOrderLinesSectionProps = {
   onVendorRowsChange?: (rows: VendorChargeRow[]) => void;
   /** Distributor names selected on the lead - options for Distributor Name. */
   vendorNameOptions?: readonly string[];
+  /** Fully lock the section (detail view / while saving). */
   disabled?: boolean;
+  /**
+   * Lock product / qty / price / distributor fields and hide add/remove.
+   * File uploads stay editable unless `disabled` is also set.
+   */
+  readOnlyLines?: boolean;
 };
 
 export function OvfOrderLinesSection({
@@ -724,7 +730,9 @@ export function OvfOrderLinesSection({
   onVendorRowsChange,
   vendorNameOptions = [],
   disabled = false,
+  readOnlyLines = false,
 }: OvfOrderLinesSectionProps) {
+  const linesLocked = disabled || readOnlyLines;
   const totalSaleValue = sumLineTotals(customerRows);
   const totalPurchaseValue = sumLineTotals(vendorRows);
   const DISTRIBUTOR_OTHERS = "__others__";
@@ -774,7 +782,9 @@ export function OvfOrderLinesSection({
     !disabled && hasVendorProductRows && !chargeTableHasFile(vendorRows, "quoteFiles");
 
   function updateCustomerRow(key: string, patch: Partial<CustomerChargeRow>, recalc = false) {
-    if (disabled || !onCustomerRowsChange) return;
+    if (!onCustomerRowsChange || disabled) return;
+    const fileOnly = Object.keys(patch).length === 1 && "poFiles" in patch;
+    if (linesLocked && !fileOnly) return;
     onCustomerRowsChange(
       customerRows.map((row) => {
         if (row.key !== key) return row;
@@ -789,7 +799,9 @@ export function OvfOrderLinesSection({
   }
 
   function updateVendorRow(key: string, patch: Partial<VendorChargeRow>, recalc = false) {
-    if (disabled || !onVendorRowsChange) return;
+    if (!onVendorRowsChange || disabled) return;
+    const fileOnly = Object.keys(patch).length === 1 && "quoteFiles" in patch;
+    if (linesLocked && !fileOnly) return;
     onVendorRowsChange(
       vendorRows.map((row) => {
         if (row.key !== key) return row;
@@ -804,17 +816,17 @@ export function OvfOrderLinesSection({
   }
 
   function onAddCustomerRow() {
-    if (disabled || !onCustomerRowsChange) return;
+    if (linesLocked || !onCustomerRowsChange) return;
     onCustomerRowsChange([...customerRows, emptyCustomerRow()]);
   }
 
   function onRemoveCustomerRow(key: string) {
-    if (disabled || !onCustomerRowsChange) return;
+    if (linesLocked || !onCustomerRowsChange) return;
     onCustomerRowsChange(customerRows.filter((row) => row.key !== key));
   }
 
   function onAddVendorRow() {
-    if (disabled || !onVendorRowsChange) return;
+    if (linesLocked || !onVendorRowsChange) return;
     onVendorRowsChange([...vendorRows, emptyVendorRow()]);
   }
 
@@ -830,7 +842,7 @@ export function OvfOrderLinesSection({
           totalLabel="Total Sale Value"
           totalValue={formatInrPrecise(totalSaleValue)}
           headerRight={
-            !disabled ? (
+            !linesLocked ? (
               <Button
                 type="button"
                 variant="outline"
@@ -857,14 +869,16 @@ export function OvfOrderLinesSection({
                 <th className={thClass("min-w-[180px]")}>
                   Add PO <span className="text-destructive">*</span>
                 </th>
-                {!disabled ? <th className={thClass("w-10")} aria-label="Remove row" /> : null}
+                {!linesLocked ? <th className={thClass("w-10")} aria-label="Remove row" /> : null}
               </tr>
             </thead>
             <tbody>
               {customerRows.length === 0 ? (
                 <tr>
-                  <td colSpan={disabled ? 9 : 10} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
-                    No customer charge rows. Click + Add row to create one.
+                  <td colSpan={linesLocked ? 9 : 10} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
+                    {linesLocked
+                      ? "No customer charge rows."
+                      : "No customer charge rows. Click + Add row to create one."}
                   </td>
                 </tr>
               ) : (
@@ -872,21 +886,21 @@ export function OvfOrderLinesSection({
                   <tr key={row.key} className="border-t border-[#e8edf3]">
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         value={row.product_name}
                         onChange={(v) => updateCustomerRow(row.key, { product_name: v })}
                       />
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         value={row.description}
                         onChange={(v) => updateCustomerRow(row.key, { description: v })}
                       />
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         type="number"
                         value={row.qty}
                         className="text-right tabular-nums"
@@ -895,7 +909,7 @@ export function OvfOrderLinesSection({
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         type="number"
                         value={row.unit_price}
                         className="text-right tabular-nums"
@@ -904,7 +918,7 @@ export function OvfOrderLinesSection({
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         type="number"
                         value={row.total}
                         className="text-right tabular-nums"
@@ -913,7 +927,7 @@ export function OvfOrderLinesSection({
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         type="number"
                         value={row.gst_pct}
                         className="text-right tabular-nums"
@@ -922,7 +936,7 @@ export function OvfOrderLinesSection({
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         type="number"
                         value={row.total_gst}
                         className="text-right tabular-nums"
@@ -931,7 +945,7 @@ export function OvfOrderLinesSection({
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         type="number"
                         value={row.total_with_gst}
                         className="text-right tabular-nums"
@@ -951,7 +965,7 @@ export function OvfOrderLinesSection({
                         }
                       />
                     </td>
-                    {!disabled ? (
+                    {!linesLocked ? (
                       <td className={tdClass("text-center")}>
                         <Button
                           type="button"
@@ -977,7 +991,7 @@ export function OvfOrderLinesSection({
           totalLabel="Total Purchase Value"
           totalValue={formatInrPrecise(totalPurchaseValue)}
           headerRight={
-            !disabled ? (
+            !linesLocked ? (
               <Button
                 type="button"
                 variant="outline"
@@ -1015,7 +1029,9 @@ export function OvfOrderLinesSection({
               {vendorRows.length === 0 ? (
                 <tr>
                   <td colSpan={12} className="px-3 py-6 text-center text-[12px] text-muted-foreground">
-                    No vendor charge rows. Click + Add row to create one.
+                    {linesLocked
+                      ? "No vendor charge rows."
+                      : "No vendor charge rows. Click + Add row to create one."}
                   </td>
                 </tr>
               ) : (
@@ -1023,21 +1039,21 @@ export function OvfOrderLinesSection({
                   <tr key={row.key} className="border-t border-[#e8edf3]">
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         value={row.product_name}
                         onChange={(v) => updateVendorRow(row.key, { product_name: v })}
                       />
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         value={row.description}
                         onChange={(v) => updateVendorRow(row.key, { description: v })}
                       />
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         type="number"
                         value={row.qty}
                         className="text-right tabular-nums"
@@ -1046,7 +1062,7 @@ export function OvfOrderLinesSection({
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         type="number"
                         value={row.unit_price}
                         className="text-right tabular-nums"
@@ -1055,7 +1071,7 @@ export function OvfOrderLinesSection({
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         type="number"
                         value={row.total}
                         className="text-right tabular-nums"
@@ -1064,7 +1080,7 @@ export function OvfOrderLinesSection({
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         type="number"
                         value={row.gst_pct}
                         className="text-right tabular-nums"
@@ -1073,7 +1089,7 @@ export function OvfOrderLinesSection({
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         type="number"
                         value={row.total_gst}
                         className="text-right tabular-nums"
@@ -1082,7 +1098,7 @@ export function OvfOrderLinesSection({
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         type="number"
                         value={row.total_with_gst}
                         className="text-right tabular-nums"
@@ -1092,7 +1108,7 @@ export function OvfOrderLinesSection({
                     <td className={tdClass()}>
                       <div className="flex min-w-[140px] flex-col gap-1.5">
                         <select
-                          disabled={disabled}
+                          disabled={linesLocked}
                           value={selectedDistributor(row.vendor_name)}
                           onChange={(e) => {
                             const next = e.target.value;
@@ -1110,7 +1126,7 @@ export function OvfOrderLinesSection({
                           className={cn(
                             "flex h-9 w-full cursor-pointer rounded-[4px] border border-[#cfd7e3] bg-white px-2.5 text-[13px] shadow-none outline-none transition-colors duration-200",
                             "focus-visible:border-sky-400 focus-visible:ring-1 focus-visible:ring-sky-300",
-                            disabled && "cursor-default bg-[#f8fafc] opacity-70",
+                            linesLocked && "cursor-default bg-[#f8fafc] opacity-70",
                             !selectedDistributor(row.vendor_name) && "text-muted-foreground",
                           )}
                           aria-label="Distributor name"
@@ -1125,7 +1141,7 @@ export function OvfOrderLinesSection({
                         </select>
                         {isOthersDistributor(row.vendor_name) ? (
                           <ChargesField
-                            readOnly={disabled}
+                            readOnly={linesLocked}
                             value={othersDistributorText(row.vendor_name)}
                             placeholder="Enter distributor name"
                             onChange={(v) =>
@@ -1139,14 +1155,14 @@ export function OvfOrderLinesSection({
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         value={row.contact_person}
                         onChange={(v) => updateVendorRow(row.key, { contact_person: v })}
                       />
                     </td>
                     <td className={tdClass()}>
                       <ChargesField
-                        readOnly={disabled}
+                        readOnly={linesLocked}
                         value={row.contact_number}
                         onChange={(v) => updateVendorRow(row.key, { contact_number: v })}
                       />

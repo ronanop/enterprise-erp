@@ -1,7 +1,8 @@
-"""AWS S3 object storage helpers.
+"""MinIO (S3-compatible) object storage helpers.
 
 Used by ESS, CRM attachments, and the asset StorageBackend when
-``OBJECT_STORAGE_BACKEND=s3`` (or ``ASSET_STORAGE_BACKEND=s3``).
+``OBJECT_STORAGE_BACKEND=minio`` (or legacy ``s3``). Requires ``S3_ENDPOINT_URL`` —
+AWS S3 is not used.
 """
 
 from __future__ import annotations
@@ -19,10 +20,9 @@ MINIO_URI_PREFIX = "minio://"
 
 
 def is_enabled() -> bool:
-    """True when S3 is selected and bucket/region are configured."""
+    """True when MinIO object storage is selected and fully configured."""
     cfg = get_settings()
-    backend = (cfg.object_storage_backend or "local").strip().lower()
-    return backend == "s3" and cfg.s3_configured
+    return cfg.uses_minio_object_storage and cfg.s3_configured
 
 
 def is_object_uri(uri: str | None) -> bool:
@@ -78,29 +78,29 @@ def _client():
         from botocore.config import Config
     except ImportError as exc:  # pragma: no cover
         raise RuntimeError(
-            "boto3 is required for S3 object storage. Install apps/api requirements."
+            "boto3 is required for MinIO object storage. Install apps/api requirements."
         ) from exc
 
     cfg = get_settings()
     endpoint = cfg.s3_endpoint_url.strip()
-    # Path-style required for MinIO / IP endpoints; virtual-hosted for AWS.
-    s3_cfg: dict[str, str] = {"addressing_style": "path"} if endpoint else {}
-    kwargs: dict[str, object] = {
-        "service_name": "s3",
-        "region_name": cfg.s3_region.strip() or None,
-        "config": Config(signature_version="s3v4", s3=s3_cfg),
-    }
+    if not endpoint:
+        raise RuntimeError(
+            "S3_ENDPOINT_URL is required for MinIO object storage (AWS S3 is disabled)."
+        )
     access = cfg.aws_access_key_id.strip()
     secret = cfg.aws_secret_access_key.strip()
-    if access and secret:
-        kwargs["aws_access_key_id"] = access
-        kwargs["aws_secret_access_key"] = secret
-    if cfg.aws_session_token.strip():
-        kwargs["aws_session_token"] = cfg.aws_session_token.strip()
-    # Optional custom endpoint (MinIO / LocalStack). Empty = real AWS S3.
-    if endpoint:
-        kwargs["endpoint_url"] = endpoint
-    return boto3.client(**kwargs)
+    if not access or not secret:
+        raise RuntimeError(
+            "AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (MinIO root user/password) are required."
+        )
+    return boto3.client(
+        "s3",
+        endpoint_url=endpoint,
+        region_name=(cfg.s3_region.strip() or "us-east-1"),
+        aws_access_key_id=access,
+        aws_secret_access_key=secret,
+        config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+    )
 
 
 def reset_client_cache() -> None:
@@ -110,7 +110,7 @@ def reset_client_cache() -> None:
 def put_bytes(key: str, data: bytes, content_type: str | None = None) -> str:
     """Upload bytes and return ``s3://bucket/key``."""
     if not is_enabled():
-        raise RuntimeError("S3 object storage is not enabled/configured")
+        raise RuntimeError("MinIO object storage is not enabled/configured")
     cfg = get_settings()
     clean_key = key.lstrip("/")
     extra: dict[str, str] = {}
@@ -127,7 +127,7 @@ def put_bytes(key: str, data: bytes, content_type: str | None = None) -> str:
 
 def put_fileobj(key: str, fileobj: BinaryIO, content_type: str | None = None) -> str:
     if not is_enabled():
-        raise RuntimeError("S3 object storage is not enabled/configured")
+        raise RuntimeError("MinIO object storage is not enabled/configured")
     cfg = get_settings()
     clean_key = key.lstrip("/")
     extra: dict[str, object] = {}
@@ -182,14 +182,14 @@ def _resolve_bucket_key(uri_or_key: str) -> tuple[str, str]:
 
 
 def head_ok() -> tuple[bool, str]:
-    """Health probe: HeadBucket when S3 is enabled."""
+    """Health probe: HeadBucket when MinIO is enabled."""
     if not is_enabled():
-        return True, "S3 not enabled (skipped)"
+        return True, "MinIO not enabled (skipped)"
     cfg = get_settings()
     bucket = cfg.s3_bucket.strip()
     try:
         _client().head_bucket(Bucket=bucket)
-        return True, f"bucket={bucket} region={cfg.s3_region}"
+        return True, f"minio endpoint={cfg.s3_endpoint_url.strip()} bucket={bucket}"
     except Exception as exc:
         return False, f"{type(exc).__name__}: {exc}"
 

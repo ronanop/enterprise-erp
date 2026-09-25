@@ -1,6 +1,8 @@
 """PO queue for Project Management - shared installation POs without a linked project."""
 
-from datetime import datetime, timezone
+from __future__ import annotations
+
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
 
@@ -44,6 +46,10 @@ class ProjectPoQueueService:
         out: list[ProjectPoQueueItem] = []
 
         for handoff in self._handoffs.list_active(ctx, cid):
+            if handoff.is_seed or handoff.proc_order_id is None:
+                out.append(self._seed_queue_item(handoff))
+                continue
+
             if handoff.proc_order_id in linked:
                 self._handoffs.soft_delete_by_order_id(ctx, handoff.proc_order_id)
                 continue
@@ -59,13 +65,15 @@ class ProjectPoQueueService:
                 continue
             if order.status not in _ELIGIBLE_PO_STATUSES:
                 continue
-            out.append(self._to_queue_item(ctx, order, shared_at=handoff.shared_at))
+            out.append(
+                self._to_queue_item(ctx, order, handoff=handoff, shared_at=handoff.shared_at)
+            )
 
         out.sort(
             key=lambda row: (
                 row.shared_at.isoformat() if row.shared_at else "",
                 row.document_date.isoformat() if row.document_date else "",
-                row.company_po_number or "",
+                row.company_po_number or row.customer_po_number or "",
             ),
             reverse=True,
         )
@@ -88,6 +96,7 @@ class ProjectPoQueueService:
             proc_order_id=order.id,
             company_id=order.company_id,
             branch_id=order.branch_id,
+            is_seed=False,
             challan_id=(payload.challan_id or "").strip() or None,
             shared_at=shared_at,
             project_name=payload.project_name.strip(),
@@ -112,6 +121,22 @@ class ProjectPoQueueService:
             order = self._procurement.get_order_response(ctx, order_id, enrich_commercial=True)
         except NotFoundException:
             order = None
+        return self._to_handoff_response(row, order)
+
+    def get_handoff_by_id(
+        self, ctx: TenantContext, handoff_id: UUID
+    ) -> ProjectPoQueueHandoffResponse | None:
+        row = self._handoffs.get(ctx, handoff_id)
+        if row is None:
+            return None
+        order = None
+        if row.proc_order_id is not None and not row.is_seed:
+            try:
+                order = self._procurement.get_order_response(
+                    ctx, row.proc_order_id, enrich_commercial=True
+                )
+            except NotFoundException:
+                order = None
         return self._to_handoff_response(row, order)
 
     def remove_handoff(self, ctx: TenantContext, order_id: UUID) -> None:
@@ -182,6 +207,8 @@ class ProjectPoQueueService:
         budget = order.customer_total or order.total_amount
         return ProjectPoPrefillResponse(
             order_id=order.id,
+            handoff_id=handoff.id if handoff is not None else None,
+            is_seed=False,
             branch_id=order.branch_id,
             company_id=order.company_id,
             company_po_number=order.company_po_number,
@@ -197,7 +224,20 @@ class ProjectPoQueueService:
             circle_name=circle_name,
             entity_state=entity_state,
             project_title=project_title,
+            rack_quantity=handoff.rack_quantity if handoff is not None else None,
+            server_quantity=handoff.server_quantity if handoff is not None else None,
+            server_type=handoff.server_type if handoff is not None else None,
         )
+
+    def get_prefill_by_handoff(
+        self, ctx: TenantContext, handoff_id: UUID
+    ) -> ProjectPoPrefillResponse:
+        row = self._handoffs.get(ctx, handoff_id)
+        if row is None:
+            raise NotFoundException("PO queue entry not found")
+        if row.is_seed or row.proc_order_id is None:
+            return self._seed_prefill(ctx, row)
+        return self.get_prefill(ctx, row.proc_order_id)
 
     def ensure_linkable(
         self,
@@ -214,12 +254,85 @@ class ProjectPoQueueService:
         if existing is not None:
             raise AppException("A project already exists for this purchase order")
 
+    def ensure_seed_handoff_linkable(self, ctx: TenantContext, handoff_id: UUID) -> None:
+        row = self._handoffs.get(ctx, handoff_id)
+        if row is None:
+            raise AppException("PO queue entry not found")
+        if not row.is_seed and row.proc_order_id is not None:
+            self.ensure_linkable(ctx, row.proc_order_id)
+
     def complete_handoff(self, ctx: TenantContext, order_id: UUID) -> None:
         """Remove PO from queue after project is linked."""
         self._handoffs.soft_delete_by_order_id(ctx, order_id)
 
+    def complete_handoff_by_id(self, ctx: TenantContext, handoff_id: UUID) -> None:
+        self._handoffs.soft_delete(ctx, handoff_id)
+
+    def _seed_queue_item(self, handoff) -> ProjectPoQueueItem:
+        customer_po = (handoff.customer_po_number or "").strip() or None
+        company_po = (handoff.company_po_number or "").strip() or None
+        doc_no = company_po or customer_po or f"SEED-{str(handoff.id)[:8].upper()}"
+        return ProjectPoQueueItem(
+            handoff_id=handoff.id,
+            order_id=None,
+            is_seed=True,
+            company_po_number=company_po,
+            document_number=doc_no,
+            document_date=handoff.document_date or handoff.shared_at.date(),
+            customer_name=(handoff.customer_name or "").strip() or "Airtel",
+            customer_po_number=customer_po,
+            vendor_id=None,
+            total_amount=0,
+            customer_total=0,
+            status="seed",
+            ovf_id=None,
+            branch_id=handoff.branch_id,
+            company_id=handoff.company_id,
+            created_at=handoff.created_at,
+            shared_at=handoff.shared_at,
+            project_name=handoff.project_name,
+            circle_name=handoff.circle_name,
+            site_name=handoff.site_name,
+            rack_quantity=handoff.rack_quantity,
+            server_quantity=handoff.server_quantity,
+            server_type=handoff.server_type,
+        )
+
+    def _seed_prefill(self, ctx: TenantContext, handoff) -> ProjectPoPrefillResponse:
+        customer_name = (handoff.customer_name or "").strip() or "Airtel"
+        customer_id = self._match_customer_id(ctx, handoff.company_id, customer_name)
+        customer_po = (handoff.customer_po_number or "").strip() or None
+        company_po = (handoff.company_po_number or "").strip() or None
+        description = (
+            f"H-Cloud seed · {handoff.project_name or handoff.site_name or 'site'}"
+            + (f" · Customer PO {customer_po}" if customer_po else "")
+        )
+        return ProjectPoPrefillResponse(
+            order_id=None,
+            handoff_id=handoff.id,
+            is_seed=True,
+            branch_id=handoff.branch_id,
+            company_id=handoff.company_id,
+            company_po_number=company_po,
+            customer_po_number=customer_po,
+            customer_name=customer_name,
+            customer_id=customer_id,
+            budget_amount=None,
+            currency_code="INR",
+            site_name=handoff.site_name,
+            description=description,
+            ovf_id=None,
+            crm_opportunity_id=None,
+            circle_name=handoff.circle_name,
+            entity_state=handoff.circle_name,
+            project_title=handoff.project_name,
+            rack_quantity=handoff.rack_quantity,
+            server_quantity=handoff.server_quantity,
+            server_type=handoff.server_type,
+        )
+
     def _to_queue_item(
-        self, ctx: TenantContext, order, *, shared_at: datetime | None
+        self, ctx: TenantContext, order, *, handoff, shared_at: datetime | None
     ) -> ProjectPoQueueItem:
         ovf_id = (
             order.source_document_id
@@ -240,7 +353,9 @@ class ProjectPoQueueService:
             except Exception:
                 pass
         return ProjectPoQueueItem(
+            handoff_id=handoff.id,
             order_id=order.id,
+            is_seed=False,
             company_po_number=order.company_po_number,
             document_number=order.document_number,
             document_date=order.document_date,
@@ -255,18 +370,26 @@ class ProjectPoQueueService:
             company_id=order.company_id,
             created_at=None,
             shared_at=shared_at,
+            project_name=handoff.project_name,
+            circle_name=handoff.circle_name,
+            site_name=handoff.site_name,
+            rack_quantity=handoff.rack_quantity,
+            server_quantity=handoff.server_quantity,
+            server_type=handoff.server_type,
         )
 
     def _to_handoff_response(self, row, order) -> ProjectPoQueueHandoffResponse:
-        customer_name = None
-        customer_po_number = None
-        company_po_number = None
+        customer_name = (row.customer_name or "").strip() or None
+        customer_po_number = (row.customer_po_number or "").strip() or None
+        company_po_number = (row.company_po_number or "").strip() or None
         if order is not None:
-            customer_name = (order.customer_name or "").strip() or None
-            customer_po_number = (order.customer_po_number or "").strip() or None
-            company_po_number = order.company_po_number
+            customer_name = (order.customer_name or "").strip() or customer_name
+            customer_po_number = (order.customer_po_number or "").strip() or customer_po_number
+            company_po_number = order.company_po_number or company_po_number
         return ProjectPoQueueHandoffResponse(
+            handoff_id=row.id,
             order_id=row.proc_order_id,
+            is_seed=bool(row.is_seed),
             challan_id=row.challan_id,
             shared_at=row.shared_at,
             project_name=row.project_name,
@@ -281,6 +404,9 @@ class ProjectPoQueueService:
             customer_name=customer_name,
             customer_po_number=customer_po_number,
             company_po_number=company_po_number,
+            document_date=row.document_date,
+            branch_id=row.branch_id,
+            company_id=row.company_id,
         )
 
     @staticmethod

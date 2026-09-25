@@ -35,6 +35,7 @@ import {
   getCompany,
   listBranchOptions,
   listCrmMemberOptions,
+  listMarketingEventOptions,
   peekNextCompanyAccountNumber,
   updateCompany,
   type Company,
@@ -97,6 +98,7 @@ const EMPTY_FORM: CompanyFormInput = {
   portal_id: "",
   source: "",
   partner_names: "",
+  marketing_event_id: "",
   rating: "",
   first_name: "",
   last_name: "",
@@ -127,6 +129,7 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
   const [form, setForm] = useState<CompanyFormInput>(EMPTY_FORM);
   const [otherSource, setOtherSource] = useState("");
   const [employees, setEmployees] = useState<Option[]>([]);
+  const [marketingEvents, setMarketingEvents] = useState<Option[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -142,12 +145,14 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
     setLoading(true);
     setError(null);
     try {
-      const [branches, emps, companyRow] = await Promise.all([
+      const [branches, emps, events, companyRow] = await Promise.all([
         listBranchOptions(),
         listCrmMemberOptions(),
+        listMarketingEventOptions().catch(() => [] as Option[]),
         companyId ? getCompany(companyId) : Promise.resolve(null),
       ]);
       setEmployees(emps);
+      setMarketingEvents(events);
       if (companyRow) {
         const normalizedSource = normalizeCompanyLeadSource(companyRow.source);
         const knownSource = (COMPANY_LEAD_SOURCES as readonly string[]).includes(normalizedSource);
@@ -162,6 +167,7 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
           portal_id: companyRow.portal_id ?? "",
           source: knownSource ? normalizedSource : "other",
           partner_names: companyRow.partner_names ?? "",
+          marketing_event_id: companyRow.marketing_event_id ?? "",
           rating: companyRow.rating ?? "",
           first_name: companyRow.first_name ?? "",
           last_name: companyRow.last_name ?? "",
@@ -273,6 +279,7 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
     if (!form.source) missing.push("Source");
     if (form.source === "other" && !otherSource.trim()) missing.push("Other Source");
     if (form.source === "multi_tier" && !form.partner_names?.trim()) missing.push("Partner Names");
+    if (form.source === "event" && !form.marketing_event_id) missing.push("Event");
     if (!form.first_name?.trim()) missing.push("First Name");
     if (!form.last_name?.trim()) missing.push("Last Name");
     if (!form.customer_email?.trim()) missing.push("Customer Email");
@@ -299,6 +306,7 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
         source: form.source === "other" ? otherSource.trim() : form.source,
         partner_names:
           form.source === "multi_tier" ? form.partner_names?.trim() || null : null,
+        marketing_event_id: form.source === "event" ? form.marketing_event_id || null : null,
         account_owner_id: form.account_owner_id || null,
         account_ownership_id: form.account_ownership_id || null,
       };
@@ -411,6 +419,7 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
                     ...f,
                     source: value,
                     partner_names: value === "multi_tier" ? f.partner_names : "",
+                    marketing_event_id: value === "event" ? f.marketing_event_id : "",
                   }));
                   if (value !== "other") setOtherSource("");
                 }}
@@ -430,6 +439,23 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
                   onChange={(e) => set("partner_names", e.target.value)}
                   placeholder="Enter partner company names"
                 />
+              </FinanceField>
+            ) : null}
+            {form.source === "event" ? (
+              <FinanceField label="Event *">
+                <FinanceSelect
+                  value={form.marketing_event_id ?? ""}
+                  onChange={(e) => set("marketing_event_id", e.target.value)}
+                >
+                  <option value="">
+                    {marketingEvents.length > 0 ? "None" : "No marketing events found"}
+                  </option>
+                  {marketingEvents.map((event) => (
+                    <option key={event.id} value={event.id}>
+                      {event.label}
+                    </option>
+                  ))}
+                </FinanceSelect>
               </FinanceField>
             ) : null}
             {form.source === "other" ? (

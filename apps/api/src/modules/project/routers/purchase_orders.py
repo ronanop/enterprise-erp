@@ -48,6 +48,32 @@ def share_project_po_queue(
 
 
 @purchase_orders_router.get(
+    "/handoffs/{handoff_id}",
+    response_model=APIResponse[ProjectPoQueueHandoffResponse | None],
+)
+def get_project_po_handoff_by_id(
+    handoff_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    data = ProjectPoQueueService(db).get_handoff_by_id(ctx, handoff_id)
+    return APIResponse(message="OK", data=data)
+
+
+@purchase_orders_router.get(
+    "/handoffs/{handoff_id}/prefill",
+    response_model=APIResponse[ProjectPoPrefillResponse],
+)
+def get_project_po_prefill_by_handoff(
+    handoff_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("project.project:read"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    data = ProjectPoQueueService(db).get_prefill_by_handoff(ctx, handoff_id)
+    return APIResponse(message="OK", data=data)
+
+
+@purchase_orders_router.get(
     "/{order_id}/handoff",
     response_model=APIResponse[ProjectPoQueueHandoffResponse | None],
 )

@@ -115,6 +115,10 @@ class CompanyService:
         lead_fields["entity_name"] = lead_fields.get("entity_name") or account.customer_name
         lead_fields["entity_email"] = lead_fields.get("entity_email") or account.customer_email
         lead_fields["entity_contact"] = lead_fields.get("entity_contact") or account.phone
+        if not lead_fields.get("partner_names") and account.source in ("multi_tier", "partner"):
+            lead_fields["partner_names"] = account.partner_names
+        if not lead_fields.get("marketing_event_id") and account.source == "event":
+            lead_fields["marketing_event_id"] = account.marketing_event_id
         if not lead_fields.get("entity_address"):
             billing_address = ", ".join(
                 str(value)

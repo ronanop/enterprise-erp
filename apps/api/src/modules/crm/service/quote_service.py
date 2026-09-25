@@ -62,6 +62,10 @@ class QuoteService:
         self._audit = AuditService(db)
 
     # -- reads -----------------------------------------------------------
+    def peek_next_quote_no(self, ctx: TenantContext, company_id: UUID | None = None) -> str:
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        return self._numbers.generate(CrmEntityType.QUOTE, cid, CrmQuote, "quote_no")
+
     def list(self, ctx: TenantContext, company_id: UUID | None = None, opportunity_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
         if opportunity_id is not None:

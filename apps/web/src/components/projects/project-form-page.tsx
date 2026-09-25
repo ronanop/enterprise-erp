@@ -16,7 +16,10 @@ import {
   advanceSiteInstallation,
   createProject,
   getProject,
+  getProjectPoHandoff,
+  getProjectPoHandoffById,
   getProjectPoPrefill,
+  getProjectPoPrefillByHandoff,
   getSiteInstallationByProject,
   listBranchOptions,
   listCustomerOptions,
@@ -29,7 +32,6 @@ import { getPurchaseOrder, getScmOvfPreview } from "@/services/procurement-servi
 import { challanDeliveredQuantity } from "@/utils/delivery-challan-bill";
 import { listDeliveryChallansByOrderId } from "@/utils/delivery-challan-storage";
 import { resolveScmInstallationPrefillForOrder } from "@/utils/installation-storage";
-import { getProjectPoHandoff } from "@/services/projects-portal-service";
 
 function digitsOnly(value: string | number | null | undefined): string {
   if (value == null) return "";
@@ -80,6 +82,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
   const isEdit = Boolean(projectId);
   const searchParams = useSearchParams();
   const poId = searchParams.get("po_id");
+  const handoffId = searchParams.get("handoff_id");
   const [linkedPoId, setLinkedPoId] = useState<string | null>(poId);
 
   const load = useCallback(async (): Promise<{ values?: FormValues; lookups?: Lookups }> => {
@@ -88,7 +91,11 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
       listProjectManagementTeamOptions().catch(() => []),
       listCustomerOptions().catch(() => []),
       projectId ? getProject(projectId) : Promise.resolve(null),
-      !projectId && poId ? getProjectPoPrefill(poId).catch(() => null) : Promise.resolve(null),
+      !projectId && handoffId
+        ? getProjectPoPrefillByHandoff(handoffId).catch(() => null)
+        : !projectId && poId
+          ? getProjectPoPrefill(poId).catch(() => null)
+          : Promise.resolve(null),
     ]);
     const resolvedCustomerLabel =
       prefill?.customer_name?.trim() ||
@@ -159,7 +166,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
 
     setLinkedPoId(poId);
 
-    // Create-from-PO: pull title/qty/type from SCM Installation + CRM OVF.
+    // Create-from-PO / seed handoff: pull title/qty/type from share metadata + optional SCM.
     let scmInstall: ReturnType<typeof resolveScmInstallationPrefillForOrder> = null;
     let ovfProjectTitle = "";
     let ovfOemName = "";
@@ -214,13 +221,23 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
       prefill?.project_title?.trim() ||
       ovfProjectTitle ||
       "";
-    const rackQty = digitsOnly(scmInstall?.rackQuantity);
+    const rackQty =
+      digitsOnly(prefill?.rack_quantity) || digitsOnly(scmInstall?.rackQuantity);
     const serverQty =
-      digitsOnly(scmInstall?.serverQuantity) || receivedQtyDigits;
+      digitsOnly(prefill?.server_quantity) ||
+      digitsOnly(scmInstall?.serverQuantity) ||
+      receivedQtyDigits;
     const serverType =
-      scmInstall?.serverType?.trim() || ovfOemName || "";
+      prefill?.server_type?.trim() ||
+      scmInstall?.serverType?.trim() ||
+      ovfOemName ||
+      "";
 
-    const handoff = poId ? await getProjectPoHandoff(poId).catch(() => null) : null;
+    const handoff = handoffId
+      ? await getProjectPoHandoffById(handoffId).catch(() => null)
+      : poId
+        ? await getProjectPoHandoff(poId).catch(() => null)
+        : null;
     const customerPoNumber =
       (handoff?.customer_po_number || "").trim() ||
       (prefill?.customer_po_number || "").trim() ||
@@ -251,7 +268,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
       },
       lookups,
     };
-  }, [projectId, poId]);
+  }, [projectId, poId, handoffId]);
 
   const onSave = useCallback(
     async (v: FormValues) => {
@@ -265,6 +282,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
           customer_id: orNull(v.customer_id),
           project_manager_employee_id: v.project_manager_employee_id || undefined,
           proc_order_id: poId || undefined,
+          po_queue_handoff_id: !poId && handoffId ? handoffId : undefined,
           site_installation: {
             delivery_type: v.delivery_type || "server_os_rack",
             site_name: orNull(siteName),
@@ -312,11 +330,11 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
 
       return `/projects/projects/${projectId}`;
     },
-    [isEdit, projectId, poId],
+    [isEdit, projectId, poId, handoffId],
   );
 
   const sections = useMemo<FormSection[]>(() => {
-    const showPoReadonlyIntake = Boolean(poId) || Boolean(linkedPoId);
+    const showPoReadonlyIntake = Boolean(poId) || Boolean(handoffId) || Boolean(linkedPoId);
 
     const intakeFields: FormSection["fields"] = [
       ...(isEdit
@@ -362,7 +380,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
       },
       {
         name: "server_type",
-        label: "Server Type",
+        label: "Type",
         type: "text" as const,
         placeholder: "Server / hardware type",
       },
@@ -445,7 +463,7 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
         fields: intakeFields,
       },
     ];
-  }, [isEdit, poId, linkedPoId]);
+  }, [isEdit, poId, handoffId, linkedPoId]);
 
   return (
     <ProjectsRecordForm
@@ -459,8 +477,8 @@ export function ProjectFormPage({ projectId }: { projectId?: string }) {
             ? "Step 1 - Intake / Site request prefilled from the SCM purchase order. After create you continue to Assign Survey owner."
             : "Step 1 - Intake / Site request. After create you continue to Assign Survey owner."
       }
-      backHref={poId ? "/projects/po-queue" : "/projects/projects"}
-      backLabel={poId ? "Back to PO queue" : "Back to projects"}
+      backHref={poId || handoffId ? "/projects/po-queue" : "/projects/projects"}
+      backLabel={poId || handoffId ? "Back to PO queue" : "Back to projects"}
       submitLabel={isEdit ? "Save changes" : "Create project"}
       sections={sections}
       emptyValues={isEdit ? EMPTY_EDIT : EMPTY_CREATE}

@@ -234,7 +234,7 @@ function ProjectsAdminDashboard() {
   return (
     <ProjectsPage>
       <PageHeader
-        title="Site Delivery Dashboard"
+        title="Projects Dashboard"
         description="Track site installation requests across Intake → Assign → Survey → SCM → Installation & Configuration → Acceptance."
         actions={
           <div className="flex flex-wrap items-center gap-2">

@@ -35,8 +35,11 @@ from modules.crm.routers import (
     tasks_router,
     visit_logs_router,
 )
+from modules.crm.routers.lookups import lookups_router
 
 crm_router = APIRouter(prefix="/crm")
+crm_router.include_router(members_router)
+crm_router.include_router(lookups_router)
 crm_router.include_router(lead_sources_router)
 crm_router.include_router(leads_router)
 crm_router.include_router(lead_assignments_router)
@@ -69,4 +72,3 @@ crm_router.include_router(my_jobs_router)
 crm_router.include_router(attachments_router)
 crm_router.include_router(blueprint_router)
 crm_router.include_router(kyc_records_router)
-crm_router.include_router(members_router)

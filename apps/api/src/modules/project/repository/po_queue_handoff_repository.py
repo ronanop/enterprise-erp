@@ -26,6 +26,15 @@ class PoQueueHandoffRepository(PrjScopedRepository):
             ).all()
         )
 
+    def get(self, ctx: TenantContext, row_id: UUID) -> PrjPoQueueHandoff | None:
+        stmt = select(PrjPoQueueHandoff).where(
+            PrjPoQueueHandoff.id == row_id,
+            PrjPoQueueHandoff.is_deleted.is_(False),
+        )
+        return self.db.scalar(
+            self.apply_prj_filter(stmt, PrjPoQueueHandoff, ctx, branch_scoped=True)
+        )
+
     def get_by_order_id(
         self, ctx: TenantContext, proc_order_id: UUID
     ) -> PrjPoQueueHandoff | None:
@@ -37,18 +46,34 @@ class PoQueueHandoffRepository(PrjScopedRepository):
             self.apply_prj_filter(stmt, PrjPoQueueHandoff, ctx, branch_scoped=True)
         )
 
+    def list_by_seed_marker(
+        self, ctx: TenantContext, company_id: UUID, seed_marker: str
+    ) -> list[PrjPoQueueHandoff]:
+        stmt = select(PrjPoQueueHandoff).where(
+            PrjPoQueueHandoff.company_id == company_id,
+            PrjPoQueueHandoff.is_deleted.is_(False),
+            PrjPoQueueHandoff.is_seed.is_(True),
+            PrjPoQueueHandoff.seed_marker == seed_marker,
+        )
+        return list(
+            self.db.scalars(
+                self.apply_prj_filter(stmt, PrjPoQueueHandoff, ctx, branch_scoped=True)
+            ).all()
+        )
+
     def upsert(self, ctx: TenantContext, **fields) -> PrjPoQueueHandoff:
-        proc_order_id = fields["proc_order_id"]
-        existing = self.get_by_order_id(ctx, proc_order_id)
-        if existing is not None:
-            for key, value in fields.items():
-                if key != "proc_order_id":
-                    setattr(existing, key, value)
-            existing.updated_at = utcnow()
-            existing.updated_by = ctx.user_id
-            existing.version = int(existing.version or 1) + 1
-            self.db.flush()
-            return existing
+        proc_order_id = fields.get("proc_order_id")
+        if proc_order_id is not None:
+            existing = self.get_by_order_id(ctx, proc_order_id)
+            if existing is not None:
+                for key, value in fields.items():
+                    if key != "proc_order_id":
+                        setattr(existing, key, value)
+                existing.updated_at = utcnow()
+                existing.updated_by = ctx.user_id
+                existing.version = int(existing.version or 1) + 1
+                self.db.flush()
+                return existing
 
         row = PrjPoQueueHandoff(
             id=uuid4(),
@@ -61,8 +86,8 @@ class PoQueueHandoffRepository(PrjScopedRepository):
         self.db.flush()
         return row
 
-    def soft_delete_by_order_id(self, ctx: TenantContext, proc_order_id: UUID) -> None:
-        row = self.get_by_order_id(ctx, proc_order_id)
+    def soft_delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        row = self.get(ctx, row_id)
         if row is None:
             return
         row.is_deleted = True
@@ -71,3 +96,9 @@ class PoQueueHandoffRepository(PrjScopedRepository):
         row.updated_at = utcnow()
         row.updated_by = ctx.user_id
         self.db.flush()
+
+    def soft_delete_by_order_id(self, ctx: TenantContext, proc_order_id: UUID) -> None:
+        row = self.get_by_order_id(ctx, proc_order_id)
+        if row is None:
+            return
+        self.soft_delete(ctx, row.id)

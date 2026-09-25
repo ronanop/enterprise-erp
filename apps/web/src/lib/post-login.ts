@@ -1,7 +1,11 @@
 import { getPostLoginRedirect } from "@/config/module-logins";
 import { contextService } from "@/services/api-client";
 import { setStoredOrgContext } from "@/lib/org-context-storage";
-import type { OrgCompanyOption } from "@/types/org-context";
+import {
+  pickPreferredBranch,
+  pickPreferredCompany,
+} from "@/lib/preferred-company";
+import type { OrgBranchOption, OrgCompanyOption } from "@/types/org-context";
 
 function safeNext(next: string | null | undefined): string | null {
   if (!next || !next.startsWith("/") || next.startsWith("//")) return null;
@@ -22,7 +26,21 @@ function normalizeCompanies(data: unknown): OrgCompanyOption[] {
     .filter((c) => c.id && c.company_name);
 }
 
-/** Resolve where to navigate after login - may route through company selection. */
+function normalizeBranches(data: unknown, companyId: string): OrgBranchOption[] {
+  if (!Array.isArray(data)) return [];
+  return data
+    .filter((row): row is Record<string, unknown> => !!row && typeof row === "object")
+    .map((row) => ({
+      id: String(row.id ?? ""),
+      company_id: String(row.company_id ?? companyId),
+      branch_code: String(row.branch_code ?? ""),
+      branch_name: String(row.branch_name ?? row.name ?? ""),
+      status: row.status ? String(row.status) : undefined,
+    }))
+    .filter((b) => b.id);
+}
+
+/** Resolve where to navigate after login — prefers CDPL when the user can access it. */
 export async function resolvePostLoginNavigation(
   email: string,
   next?: string | null,
@@ -32,34 +50,36 @@ export async function resolvePostLoginNavigation(
   try {
     const res = await contextService.listCompanies();
     const companies = normalizeCompanies(res.data);
+    const company = pickPreferredCompany(companies);
 
-    if (companies.length === 0) {
+    if (!company) {
       return destination;
     }
 
-    if (companies.length === 1) {
-      const company = companies[0];
-      let branchId: string | undefined;
-      try {
-        const branchesRes = await contextService.listBranches(company.id);
-        const branches = Array.isArray(branchesRes.data) ? branchesRes.data : [];
-        branchId = branches[0]?.id ? String(branches[0].id) : undefined;
-      } catch {
-        branchId = undefined;
-      }
-      await contextService.switchContext({
-        company_id: company.id,
-        branch_id: branchId ?? null,
-      });
-      setStoredOrgContext({
-        companyId: company.id,
-        companyName: company.company_name,
-        branchId,
-      });
-      return destination;
+    let branchId: string | undefined;
+    let branchName: string | undefined;
+    try {
+      const branchesRes = await contextService.listBranches(company.id);
+      const branch = pickPreferredBranch(
+        normalizeBranches(branchesRes.data, company.id),
+      );
+      branchId = branch?.id;
+      branchName = branch?.branch_name;
+    } catch {
+      branchId = undefined;
     }
 
-    return `/select-company?next=${encodeURIComponent(destination)}`;
+    await contextService.switchContext({
+      company_id: company.id,
+      branch_id: branchId ?? null,
+    });
+    setStoredOrgContext({
+      companyId: company.id,
+      companyName: company.company_name,
+      branchId,
+      branchName,
+    });
+    return destination;
   } catch {
     return destination;
   }

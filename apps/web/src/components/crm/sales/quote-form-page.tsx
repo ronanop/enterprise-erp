@@ -20,9 +20,9 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthUser } from "@/hooks/use-auth-user";
+import { formatCrmCode } from "@/lib/crm/format-crm-code";
 import { resolveSessionEmployeeLabel } from "@/lib/crm/session-employee";
 import {
-  QUOTE_SERVICE_TYPES,
   normalizeQuoteServiceType,
 } from "@/lib/crm/lead-product-options";
 import { ApiClientError } from "@/services/api-client";
@@ -42,11 +42,11 @@ import {
   listContacts,
   listCrmMemberOptions,
   listQuoteLines,
+  peekNextQuoteNumber,
   updateQuote,
   updateQuoteLine,
   type Contact,
   type Opportunity,
-  type Option,
   type Quote,
   type SalesLead,
 } from "@/services/sales-crm-service";
@@ -169,6 +169,7 @@ export function QuoteFormPage({
   const [error, setError] = useState<string | null>(null);
   const [mandateOpen, setMandateOpen] = useState(false);
   const [mandateMessage, setMandateMessage] = useState("");
+  const [nextQuoteNo, setNextQuoteNo] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -251,19 +252,22 @@ export function QuoteFormPage({
       }
 
       const opportunityRow = await getOpportunity(opportunityId);
-      const [companyRow, leadRow, contactRows, employeeRows, blueprint] = await Promise.all([
-        opportunityRow.company_account_id
-          ? getCompany(opportunityRow.company_account_id).catch(() => null)
-          : Promise.resolve(null),
-        opportunityRow.lead_id
-          ? getSalesLead(opportunityRow.lead_id).catch(() => null)
-          : Promise.resolve(null),
-        opportunityRow.company_account_id
-          ? listContacts(opportunityRow.company_account_id).catch(() => [])
-          : Promise.resolve([]),
-        listCrmMemberOptions().catch(() => []),
-        getOpportunityBlueprint(opportunityId).catch(() => null),
-      ]);
+      const [companyRow, leadRow, contactRows, employeeRows, blueprint, previewQuoteNo] =
+        await Promise.all([
+          opportunityRow.company_account_id
+            ? getCompany(opportunityRow.company_account_id).catch(() => null)
+            : Promise.resolve(null),
+          opportunityRow.lead_id
+            ? getSalesLead(opportunityRow.lead_id).catch(() => null)
+            : Promise.resolve(null),
+          opportunityRow.company_account_id
+            ? listContacts(opportunityRow.company_account_id).catch(() => [])
+            : Promise.resolve([]),
+          listCrmMemberOptions().catch(() => []),
+          getOpportunityBlueprint(opportunityId).catch(() => null),
+          peekNextQuoteNumber().catch(() => ""),
+        ]);
+      setNextQuoteNo(previewQuoteNo);
       if (
         !blueprint?.is_sales_blueprint ||
         !["quote_ready", "quote_in_progress"].includes(blueprint.state) ||
@@ -301,7 +305,7 @@ export function QuoteFormPage({
           normalizeQuoteServiceType(leadRow?.product_type ?? opportunityRow.product_type) ||
           "",
         owner_name: ownerLabel,
-        subject: "",
+        subject: opportunityRow.opportunity_name || "",
         valid_until: "",
         entity_name: leadRow?.entity_name || companyRow?.customer_name || "",
         entity_email: leadRow?.entity_email || companyRow?.customer_email || "",
@@ -466,7 +470,11 @@ export function QuoteFormPage({
   function quotePayload() {
     return {
       contact_id: form.contact_id || null,
-      subject: form.subject.trim(),
+      subject:
+        form.subject.trim() ||
+        opportunity?.opportunity_name?.trim() ||
+        form.project_title.trim() ||
+        null,
       project_title: form.project_title.trim() || null,
       account_name: form.account_name.trim() || null,
       service_type: form.service_type || null,
@@ -500,9 +508,7 @@ export function QuoteFormPage({
   async function onSave() {
     if (!opportunity) return;
     const missing: string[] = [];
-    if (!form.subject.trim()) missing.push("Subject");
     if (!form.valid_until.trim()) missing.push("Valid Until");
-    if (!form.service_type.trim()) missing.push("Service Type");
     if (lines.length === 0) {
       missing.push("At least one quoted item row");
     }
@@ -589,7 +595,7 @@ export function QuoteFormPage({
   const backHref = isEdit && quoteId
     ? `/crm/quotes/${quoteId}`
     : `/crm/opportunities/${opportunityId ?? opportunity?.id ?? ""}`;
-  const backLabel = isEdit ? quote?.quote_no ?? "Quote" : "Opportunity";
+  const backLabel = isEdit ? formatCrmCode(quote?.quote_no) || "Quote" : "Opportunity";
 
   return (
     <CrmPage className="grid min-w-0 max-w-full grid-cols-1 gap-4 overflow-x-clip space-y-0">
@@ -601,7 +607,7 @@ export function QuoteFormPage({
       </Link>
       <PageHeader
         className="min-w-0"
-        title={isEdit ? `Edit ${quote?.quote_no ?? "Quote"}` : "Create Quote"}
+        title={isEdit ? `Edit ${formatCrmCode(quote?.quote_no) || "Quote"}` : "Create Quote"}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Link
@@ -625,9 +631,6 @@ export function QuoteFormPage({
               value={form.project_title}
               onChange={(event) => setField("project_title", event.target.value)}
             />
-          </FinanceField>
-          <FinanceField label="Subject *">
-            <Input value={form.subject} onChange={(event) => setField("subject", event.target.value)} />
           </FinanceField>
           <FinanceField label="Account Name">
             <Input
@@ -656,35 +659,15 @@ export function QuoteFormPage({
             </FinanceSelect>
           </FinanceField>
           <CrmSessionEmployeeField label="Quote Owner" value={form.owner_name} />
-          <FinanceField label="Service Type *">
-            <FinanceSelect
-              value={form.service_type}
-              onChange={(event) => setField("service_type", event.target.value)}
-            >
-              <option value="">Select</option>
-              {QUOTE_SERVICE_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
-            </FinanceSelect>
-          </FinanceField>
           <FinanceField label="Quote No.">
-            <Input value={isEdit ? quote?.quote_no ?? "-" : "Auto-generated on save"} disabled />
-          </FinanceField>
-          <FinanceField label="Quote Stage">
             <Input
               value={
                 isEdit
-                  ? (quote?.quote_stage ?? "").replaceAll("_", " ") || "-"
-                  : "Quote Create"
+                  ? formatCrmCode(quote?.quote_no) || "-"
+                  : formatCrmCode(nextQuoteNo) || "Assigning…"
               }
               disabled
-              className="capitalize"
             />
-          </FinanceField>
-          <FinanceField label="Version">
-            <Input value={isEdit ? String(quote?.version ?? 1) : "1"} disabled />
           </FinanceField>
         </div>
       </CrmSection>

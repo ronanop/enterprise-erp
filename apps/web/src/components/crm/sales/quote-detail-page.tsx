@@ -14,6 +14,7 @@ import {
 
 import {
   CrmErrorBanner,
+  CrmInfoBanner,
   CrmPage,
   CrmSection,
   CrmWarnBanner,
@@ -30,7 +31,6 @@ import { BlueprintActions } from "@/components/crm/sales/blueprint-actions";
 import { resolveSalesStageLabel } from "@/lib/crm/sales-blueprint-stages";
 import { CrmDetailEditLink } from "@/components/crm/sales/crm-detail-edit-link";
 import { CrmRecordActionsMenu } from "@/components/crm/sales/crm-record-actions-menu";
-import { normalizeQuoteServiceType } from "@/lib/crm/lead-product-options";
 import { QuoteLineTable } from "@/components/crm/sales/quote-line-table";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -84,7 +84,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [banner, setBanner] = useState<{ text: string; tone: "error" } | null>(null);
+  const [banner, setBanner] = useState<{ text: string; tone: "error" | "success" } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -133,6 +133,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   async function onBlueprintAction(action: string, payload: BlueprintActionPayload) {
     setBusy(true);
     setError(null);
+    setBanner(null);
     try {
       if (action === "create_ovf") {
         router.push(`/crm/quotes/${quoteId}/ovf/new`);
@@ -176,6 +177,32 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       } else {
         await applyQuoteAction(quoteId, action, payload);
       }
+
+      if (action === "send_to_customer" && quote) {
+        const lineRows = lines.length > 0 ? lines : await listQuoteLines(quoteId).catch(() => []);
+        try {
+          await downloadQuoteExport(quote, lineRows);
+        } catch {
+          /* stage update already succeeded — PDF download is best-effort */
+        }
+        const to = (quote.entity_email || "").trim();
+        if (to) {
+          const subject = encodeURIComponent(
+            `Quotation ${quote.quote_no}${quote.subject ? ` — ${quote.subject}` : ""}`,
+          );
+          const body = encodeURIComponent(
+            `Dear Customer,\n\nPlease find attached quotation ${quote.quote_no}.\n\nRegards`,
+          );
+          window.open(`mailto:${to}?subject=${subject}&body=${body}`, "_blank", "noopener,noreferrer");
+        }
+        setBanner({
+          text: to
+            ? "Quote marked as sent. PDF downloaded and email draft opened."
+            : "Quote marked as sent to customer. PDF downloaded — add Entity Email to open a mail draft next time.",
+          tone: "success",
+        });
+      }
+
       await load();
     } catch (err) {
       const message = err instanceof ApiClientError ? err.message : `Failed to ${action}`;
@@ -230,13 +257,13 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
   const oppTransitionActions =
     quote.quote_stage === "accepted" && oppBlueprint
       ? oppBlueprint.allowed_actions.filter(
-          (action) =>
-            action !== "create_quote" &&
-            action !== "create_ovf" &&
-            action !== "quote_accepted" &&
-            !blueprint.allowed_actions.includes(action) &&
-            !(existingOvf && action === "create_ovf"),
-        )
+        (action) =>
+          action !== "create_quote" &&
+          action !== "create_ovf" &&
+          action !== "quote_accepted" &&
+          !blueprint.allowed_actions.includes(action) &&
+          !(existingOvf && action === "create_ovf"),
+      )
       : [];
 
   const blueprintActions = Array.from(
@@ -317,7 +344,13 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
         </p>
       ) : null}
 
-      {banner ? <CrmErrorBanner>{banner.text}</CrmErrorBanner> : null}
+      {banner ? (
+        banner.tone === "success" ? (
+          <CrmInfoBanner>{banner.text}</CrmInfoBanner>
+        ) : (
+          <CrmErrorBanner>{banner.text}</CrmErrorBanner>
+        )
+      ) : null}
       {error ? <CrmErrorBanner>{error}</CrmErrorBanner> : null}
 
       {nearingSubmit ? (
@@ -358,15 +391,10 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
             label="Project Title"
             value={textOrDash(quote.project_title)}
           />
-          <CrmReadOnlyField label="Subject *" value={textOrDash(quote.subject)} />
           <CrmReadOnlyField label="Account Name" value={textOrDash(quote.account_name)} />
           <CrmReadOnlyField label="Valid Until *" value={textOrDash(quote.valid_until)} />
           <CrmReadOnlyField label="Contact Name" value={contactName} />
           <CrmReadOnlyField label="Quote Owner" value={textOrDash(quote.owner_name)} />
-          <CrmReadOnlyField
-            label="Service Type *"
-            value={textOrDash(normalizeQuoteServiceType(quote.service_type) || quote.service_type)}
-          />
           <CrmReadOnlyField label="Quote No." value={formatCrmCode(quote.quote_no)} />
           <CrmReadOnlyField
             label="Quote Stage"

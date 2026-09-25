@@ -2,7 +2,7 @@
 
 Product rules enforced here:
   4. OVF ONLY after customer PO is approved on the opportunity.
-  7. Finance cost ~0.5% per 15 days of payment gap.
+  7. Finance cost ~0.5% per 15 days of payment gap after a 5-day buffer.
   8. "Send for approval" creates a My Jobs task + notification stub and can
      lock the record.
 """
@@ -722,8 +722,9 @@ class OvfService:
             fields["total_margin_amount"] = quote.total_margin_amount
         vendor_days = int(fields.get("vendor_payment_days", 0) or 0)
         customer_days = int(fields.get("customer_payment_days", 0) or 0)
-        if fields.get("finance_cost_pct") is None:
-            fields["finance_cost_pct"] = margin_engine.compute_finance_cost_pct(vendor_days, customer_days)
+        fields["finance_cost_pct"] = margin_engine.compute_finance_cost_pct(
+            vendor_days, customer_days
+        )
 
         code = self._numbers.generate(CrmEntityType.OVF, opp.company_id, CrmOvf, "ovf_no")
         approval_status = fields.pop("approval_status", None) or "not_required"
@@ -783,9 +784,9 @@ class OvfService:
 
         vendor_days = int(fields.get("vendor_payment_days", ovf.vendor_payment_days) or 0)
         customer_days = int(fields.get("customer_payment_days", ovf.customer_payment_days) or 0)
-        if "vendor_payment_days" in fields or "customer_payment_days" in fields:
-            if fields.get("finance_cost_pct") is None:
-                fields["finance_cost_pct"] = margin_engine.compute_finance_cost_pct(vendor_days, customer_days)
+        fields["finance_cost_pct"] = margin_engine.compute_finance_cost_pct(
+            vendor_days, customer_days
+        )
 
         approval_status = fields.get("approval_status")
         if approval_status is not None and approval_status not in (

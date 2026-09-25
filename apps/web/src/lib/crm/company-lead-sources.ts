@@ -15,11 +15,18 @@ export type CompanyLeadSource = (typeof COMPANY_LEAD_SOURCES)[number];
 export function companyLeadSourceLabel(source: string): string {
   const normalized = source === "partner" ? "multi_tier" : source;
   if (normalized === "multi_tier") return "Multi-Tier";
-  return normalized.replaceAll("_", " ");
+  return normalized
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export function normalizeCompanyLeadSource(source: string): string {
   return source === "partner" ? "multi_tier" : source;
+}
+
+/** True when a lead-source option label is Event. */
+export function isEventLeadSourceLabel(label: string | null | undefined): boolean {
+  return normalizeSourceMatchKey(label ?? "") === "event";
 }
 
 /** Compare company source codes / free-text to lead-source option labels. */
@@ -53,4 +60,10 @@ export function sortLeadSourcesByCompanyOrder<T extends { label: string }>(rows:
     if (bi === -1) return -1;
     return ai - bi;
   });
+}
+
+/** True when a lead-source option label is Multi-Tier (incl. legacy Partner). */
+export function isMultiTierLeadSourceLabel(label: string | null | undefined): boolean {
+  const key = normalizeSourceMatchKey(label ?? "");
+  return key === "multi tier" || key === "partner";
 }

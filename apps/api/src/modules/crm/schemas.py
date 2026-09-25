@@ -106,6 +106,8 @@ class SalesLeadUpdate(BaseModel):
     mobile: str | None = None
     email: str | None = None
     lead_source_id: UUID | None = None
+    partner_names: str | None = None
+    marketing_event_id: UUID | None = None
     expected_amount: Decimal | None = None
     committed_amount: Decimal | None = None
     expected_closure_date: date | None = None
@@ -178,6 +180,8 @@ class LeadResponse(OrmModel):
     mobile: str
     email: str | None
     lead_source_id: UUID
+    partner_names: str | None = None
+    marketing_event_id: UUID | None = None
     status: str
     blueprint_state: str
     locked: bool
@@ -770,6 +774,7 @@ class CompanyCreate(BaseModel):
     portal_id: str | None = None
     source: str
     partner_names: str | None = None
+    marketing_event_id: UUID | None = None
     rating: str | None = None
     first_name: str
     last_name: str
@@ -802,6 +807,7 @@ class CompanyUpdate(BaseModel):
     portal_id: str | None = None
     source: str | None = None
     partner_names: str | None = None
+    marketing_event_id: UUID | None = None
     rating: str | None = None
     first_name: str | None = None
     last_name: str | None = None
@@ -839,6 +845,7 @@ class CompanyResponse(OrmModel):
     portal_id: str | None
     source: str
     partner_names: str | None
+    marketing_event_id: UUID | None = None
     rating: str | None
     first_name: str | None
     last_name: str | None
@@ -919,6 +926,8 @@ class LeadCreateFromCompany(BaseModel):
     mobile: str | None = None
     email: str | None = None
     lead_source_id: UUID
+    partner_names: str | None = None
+    marketing_event_id: UUID | None = None
     owner_employee_id: UUID | None = None
     assign_to_id: UUID | None = None
     assigned_date: date | None = None
@@ -979,6 +988,9 @@ class SalesLeadResponse(OrmModel):
     mobile: str
     email: str | None
     designation: str | None = None
+    lead_source_id: UUID | None = None
+    partner_names: str | None = None
+    marketing_event_id: UUID | None = None
     status: str
     blueprint_state: str
     locked: bool

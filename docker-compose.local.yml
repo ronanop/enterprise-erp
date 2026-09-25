@@ -1,0 +1,183 @@
+# Local Docker stack — Redis / RabbitMQ / OpenSearch / API / Celery / Web
+# Database: AWS RDS via DATABASE_URL in .env
+# Object storage: AWS S3 via .env
+# Host ports: API :8000 | Web :3000 | Redis :6379 | RabbitMQ :5672/:15672 | OpenSearch :9200
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: erp-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - erp_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: erp-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-erp}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-erp_dev_password}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - erp_rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  opensearch:
+    image: opensearchproject/opensearch:2
+    container_name: erp-opensearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - erp_opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    image: enterprise-erp-api:local
+    container_name: erp-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      DEBUG: ${DEBUG:-true}
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-erp}:${RABBITMQ_PASSWORD:-erp_dev_password}@rabbitmq:5672//
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      OPENSEARCH_URL: http://opensearch:9200
+      RUN_MIGRATIONS: "true"
+      CORS_ORIGINS: ${CORS_ORIGINS}
+      CORS_ORIGIN_REGEX: ${CORS_ORIGIN_REGEX:-}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      MICROSOFT_REDIRECT_URI: ${MICROSOFT_REDIRECT_URI:-http://localhost:8000/api/v1/auth/microsoft/callback}
+      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-s3}
+      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-s3}
+      ASSET_STORAGE_PATH: /app/var/asset-storage
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-ap-south-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SSL_CERT_DIR: /etc/ssl/certs
+    ports:
+      - "8000:8000"
+    volumes:
+      - erp_crm_uploads:/app/var/crm-attachments
+      - erp_asset_storage:/app/var/asset-storage
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=4)\" || exit 1",
+        ]
+      interval: 15s
+      timeout: 5s
+      start_period: 90s
+      retries: 12
+
+  celery-worker:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    image: enterprise-erp-api:local
+    pull_policy: never
+    container_name: erp-celery-worker
+    restart: unless-stopped
+    command: ["worker"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: amqp://${RABBITMQ_USER:-erp}:${RABBITMQ_PASSWORD:-erp_dev_password}@rabbitmq:5672//
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      OPENSEARCH_URL: http://opensearch:9200
+      RUN_MIGRATIONS: "false"
+      OBJECT_STORAGE_BACKEND: ${OBJECT_STORAGE_BACKEND:-s3}
+      ASSET_STORAGE_BACKEND: ${ASSET_STORAGE_BACKEND:-s3}
+      ASSET_STORAGE_PATH: /app/var/asset-storage
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-ap-south-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
+      REQUESTS_CA_BUNDLE: /etc/ssl/certs/ca-certificates.crt
+      SSL_CERT_DIR: /etc/ssl/certs
+    volumes:
+      - erp_crm_uploads:/app/var/crm-attachments
+      - erp_asset_storage:/app/var/asset-storage
+    depends_on:
+      api:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-Connect Plus}
+        NEXT_PUBLIC_DEMO_EMAIL: ${NEXT_PUBLIC_DEMO_EMAIL:-admin@example.com}
+        NEXT_PUBLIC_DEMO_PASSWORD: ${NEXT_PUBLIC_DEMO_PASSWORD:-Secure1!}
+        NEXT_PUBLIC_ELEVENLABS_AGENT_ID: ${NEXT_PUBLIC_ELEVENLABS_AGENT_ID:-}
+        API_INTERNAL_URL: http://api:8000
+    image: enterprise-erp-web:local
+    container_name: erp-web
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      HOSTNAME: 0.0.0.0
+      API_INTERNAL_URL: http://api:8000
+    ports:
+      - "3002:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  erp_redis_data:
+    name: erp_redis_data
+  erp_rabbitmq_data:
+    name: erp_rabbitmq_data
+  erp_opensearch_data:
+    name: erp_opensearch_data
+  erp_crm_uploads:
+    name: erp_crm_uploads
+  erp_asset_storage:
+    name: erp_asset_storage

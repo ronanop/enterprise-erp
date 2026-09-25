@@ -55,6 +55,8 @@ class ProjectCreate(BaseModel):
     crm_opportunity_id: UUID | None = None
     crm_customer_id: UUID | None = None
     proc_order_id: UUID | None = None
+    # Projects-only PO queue seed row (no SCM PO). Cleared from queue on create.
+    po_queue_handoff_id: UUID | None = None
     health_status: str | None = None
     description: str | None = None
     status: str | None = None
@@ -117,23 +119,31 @@ class ProjectResponse(OrmModel):
 
 
 class ProjectPoQueueItem(BaseModel):
-    """Finalized SCM purchase order awaiting project creation."""
+    """PO queue row — real SCM share or Projects-only seed handoff."""
 
-    order_id: UUID
+    handoff_id: UUID
+    order_id: UUID | None = None
+    is_seed: bool = False
     company_po_number: str | None = None
     document_number: str
     document_date: date
     customer_name: str | None = None
     customer_po_number: str | None = None
-    vendor_id: UUID
-    total_amount: float
+    vendor_id: UUID | None = None
+    total_amount: float = 0
     customer_total: float = 0
-    status: str
+    status: str = "shared"
     ovf_id: UUID | None = None
     branch_id: UUID
     company_id: UUID
     created_at: datetime | None = None
     shared_at: datetime | None = None
+    project_name: str | None = None
+    circle_name: str | None = None
+    site_name: str | None = None
+    rack_quantity: str | None = None
+    server_quantity: str | None = None
+    server_type: str | None = None
 
 
 class ProjectPoQueueShareCreate(BaseModel):
@@ -155,7 +165,9 @@ class ProjectPoQueueShareCreate(BaseModel):
 class ProjectPoQueueHandoffResponse(BaseModel):
     """Stored installation handoff metadata for a PO queue entry."""
 
-    order_id: UUID
+    handoff_id: UUID
+    order_id: UUID | None = None
+    is_seed: bool = False
     challan_id: str | None = None
     shared_at: datetime
     project_name: str | None = None
@@ -170,12 +182,17 @@ class ProjectPoQueueHandoffResponse(BaseModel):
     customer_name: str | None = None
     customer_po_number: str | None = None
     company_po_number: str | None = None
+    document_date: date | None = None
+    branch_id: UUID | None = None
+    company_id: UUID | None = None
 
 
 class ProjectPoPrefillResponse(BaseModel):
-    """Suggested project intake values from a procurement PO."""
+    """Suggested project intake values from a procurement PO or seed handoff."""
 
-    order_id: UUID
+    order_id: UUID | None = None
+    handoff_id: UUID | None = None
+    is_seed: bool = False
     branch_id: UUID
     company_id: UUID
     company_po_number: str | None = None
@@ -191,6 +208,9 @@ class ProjectPoPrefillResponse(BaseModel):
     circle_name: str | None = None
     entity_state: str | None = None
     project_title: str | None = None
+    rack_quantity: str | None = None
+    server_quantity: str | None = None
+    server_type: str | None = None
 
 
 class ProjectPhaseCreate(BaseModel):

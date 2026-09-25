@@ -42,6 +42,7 @@ import {
   listAttachments,
   listCrmMemberOptions,
   listLeadSourceOptions,
+  listMarketingEventOptions,
   listOvfs,
   listQuotes,
   downloadAttachment,
@@ -103,6 +104,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
   const [company, setCompany] = useState<Company | null>(null);
   const [employees, setEmployees] = useState<Option[]>([]);
   const [leadSources, setLeadSources] = useState<Option[]>([]);
+  const [marketingEvents, setMarketingEvents] = useState<Option[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [ovfs, setOvfs] = useState<Ovf[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -115,16 +117,18 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
     setLoading(true);
     setError(null);
     try {
-      const [oppRow, bp, employeeOptions, leadSourceOptions] = await Promise.all([
+      const [oppRow, bp, employeeOptions, leadSourceOptions, marketingEventOptions] = await Promise.all([
         getOpportunity(opportunityId),
         getOpportunityBlueprint(opportunityId),
         listCrmMemberOptions().catch(() => [] as Option[]),
         listLeadSourceOptions().catch(() => [] as Option[]),
+        listMarketingEventOptions().catch(() => [] as Option[]),
       ]);
       setOpp(oppRow);
       setBlueprint(bp);
       setEmployees(employeeOptions);
       setLeadSources(leadSourceOptions);
+      setMarketingEvents(marketingEventOptions);
       const [quoteRows, ovfRows, attachmentRows, leadRow, companyRow] = await Promise.all([
         listQuotes({ opportunity_id: opportunityId }).catch(() => []),
         listOvfs({ opportunity_id: opportunityId }).catch(() => []),
@@ -554,6 +558,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
               company={company}
               employees={employees}
               leadSources={leadSources}
+              marketingEvents={marketingEvents}
               title="Opportunity Information"
               mergeFullName
             />

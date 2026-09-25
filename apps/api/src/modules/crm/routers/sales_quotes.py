@@ -44,6 +44,16 @@ def list_quotes(
     return APIResponse(message="OK", data=paginate(rows, pagination))
 
 
+@quotes_router.get("/next-quote-number", response_model=APIResponse[dict[str, str]])
+def next_quote_number(
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.quote:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    company_id: UUID | None = None,
+):
+    number = QuoteService(db).peek_next_quote_no(ctx, company_id)
+    return APIResponse(message="OK", data={"quote_no": number})
+
+
 @quotes_router.post("", response_model=APIResponse[QuoteResponse])
 def create_quote(
     body: QuoteCreate,

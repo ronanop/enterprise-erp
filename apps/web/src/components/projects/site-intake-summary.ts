@@ -76,7 +76,7 @@ export function intakeAdminDetailRows(input: {
       value: displayQty(site?.server_qty, site?.remarks, "Server quantity"),
     },
     {
-      label: "Server Type",
+      label: "Type",
       value: displayText(site?.application, site?.remarks, "Server type"),
     },
   ];
@@ -205,7 +205,7 @@ export function intakeSummarySection(): FormSection {
       },
       {
         name: "intake_server_type",
-        label: "Server Type",
+        label: "Type",
         type: "readonly",
       },
       {

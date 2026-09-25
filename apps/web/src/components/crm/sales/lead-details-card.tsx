@@ -12,6 +12,14 @@ import {
 
 import { CrmSection } from "@/components/crm/crm-ui";
 import { FinanceField } from "@/components/finance/journals/finance-form-field";
+import { isEventLeadSourceLabel, isMultiTierLeadSourceLabel } from "@/lib/crm/company-lead-sources";
+import {
+  displayLeadSourcingChannels,
+  leadNeedsHardwareSourcing,
+  leadNeedsServiceSourcing,
+  parseLeadSourcingChannels,
+} from "@/lib/crm/lead-sourcing-channels";
+import { parseLeadProductTypes } from "@/lib/crm/lead-product-options";
 import {
   formatInr,
   fullName,
@@ -59,6 +67,7 @@ type Props = {
   company?: Company | null;
   employees?: Option[];
   leadSources?: Option[];
+  marketingEvents?: Option[];
   /** Section heading - use Opportunity Information on converted deals. */
   title?: string;
   /** Merge first/last into one Full Name field (opportunity view). */
@@ -70,6 +79,7 @@ export function LeadDetailsCard({
   company,
   employees = [],
   leadSources = [],
+  marketingEvents = [],
   title = "Lead Information",
   mergeFullName = false,
 }: Props) {
@@ -89,6 +99,10 @@ export function LeadDetailsCard({
     .filter(Boolean)
     .join(" ")
     .trim();
+  const productTypes = parseLeadProductTypes(lead.product_type);
+  const sourcingChannels = parseLeadSourcingChannels(lead.deal_type);
+  const showHardwareSourcing = leadNeedsHardwareSourcing(productTypes);
+  const showServiceSourcing = leadNeedsServiceSourcing(productTypes);
 
   return (
     <div className="space-y-5">
@@ -126,6 +140,17 @@ export function LeadDetailsCard({
 
           <LeadReadOnlyField label="Designation *" value={textOrDash(lead.designation)} />
           <LeadReadOnlyField label="Lead Source *" value={leadSourceName(lead.lead_source_id)} />
+          {isMultiTierLeadSourceLabel(leadSourceName(lead.lead_source_id)) ? (
+            <LeadReadOnlyField label="Partner Names *" value={textOrDash(lead.partner_names)} />
+          ) : null}
+          {isEventLeadSourceLabel(leadSourceName(lead.lead_source_id)) ? (
+            <LeadReadOnlyField
+              label="Event *"
+              value={textOrDash(
+                marketingEvents.find((event) => event.id === lead.marketing_event_id)?.label,
+              )}
+            />
+          ) : null}
 
           <LeadReadOnlyField label="Product Type *" value={textOrDash(lead.product_type)} />
 
@@ -146,7 +171,24 @@ export function LeadDetailsCard({
           />
           <LeadReadOnlyField label="DR Number" value={textOrDash(lead.dr_number)} />
 
-          <LeadReadOnlyField label="Sourcing Channel" value={textOrDash(lead.deal_type)} />
+          {showHardwareSourcing ? (
+            <LeadReadOnlyField
+              label="Hardware Sourcing Channel *"
+              value={textOrDash(sourcingChannels.hardware)}
+            />
+          ) : null}
+          {showServiceSourcing ? (
+            <LeadReadOnlyField
+              label="Service Sourcing Channel *"
+              value={textOrDash(sourcingChannels.service)}
+            />
+          ) : null}
+          {!showHardwareSourcing && !showServiceSourcing ? (
+            <LeadReadOnlyField
+              label="Sourcing Channel"
+              value={displayLeadSourcingChannels(lead.deal_type, lead.product_type)}
+            />
+          ) : null}
           <LeadReadOnlyField label="Lead Owner *" value={employeeName(lead.owner_employee_id)} />
 
           <LeadReadOnlyField

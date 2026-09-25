@@ -222,6 +222,8 @@ export type ProjectFormInput = {
   description?: string | null;
   status?: string;
   proc_order_id?: string | null;
+  /** Projects-only PO queue seed handoff (no SCM PO). */
+  po_queue_handoff_id?: string | null;
   site_installation?: SiteInstallationNestedInput | null;
 };
 
@@ -284,13 +286,15 @@ export async function closeProject(id: string): Promise<Project> {
 export const PROJECT_PO_QUEUE_API = "/projects/purchase-orders";
 
 export type ProjectPoQueueItem = {
-  order_id: string;
+  handoff_id: string;
+  order_id: string | null;
+  is_seed?: boolean;
   company_po_number: string | null;
   document_number: string;
   document_date: string;
   customer_name: string | null;
   customer_po_number: string | null;
-  vendor_id: string;
+  vendor_id: string | null;
   total_amount: number;
   customer_total: number;
   status: string;
@@ -299,10 +303,18 @@ export type ProjectPoQueueItem = {
   company_id: string;
   created_at: string | null;
   shared_at?: string | null;
+  project_name?: string | null;
+  circle_name?: string | null;
+  site_name?: string | null;
+  rack_quantity?: string | null;
+  server_quantity?: string | null;
+  server_type?: string | null;
 };
 
 export type ProjectPoQueueHandoff = {
-  order_id: string;
+  handoff_id: string;
+  order_id: string | null;
+  is_seed?: boolean;
   challan_id: string | null;
   shared_at: string;
   project_name: string | null;
@@ -317,6 +329,9 @@ export type ProjectPoQueueHandoff = {
   customer_name: string | null;
   customer_po_number: string | null;
   company_po_number: string | null;
+  document_date?: string | null;
+  branch_id?: string | null;
+  company_id?: string | null;
 };
 
 export type ProjectPoQueueShareInput = {
@@ -334,7 +349,9 @@ export type ProjectPoQueueShareInput = {
 };
 
 export type ProjectPoPrefill = {
-  order_id: string;
+  order_id: string | null;
+  handoff_id?: string | null;
+  is_seed?: boolean;
   branch_id: string;
   company_id: string;
   company_po_number: string | null;
@@ -351,6 +368,9 @@ export type ProjectPoPrefill = {
   entity_state: string | null;
   /** CRM lead / opportunity project title (for Projects intake). */
   project_title?: string | null;
+  rack_quantity?: string | null;
+  server_quantity?: string | null;
+  server_type?: string | null;
 };
 
 export async function listProjectPoQueue(): Promise<ProjectPoQueueItem[]> {
@@ -376,6 +396,15 @@ export async function getProjectPoHandoff(orderId: string): Promise<ProjectPoQue
   return res.data ?? null;
 }
 
+export async function getProjectPoHandoffById(
+  handoffId: string,
+): Promise<ProjectPoQueueHandoff | null> {
+  const res = await apiClient<ProjectPoQueueHandoff | null>(
+    `${PROJECT_PO_QUEUE_API}/handoffs/${handoffId}`,
+  );
+  return res.data ?? null;
+}
+
 export async function getProjectPoPrefill(
   orderId: string,
   options?: { installationHandoff?: boolean },
@@ -383,6 +412,14 @@ export async function getProjectPoPrefill(
   const qs = options?.installationHandoff ? "?installation_handoff=true" : "";
   return unwrap(
     await apiClient<ProjectPoPrefill>(`${PROJECT_PO_QUEUE_API}/${orderId}/prefill${qs}`),
+  );
+}
+
+export async function getProjectPoPrefillByHandoff(
+  handoffId: string,
+): Promise<ProjectPoPrefill> {
+  return unwrap(
+    await apiClient<ProjectPoPrefill>(`${PROJECT_PO_QUEUE_API}/handoffs/${handoffId}/prefill`),
   );
 }
 

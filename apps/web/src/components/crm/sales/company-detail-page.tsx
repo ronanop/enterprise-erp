@@ -51,6 +51,7 @@ import {
   listAttachmentsByCategory,
   listContacts,
   listCrmMemberOptions,
+  listMarketingEventOptions,
   listFollowups,
   listMeetings,
   listOpportunities,
@@ -126,9 +127,11 @@ function formatFollowupTaskDeadline(row: CrmFollowup): string {
 function CompanyProfileReadOnly({
   company,
   employeeName,
+  marketingEventName,
 }: {
   company: Company;
   employeeName: (id: string | null) => string;
+  marketingEventName?: string;
 }) {
   const normalizedSource = normalizeCompanyLeadSource(company.source);
   const knownSource = (COMPANY_LEAD_SOURCES as readonly string[]).includes(normalizedSource);
@@ -149,6 +152,9 @@ function CompanyProfileReadOnly({
             <CompanyReadOnlyField label="Source *" value={formatSourceLabel(sourceSelectValue)} />
             {sourceSelectValue === "multi_tier" ? (
               <CompanyReadOnlyField label="Partner Names *" value={textOrDash(company.partner_names)} />
+            ) : null}
+            {sourceSelectValue === "event" ? (
+              <CompanyReadOnlyField label="Event *" value={textOrDash(marketingEventName)} />
             ) : null}
             {sourceSelectValue === "other" ? (
               <CompanyReadOnlyField label="Other Source *" value={textOrDash(otherSourceValue)} />
@@ -207,6 +213,7 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
   const [oemQuoteRows, setOemQuoteRows] = useState<DocPreviewRow[]>([]);
   const [purchaseOrderRows, setPurchaseOrderRows] = useState<DocPreviewRow[]>([]);
   const [employees, setEmployees] = useState<Option[]>([]);
+  const [marketingEvents, setMarketingEvents] = useState<Option[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [meetingOpen, setMeetingOpen] = useState(false);
@@ -220,6 +227,7 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
         companyRow,
         allLeads,
         employeeOptions,
+        marketingEventOptions,
         meetingRows,
         followupRows,
         opportunityRows,
@@ -232,6 +240,7 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
         getCompany(companyAccountId),
         listSalesLeads(companyAccountId).catch(() => [] as SalesLead[]),
         listCrmMemberOptions().catch(() => [] as Option[]),
+        listMarketingEventOptions().catch(() => [] as Option[]),
         listMeetings(companyAccountId).catch(() => [] as CrmMeeting[]),
         listFollowups(companyAccountId).catch(() => [] as CrmFollowup[]),
         listOpportunities({ company_account_id: companyAccountId }).catch(() => [] as Opportunity[]),
@@ -247,6 +256,7 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
       setCompany(companyRow);
       setLeads(allLeads);
       setEmployees(employeeOptions);
+      setMarketingEvents(marketingEventOptions);
       setMeetings(meetingRows);
       setFollowups(followupRows);
       setOpportunities(scopedOpportunities);
@@ -298,7 +308,13 @@ export function CompanyDetailPage({ companyAccountId }: { companyAccountId: stri
         <CrmErrorBanner>{error ?? "Company not found"}</CrmErrorBanner>
       ) : (
         <CrmPage>
-          <CompanyProfileReadOnly company={company} employeeName={employeeName} />
+          <CompanyProfileReadOnly
+            company={company}
+            employeeName={employeeName}
+            marketingEventName={
+              marketingEvents.find((event) => event.id === company.marketing_event_id)?.label
+            }
+          />
 
           <div id="company-meetings">
             <CrmListPanel>

@@ -231,11 +231,52 @@ class ProjectService:
         self._scope.validate_branch_access(ctx, branch_id)
         # Site workflow payload (optional) - stripped before project insert
         site_fields = fields.pop("site_installation", None)
+        po_queue_handoff_id = fields.pop("po_queue_handoff_id", None)
         proc_order_id = fields.get("proc_order_id")
-        if proc_order_id is not None:
-            from modules.project.service.project_po_queue_service import ProjectPoQueueService
+        from modules.project.service.project_po_queue_service import ProjectPoQueueService
 
-            po_queue = ProjectPoQueueService(self._db)
+        po_queue = ProjectPoQueueService(self._db)
+        if po_queue_handoff_id is not None and proc_order_id is None:
+            # Seed / handoff-driven create — prefill from queue row, no SCM PO link.
+            po_queue.ensure_seed_handoff_linkable(ctx, po_queue_handoff_id)
+            prefill = po_queue.get_prefill_by_handoff(ctx, po_queue_handoff_id)
+            if not fields.get("budget_amount") and prefill.budget_amount is not None:
+                fields["budget_amount"] = prefill.budget_amount
+            if not fields.get("customer_id") and prefill.customer_id:
+                fields["customer_id"] = prefill.customer_id
+            if not fields.get("customer_id") and prefill.customer_name:
+                matched = po_queue._match_customer_id(
+                    ctx, prefill.company_id, prefill.customer_name
+                )
+                if matched is not None:
+                    fields["customer_id"] = matched
+            if not fields.get("description") and prefill.description:
+                fields["description"] = prefill.description
+            if not fields.get("currency_code"):
+                fields["currency_code"] = prefill.currency_code
+            if not (fields.get("project_name") or "").strip() and prefill.project_title:
+                fields["project_name"] = prefill.project_title
+            site = site_fields if isinstance(site_fields, dict) else {}
+            if not (site.get("site_name") or "").strip() and prefill.site_name:
+                site["site_name"] = prefill.site_name
+            if not (site.get("circle") or "").strip():
+                site["circle"] = (
+                    prefill.entity_state or prefill.circle_name or ""
+                ).strip() or None
+            if not (site.get("application") or "").strip() and prefill.server_type:
+                site["application"] = prefill.server_type
+            if site.get("rack_qty") is None and prefill.rack_quantity:
+                try:
+                    site["rack_qty"] = int(str(prefill.rack_quantity).strip())
+                except ValueError:
+                    pass
+            if site.get("server_qty") is None and prefill.server_quantity:
+                try:
+                    site["server_qty"] = int(str(prefill.server_quantity).strip())
+                except ValueError:
+                    pass
+            site_fields = site
+        elif proc_order_id is not None:
             po_queue.ensure_linkable(ctx, proc_order_id)
             prefill = po_queue.get_prefill(ctx, proc_order_id)
             if not fields.get("budget_amount") and prefill.budget_amount is not None:
@@ -272,7 +313,9 @@ class ProjectService:
         site_kwargs = site_fields if isinstance(site_fields, dict) else {}
         SiteInstallationService(self._db).ensure_for_new_project(ctx, project, **site_kwargs)
         if proc_order_id is not None:
-            ProjectPoQueueService(self._db).complete_handoff(ctx, proc_order_id)
+            po_queue.complete_handoff(ctx, proc_order_id)
+        elif po_queue_handoff_id is not None:
+            po_queue.complete_handoff_by_id(ctx, po_queue_handoff_id)
         return project
 
     def _apply_intake_create_defaults(

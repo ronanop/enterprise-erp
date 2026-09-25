@@ -90,7 +90,7 @@ Company (Sales Account)
 | 4 | **OVF after Customer PO approved** | OVF create only when opportunity is `ovf_ready` (`customer_po_approved = true`). |
 | 5 | **Lost until Deal Won** | `lost` available on Lead / Opportunity / Quote until terminal won. **No lost on OVF** (PO already approved). |
 | 6 | **Margin thresholds** | HW/SW ≥ **7%**; Services ≥ **20%**. Mixed lines use the **stricter** (higher) threshold. Below/at threshold → cannot self-approve; must `send-for-approval` to Management. |
-| 7 | **Finance cost on OVF** | `finance_cost_pct = ceil(max(0, customer_payment_days - vendor_payment_days) / 15) * 0.5` |
+| 7 | **Finance cost on OVF** | `finance_cost_pct = round((max(0, customer_payment_days - vendor_payment_days - 5) / 15) * 0.5, 2)` (5-day buffer, no ceil) |
 | 8 | **Locking on approval** | Sending for approval sets `locked = true`. Locked records reject blueprint actions (`409`) except universal `lost` where applicable. Unlock on approve/reject decision. |
 
 ---
@@ -482,8 +482,9 @@ Downstream: Won deal / OVF may feed SCM/procurement; Project has a CRM port; Pro
 ### OVF finance cost
 
 ```text
-gapDays = max(0, customer_payment_days - vendor_payment_days)
-finance_cost_pct = ceil(gapDays / 15) * 0.5
+rawGap = customer_payment_days - vendor_payment_days
+gapDays = max(0, rawGap - 5)   # 5-day buffer
+finance_cost_pct = round((gapDays / 15) * 0.5, 2)
 ```
 
 ---
