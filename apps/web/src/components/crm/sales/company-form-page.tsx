@@ -24,6 +24,7 @@ import {
   resolveSessionEmployeeId,
   resolveSessionEmployeeLabel,
 } from "@/lib/crm/session-employee";
+import { containsUnsafeMarkup } from "@/lib/text-safety";
 import {
   COMPANY_LEAD_SOURCES,
   companyLeadSourceLabel,
@@ -294,6 +295,41 @@ export function CompanyFormPage({ companyId }: { companyId?: string }) {
     if (missing.length > 0) {
       setMandateMessage(missingRequiredMessage(missing));
       setMandateOpen(true);
+      return;
+    }
+
+    const unsafeFields: string[] = [];
+    const plainTextChecks: Array<[string, string | null | undefined]> = [
+      ["Company Name", form.customer_name],
+      ["First Name", form.first_name],
+      ["Last Name", form.last_name],
+      ["Customer Email", form.customer_email],
+      ["Phone", form.phone],
+      ["Website", form.website],
+      ["Partner Names", form.partner_names],
+      ["Other Industries", form.other_industries],
+      ["Description", form.description],
+      ["Billing Street", form.billing_street],
+      ["Billing City", form.billing_city],
+      ["Billing State", form.billing_state],
+      ["Billing Code", form.billing_code],
+      ["Billing Country", form.billing_country],
+      ["Shipping Street", form.shipping_street],
+      ["Shipping City", form.shipping_city],
+      ["Shipping State", form.shipping_state],
+      ["Shipping Code", form.shipping_code],
+      ["Shipping Country", form.shipping_country],
+    ];
+    if (form.source === "other") {
+      plainTextChecks.push(["Other Source", otherSource]);
+    }
+    for (const [label, value] of plainTextChecks) {
+      if (value && containsUnsafeMarkup(value)) unsafeFields.push(label);
+    }
+    if (unsafeFields.length > 0) {
+      setError(
+        `${unsafeFields.join(", ")} cannot contain HTML or script content.`,
+      );
       return;
     }
 

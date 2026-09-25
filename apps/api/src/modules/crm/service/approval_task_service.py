@@ -31,6 +31,8 @@ def utcnow() -> datetime:
 _REJECT_ACTION_MAP = {
     "approve_boq": "reject_boq",
     "approve_sow": "reject_sow",
+    "provide_boq_attachment": "reject_boq_attachment",
+    "provide_sow_attachment": "reject_sow_attachment",
     "approve_po_finance": "reject_po_finance",
     "approve_po_terms": "reject_po_terms",
     "approve_po": "reject_po",
@@ -42,11 +44,14 @@ _REJECT_ACTION_MAP = {
 _REJECT_DOC_LABEL = {
     "approve_boq": "BOQ",
     "approve_sow": "SOW",
+    "provide_boq_attachment": "BOQ",
+    "provide_sow_attachment": "SOW",
     "approve_po_finance": "customer PO",
     "approve_po_terms": "customer PO terms & conditions",
     "approve_po": "customer PO",
     "approve_internally": "quote",
     "approve": "OVF",
+    "provide_freight": "freight charges",
 }
 
 
@@ -267,12 +272,27 @@ class ApprovalTaskService:
         *,
         decision: str,
         remark: str | None = None,
+        freight: object | None = None,
+        file_name: str | None = None,
+        content_base64: str | None = None,
+        content_type: str | None = None,
+        file_path: str | None = None,
     ) -> CrmApprovalTask:
         if decision not in {"approved", "rejected"}:
             raise ConflictException("decision must be 'approved' or 'rejected'")
         task = self.get(ctx, task_id)
         if task.status != "pending":
             raise ConflictException(f"Task {task.task_code} has already been decided")
+
+        if decision == "approved" and task.action == "provide_freight":
+            if freight is None:
+                raise ConflictException("Freight amount is required to complete this task")
+        if decision == "approved" and task.action in {
+            "provide_boq_attachment",
+            "provide_sow_attachment",
+        }:
+            if not file_name or not (content_base64 or file_path):
+                raise ConflictException("A file upload is required to complete this attachment task")
 
         self._repo.cancel_pending_siblings(
             ctx,
@@ -292,7 +312,17 @@ class ApprovalTaskService:
         )
         if decision == "rejected":
             self._notify_rejection(ctx, task, remark)
-        self._resume(ctx, task, decision, remark)
+        self._resume(
+            ctx,
+            task,
+            decision,
+            remark,
+            freight=freight,
+            file_name=file_name,
+            content_base64=content_base64,
+            content_type=content_type,
+            file_path=file_path,
+        )
         return task
 
     def _notify_rejection(
@@ -325,7 +355,40 @@ class ApprovalTaskService:
             created_by=ctx.user_id,
         )
 
-    def _resume(self, ctx: TenantContext, task: CrmApprovalTask, decision: str, remark: str | None = None) -> None:
+    def _resume(
+        self,
+        ctx: TenantContext,
+        task: CrmApprovalTask,
+        decision: str,
+        remark: str | None = None,
+        *,
+        freight: object | None = None,
+        file_name: str | None = None,
+        content_base64: str | None = None,
+        content_type: str | None = None,
+        file_path: str | None = None,
+    ) -> None:
+        if task.action == "provide_freight":
+            if decision != "approved":
+                return
+            from modules.crm.service.ovf_service import OvfService
+            from modules.crm.service.crm_notification_service import notify_ovf_freight_provided
+
+            ovf = OvfService(self._db).apply_freight_from_scm(ctx, task.entity_id, freight=freight)
+            if task.requested_by:
+                amount = float(ovf.freight or 0)
+                freight_txt = f"{amount:,.2f}"
+                notify_ovf_freight_provided(
+                    self._db,
+                    tenant_id=ctx.tenant_id,
+                    recipient_user_id=task.requested_by,
+                    ovf_id=ovf.id,
+                    ovf_no=ovf.ovf_no,
+                    freight=freight_txt,
+                    created_by=ctx.user_id,
+                )
+            return
+
         action = task.action if decision == "approved" else _REJECT_ACTION_MAP.get(task.action or "", None)
         if not action:
             return
@@ -333,11 +396,23 @@ class ApprovalTaskService:
         payload: dict = {}
         if remark:
             payload["remark"] = remark
+        if file_name:
+            payload["file_name"] = file_name
+        if content_base64:
+            payload["content_base64"] = content_base64
+        if content_type:
+            payload["content_type"] = content_type
+        if file_path:
+            payload["file_path"] = file_path
 
         if task.entity_type == "opportunity":
             from modules.crm.service.blueprint_service import OpportunityBlueprintService
 
             OpportunityBlueprintService(self._db).perform_action(ctx, task.entity_id, action, payload)
+        elif task.entity_type == "lead":
+            from modules.crm.service.lead_service import LeadService
+
+            LeadService(self._db).apply_attachment_action(ctx, task.entity_id, action, payload)
         elif task.entity_type == "quote":
             from modules.crm.service.quote_service import QuoteService
 

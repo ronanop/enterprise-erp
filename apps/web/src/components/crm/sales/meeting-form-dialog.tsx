@@ -188,10 +188,14 @@ export function MeetingFormDialog({
       setEmployees(employeeOptions);
       setCompanies(companyRows);
       const branchId = companyAccount?.branch_id || defaultBranchId || branches[0]?.id || "";
-      const hostId =
-        resolveSessionEmployeeId(employeeOptions, user) ||
-        companyAccount?.account_owner_id ||
-        "";
+      const sessionOwnerId = resolveSessionEmployeeId(employeeOptions, user);
+      const accountOwnerRaw = companyAccount?.account_owner_id ?? "";
+      const accountOwnerId = accountOwnerRaw
+        ? employeeOptions.find(
+          (row) => row.id === accountOwnerRaw || row.userId === accountOwnerRaw,
+        )?.id ?? ""
+        : "";
+      const hostId = sessionOwnerId || accountOwnerId || employeeOptions[0]?.id || "";
       setForm(
         emptyForm(branchId, companyAccount?.id ?? "", hostId),
       );

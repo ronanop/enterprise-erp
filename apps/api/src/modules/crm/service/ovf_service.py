@@ -715,7 +715,8 @@ class OvfService:
             )
         )
 
-        fields["freight"] = fields.get("freight") if fields.get("freight") is not None else (quote.freight or Decimal("0"))
+        # Freight is SCM-owned (Ask SCM / post-share charges). Do not take Sales input.
+        fields["freight"] = Decimal("0")
         if fields.get("total_margin_pct") is None:
             fields["total_margin_pct"] = quote.avg_margin_pct
         if fields.get("total_margin_amount") is None:
@@ -781,6 +782,9 @@ class OvfService:
         sales_blueprint_engine.assert_not_locked(ovf)
         if ovf.deal_won or ovf.shared_to_scm:
             raise ConflictException("OVF cannot be edited after it is shared to SCM or marked Deal Won")
+
+        # Freight is written only via Ask SCM / SCM charges — ignore Sales payload.
+        fields.pop("freight", None)
 
         vendor_days = int(fields.get("vendor_payment_days", ovf.vendor_payment_days) or 0)
         customer_days = int(fields.get("customer_payment_days", ovf.customer_payment_days) or 0)
@@ -879,6 +883,10 @@ class OvfService:
     ) -> CrmOvf:
         ovf = self.get(ctx, ovf_id)
         sales_blueprint_engine.assert_not_locked(ovf)
+        if self._has_pending_freight_task(ctx, ovf):
+            raise ConflictException(
+                "Freight is still pending from SCM. Wait for My Jobs to complete before sending for approval."
+            )
         next_state = sales_blueprint_engine.transition("ovf", ovf.blueprint_state, "send_for_approval")
 
         from modules.crm.service.approval_task_service import ApprovalTaskService
@@ -990,6 +998,97 @@ class OvfService:
             ovf.blueprint_state,
             "scm_hold" if on_hold else "scm_release_hold",
             None,
+        )
+        return row
+
+    def request_freight_from_scm(self, ctx: TenantContext, ovf_id: UUID) -> CrmOvf:
+        """Ask configured SCM step owners to provide freight via My Jobs.
+
+        OVF remains in ``draft`` until SCM submits freight (and Sales continues editing).
+        """
+        ovf = self.get(ctx, ovf_id)
+        if ovf.deal_won:
+            raise ConflictException("Cannot request freight after Deal Won")
+        if ovf.blueprint_state not in {"draft", "approved", "shared_scm"}:
+            raise ConflictException(
+                f"Cannot request freight while OVF is in '{ovf.blueprint_state}'"
+            )
+
+        from modules.crm.service.approval_step_owner_service import ApprovalStepOwnerService
+        from modules.crm.service.approval_task_service import ApprovalTaskService
+
+        pending = ApprovalTaskService(self._db).list(
+            ctx,
+            company_id=ovf.company_id,
+            status="pending",
+            entity_type="ovf",
+            entity_id=ovf.id,
+        )
+        if any(task.action == "provide_freight" for task in pending):
+            raise ConflictException("A freight request is already pending for this OVF")
+
+        owner_ids = ApprovalStepOwnerService(self._db).list_user_ids(ctx, "ovf_provide_freight")
+        if not owner_ids:
+            raise ConflictException(
+                "No SCM freight step owners configured. Set them under CRM → Users → Default task owners."
+            )
+
+        ApprovalTaskService(self._db).route_approval(
+            ctx,
+            title=f"Provide freight for OVF {ovf.ovf_no}",
+            entity_type="ovf",
+            entity_id=ovf.id,
+            team_role="scm",
+            action="provide_freight",
+            company_id=ovf.company_id,
+            branch_id=ovf.branch_id,
+            assigned_user_ids=owner_ids,
+            remarks="Sales requested freight charges",
+        )
+        # Keep draft while waiting - Sales can still edit other fields.
+        if ovf.blueprint_state == "draft":
+            self._repo.update(ctx, ovf_id, blueprint_state="draft")
+        self._log(ctx, ovf, ovf.blueprint_state, ovf.blueprint_state, "request_freight", None)
+        return self.get(ctx, ovf_id)
+
+    def _has_pending_freight_task(self, ctx: TenantContext, ovf: CrmOvf) -> bool:
+        from modules.crm.service.approval_task_service import ApprovalTaskService
+
+        pending = ApprovalTaskService(self._db).list(
+            ctx,
+            company_id=ovf.company_id,
+            status="pending",
+            entity_type="ovf",
+            entity_id=ovf.id,
+        )
+        return any(task.action == "provide_freight" for task in pending)
+
+    def apply_freight_from_scm(
+        self,
+        ctx: TenantContext,
+        ovf_id: UUID,
+        *,
+        freight: Decimal | float | str | None,
+    ) -> CrmOvf:
+        """Write freight from a completed My Jobs provide_freight task (pre- or post-share)."""
+        ovf = self.get(ctx, ovf_id)
+        if freight is None:
+            raise ConflictException("Freight amount is required")
+        value = Decimal(str(freight))
+        if value < 0:
+            raise ConflictException("Freight cannot be negative")
+        row = self._repo.update(ctx, ovf_id, freight=value.quantize(Decimal("0.0001")))
+        if row is None:
+            raise NotFoundException("OVF not found")
+        self._recompute_margin(ctx, ovf_id)
+        row = self.get(ctx, ovf_id)
+        self._log(
+            ctx,
+            ovf,
+            ovf.blueprint_state,
+            ovf.blueprint_state,
+            "scm_provide_freight",
+            f"freight={row.freight}",
         )
         return row
 

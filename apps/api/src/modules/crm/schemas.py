@@ -4,7 +4,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 
 class OrmModel(BaseModel):
@@ -147,6 +147,8 @@ class SalesLeadUpdate(BaseModel):
     entity_address: str | None = None
     entity_gst: str | None = None
     entity_contact: str | None = None
+    requires_boq: bool | None = None
+    requires_sow: bool | None = None
     notes: str | None = None
     presales_owner_id: UUID | None = None
 
@@ -217,6 +219,10 @@ class LeadResponse(OrmModel):
     entity_address: str | None
     entity_gst: str | None
     entity_contact: str | None
+    requires_boq: bool = False
+    requires_sow: bool = False
+    boq_attached: bool = False
+    sow_attached: bool = False
     oem_name: str | None = None
     oem_contact_person: str | None = None
     oem_contact_number: str | None = None
@@ -797,6 +803,50 @@ class CompanyCreate(BaseModel):
     description: str | None = None
     master_customer_id: UUID | None = None
 
+    @field_validator(
+        "customer_name",
+        "first_name",
+        "last_name",
+        "customer_email",
+        "phone",
+        "industry",
+        "source",
+        "account_type",
+        "billing_street",
+        "billing_city",
+        "billing_state",
+        "billing_code",
+        "billing_country",
+    )
+    @classmethod
+    def reject_company_markup(cls, value: str) -> str:
+        from shared.text_safety import assert_safe_plain_text
+
+        return assert_safe_plain_text(value, field="value")
+
+    @field_validator(
+        "other_industries",
+        "portal_id",
+        "partner_names",
+        "rating",
+        "website",
+        "customer_id_ext",
+        "role",
+        "shipping_street",
+        "shipping_city",
+        "shipping_state",
+        "shipping_code",
+        "shipping_country",
+        "description",
+    )
+    @classmethod
+    def reject_optional_company_markup(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        from shared.text_safety import assert_safe_plain_text
+
+        return assert_safe_plain_text(value, field="value")
+
 
 class CompanyUpdate(BaseModel):
     customer_name: str | None = None
@@ -830,6 +880,43 @@ class CompanyUpdate(BaseModel):
     description: str | None = None
     status: str | None = None
     version: int | None = None
+
+    @field_validator(
+        "customer_name",
+        "account_type",
+        "industry",
+        "other_industries",
+        "portal_id",
+        "source",
+        "partner_names",
+        "rating",
+        "first_name",
+        "last_name",
+        "customer_email",
+        "phone",
+        "website",
+        "customer_id_ext",
+        "role",
+        "billing_street",
+        "billing_city",
+        "billing_state",
+        "billing_code",
+        "billing_country",
+        "shipping_street",
+        "shipping_city",
+        "shipping_state",
+        "shipping_code",
+        "shipping_country",
+        "description",
+        "status",
+    )
+    @classmethod
+    def reject_company_markup(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        from shared.text_safety import assert_safe_plain_text
+
+        return assert_safe_plain_text(value, field="value")
 
 
 class CompanyResponse(OrmModel):
@@ -970,6 +1057,8 @@ class LeadCreateFromCompany(BaseModel):
     entity_address: str | None = None
     entity_gst: str | None = None
     entity_contact: str | None = None
+    requires_boq: bool = False
+    requires_sow: bool = False
     notes: str | None = None
     presales_owner_id: UUID | None = None
 
@@ -1010,6 +1099,10 @@ class SalesLeadResponse(OrmModel):
     entity_address: str | None = None
     entity_gst: str | None = None
     entity_contact: str | None = None
+    requires_boq: bool = False
+    requires_sow: bool = False
+    boq_attached: bool = False
+    sow_attached: bool = False
     oem_name: str | None = None
     oem_contact_person: str | None = None
     oem_contact_number: str | None = None
@@ -1601,6 +1694,11 @@ class CrmMemberOption(BaseModel):
 class ApprovalTaskDecisionRequest(BaseModel):
     decision: str = Field(pattern="^(approved|rejected)$")
     remark: str | None = None
+    freight: Decimal | None = None
+    file_name: str | None = None
+    content_base64: str | None = None
+    content_type: str | None = None
+    file_path: str | None = None
 
 
 class PoValidationStageResponse(BaseModel):

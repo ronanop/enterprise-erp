@@ -10,10 +10,18 @@ import { cn } from "@/lib/utils";
 type ApproverOption = { id: string; label: string; name?: string; email?: string };
 
 type MenuCoords = {
-  top: number;
+  top?: number;
+  bottom?: number;
   left: number;
   width: number;
+  maxHeight: number;
+  placement: "above" | "below";
 };
+
+const VIEWPORT_PAD = 8;
+const MENU_GAP = 6;
+const MENU_MAX_HEIGHT = 320;
+const MENU_MIN_HEIGHT = 160;
 
 function parseApproverLabel(label: string): { name: string; email: string | null } {
   const match = label.trim().match(/^(.+?)\s*\(([^)]+)\)\s*$/);
@@ -35,6 +43,11 @@ function optionParts(option: ApproverOption): { name: string; email: string | nu
     return { name: option.name.trim(), email: option.email?.trim() || null };
   }
   return parseApproverLabel(option.label);
+}
+
+/** Normalize ids so option lookup never fails on UUID string casing. */
+function normId(id: string): string {
+  return String(id).trim().toLowerCase();
 }
 
 /** Multi-select approver control that opens like a dropdown. */
@@ -60,9 +73,26 @@ export function ApproverMultiSelect({
   const [search, setSearch] = useState("");
   const [coords, setCoords] = useState<MenuCoords | null>(null);
 
-  const lockedSet = useMemo(() => new Set(lockedIds ?? []), [lockedIds]);
-  const selectedSet = useMemo(() => new Set(value), [value]);
-  const optionById = useMemo(() => new Map(options.map((option) => [option.id, option])), [options]);
+  const lockedSet = useMemo(() => new Set((lockedIds ?? []).map(normId)), [lockedIds]);
+  const selectedSet = useMemo(() => new Set(value.map(normId)), [value]);
+  const optionById = useMemo(() => {
+    const map = new Map<string, ApproverOption>();
+    for (const option of options) {
+      map.set(normId(option.id), option);
+    }
+    return map;
+  }, [options]);
+
+  function lookupOption(id: string): ApproverOption {
+    const found = optionById.get(normId(id));
+    if (found) return found;
+    const parts = parseApproverLabel(id);
+    // Never surface raw UUIDs in the UI.
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return { id, label: "Unknown user", name: "Unknown user" };
+    }
+    return { id, label: parts.name || id, name: parts.name || id, email: parts.email ?? undefined };
+  }
 
   const filteredOptions = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -81,17 +111,46 @@ export function ApproverMultiSelect({
     value.length === 0
       ? placeholder
       : value.length === 1
-        ? optionParts(optionById.get(value[0]) ?? { id: value[0], label: "1 approver selected" }).name
-        : `${value.length} approvers selected`;
+        ? optionParts(lookupOption(value[0])).name
+        : `${value.length} owners selected`;
 
   const updatePosition = useCallback(() => {
     const el = triggerRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    const width = Math.min(Math.max(rect.width, 320), vw - VIEWPORT_PAD * 2);
+    let left = rect.left;
+    if (left + width > vw - VIEWPORT_PAD) {
+      left = Math.max(VIEWPORT_PAD, vw - VIEWPORT_PAD - width);
+    }
+    if (left < VIEWPORT_PAD) left = VIEWPORT_PAD;
+
+    const spaceBelow = vh - rect.bottom - MENU_GAP - VIEWPORT_PAD;
+    const spaceAbove = rect.top - MENU_GAP - VIEWPORT_PAD;
+    const placeAbove = spaceBelow < 220 && spaceAbove > spaceBelow;
+    const available = Math.max(MENU_MIN_HEIGHT, placeAbove ? spaceAbove : spaceBelow);
+    const maxHeight = Math.min(MENU_MAX_HEIGHT, available);
+
+    if (placeAbove) {
+      setCoords({
+        bottom: Math.max(VIEWPORT_PAD, vh - rect.top + MENU_GAP),
+        left,
+        width,
+        maxHeight,
+        placement: "above",
+      });
+      return;
+    }
+
     setCoords({
-      top: rect.bottom + 6,
-      left: rect.left,
-      width: Math.max(rect.width, 320),
+      top: rect.bottom + MENU_GAP,
+      left,
+      width,
+      maxHeight,
+      placement: "below",
     });
   }, []);
 
@@ -112,17 +171,17 @@ export function ApproverMultiSelect({
   }
 
   function toggleOption(id: string) {
-    if (lockedSet.has(id)) return;
-    if (selectedSet.has(id)) {
-      onChange(value.filter((item) => item !== id));
+    if (lockedSet.has(normId(id))) return;
+    if (selectedSet.has(normId(id))) {
+      onChange(value.filter((item) => normId(item) !== normId(id)));
       return;
     }
     onChange([...value, id]);
   }
 
   function removeOption(id: string) {
-    if (lockedSet.has(id)) return;
-    onChange(value.filter((item) => item !== id));
+    if (lockedSet.has(normId(id))) return;
+    onChange(value.filter((item) => normId(item) !== normId(id)));
   }
 
   useEffect(() => {
@@ -158,14 +217,16 @@ export function ApproverMultiSelect({
     mounted && open && coords ? (
       <div
         ref={menuRef}
-        className="fixed z-200 overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-lg shadow-slate-900/10"
+        className="fixed z-200 flex flex-col overflow-hidden rounded-xl border border-slate-200/90 bg-white shadow-lg shadow-slate-900/10"
         style={{
           top: coords.top,
+          bottom: coords.bottom,
           left: coords.left,
           width: coords.width,
+          maxHeight: coords.maxHeight,
         }}
       >
-        <div className="border-b border-slate-100 bg-slate-50/80 p-2.5">
+        <div className="shrink-0 border-b border-slate-100 bg-slate-50/80 p-2.5">
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-slate-400" />
             <Input
@@ -178,13 +239,17 @@ export function ApproverMultiSelect({
             />
           </div>
         </div>
-        <ul role="listbox" aria-multiselectable="true" className="max-h-64 overflow-y-auto p-1.5">
+        <ul
+          role="listbox"
+          aria-multiselectable="true"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-1.5"
+        >
           {filteredOptions.length === 0 ? (
             <li className="px-3 py-6 text-center text-xs text-slate-500">No matching approvers</li>
           ) : (
             filteredOptions.map((option) => {
-              const checked = selectedSet.has(option.id);
-              const locked = lockedSet.has(option.id);
+              const checked = selectedSet.has(normId(option.id));
+              const locked = lockedSet.has(normId(option.id));
               const { name, email } = optionParts(option);
               return (
                 <li key={option.id}>
@@ -233,7 +298,7 @@ export function ApproverMultiSelect({
           )}
         </ul>
         {value.length > 0 ? (
-          <div className="border-t border-slate-100 bg-slate-50/70 px-3 py-2 text-[11px] text-slate-500">
+          <div className="shrink-0 border-t border-slate-100 bg-slate-50/70 px-3 py-2 text-[11px] text-slate-500">
             {value.length} selected
           </div>
         ) : null}
@@ -281,11 +346,9 @@ export function ApproverMultiSelect({
       {value.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {value.map((id) => {
-            const option = optionById.get(id);
-            const { name, email } = option
-              ? optionParts(option)
-              : { name: id, email: null as string | null };
-            const locked = lockedSet.has(id);
+            const option = lookupOption(id);
+            const { name, email } = optionParts(option);
+            const locked = lockedSet.has(normId(id));
             return (
               <span
                 key={id}

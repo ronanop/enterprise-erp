@@ -436,6 +436,7 @@ export function OpportunityDetailPage({ opportunityId }: { opportunityId: string
             allowedActions={blueprintActions}
             locked={blueprint.locked}
             opportunityId={opp.id}
+            entityType="opportunity"
             currentStageLabel={resolveSalesStageLabel({
               entityType: "opportunity",
               blueprintState: blueprint.state,

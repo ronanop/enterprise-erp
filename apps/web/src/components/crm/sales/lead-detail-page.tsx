@@ -129,7 +129,20 @@ export function LeadDetailPage({ leadId }: { leadId: string }) {
         </Link>
       </div>
 
-      <ApprovalBanner locked={blueprint.locked} label="This lead" />
+      <ApprovalBanner
+        locked={blueprint.locked}
+        label="This lead"
+        reason={
+          (lead.requires_boq && !lead.boq_attached) || (lead.requires_sow && !lead.sow_attached)
+            ? `waiting for ${[
+                lead.requires_boq && !lead.boq_attached ? "BOQ" : null,
+                lead.requires_sow && !lead.sow_attached ? "SOW" : null,
+              ]
+                .filter(Boolean)
+                .join(" and ")} attachment in My Jobs before convert to opportunity.`
+            : null
+        }
+      />
 
       <PageHeader
         title={`${fullName(lead)} · ${formatCrmCode(lead.lead_code)}`}

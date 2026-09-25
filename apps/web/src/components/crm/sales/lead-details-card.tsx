@@ -270,6 +270,31 @@ export function LeadDetailsCard({
         </div>
       </CrmSection>
 
+      <CrmSection title="BOQ & SOW Requirements" icon={Package}>
+        <div className="grid gap-x-10 gap-y-3 md:grid-cols-2">
+          <LeadReadOnlyField
+            label="BOQ required"
+            value={
+              lead.requires_boq
+                ? lead.boq_attached
+                  ? "Yes — attached"
+                  : "Yes — awaiting attachment"
+                : "No"
+            }
+          />
+          <LeadReadOnlyField
+            label="SOW required"
+            value={
+              lead.requires_sow
+                ? lead.sow_attached
+                  ? "Yes — attached"
+                  : "Yes — awaiting attachment"
+                : "No"
+            }
+          />
+        </div>
+      </CrmSection>
+
       <CrmSection title="Lead Remarks" icon={MessageSquareText}>
         <FinanceField label="Remarks">
           <div className="flex min-h-[96px] w-full rounded-lg border border-input bg-muted/20 px-2.5 py-2 text-sm whitespace-pre-wrap text-foreground">

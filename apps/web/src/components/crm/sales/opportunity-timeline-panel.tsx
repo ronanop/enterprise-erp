@@ -98,6 +98,7 @@ const CURRENT_STATE_TITLES = new Set([
   "OVF Ready",
   "Customer PO Approved / OVF Ready",
   "OVF Created",
+  "OVF Created · Draft",
   "OVF Sent for Approval",
   "OVF Approved",
   "OVF Shared to SCM",
@@ -197,25 +198,25 @@ function EventCard({ event }: { event: OpportunityTimelineEvent }) {
 
         <dl className="mt-2 grid gap-1 text-[11px] text-muted-foreground">
           {event.requested_by_name &&
-          event.event_type !== "approval_requested" &&
-          event.requested_by_name !== actorLabel &&
-          event.requested_by_name !== approverLabel ? (
+            event.event_type !== "approval_requested" &&
+            event.requested_by_name !== actorLabel &&
+            event.requested_by_name !== approverLabel ? (
             <div className="flex gap-1.5">
               <dt className="shrink-0 font-medium text-foreground/70">Requested by</dt>
               <dd>{event.requested_by_name}</dd>
             </div>
           ) : null}
           {event.decided_by_name &&
-          event.decided_by_name !== actorLabel &&
-          event.decided_by_name !== approverLabel &&
-          !isApprovedStep ? (
+            event.decided_by_name !== actorLabel &&
+            event.decided_by_name !== approverLabel &&
+            !isApprovedStep ? (
             <div className="flex gap-1.5">
               <dt className="shrink-0 font-medium text-foreground/70">Decided by</dt>
               <dd>{event.decided_by_name}</dd>
             </div>
           ) : null}
           {event.event_type !== "approval_requested" &&
-          (event.from_state || event.to_state) ? (
+            (event.from_state || event.to_state) ? (
             <div className="flex gap-1.5">
               <dt className="shrink-0 font-medium text-foreground/70">State</dt>
               <dd className="font-mono">

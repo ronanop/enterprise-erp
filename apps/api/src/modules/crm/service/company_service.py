@@ -23,6 +23,35 @@ from modules.crm.service.crm_scope_validator import CrmScopeValidator
 from modules.crm.service.document_number_service import DocumentNumberService
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
+from shared.text_safety import assert_safe_plain_text, contains_unsafe_markup, scrub_unsafe_markup
+
+_COMPANY_TEXT_FIELDS = (
+    "customer_name",
+    "first_name",
+    "last_name",
+    "customer_email",
+    "phone",
+    "website",
+    "industry",
+    "other_industries",
+    "portal_id",
+    "source",
+    "partner_names",
+    "rating",
+    "customer_id_ext",
+    "role",
+    "billing_street",
+    "billing_city",
+    "billing_state",
+    "billing_code",
+    "billing_country",
+    "shipping_street",
+    "shipping_city",
+    "shipping_state",
+    "shipping_code",
+    "shipping_country",
+    "description",
+)
 
 
 class CompanyService:
@@ -38,14 +67,15 @@ class CompanyService:
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
         allowed = self._visibility.company_account_ids_for_user(ctx, cid)
-        return self._repo.list_companies(ctx, cid, account_ids=allowed)
+        rows = self._repo.list_companies(ctx, cid, account_ids=allowed)
+        return [self._heal_unsafe_fields(row) for row in rows]
 
     def get(self, ctx: TenantContext, row_id: UUID) -> CrmCompany:
         row = self._repo.get(ctx, row_id)
         if row is None:
             raise NotFoundException("Company account not found")
         self._visibility.ensure_company_access(ctx, row)
-        return row
+        return self._heal_unsafe_fields(row)
 
     def peek_next_account_number(self, ctx: TenantContext, company_id: UUID | None = None) -> str:
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -56,6 +86,7 @@ class CompanyService:
         self._scope.validate_branch_access(ctx, branch_id)
         code = self._numbers.generate(CrmEntityType.COMPANY, cid, CrmCompany, "account_number")
         fields.setdefault("status", "active")
+        fields = self._assert_safe_fields(fields)
         row = self._repo.create(ctx, company_id=cid, branch_id=branch_id, account_number=code, **fields)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
@@ -70,9 +101,37 @@ class CompanyService:
         existing = self.get(ctx, row_id)
         if existing.locked:
             raise ConflictException("Company account is locked pending approval")
+        fields = self._assert_safe_fields(fields)
         row = self._repo.update(ctx, row_id, **fields)
         if row is None:
             raise NotFoundException("Company account not found")
+        return row
+
+    @staticmethod
+    def _assert_safe_fields(fields: dict) -> dict:
+        cleaned: dict = {}
+        for key, value in fields.items():
+            if key in _COMPANY_TEXT_FIELDS and isinstance(value, str):
+                try:
+                    cleaned[key] = assert_safe_plain_text(value, field=key)
+                except ValueError as exc:
+                    raise AppException(str(exc)) from exc
+            else:
+                cleaned[key] = value
+        return cleaned
+
+    def _heal_unsafe_fields(self, row: CrmCompany) -> CrmCompany:
+        """Persist scrubbed values for legacy XSS payloads so list/API retests stay clean."""
+        patched = False
+        for key in _COMPANY_TEXT_FIELDS:
+            current = getattr(row, key, None)
+            if not isinstance(current, str) or not contains_unsafe_markup(current):
+                continue
+            fallback = (row.account_number or "[invalid]") if key == "customer_name" else "[invalid]"
+            setattr(row, key, scrub_unsafe_markup(current, fallback=fallback))
+            patched = True
+        if patched:
+            self._db.flush()
         return row
 
     def delete(self, ctx: TenantContext, row_id: UUID) -> None:

@@ -48,6 +48,7 @@ import {
   getQuote,
   getSalesLead,
   listAttachments,
+  listCrmApprovalUsers,
   listEmployeeOptions,
   listMyJobs,
   listOvfLines,
@@ -70,19 +71,46 @@ function textOrDash(value: string | number | null | undefined): string {
   return text || "-";
 }
 
-function resolveEmployeeLabel(userId: string | null | undefined, employees: Option[]): string | null {
+function resolveUserLabel(
+  userId: string | null | undefined,
+  users: { id: string; display_name: string; email: string }[],
+): string | null {
   if (!userId) return null;
-  const match = employees.find((employee) => employee.id === userId);
-  return match?.label?.trim() || null;
+  const match = users.find((user) => user.id === userId);
+  const name = match?.display_name?.trim() || match?.email?.trim();
+  return name || null;
 }
 
-async function resolveOvfApproverName(ovfId: string, employees: Option[]): Promise<string | null> {
+/** Prefer who approved; otherwise show assigned My Jobs approver(s). */
+async function resolveOvfApproverName(ovfId: string): Promise<string | null> {
   try {
-    const tasks = await listMyJobs({ entity_type: "ovf", entity_id: ovfId, status: "approved" });
-    const approveTask = tasks
-      .filter((task) => task.action === "approve" && task.decided_by)
+    const [tasks, users] = await Promise.all([
+      listMyJobs({ entity_type: "ovf", entity_id: ovfId }),
+      listCrmApprovalUsers().catch(() => []),
+    ]);
+    const approveTasks = tasks.filter((task) => (task.action || "").toLowerCase() === "approve");
+
+    const decided = approveTasks
+      .filter((task) => (task.status || "").toLowerCase() === "approved" && task.decided_by)
       .sort((a, b) => String(b.decided_at ?? "").localeCompare(String(a.decided_at ?? "")))[0];
-    return resolveEmployeeLabel(approveTask?.decided_by, employees);
+    if (decided?.decided_by) {
+      return resolveUserLabel(decided.decided_by, users);
+    }
+
+    const assigneeIds = [
+      ...new Set(
+        approveTasks
+          .filter((task) => {
+            const status = (task.status || "").toLowerCase();
+            return Boolean(task.assigned_user_id) && status !== "cancelled" && status !== "canceled";
+          })
+          .map((task) => String(task.assigned_user_id)),
+      ),
+    ];
+    const names = assigneeIds
+      .map((id) => resolveUserLabel(id, users))
+      .filter((name): name is string => Boolean(name));
+    return names.length > 0 ? names.join(", ") : null;
   } catch {
     return null;
   }
@@ -151,7 +179,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
 
       const accountId = ovfRow.company_account_id ?? oppRow?.company_account_id ?? null;
       setCompany(accountId ? await getCompany(accountId).catch(() => null) : null);
-      setOvfApproverName(await resolveOvfApproverName(ovfId, employeeRows));
+      setOvfApproverName(await resolveOvfApproverName(ovfId));
     } catch (err) {
       setOvf(null);
       setError(err instanceof ApiClientError ? err.message : "Failed to load OVF");
@@ -353,7 +381,9 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         title={formatCrmCode(ovf.ovf_no)}
         actions={
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <CrmDetailEditLink href={`/crm/ovf/${ovf.id}/edit`} />
+            {!blueprint.locked ? (
+              <CrmDetailEditLink href={`/crm/ovf/${ovf.id}/edit`} />
+            ) : null}
             <CrmRecordActionsMenu
               entityType="ovf"
               entityId={ovf.id}
@@ -392,6 +422,7 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
       <BlueprintActions
         allowedActions={blueprint.allowed_actions}
         locked={blueprint.locked}
+        entityType="ovf"
         currentStageLabel={resolveSalesStageLabel({
           entityType: "ovf",
           blueprintState: blueprint.state,
@@ -452,14 +483,6 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
         </CrmDetailGrid>
 
         <h3 className="mt-4 border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          Technology Segment &amp; Sub Technology Segment
-        </h3>
-        <CrmDetailGrid className="mt-3">
-          <CrmDetailItem label="Technology Segment">{textOrDash(ovf.technology_segment)}</CrmDetailItem>
-          <CrmDetailItem label="Sub Technology Segment">{textOrDash(ovf.sub_technology_segment)}</CrmDetailItem>
-        </CrmDetailGrid>
-
-        <h3 className="mt-4 border-t border-border/70 pt-3 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
           Charges and Details
         </h3>
         <CrmDetailGrid className="mt-3">
@@ -476,7 +499,6 @@ export function OvfDetailPage({ ovfId }: { ovfId: string }) {
           <CrmDetailItem label="Deal Won Amount">
             {ovf.deal_won_amount != null ? formatInr(ovf.deal_won_amount) : "-"}
           </CrmDetailItem>
-          <CrmDetailItem label="Version">{ovf.version}</CrmDetailItem>
         </CrmDetailGrid>
       </CrmSection>
 

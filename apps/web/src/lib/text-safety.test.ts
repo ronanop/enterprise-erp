@@ -8,6 +8,18 @@ describe("text-safety XSS guards", () => {
     expect(containsUnsafeMarkup(payload)).toBe(true);
   });
 
+  it("rejects alert() residue and img/script payloads", () => {
+    expect(containsUnsafeMarkup('alert("XSS")')).toBe(true);
+    expect(
+      containsUnsafeMarkup('<IMG """><SCRIPT>alert("XSS")</SCRIPT>"\\>'),
+    ).toBe(true);
+    expect(
+      containsUnsafeMarkup(
+        '<a href="javascript:alert(String.fromCharCode(88,83,83))">Click Me!</a>',
+      ),
+    ).toBe(true);
+  });
+
   it("allows plain serials", () => {
     expect(containsUnsafeMarkup("25KVIVPDUOJL1Z")).toBe(false);
   });

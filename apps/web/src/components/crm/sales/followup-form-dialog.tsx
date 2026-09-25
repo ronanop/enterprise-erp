@@ -152,10 +152,14 @@ export function FollowupFormDialog({
         companyAccount?.branch_id ||
         branchRows[0]?.id ||
         "";
-      const ownerId =
-        resolveSessionEmployeeId(employeeRows, user) ||
-        companyAccount?.account_owner_id ||
-        "";
+      const sessionOwnerId = resolveSessionEmployeeId(employeeRows, user);
+      const accountOwnerRaw = companyAccount?.account_owner_id ?? "";
+      const accountOwnerId = accountOwnerRaw
+        ? employeeRows.find(
+          (row) => row.id === accountOwnerRaw || row.userId === accountOwnerRaw,
+        )?.id ?? ""
+        : "";
+      const ownerId = sessionOwnerId || accountOwnerId || employeeRows[0]?.id || "";
       const presetOpportunity =
         opportunityId && opportunityRows.some((row) => row.id === opportunityId)
           ? opportunityId
@@ -186,6 +190,13 @@ export function FollowupFormDialog({
     if (!form.task_deadline_time) missing.push("Task deadline time");
     if (!form.owner_employee_id) missing.push("Team Member");
     if (!form.branch_id) missing.push("Branch");
+    if (
+      form.owner_employee_id &&
+      !employees.some((row) => row.id === form.owner_employee_id)
+    ) {
+      setError("Internal Team Member is invalid. Close and reopen the form, then try again.");
+      return;
+    }
     if (missing.length > 0) {
       setMandateMessage(missingRequiredMessage(missing));
       setMandateOpen(true);

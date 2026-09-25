@@ -3,6 +3,7 @@
 const HTML_TAG_RE = /<\/?[a-zA-Z][^>]*>/i;
 const EVENT_HANDLER_RE = /\bon[a-z]+\s*=/i;
 const ACTIVE_SCHEME_RE = /(?:^|[\s"'`(=])(?:javascript|vbscript|data\s*:\s*text\/html)\s*:/i;
+const JS_NOISE_RE = /\b(?:alert|prompt|confirm)\s*\(|String\.fromCharCode|document\.cookie/i;
 
 export function containsUnsafeMarkup(value: string | null | undefined): boolean {
   const text = (value ?? "").trim();
@@ -10,6 +11,7 @@ export function containsUnsafeMarkup(value: string | null | undefined): boolean 
   if (HTML_TAG_RE.test(text)) return true;
   if (EVENT_HANDLER_RE.test(text)) return true;
   if (ACTIVE_SCHEME_RE.test(text)) return true;
+  if (JS_NOISE_RE.test(text)) return true;
   const lowered = text.toLowerCase();
   return (
     lowered.includes("<script") ||

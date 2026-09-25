@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiClientError } from "@/services/api-client";
-import { fileToBase64, getNextDealRegNumber, listCrmApprovalUsers, type BlueprintActionPayload } from "@/services/sales-crm-service";
+import { fileToBase64, getNextDealRegNumber, listApprovalStepOwners, listCrmApprovalUsers, type BlueprintActionPayload } from "@/services/sales-crm-service";
 
 type FieldType =
   | "text"
@@ -62,6 +62,8 @@ const REMARK_FIELD_ALT: FieldConfig = { key: "remark", label: "Remark", type: "t
 const SEND_APPROVAL_ACTIONS = new Set([
   "send_boq_approval",
   "send_sow_approval",
+  "send_boq_for_attachment",
+  "send_sow_for_attachment",
   "send_po_approval",
   "send_for_approval",
   "send_cloud_discount_approval",
@@ -165,6 +167,11 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
     fields: APPROVAL_DIALOG_FIELDS,
     description: `Routes the attached BOQ to the Pre-sales team via My Jobs. ${APPROVAL_ADMIN_NOTE}`,
   },
+  send_boq_for_attachment: {
+    label: "Send BOQ for Attachment",
+    fields: APPROVAL_DIALOG_FIELDS,
+    description: `Asks selected users to attach the BOQ via My Jobs. ${APPROVAL_ADMIN_NOTE}`,
+  },
   attach_sow: {
     label: "Attach SOW",
     fields: [{ key: "file_name", label: "SOW files", type: "file", required: true }],
@@ -173,6 +180,11 @@ const ACTION_CONFIG: Record<string, ActionConfig> = {
     label: "Send SOW for Approval",
     fields: APPROVAL_DIALOG_FIELDS,
     description: `Routes the attached SOW to the Pre-sales team via My Jobs. ${APPROVAL_ADMIN_NOTE}`,
+  },
+  send_sow_for_attachment: {
+    label: "Send SOW for Attachment",
+    fields: APPROVAL_DIALOG_FIELDS,
+    description: `Asks selected users to attach the SOW via My Jobs. ${APPROVAL_ADMIN_NOTE}`,
   },
   skip_sow: { label: "Skip SOW", fields: [] },
   deal_reg: {
@@ -280,38 +292,34 @@ const PRIMARY_FLOW_ACTIONS = new Set([
 const APPROVAL_ACTIONS = new Set([
   "send_boq_approval",
   "send_sow_approval",
+  "send_boq_for_attachment",
+  "send_sow_for_attachment",
   "send_po_approval",
   "send_for_approval",
   "send_cloud_discount_approval",
 ]);
 
-const QUOTE_OVF_APPROVAL_EMAILS = [
-  "shraddha@cachedigitech.com",
-  "vinod@cachedigitech.com",
-  "prarthana@cachedigitech.com",
-] as const;
+const PINNED_STEP_KEYS = new Set([
+  "quote_send_for_approval",
+  "ovf_send_for_approval",
+  "po_finance",
+]);
 
-const CUSTOMER_PO_APPROVAL_EMAILS = [
-  "accounts@cachedigitech.com",
-  "navneet.kumar@cachedigitech.com",
-] as const;
-
-function pinnedApproverEmailsForAction(action: string): readonly string[] {
-  if (action === "send_po_approval") return CUSTOMER_PO_APPROVAL_EMAILS;
-  if (action === "send_for_approval") return QUOTE_OVF_APPROVAL_EMAILS;
-  return [];
-}
-
-function resolvePinnedApproverIds(
+function stepKeyForAction(
   action: string,
-  approvalUsers: { id: string; email: string }[],
-): string[] {
-  const emails = pinnedApproverEmailsForAction(action);
-  if (emails.length === 0) return [];
-  const wanted = new Set(emails.map((email) => email.toLowerCase()));
-  return approvalUsers
-    .filter((user) => wanted.has(user.email.trim().toLowerCase()))
-    .map((user) => user.id);
+  entityType?: "quote" | "ovf" | "opportunity",
+): string | null {
+  if (action === "send_for_approval") {
+    if (entityType === "ovf") return "ovf_send_for_approval";
+    return "quote_send_for_approval";
+  }
+  if (action === "send_po_approval") return "po_finance";
+  if (action === "send_cloud_discount_approval") return "cloud_discount";
+  if (action === "send_boq_for_attachment") return "boq_attachment";
+  if (action === "send_sow_for_attachment") return "sow_attachment";
+  if (action === "send_boq_approval") return "boq_attachment";
+  if (action === "send_sow_approval") return "sow_attachment";
+  return null;
 }
 
 function mergeApproverSelection(
@@ -330,6 +338,8 @@ type Props = {
   currentStageLabel?: string | null;
   /** Opportunity id — used to auto-generate Deal Registration (DR) numbers. */
   opportunityId?: string;
+  /** Distinguishes quote vs OVF for send_for_approval step-owner defaults. */
+  entityType?: "quote" | "ovf" | "opportunity";
   /** Actions rendered elsewhere by the parent (e.g. gated Create Quote / Create OVF CTAs). */
   excludeActions?: string[];
   actionLabelOverrides?: Partial<Record<string, string>>;
@@ -344,6 +354,7 @@ export function BlueprintActions({
   locked,
   currentStageLabel,
   opportunityId,
+  entityType,
   excludeActions,
   actionLabelOverrides,
   actionDispatchOverrides,
@@ -367,28 +378,73 @@ export function BlueprintActions({
   const [approvalUsers, setApprovalUsers] = useState<
     { id: string; label: string; name: string; email: string }[]
   >([]);
+  const [stepOwnerIds, setStepOwnerIds] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     let cancelled = false;
-    void listCrmApprovalUsers()
-      .then((rows) => {
+    void Promise.all([listCrmApprovalUsers(), listApprovalStepOwners().catch(() => [])])
+      .then(([rows, ownerGroups]) => {
         if (cancelled) return;
-        setApprovalUsers(
-          rows.map((row) => ({
-            id: row.id,
+        const byId = new Map<string, { id: string; label: string; name: string; email: string }>();
+        for (const row of rows) {
+          const id = String(row.id);
+          byId.set(id, {
+            id,
             name: row.display_name,
             email: row.email,
             label: `${row.display_name} (${row.email})`,
-          })),
+          });
+        }
+        // Merge configured step owners so pinned defaults always resolve to names.
+        for (const group of ownerGroups) {
+          for (const owner of group.owners) {
+            const id = String(owner.user_id);
+            if (!byId.has(id)) {
+              byId.set(id, {
+                id,
+                name: owner.display_name,
+                email: owner.email,
+                label: owner.email
+                  ? `${owner.display_name} (${owner.email})`
+                  : owner.display_name,
+              });
+            }
+          }
+        }
+        setApprovalUsers([...byId.values()].sort((a, b) => a.label.localeCompare(b.label)));
+        setStepOwnerIds(
+          Object.fromEntries(
+            ownerGroups.map((group) => [
+              group.step_key,
+              group.owners.map((owner) => String(owner.user_id)),
+            ]),
+          ),
         );
       })
       .catch(() => {
-        if (!cancelled) setApprovalUsers([]);
+        if (!cancelled) {
+          setApprovalUsers([]);
+          setStepOwnerIds({});
+        }
       });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  function resolveDefaultApproverIds(action: string): string[] {
+    const key = stepKeyForAction(action, entityType);
+    if (!key) return [];
+    const configured = stepOwnerIds[key] ?? [];
+    const known = new Set(approvalUsers.map((user) => String(user.id).toLowerCase()));
+    return configured.filter((id) => known.has(String(id).toLowerCase()));
+  }
+
+  function resolvePinnedApproverIds(action: string): string[] {
+    const key = stepKeyForAction(action, entityType);
+    if (!key || !PINNED_STEP_KEYS.has(key)) return [];
+    return resolveDefaultApproverIds(action);
+  }
 
   if (!currentStageLabel && visibleActions.length === 0) return null;
 
@@ -431,7 +487,8 @@ export function BlueprintActions({
       void runImmediate(action);
       return;
     }
-    const pinnedIds = resolvePinnedApproverIds(action, approvalUsers);
+    const pinnedIds = resolvePinnedApproverIds(action);
+    const defaultIds = resolveDefaultApproverIds(action);
     setActiveAction(action);
     setValues(
       Object.fromEntries(
@@ -442,11 +499,17 @@ export function BlueprintActions({
         }),
       ),
     );
-    setApproverIds(pinnedIds);
-    // Finance owns the first PO check, so the pinned accounts approvers seed it.
+    setApproverIds(mergeApproverSelection(defaultIds, pinnedIds));
+    // Finance owns the first PO check, so the pinned/default accounts approvers seed it.
     setPoStageApprovers(
       action === "send_po_approval"
-        ? { ...EMPTY_PO_STAGE_APPROVERS, finance: pinnedIds }
+        ? {
+          ...EMPTY_PO_STAGE_APPROVERS,
+          finance: mergeApproverSelection(defaultIds, pinnedIds),
+          legal: stepOwnerIds.po_legal ?? [],
+          management: stepOwnerIds.po_management ?? [],
+          operations: stepOwnerIds.service_scope ?? [],
+        }
         : EMPTY_PO_STAGE_APPROVERS,
     );
     setFile(null);
@@ -581,22 +644,22 @@ export function BlueprintActions({
   }
 
   const activeConfig = activeAction ? resolveConfig(activeAction) : null;
-  const activePinnedApproverIds = activeAction
-    ? resolvePinnedApproverIds(activeAction, approvalUsers)
-    : [];
+  const activePinnedApproverIds = activeAction ? resolvePinnedApproverIds(activeAction) : [];
   const orderedActions = [...visibleActions].sort((a, b) => {
     const rank = (action: string) => {
-      if (action === "attach_sow") return 0;
-      if (action === "attach_boq") return 1;
-      if (action === "send_boq_approval") return 2;
-      if (action === "send_sow_approval") return 3;
-      if (action === "deal_reg") return 4;
-      if (action === "send_to_customer") return 5;
-      if (action === "accept") return 6;
-      if (action === "negotiate") return 7;
-      if (action === "follow_up") return 8;
-      if (action === "attach_po") return 9;
-      if (action === "send_po_approval") return 10;
+      if (action === "send_sow_for_attachment") return 0;
+      if (action === "send_boq_for_attachment") return 1;
+      if (action === "attach_sow") return 2;
+      if (action === "attach_boq") return 3;
+      if (action === "send_boq_approval") return 4;
+      if (action === "send_sow_approval") return 5;
+      if (action === "deal_reg") return 6;
+      if (action === "send_to_customer") return 7;
+      if (action === "accept") return 8;
+      if (action === "negotiate") return 9;
+      if (action === "follow_up") return 10;
+      if (action === "attach_po") return 11;
+      if (action === "send_po_approval") return 12;
       if (action === "lost") return 20;
       return 15;
     };

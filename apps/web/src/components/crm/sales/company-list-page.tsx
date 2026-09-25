@@ -15,6 +15,7 @@ import {
 } from "@/components/crm/sales/company-list-columns";
 import { CrmSortableTh, sortRows, useTableSort } from "@/components/crm/sales/crm-table-sort";
 import { ApiClientError } from "@/services/api-client";
+import { safeEntityHref } from "@/lib/html";
 import {
   listCompanies,
   listCrmMemberOptions,
@@ -123,7 +124,10 @@ export function CompanyListPage() {
     switch (col) {
       case "customer_name":
         return (
-          <Link href={`/crm/companies/${row.id}`} className="cursor-pointer font-medium hover:underline">
+          <Link
+            href={safeEntityHref("/crm/companies", row.id)}
+            className="cursor-pointer font-medium hover:underline"
+          >
             {row.customer_name}
           </Link>
         );

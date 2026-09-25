@@ -34,14 +34,22 @@ def get_lead_blueprint(
 ):
     lead = LeadService(db).get(ctx, lead_id)
     state = lead.blueprint_state or "open"
+    pending_docs = (bool(lead.requires_boq) and not bool(lead.boq_attached)) or (
+        bool(lead.requires_sow) and not bool(lead.sow_attached)
+    )
+    locked = bool(lead.locked) or pending_docs
+    actions = sales_blueprint_engine.allowed_actions("lead", state)
+    if locked:
+        # Convert stays blocked until BOQ/SOW are attached; lost remains available.
+        actions = [a for a in actions if a != "convert"]
     return APIResponse(
         message="OK",
         data={
             "entity_type": "lead",
             "entity_id": lead.id,
             "state": state,
-            "locked": lead.locked,
-            "allowed_actions": [] if lead.locked else sales_blueprint_engine.allowed_actions("lead", state),
+            "locked": locked,
+            "allowed_actions": actions,
         },
     )
 

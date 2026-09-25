@@ -13,11 +13,14 @@ import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { ApiClientError } from "@/services/api-client";
+import { Input } from "@/components/ui/input";
 import {
   decideMyJob,
+  fileToBase64,
   getOpportunity,
   getOvf,
   getQuote,
+  getSalesLead,
   listMyJobs,
   listOpportunities,
   listOvfs,
@@ -29,6 +32,8 @@ import {
 
 const TEAM_ROLES = ["presales", "project", "management", "accounts", "scm", "legal"];
 const STATUSES = ["pending", "approved", "rejected", "cancelled"];
+const FREIGHT_ACTION = "provide_freight";
+const ATTACHMENT_ACTIONS = new Set(["provide_boq_attachment", "provide_sow_attachment"]);
 
 type SortKey = "title" | "opportunity_name" | "team_role" | "status";
 
@@ -37,6 +42,12 @@ function myJobDetailHref(task: ApprovalTask): string {
   if (base === "/crm/my-jobs") return base;
   const sep = base.includes("?") ? "&" : "?";
   return `${base}${sep}from=my-jobs`;
+}
+
+function approveLabel(task: ApprovalTask): string {
+  if (task.action === FREIGHT_ACTION) return "Submit freight";
+  if (task.action && ATTACHMENT_ACTIONS.has(task.action)) return "Submit file";
+  return "Approve";
 }
 
 export function MyJobsPage({
@@ -57,6 +68,8 @@ export function MyJobsPage({
 
   const [decision, setDecision] = useState<{ task: ApprovalTask; outcome: "approved" | "rejected" } | null>(null);
   const [remark, setRemark] = useState("");
+  const [freightAmount, setFreightAmount] = useState("");
+  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
   const [deciding, setDeciding] = useState(false);
   const [decideError, setDecideError] = useState<string | null>(null);
 
@@ -80,6 +93,17 @@ export function MyJobsPage({
         try {
           if (task.entity_type === "opportunity") {
             names[task.id] = (await opportunityName(task.entity_id)) ?? "-";
+          } else if (task.entity_type === "lead") {
+            try {
+              const lead = await getSalesLead(task.entity_id);
+              names[task.id] =
+                [lead.first_name, lead.last_name].filter(Boolean).join(" ").trim() ||
+                lead.project_title ||
+                lead.lead_code ||
+                "-";
+            } catch {
+              names[task.id] = "-";
+            }
           } else if (task.entity_type === "quote") {
             const quote = await getQuote(task.entity_id);
             names[task.id] =
@@ -147,6 +171,8 @@ export function MyJobsPage({
   function openDecision(task: ApprovalTask, outcome: "approved" | "rejected") {
     setDecision({ task, outcome });
     setRemark("");
+    setFreightAmount("");
+    setAttachmentFile(null);
     setDecideError(null);
   }
 
@@ -156,10 +182,47 @@ export function MyJobsPage({
       setDecideError("A remark is required to reject a task.");
       return;
     }
+    const action = decision.task.action;
+    if (decision.outcome === "approved" && action === FREIGHT_ACTION) {
+      const value = Number(freightAmount);
+      if (!Number.isFinite(value) || value < 0) {
+        setDecideError("Enter a valid freight amount (₹).");
+        return;
+      }
+    }
+    if (
+      decision.outcome === "approved" &&
+      action &&
+      ATTACHMENT_ACTIONS.has(action) &&
+      !attachmentFile
+    ) {
+      setDecideError("Upload the required file to complete this task.");
+      return;
+    }
+
     setDeciding(true);
     setDecideError(null);
     try {
-      await decideMyJob(decision.task.id, decision.outcome, remark.trim() || undefined);
+      const extras: {
+        freight?: number;
+        file_name?: string;
+        content_base64?: string;
+        content_type?: string;
+      } = {};
+      if (decision.outcome === "approved" && action === FREIGHT_ACTION) {
+        extras.freight = Number(Number(freightAmount).toFixed(2));
+      }
+      if (decision.outcome === "approved" && action && ATTACHMENT_ACTIONS.has(action) && attachmentFile) {
+        extras.file_name = attachmentFile.name;
+        extras.content_type = attachmentFile.type || "application/octet-stream";
+        extras.content_base64 = await fileToBase64(attachmentFile);
+      }
+      await decideMyJob(
+        decision.task.id,
+        decision.outcome,
+        remark.trim() || undefined,
+        Object.keys(extras).length > 0 ? extras : undefined,
+      );
       setDecision(null);
       await load();
     } catch (err) {
@@ -288,7 +351,7 @@ export function MyJobsPage({
                             className="cursor-pointer"
                             onClick={() => openDecision(task, "approved")}
                           >
-                            <Check className="size-3.5" /> Approve
+                            <Check className="size-3.5" /> {approveLabel(task)}
                           </Button>
                           <Button
                             type="button"
@@ -314,15 +377,60 @@ export function MyJobsPage({
 
       <ConfirmDialog
         open={Boolean(decision)}
-        title={decision?.outcome === "approved" ? "Approve task" : "Reject task"}
+        title={
+          decision?.outcome === "approved"
+            ? decision.task.action === FREIGHT_ACTION
+              ? "Submit freight"
+              : decision.task.action && ATTACHMENT_ACTIONS.has(decision.task.action)
+                ? "Submit attachment"
+                : "Approve task"
+            : "Reject task"
+        }
         description={decision ? decision.task.title : undefined}
         tone={decision?.outcome === "rejected" ? "destructive" : "default"}
-        confirmLabel={decision?.outcome === "approved" ? "Approve" : "Reject"}
+        confirmLabel={
+          decision?.outcome === "approved"
+            ? decision.task.action === FREIGHT_ACTION
+              ? "Submit freight"
+              : decision.task.action && ATTACHMENT_ACTIONS.has(decision.task.action)
+                ? "Submit file"
+                : "Approve"
+            : "Reject"
+        }
         busy={deciding}
         contentClassName="max-w-lg"
         onCancel={() => !deciding && setDecision(null)}
         onConfirm={() => void submitDecision()}
       >
+        {decision?.outcome === "approved" && decision.task.action === FREIGHT_ACTION ? (
+          <FinanceField label="Freight Charges (₹) *" className="mb-3 space-y-2">
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              value={freightAmount}
+              onChange={(e) => setFreightAmount(e.target.value)}
+              placeholder="0.00"
+              className="h-9"
+            />
+          </FinanceField>
+        ) : null}
+        {decision?.outcome === "approved" &&
+        decision.task.action &&
+        ATTACHMENT_ACTIONS.has(decision.task.action) ? (
+          <FinanceField
+            label={
+              decision.task.action === "provide_boq_attachment" ? "BOQ file *" : "SOW file *"
+            }
+            className="mb-3 space-y-2"
+          >
+            <Input
+              type="file"
+              className="h-9 cursor-pointer"
+              onChange={(e) => setAttachmentFile(e.target.files?.[0] ?? null)}
+            />
+          </FinanceField>
+        ) : null}
         <FinanceField
           label={decision?.outcome === "rejected" ? "Remark *" : "Remark"}
           className="space-y-2"

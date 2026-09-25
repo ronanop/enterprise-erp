@@ -316,6 +316,8 @@ export type LeadCreateFromCompanyInput = {
   entity_address?: string | null;
   entity_gst?: string | null;
   entity_contact?: string | null;
+  requires_boq?: boolean;
+  requires_sow?: boolean;
   notes?: string | null;
   presales_owner_id?: string | null;
 };
@@ -546,6 +548,10 @@ export type SalesLead = {
   entity_address: string | null;
   entity_gst: string | null;
   entity_contact: string | null;
+  requires_boq?: boolean;
+  requires_sow?: boolean;
+  boq_attached?: boolean;
+  sow_attached?: boolean;
   oem_name?: string | null;
   oem_contact_person?: string | null;
   oem_contact_number?: string | null;
@@ -1402,11 +1408,56 @@ export async function decideMyJob(
   id: string,
   decision: "approved" | "rejected",
   remark?: string,
+  extras?: {
+    freight?: number;
+    file_name?: string;
+    content_base64?: string;
+    content_type?: string;
+  },
 ): Promise<ApprovalTask> {
   return unwrap(
     await apiClient<ApprovalTask>(`${CRM_MY_JOBS_API}/${id}/decide`, {
       method: "POST",
-      body: { decision, remark },
+      body: { decision, remark, ...extras },
+    }),
+  );
+}
+
+export type ApprovalStepOwnerUser = {
+  user_id: string;
+  display_name: string;
+  email: string;
+};
+
+export type ApprovalStepOwnersGroup = {
+  step_key: string;
+  label: string;
+  team_role: string;
+  owners: ApprovalStepOwnerUser[];
+};
+
+export async function listApprovalStepOwners(): Promise<ApprovalStepOwnersGroup[]> {
+  const res = await apiClient<ApprovalStepOwnersGroup[]>("/crm/approval-step-owners");
+  return asArray(res.data);
+}
+
+export async function replaceApprovalStepOwners(
+  stepKey: string,
+  userIds: string[],
+): Promise<ApprovalStepOwnersGroup> {
+  return unwrap(
+    await apiClient<ApprovalStepOwnersGroup>(`/crm/approval-step-owners/${stepKey}`, {
+      method: "PUT",
+      body: { user_ids: userIds },
+    }),
+  );
+}
+
+export async function requestOvfFreight(ovfId: string): Promise<Ovf> {
+  return unwrap(
+    await apiClient<Ovf>(`${CRM_OVF_API}/${ovfId}/request-freight`, {
+      method: "POST",
+      body: {},
     }),
   );
 }
@@ -1741,7 +1792,7 @@ export async function createTask(body: TaskFormInput): Promise<CrmTask> {
 // Lookups shared by sales CRM forms
 // ---------------------------------------------------------------------------
 
-export type Option = { id: string; label: string; email?: string };
+export type Option = { id: string; label: string; email?: string; userId?: string };
 
 export async function listLeadSourceOptions(): Promise<Option[]> {
   const res = await resourceService.list("/crm/lead-sources");
@@ -1799,6 +1850,7 @@ export async function listCrmMemberOptions(): Promise<Option[]> {
     id: String(r.id),
     label: String(r.label ?? r.id),
     email: r.email ? String(r.email) : undefined,
+    userId: r.user_id ? String(r.user_id) : undefined,
   }));
 }
 

@@ -162,6 +162,10 @@ _UNLOCKING_ACTIONS = {
     "reject_boq",
     "approve_sow",
     "reject_sow",
+    "provide_boq_attachment",
+    "reject_boq_attachment",
+    "provide_sow_attachment",
+    "reject_sow_attachment",
     "approve_po_finance",
     "reject_po_finance",
     "approve_po_terms",
@@ -239,7 +243,7 @@ class OpportunityBlueprintService:
         return opp.blueprint_state
 
     def state(self, ctx: TenantContext, opportunity_id: UUID) -> dict[str, Any]:
-        opp = self.get(ctx, opportunity_id)
+        opp = self._reconcile_lead_docs_ready_for_deal_reg(ctx, self.get(ctx, opportunity_id))
         is_sales_blueprint = opp.blueprint_state is not None
         current = opp.blueprint_state or "open"
         if not is_sales_blueprint:
@@ -277,6 +281,34 @@ class OpportunityBlueprintService:
             "is_sales_blueprint": is_sales_blueprint,
             "po_validation": self._po_validation(opp, current),
         }
+
+    def _reconcile_lead_docs_ready_for_deal_reg(
+        self, ctx: TenantContext, opp: CrmOpportunity
+    ) -> CrmOpportunity:
+        """Advance opportunities stuck on ``open`` after lead BOQ/SOW was attached.
+
+        Lead My Jobs ``provide_*_attachment`` only sets lead flags; convert used to
+        copy ``*_attached`` without ``*_approved`` or leaving ``blueprint_state=open``,
+        which hid Deal Registration (only Deal Lost remained).
+        """
+        if (opp.blueprint_state or "open") != "open":
+            return opp
+        if not opp.boq_attached and not opp.sow_attached:
+            return opp
+
+        updates: dict[str, Any] = {}
+        if opp.boq_attached and not opp.boq_approved:
+            updates["boq_approved"] = True
+        if opp.sow_attached and not opp.sow_approved:
+            updates["sow_approved"] = True
+        if opp.boq_approved or updates.get("boq_approved") or opp.sow_approved or updates.get(
+            "sow_approved"
+        ):
+            updates["blueprint_state"] = "deal_reg"
+        if not updates:
+            return opp
+        row = self._repo.update(ctx, opp.id, **updates)
+        return row or opp
 
     @staticmethod
     def _po_validation(opp: CrmOpportunity, current: str) -> dict[str, Any]:
@@ -329,25 +361,23 @@ class OpportunityBlueprintService:
 
     @staticmethod
     def _filter_document_step_actions(allowed: list[str], opp: CrmOpportunity) -> list[str]:
-        """Gate BOQ/SOW attach, approval, and Deal Registration by document status.
+        """Gate BOQ/SOW attachment requests and Deal Registration by document status.
 
-        - SOW attached → Attach BOQ + Send SOW for Approval
-        - BOQ attached → Attach SOW + Send BOQ for Approval
-        - Either document approved → Deal Registration + peer attach (if missing)
+        Primary path: Send BOQ/SOW for attachment (assignee uploads via My Jobs).
+        Legacy attach + send-for-approval actions are hidden from the sales UI.
         """
         actions = list(allowed)
 
-        if opp.boq_attached:
-            actions = [action for action in actions if action != "attach_boq"]
-        if opp.sow_attached:
-            actions = [action for action in actions if action != "attach_sow"]
+        # Prefer attachment-request flow; hide CRM self-attach / study approval.
+        for legacy in ("attach_boq", "attach_sow", "send_boq_approval", "send_sow_approval"):
+            actions = [action for action in actions if action != legacy]
 
-        if opp.boq_approved or not opp.boq_attached:
-            actions = [action for action in actions if action != "send_boq_approval"]
-        if opp.sow_approved or not opp.sow_attached:
-            actions = [action for action in actions if action != "send_sow_approval"]
+        if opp.boq_attached or opp.boq_approved:
+            actions = [action for action in actions if action != "send_boq_for_attachment"]
+        if opp.sow_attached or opp.sow_approved:
+            actions = [action for action in actions if action != "send_sow_for_attachment"]
 
-        # Deal Registration only after at least one document is approved.
+        # Deal Registration after at least one document is attached/approved.
         if not opp.boq_approved and not opp.sow_approved:
             actions = [action for action in actions if action != "deal_reg"]
 
@@ -357,33 +387,24 @@ class OpportunityBlueprintService:
     def _ensure_peer_document_actions(
         allowed: list[str], opp: CrmOpportunity, current: str
     ) -> list[str]:
-        """After one document is approved, keep the other attach/approval path available."""
-        if opp.locked or current not in {"boq_pending", "deal_reg", "boq_approval", "sow_approval"}:
+        """After one document is done, keep the other attachment-request path available."""
+        if opp.locked or current not in {
+            "boq_pending",
+            "deal_reg",
+            "boq_approval",
+            "sow_approval",
+            "open",
+        }:
             return allowed
         if not opp.boq_approved and not opp.sow_approved:
             return allowed
 
         actions = list(allowed)
 
-        if opp.sow_approved and not opp.boq_attached and "attach_boq" not in actions:
-            actions.append("attach_boq")
-        if opp.boq_approved and not opp.sow_attached and "attach_sow" not in actions:
-            actions.append("attach_sow")
-
-        if (
-            opp.sow_approved
-            and opp.boq_attached
-            and not opp.boq_approved
-            and "send_boq_approval" not in actions
-        ):
-            actions.append("send_boq_approval")
-        if (
-            opp.boq_approved
-            and opp.sow_attached
-            and not opp.sow_approved
-            and "send_sow_approval" not in actions
-        ):
-            actions.append("send_sow_approval")
+        if opp.sow_approved and not opp.boq_attached and "send_boq_for_attachment" not in actions:
+            actions.append("send_boq_for_attachment")
+        if opp.boq_approved and not opp.sow_attached and "send_sow_for_attachment" not in actions:
+            actions.append("send_sow_for_attachment")
 
         return sorted(set(actions))
 
@@ -455,6 +476,50 @@ class OpportunityBlueprintService:
         elif action == "attach_boq":
             self._attach(ctx, opp, payload, category="boq")
             updates["boq_attached"] = True
+        elif action == "send_boq_for_attachment":
+            if is_cloud_opportunity(opp):
+                raise ConflictException(
+                    "Use Send Cloud Discount for Approval on cloud opportunities"
+                )
+            if opp.boq_attached or opp.boq_approved:
+                raise ConflictException("BOQ is already attached")
+            self._raise_approval(
+                ctx,
+                opp,
+                action="provide_boq_attachment",
+                team_role=payload.get("team_role", "presales"),
+                title=f"Attach BOQ - {opp.opportunity_name}",
+                remarks=payload.get("remarks"),
+                assigned_user_ids=_require_assigned_users(payload),
+            )
+            updates["locked"] = True
+        elif action == "send_sow_for_attachment":
+            if opp.sow_attached or opp.sow_approved:
+                raise ConflictException("SOW is already attached")
+            self._raise_approval(
+                ctx,
+                opp,
+                action="provide_sow_attachment",
+                team_role=payload.get("team_role", "presales"),
+                title=f"Attach SOW - {opp.opportunity_name}",
+                remarks=payload.get("remarks"),
+                assigned_user_ids=_require_assigned_users(payload),
+            )
+            updates["locked"] = True
+        elif action == "provide_boq_attachment":
+            self._attach(ctx, opp, payload, category="boq")
+            updates["boq_attached"] = True
+            updates["boq_approved"] = True
+            updates["locked"] = False
+        elif action == "reject_boq_attachment":
+            updates["locked"] = False
+        elif action == "provide_sow_attachment":
+            self._attach(ctx, opp, payload, category="sow")
+            updates["sow_attached"] = True
+            updates["sow_approved"] = True
+            updates["locked"] = False
+        elif action == "reject_sow_attachment":
+            updates["locked"] = False
         elif action == "send_boq_approval":
             if is_cloud_opportunity(opp):
                 raise ConflictException(
@@ -513,7 +578,7 @@ class OpportunityBlueprintService:
         elif action == "deal_reg":
             if not opp.boq_approved and not opp.sow_approved:
                 raise ConflictException(
-                    "Approve a BOQ or SOW before Deal Registration"
+                    "Attach a BOQ or SOW before Deal Registration"
                 )
             reg_no = (payload.get("deal_reg_number") or "").strip()
             if not reg_no:

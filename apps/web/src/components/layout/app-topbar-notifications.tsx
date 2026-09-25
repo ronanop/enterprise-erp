@@ -284,15 +284,22 @@ export function AppTopbarNotifications() {
       setCrmAlerts(mapped);
       setCrmPopups((prev) =>
         prev.filter((row) => {
+          if (row.event_type === "crm.opportunity.stage_completed") return false;
           const inboxRow = rows.find((candidate) => candidate.id === row.id);
           return inboxRow ? !isCrmApprovalSurfaceDismissed(inboxRow) : false;
         }),
       );
 
       const popupSeen = readCrmApprovalPopupSeenIds();
+      // Stage completions belong in the bell only — no repeat toast/banner on refresh.
+      const stageIds = rows
+        .filter((row) => row.event_type === "crm.opportunity.stage_completed" && !row.read_at)
+        .map((row) => `crm:${row.id}`);
+      if (stageIds.length > 0) {
+        markCrmApprovalPopupSeen(stageIds);
+      }
       const popupEventTypes = new Set([
         "crm.approval.rejected",
-        "crm.opportunity.stage_completed",
         "crm.lead.stale_reminder",
       ]);
       const candidates = rows.filter(

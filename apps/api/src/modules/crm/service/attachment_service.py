@@ -168,6 +168,8 @@ class AttachmentService:
         )
         if entity_type == "opportunity":
             self._sync_opportunity_attachment_flags(ctx, entity_id)
+        elif entity_type == "lead":
+            self._sync_lead_attachment_flags(ctx, entity_id)
         return row
 
     def delete(self, ctx: TenantContext, row_id: UUID) -> None:
@@ -180,6 +182,8 @@ class AttachmentService:
         self._delete_stored_bytes(stored)
         if entity_type == "opportunity":
             self._sync_opportunity_attachment_flags(ctx, entity_id)
+        elif entity_type == "lead":
+            self._sync_lead_attachment_flags(ctx, entity_id)
 
     def _delete_stored_bytes(self, stored: str) -> None:
         if not stored:
@@ -210,4 +214,16 @@ class AttachmentService:
             sow_attached="sow" in categories,
             oem_quote_attached="oem_quote" in categories,
             customer_po_attached="customer_po" in categories,
+        )
+
+    def _sync_lead_attachment_flags(self, ctx: TenantContext, lead_id: UUID) -> None:
+        from modules.crm.repository.lead_repository import LeadRepository
+
+        rows = self._repo.list_for_entity(ctx, "lead", lead_id)
+        categories = {r.category for r in rows}
+        LeadRepository(self._db).update(
+            ctx,
+            lead_id,
+            boq_attached="boq" in categories,
+            sow_attached="sow" in categories,
         )

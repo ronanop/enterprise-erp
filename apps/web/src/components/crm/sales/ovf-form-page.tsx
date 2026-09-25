@@ -53,9 +53,11 @@ import {
   listAttachments,
   listContacts,
   listCrmMemberOptions,
+  listMyJobs,
   listOvfLines,
   listOvfs,
   listQuoteLines,
+  requestOvfFreight,
   updateOvf,
   updateOvfLine,
   type Opportunity,
@@ -139,6 +141,8 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [requestingFreight, setRequestingFreight] = useState(false);
+  const [freightPending, setFreightPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mandateOpen, setMandateOpen] = useState(false);
   const [mandateMessage, setMandateMessage] = useState("");
@@ -174,6 +178,12 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
         setOvf(ovfRow);
         setQuote(quoteRow);
         setOpportunity(opportunityRow);
+        const freightTasks = await listMyJobs({
+          entity_type: "ovf",
+          entity_id: ovfId,
+          status: "pending",
+        }).catch(() => []);
+        setFreightPending(freightTasks.some((task) => task.action === "provide_freight"));
         setVendorNameOptions(await distributorOptionsForOpportunity(opportunityRow));
         setCustomerRows(
           mergeCustomerRowsWithPoAttachments(
@@ -314,11 +324,7 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
   }, [load]);
 
   function setField<K extends keyof OvfDraft>(key: K, value: OvfDraft[K]) {
-    if (
-      key === "freight" ||
-      key === "vendor_payment_days" ||
-      key === "customer_payment_days"
-    ) {
+    if (key === "vendor_payment_days" || key === "customer_payment_days") {
       setMarginInputsDirty(true);
     }
     setForm((current) => ({ ...current, [key]: value }));
@@ -377,12 +383,62 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
       installation_details: form.installation_details.trim() || null,
       vendor_payment_days: Number(form.vendor_payment_days) || 0,
       customer_payment_days: Number(form.customer_payment_days) || 0,
-      freight: Number(freightAmount.toFixed(2)),
       additional_charges: Number(Number(form.additional_charges || 0).toFixed(2)),
       total_margin_amount: Number(totalMarginAmount.toFixed(2)),
       total_margin_pct: Number(totalMarginPct.toFixed(2)),
       finance_cost_pct: Number(financeCostPct.toFixed(2)),
     };
+  }
+
+  async function onAskScmFreight() {
+    if (!quote || !opportunity || freightPending || requestingFreight || saving) return;
+    setRequestingFreight(true);
+    setError(null);
+    try {
+      let targetId = ovfId ?? ovf?.id ?? null;
+      if (!targetId) {
+        try {
+          const created = await createOvf({
+            quote_id: quote.id,
+            branch_id: opportunity.branch_id,
+            ...ovfPayload(),
+          });
+          await persistOvfOrderLinesAfterCreate(
+            created.id,
+            created.branch_id,
+            created.company_id ?? opportunity.company_account_id,
+            customerRows,
+            vendorRows,
+            { listOvfLines, addOvfLine, updateOvfLine, createAttachment, fileToBase64 },
+          ).catch(() => undefined);
+          targetId = created.id;
+          setOvf(created);
+        } catch (createErr) {
+          const existing = await listOvfs({ opportunity_id: opportunity.id }).catch(() => []);
+          const found = existing[0];
+          if (!found) throw createErr;
+          targetId = found.id;
+          setOvf(found);
+        }
+      }
+
+      const updated = await requestOvfFreight(targetId);
+      setOvf(updated);
+      setFreightPending(true);
+      setForm((f) => ({
+        ...f,
+        freight: updated.freight != null ? String(updated.freight) : f.freight,
+        approval_status: updated.approval_status ?? f.approval_status,
+      }));
+
+      if (!ovfId) {
+        router.replace(`/crm/ovf/${targetId}/edit`);
+      }
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Failed to request freight from SCM");
+    } finally {
+      setRequestingFreight(false);
+    }
   }
 
   async function onSave() {
@@ -416,7 +472,6 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
           { addOvfLine, updateOvfLine, createAttachment, fileToBase64 },
         );
         await updateOvf(saved.id, {
-          freight: payload.freight,
           additional_charges: payload.additional_charges,
           total_margin_amount: payload.total_margin_amount,
           total_margin_pct: payload.total_margin_pct,
@@ -550,14 +605,47 @@ export function OvfFormPage({ quoteId, ovfId }: { quoteId?: string; ovfId?: stri
             <Input value={opportunity?.opportunity_name ?? "-"} disabled />
           </FinanceField>
           <FinanceField label="Freight Charges (₹)">
-            <Input
-              type="number"
-              min={0}
-              step="0.01"
-              className={NUMBER_NO_SPIN}
-              value={form.freight}
-              onChange={(event) => setField("freight", event.target.value)}
-            />
+            <div className="flex min-w-0 flex-col gap-2">
+              <Input
+                type="text"
+                readOnly
+                aria-readonly="true"
+                className="cursor-default bg-muted/50"
+                value={
+                  form.freight.trim()
+                    ? Number(form.freight).toLocaleString("en-IN", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })
+                    : "—"
+                }
+              />
+              {freightPending ? (
+                <p className="text-xs text-muted-foreground">
+                  Draft — waiting on SCM to enter freight in My Jobs. You will get a notification when
+                  it is ready.
+                </p>
+              ) : null}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-fit cursor-pointer"
+                disabled={freightPending || requestingFreight || saving || !quote || !opportunity}
+                onClick={() => void onAskScmFreight()}
+              >
+                {requestingFreight
+                  ? "Requesting…"
+                  : freightPending
+                    ? "Freight requested"
+                    : "Ask SCM for freight"}
+              </Button>
+              {!freightPending ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Creates a draft OVF if needed and assigns SCM a My Jobs task to fill freight.
+                </p>
+              ) : null}
+            </div>
           </FinanceField>
           <FinanceField label="Approval Status">
             <Input

@@ -717,8 +717,8 @@ type OvfOrderLinesSectionProps = {
   /** Fully lock the section (detail view / while saving). */
   disabled?: boolean;
   /**
-   * Lock product / qty / price / distributor fields and hide add/remove.
-   * File uploads stay editable unless `disabled` is also set.
+   * Lock product / qty / price fields and hide add/remove.
+   * Distributor Name and file uploads stay editable unless `disabled` is also set.
    */
   readOnlyLines?: boolean;
 };
@@ -733,6 +733,8 @@ export function OvfOrderLinesSection({
   readOnlyLines = false,
 }: OvfOrderLinesSectionProps) {
   const linesLocked = disabled || readOnlyLines;
+  /** Distributor can still be set while quote-derived line amounts stay locked. */
+  const distributorLocked = disabled || !onVendorRowsChange;
   const totalSaleValue = sumLineTotals(customerRows);
   const totalPurchaseValue = sumLineTotals(vendorRows);
   const DISTRIBUTOR_OTHERS = "__others__";
@@ -800,8 +802,12 @@ export function OvfOrderLinesSection({
 
   function updateVendorRow(key: string, patch: Partial<VendorChargeRow>, recalc = false) {
     if (!onVendorRowsChange || disabled) return;
-    const fileOnly = Object.keys(patch).length === 1 && "quoteFiles" in patch;
-    if (linesLocked && !fileOnly) return;
+    const keys = Object.keys(patch);
+    const fileOnly = keys.length === 1 && "quoteFiles" in patch;
+    const distributorOnly =
+      keys.length > 0 &&
+      keys.every((k) => k === "vendor_name" || k === "contact_person" || k === "contact_number");
+    if (linesLocked && !fileOnly && !distributorOnly) return;
     onVendorRowsChange(
       vendorRows.map((row) => {
         if (row.key !== key) return row;
@@ -1108,7 +1114,7 @@ export function OvfOrderLinesSection({
                     <td className={tdClass()}>
                       <div className="flex min-w-[140px] flex-col gap-1.5">
                         <select
-                          disabled={linesLocked}
+                          disabled={distributorLocked}
                           value={selectedDistributor(row.vendor_name)}
                           onChange={(e) => {
                             const next = e.target.value;
@@ -1126,7 +1132,7 @@ export function OvfOrderLinesSection({
                           className={cn(
                             "flex h-9 w-full cursor-pointer rounded-[4px] border border-[#cfd7e3] bg-white px-2.5 text-[13px] shadow-none outline-none transition-colors duration-200",
                             "focus-visible:border-sky-400 focus-visible:ring-1 focus-visible:ring-sky-300",
-                            linesLocked && "cursor-default bg-[#f8fafc] opacity-70",
+                            distributorLocked && "cursor-default bg-[#f8fafc] opacity-70",
                             !selectedDistributor(row.vendor_name) && "text-muted-foreground",
                           )}
                           aria-label="Distributor name"
@@ -1141,7 +1147,7 @@ export function OvfOrderLinesSection({
                         </select>
                         {isOthersDistributor(row.vendor_name) ? (
                           <ChargesField
-                            readOnly={linesLocked}
+                            readOnly={distributorLocked}
                             value={othersDistributorText(row.vendor_name)}
                             placeholder="Enter distributor name"
                             onChange={(v) =>

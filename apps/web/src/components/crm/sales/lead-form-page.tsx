@@ -146,6 +146,8 @@ const EMPTY: LeadCreateFromCompanyInput = {
   entity_address: "",
   entity_gst: "",
   entity_contact: "",
+  requires_boq: false,
+  requires_sow: false,
   notes: "",
   presales_owner_id: "",
 };
@@ -290,6 +292,8 @@ export function LeadFormPage({
             entity_address: leadRow.entity_address ?? "",
             entity_gst: leadRow.entity_gst ?? "",
             entity_contact: leadRow.entity_contact ?? "",
+            requires_boq: Boolean(leadRow.requires_boq),
+            requires_sow: Boolean(leadRow.requires_sow),
             owner_employee_id: leadRow.owner_employee_id ?? "",
             presales_owner_id: leadRow.presales_owner_id ?? "",
             notes: leadRow.notes ?? "",
@@ -502,6 +506,8 @@ export function LeadFormPage({
             : null,
         expected_closure_date: form.expected_closure_date || null,
         presales_owner_id: form.presales_owner_id?.trim() || null,
+        requires_boq: Boolean(form.requires_boq),
+        requires_sow: Boolean(form.requires_sow),
         distributor_department: null,
       };
       if (isEdit && leadId && existingLead) {
@@ -1042,6 +1048,59 @@ export function LeadFormPage({
               value={form.entity_contact ?? ""}
               onChange={(e) => set("entity_contact", e.target.value)}
             />
+          </FinanceField>
+        </div>
+      </CrmSection>
+
+      <CrmSection title="BOQ & SOW Requirements" icon={Package}>
+        <p className="mb-3 text-xs text-muted-foreground">
+          If Yes, the default BOQ/SOW task owners (CRM → Users) get a My Jobs task to attach the
+          document. Convert to opportunity stays blocked until the selected documents are attached.
+        </p>
+        <div className="grid gap-x-10 gap-y-4 md:grid-cols-2">
+          <FinanceField label="BOQ required?">
+            <div className="flex min-h-8 items-center gap-5" role="group" aria-label="BOQ required">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-sm transition-colors duration-200">
+                <input
+                  type="checkbox"
+                  className="size-4 cursor-pointer accent-primary"
+                  checked={Boolean(form.requires_boq)}
+                  onChange={() => set("requires_boq", true)}
+                />
+                Yes
+              </label>
+              <label className="inline-flex cursor-pointer items-center gap-2 text-sm transition-colors duration-200">
+                <input
+                  type="checkbox"
+                  className="size-4 cursor-pointer accent-primary"
+                  checked={!form.requires_boq}
+                  onChange={() => set("requires_boq", false)}
+                />
+                No
+              </label>
+            </div>
+          </FinanceField>
+          <FinanceField label="SOW required?">
+            <div className="flex min-h-8 items-center gap-5" role="group" aria-label="SOW required">
+              <label className="inline-flex cursor-pointer items-center gap-2 text-sm transition-colors duration-200">
+                <input
+                  type="checkbox"
+                  className="size-4 cursor-pointer accent-primary"
+                  checked={Boolean(form.requires_sow)}
+                  onChange={() => set("requires_sow", true)}
+                />
+                Yes
+              </label>
+              <label className="inline-flex cursor-pointer items-center gap-2 text-sm transition-colors duration-200">
+                <input
+                  type="checkbox"
+                  className="size-4 cursor-pointer accent-primary"
+                  checked={!form.requires_sow}
+                  onChange={() => set("requires_sow", false)}
+                />
+                No
+              </label>
+            </div>
           </FinanceField>
         </div>
       </CrmSection>

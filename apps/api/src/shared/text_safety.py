@@ -13,6 +13,12 @@ _ACTIVE_SCHEME_RE = re.compile(
     r"(?:^|[\s\"'`(=])(?:javascript|vbscript|data\s*:\s*text/html)\s*:",
     re.IGNORECASE,
 )
+_ANGLE_RE = re.compile(r"[<>]")
+_WS_RE = re.compile(r"\s+")
+_JS_NOISE_RE = re.compile(
+    r"\b(?:alert|prompt|confirm)\s*\(|String\.fromCharCode|document\.cookie|<\s*/?\s*script",
+    re.IGNORECASE,
+)
 
 
 def contains_unsafe_markup(value: str | None) -> bool:
@@ -25,6 +31,8 @@ def contains_unsafe_markup(value: str | None) -> bool:
     if _EVENT_HANDLER_RE.search(text):
         return True
     if _ACTIVE_SCHEME_RE.search(text):
+        return True
+    if _JS_NOISE_RE.search(text):
         return True
     # Angle-bracket iframe/script fragments without a full closing tag.
     lowered = text.lower()
@@ -39,6 +47,25 @@ def assert_safe_plain_text(value: str, *, field: str = "value") -> str:
     if contains_unsafe_markup(text):
         raise ValueError(f"{field} contains disallowed HTML or script content")
     return text
+
+
+def scrub_unsafe_markup(value: str | None, *, fallback: str = "[invalid]") -> str:
+    """Best-effort cleanup for legacy rows that already stored XSS payloads."""
+    text = (value or "").strip()
+    if not text:
+        return ""
+    if not contains_unsafe_markup(text):
+        return text
+    cleaned = _HTML_TAG_RE.sub(" ", text)
+    cleaned = _EVENT_HANDLER_RE.sub(" ", cleaned)
+    cleaned = _ACTIVE_SCHEME_RE.sub(" ", cleaned)
+    cleaned = _ANGLE_RE.sub("", cleaned)
+    cleaned = html.unescape(cleaned)
+    cleaned = _WS_RE.sub(" ", cleaned).strip(" \t\r\n\"'`\\")
+    # Tag stripping often leaves executable-looking leftovers (alert(...)).
+    if not cleaned or contains_unsafe_markup(cleaned) or _JS_NOISE_RE.search(cleaned):
+        return fallback
+    return cleaned
 
 
 def sanitize_plain_text_list(

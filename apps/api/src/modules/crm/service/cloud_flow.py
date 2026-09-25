@@ -25,7 +25,16 @@ VARIANT_MIGRATION = "migration"
 VARIANT_POC_ASSESSMENT = "poc_assessment"
 VARIANT_CLOUD_OTHER = "cloud_other"
 
-STANDARD_DOC_ACTIONS = frozenset({"attach_boq", "attach_sow", "send_boq_approval", "send_sow_approval"})
+STANDARD_DOC_ACTIONS = frozenset(
+    {
+        "attach_boq",
+        "attach_sow",
+        "send_boq_approval",
+        "send_sow_approval",
+        "send_boq_for_attachment",
+        "send_sow_for_attachment",
+    }
+)
 CLOUD_DOC_ACTIONS = frozenset({"attach_contract", "send_cloud_discount_approval"})
 CLOUD_UNLOCKING = frozenset({"approve_cloud_discount", "reject_cloud_discount"})
 
@@ -40,6 +49,8 @@ HARDWARE_PIPELINE_ACTIONS = frozenset(
         "attach_sow",
         "send_boq_approval",
         "send_sow_approval",
+        "send_boq_for_attachment",
+        "send_sow_for_attachment",
         "skip_sow",
     }
 )

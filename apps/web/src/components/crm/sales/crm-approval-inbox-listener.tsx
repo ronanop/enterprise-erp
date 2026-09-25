@@ -13,7 +13,10 @@ import {
   dedupeCrmRejectionsByEntity,
   dismissCrmApprovalSurface,
   isCrmApprovalSurfaceDismissed,
+  markCrmApprovalPopupSeen,
   normalizeNotificationText,
+  readCrmApprovalPopupSeenIds,
+  readSurfaceDismissedCrmApprovalIds,
   type CrmApprovalSurfaceDismissDetail,
 } from "@/lib/crm-notification-state";
 
@@ -209,28 +212,48 @@ export function CrmApprovalInboxListener() {
       const rows = await listCrmApprovalInbox();
       inboxRef.current = rows;
       const open = parseOpenEntity(window.location.pathname);
+      // Stage completions stay in the bell only — never re-banner on poll/refresh.
+      const stageIds = rows
+        .filter((row) => row.event_type === "crm.opportunity.stage_completed" && !row.read_at)
+        .map((row) => `crm:${row.id}`);
+      if (stageIds.length > 0) {
+        markCrmApprovalPopupSeen(stageIds);
+      }
+
       const popupEvents = new Set([
         "crm.approval.rejected",
-        "crm.opportunity.stage_completed",
         "crm.lead.stale_reminder",
       ]);
+      const popupSeen = readCrmApprovalPopupSeenIds();
       const candidates = rows.filter((row) => {
         if (!popupEvents.has(row.event_type) || row.read_at) return false;
         if (isCrmApprovalSurfaceDismissed(row)) return false;
         if (isSameEntity(row, open)) return false;
+        if (popupSeen.has(`crm:${row.id}`)) return false;
         return true;
       });
       const rejections = dedupeCrmRejectionsByEntity(
         candidates.filter((row) => row.event_type === "crm.approval.rejected"),
       );
-      const stages = candidates.filter(
-        (row) => row.event_type === "crm.opportunity.stage_completed",
-      );
       const staleLeads = candidates.filter(
         (row) => row.event_type === "crm.lead.stale_reminder",
       );
-      // Approvals on top, then stage completions, then lead reminders.
-      setAlerts([...rejections, ...stages, ...staleLeads].slice(0, 3));
+      const next = [...rejections, ...staleLeads].slice(0, 3);
+      if (next.length > 0) {
+        markCrmApprovalPopupSeen(next.map((row) => `crm:${row.id}`));
+      }
+      setAlerts((prev) => {
+        const dismissed = readSurfaceDismissedCrmApprovalIds();
+        const kept = prev.filter((row) => {
+          if (dismissed.has(row.id)) return false;
+          if (row.event_type === "crm.opportunity.stage_completed") return false;
+          if (row.read_at) return false;
+          return true;
+        });
+        const keptIds = new Set(kept.map((row) => row.id));
+        const addedFresh = next.filter((row) => !keptIds.has(row.id));
+        return [...kept, ...addedFresh].slice(0, 3);
+      });
     } catch {
       /* ignore polling errors */
     }

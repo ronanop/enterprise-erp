@@ -39,7 +39,7 @@ function resolveOvfStageLabel(blueprintState: string, ovf: Ovf): string {
   if (ovf.deal_won || blueprintState === "deal_won") return "Deal Won";
   switch (blueprintState) {
     case "draft":
-      return "OVF Created";
+      return "OVF Created · Draft";
     case "approval":
       return ovf.locked ? "OVF Sent for Approval" : "OVF Sent for Approval";
     case "approved":
@@ -53,14 +53,18 @@ function resolveOvfStageLabel(blueprintState: string, ovf: Ovf): string {
 
 function resolveOpportunityBoqPending(opp: Opportunity): string {
   const { sow_attached, boq_attached, sow_approved, boq_approved } = opp;
+  if (boq_approved && sow_approved) return "BOQ/SOW Attached";
   if (sow_approved && !boq_approved && boq_attached) return "SOW Studied";
   if (boq_approved && !sow_approved && sow_attached) return "BOQ Studied";
   if (sow_attached && boq_attached) {
     if (!sow_approved) return "SOW Attached";
     if (!boq_approved) return "BOQ Attached";
+    return "BOQ/SOW Attached";
   }
   if (sow_attached && !sow_approved) return "SOW Attached";
   if (boq_attached && !boq_approved) return "BOQ Attached";
+  if (boq_approved) return "BOQ Studied";
+  if (sow_approved) return "SOW Studied";
   return "Opportunity Open";
 }
 

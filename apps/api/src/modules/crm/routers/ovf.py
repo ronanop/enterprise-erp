@@ -176,6 +176,18 @@ def send_ovf_for_approval(
     return APIResponse(message="OK", data=OvfService(db).send_for_approval(ctx, ovf_id, **body.model_dump()))
 
 
+@ovf_router.post("/{ovf_id}/request-freight", response_model=APIResponse[OvfResponse])
+def request_ovf_freight(
+    ovf_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("crm.ovf:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Freight requested from SCM",
+        data=OvfService(db).request_freight_from_scm(ctx, ovf_id),
+    )
+
+
 @ovf_router.post("/{ovf_id}/share-to-scm", response_model=APIResponse[OvfResponse])
 def share_ovf_to_scm(
     ovf_id: UUID,

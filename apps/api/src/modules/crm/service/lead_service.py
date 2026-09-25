@@ -1,5 +1,7 @@
 """Lead application services."""
 
+from __future__ import annotations
+
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import UUID
@@ -368,7 +370,8 @@ class LeadService:
             operation="create",
             performed_by=ctx.user_id,
         )
-        return row
+        self._sync_lead_doc_requests(ctx, row.id)
+        return self.get(ctx, row.id)
 
     def update(self, ctx: TenantContext, lead_id: UUID, **fields):
         self.get(ctx, lead_id)
@@ -387,7 +390,9 @@ class LeadService:
             raise ConflictException("Lost leads cannot be edited")
         if lead.blueprint_state not in ("open", "converted"):
             raise ConflictException("Only open or converted sales leads can be edited")
-        sales_blueprint_engine.assert_not_locked(lead)
+        # Edits stay allowed while waiting on lead BOQ/SOW; convert remains blocked.
+        if not self._lead_docs_pending(lead):
+            sales_blueprint_engine.assert_not_locked(lead)
         if version is not None and int(lead.version or 1) != int(version):
             raise ConflictException("Lead was modified by another user; refresh and try again")
         if owner_candidate is not None:
@@ -395,6 +400,11 @@ class LeadService:
                 fields["owner_employee_id"] = self._resolve_owner_employee_id(ctx, owner_candidate)
             elif owner_candidate != lead.owner_employee_id:
                 raise ForbiddenException("Only CRM admins can change lead owner")
+        # Clearing a requirement also clears the attached flag for that doc type.
+        if fields.get("requires_boq") is False:
+            fields["boq_attached"] = False
+        if fields.get("requires_sow") is False:
+            fields["sow_attached"] = False
         row = self._repo.update(ctx, lead_id, **fields)
         if row is None:
             raise NotFoundException("Lead not found")
@@ -405,7 +415,200 @@ class LeadService:
             operation="update",
             performed_by=ctx.user_id,
         )
-        return row
+        self._sync_lead_doc_requests(ctx, lead_id)
+        return self.get(ctx, lead_id)
+
+    @staticmethod
+    def _lead_docs_pending(lead: CrmLead) -> bool:
+        return (bool(lead.requires_boq) and not bool(lead.boq_attached)) or (
+            bool(lead.requires_sow) and not bool(lead.sow_attached)
+        )
+
+    def _pending_doc_labels(self, lead: CrmLead) -> list[str]:
+        labels: list[str] = []
+        if lead.requires_boq and not lead.boq_attached:
+            labels.append("BOQ")
+        if lead.requires_sow and not lead.sow_attached:
+            labels.append("SOW")
+        return labels
+
+    def _sync_lead_doc_requests(self, ctx: TenantContext, lead_id: UUID) -> CrmLead:
+        """Route My Jobs attachment tasks for required BOQ/SOW and lock convert until done."""
+        from modules.crm.domain.approval_step_owners import APPROVAL_STEP_CATALOG
+        from modules.crm.service.approval_step_owner_service import ApprovalStepOwnerService
+        from modules.crm.service.approval_task_service import ApprovalTaskService
+
+        lead = self.get(ctx, lead_id)
+        tasks = ApprovalTaskService(self._db)
+        owners = ApprovalStepOwnerService(self._db)
+        pending = tasks.list(
+            ctx,
+            company_id=lead.company_id,
+            entity_type="lead",
+            entity_id=lead_id,
+            status="pending",
+        )
+        pending_actions = {t.action for t in pending}
+
+        lead_label = (
+            (lead.project_title or "").strip()
+            or f"{lead.first_name} {lead.last_name or ''}".strip()
+            or lead.lead_code
+        )
+
+        def cancel_pending(action: str) -> None:
+            for task in pending:
+                if task.action == action and task.status == "pending":
+                    tasks._repo.update(
+                        ctx,
+                        task.id,
+                        status="cancelled",
+                        decision_remark="Requirement cleared on lead",
+                        decided_at=datetime.now(timezone.utc),
+                        decided_by=ctx.user_id,
+                    )
+
+        def ensure_request(*, required: bool, attached: bool, action: str, step_key: str, title: str) -> None:
+            if not required or attached:
+                if action in pending_actions:
+                    cancel_pending(action)
+                return
+            if action in pending_actions:
+                return
+            user_ids = owners.list_user_ids(ctx, step_key)
+            if not user_ids:
+                raise ConflictException(
+                    f"No default owners configured for {step_key.replace('_', ' ')}. "
+                    "Assign owners under CRM → Users → Default task owners before requiring this document."
+                )
+            team_role = APPROVAL_STEP_CATALOG[step_key][1]
+            tasks.route_approval(
+                ctx,
+                assigned_user_ids=user_ids,
+                title=f"{title} - {lead_label}",
+                entity_type="lead",
+                entity_id=lead_id,
+                team_role=team_role,
+                action=action,
+                company_id=lead.company_id,
+                branch_id=lead.branch_id,
+                remarks="Required before converting this lead to an opportunity",
+            )
+
+        ensure_request(
+            required=bool(lead.requires_boq),
+            attached=bool(lead.boq_attached),
+            action="provide_boq_attachment",
+            step_key="boq_attachment",
+            title="Attach BOQ",
+        )
+        ensure_request(
+            required=bool(lead.requires_sow),
+            attached=bool(lead.sow_attached),
+            action="provide_sow_attachment",
+            step_key="sow_attachment",
+            title="Attach SOW",
+        )
+
+        pending_docs = self._lead_docs_pending(lead)
+        if lead.locked != pending_docs and lead.blueprint_state == "open":
+            updated = self._repo.update(ctx, lead_id, locked=pending_docs)
+            if updated is not None:
+                lead = updated
+        return lead
+
+    def apply_attachment_action(
+        self,
+        ctx: TenantContext,
+        lead_id: UUID,
+        action: str,
+        payload: dict | None = None,
+    ) -> CrmLead:
+        """Resume lead BOQ/SOW attachment after a My Jobs decision."""
+        from modules.crm.service.attachment_service import AttachmentService
+
+        payload = payload or {}
+        lead = self.get(ctx, lead_id)
+        updates: dict = {}
+        if action == "provide_boq_attachment":
+            if not payload.get("file_name") or not (
+                payload.get("content_base64") or payload.get("file_path")
+            ):
+                raise ConflictException("A BOQ file is required")
+            AttachmentService(self._db).create(
+                ctx,
+                entity_type="lead",
+                entity_id=lead.id,
+                file_name=payload["file_name"],
+                category="boq",
+                branch_id=lead.branch_id,
+                company_id=lead.company_id,
+                file_path=payload.get("file_path"),
+                content_base64=payload.get("content_base64"),
+                content_type=payload.get("content_type"),
+            )
+            updates["boq_attached"] = True
+        elif action == "provide_sow_attachment":
+            if not payload.get("file_name") or not (
+                payload.get("content_base64") or payload.get("file_path")
+            ):
+                raise ConflictException("A SOW file is required")
+            AttachmentService(self._db).create(
+                ctx,
+                entity_type="lead",
+                entity_id=lead.id,
+                file_name=payload["file_name"],
+                category="sow",
+                branch_id=lead.branch_id,
+                company_id=lead.company_id,
+                file_path=payload.get("file_path"),
+                content_base64=payload.get("content_base64"),
+                content_type=payload.get("content_type"),
+            )
+            updates["sow_attached"] = True
+        elif action in {"reject_boq_attachment", "reject_sow_attachment"}:
+            pass
+        else:
+            raise ConflictException(f"Unsupported lead attachment action '{action}'")
+
+        if updates:
+            self._repo.update(ctx, lead_id, **updates)
+        return self._sync_lead_doc_requests(ctx, lead_id)
+
+    def _copy_lead_attachments_to_opportunity(
+        self, ctx: TenantContext, lead: CrmLead, opportunity_id: UUID
+    ) -> None:
+        from modules.crm.repository.opportunity_repository import OpportunityRepository
+        from modules.crm.service.attachment_service import AttachmentService
+
+        attachments = AttachmentService(self._db)
+        rows = attachments.list_for_entity(ctx, "lead", lead.id)
+        for row in rows:
+            if row.category not in {"boq", "sow"}:
+                continue
+            attachments.create(
+                ctx,
+                entity_type="opportunity",
+                entity_id=opportunity_id,
+                file_name=row.file_name,
+                category=row.category,
+                branch_id=lead.branch_id,
+                company_id=lead.company_id,
+                file_path=row.file_path,
+                content_type=row.content_type,
+            )
+        flags = {}
+        if lead.boq_attached:
+            flags["boq_attached"] = True
+            # Lead My Jobs attach is equivalent to opportunity provide_* (sets approved).
+            flags["boq_approved"] = True
+        if lead.sow_attached:
+            flags["sow_attached"] = True
+            flags["sow_approved"] = True
+        if flags:
+            # Same landing state as approve_boq / approve_sow → Deal Registration next.
+            flags["blueprint_state"] = "deal_reg"
+            OpportunityRepository(self._db).update(ctx, opportunity_id, **flags)
 
     def delete(self, ctx: TenantContext, lead_id: UUID) -> None:
         self._crm_admin.ensure_admin(ctx)
@@ -492,6 +695,12 @@ class LeadService:
                     f"Lead is in blueprint state '{lead.blueprint_state}'; only an 'open' "
                     "sales lead can be converted"
                 )
+            pending = self._pending_doc_labels(lead)
+            if pending:
+                raise ConflictException(
+                    f"Attach required {' and '.join(pending)} before converting this lead "
+                    "to an opportunity"
+                )
             sales_blueprint_engine.assert_not_locked(lead)
         else:
             self._engine.validate_convertible(lead)
@@ -537,6 +746,8 @@ class LeadService:
                 opp_fields["distributor_discount_locked"] = True
 
         opportunity = opp_svc.create(ctx, **opp_fields)
+        if lead.company_account_id is not None:
+            self._copy_lead_attachments_to_opportunity(ctx, lead, opportunity.id)
         now = datetime.now(timezone.utc)
         if lead.company_account_id is None:
             self._engine.apply_convert(lead)
@@ -549,6 +760,7 @@ class LeadService:
             converted_at=now,
             customer_id=customer_id,
             convert_remark=remark,
+            locked=False,
         )
         return opportunity
 
@@ -556,13 +768,15 @@ class LeadService:
         lead = self.get(ctx, lead_id)
         if lead.status in {LeadStatus.CONVERTED.value, LeadStatus.LOST.value}:
             raise ConflictException("Lead is already converted or lost")
-        sales_blueprint_engine.assert_not_locked(lead)
+        if not self._lead_docs_pending(lead):
+            sales_blueprint_engine.assert_not_locked(lead)
         row = self._repo.update(
             ctx,
             lead_id,
             status=LeadStatus.LOST.value,
             blueprint_state="lost",
             lost_reason=reason,
+            locked=False,
         )
         if row is None:
             raise NotFoundException("Lead not found")

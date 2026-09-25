@@ -365,6 +365,7 @@ export function QuoteDetailPage({ quoteId }: { quoteId: string }) {
       <BlueprintActions
         allowedActions={blueprintActions}
         locked={blueprint.locked && oppTransitionActions.length === 0}
+        entityType="quote"
         currentStageLabel={resolveSalesStageLabel({
           entityType: "quote",
           blueprintState: blueprint.state,

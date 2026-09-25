@@ -8,6 +8,7 @@ import { UserAvatar } from "@/components/layout/user-avatar";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { CrmDefaultTaskOwnersPanel } from "@/components/crm/crm-default-task-owners-panel";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { canManageModuleUsers, moduleTitle } from "@/lib/module-access";
 import { formatApiError } from "@/services/api-client";
@@ -322,6 +323,8 @@ export function ModuleUsersPage({ moduleKey }: Props) {
           </table>
         </div>
       </div>
+
+      {moduleKey === "crm" ? <CrmDefaultTaskOwnersPanel /> : null}
     </div>
   );
 }

@@ -68,6 +68,69 @@ def notify_approval_rejected(
     )
 
 
+def notify_ovf_freight_provided(
+    db: Session,
+    *,
+    tenant_id: UUID,
+    recipient_user_id: UUID,
+    ovf_id: UUID,
+    ovf_no: str,
+    freight: str,
+    created_by: UUID | None = None,
+) -> None:
+    """Tell the CRM requester that SCM filled freight on their OVF."""
+    from modules.foundation.repository.base import utcnow
+
+    notif = NotificationService(db)
+    tpl = notif.get_or_create_template(
+        tenant_id=tenant_id,
+        template_code="crm.ovf_freight_provided",
+        template_name="CRM OVF freight provided",
+        channel="in_app",
+        subject_template="{{title}}",
+        body_template="{{body}}",
+        created_by=created_by,
+    )
+    title = f"Freight ready - OVF {ovf_no}"
+    body = (
+        f"SCM submitted freight charges of ₹{freight} for OVF {ovf_no}. "
+        "You can review the amount and continue saving the OVF."
+    )
+    digest_key = f"ovf:{ovf_id}:freight"
+    payload = {
+        "title": title,
+        "body": body,
+        "kind": "crm_ovf_freight_provided",
+        "entity_type": "ovf",
+        "entity_id": str(ovf_id),
+        "ovf_no": ovf_no,
+        "freight": freight,
+        "digest_key": digest_key,
+        "href": f"/crm/ovf/{ovf_id}",
+    }
+    existing = notif.find_unread_digest(
+        tenant_id=tenant_id,
+        user_id=recipient_user_id,
+        event_type="crm.ovf.freight_provided",
+        digest_key=digest_key,
+    )
+    if existing is not None:
+        existing.payload_json = payload
+        existing.created_at = utcnow()
+        db.flush()
+        return
+
+    notif.send(
+        tenant_id=tenant_id,
+        template_id=tpl.id,
+        event_type="crm.ovf.freight_provided",
+        recipient_user_id=recipient_user_id,
+        recipient_address=None,
+        payload_json=payload,
+        created_by=created_by,
+    )
+
+
 def notify_stale_lead(
     db: Session,
     *,

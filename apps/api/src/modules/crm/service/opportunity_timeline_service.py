@@ -72,6 +72,8 @@ def _event(
 _SEND_ACTION_TO_TASK_ACTION: dict[str, str] = {
     "send_sow_approval": "approve_sow",
     "send_boq_approval": "approve_boq",
+    "send_boq_for_attachment": "provide_boq_attachment",
+    "send_sow_for_attachment": "provide_sow_attachment",
     "send_po_approval": "approve_po",
     "send_cloud_discount_approval": "approve_cloud_discount",
 }
@@ -81,10 +83,13 @@ _APPROVE_TASK_ACTIONS: frozenset[str] = frozenset(
     {
         "approve_sow",
         "approve_boq",
+        "provide_boq_attachment",
+        "provide_sow_attachment",
         "approve_po",
         "approve_internally",
         "approve",
         "approve_cloud_discount",
+        "provide_freight",
     }
 )
 
@@ -96,10 +101,14 @@ _ACTION_MILESTONE: dict[str, str] = {
     "convert_lead": "Converted to Opportunity",
     "attach_boq": "BOQ Attached",
     "attach_sow": "SOW Attached",
+    "send_boq_for_attachment": "BOQ attachment requested",
+    "send_sow_for_attachment": "SOW attachment requested",
+    "provide_boq_attachment": "BOQ Attached",
+    "provide_sow_attachment": "SOW Attached",
     "send_boq_approval": "BOQ Sent for Approval",
     "send_sow_approval": "SOW Sent for Approval",
-    "approve_boq": "BOQ Studied",
-    "approve_sow": "SOW Studied",
+    "approve_boq": "BOQ Attached",
+    "approve_sow": "SOW Attached",
     "deal_reg": "Deal Registration Submitted",
     "oem_received": "OEM Quotation Received",
     "attach_oem_quote": "OEM Quote Attached",
@@ -131,6 +140,8 @@ _TO_STATE_MILESTONE: dict[str, dict[str, str]] = {
     "opportunity": {
         "open": "Opportunity Open",
         "boq_pending": "BOQ Attached",
+        "boq_attachment_pending": "BOQ attachment requested",
+        "sow_attachment_pending": "SOW attachment requested",
         "sow_approval": "SOW Sent for Approval",
         "boq_approval": "BOQ Sent for Approval",
         "deal_reg": "Deal Registration",
@@ -155,7 +166,7 @@ _TO_STATE_MILESTONE: dict[str, dict[str, str]] = {
         "lost": "Lost Deal",
     },
     "ovf": {
-        "draft": "OVF Created",
+        "draft": "OVF Created · Draft",
         "approval": "OVF Sent for Approval",
         "approved": "OVF Approved",
         "shared_scm": "OVF Shared to SCM",
@@ -283,6 +294,34 @@ class OpportunityTimelineService:
                 for t in approval_tasks
                 if t.entity_id == entity_id and (t.action or "").strip().lower() == wanted
             ]
+
+        def task_decided_times(entity_id: UUID | None, *actions: str) -> list[datetime]:
+            times: list[datetime] = []
+            for action in actions:
+                for task in tasks_for(entity_id, action):
+                    if (task.status or "").lower() == "approved" and task.decided_at:
+                        times.append(task.decided_at)
+            return times
+
+        def attachment_milestone_time(
+            *task_actions: str,
+            history_actions: tuple[str, ...] | None = None,
+            fallback_after_opp_seconds: int = 10,
+            prefer_before_convert: bool = False,
+        ) -> datetime | None:
+            """BOQ/SOW attached on the lead must sort above Converted to Opportunity."""
+            times: list[datetime] = []
+            if lead is not None:
+                times.extend(task_decided_times(lead.id, *task_actions))
+            times.extend(task_decided_times(opp.id, *task_actions))
+            if times:
+                return max(times)
+            hist = hist_time(*(history_actions or task_actions))
+            if hist:
+                return hist
+            if prefer_before_convert and lead is not None:
+                return bump(lead.converted_at or opp.created_at, -5)
+            return bump(opp.created_at, fallback_after_opp_seconds)
 
         def assignee_names_for(entity_id: UUID | None, task_action: str | None) -> list[str]:
             rows = tasks_for(entity_id, task_action)
@@ -489,36 +528,83 @@ class OpportunityTimelineService:
         )
 
         # Document attach / study / registration
-        if opp.boq_attached and opp.sow_attached:
+        if hist_time("send_boq_for_attachment") or (opp.blueprint_state == "boq_attachment_pending"):
             add_milestone(
-                "BOQ/SOW Attached",
-                occurred_at=hist_time("attach_boq", "attach_sow")
-                or hist_to_state("boq_pending")
-                or bump(opp.created_at, 10),
+                "BOQ attachment requested",
+                occurred_at=hist_time("send_boq_for_attachment")
+                or hist_to_state("boq_attachment_pending")
+                or bump(opp.updated_at, 0),
                 entity_type="opportunity",
                 entity_id=opp.id,
-                action="attach_boq",
-                actor_actions=("attach_boq", "attach_sow"),
+                action="send_boq_for_attachment",
+                to_state="boq_attachment_pending",
+            )
+        if hist_time("send_sow_for_attachment") or (opp.blueprint_state == "sow_attachment_pending"):
+            add_milestone(
+                "SOW attachment requested",
+                occurred_at=hist_time("send_sow_for_attachment")
+                or hist_to_state("sow_attachment_pending")
+                or bump(opp.updated_at, 0),
+                entity_type="opportunity",
+                entity_id=opp.id,
+                action="send_sow_for_attachment",
+                to_state="sow_attachment_pending",
+            )
+        if opp.boq_attached and opp.sow_attached:
+            from_lead = bool(lead is not None and lead.boq_attached and lead.sow_attached)
+            add_milestone(
+                "BOQ/SOW Attached",
+                occurred_at=attachment_milestone_time(
+                    "provide_boq_attachment",
+                    "provide_sow_attachment",
+                    history_actions=(
+                        "provide_boq_attachment",
+                        "provide_sow_attachment",
+                        "attach_boq",
+                        "attach_sow",
+                    ),
+                    prefer_before_convert=from_lead,
+                )
+                or hist_to_state("boq_pending"),
+                entity_type="lead" if from_lead else "opportunity",
+                entity_id=lead.id if from_lead and lead is not None else opp.id,
+                action="provide_boq_attachment",
+                actor_actions=(
+                    "provide_boq_attachment",
+                    "provide_sow_attachment",
+                    "attach_boq",
+                    "attach_sow",
+                ),
                 to_state="boq_pending",
             )
         elif opp.boq_attached:
+            from_lead = bool(lead is not None and lead.boq_attached)
             add_milestone(
                 "BOQ Attached",
-                occurred_at=hist_time("attach_boq")
-                or hist_to_state("boq_pending")
-                or bump(opp.created_at, 10),
-                entity_type="opportunity",
-                entity_id=opp.id,
-                action="attach_boq",
+                occurred_at=attachment_milestone_time(
+                    "provide_boq_attachment",
+                    history_actions=("provide_boq_attachment", "attach_boq", "approve_boq"),
+                    prefer_before_convert=from_lead,
+                )
+                or hist_to_state("boq_pending"),
+                entity_type="lead" if from_lead else "opportunity",
+                entity_id=lead.id if from_lead and lead is not None else opp.id,
+                action="provide_boq_attachment",
                 to_state="boq_pending",
             )
         elif opp.sow_attached:
+            from_lead = bool(lead is not None and lead.sow_attached)
             add_milestone(
                 "SOW Attached",
-                occurred_at=hist_time("attach_sow") or bump(opp.created_at, 11),
-                entity_type="opportunity",
-                entity_id=opp.id,
-                action="attach_sow",
+                occurred_at=attachment_milestone_time(
+                    "provide_sow_attachment",
+                    history_actions=("provide_sow_attachment", "attach_sow", "approve_sow"),
+                    fallback_after_opp_seconds=11,
+                    prefer_before_convert=from_lead,
+                ),
+                entity_type="lead" if from_lead else "opportunity",
+                entity_id=lead.id if from_lead and lead is not None else opp.id,
+                action="provide_sow_attachment",
                 to_state="boq_pending",
             )
         if hist_time("send_sow_approval") or (opp.blueprint_state == "sow_approval"):
@@ -543,7 +629,13 @@ class OpportunityTimelineService:
                 action="send_boq_approval",
                 to_state="boq_approval",
             )
-        if opp.boq_approved and opp.sow_approved:
+        # Legacy study milestones only when approve_* ran without provide_* attachment flow.
+        if (
+            opp.boq_approved
+            and opp.sow_approved
+            and hist_time("approve_boq", "approve_sow")
+            and not hist_time("provide_boq_attachment", "provide_sow_attachment")
+        ):
             add_milestone(
                 "BOQ/SOW Studied",
                 occurred_at=hist_time("approve_boq", "approve_sow") or bump(opp.updated_at, 2),
@@ -552,7 +644,11 @@ class OpportunityTimelineService:
                 action="approve_boq",
                 to_state="deal_reg",
             )
-        elif opp.sow_approved:
+        elif (
+            opp.sow_approved
+            and hist_time("approve_sow")
+            and not hist_time("provide_sow_attachment")
+        ):
             add_milestone(
                 "SOW Studied",
                 occurred_at=hist_time("approve_sow") or bump(opp.updated_at, 1),
@@ -561,7 +657,11 @@ class OpportunityTimelineService:
                 action="approve_sow",
                 to_state="deal_reg",
             )
-        elif opp.boq_approved:
+        elif (
+            opp.boq_approved
+            and hist_time("approve_boq")
+            and not hist_time("provide_boq_attachment")
+        ):
             add_milestone(
                 "BOQ Studied",
                 occurred_at=hist_time("approve_boq") or bump(opp.updated_at, 2),
@@ -751,8 +851,10 @@ class OpportunityTimelineService:
         # OVF path
         if ovf is not None:
             oid = ovf.id
+            ovf_stage = (ovf.blueprint_state or "draft").lower()
+            created_title = "OVF Created · Draft" if ovf_stage == "draft" else "OVF Created"
             add_milestone(
-                "OVF Created",
+                created_title,
                 occurred_at=ovf.created_at or hist_time("create_ovf"),
                 entity_type="ovf",
                 entity_id=oid,
@@ -762,7 +864,6 @@ class OpportunityTimelineService:
                 to_state="draft",
                 actor_id=ovf.created_by,
             )
-            ovf_stage = (ovf.blueprint_state or "draft").lower()
             ovf_steps = [
                 ("approval", "OVF Sent for Approval", ("send_for_approval",)),
                 ("approved", "OVF Approved", ("approve",)),

@@ -45,6 +45,8 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
         "open": {
             "attach_boq": "boq_pending",
             "attach_sow": "boq_pending",
+            "send_boq_for_attachment": "boq_attachment_pending",
+            "send_sow_for_attachment": "sow_attachment_pending",
             "attach_contract": "cloud_docs",
             "send_cloud_discount_approval": "cloud_discount_approval",
             "lost": "lost",
@@ -73,8 +75,20 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
             "attach_sow": "boq_pending",
             "send_boq_approval": "boq_approval",
             "send_sow_approval": "sow_approval",
-            # Gated in BlueprintService until BOQ or SOW is approved.
+            "send_boq_for_attachment": "boq_attachment_pending",
+            "send_sow_for_attachment": "sow_attachment_pending",
+            # Gated in BlueprintService until BOQ or SOW is approved / attached.
             "deal_reg": "oem_pending",
+            "lost": "lost",
+        },
+        "boq_attachment_pending": {
+            "provide_boq_attachment": "boq_pending",
+            "reject_boq_attachment": "boq_pending",
+            "lost": "lost",
+        },
+        "sow_attachment_pending": {
+            "provide_sow_attachment": "boq_pending",
+            "reject_sow_attachment": "boq_pending",
             "lost": "lost",
         },
         "boq_approval": {
@@ -104,6 +118,8 @@ _TRANSITIONS: dict[str, dict[str, dict[str, str]]] = {
             "lost": "lost",
             "send_boq_approval": "boq_approval",
             "send_sow_approval": "sow_approval",
+            "send_boq_for_attachment": "boq_attachment_pending",
+            "send_sow_for_attachment": "sow_attachment_pending",
         },
         "oem_pending": {"oem_received": "oem_attached", "lost": "lost"},
         "oem_attached": {"attach_oem_quote": "quote_ready", "lost": "lost"},

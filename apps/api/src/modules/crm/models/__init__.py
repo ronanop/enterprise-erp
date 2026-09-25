@@ -1,5 +1,6 @@
 """CRM ORM models."""
 
+from modules.crm.models.approval_step_owner import CrmApprovalStepOwner
 from modules.crm.models.approval_task import CrmApprovalTask
 from modules.crm.models.attachment import CrmAttachment
 from modules.crm.models.call_log import CrmCallLog
@@ -32,6 +33,7 @@ from modules.crm.models.task import CrmTask
 from modules.crm.models.visit_log import CrmVisitLog
 
 __all__ = [
+    "CrmApprovalStepOwner",
     "CrmApprovalTask",
     "CrmAttachment",
     "CrmCallLog",

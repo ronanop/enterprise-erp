@@ -78,5 +78,15 @@ def decide_my_job(
     ctx: Annotated[TenantContext, Depends(require_permission("crm.my_jobs:decide"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    row = ApprovalTaskService(db).decide(ctx, task_id, decision=body.decision, remark=body.remark)
+    row = ApprovalTaskService(db).decide(
+        ctx,
+        task_id,
+        decision=body.decision,
+        remark=body.remark,
+        freight=body.freight,
+        file_name=body.file_name,
+        content_base64=body.content_base64,
+        content_type=body.content_type,
+        file_path=body.file_path,
+    )
     return APIResponse(message="OK", data=row)

@@ -3,9 +3,10 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import ConflictException, NotFoundException
 from modules.crm.domain.enums import CrmEntityType
 from modules.crm.models import CrmFollowup, CrmInteraction, CrmMeeting, CrmTask
 from modules.crm.repository.call_log_repository import CallLogRepository
@@ -28,7 +29,53 @@ from modules.crm.service.engines import (
     VisitLogEngine,
 )
 from modules.foundation.domain.value_objects import TenantContext
+from modules.foundation.models.security import SecUser
+from modules.foundation.service.user_employee_link_service import UserEmployeeLinkService
+from modules.master_data.repository.employee_repository import EmployeeRepository
 
+
+def _resolve_employee_fk(
+    db: Session,
+    ctx: TenantContext,
+    candidate: UUID | None,
+    *,
+    field_label: str = "Team member",
+) -> UUID:
+    """Map owner/assignee to master_employee.id (accepts employee id or user id)."""
+    employees = EmployeeRepository(db)
+    links = UserEmployeeLinkService(db)
+
+    if candidate is not None:
+        if employees.get_by_id(ctx, candidate) is not None:
+            return candidate
+        user = db.scalar(
+            select(SecUser).where(
+                SecUser.id == candidate,
+                SecUser.tenant_id == ctx.tenant_id,
+                SecUser.is_deleted.is_(False),
+            )
+        )
+        if user is not None:
+            linked = links.find_employee_for_user(ctx, user)
+            if linked is not None:
+                return linked.id
+
+    if ctx.user_id is not None:
+        current = db.scalar(
+            select(SecUser).where(
+                SecUser.id == ctx.user_id,
+                SecUser.tenant_id == ctx.tenant_id,
+                SecUser.is_deleted.is_(False),
+            )
+        )
+        if current is not None:
+            linked = links.find_employee_for_user(ctx, current)
+            if linked is not None:
+                return linked.id
+
+    raise ConflictException(
+        f"{field_label} must be a valid employee. Re-select the team member and try again."
+    )
 
 class InteractionService:
     def __init__(self, db: Session) -> None:
@@ -62,6 +109,7 @@ class InteractionService:
 
 class TaskService:
     def __init__(self, db: Session) -> None:
+        self._db = db
         self._repo = TaskRepository(db)
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
@@ -89,6 +137,20 @@ class TaskService:
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
+        fields["owner_employee_id"] = _resolve_employee_fk(
+            self._db,
+            ctx,
+            fields.get("owner_employee_id"),
+            field_label="Owner",
+        )
+        assigned = fields.get("assigned_to_employee_id")
+        if assigned is not None:
+            fields["assigned_to_employee_id"] = _resolve_employee_fk(
+                self._db,
+                ctx,
+                assigned,
+                field_label="Assignee",
+            )
         code = self._numbers.generate(CrmEntityType.TASK, cid, CrmTask, "task_code")
         return self._repo.create(ctx, company_id=cid, branch_id=branch_id, task_code=code, **fields)
 
@@ -108,6 +170,7 @@ class TaskService:
 
 class FollowupService:
     def __init__(self, db: Session) -> None:
+        self._db = db
         self._repo = FollowupRepository(db)
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
@@ -135,6 +198,12 @@ class FollowupService:
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
+        fields["owner_employee_id"] = _resolve_employee_fk(
+            self._db,
+            ctx,
+            fields.get("owner_employee_id"),
+            field_label="Internal team member",
+        )
         code = self._numbers.generate(CrmEntityType.FOLLOWUP, cid, CrmFollowup, "followup_code")
         return self._repo.create(ctx, company_id=cid, branch_id=branch_id, followup_code=code, **fields)
 
@@ -146,6 +215,7 @@ class FollowupService:
 
 class MeetingService:
     def __init__(self, db: Session) -> None:
+        self._db = db
         self._repo = MeetingRepository(db)
         self._scope = CrmScopeValidator(db)
         self._numbers = DocumentNumberService(db)
@@ -176,6 +246,20 @@ class MeetingService:
         if fields.get("all_day"):
             fields["start_time"] = None
             fields["end_time"] = None
+        fields["organizer_employee_id"] = _resolve_employee_fk(
+            self._db,
+            ctx,
+            fields.get("organizer_employee_id"),
+            field_label="Organizer",
+        )
+        tagged = fields.get("tagged_employee_id")
+        if tagged is not None:
+            fields["tagged_employee_id"] = _resolve_employee_fk(
+                self._db,
+                ctx,
+                tagged,
+                field_label="Tagged team member",
+            )
         code = self._numbers.generate(CrmEntityType.MEETING, cid, CrmMeeting, "meeting_code")
         return self._repo.create(ctx, company_id=cid, branch_id=branch_id, meeting_code=code, **fields)
 
