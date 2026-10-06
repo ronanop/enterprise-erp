@@ -19,11 +19,10 @@ class RecruitmentReportRepository(RecScopedRepository):
         stmt = self.apply_rec_filter(stmt, RecRecruitmentReport, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(RecRecruitmentReport).where(
-            RecRecruitmentReport.company_id == company_id,
-            RecRecruitmentReport.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(RecRecruitmentReport).where(RecRecruitmentReport.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(RecRecruitmentReport.company_id == company_id)
         stmt = self.apply_rec_filter(stmt, RecRecruitmentReport, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 

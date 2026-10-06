@@ -19,11 +19,10 @@ class TaxConfigurationRepository(PayScopedRepository):
         stmt = self.apply_pay_filter(stmt, PayTaxConfiguration, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(PayTaxConfiguration).where(
-            PayTaxConfiguration.company_id == company_id,
-            PayTaxConfiguration.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(PayTaxConfiguration).where(PayTaxConfiguration.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(PayTaxConfiguration.company_id == company_id)
         stmt = self.apply_pay_filter(stmt, PayTaxConfiguration, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 

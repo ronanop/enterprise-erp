@@ -19,11 +19,10 @@ class SalaryStructureLineRepository(PayScopedRepository):
         stmt = self.apply_pay_filter(stmt, PaySalaryStructureLine, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(PaySalaryStructureLine).where(
-            PaySalaryStructureLine.company_id == company_id,
-            PaySalaryStructureLine.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(PaySalaryStructureLine).where(PaySalaryStructureLine.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(PaySalaryStructureLine.company_id == company_id)
         stmt = self.apply_pay_filter(stmt, PaySalaryStructureLine, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 

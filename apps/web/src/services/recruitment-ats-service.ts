@@ -172,8 +172,7 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
     apiPartial = overview.partial;
 
     // Prefer API as SoR for lists when overview returns rows (local cache becomes mirror).
-    if (overview.requisitions.length) {
-      const localOnly = jobs.filter((j) => !j.apiId);
+    if (!overview.partial || overview.requisitions.length) {
       jobs = [
         ...overview.requisitions.map((r, i) => ({
         id: String(r.id ?? crypto.randomUUID()),
@@ -208,13 +207,11 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
         updatedAt: String(r.updated_at ?? r.created_at ?? nowIso()),
         apiId: String(r.id ?? ""),
       })),
-        ...localOnly,
       ];
       saveJobs(jobs);
     }
 
-    if (overview.candidates.length) {
-      const localOnly = candidates.filter((c) => !c.apiId);
+    if (overview.candidatesLoaded) {
       candidates = [
         ...overview.candidates.map((c, i) => ({
         id: String(c.id ?? crypto.randomUUID()),
@@ -244,12 +241,11 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
         updatedAt: String(c.updated_at ?? c.created_at ?? nowIso()),
         apiId: String(c.id ?? ""),
       })),
-        ...localOnly,
       ];
       saveCandidates(candidates);
     }
 
-    if (overview.applications.length) {
+    if (overview.applicationsLoaded) {
       applications = overview.applications.map((a, i) => {
         const stageRaw = String(a.current_stage_code ?? a.status ?? "sourced").toLowerCase();
         const statusRaw = String(a.status ?? "active").toLowerCase();
@@ -305,7 +301,7 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
       saveApps(applications);
     }
 
-    if (overview.offers.length) {
+    if (overview.offersLoaded) {
       offers = overview.offers.map((o, i) => {
         const s = asStatus(o.status);
         const status: AtsOffer["status"] = s.includes("accept")
@@ -341,6 +337,23 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
     apiPartial = true;
   }
 
+  const apiJobIds = new Set(
+    jobs.flatMap((job) => [job.id, job.apiId].filter((id): id is string => Boolean(id))),
+  );
+  const apiCandidateIds = new Set(
+    candidates.flatMap((candidate) =>
+      [candidate.id, candidate.apiId].filter((id): id is string => Boolean(id)),
+    ),
+  );
+  let scopedInterviews = interviews;
+  let scopedDocuments = documents;
+  if (!apiPartial) {
+    scopedInterviews = interviews.filter(
+      (row) => apiJobIds.has(row.jobId) || apiCandidateIds.has(row.candidateId),
+    );
+    scopedDocuments = documents.filter((row) => apiCandidateIds.has(row.candidateId));
+  }
+
   const departments = Array.from(
     new Set(jobs.map((j) => j.department).filter((d) => d && d !== "—")),
   ).sort();
@@ -349,9 +362,9 @@ export async function loadAtsDirectory(): Promise<AtsDirectory> {
     jobs,
     candidates,
     applications,
-    interviews,
+    interviews: scopedInterviews,
     offers,
-    documents,
+    documents: scopedDocuments,
     departments,
     apiPartial,
   };

@@ -20,6 +20,9 @@ export type RecruitmentOverview = {
   errors: string[];
   statusCodes: number[];
   partial: boolean;
+  candidatesLoaded: boolean;
+  applicationsLoaded: boolean;
+  offersLoaded: boolean;
 };
 
 function normalizeRows(data: unknown): RecruitmentRow[] {
@@ -176,5 +179,8 @@ export async function loadRecruitmentOverview(): Promise<RecruitmentOverview> {
     errors,
     statusCodes,
     partial: errors.length > 0,
+    candidatesLoaded: !candidates.error,
+    applicationsLoaded: !applications.error,
+    offersLoaded: !offers.error,
   };
 }

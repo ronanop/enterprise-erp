@@ -47,6 +47,25 @@ async function applyCompany(
  * @returns `ready` when API company scope is set, `needs_company` when user must pick one.
  */
 export async function ensureOrgContextReady(): Promise<"ready" | "needs_company"> {
+  const storedFirst = getStoredOrgContext();
+  if (storedFirst?.allCompanies) {
+    try {
+      await contextService.switchContext({
+        all_companies: true,
+        company_id: null,
+        branch_id: null,
+      });
+      setStoredOrgContext({
+        companyId: "",
+        companyName: "All",
+        allCompanies: true,
+      });
+      return "ready";
+    } catch {
+      /* fall through and restore a single company */
+    }
+  }
+
   // 1) Server already has company scope (Redis / default scope)
   try {
     const ctxRes = await contextService.getContext();

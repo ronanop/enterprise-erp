@@ -442,14 +442,22 @@ export const contextService = {
     apiClient<OrgBranchOption[]>("/auth/context/branches", {
       query: { company_id: companyId },
     }),
-  switchContext: (body: { company_id: string; branch_id?: string | null }) =>
-    apiClient<{ company_id: string; branch_id: string | null }>("/auth/context/switch", {
-      method: "POST",
-      body: {
-        company_id: body.company_id,
-        branch_id: body.branch_id ?? null,
+  switchContext: (body: {
+    company_id?: string | null;
+    branch_id?: string | null;
+    all_companies?: boolean;
+  }) =>
+    apiClient<{ company_id: string | null; branch_id: string | null; all_companies?: boolean }>(
+      "/auth/context/switch",
+      {
+        method: "POST",
+        body: {
+          company_id: body.company_id ?? null,
+          branch_id: body.branch_id ?? null,
+          all_companies: body.all_companies ?? false,
+        },
       },
-    }),
+    ),
 };
 
 export type ListQuery = Record<string, string | number | boolean | null | undefined>;

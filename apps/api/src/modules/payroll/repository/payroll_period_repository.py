@@ -19,11 +19,10 @@ class PayrollPeriodRepository(PayScopedRepository):
         stmt = self.apply_pay_filter(stmt, PayPayrollPeriod, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(PayPayrollPeriod).where(
-            PayPayrollPeriod.company_id == company_id,
-            PayPayrollPeriod.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(PayPayrollPeriod).where(PayPayrollPeriod.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(PayPayrollPeriod.company_id == company_id)
         stmt = self.apply_pay_filter(stmt, PayPayrollPeriod, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt.order_by(PayPayrollPeriod.start_date.desc())).all())
 

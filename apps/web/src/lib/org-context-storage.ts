@@ -8,6 +8,13 @@ function readKey(storage: Storage, key: string): StoredOrgContext | null {
     const raw = storage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as StoredOrgContext;
+    if (parsed?.allCompanies) {
+      return {
+        ...parsed,
+        companyId: parsed.companyId || "",
+        companyName: parsed.companyName || "All",
+      };
+    }
     if (!parsed?.companyId) return null;
     return parsed;
   } catch {

@@ -19,11 +19,10 @@ class InterviewFeedbackRepository(RecScopedRepository):
         stmt = self.apply_rec_filter(stmt, RecInterviewFeedback, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(RecInterviewFeedback).where(
-            RecInterviewFeedback.company_id == company_id,
-            RecInterviewFeedback.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(RecInterviewFeedback).where(RecInterviewFeedback.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(RecInterviewFeedback.company_id == company_id)
         stmt = self.apply_rec_filter(stmt, RecInterviewFeedback, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 

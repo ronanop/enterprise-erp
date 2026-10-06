@@ -58,6 +58,7 @@ def get_tenant_context(
             pass
     company_id = UUID(cached["company_id"]) if cached.get("company_id") else None
     branch_id = UUID(cached["branch_id"]) if cached.get("branch_id") else None
+    all_companies = bool(cached.get("all_companies"))
     user_id = UUID(payload["sub"])
     tenant_id = UUID(payload["tenant_id"])
     user_type = str(payload["user_type"])
@@ -65,7 +66,7 @@ def get_tenant_context(
     if user_row is not None and user_row.user_type:
         user_type = user_row.user_type
 
-    if not company_id:
+    if not company_id and not all_companies:
         from modules.foundation.service.org_context_service import OrgContextService
 
         org_ctx = OrgContextService(db)
@@ -111,6 +112,7 @@ def get_tenant_context(
         branch_id=branch_id,
         tenant_wide=tenant_wide,
         scoped_company_ids=scoped_company_ids,
+        all_companies=all_companies,
     )
 
 

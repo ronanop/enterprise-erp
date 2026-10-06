@@ -42,6 +42,9 @@ class RecScopedRepository(OrgScopedRepository):
         if company_id is not None:
             RecScopedRepository.ensure_company_access(ctx, company_id)
             return company_id
+        if ctx.company_id is not None:
+            RecScopedRepository.ensure_company_access(ctx, ctx.company_id)
+            return ctx.company_id
         if has_tenant_wide_data_access(ctx):
             return None
         allowed = effective_company_ids(ctx)

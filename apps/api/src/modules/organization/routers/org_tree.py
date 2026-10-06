@@ -44,7 +44,10 @@ def switch_context(
     db: Annotated[Session, Depends(get_db)],
 ) -> APIResponse[dict]:
     data = OrgContextService(db).switch_context(
-        ctx, company_id=body.company_id, branch_id=body.branch_id
+        ctx,
+        company_id=body.company_id,
+        branch_id=body.branch_id,
+        all_companies=body.all_companies,
     )
     db.commit()
     return APIResponse(message="Context switched", data=data)

@@ -19,11 +19,10 @@ class OnboardingRepository(RecScopedRepository):
         stmt = self.apply_rec_filter(stmt, RecOnboarding, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(RecOnboarding).where(
-            RecOnboarding.company_id == company_id,
-            RecOnboarding.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(RecOnboarding).where(RecOnboarding.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(RecOnboarding.company_id == company_id)
         stmt = self.apply_rec_filter(stmt, RecOnboarding, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 

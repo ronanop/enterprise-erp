@@ -37,3 +37,4 @@ class TenantContext:
     branch_id: UUID | None = None
     tenant_wide: bool = False
     scoped_company_ids: tuple[UUID, ...] = ()
+    all_companies: bool = False

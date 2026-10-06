@@ -3,6 +3,8 @@
  * HR creates & sends; employees accept in ESS (PWA). Stored locally for now.
  */
 
+import { getStoredOrgContext } from "@/lib/org-context-storage";
+
 export type OrgDocKind = "policy" | "handbook" | "contract" | "notice" | "other";
 
 export type OrgDocAttachment = {
@@ -35,6 +37,7 @@ export type OrgDocument = {
   updatedAt: string;
   sentAt?: string;
   acceptances: OrgDocAcceptance[];
+  companyId?: string;
 };
 
 const STORAGE_KEY = "erp_edoc_org_documents_v1";
@@ -67,6 +70,18 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function activeCompanyId(): string | null {
+  const stored = getStoredOrgContext();
+  if (!stored || stored.allCompanies || !stored.companyId) return null;
+  return stored.companyId;
+}
+
+function visibleInActiveEntity(row: OrgDocument): boolean {
+  const companyId = activeCompanyId();
+  if (!companyId) return true;
+  return row.companyId === companyId;
+}
+
 function nextCode(existing: OrgDocument[]): string {
   let max = 0;
   for (const r of existing) {
@@ -77,11 +92,15 @@ function nextCode(existing: OrgDocument[]): string {
 }
 
 export function listOrgDocuments(): OrgDocument[] {
-  return readAll().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  return readAll()
+    .filter(visibleInActiveEntity)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 export function getOrgDocument(id: string): OrgDocument | null {
-  return readAll().find((r) => r.id === id) ?? null;
+  const row = readAll().find((r) => r.id === id) ?? null;
+  if (!row || !visibleInActiveEntity(row)) return null;
+  return row;
 }
 
 export function createOrgDocument(input: {
@@ -102,6 +121,7 @@ export function createOrgDocument(input: {
     createdAt: nowIso(),
     updatedAt: nowIso(),
     acceptances: [],
+    companyId: activeCompanyId() ?? undefined,
   };
   writeAll([row, ...all]);
   return row;

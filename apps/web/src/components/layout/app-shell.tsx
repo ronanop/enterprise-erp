@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { AssetsModuleSidebar } from "@/components/assets/assets-module-sidebar";
 import { CrmSidebar } from "@/components/crm/crm-workspace-nav";
 import { ElevenLabsConvaiWidget } from "@/components/elevenlabs/convai-widget";
+import { HrEntityHeader } from "@/components/hr/hr-entity-header";
 import { HrSidebar } from "@/components/hr/hr-sidebar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppTopbar } from "@/components/layout/app-topbar";
@@ -55,7 +56,7 @@ export function AppShell({ children }: AppShellProps) {
         <AppSidebar />
       )}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip">
-        {hrMode ? null : <AppTopbar />}
+        {hrMode ? <HrEntityHeader /> : <AppTopbar />}
         <main
           className={cn(
             "min-h-0 min-w-0 flex-1 overflow-x-clip px-4 py-4 sm:px-6 lg:px-8",

@@ -60,7 +60,7 @@ Services: Redis, RabbitMQ, MinIO, OpenSearch
 PostgreSQL is **not** in Docker — use the native instance on `172.16.200.26:5432` (`DATABASE_URL` in `.env`).
 
 ### 3. Backend API
-
+ 
 ```bash
 cd apps/api
 python -m venv .venv
@@ -79,7 +79,6 @@ Docs: http://localhost:8000/docs
 cd apps/web
 cp .env.example .env.local
 npm install
-npm run dev
 ```
 
 App: http://localhost:3000

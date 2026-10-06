@@ -30,6 +30,7 @@ export type OrgSessionContext = {
   company_id: string | null;
   branch_id: string | null;
   user_type?: string | null;
+  all_companies?: boolean;
 };
 
 export type StoredOrgContext = {
@@ -37,4 +38,5 @@ export type StoredOrgContext = {
   companyName: string;
   branchId?: string;
   branchName?: string;
+  allCompanies?: boolean;
 };

@@ -1037,16 +1037,12 @@ def seed(db) -> None:
     )
 
     funnel_candidates = [
-        ("CAND-D01", "Ankit", "Verma", "applied"),
-        ("CAND-D02", "Sneha", "Reddy", "applied"),
-        ("CAND-D03", "Tarun", "Gupta", "screening"),
-        ("CAND-D04", "Ishita", "Bose", "screening"),
         ("CAND-D05", "Vikram", "Das", "interview"),
         ("CAND-D06", "Pooja", "Nair", "interview"),
         ("CAND-D07", "Rahul", "Sen", "offer"),
         ("CAND-D08", "Kavya", "Menon", "hired"),
     ]
-    for i, (code, first, last, app_status) in enumerate(funnel_candidates, start=1):
+    for i, (code, first, last, app_status) in enumerate(funnel_candidates, start=5):
         cand = ensure(
             db,
             RecCandidate,

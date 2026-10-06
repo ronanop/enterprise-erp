@@ -30,11 +30,12 @@ class OrgContextService:
             "company_id": str(ctx.company_id) if ctx.company_id else None,
             "branch_id": str(ctx.branch_id) if ctx.branch_id else None,
             "user_type": ctx.user_type,
+            "all_companies": ctx.all_companies,
         }
 
     def list_accessible_companies(self, ctx: TenantContext):
         if has_tenant_wide_data_access(ctx):
-            return self._companies.list_companies(ctx)
+            return self._companies.list_permitted_companies(ctx)
 
         scopes = self._scopes.list_user_scopes(ctx.user_id, ctx.tenant_id)
         company_ids = {s.company_id for s in scopes}
@@ -42,7 +43,7 @@ class OrgContextService:
             # HR Admins are strictly entity-scoped. Empty scope must not leak every company.
             if self._is_hr_admin(ctx):
                 return []
-            return self._companies.list_companies(ctx)
+            return self._companies.list_permitted_companies(ctx)
 
         companies = []
         seen: set[UUID] = set()
@@ -65,9 +66,32 @@ class OrgContextService:
         self,
         ctx: TenantContext,
         *,
-        company_id: UUID,
+        company_id: UUID | None = None,
         branch_id: UUID | None = None,
+        all_companies: bool = False,
     ) -> dict:
+        if all_companies:
+            if ctx.session_id:
+                self._store.set_session(
+                    ctx.session_id,
+                    {
+                        "user_id": str(ctx.user_id),
+                        "tenant_id": str(ctx.tenant_id),
+                        "company_id": None,
+                        "branch_id": None,
+                        "all_companies": True,
+                    },
+                )
+            self._audit.log_security_event(
+                tenant_id=ctx.tenant_id,
+                event_type="auth.context_switch",
+                user_id=ctx.user_id,
+                details_json={"all_companies": True},
+            )
+            return {"company_id": None, "branch_id": None, "all_companies": True}
+
+        if company_id is None:
+            raise NotFoundException("Company not found")
         company = self._companies.get_by_id(ctx, company_id)
         if company is None:
             raise NotFoundException("Company not found")
@@ -83,6 +107,7 @@ class OrgContextService:
                     "tenant_id": str(ctx.tenant_id),
                     "company_id": str(company_id),
                     "branch_id": str(branch_id) if branch_id else None,
+                    "all_companies": False,
                 },
             )
         self._audit.log_security_event(
@@ -92,11 +117,13 @@ class OrgContextService:
             details_json={
                 "company_id": str(company_id),
                 "branch_id": str(branch_id) if branch_id else None,
+                "all_companies": False,
             },
         )
         return {
             "company_id": str(company_id),
             "branch_id": str(branch_id) if branch_id else None,
+            "all_companies": False,
         }
 
     def _is_hr_admin(self, ctx: TenantContext) -> bool:

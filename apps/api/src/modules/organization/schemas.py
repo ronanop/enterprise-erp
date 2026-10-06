@@ -3,7 +3,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class CompanyCreateRequest(BaseModel):
@@ -155,5 +155,12 @@ class ProfitCenterCreateRequest(BaseModel):
 
 
 class ContextSwitchRequest(BaseModel):
-    company_id: UUID
+    company_id: UUID | None = None
     branch_id: UUID | None = None
+    all_companies: bool = False
+
+    @model_validator(mode="after")
+    def company_required_unless_all(self) -> "ContextSwitchRequest":
+        if not self.all_companies and self.company_id is None:
+            raise ValueError("company_id is required unless all_companies is set")
+        return self

@@ -19,11 +19,10 @@ class LoanInstallmentRepository(PayScopedRepository):
         stmt = self.apply_pay_filter(stmt, PayLoanInstallment, ctx, branch_scoped=True)
         return self.db.scalar(stmt)
 
-    def list_rows(self, ctx: TenantContext, company_id: UUID):
-        stmt = select(PayLoanInstallment).where(
-            PayLoanInstallment.company_id == company_id,
-            PayLoanInstallment.is_deleted.is_(False),
-        )
+    def list_rows(self, ctx: TenantContext, company_id: UUID | None):
+        stmt = select(PayLoanInstallment).where(PayLoanInstallment.is_deleted.is_(False))
+        if company_id is not None:
+            stmt = stmt.where(PayLoanInstallment.company_id == company_id)
         stmt = self.apply_pay_filter(stmt, PayLoanInstallment, ctx, branch_scoped=True)
         return list(self.db.scalars(stmt).all())
 

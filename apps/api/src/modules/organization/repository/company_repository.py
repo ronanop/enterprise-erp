@@ -2,10 +2,10 @@
 
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import false, select
 from sqlalchemy.orm import Session
 
-from modules.foundation.domain.org_data_scope import apply_company_scope
+from modules.foundation.domain.org_data_scope import apply_company_scope, effective_company_ids
 from modules.foundation.domain.value_objects import TenantContext
 from modules.organization.domain.entities import CompanyEntity
 from modules.organization.models.company import OrgCompany
@@ -20,6 +20,21 @@ class CompanyRepository(OrgScopedRepository):
         stmt = select(OrgCompany)
         stmt = self.apply_tenant_filter(stmt, OrgCompany, ctx)
         stmt = apply_company_scope(stmt, OrgCompany, ctx)
+        return [self._to_entity(r) for r in self.db.scalars(stmt).all()]
+
+    def list_permitted_companies(self, ctx: TenantContext) -> list[CompanyEntity]:
+        """Every company the user may open, including ones other than the active entity."""
+        stmt = select(OrgCompany)
+        stmt = self.apply_tenant_filter(stmt, OrgCompany, ctx)
+        ids = effective_company_ids(ctx)
+        if ids is not None:
+            if not ids:
+                stmt = stmt.where(false())
+            elif len(ids) == 1:
+                stmt = stmt.where(OrgCompany.id == ids[0])
+            else:
+                stmt = stmt.where(OrgCompany.id.in_(ids))
+        stmt = stmt.order_by(OrgCompany.company_name)
         return [self._to_entity(r) for r in self.db.scalars(stmt).all()]
 
     def get_by_id(self, ctx: TenantContext, company_id: UUID) -> CompanyEntity | None:
