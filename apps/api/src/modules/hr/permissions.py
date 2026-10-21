@@ -176,7 +176,7 @@ def _hr_admin_workspace_permissions() -> list[str]:
             ]
             + [p[0] for p in PAYROLL_PERMISSIONS]
             + [p[0] for p in RECRUITMENT_PERMISSIONS]
-            + [p[0] for p in ORGANIZATION_PERMISSIONS if p[2] != "delete"]
+            + [p[0] for p in ORGANIZATION_PERMISSIONS]
         )
     )
 

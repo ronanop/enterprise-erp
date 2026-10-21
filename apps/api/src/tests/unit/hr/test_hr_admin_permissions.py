@@ -12,6 +12,13 @@ def test_hr_admin_does_not_get_superadmin_panel_permission() -> None:
     assert HR_SUPERADMIN_PERMISSION not in HR_ADMIN_WORKSPACE_PERMISSIONS
 
 
+def test_hr_admin_can_delete_organization_setup_records() -> None:
+    assert "organization.branch:delete" in HR_ADMIN_WORKSPACE_PERMISSIONS
+    assert "organization.department:delete" in HR_ADMIN_WORKSPACE_PERMISSIONS
+    assert "organization.location:delete" in HR_ADMIN_WORKSPACE_PERMISSIONS
+    assert "organization.company:delete" in HR_ADMIN_WORKSPACE_PERMISSIONS
+
+
 def test_hr_admin_workspace_includes_employee_create() -> None:
     assert "master.employee:create" in HR_ADMIN_WORKSPACE_PERMISSIONS
     assert "master.employee:update" in HR_ADMIN_WORKSPACE_PERMISSIONS
