@@ -56,7 +56,7 @@ class HrLegalEntityService:
             entity_id=company_id,
             operation="update",
             performed_by=ctx.user_id,
-            new_value=fields,
+            new_value={k: "[logo]" if k == "logo_url" and v else v for k, v in fields.items()},
         )
         return company
 

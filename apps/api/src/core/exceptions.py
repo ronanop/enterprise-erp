@@ -68,6 +68,8 @@ def conflict_from_integrity(exc: IntegrityError) -> ConflictException:
         )
     if "UniqueViolation" in name or "unique constraint" in lowered:
         return ConflictException("A record with these values already exists.")
+    if "NotNullViolation" in name or "not-null constraint" in lowered:
+        return ConflictException("A required value is missing, so this could not be saved.")
     return ConflictException("This change conflicts with existing data.")
 
 

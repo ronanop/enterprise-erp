@@ -52,11 +52,19 @@ import {
   type PayrollDirectory,
 } from "@/services/payroll-management-service";
 import { PayslipLetterhead } from "@/components/hr/payroll/payslip-letterhead";
-import { downloadPayslipPdf, downloadPayslipsPdf, payslipPdfContext } from "@/utils/payslip-pdf";
+import { resourceService } from "@/services/api-client";
+import {
+  downloadPayslipPdf,
+  downloadPayslipsPdf,
+  payslipCompanyFromApi,
+  payslipPdfContext,
+  type PayslipCompany,
+} from "@/utils/payslip-pdf";
 import {
   loadHrMasterDirectory,
   type HrMasterOption,
 } from "@/services/hr-master-connector";
+import type { EmployeeRecord } from "@/types/employee-management";
 import type {
   PayslipRecord,
   EmployeeSalary,
@@ -133,6 +141,8 @@ export function PayrollManagementPage() {
 
   const [dir, setDir] = useState<PayrollDirectory | null>(null);
   const [employees, setEmployees] = useState<HrMasterOption[]>([]);
+  const [employeeRecords, setEmployeeRecords] = useState<EmployeeRecord[]>([]);
+  const [payslipCompanies, setPayslipCompanies] = useState<PayslipCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [viewSlip, setViewSlip] = useState<PayslipRecord | null>(null);
@@ -161,6 +171,12 @@ export function PayrollManagementPage() {
       ]);
       setDir(pay);
       setEmployees(master?.employees ?? []);
+      setEmployeeRecords(master?.records ?? []);
+      const entities = await resourceService
+        .list<Record<string, unknown>>("/hrms/legal-entities")
+        .catch(() => null);
+      const rows = Array.isArray(entities?.data) ? entities.data : [];
+      setPayslipCompanies(rows.map((row) => payslipCompanyFromApi(row)));
     } catch {
       toast("Failed to load payroll data", "error");
     } finally {
@@ -171,6 +187,16 @@ export function PayrollManagementPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  function slipContext(slip: PayslipRecord) {
+    return payslipPdfContext(
+      slip,
+      employees,
+      employeeRecords,
+      payslipCompanies,
+      dir?.payslips ?? [],
+    );
+  }
 
   useEffect(() => {
     const raw = searchParams.get("section");
@@ -383,7 +409,7 @@ export function PayrollManagementPage() {
                       await downloadPayslipsPdf(
                         filteredPayslips.map((p) => ({
                           slip: p,
-                          ctx: payslipPdfContext(p, employees),
+                          ctx: slipContext(p),
                         })),
                         `salary-slips-${slipOpenMonth}.pdf`,
                       );
@@ -840,7 +866,7 @@ export function PayrollManagementPage() {
                                           try {
                                             await downloadPayslipPdf(
                                               p,
-                                              payslipPdfContext(p, employees),
+                                              slipContext(p),
                                             );
                                             toast("PDF downloaded");
                                           } catch {
@@ -964,7 +990,7 @@ export function PayrollManagementPage() {
               className="cursor-pointer"
               onClick={async () => {
                 try {
-                  await downloadPayslipPdf(viewSlip, payslipPdfContext(viewSlip, employees));
+                  await downloadPayslipPdf(viewSlip, slipContext(viewSlip));
                   toast("PDF downloaded");
                 } catch {
                   toast("Could not download PDF", "error");
@@ -978,7 +1004,7 @@ export function PayrollManagementPage() {
         }
       >
         {viewSlip ? (
-          <PayslipLetterhead slip={viewSlip} ctx={payslipPdfContext(viewSlip, employees)} />
+          <PayslipLetterhead slip={viewSlip} ctx={slipContext(viewSlip)} />
         ) : null}
       </SetupDrawer>
       <BonusDrawer

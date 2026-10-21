@@ -132,7 +132,10 @@ def upgrade() -> None:
         for role_code, role_name, codes in ROLE_SPECS:
             role_id = _ensure_role(conn, now, tid, role_code, role_name)
             for code in codes:
-                _grant(conn, now, tid, role_id, perm_ids[code])
+                perm_id = perm_ids.get(code)
+                if perm_id is None:
+                    continue
+                _grant(conn, now, tid, role_id, perm_id)
 
 
 def downgrade() -> None:

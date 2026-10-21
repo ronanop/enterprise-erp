@@ -698,6 +698,13 @@ async function fetchEmployeeDirectoryUncached(): Promise<EmployeeDirectoryResult
       const stored = extensions[id];
       const ext = defaultExtension(stored);
       // Hydrate onboarding bank from HR profile when local store is empty
+      if (profile) {
+        ext.governmentIds = {
+          ...ext.governmentIds,
+          pan: ext.governmentIds.pan || String(profile.pan_number ?? ""),
+          uan: ext.governmentIds.uan || String(profile.uan_number ?? ""),
+        };
+      }
       if (profile && !ext.bank.accountNumber && !ext.bank.ifsc) {
         ext.bank = {
           ...ext.bank,

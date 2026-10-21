@@ -7,7 +7,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import NotFoundException, ValidationException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.payroll.domain.payroll_policy_spec import default_company_payroll_policy_fields
@@ -94,6 +94,10 @@ class PayrollPolicyService:
     ) -> PayPayrollPolicy:
         """Create DEFAULT active policy for company if none exists."""
         cid = self._scope.resolve_company_id(ctx, company_id)
+        if cid is None:
+            raise ValidationException(
+                "Select a company in the header before saving salary configuration."
+            )
         existing = self._repo.get_active(ctx, cid)
         if existing is not None:
             return existing

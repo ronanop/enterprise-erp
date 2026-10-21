@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { SetupField, SetupInput, SetupSelect } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { resourceService } from "@/services/api-client";
+import { payrollTargetCompanyIds } from "@/lib/payroll-company";
+import { getStoredOrgContext } from "@/lib/org-context-storage";
 import { loadResolvedPayrollPfPolicy } from "@/lib/payroll-pf-policy";
 
 type PolicyForm = {
@@ -62,14 +64,22 @@ export function PayrollPolicyPanel() {
   const [form, setForm] = useState<PolicyForm>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [appliesToEveryCompany, setAppliesToEveryCompany] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      await resourceService.create("/payroll/policies/ensure-default", {}).catch(() => null);
-      const res = await resourceService.list<Record<string, unknown>>("/payroll/policies/resolved");
+      const companies = await payrollTargetCompanyIds();
+      const companyId = companies[0];
+      const query = companyId ? { company_id: companyId } : undefined;
+      if (companyId) {
+        await resourceService
+          .create("/payroll/policies/ensure-default", { company_id: companyId })
+          .catch(() => null);
+      }
+      const res = await resourceService.list<Record<string, unknown>>("/payroll/policies/resolved", query);
       const row = (res.data ?? {}) as Record<string, unknown>;
-      const active = await resourceService.list<Record<string, unknown>>("/payroll/policies/active");
+      const active = await resourceService.list<Record<string, unknown>>("/payroll/policies/active", query);
       const activeRow = (active.data ?? null) as Record<string, unknown> | null;
       setForm({
         id: String(activeRow?.id ?? row.id ?? ""),
@@ -96,6 +106,7 @@ export function PayrollPolicyPanel() {
   }, []);
 
   useEffect(() => {
+    setAppliesToEveryCompany(Boolean(getStoredOrgContext()?.allCompanies));
     void load();
   }, [load]);
 
@@ -116,17 +127,25 @@ export function PayrollPolicyPanel() {
         pf_wage_ceiling: Number(form.pf_wage_ceiling || 15000),
         pf_on_lop: form.pf_on_lop,
         net_pay_formula: form.net_pay_formula,
-        version: form.version,
       };
-      if (form.id) {
-        await resourceService.update("/payroll/policies", form.id, body);
-      } else {
-        await resourceService.create("/payroll/policies/ensure-default", {});
-        const active = await resourceService.list<Record<string, unknown>>("/payroll/policies/active");
-        const id = String((active.data as Record<string, unknown> | null)?.id ?? "");
-        if (id) await resourceService.update("/payroll/policies", id, body);
+      const companies = await payrollTargetCompanyIds();
+      if (!companies.length) {
+        throw new Error("Select a company in the header before saving salary configuration.");
       }
-      toast("Salary configuration saved");
+      for (const companyId of companies) {
+        const ensured = await resourceService.create<Record<string, unknown>>(
+          "/payroll/policies/ensure-default",
+          { company_id: companyId },
+        );
+        const id = String((ensured.data as Record<string, unknown> | null)?.id ?? "");
+        if (!id) throw new Error("Salary configuration could not be saved for this company.");
+        await resourceService.update("/payroll/policies", id, body);
+      }
+      toast(
+        companies.length > 1
+          ? "Salary configuration saved for every company"
+          : "Salary configuration saved",
+      );
       await loadResolvedPayrollPfPolicy().catch(() => null);
       await load();
     } catch (err) {
@@ -277,6 +296,11 @@ export function PayrollPolicyPanel() {
         </p>
       </section>
 
+      {appliesToEveryCompany ? (
+        <p className="text-xs text-muted-foreground">
+          The header is set to All companies, so this save updates salary configuration for every company.
+        </p>
+      ) : null}
       <Button
         type="button"
         className="cursor-pointer transition-colors duration-200"

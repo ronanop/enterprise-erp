@@ -2,7 +2,7 @@
 
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, SmallInteger, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, SmallInteger, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,6 +31,13 @@ class OrgCompany(Base, AuditMixin, TenantMixin, SoftDeleteMixin, VersionMixin):
     legal_name: Mapped[str] = mapped_column(String(255), nullable=False)
     registration_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
     tax_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    tan_number: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    address_line1: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    address_line2: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    state_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
     country_code: Mapped[str] = mapped_column(String(3), nullable=False)
     currency_code: Mapped[str] = mapped_column(String(3), nullable=False)
     fiscal_year_start_month: Mapped[int] = mapped_column(

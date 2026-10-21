@@ -1,11 +1,11 @@
 """SalaryStructure application service."""
 
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import NotFoundException, ValidationException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.service.audit_service import AuditService
 from modules.payroll.domain.exceptions import InvalidSalaryStructureState
@@ -75,10 +75,12 @@ class SalaryStructureService:
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
+        if cid is None:
+            raise ValidationException(
+                "Select a company in the header before creating a salary structure."
+            )
         if not fields.get("structure_code"):
-            import uuid as _uuid
-
-            fields["structure_code"] = f"STR-{str(_uuid.uuid4())[:8].upper()}"
+            fields["structure_code"] = f"STR-{str(uuid4())[:8].upper()}"
         fields.setdefault("currency_code", "INR")
         fields.setdefault("status", "draft")
         fields = _apply_ctc_split(fields)

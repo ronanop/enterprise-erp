@@ -432,11 +432,19 @@ export type PayslipRecord = {
   bankAccount: string;
   presentDays: number;
   leaveDays: number;
+  /** Paid-leave days. `leaveDays` is the same figure for older slips. */
+  unpaidLeaveDays?: number;
+  /** Scheduled working days, excluding weekly offs and holidays. */
+  scheduledWorkingDays?: number;
+  /** Set only when attendance counted late marks. */
+  lateCount?: number;
   payableDays?: number;
   periodDays?: number;
   lopDays?: number;
   weeklyOff?: number;
   holidays?: number;
+  paymentStatus?: string;
+  employerContribution?: number;
   earnings: { label: string; amount: number }[];
   deductions: { label: string; amount: number }[];
   gross: number;

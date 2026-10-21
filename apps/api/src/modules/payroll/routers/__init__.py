@@ -45,6 +45,7 @@ from modules.payroll.schemas import (
     PayrollPeriodResponse,
     PayrollPeriodUpdate,
     PayrollPolicyCreate,
+    PayrollPolicyEnsureRequest,
     PayrollPolicyResponse,
     PayrollPolicyUpdate,
     PayrollPostingCreate,
@@ -315,11 +316,13 @@ def list_payroll_policies(
 def ensure_default_payroll_policy(
     ctx: Annotated[TenantContext, Depends(require_permission("payroll.period:create"))],
     db: Annotated[Session, Depends(get_db)],
+    body: PayrollPolicyEnsureRequest | None = None,
     company_id: UUID | None = None,
 ):
+    target = company_id or (body.company_id if body is not None else None)
     return APIResponse(
         message="OK",
-        data=PayrollPolicyService(db).ensure_default_active(ctx, company_id),
+        data=PayrollPolicyService(db).ensure_default_active(ctx, target),
     )
 
 

@@ -2,6 +2,7 @@
  * Enterprise Payroll Management service — local rich store + payroll API merge.
  */
 
+import { payrollTargetCompanyIds } from "@/lib/payroll-company";
 import { formatInr, listAllPayrollRows, loadPayrollOverview } from "@/services/payroll-service";
 import { apiClient, resourceService } from "@/services/api-client";
 import type {
@@ -679,6 +680,16 @@ function replaceRunInStore(row: PayrollRun): PayrollRun[] {
   return all;
 }
 
+function payslipRichness(slip: PayslipRecord): number {
+  let score = slip.earnings.length + slip.deductions.length;
+  if (slip.earnings.some((row) => !/^(gross|ctc \/ gross)$/i.test(row.label))) score += 20;
+  if (slip.deductions.some((row) => !/^deductions$/i.test(row.label))) score += 10;
+  if (slip.scheduledWorkingDays) score += 2;
+  if (slip.unpaidLeaveDays != null) score += 1;
+  if (slip.paymentStatus) score += 1;
+  return score;
+}
+
 function uniquePayslips(rows: PayslipRecord[]): PayslipRecord[] {
   const byEmpMonth = new Map<string, PayslipRecord>();
   for (const p of rows) {
@@ -686,11 +697,140 @@ function uniquePayslips(rows: PayslipRecord[]): PayslipRecord[] {
     const who = (p.employeeId || p.employeeCode || p.employeeName || p.id).toLowerCase();
     const key = `${who}|${ym}`;
     const prev = byEmpMonth.get(key);
-    if (!prev || (p.generatedAt || "") >= (prev.generatedAt || "")) {
+    if (!prev) {
+      byEmpMonth.set(key, p);
+      continue;
+    }
+    const nextScore = payslipRichness(p);
+    const prevScore = payslipRichness(prev);
+    if (nextScore > prevScore || (nextScore === prevScore && (p.generatedAt || "") >= (prev.generatedAt || ""))) {
       byEmpMonth.set(key, p);
     }
   }
   return [...byEmpMonth.values()];
+}
+
+function monthFromPayslipPayload(row: Record<string, unknown>, fallback = ""): string {
+  const direct = String(row.month ?? row.payroll_month ?? "").slice(0, 7);
+  if (/^\d{4}-\d{2}$/.test(direct)) return direct;
+  const json = (row.payslip_json as Record<string, unknown> | null) ?? {};
+  const period = (json.period as Record<string, unknown> | null) ?? {};
+  const code = String(period.code ?? "");
+  const coded = /^PAY-(\d{4})-(\d{2})$/.exec(code);
+  if (coded) return `${coded[1]}-${coded[2]}`;
+  const start = String(period.start ?? "").slice(0, 7);
+  if (/^\d{4}-\d{2}$/.test(start)) return start;
+  const fb = fallback.slice(0, 7);
+  return /^\d{4}-\d{2}$/.test(fb) ? fb : "";
+}
+
+function optionalCount(value: unknown): number | undefined {
+  if (value == null || value === "") return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function componentLines(breakdown: Record<string, unknown>, gross: number): {
+  earnings: { label: string; amount: number }[];
+  deductions: { label: string; amount: number }[];
+} {
+  const core = [
+    { label: "Basic", amount: Number(breakdown.basic ?? 0) },
+    { label: "HRA", amount: Number(breakdown.hra ?? 0) },
+    { label: "Special Allowance", amount: Number(breakdown.special_allowance ?? 0) },
+  ];
+  const coreSum = core.reduce((sum, row) => sum + row.amount, 0);
+  const earnings = core.filter((row) => row.amount > 0);
+  let room = gross - coreSum;
+  for (const row of [
+    { label: "Overtime", amount: Number(breakdown.overtime_pay ?? 0) },
+    { label: "Bonus", amount: Number(breakdown.bonus ?? 0) },
+    { label: "Arrears", amount: Number(breakdown.arrears ?? 0) },
+    { label: "Performance Incentive", amount: Number(breakdown.incentives ?? 0) },
+  ]) {
+    if (row.amount > 0 && room + 0.05 >= row.amount) {
+      earnings.push(row);
+      room -= row.amount;
+    }
+  }
+  const deductions = [
+    { label: "Employee PF", amount: Number(breakdown.pf_employee ?? 0) },
+    { label: "Employer PF", amount: Number(breakdown.pf_employer ?? 0) },
+    { label: "ESI", amount: Number(breakdown.esi_employee ?? 0) },
+    { label: "Professional Tax", amount: Number(breakdown.professional_tax ?? 0) },
+    { label: "Other Deductions", amount: Number(breakdown.deduction_adjustments ?? 0) },
+  ].filter((row) => row.amount > 0);
+  return {
+    earnings: earnings.length ? earnings : [{ label: "Gross", amount: gross }],
+    deductions,
+  };
+}
+
+function payslipRecordFromApi(row: Record<string, unknown>, monthFallback = ""): PayslipRecord {
+  const json = (row.payslip_json as Record<string, unknown> | null) ?? {};
+  const att = (json.attendance as Record<string, unknown> | null) ?? {};
+  const summary = (json.summary as Record<string, unknown> | null) ?? {};
+  const emp = (json.employee as Record<string, unknown> | null) ?? {};
+  const day = (json.day_summary as Record<string, unknown> | null) ?? (json.day_summary_json as Record<string, unknown> | null);
+  const counts = (att.present == null && day && typeof day.counts === "object" ? day.counts : att) as Record<string, unknown>;
+  const gross = Number(row.gross_salary ?? summary.gross ?? json.gross ?? 0);
+  const totalDeductions = Number(row.total_deductions ?? summary.total_deductions ?? 0);
+  const net = Number(row.net_salary ?? summary.net_pay ?? 0);
+  const listedEarnings = Array.isArray(json.earnings) ? json.earnings : [];
+  const listedDeductions = Array.isArray(json.deductions) ? json.deductions : [];
+  const fromComponents = listedEarnings.length ? null : componentLines(json, gross);
+  const earnings = listedEarnings.length
+    ? listedEarnings.map((entry) => ({
+        label: String((entry as Record<string, unknown>).label ?? "Earning"),
+        amount: Number((entry as Record<string, unknown>).amount ?? 0),
+      }))
+    : (fromComponents?.earnings ?? [{ label: "Gross", amount: gross }]);
+  let deductions = listedDeductions.length
+    ? listedDeductions
+        .filter((entry) => (entry as Record<string, unknown>).code !== "pf_total")
+        .map((entry) => ({
+          label: String((entry as Record<string, unknown>).label ?? "Deduction"),
+          amount: Number((entry as Record<string, unknown>).amount ?? 0),
+        }))
+    : (fromComponents?.deductions ?? []);
+  if (!deductions.some((row) => row.amount > 0) && totalDeductions > 0) {
+    deductions = [{ label: "Deductions", amount: totalDeductions }];
+  }
+  const month = monthFromPayslipPayload(row, monthFallback);
+  const employer = Number(summary.employer_contribution ?? json.employer_contribution ?? json.pf_employer ?? 0);
+  const payableRaw = att.payable_days ?? att.paid_days ?? json.paid_days;
+  return {
+    id: String(row.id ?? crypto.randomUUID()),
+    payslipCode: String(row.document_number ?? nextCode("slip", "PSL")),
+    runId: String(row.payroll_run_id ?? ""),
+    employeeId: String(row.employee_id ?? emp.id ?? ""),
+    employeeName: String(row.employee_name ?? emp.name ?? row.employee_id ?? "Employee"),
+    employeeCode: String(row.employee_code ?? emp.code ?? emp.employee_code ?? ""),
+    month,
+    monthLabel: monthLabel(month),
+    department: "—",
+    bankAccount: "",
+    presentDays: Number(counts.present ?? 0),
+    leaveDays: Number(counts.paid_leave ?? counts.leave_days ?? att.leave_days ?? 0),
+    unpaidLeaveDays: optionalCount(counts.unpaid_leave),
+    scheduledWorkingDays: optionalCount(counts.scheduled_working),
+    lateCount: optionalCount(counts.late_count ?? counts.late),
+    payableDays: payableRaw == null || payableRaw === "" ? undefined : Number(payableRaw),
+    periodDays: Number(att.period_days ?? json.period_days ?? SALARY_DAY_BASIS) || SALARY_DAY_BASIS,
+    lopDays: Number(att.lop_days ?? counts.lop ?? json.lop_days ?? 0),
+    weeklyOff: Number(att.week_off ?? counts.week_off ?? 0) || undefined,
+    holidays: Number(att.holiday ?? counts.holiday ?? 0) || undefined,
+    paymentStatus: String(row.payment_status ?? "") || undefined,
+    employerContribution: employer > 0 ? employer : undefined,
+    earnings,
+    deductions,
+    gross,
+    totalDeductions,
+    net,
+    taxRegime: "new",
+    generatedAt: String(row.issued_at ?? row.created_at ?? row.updated_at ?? nowIso()),
+    exportText: typeof json.export_text === "string" ? json.export_text : undefined,
+  };
 }
 
 function payslipsFromRunLines(run: PayrollRun, lines: PayrollRunEmployeeLine[]): PayslipRecord[] {
@@ -1109,27 +1249,7 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
     }
 
     if (overview.payslips.length) {
-      const fromApi = overview.payslips.map((p, i) => ({
-        id: String(p.id ?? crypto.randomUUID()),
-        payslipCode: String(p.document_number ?? `PSL-${String(i + 1).padStart(6, "0")}`),
-        runId: String(p.payroll_run_id ?? ""),
-        employeeId: String(p.employee_id ?? ""),
-        employeeName: String(p.employee_name ?? "Employee"),
-        employeeCode: String(p.employee_code ?? ""),
-        month: String(p.month ?? p.payroll_month ?? "").slice(0, 7) || "2026-07",
-        monthLabel: monthLabel(String(p.month ?? p.payroll_month ?? "").slice(0, 7) || "2026-07"),
-        department: "—",
-        bankAccount: "XXXX",
-        presentDays: 22,
-        leaveDays: 0,
-        earnings: [{ label: "Gross", amount: Number(p.gross_earnings ?? p.gross_salary ?? 0) }],
-        deductions: [{ label: "Deductions", amount: Number(p.total_deductions ?? 0) }],
-        gross: Number(p.gross_earnings ?? p.gross_salary ?? 0),
-        totalDeductions: Number(p.total_deductions ?? 0),
-        net: Number(p.net_pay ?? p.net_salary ?? 0),
-        taxRegime: "new" as const,
-        generatedAt: String(p.issued_at ?? p.created_at ?? p.updated_at ?? ""),
-      }));
+      const fromApi = overview.payslips.map((p) => payslipRecordFromApi(p));
       payslips = uniquePayslips([...fromApi, ...payslips]);
       save(K.payslips, payslips);
     }
@@ -1199,7 +1319,12 @@ export async function createStructure(
   input: Omit<SalaryStructure, "id" | "createdAt">,
 ): Promise<SalaryStructure> {
   const prepared = withExcelAmounts(input);
-  const payload = structureApiPayload(prepared);
+  const companies = await payrollTargetCompanyIds();
+  const companyId = companies[0];
+  if (!companyId) {
+    throw new Error("Select a company in the header before creating a salary structure.");
+  }
+  const payload = { ...structureApiPayload(prepared), company_id: companyId };
   const res = await resourceService.create<Record<string, unknown>>(
     "/payroll/salary-structures",
     payload,
@@ -1915,48 +2040,12 @@ export async function addLoan(
 }
 
 function mapApiPayslipToRecord(p: Record<string, unknown>, run: PayrollRun): PayslipRecord {
-  const json = (p.payslip_json as Record<string, unknown> | null) ?? {};
-  const att = (json.attendance as Record<string, unknown> | null) ?? {};
-  const emp = (json.employee as Record<string, unknown> | null) ?? {};
-  const earningsRaw = Array.isArray(json.earnings) ? json.earnings : [];
-  const deductionsRaw = Array.isArray(json.deductions) ? json.deductions : [];
-  const gross = Number(p.gross_salary ?? (json.summary as Record<string, unknown>)?.gross ?? 0);
-  const totalDeductions = Number(p.total_deductions ?? (json.summary as Record<string, unknown>)?.total_deductions ?? 0);
-  const net = Number(p.net_salary ?? (json.summary as Record<string, unknown>)?.net_pay ?? 0);
+  const slip = payslipRecordFromApi(p, run.month.slice(0, 7));
   return {
-    id: String(p.id ?? crypto.randomUUID()),
-    payslipCode: String(p.document_number ?? nextCode("slip", "PSL")),
-    runId: String(p.payroll_run_id ?? run.id),
-    employeeId: String(p.employee_id ?? emp.id ?? ""),
-    employeeName: String(p.employee_name ?? emp.name ?? p.employee_id ?? ""),
-    employeeCode: String(p.employee_code ?? emp.code ?? emp.employee_code ?? ""),
-    month: run.month,
-    monthLabel: run.monthLabel,
-    department: "—",
-    bankAccount: "—",
-    presentDays: Number(att.present ?? att.paid_days ?? 0),
-    leaveDays: Number(att.paid_leave ?? att.leave_days ?? 0),
-    payableDays: Number(att.payable_days ?? att.paid_days ?? 0),
-    periodDays: Number(att.period_days ?? SALARY_DAY_BASIS),
-    lopDays: Number(att.lop_days ?? 0),
-    weeklyOff: Number(att.week_off ?? 0),
-    holidays: Number(att.holiday ?? 0),
-    earnings: earningsRaw.map((e) => ({
-      label: String((e as Record<string, unknown>).label ?? "Earning"),
-      amount: Number((e as Record<string, unknown>).amount ?? 0),
-    })),
-    deductions: deductionsRaw
-      .filter((d) => (d as Record<string, unknown>).code !== "pf_total")
-      .map((d) => ({
-        label: String((d as Record<string, unknown>).label ?? "Deduction"),
-        amount: Number((d as Record<string, unknown>).amount ?? 0),
-      })),
-    gross,
-    totalDeductions,
-    net,
-    taxRegime: "new",
-    generatedAt: nowIso(),
-    exportText: typeof json.export_text === "string" ? json.export_text : undefined,
+    ...slip,
+    runId: slip.runId || run.id,
+    month: slip.month || run.month.slice(0, 7),
+    monthLabel: slip.month ? slip.monthLabel : run.monthLabel,
   };
 }
 
@@ -2040,32 +2129,46 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
               /* issue optional */
             }
           }
-          slips.push({
-            id: slipId || crypto.randomUUID(),
-            payslipCode: String(created.data?.document_number ?? nextCode("slip", "PSL")),
-            runId,
-            employeeId,
-            employeeName: String(created.data?.employee_name ?? employeeId),
-            employeeCode: String(created.data?.employee_code ?? ""),
-            month: run.month.slice(0, 7),
-            monthLabel: monthLabel(run.month),
-            department: "—",
-            bankAccount: "—",
-            presentDays: Number(line.day_summary_json && (line.day_summary_json as Record<string, unknown>).counts
-              ? ((line.day_summary_json as { counts?: { present?: number } }).counts?.present ?? 0)
-              : 0),
-            leaveDays: Number(line.leave_days ?? 0),
-            payableDays: Number(line.paid_days ?? 0),
-            periodDays: Number(line.period_days ?? SALARY_DAY_BASIS),
-            lopDays: Number(line.lop_days ?? 0),
-            earnings: [{ label: "Gross", amount: gross }],
-            deductions: [{ label: "Deductions", amount: deductions }],
-            gross,
-            totalDeductions: deductions,
-            net,
-            taxRegime: "new",
-            generatedAt: nowIso(),
-          });
+          const day = (line.day_summary_json as Record<string, unknown> | null) ?? {};
+          const counts = (day.counts as Record<string, unknown> | null) ?? {};
+          const saved = (created.data ?? {}) as Record<string, unknown>;
+          slips.push(
+            mapApiPayslipToRecord(
+              {
+                ...saved,
+                id: slipId || saved.id,
+                payroll_run_id: runId,
+                employee_id: employeeId,
+                gross_salary: gross,
+                total_deductions: deductions,
+                net_salary: net,
+                payslip_json: {
+                  ...breakdown,
+                  attendance: {
+                    period_days: line.period_days,
+                    paid_days: line.paid_days,
+                    payable_days: line.paid_days,
+                    lop_days: line.lop_days,
+                    leave_days: line.leave_days,
+                    present: counts.present,
+                    paid_leave: counts.paid_leave ?? line.leave_days,
+                    unpaid_leave: counts.unpaid_leave,
+                    scheduled_working: counts.scheduled_working,
+                    late_count: counts.late,
+                    week_off: counts.week_off,
+                    holiday: counts.holiday,
+                  },
+                  summary: {
+                    gross,
+                    total_deductions: deductions,
+                    net_pay: net,
+                    employer_contribution: line.employer_contribution,
+                  },
+                },
+              },
+              run,
+            ),
+          );
         }
         if (slips.length) {
           persistPayslipsForRun(run, slips);

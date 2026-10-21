@@ -646,6 +646,10 @@ class PayrollSummaryResponse(OrmModel):
     version: int
 
 
+class PayrollPolicyEnsureRequest(BaseModel):
+    company_id: UUID | None = None
+
+
 class PayrollPolicyCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID | None = None

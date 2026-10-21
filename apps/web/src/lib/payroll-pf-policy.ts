@@ -1,3 +1,4 @@
+import { payrollTargetCompanyIds } from "@/lib/payroll-company";
 import { resourceService } from "@/services/api-client";
 import { isPfDeductionLabel } from "@/lib/payroll-cycle";
 
@@ -70,8 +71,16 @@ export function getCachedPayrollPfPolicy(): PayrollPfPolicy {
 
 export async function loadResolvedPayrollPfPolicy(): Promise<PayrollPfPolicy> {
   try {
-    await resourceService.create("/payroll/policies/ensure-default", {}).catch(() => null);
-    const res = await resourceService.list<Record<string, unknown>>("/payroll/policies/resolved");
+    const companyId = (await payrollTargetCompanyIds())[0];
+    if (companyId) {
+      await resourceService
+        .create("/payroll/policies/ensure-default", { company_id: companyId })
+        .catch(() => null);
+    }
+    const res = await resourceService.list<Record<string, unknown>>(
+      "/payroll/policies/resolved",
+      companyId ? { company_id: companyId } : undefined,
+    );
     const row = (res.data ?? {}) as Record<string, unknown>;
     memory = parsePayrollPfPolicy(row);
   } catch {

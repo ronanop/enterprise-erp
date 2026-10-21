@@ -19,6 +19,14 @@ class CompanyEntity:
     timezone: str = "UTC"
     version: int = 1
     is_deleted: bool = False
+    tax_number: str | None = None
+    tan_number: str | None = None
+    logo_url: str | None = None
+    address_line1: str | None = None
+    address_line2: str | None = None
+    city: str | None = None
+    state_name: str | None = None
+    postal_code: str | None = None
 
 
 @dataclass

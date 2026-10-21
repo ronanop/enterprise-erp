@@ -65,7 +65,8 @@ export type FieldDef = {
     | "searchable"
     | "textarea"
     | "checkbox"
-    | "equipment_list";
+    | "equipment_list"
+    | "image";
   required?: boolean;
   readOnly?: boolean;
   options?: { value: string; label: string }[];
@@ -103,6 +104,38 @@ function toFormValue(value: unknown, type?: FieldDef["type"]): string {
     return s === "true" || s === "1" || s === "yes" ? "true" : "false";
   }
   return String(value);
+}
+
+function readLogoFile(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith("image/") || file.size > 2_000_000) {
+      reject(new Error("logo"));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("logo"));
+    reader.onload = () => {
+      const src = String(reader.result ?? "");
+      const img = new Image();
+      img.onload = () => {
+        const max = 480;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          reject(new Error("logo"));
+          return;
+        }
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.72));
+      };
+      img.onerror = () => reject(new Error("logo"));
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  });
 }
 
 function isFormChecked(value: string | undefined): boolean {
@@ -919,7 +952,9 @@ export function SetupEntityPanel({
             <div
               key={f.key}
               className={
-                f.type === "textarea" || f.type === "equipment_list" ? "sm:col-span-2" : undefined
+                f.type === "textarea" || f.type === "equipment_list" || f.type === "image"
+                  ? "sm:col-span-2"
+                  : undefined
               }
             >
               <SetupField label={f.label} required={f.required} hint={f.hint}>
@@ -977,6 +1012,33 @@ export function SetupEntityPanel({
                     disabled={readOnly || f.readOnly}
                     onChange={(v) => setForm((prev) => ({ ...prev, [f.key]: v }))}
                   />
+                ) : f.type === "image" ? (
+                  <div className="space-y-2">
+                    {form[f.key] ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={form[f.key]}
+                        alt=""
+                        className="h-12 w-auto max-w-[160px] object-contain"
+                      />
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No logo uploaded.</p>
+                    )}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      disabled={readOnly || f.readOnly}
+                      className="block w-full cursor-pointer text-xs file:mr-2 file:cursor-pointer file:rounded-md file:border file:border-border file:bg-background file:px-2 file:py-1"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (!file) return;
+                        void readLogoFile(file).then((dataUrl) => {
+                          setForm((prev) => ({ ...prev, [f.key]: dataUrl }));
+                        }).catch(() => toast("Use a PNG or JPEG logo under 2 MB", "error"));
+                      }}
+                    />
+                  </div>
                 ) : f.type === "checkbox" ? (
                   <div className="flex h-8 items-center gap-2 text-sm">
                     <input

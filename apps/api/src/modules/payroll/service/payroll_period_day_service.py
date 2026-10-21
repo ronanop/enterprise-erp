@@ -255,6 +255,7 @@ class PayrollPeriodDayService:
             "half_day": 0,
             "paid_leave": 0,
             "unpaid_leave": 0,
+            "late": 0,
             "lop": 0,
             "sandwich_lop": 0,
             "other_attendance": 0,
@@ -294,6 +295,8 @@ class PayrollPeriodDayService:
             status = attendance_by_date.get(d)
             if status in {"present", "late", "work_from_home", "on_duty", "miss_punch"}:
                 counts["present"] += 1
+                if status == "late":
+                    counts["late"] += 1
             elif status == "absent":
                 counts["absent"] += 1
             elif status == "half_day":
