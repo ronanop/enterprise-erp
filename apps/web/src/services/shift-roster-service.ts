@@ -1,6 +1,7 @@
 import { resourceService } from "@/services/api-client";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import { cacheRosterAssignments } from "@/services/hr-master-connector";
+import { listPeopleRoles } from "@/services/people-role-service";
 import { isWeeklyOffDay } from "@/lib/hr/weekly-off-rules";
 import { consumeShiftCode, syncShiftCodesFromList } from "@/config/shift-id";
 import type { HrRow } from "@/services/hr-service";
@@ -20,6 +21,30 @@ import type {
 } from "@/types/shift-roster-management";
 import { DEFAULT_SHIFT_EXTENSION } from "@/types/shift-roster-management";
 import { devError, devWarn } from "@/lib/dev-log";
+
+type EmpLookup = {
+  id: string;
+  displayName: string;
+  employeeCode: string;
+  departmentName: string;
+  managerId: string;
+  managerName: string;
+  managerCode: string;
+};
+
+function formatAssignDate(raw: string | null | undefined): string {
+  const s = String(raw ?? "").slice(0, 10);
+  if (!s || s.startsWith("1970") || s.startsWith("0001") || s === "null") return "";
+  const y = Number(s.slice(0, 4));
+  if (!Number.isFinite(y) || y < 1990) return "";
+  return s;
+}
+
+function personLabel(first: string, last: string, code: string, fallback = ""): string {
+  const name = `${first} ${last}`.trim() || fallback.trim();
+  if (name && code && !name.includes(code)) return `${name} (${code})`;
+  return name || code || fallback;
+}
 
 const EXT_KEY = "erp_shift_extensions_v1";
 const ASSIGN_EXT_KEY = "erp_shift_assignment_ext_v1";
@@ -72,6 +97,48 @@ function parseTime(t: unknown): string {
   return m ? m[1] : t;
 }
 
+function normalizeRows(data: unknown): HrRow[] {
+  if (Array.isArray(data)) {
+    return data.filter((row): row is HrRow => !!row && typeof row === "object");
+  }
+  if (data && typeof data === "object") {
+    const obj = data as Record<string, unknown>;
+    for (const key of ["items", "results", "records", "rows", "data"]) {
+      if (Array.isArray(obj[key])) return normalizeRows(obj[key]);
+    }
+  }
+  return [];
+}
+
+function emptyDirectory(): ShiftRosterDirectory {
+  return {
+    shifts: [],
+    assignments: [],
+    rotations: [],
+    swaps: [],
+    rosterCells: readJson<RosterCell[]>(ROSTER_KEY, []),
+    weeklyOffRules: readJson<WeeklyOffRule[]>(WEEKLY_OFF_KEY, ["sunday"]),
+    weeklyOffAlternateSaturdayStart: readJson<string>(WEEKLY_OFF_ALT_START_KEY, ""),
+    holidays: [],
+    options: { branches: [], employees: [], managers: [], shifts: [] },
+  };
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(fallback), ms);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        resolve(fallback);
+      });
+  });
+}
+
 function mergeShift(row: HrRow, ext: ShiftExtension): ShiftRecord {
   return {
     id: String(row.id),
@@ -117,27 +184,142 @@ export type ShiftRosterDirectory = {
 };
 
 export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> {
-  const [shiftRes, assignRes, holidayRes, empDir, branches, weeklyOffRes] = await Promise.all([
-    resourceService.list("/hr/shifts").catch(() => ({ data: [] })),
-    resourceService.list("/hr/shift-assignments").catch(() => ({ data: [] })),
-    resourceService.list("/hr/holiday-calendars").catch(() => ({ data: [] })),
-    loadEmployeeDirectory().catch(() => ({
-      records: [],
-      options: { branches: [], departments: [], designations: [], managers: [], shifts: [] },
-      errors: [],
-    })),
-    resourceService.list("/branches").catch(() => ({ data: [] })),
-    resourceService.list("/hr/weekly-off-policies").catch(() => ({ data: [] })),
-  ]);
+  try {
+    return await loadShiftRosterDirectoryInner();
+  } catch (err) {
+    devError("loadShiftRosterDirectory failed", err);
+    return emptyDirectory();
+  }
+}
 
-  const shiftRows = (Array.isArray(shiftRes.data) ? shiftRes.data : []) as HrRow[];
-  const assignRows = (Array.isArray(assignRes.data) ? assignRes.data : []) as HrRow[];
+async function loadShiftRosterDirectoryInner(): Promise<ShiftRosterDirectory> {
+  const emptyEmpDir = {
+    records: [] as Awaited<ReturnType<typeof loadEmployeeDirectory>>["records"],
+    options: {
+      branches: [] as { id: string; label: string }[],
+      departments: [] as { id: string; label: string }[],
+      designations: [] as { id: string; label: string }[],
+      managers: [] as { id: string; label: string }[],
+      shifts: [] as { id: string; label: string }[],
+    },
+    errors: [] as string[],
+  };
+  const listQ = { page_size: 200, page: 1 };
+
+  const [shiftRes, assignRes, holidayRes, empDir, branches, weeklyOffRes, peopleRoles] =
+    await Promise.all([
+      resourceService.list("/hr/shifts", listQ).catch(() => ({ data: [] as unknown })),
+      resourceService.list("/hr/shift-assignments", listQ).catch(() => ({ data: [] as unknown })),
+      resourceService.list("/hr/holiday-calendars", listQ).catch(() => ({ data: [] as unknown })),
+      withTimeout(loadEmployeeDirectory().catch(() => emptyEmpDir), 20_000, emptyEmpDir),
+      resourceService.list("/branches", listQ).catch(() => ({ data: [] as unknown })),
+      resourceService.list("/hr/weekly-off-policies", listQ).catch(() => ({ data: [] as unknown })),
+      // Company-scoped names — /employees is branch-scoped and drops HQ staff.
+      withTimeout(listPeopleRoles().catch(() => []), 15_000, [] as Awaited<ReturnType<typeof listPeopleRoles>>),
+    ]);
+
+  const shiftRows = normalizeRows(shiftRes.data);
+  const assignRows = normalizeRows(assignRes.data);
   const shiftExts = readJson<Record<string, ShiftExtension>>(EXT_KEY, {});
   const assignExts = readJson<Record<string, { assignmentType: string; notes: string; effectiveTo: string }>>(ASSIGN_EXT_KEY, {});
 
   syncShiftCodesFromList(shiftRows.map((s) => String(s.shift_code ?? "")));
 
-  const empById = new Map(empDir.records.map((e) => [e.id, e]));
+  const empLookup = new Map<string, EmpLookup>();
+  for (const e of empDir.records) {
+    empLookup.set(e.id, {
+      id: e.id,
+      displayName: e.displayName,
+      employeeCode: e.employeeCode,
+      departmentName: e.departmentName || "-",
+      managerId: e.reportingManagerId || "",
+      managerName: e.reportingManagerName || "",
+      managerCode: "",
+    });
+  }
+  const roleById = new Map(peopleRoles.map((r) => [r.id, r]));
+  for (const r of peopleRoles) {
+    const mgr = r.reporting_manager_id ? roleById.get(r.reporting_manager_id) : undefined;
+    const prev = empLookup.get(r.id);
+    empLookup.set(r.id, {
+      id: r.id,
+      displayName: prev?.displayName || r.display_name || `${r.first_name} ${r.last_name}`.trim(),
+      employeeCode: prev?.employeeCode || r.employee_code || "",
+      departmentName: prev?.departmentName && prev.departmentName !== "-" ? prev.departmentName : "-",
+      managerId: prev?.managerId || r.reporting_manager_id || "",
+      managerName:
+        prev?.managerName ||
+        r.reporting_manager_name ||
+        (mgr ? mgr.display_name : "") ||
+        "",
+      managerCode: prev?.managerCode || r.reporting_manager_code || mgr?.employee_code || "",
+    });
+  }
+
+  const assignEmpIds = [
+    ...new Set(assignRows.map((row) => String(row.employee_id ?? "")).filter(Boolean)),
+  ];
+  // Hydrate any assignment employee missing from directory, or missing department.
+  const needsHydrate = assignEmpIds.filter((id) => {
+    const hit = empLookup.get(id);
+    return !hit || !hit.departmentName || hit.departmentName === "-";
+  });
+  const deptRes = await resourceService
+    .list("/departments", { page_size: 500 })
+    .catch(() => ({ data: [] as unknown }));
+  const deptRows = (Array.isArray(deptRes.data) ? deptRes.data : []) as HrRow[];
+  const deptById = new Map(
+    deptRows.map((d) => [String(d.id), String(d.department_name ?? d.name ?? "")]),
+  );
+
+  await Promise.all(
+    needsHydrate.map(async (id) => {
+      try {
+        const res = await resourceService.get<HrRow>("/employees", id);
+        const e = res.data;
+        if (!e?.id) return;
+        const code = String(e.employee_code ?? "");
+        const name = personLabel(
+          String(e.first_name ?? ""),
+          String(e.last_name ?? ""),
+          code,
+          String(e.display_name ?? ""),
+        );
+        const deleted = Boolean(e.is_deleted);
+        const prev = empLookup.get(id);
+        const deptName =
+          (prev?.departmentName && prev.departmentName !== "-"
+            ? prev.departmentName
+            : "") ||
+          deptById.get(String(e.department_id ?? "")) ||
+          "-";
+        empLookup.set(id, {
+          id,
+          displayName:
+            prev?.displayName ||
+            (deleted && name ? `${name} (inactive)` : name || code || id.slice(0, 8)),
+          employeeCode: prev?.employeeCode || code,
+          departmentName: deptName,
+          managerId: prev?.managerId || (e.reporting_manager_id ? String(e.reporting_manager_id) : ""),
+          managerName: prev?.managerName || "",
+          managerCode: prev?.managerCode || "",
+        });
+      } catch {
+        /* keep fallback */
+      }
+    }),
+  );
+
+  // Fill manager names for lookups that only have managerId.
+  for (const emp of empLookup.values()) {
+    if (emp.managerId && !emp.managerName) {
+      const mgr = empLookup.get(emp.managerId);
+      if (mgr) {
+        emp.managerName = mgr.displayName;
+        emp.managerCode = mgr.employeeCode;
+      }
+    }
+  }
 
   const shifts = shiftRows.map((row) => {
     const id = String(row.id);
@@ -146,30 +328,34 @@ export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> 
 
   const shiftById = new Map(shifts.map((s) => [s.id, s]));
 
-  const branchRows = (Array.isArray(branches.data) ? branches.data : []) as HrRow[];
+  const branchRows = normalizeRows(branches.data);
   const branchMap = new Map(
     branchRows.map((b) => [String(b.id), String(b.branch_name ?? b.name ?? b.id)]),
   );
 
   const assignments: ShiftAssignmentRecord[] = assignRows.map((row) => {
     const id = String(row.id);
-    const emp = empById.get(String(row.employee_id));
+    const empId = String(row.employee_id ?? "");
+    const emp = empLookup.get(empId);
     const sh = shiftById.get(String(row.shift_id));
     const ax = assignExts[id];
+    const from = formatAssignDate(row.effective_from);
+    const toRaw = ax?.effectiveTo || String(row.effective_to ?? "");
+    const to = formatAssignDate(toRaw);
     return {
       id,
       documentNumber: String(row.document_number ?? id.slice(0, 8)),
-      employeeId: String(row.employee_id),
-      employeeName: emp?.displayName ?? String(row.employee_id).slice(0, 8),
+      employeeId: empId,
+      employeeName: emp?.displayName || emp?.employeeCode || "Unknown employee",
       employeeCode: emp?.employeeCode ?? "",
-      departmentName: emp?.departmentName ?? "-",
+      departmentName: emp?.departmentName && emp.departmentName !== "-" ? emp.departmentName : "-",
       branchId: String(row.branch_id ?? ""),
       branchName: branchMap.get(String(row.branch_id ?? "")) ?? "-",
       shiftId: String(row.shift_id),
       shiftName: sh?.shiftName ?? "-",
       shiftColor: sh?.extension.color ?? "#64748b",
-      effectiveFrom: String(row.effective_from ?? ""),
-      effectiveTo: ax?.effectiveTo ?? String(row.effective_to ?? ""),
+      effectiveFrom: from,
+      effectiveTo: to,
       assignmentType: (ax?.assignmentType ?? "permanent") as ShiftAssignmentRecord["assignmentType"],
       notes: ax?.notes ?? "",
       status: String(row.status ?? "draft"),
@@ -188,7 +374,7 @@ export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> 
   );
 
   const holidays: { date: string; name: string; type: string }[] = [];
-  for (const cal of (Array.isArray(holidayRes.data) ? holidayRes.data : []) as HrRow[]) {
+  for (const cal of normalizeRows(holidayRes.data)) {
     const json = cal.holidays_json;
     if (Array.isArray(json)) {
       for (const h of json) {
@@ -203,7 +389,7 @@ export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> 
     }
   }
 
-  const weeklyOffRows = (Array.isArray(weeklyOffRes.data) ? weeklyOffRes.data : []) as HrRow[];
+  const weeklyOffRows = normalizeRows(weeklyOffRes.data);
   const activePolicy =
     weeklyOffRows.find((p) => p.is_default && p.status === "active") ??
     weeklyOffRows.find((p) => p.status === "active") ??
@@ -219,11 +405,10 @@ export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> 
     : readJson<string>(WEEKLY_OFF_ALT_START_KEY, "");
 
   const [rotApi, swapApi] = await Promise.all([
-    resourceService.list("/hr/shift-rotations", { page_size: 200 }).catch(() => ({ data: [] })),
-    resourceService.list("/hr/shift-swaps", { page_size: 200 }).catch(() => ({ data: [] })),
+    resourceService.list("/hr/shift-rotations", listQ).catch(() => ({ data: [] as unknown })),
+    resourceService.list("/hr/shift-swaps", listQ).catch(() => ({ data: [] as unknown })),
   ]);
-  const apiRotations = (Array.isArray(rotApi.data) ? rotApi.data : []).map((r) => {
-    const row = r as HrRow;
+  const apiRotations = normalizeRows(rotApi.data).map((row) => {
     let sequence: string[] = [];
     let employeeIds: string[] = [];
     try {
@@ -247,8 +432,7 @@ export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> 
       status: String(row.status ?? "active"),
     } satisfies ShiftRotation;
   });
-  const apiSwaps = (Array.isArray(swapApi.data) ? swapApi.data : []).map((r) => {
-    const row = r as HrRow;
+  const apiSwaps = normalizeRows(swapApi.data).map((row) => {
     const status = String(row.status ?? "draft");
     const workflowStage =
       status === "approved"
@@ -258,10 +442,12 @@ export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> 
           : status === "manager_approved" || status === "submitted"
             ? "manager"
             : "pending";
+    const empId = String(row.employee_id ?? "");
+    const emp = empLookup.get(empId);
     return {
       id: String(row.id),
-      employeeId: String(row.employee_id ?? ""),
-      employeeName: String(row.employee_id ?? ""),
+      employeeId: empId,
+      employeeName: emp?.displayName || emp?.employeeCode || "Unknown employee",
       currentShiftId: String(row.current_shift_id ?? ""),
       requestedShiftId: String(row.requested_shift_id ?? ""),
       swapWithEmployeeId: String(row.swap_with_employee_id ?? ""),
@@ -271,29 +457,40 @@ export async function loadShiftRosterDirectory(): Promise<ShiftRosterDirectory> 
     } satisfies ShiftSwapRequest;
   });
 
-  const employees = empDir.records.map((e) => {
-    const mgr = empById.get(e.reportingManagerId);
+  const employees = [...empLookup.values()].map((e) => {
+    const fromDir = empDir.records.find((r) => r.id === e.id);
     return {
       id: e.id,
       label: e.displayName,
       code: e.employeeCode,
-      departmentId: e.departmentId,
-      departmentName: e.departmentName,
-      managerId: e.reportingManagerId || "",
-      managerCode: mgr?.employeeCode ?? "",
-      managerName: e.reportingManagerName || mgr?.displayName || "",
+      departmentId: fromDir?.departmentId ?? "",
+      departmentName:
+        (fromDir?.departmentName && fromDir.departmentName !== "-"
+          ? fromDir.departmentName
+          : e.departmentName) || "-",
+      managerId: e.managerId || "",
+      managerCode: e.managerCode || "",
+      managerName: e.managerName || "",
     };
   });
+
+  // Prefer directory department names on assignments when available.
+  for (const a of assignments) {
+    const opt = employees.find((e) => e.id === a.employeeId);
+    if (opt?.departmentName && opt.departmentName !== "-") {
+      a.departmentName = opt.departmentName;
+    }
+  }
 
   const managerIdsWithReports = new Set(
     employees.map((e) => e.managerId).filter(Boolean),
   );
-  const managers = empDir.records
-    .filter((e) => managerIdsWithReports.has(e.id))
+  const managers = employees
+    .filter((e) => managerIdsWithReports.has(e.id) || Boolean(roleById.get(e.id)?.is_hiring_manager))
     .map((e) => ({
       id: e.id,
-      label: e.displayName,
-      code: e.employeeCode,
+      label: e.label || e.code || e.id,
+      code: e.code || "",
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
@@ -410,6 +607,31 @@ export async function updateShift(
   });
 }
 
+function writeAssignmentExt(
+  id: string,
+  payload: Pick<AssignShiftPayload, "assignmentType" | "notes" | "effectiveTo">,
+): void {
+  const all = readJson<Record<string, { assignmentType: string; notes: string; effectiveTo: string }>>(
+    ASSIGN_EXT_KEY,
+    {},
+  );
+  all[id] = {
+    assignmentType: payload.assignmentType,
+    notes: payload.notes,
+    effectiveTo: payload.effectiveTo,
+  };
+  writeJson(ASSIGN_EXT_KEY, all);
+}
+
+async function publishAssignment(id: string): Promise<void> {
+  try {
+    await resourceService.action("/hr/shift-assignments", id, "submit", {});
+    await resourceService.action("/hr/shift-assignments", id, "approve", {});
+  } catch (err) {
+    devWarn("Shift assignment publish failed", err);
+  }
+}
+
 export async function assignShift(payload: AssignShiftPayload): Promise<void> {
   const res = await resourceService.create("/hr/shift-assignments", {
     branch_id: payload.branchId,
@@ -418,17 +640,58 @@ export async function assignShift(payload: AssignShiftPayload): Promise<void> {
     effective_from: payload.effectiveFrom,
     effective_to: payload.effectiveTo || null,
   });
-  const id = String((res.data as HrRow).id);
-  const all = readJson<Record<string, { assignmentType: string; notes: string; effectiveTo: string }>>(ASSIGN_EXT_KEY, {});
-  all[id] = {
-    assignmentType: payload.assignmentType,
-    notes: payload.notes,
-    effectiveTo: payload.effectiveTo,
-  };
-  writeJson(ASSIGN_EXT_KEY, all);
+  const id = String((res.data as HrRow)?.id ?? "");
+  if (!id) {
+    throw new Error("Shift assignment API returned no id");
+  }
+  await publishAssignment(id);
+  writeAssignmentExt(id, payload);
   appendShiftAudit({
     action: "shift_assigned",
     detail: `Employee ${payload.employeeId} → shift ${payload.shiftId}`,
+    actor: actor(),
+  });
+}
+
+export async function updateShiftAssignment(
+  id: string,
+  payload: AssignShiftPayload,
+): Promise<void> {
+  await resourceService.update("/hr/shift-assignments", id, {
+    branch_id: payload.branchId,
+    employee_id: payload.employeeId,
+    shift_id: payload.shiftId,
+    effective_from: payload.effectiveFrom,
+    effective_to: payload.effectiveTo || null,
+  });
+  writeAssignmentExt(id, payload);
+  appendShiftAudit({
+    action: "shift_assignment_updated",
+    detail: `Assignment ${id.slice(0, 8)} → shift ${payload.shiftId}`,
+    actor: actor(),
+  });
+}
+
+export async function activateShiftAssignment(id: string): Promise<void> {
+  await publishAssignment(id);
+  appendShiftAudit({
+    action: "shift_assignment_activated",
+    detail: `Assignment ${id.slice(0, 8)} activated`,
+    actor: actor(),
+  });
+}
+
+export async function deleteShiftAssignment(id: string): Promise<void> {
+  await resourceService.delete("/hr/shift-assignments", id);
+  const all = readJson<Record<string, { assignmentType: string; notes: string; effectiveTo: string }>>(
+    ASSIGN_EXT_KEY,
+    {},
+  );
+  delete all[id];
+  writeJson(ASSIGN_EXT_KEY, all);
+  appendShiftAudit({
+    action: "shift_assignment_deleted",
+    detail: `Assignment ${id.slice(0, 8)} removed`,
     actor: actor(),
   });
 }

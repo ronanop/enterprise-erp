@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hmac
+import re
 import secrets
 import socket
 from datetime import date, datetime, timedelta, timezone
@@ -10,8 +11,10 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy.orm import Session
+from zk import ZK
+from zk.exception import ZKErrorResponse, ZKNetworkError
 
-from core.exceptions import AppException, NotFoundException
+from core.exceptions import AppException, ConflictException, NotFoundException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.repository.base import hash_token
 from modules.platform.compat.audit_facade import PlatformAuditFacade
@@ -187,6 +190,37 @@ class CompoffRequestService:
         )
 
 
+_DEVICE_LOCAL_TZ = timezone(timedelta(hours=5, minutes=30))
+_LOG_LOOKBACK_DAYS = 31
+
+_IPV4 = re.compile(
+    r"^(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)$"
+)
+
+
+def _clean_ipv4(value: str | None, label: str) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    if not _IPV4.match(text):
+        raise AppException(f"{label} must be an IPv4 address")
+    return text
+
+
+def _clean_comm_password(value: str | None) -> str | None:
+    """ZKTeco Comm. password: empty or 0 means no password. Otherwise 1–6 digits."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text or text == "0":
+        return "0"
+    if not text.isdigit() or len(text) > 6:
+        raise AppException("Communication password must be 0, or 1 to 6 digits")
+    return text
+
+
 class BiometricDeviceService:
     def __init__(self, db: Session) -> None:
         self._db = db
@@ -290,37 +324,165 @@ class BiometricDeviceService:
         device_model: str = "fingerprint_k40_timelabs",
         ip_address: str | None = None,
         port: int | None = None,
+        subnet_mask: str | None = None,
+        gateway: str | None = None,
+        comm_password: str | None = None,
         location_text: str | None = None,
         status: str = "active",
         generate_api_key: bool = True,
     ):
-        cid = self._scope.resolve_company_id(ctx, company_id)
+        # Module-wide HR admins resolve company_id as None — create must use branch.company_id.
         self._scope.validate_branch_access(ctx, branch_id)
-        if device_model not in {"fingerprint_k40_timelabs"}:
+        cid = self._scope.resolve_create_company_id(
+            ctx, branch_id=branch_id, company_id=company_id
+        )
+        if device_model not in {"fingerprint_k40_timelabs", "fingerprint_k40_zkteco_pro"}:
             raise AppException(f"Unsupported biometric device model: {device_model}")
+        code = (device_code or "").strip()
+        if not code:
+            raise AppException("Device code is required")
         if ip_address is not None and not str(ip_address).strip():
             ip_address = None
         if port is not None and (port < 1 or port > 65535):
             raise AppException("Port must be between 1 and 65535")
+        subnet_clean = _clean_ipv4(subnet_mask, "Subnet mask")
+        gateway_clean = _clean_ipv4(gateway, "Gateway")
+        comm_clean = _clean_comm_password(comm_password)
+
+        existing = self._repo.get_by_code_including_deleted(ctx, cid, code)
+        if existing is not None and not getattr(existing, "is_deleted", False):
+            raise ConflictException(
+                f"Device code '{code}' is already registered. Use a different code "
+                f"(e.g. K40-02) or open the existing device."
+            )
+
         plaintext: str | None = None
         api_key_hash = None
         if generate_api_key:
             plaintext = secrets.token_urlsafe(32)
             api_key_hash = hash_token(plaintext)
+
+        ip_clean = ip_address.strip() if ip_address else None
+
+        # Soft-deleted row still holds the unique (company_id, device_code) — revive it.
+        if existing is not None and getattr(existing, "is_deleted", False):
+            existing.is_deleted = False
+            existing.deleted_at = None
+            existing.deleted_by = None
+            existing.branch_id = branch_id
+            existing.device_name = device_name
+            existing.device_model = device_model
+            existing.ip_address = ip_clean
+            existing.port = port
+            existing.subnet_mask = subnet_clean
+            existing.gateway = gateway_clean
+            existing.comm_password = comm_clean
+            existing.location_text = location_text
+            existing.status = status
+            if api_key_hash is not None:
+                existing.api_key_hash = api_key_hash
+            existing.updated_by = ctx.user_id
+            self._db.flush()
+            return existing, plaintext
+
         row = self._repo.create(
             ctx,
             company_id=cid,
             branch_id=branch_id,
-            device_code=device_code,
+            device_code=code,
             device_name=device_name,
             device_model=device_model,
-            ip_address=ip_address.strip() if ip_address else None,
+            ip_address=ip_clean,
             port=port,
+            subnet_mask=subnet_clean,
+            gateway=gateway_clean,
+            comm_password=comm_clean,
             location_text=location_text,
             status=status,
             api_key_hash=api_key_hash,
         )
         return row, plaintext
+
+    def delete(self, ctx: TenantContext, row_id: UUID) -> None:
+        if not self._repo.soft_delete(ctx, row_id):
+            raise NotFoundException("Biometric device not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_biometric_device",
+            entity_id=row_id,
+            operation="delete",
+            performed_by=ctx.user_id,
+        )
+
+    def download_logs(self, ctx: TenantContext, row_id: UUID) -> dict:
+        """Pull attendance from the K40 over TCP and store it as biometric attendance."""
+        device = self.get(ctx, row_id)
+        if device.status != "active":
+            raise AppException("Biometric device is inactive")
+        if not device.ip_address or not device.port:
+            raise AppException("Set the device IP address and port before downloading logs.")
+        password = int(str(device.comm_password or "0").strip() or "0")
+        terminal = ZK(
+            str(device.ip_address).strip(),
+            port=int(device.port),
+            timeout=8,
+            password=password,
+            force_udp=False,
+            ommit_ping=True,
+        )
+        conn = None
+        try:
+            conn = terminal.connect()
+            raw_logs = conn.get_attendance() or []
+        except (OSError, ZKNetworkError, ZKErrorResponse) as exc:
+            raise AppException(
+                f"Cannot download attendance from {device.ip_address}:{device.port}. {exc}"
+            ) from exc
+        finally:
+            if conn is not None:
+                try:
+                    conn.disconnect()
+                except (OSError, ZKNetworkError, ZKErrorResponse):
+                    pass
+
+        cutoff = datetime.now(_DEVICE_LOCAL_TZ) - timedelta(days=_LOG_LOOKBACK_DAYS)
+        grouped: dict[tuple[str, date], list[datetime]] = {}
+        logs_read = 0
+        for log in raw_logs:
+            user_id = str(getattr(log, "user_id", "") or "").strip()
+            stamped = getattr(log, "timestamp", None)
+            if not user_id or stamped is None:
+                continue
+            if stamped.tzinfo is None:
+                stamped = stamped.replace(tzinfo=_DEVICE_LOCAL_TZ)
+            if stamped < cutoff:
+                continue
+            logs_read += 1
+            grouped.setdefault((user_id, stamped.date()), []).append(stamped)
+
+        punches: list[dict] = []
+        for (user_id, attendance_date), times in grouped.items():
+            times.sort()
+            punches.append(
+                {
+                    # Match master_employee.employee_code (e.g. CT5353 on the K40).
+                    "employee_code": user_id.strip().upper(),
+                    "attendance_date": attendance_date,
+                    "check_in_at": times[0],
+                    "check_out_at": times[-1] if len(times) > 1 else None,
+                    "punch_events": times,
+                    "notes": f"biometric:{device.device_code}",
+                }
+            )
+
+        result = self.device_sync(
+            ctx,
+            punches=punches,
+            device_code=device.device_code,
+            company_id=device.company_id,
+        )
+        result["logs_read"] = logs_read
+        return result
 
     def rotate_api_key(self, ctx: TenantContext, device_id: UUID) -> str:
         row = self._repo.get(ctx, device_id)
@@ -386,7 +548,9 @@ class BiometricDeviceService:
                 if employee_id:
                     emp = self._master.get_employee(ctx, UUID(str(employee_id)))
                 else:
-                    emp = self._master.get_employee_by_code(ctx, cid, str(employee_code))
+                    emp = self._master.get_employee_by_code(
+                        ctx, cid, str(employee_code).strip().upper()
+                    )
             except Exception:
                 skipped += 1
                 continue

@@ -307,7 +307,6 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       { key: "branch_type", label: "Branch Type", type: "select", options: [
         { value: "head_office", label: "Head Office" },
         { value: "regional", label: "Regional" },
-        { value: "satellite", label: "Satellite" },
       ]},
       { key: "address_line1", label: "Address" },
       { key: "city", label: "City" },

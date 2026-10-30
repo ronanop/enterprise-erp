@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   SetupDrawer,
@@ -13,98 +13,276 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   formatInrGrouping,
-  hiringManagerSourceHint,
   loadAtsLookups,
   parseInrInput,
-  recruiterSourceHint,
-  type AtsLookupSource,
   type NamedOption,
 } from "@/services/recruitment-ats-lookups";
-import type { CreateJobInput, JobOpening, JobPriority, EmploymentType } from "@/types/recruitment-ats";
+import type {
+  CreateJobInput,
+  EmploymentType,
+  JobOpening,
+  JobPostingAudience,
+  JobPriority,
+} from "@/types/recruitment-ats";
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  onSubmit: (input: CreateJobInput) => void;
+  onSubmit: (input: CreateJobInput) => void | Promise<void>;
   initial?: JobOpening | null;
 };
 
+function nameById(options: NamedOption[], id: string): string {
+  return options.find((o) => o.id === id)?.name ?? "";
+}
+
+function resolveOptionId(
+  options: NamedOption[],
+  id: string | undefined,
+  name: string | undefined,
+): string {
+  if (id && options.some((o) => o.id === id)) return id;
+  if (name) {
+    const match = options.find((o) => o.name === name || o.name.includes(name) || name.includes(o.name));
+    if (match) return match.id;
+  }
+  if (id) return id;
+  return "";
+}
+
+function withSelectedOption(
+  options: NamedOption[],
+  id: string,
+  fallbackName?: string,
+): NamedOption[] {
+  if (!id || options.some((o) => o.id === id)) return options;
+  return [{ id, name: fallbackName?.trim() || id }, ...options];
+}
+
 export function JobOpeningDrawer({ open, onClose, onSubmit, initial }: Props) {
-  const [title, setTitle] = useState(initial?.title ?? "");
-  const [department, setDepartment] = useState(initial?.department ?? "");
-  const [designation, setDesignation] = useState(initial?.designation ?? "");
-  const [employmentType, setEmploymentType] = useState<EmploymentType>(
-    initial?.employmentType ?? "full_time",
-  );
-  const [branch, setBranch] = useState(initial?.branch ?? "Head Office");
-  const [location, setLocation] = useState(initial?.location ?? "");
-  const [hiringManager, setHiringManager] = useState(initial?.hiringManager ?? "");
-  const [recruiter, setRecruiter] = useState(initial?.recruiter ?? "");
-  const [positions, setPositions] = useState(String(initial?.positions ?? 1));
-  const [salaryMinDisplay, setSalaryMinDisplay] = useState(
-    initial?.salaryMin ? formatInrGrouping(initial.salaryMin) : "",
-  );
-  const [salaryMaxDisplay, setSalaryMaxDisplay] = useState(
-    initial?.salaryMax ? formatInrGrouping(initial.salaryMax) : "",
-  );
-  const [experienceMin, setExperienceMin] = useState(String(initial?.experienceMin ?? 0));
-  const [experienceMax, setExperienceMax] = useState(String(initial?.experienceMax ?? 5));
-  const [skills, setSkills] = useState(initial?.skills.join(", ") ?? "");
-  const [description, setDescription] = useState(initial?.description ?? "");
-  const [deadline, setDeadline] = useState(initial?.deadline ?? "");
-  const [priority, setPriority] = useState<JobPriority>(initial?.priority ?? "medium");
-  const [status, setStatus] = useState<JobOpening["status"]>(initial?.status ?? "open");
-  const [jdFileName, setJdFileName] = useState(initial?.jdFileName ?? "");
+  const editing = Boolean(initial);
+  const [title, setTitle] = useState("");
+  const [departmentId, setDepartmentId] = useState("");
+  const [designationId, setDesignationId] = useState("");
+  const [employmentType, setEmploymentType] = useState<EmploymentType>("full_time");
+  const [branchId, setBranchId] = useState("");
+  const [location, setLocation] = useState("");
+  const [hiringManagerId, setHiringManagerId] = useState("");
+  const [recruiterId, setRecruiterId] = useState("");
+  const [positions, setPositions] = useState("1");
+  const [salaryMinDisplay, setSalaryMinDisplay] = useState("");
+  const [salaryMaxDisplay, setSalaryMaxDisplay] = useState("");
+  const [experienceMin, setExperienceMin] = useState("0");
+  const [experienceMax, setExperienceMax] = useState("5");
+  const [skills, setSkills] = useState("");
+  const [description, setDescription] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [priority, setPriority] = useState<JobPriority>("medium");
+  const [status, setStatus] = useState<JobOpening["status"]>("open");
+  const [jdFileName, setJdFileName] = useState("");
+  const [postingAudience, setPostingAudience] = useState<JobPostingAudience>("external");
+  const [evidenceEmailFileName, setEvidenceEmailFileName] = useState("");
+  const [evidenceEmailFile, setEvidenceEmailFile] = useState<File | null>(null);
 
   const [employees, setEmployees] = useState<NamedOption[]>([]);
   const [branches, setBranches] = useState<NamedOption[]>([]);
+  const [departments, setDepartments] = useState<NamedOption[]>([]);
+  const [designations, setDesignations] = useState<NamedOption[]>([]);
   const [recruiters, setRecruiters] = useState<NamedOption[]>([]);
-  const [managerSource, setManagerSource] = useState<AtsLookupSource>("demo");
-  const [recruiterSource, setRecruiterSource] = useState<AtsLookupSource>("demo");
+  const [lookupsLoading, setLookupsLoading] = useState(false);
+
+  // Hydrate every time the drawer opens so edit shows saved values.
+  useEffect(() => {
+    if (!open) return;
+    setTitle(initial?.title ?? "");
+    setDepartmentId(initial?.departmentId ?? "");
+    setDesignationId(initial?.designationId ?? "");
+    setEmploymentType(initial?.employmentType ?? "full_time");
+    setBranchId(initial?.branchId ?? "");
+    const loc = (initial?.location ?? "").trim();
+    setLocation(loc && loc !== "—" ? loc : "");
+    setHiringManagerId(initial?.hiringManagerId ?? "");
+    setRecruiterId(initial?.recruiterId ?? "");
+    setPositions(String(initial?.positions ?? 1));
+    setSalaryMinDisplay(initial?.salaryMin ? formatInrGrouping(initial.salaryMin) : "");
+    setSalaryMaxDisplay(initial?.salaryMax ? formatInrGrouping(initial.salaryMax) : "");
+    setExperienceMin(String(initial?.experienceMin ?? 0));
+    setExperienceMax(String(initial?.experienceMax ?? 5));
+    setSkills(initial?.skills?.join(", ") ?? "");
+    setDescription(initial?.description ?? "");
+    setDeadline(initial?.deadline ?? "");
+    setPriority(initial?.priority ?? "medium");
+    setStatus(initial?.status ?? "open");
+    setJdFileName(initial?.jdFileName ?? "");
+    setPostingAudience(initial?.postingAudience ?? "external");
+    setEvidenceEmailFileName(initial?.evidenceEmailFileName ?? "");
+    setEvidenceEmailFile(null);
+  }, [open, initial]);
 
   useEffect(() => {
     if (!open) return;
-    void loadAtsLookups().then((lookups) => {
-      setEmployees(lookups.hiringManagers);
-      setBranches(lookups.branches);
-      setRecruiters(lookups.recruiters);
-      setManagerSource(lookups.managerSource);
-      setRecruiterSource(lookups.recruiterSource);
-      if ((!branch || branch === "Head Office") && lookups.branches[0]) {
-        setBranch(lookups.branches[0].name);
-      }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once when drawer opens
-  }, [open]);
+    let cancelled = false;
+    setLookupsLoading(true);
+    void loadAtsLookups()
+      .then((lookups) => {
+        if (cancelled) return;
+        setEmployees(lookups.hiringManagers);
+        setBranches(lookups.branches);
+        setDepartments(lookups.departments);
+        setDesignations(lookups.designations);
+        setRecruiters(lookups.recruiters);
 
-  function save() {
+        const nextBranch = resolveOptionId(
+          lookups.branches,
+          initial?.branchId,
+          initial?.branch,
+        );
+        if (nextBranch) setBranchId(nextBranch);
+        else if (!editing && lookups.branches[0]) setBranchId(lookups.branches[0].id);
+
+        const branchForDept = nextBranch || initial?.branchId || "";
+        const deptsForBranch = branchForDept
+          ? lookups.departments.filter((d) => !d.branchId || d.branchId === branchForDept)
+          : lookups.departments;
+        const deptPool = deptsForBranch.length ? deptsForBranch : lookups.departments;
+        const nextDept = resolveOptionId(deptPool, initial?.departmentId, initial?.department);
+        if (nextDept) setDepartmentId(nextDept);
+        else if (!editing && deptPool[0]) setDepartmentId(deptPool[0].id);
+
+        const companyId =
+          lookups.branches.find((b) => b.id === (nextBranch || initial?.branchId))?.companyId;
+        const desigPool = companyId
+          ? lookups.designations.filter((d) => !d.companyId || d.companyId === companyId)
+          : lookups.designations;
+        const desigSource = desigPool.length ? desigPool : lookups.designations;
+        const nextDesig = resolveOptionId(
+          desigSource,
+          initial?.designationId,
+          initial?.designation,
+        );
+        if (nextDesig) setDesignationId(nextDesig);
+
+        const nextHm = resolveOptionId(
+          lookups.hiringManagers,
+          initial?.hiringManagerId,
+          initial?.hiringManager,
+        );
+        if (nextHm) setHiringManagerId(nextHm);
+
+        const nextRec = resolveOptionId(
+          lookups.recruiters,
+          initial?.recruiterId,
+          initial?.recruiter,
+        );
+        if (nextRec) setRecruiterId(nextRec);
+
+        setLocation((prev) => {
+          if (prev.trim() && prev !== "—") return prev;
+          const fromInitial = (initial?.location ?? "").trim();
+          if (fromInitial && fromInitial !== "—") return fromInitial;
+          const branchName =
+            lookups.branches.find((b) => b.id === (nextBranch || initial?.branchId))?.name ||
+            initial?.branch ||
+            "";
+          return branchName;
+        });
+      })
+      .finally(() => {
+        if (!cancelled) setLookupsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, editing, initial]);
+
+  const [saving, setSaving] = useState(false);
+
+  const departmentsForBranch = useMemo(() => {
+    const scoped = branchId
+      ? departments.filter((d) => !d.branchId || d.branchId === branchId)
+      : departments;
+    const base = scoped.length ? scoped : departments;
+    return withSelectedOption(base, departmentId, initial?.department);
+  }, [departments, branchId, departmentId, initial?.department]);
+
+  const designationsForCompany = useMemo(() => {
+    const companyId = branches.find((b) => b.id === branchId)?.companyId;
+    const scoped = companyId
+      ? designations.filter((d) => !d.companyId || d.companyId === companyId)
+      : designations;
+    const base = scoped.length ? scoped : designations;
+    return withSelectedOption(base, designationId, initial?.designation);
+  }, [designations, branches, branchId, designationId, initial?.designation]);
+
+  const hiringManagerOptions = useMemo(
+    () => withSelectedOption(employees, hiringManagerId, initial?.hiringManager),
+    [employees, hiringManagerId, initial?.hiringManager],
+  );
+
+  const recruiterOptions = useMemo(
+    () => withSelectedOption(recruiters, recruiterId, initial?.recruiter),
+    [recruiters, recruiterId, initial?.recruiter],
+  );
+
+  async function save() {
     if (!title.trim()) return;
-    onSubmit({
-      title: title.trim(),
-      department: department || "General",
-      designation: designation || title.trim(),
-      employmentType,
-      branch,
-      location,
-      hiringManager,
-      recruiter,
-      positions: Number(positions) || 1,
-      salaryMin: parseInrInput(salaryMinDisplay),
-      salaryMax: parseInrInput(salaryMaxDisplay),
-      experienceMin: Number(experienceMin) || 0,
-      experienceMax: Number(experienceMax) || 0,
-      skills: skills
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-      description,
-      deadline,
-      priority,
-      status,
-      jdFileName: jdFileName || undefined,
-    });
-    onClose();
+    if (!branchId || !departmentId || !hiringManagerId) return;
+    if (!evidenceEmailFileName.trim() && !evidenceEmailFile) return;
+    const designationName = nameById(designationsForCompany, designationId) || title.trim();
+    const branchName = nameById(branches, branchId) || "Head Office";
+    const locationValue = location.trim() || branchName;
+    setSaving(true);
+    try {
+      await Promise.resolve(
+        onSubmit({
+          title: title.trim(),
+          department: nameById(departmentsForBranch, departmentId) || "General",
+          departmentId,
+          designation: designationName,
+          designationId: designationId || undefined,
+          employmentType,
+          branch: branchName,
+          branchId,
+          location: locationValue,
+          hiringManager: nameById(hiringManagerOptions, hiringManagerId),
+          hiringManagerId,
+          recruiter: nameById(recruiterOptions, recruiterId),
+          recruiterId: recruiterId || undefined,
+          positions: Number(positions) || 1,
+          salaryMin: parseInrInput(salaryMinDisplay),
+          salaryMax: parseInrInput(salaryMaxDisplay),
+          experienceMin: Number(experienceMin) || 0,
+          experienceMax: Number(experienceMax) || 0,
+          skills: skills
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+          description,
+          deadline,
+          priority,
+          status,
+          jdFileName: jdFileName || undefined,
+          postingAudience,
+          evidenceEmailFileName:
+            evidenceEmailFile?.name || evidenceEmailFileName.trim() || undefined,
+          evidenceEmailFile: evidenceEmailFile,
+        }),
+      );
+      onClose();
+    } catch {
+      /* parent shows toast; keep drawer open */
+    } finally {
+      setSaving(false);
+    }
   }
+
+  const canSave = Boolean(
+    title.trim() &&
+      branchId &&
+      departmentId &&
+      hiringManagerId &&
+      (evidenceEmailFile || evidenceEmailFileName.trim()),
+  );
 
   return (
     <SetupDrawer
@@ -118,8 +296,13 @@ export function JobOpeningDrawer({ open, onClose, onSubmit, initial }: Props) {
           <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" className="cursor-pointer bg-[#7C3AED] text-white hover:bg-[#6D28D9]" disabled={!title.trim()} onClick={save}>
-            {initial ? "Save" : "Create Job"}
+          <Button
+            type="button"
+            className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"
+            disabled={!canSave || saving}
+            onClick={() => void save()}
+          >
+            {saving ? "Saving…" : initial ? "Save" : "Create Job"}
           </Button>
         </>
       }
@@ -131,12 +314,64 @@ export function JobOpeningDrawer({ open, onClose, onSubmit, initial }: Props) {
         <SetupField label="Job title" required>
           <SetupInput value={title} onChange={(e) => setTitle(e.target.value)} />
         </SetupField>
+        <SetupField label="Posting type" required>
+          <div className="flex flex-wrap gap-3 text-sm">
+            <label className="inline-flex cursor-pointer items-center gap-1.5">
+              <input
+                type="radio"
+                name="job-posting-audience"
+                className="cursor-pointer"
+                checked={postingAudience === "external"}
+                onChange={() => setPostingAudience("external")}
+              />
+              External
+            </label>
+            <label className="inline-flex cursor-pointer items-center gap-1.5">
+              <input
+                type="radio"
+                name="job-posting-audience"
+                className="cursor-pointer"
+                checked={postingAudience === "internal"}
+                onChange={() => setPostingAudience("internal")}
+              />
+              Internal
+            </label>
+          </div>
+        </SetupField>
+        <SetupField label="Approval email evidence" required>
+          <SetupInput
+            type="file"
+            accept=".pdf,.png,.jpg,.jpeg,.webp,.eml,.msg,.doc,.docx"
+            onChange={(e) => {
+              const f = e.target.files?.[0] ?? null;
+              setEvidenceEmailFile(f);
+              setEvidenceEmailFileName(f?.name ?? "");
+            }}
+          />
+          {evidenceEmailFileName ? (
+            <p className="mt-1 text-[10px] text-muted-foreground">{evidenceEmailFileName}</p>
+          ) : null}
+        </SetupField>
         <div className="grid gap-3 sm:grid-cols-2">
-          <SetupField label="Department">
-            <SetupInput value={department} onChange={(e) => setDepartment(e.target.value)} />
+          <SetupField label="Department" required>
+            <SearchableSelect
+              value={departmentId}
+              onChange={setDepartmentId}
+              placeholder={lookupsLoading ? "Loading…" : "Select department…"}
+              searchPlaceholder="Type a department…"
+              options={departmentsForBranch.map((d) => ({ value: d.id, label: d.name }))}
+              disabled={lookupsLoading && !departmentId}
+            />
           </SetupField>
           <SetupField label="Designation">
-            <SetupInput value={designation} onChange={(e) => setDesignation(e.target.value)} />
+            <SearchableSelect
+              value={designationId}
+              onChange={setDesignationId}
+              placeholder={lookupsLoading ? "Loading…" : "Select designation…"}
+              searchPlaceholder="Type a designation…"
+              options={designationsForCompany.map((d) => ({ value: d.id, label: d.name }))}
+              disabled={lookupsLoading && !designationId}
+            />
           </SetupField>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -164,16 +399,14 @@ export function JobOpeningDrawer({ open, onClose, onSubmit, initial }: Props) {
           </SetupField>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <SetupField label="Branch">
-            <SetupSelect value={branch} onChange={(e) => setBranch(e.target.value)}>
+          <SetupField label="Branch" required>
+            <SetupSelect value={branchId} onChange={(e) => setBranchId(e.target.value)}>
+              <option value="">Select branch…</option>
               {branches.map((b) => (
-                <option key={b.id} value={b.name}>
+                <option key={b.id} value={b.id}>
                   {b.name}
                 </option>
               ))}
-              {!branches.some((b) => b.name === branch) && branch ? (
-                <option value={branch}>{branch}</option>
-              ) : null}
             </SetupSelect>
           </SetupField>
           <SetupField label="Location">
@@ -181,22 +414,22 @@ export function JobOpeningDrawer({ open, onClose, onSubmit, initial }: Props) {
           </SetupField>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <SetupField label="Hiring manager" hint={hiringManagerSourceHint(managerSource)}>
+          <SetupField label="Hiring manager" required>
             <SearchableSelect
-              value={hiringManager}
-              onChange={setHiringManager}
+              value={hiringManagerId}
+              onChange={setHiringManagerId}
               placeholder="Select manager…"
               searchPlaceholder="Type a name…"
-              options={employees.map((e) => ({ value: e.name, label: e.name }))}
+              options={hiringManagerOptions.map((e) => ({ value: e.id, label: e.name }))}
             />
           </SetupField>
-          <SetupField label="Recruiter" hint={recruiterSourceHint(recruiterSource)}>
+          <SetupField label="Recruiter">
             <SearchableSelect
-              value={recruiter}
-              onChange={setRecruiter}
+              value={recruiterId}
+              onChange={setRecruiterId}
               placeholder="Select recruiter…"
               searchPlaceholder="Type a name…"
-              options={recruiters.map((r) => ({ value: r.name, label: r.name }))}
+              options={recruiterOptions.map((r) => ({ value: r.id, label: r.name }))}
             />
           </SetupField>
         </div>
@@ -204,7 +437,7 @@ export function JobOpeningDrawer({ open, onClose, onSubmit, initial }: Props) {
           <SetupField label="No. of positions">
             <SetupInput type="number" value={positions} onChange={(e) => setPositions(e.target.value)} />
           </SetupField>
-          <SetupField label="Salary min (₹)" hint="Indian Rupees">
+          <SetupField label="Salary min (₹)">
             <div className="relative">
               <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-xs text-muted-foreground">
                 ₹
@@ -221,7 +454,7 @@ export function JobOpeningDrawer({ open, onClose, onSubmit, initial }: Props) {
               />
             </div>
           </SetupField>
-          <SetupField label="Salary max (₹)" hint="Indian Rupees">
+          <SetupField label="Salary max (₹)">
             <div className="relative">
               <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-xs text-muted-foreground">
                 ₹

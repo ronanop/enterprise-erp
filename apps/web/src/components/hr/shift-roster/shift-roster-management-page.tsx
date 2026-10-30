@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
+  Check,
   ClipboardList,
   Clock3,
   Download,
   Pencil,
   Plus,
   Repeat,
+  Trash2,
   Upload,
   UserPlus,
   Users,
@@ -37,9 +39,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isAuthenticated } from "@/lib/auth";
 import { cn } from "@/lib/utils";
+import { formatApiError } from "@/services/api-client";
 import {
+  activateShiftAssignment,
   approveSwap,
   computeShiftDashboardStats,
+  deleteShiftAssignment,
   downloadTextFile,
   exportAssignmentsCsv,
   filterAssignments,
@@ -51,7 +56,7 @@ import {
   runAttendanceAutoAbsentJob,
   type ShiftRosterDirectory,
 } from "@/services/shift-roster-service";
-import type { ShiftFilters, ShiftRecord } from "@/types/shift-roster-management";
+import type { ShiftAssignmentRecord, ShiftFilters, ShiftRecord } from "@/types/shift-roster-management";
 import { emptyShiftFilters, SHIFT_TYPE_LABELS } from "@/types/shift-roster-management";
 import { WEEKLY_OFF_RULE_OPTIONS } from "@/lib/hr/weekly-off-rules";
 
@@ -70,6 +75,8 @@ export function ShiftRosterManagementPage() {
   const [createShiftOpen, setCreateShiftOpen] = useState(false);
   const [editingShift, setEditingShift] = useState<ShiftRecord | null>(null);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [editingAssignment, setEditingAssignment] = useState<ShiftAssignmentRecord | null>(null);
+  const [assignmentBusyId, setAssignmentBusyId] = useState<string | null>(null);
   const [rotationOpen, setRotationOpen] = useState(false);
   const [downloadManagerOpen, setDownloadManagerOpen] = useState(false);
   const [uploadManagerOpen, setUploadManagerOpen] = useState(false);
@@ -81,7 +88,8 @@ export function ShiftRosterManagementPage() {
     setLoading(true);
     try {
       setDir(await loadShiftRosterDirectory());
-    } catch {
+    } catch (err) {
+      console.error("loadShiftRosterDirectory failed", err);
       toast("Failed to load shift data", "error");
     } finally {
       setLoading(false);
@@ -134,7 +142,15 @@ export function ShiftRosterManagementPage() {
               <Plus className="size-3.5" />
               Create shift
             </Button>
-            <Button size="sm" variant="outline" className="cursor-pointer" onClick={() => setAssignOpen(true)}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="cursor-pointer"
+              onClick={() => {
+                setEditingAssignment(null);
+                setAssignOpen(true);
+              }}
+            >
               <UserPlus className="size-3.5" />
               Assign shift
             </Button>
@@ -171,8 +187,11 @@ export function ShiftRosterManagementPage() {
       />
 
       {authBlocked ? <HrAuthBanner /> : null}
-      {loading && !dir ? <EmsSkeleton /> : null}
 
+      {loading && !dir ? (
+        <EmsSkeleton cards={6} rows={10} />
+      ) : (
+      <>
       {stats ? (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           {[
@@ -328,7 +347,16 @@ export function ShiftRosterManagementPage() {
           ) : null}
           {!assignPage.length ? (
             <HrEmptyState title="No assignments" description="Assign shifts to employees with effective dates." action={
-              <Button size="sm" className="cursor-pointer" onClick={() => setAssignOpen(true)}>Assign shift</Button>
+              <Button
+                size="sm"
+                className="cursor-pointer"
+                onClick={() => {
+                  setEditingAssignment(null);
+                  setAssignOpen(true);
+                }}
+              >
+                Assign shift
+              </Button>
             } />
           ) : (
             <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
@@ -344,6 +372,7 @@ export function ShiftRosterManagementPage() {
                     <th className="px-2 py-2">To</th>
                     <th className="px-2 py-2">Type</th>
                     <th className="px-2 py-2">Status</th>
+                    <th className="px-2 py-2 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -358,21 +387,99 @@ export function ShiftRosterManagementPage() {
                           });
                         }} />
                       </td>
-                      <td className="px-2 py-2 text-xs font-medium">{a.employeeName}</td>
+                      <td className="px-2 py-2 text-xs font-medium">
+                        {a.employeeName}
+                        {a.employeeCode ? (
+                          <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">
+                            {a.employeeCode}
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="px-2 py-2 text-xs text-muted-foreground">
                         {empManagerById.get(a.employeeId) || "-"}
                       </td>
-                      <td className="px-2 py-2 text-xs">{a.departmentName}</td>
+                      <td className="px-2 py-2 text-xs">
+                        {a.departmentName && a.departmentName !== "-" ? a.departmentName : "-"}
+                      </td>
                       <td className="px-2 py-2 text-xs">
                         <span className="inline-flex items-center gap-1">
                           <span className="size-2 rounded-full" style={{ backgroundColor: a.shiftColor }} />
                           {a.shiftName}
                         </span>
                       </td>
-                      <td className="px-2 py-2 text-xs">{a.effectiveFrom}</td>
+                      <td className="px-2 py-2 text-xs">{a.effectiveFrom || "-"}</td>
                       <td className="px-2 py-2 text-xs">{a.effectiveTo || "-"}</td>
                       <td className="px-2 py-2 text-xs capitalize">{a.assignmentType}</td>
                       <td className="px-2 py-2"><HrStatusBadge status={a.status} /></td>
+                      <td className="px-2 py-2">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 cursor-pointer transition-colors duration-200"
+                            disabled={assignmentBusyId === a.id}
+                            onClick={() => {
+                              setEditingAssignment(a);
+                              setAssignOpen(true);
+                            }}
+                          >
+                            <Pencil className="size-3.5" />
+                            Edit
+                          </Button>
+                          {a.status === "draft" || a.status === "submitted" ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 cursor-pointer transition-colors duration-200"
+                              disabled={assignmentBusyId === a.id}
+                              onClick={() => {
+                                void (async () => {
+                                  setAssignmentBusyId(a.id);
+                                  try {
+                                    await activateShiftAssignment(a.id);
+                                    toast("Assignment activated", "success");
+                                    await load();
+                                  } catch (err) {
+                                    toast(formatApiError(err, "Activate failed"), "error");
+                                  } finally {
+                                    setAssignmentBusyId(null);
+                                  }
+                                })();
+                              }}
+                            >
+                              <Check className="size-3.5" />
+                              Activate
+                            </Button>
+                          ) : null}
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="h-7 cursor-pointer text-destructive transition-colors duration-200 hover:bg-destructive/10"
+                            disabled={assignmentBusyId === a.id}
+                            onClick={() => {
+                              if (!window.confirm(`Remove assignment for ${a.employeeName}?`)) return;
+                              void (async () => {
+                                setAssignmentBusyId(a.id);
+                                try {
+                                  await deleteShiftAssignment(a.id);
+                                  toast("Assignment removed", "success");
+                                  await load();
+                                } catch (err) {
+                                  toast(formatApiError(err, "Delete failed"), "error");
+                                } finally {
+                                  setAssignmentBusyId(null);
+                                }
+                              })();
+                            }}
+                          >
+                            <Trash2 className="size-3.5" />
+                            Delete
+                          </Button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -541,6 +648,8 @@ export function ShiftRosterManagementPage() {
           </table>
         </div>
       ) : null}
+      </>
+      )}
 
       <CreateShiftDrawer
         open={createShiftOpen}
@@ -552,7 +661,16 @@ export function ShiftRosterManagementPage() {
         }}
         onSaved={() => void load()}
       />
-      <AssignShiftDrawer open={assignOpen} directory={dir} onClose={() => setAssignOpen(false)} onSaved={() => void load()} />
+      <AssignShiftDrawer
+        open={assignOpen}
+        directory={dir}
+        initial={editingAssignment}
+        onClose={() => {
+          setAssignOpen(false);
+          setEditingAssignment(null);
+        }}
+        onSaved={() => void load()}
+      />
       <CreateRotationDrawer open={rotationOpen} directory={dir} onClose={() => setRotationOpen(false)} onSaved={() => void load()} />
 
       <DownloadManagerRosterDrawer

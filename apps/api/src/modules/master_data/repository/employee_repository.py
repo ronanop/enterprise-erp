@@ -52,13 +52,21 @@ class EmployeeRepository(MasterScopedRepository):
     def get_by_code(
         self, ctx: TenantContext, company_id: UUID, employee_code: str
     ) -> MasterEmployee | None:
+        code = (employee_code or "").strip()
+        if not code:
+            return None
         stmt = select(MasterEmployee).where(
             MasterEmployee.tenant_id == ctx.tenant_id,
             MasterEmployee.company_id == company_id,
-            MasterEmployee.employee_code == employee_code,
             MasterEmployee.is_deleted.is_(False),
         )
-        return self.db.scalar(stmt)
+        # Exact first, then case-insensitive (K40 user ids often match employee_code).
+        row = self.db.scalar(stmt.where(MasterEmployee.employee_code == code))
+        if row is not None:
+            return row
+        return self.db.scalar(
+            stmt.where(MasterEmployee.employee_code.ilike(code))
+        )
 
     def create(
         self,
@@ -156,6 +164,7 @@ class EmployeeRepository(MasterScopedRepository):
             date_of_leaving=row.date_of_leaving,
             user_id=row.user_id,
             is_hiring_manager=bool(getattr(row, "is_hiring_manager", False)),
+            is_manager=bool(getattr(row, "is_manager", False)),
             is_recruiter=bool(getattr(row, "is_recruiter", False)),
             is_hr=bool(getattr(row, "is_hr", False)),
             status=row.status,

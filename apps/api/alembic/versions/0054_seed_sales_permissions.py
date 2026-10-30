@@ -1,22 +1,11 @@
 """Seed sales permissions and roles."""
 
-import sys
 from collections.abc import Sequence
 from datetime import datetime, timezone
-from pathlib import Path
 from uuid import uuid4
 
 import sqlalchemy as sa
 from alembic import op
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-
-from modules.sales.permissions import (
-    FINANCE_REVIEWER_PERMISSIONS,
-    SALES_EXECUTIVE_PERMISSIONS,
-    SALES_MANAGER_PERMISSIONS,
-    SALES_PERMISSIONS,
-)
 
 revision: str = "0054_seed_sales_permissions"
 down_revision: str | None = "0053_sales_return_line"
@@ -34,12 +23,6 @@ PERMISSION_TABLE = sa.table(
     sa.column("created_at", sa.DateTime(timezone=True)),
     schema="foundation",
 )
-
-ROLE_SPECS: list[tuple[str, str, list[str]]] = [
-    ("SALES_EXECUTIVE", "Sales Executive", SALES_EXECUTIVE_PERMISSIONS),
-    ("SALES_MANAGER", "Sales Manager", SALES_MANAGER_PERMISSIONS),
-    ("FINANCE_REVIEWER", "Finance Reviewer (Sales)", FINANCE_REVIEWER_PERMISSIONS),
-]
 
 
 def _ensure_permission(
@@ -118,6 +101,23 @@ def _grant(conn, now: datetime, tenant_id: str, role_id: str, perm_id: str) -> N
 
 
 def upgrade() -> None:
+    try:
+        from modules.sales.permissions import (
+            FINANCE_REVIEWER_PERMISSIONS,
+            SALES_EXECUTIVE_PERMISSIONS,
+            SALES_MANAGER_PERMISSIONS,
+            SALES_PERMISSIONS,
+        )
+    except ModuleNotFoundError:
+        # Sales module removed; historical seed already applied on existing DBs.
+        return
+
+    role_specs: list[tuple[str, str, list[str]]] = [
+        ("SALES_EXECUTIVE", "Sales Executive", SALES_EXECUTIVE_PERMISSIONS),
+        ("SALES_MANAGER", "Sales Manager", SALES_MANAGER_PERMISSIONS),
+        ("FINANCE_REVIEWER", "Finance Reviewer (Sales)", FINANCE_REVIEWER_PERMISSIONS),
+    ]
+
     conn = op.get_bind()
     now = datetime.now(timezone.utc)
     perm_map: dict[str, str] = {}
@@ -131,7 +131,7 @@ def upgrade() -> None:
 
     for (tenant_id,) in tenants:
         tid = str(tenant_id)
-        for role_code, role_name, perm_codes in ROLE_SPECS:
+        for role_code, role_name, perm_codes in role_specs:
             role_id = _ensure_role(conn, now, tid, role_code, role_name)
             for perm_code in perm_codes:
                 perm_id = perm_map.get(perm_code)
@@ -155,9 +155,25 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    conn = op.get_bind()
-    role_codes = [r[0] for r in ROLE_SPECS]
+    try:
+        from modules.sales.permissions import (
+            SALES_EXECUTIVE_PERMISSIONS,
+            SALES_MANAGER_PERMISSIONS,
+            FINANCE_REVIEWER_PERMISSIONS,
+            SALES_PERMISSIONS,
+        )
+    except ModuleNotFoundError:
+        return
+
+    role_codes = [
+        "SALES_EXECUTIVE",
+        "SALES_MANAGER",
+        "FINANCE_REVIEWER",
+    ]
+    # silence unused import warnings for role constant lists
+    _ = (SALES_EXECUTIVE_PERMISSIONS, SALES_MANAGER_PERMISSIONS, FINANCE_REVIEWER_PERMISSIONS)
     perm_codes = [p[0] for p in SALES_PERMISSIONS]
+    conn = op.get_bind()
 
     for code in role_codes:
         conn.execute(

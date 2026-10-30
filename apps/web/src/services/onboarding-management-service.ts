@@ -5,19 +5,37 @@
  */
 
 import { ApiClientError, apiClient, resourceService } from "@/services/api-client";
+import { sendEmailCompose } from "@/services/email-notification-service";
 import { getShareableOrigin } from "@/utils/env";
-import { registerLocalEmployee, updateLocalEmployeeLifecycle } from "@/services/hr-master-connector";
+import {
+  listLocalEmployees,
+  registerLocalEmployee,
+  updateLocalEmployeeLifecycle,
+} from "@/services/hr-master-connector";
 import { applyOnboardingPortalToEmployee } from "@/services/employee-management-service";
+import {
+  fetchBgDocumentsForCandidate,
+  resolveBgGovernmentIds,
+} from "@/services/bg-check-portal-service";
 import { loadRecruitmentOverview, type RecruitmentRow } from "@/services/recruitment-service";
 import { portalToWizardDraft } from "@/lib/onboarding-to-employee";
 import { isJoiningDateReached } from "@/lib/onboarding-workflow";
 import { employmentDurationKind } from "@/config/hr-master-options";
-import { previewNextEmployeeCode } from "@/services/employee-management-service";
+import {
+  allocateNextEmployeeCodeForEntity,
+  previewNextEmployeeCode,
+} from "@/services/employee-management-service";
+import { listEntityOptions } from "@/services/hr-setup-service";
 import {
   clearAllSignedPolicyDocs,
   saveSignedPolicyDocsForCase,
   stripSignedDocPayloads,
 } from "@/lib/onboarding-signed-docs-store";
+import {
+  clearAllPortalFilePayloads,
+  mergePortalFilePayloads,
+  savePortalFilePayloads,
+} from "@/lib/onboarding-portal-files-store";
 import { migrateSignedPolicyStampFormat } from "@/lib/migrate-signed-policy-stamps";
 import { devError, devWarn } from "@/lib/dev-log";
 import { timingSafeEqual } from "@/lib/timing-safe";
@@ -32,6 +50,7 @@ import {
   type OnboardingAuditEntry,
   type OnboardingCase,
   type OnboardingCaseStatus,
+  type DocumentKind,
   type OnboardingDocument,
   type OnboardingFilters,
   type PortalPayload,
@@ -151,15 +170,25 @@ async function syncCaseToApi(
   caseRow: OnboardingCase,
   opts?: { required?: boolean },
 ): Promise<OnboardingCase> {
+  // Strip bulky base64 so verify/status updates actually reach the API.
+  // Server merge keeps previously stored file bytes.
+  const leanCase: OnboardingCase = {
+    ...caseRow,
+    portal: leanPortalForSubmit(caseRow.portal),
+  };
   try {
     const res = await apiClient<Record<string, unknown>>("/hr/digital-onboarding", {
       method: "POST",
-      body: { case: caseRow },
+      body: { case: leanCase },
     });
     const normalized = normalizeApiCase((res.data ?? {}) as Record<string, unknown>);
     if (normalized) {
-      upsertCaseLocal(normalized);
-      return normalized;
+      const withFiles: OnboardingCase = {
+        ...normalized,
+        portal: mergePortalKeepingFiles(normalized.portal, caseRow.portal),
+      };
+      upsertCaseLocal(withFiles);
+      return withFiles;
     }
     if (opts?.required) {
       throw new Error("Could not save the onboarding invitation on the server.");
@@ -195,6 +224,7 @@ export function clearLocalOnboardingCases(): void {
   writeJson(CASES_KEY, []);
   writeJson(AUDIT_KEY, []);
   writeJson(SEQ_KEY, 0);
+  void clearAllPortalFilePayloads().catch(() => undefined);
   if (typeof window !== "undefined") {
     try {
       localStorage.removeItem(PORTAL_SESSION_KEY);
@@ -230,15 +260,129 @@ export async function fetchPortalFullCase(caseId: string): Promise<OnboardingCas
   }
 }
 
+function portalMissingFileBytes(portal: PortalPayload): boolean {
+  const docsMissing = (portal.documents ?? []).some((d) => !d.fileDataUrl?.trim());
+  const signedMissing = (portal.policies?.signedDocuments ?? []).some(
+    (d) => !d.fileDataUrl?.trim(),
+  );
+  const sigMissing =
+    Boolean(portal.policies?.signatureFileName || portal.policies?.signature) &&
+    !portal.policies?.signatureDataUrl?.trim();
+  return docsMissing || signedMissing || sigMissing;
+}
+
+function countPortalFileBytes(portal: PortalPayload): number {
+  let n = 0;
+  for (const d of portal.documents ?? []) {
+    if (d.fileDataUrl?.trim()) n += 1;
+  }
+  for (const d of portal.policies?.signedDocuments ?? []) {
+    if (d.fileDataUrl?.trim()) n += 1;
+  }
+  if (portal.policies?.signatureDataUrl?.trim()) n += 1;
+  return n;
+}
+
+/**
+ * Restore document/signature bytes for HR preview.
+ * Tries IndexedDB (same browser as upload) then portal-full API.
+ */
+export async function hydrateOnboardingCaseFiles(
+  caseRow: OnboardingCase,
+): Promise<OnboardingCase> {
+  const before = countPortalFileBytes(caseRow.portal);
+  let portal = await mergePortalFilePayloads(caseRow.id, caseRow.portal);
+  if (portalMissingFileBytes(portal)) {
+    const full = await fetchPortalFullCase(caseRow.id);
+    if (full?.portal) {
+      portal = mergePortalKeepingFiles(portal, full.portal);
+      portal = await mergePortalFilePayloads(caseRow.id, portal);
+    }
+  }
+  const after = countPortalFileBytes(portal);
+  if (after <= before && !portalMissingFileBytes(caseRow.portal)) {
+    return caseRow;
+  }
+  if (after <= before) {
+    // Still missing bytes — return merged metadata view without bumping updatedAt
+    return { ...caseRow, portal };
+  }
+  const next = { ...caseRow, portal };
+  upsertCaseLocal(next);
+  void savePortalFilePayloads(caseRow.id, portal).catch(() => undefined);
+  return next;
+}
+
+const CASE_STATUS_RANK: Record<OnboardingCaseStatus, number> = {
+  draft: 0,
+  invitation_sent: 1,
+  in_progress: 2,
+  submitted: 3,
+  hr_review: 4,
+  overdue: 4,
+  ready_to_join: 5,
+  pending_join: 6,
+  joined: 7,
+  cancelled: 8,
+};
+
+function mergeDocumentFileFields(
+  preferred: OnboardingDocument[],
+  fallback: OnboardingDocument[],
+): OnboardingDocument[] {
+  const byId = new Map(fallback.map((d) => [d.id, d]));
+  return preferred.map((d) => {
+    const prior = byId.get(d.id);
+    let next = d;
+    if (!d.fileDataUrl?.trim() && prior?.fileDataUrl?.trim()) {
+      next = {
+        ...d,
+        fileDataUrl: prior.fileDataUrl,
+        mimeType: d.mimeType || prior.mimeType,
+      };
+    }
+    const localDecided =
+      prior?.verifyStatus === "verified" ||
+      prior?.verifyStatus === "rejected" ||
+      prior?.verifyStatus === "accepted";
+    if (localDecided && prior && (next.verifyStatus === "pending" || !next.verifyStatus)) {
+      next = { ...next, verifyStatus: prior.verifyStatus, notes: prior.notes ?? next.notes };
+    }
+    return next;
+  });
+}
+
+function mergePortalKeepingFiles(preferred: PortalPayload, fallback?: PortalPayload): PortalPayload {
+  if (!fallback) return preferred;
+  const documents = mergeDocumentFileFields(preferred.documents ?? [], fallback.documents ?? []);
+  const pol = preferred.policies;
+  const priorPol = fallback.policies;
+  const policies = {
+    ...pol,
+    signatureDataUrl: pol.signatureDataUrl?.trim()
+      ? pol.signatureDataUrl
+      : priorPol?.signatureDataUrl,
+    signatureMimeType: pol.signatureMimeType || priorPol?.signatureMimeType,
+    signatureFileName: pol.signatureFileName || priorPol?.signatureFileName,
+    signedDocuments: mergeDocumentFileFields(
+      pol.signedDocuments ?? [],
+      priorPol?.signedDocuments ?? [],
+    ),
+  };
+  return { ...preferred, documents, policies };
+}
+
 function mergeCasesById(preferred: OnboardingCase[], fallback: OnboardingCase[]): OnboardingCase[] {
   const map = new Map<string, OnboardingCase>();
   for (const c of fallback) map.set(c.id, c);
   for (const c of preferred) {
     const prev = map.get(c.id);
     const incomingInv = c.invitation;
+    const portal = mergePortalKeepingFiles(c.portal, prev?.portal);
     if (incomingInv && (prev?.invitation?.portalPassword || prev?.invitation?.loginEmail)) {
       map.set(c.id, {
         ...c,
+        portal,
         invitation: {
           ...incomingInv,
           portalPassword: incomingInv.portalPassword || prev.invitation?.portalPassword,
@@ -246,7 +390,17 @@ function mergeCasesById(preferred: OnboardingCase[], fallback: OnboardingCase[])
         },
       });
     } else {
-      map.set(c.id, c);
+      map.set(c.id, { ...c, portal });
+    }
+    const merged = map.get(c.id);
+    if (merged && prev && CASE_STATUS_RANK[prev.status] > CASE_STATUS_RANK[merged.status]) {
+      map.set(c.id, {
+        ...merged,
+        status: prev.status,
+        employeeId: prev.employeeId || merged.employeeId,
+        activatedAt: prev.activatedAt || merged.activatedAt,
+        progressPct: prev.progressPct,
+      });
     }
   }
   return Array.from(map.values()).sort(
@@ -471,9 +625,20 @@ export async function loadOnboardingDirectory(): Promise<OnboardingDirectory> {
   const fetched = await fetchCasesFromApi();
   // When the API is reachable it is the source of truth. Do not re-upload
   // local leftovers (they reappear after a list clear / company switch).
-  const cases = fetched.ok
+  // Still keep local/IDB file bytes when API list omits bulky fileDataUrl.
+  let cases = fetched.ok
     ? mergeCasesById(fetched.cases, localCases.filter((c) => fetched.cases.some((a) => a.id === c.id)))
     : localCases;
+  cases = await Promise.all(
+    cases.map(async (c) => {
+      try {
+        const portal = await mergePortalFilePayloads(c.id, c.portal);
+        return portal === c.portal ? c : { ...c, portal };
+      } catch {
+        return c;
+      }
+    }),
+  );
   saveCases(cases);
   // Re-stamp stored signed PDFs without legacy "Digitally signed" label.
   await migrateSignedPolicyStampFormat(cases).catch(() => undefined);
@@ -701,10 +866,25 @@ export function buildInvitationEmailBody(caseRow: OnboardingCase): string {
     "",
     `This access expires on ${expires}.`,
     "",
-    "If the link is missing or you are signed out, open the login page and sign in again with the same email and password.",
+    "Complete personal details, government IDs (Aadhaar & PAN), and upload any remaining required documents before submitting.",
+    "",
+    "If you are signed out, open the login page and sign in again with the same email and password.",
     "",
     "- HR Team",
   ].join("\n");
+}
+
+function invitationEmailHtml(caseRow: OnboardingCase): string {
+  const plain = buildInvitationEmailBody(caseRow);
+  const escaped = plain
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  return `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px;line-height:1.5;color:#111827">${escaped
+    .split("\n")
+    .map((line) => (line ? line : "<br/>"))
+    .join("<br/>")}</div>`;
 }
 
 export function buildInvitationCredentialsText(caseRow: OnboardingCase): string {
@@ -842,9 +1022,13 @@ export async function sendInvitation(
 
   const expires = new Date();
   expires.setDate(expires.getDate() + (expiryDays ?? INVITE_EXPIRY_DEFAULT_DAYS));
-  // Always mint a fresh token so “new link” works after resend
+  // Fresh token + password on every send so the email always matches portal login
   const token = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
-  const creds = ensureInvitationCredentials(c.invitation, c.candidateEmail);
+  const loginEmail = (
+    c.invitation?.loginEmail ||
+    c.candidateEmail ||
+    ""
+  ).trim();
 
   const next: OnboardingCase = {
     ...c,
@@ -856,8 +1040,8 @@ export async function sendInvitation(
       channel,
       lastChannel: channel,
       resendCount: (c.invitation?.resendCount ?? 0) + (c.invitation?.sentAt ? 1 : 0),
-      loginEmail: creds.loginEmail,
-      portalPassword: creds.portalPassword,
+      loginEmail,
+      portalPassword: generatePortalPassword(),
     },
     // New invitation clears prior terms so candidate re-confirms on the new link
     termsAcceptedAt: undefined,
@@ -871,7 +1055,31 @@ export async function sendInvitation(
     detail: `Invitation via ${channel} → ${getPortalLoginUrl()}`,
     actor: actor(),
   });
-  return syncCaseToApi(saved);
+  const synced = await syncCaseToApi(saved);
+
+  if (channel === "email") {
+    const to = invitationLoginEmail(synced);
+    if (!to) {
+      throw new Error("Candidate email is required to send the onboarding invitation");
+    }
+    await sendEmailCompose({
+      to_address: to,
+      subject: `Your onboarding login — ${synced.caseCode}`,
+      body_html: invitationEmailHtml(synced),
+      event_type: "recruitment.onboarding.invitation",
+      payload_json: {
+        case_id: synced.id,
+        case_code: synced.caseCode,
+        candidate_name: synced.candidateName,
+        portal_login_url: getPortalLoginUrl(),
+        invitation_url: synced.invitation?.token
+          ? getInvitationUrl(synced.invitation.token)
+          : undefined,
+      },
+    });
+  }
+
+  return synced;
 }
 
 export function getCaseByToken(token: string): OnboardingCase | null {
@@ -892,18 +1100,23 @@ export async function getCaseByTokenAsync(token: string): Promise<OnboardingCase
     });
     const normalized = normalizeApiCase((res.data ?? {}) as Record<string, unknown>);
     if (normalized) {
-      upsertCaseLocal(normalized);
+      const portal = await mergePortalFilePayloads(normalized.id, normalized.portal);
+      const withFiles = { ...normalized, portal };
+      upsertCaseLocal(withFiles);
       if ((res.data as { _expired?: boolean })?._expired) {
-        return { ...normalized, status: "overdue" };
+        return { ...withFiles, status: "overdue" };
       }
-      return normalized;
+      return withFiles;
     }
   } catch (e) {
     if (e instanceof ApiClientError && e.status === 404) return null;
     if (e instanceof ApiClientError && (e.status === 0 || e.status >= 500)) throw e;
     /* fall through to local */
   }
-  return getCaseByToken(token);
+  const local = getCaseByToken(token);
+  if (!local) return null;
+  const portal = await mergePortalFilePayloads(local.id, local.portal);
+  return { ...local, portal };
 }
 
 export async function acceptOnboardingTerms(token: string): Promise<OnboardingCase | null> {
@@ -943,6 +1156,10 @@ export async function savePortalProgress(
   portal: PortalPayload,
   advanceStatus = true,
 ): Promise<OnboardingCase | null> {
+  const hasFileBytes =
+    (portal.documents ?? []).some((d) => Boolean(d.fileDataUrl?.trim())) ||
+    Boolean(portal.policies?.signatureDataUrl?.trim());
+
   try {
     const res = await apiClient<Record<string, unknown>>(
       `/public/onboarding/${encodeURIComponent(token)}/portal`,
@@ -954,11 +1171,23 @@ export async function savePortalProgress(
     );
     const normalized = normalizeApiCase((res.data ?? {}) as Record<string, unknown>);
     if (normalized) {
-      upsertCaseLocal(normalized);
-      return normalized;
+      await savePortalFilePayloads(normalized.id, portal).catch(() => undefined);
+      const withFiles = {
+        ...normalized,
+        portal: await mergePortalFilePayloads(normalized.id, mergePortalKeepingFiles(normalized.portal, portal)),
+      };
+      upsertCaseLocal(withFiles);
+      return withFiles;
     }
   } catch (e) {
     if (e instanceof ApiClientError && e.status === 400) throw e;
+    // File uploads must reach the server or HR cannot preview — don't silently go local-only
+    if (hasFileBytes && e instanceof ApiClientError) throw e;
+    if (hasFileBytes) {
+      throw e instanceof Error
+        ? e
+        : new Error("Could not save uploaded files to the server. Try a smaller file.");
+    }
   }
 
   const all = loadCases();
@@ -967,6 +1196,7 @@ export async function savePortalProgress(
   const c = all[idx];
   const nextStatus: OnboardingCaseStatus =
     advanceStatus && c.status === "invitation_sent" ? "in_progress" : c.status;
+  await savePortalFilePayloads(c.id, portal).catch(() => undefined);
   const next = upsertCase({ ...c, portal, status: nextStatus });
   if (!next) return null;
   appendOnboardingAudit({
@@ -979,31 +1209,132 @@ export async function savePortalProgress(
   return next;
 }
 
+/** Drop base64 payloads so submit stays under request-size limits. Server merges prior files. */
+function leanPortalForSubmit(portal: PortalPayload): PortalPayload {
+  return {
+    ...portal,
+    documents: (portal.documents ?? []).map((d) => ({
+      ...d,
+      fileDataUrl: undefined,
+    })),
+    policies: {
+      ...portal.policies,
+      // Keep small signature image for HR re-stamp; strip bulky stamped PDFs
+      signedDocuments: stripSignedDocPayloads(portal.policies?.signedDocuments ?? []),
+    },
+  };
+}
+
+const ACTIVATED_EMPLOYEES_KEY = "erp_onboarding_activated_employees_v1";
+
+function rememberedEmployeeCode(caseId: string): string {
+  const list = readJson<{ employeeCode: string; caseId: string }[]>(ACTIVATED_EMPLOYEES_KEY, []);
+  return (list.find((row) => row.caseId === caseId)?.employeeCode || "").trim();
+}
+
+function rememberActivatedEmployee(caseId: string, employeeCode: string): void {
+  const list = readJson<{ employeeCode: string; caseId: string; at: string }[]>(
+    ACTIVATED_EMPLOYEES_KEY,
+    [],
+  );
+  const rest = list.filter((row) => row.caseId !== caseId);
+  rest.unshift({ employeeCode, caseId, at: nowIso() });
+  writeJson(ACTIVATED_EMPLOYEES_KEY, rest.slice(0, 200));
+}
+
+/** Save status without file bytes, then push it to the server so a refresh cannot undo it. */
+async function persistOnboardingCase(caseRow: OnboardingCase): Promise<OnboardingCase> {
+  const lean: OnboardingCase = {
+    ...caseRow,
+    portal: leanPortalForSubmit(caseRow.portal),
+  };
+  const saved = upsertCase(lean);
+  if (!saved) {
+    throw new Error("Could not save this onboarding update. Browser storage is full.");
+  }
+  const synced = await syncCaseToApi(saved, { required: true });
+  return {
+    ...synced,
+    portal: mergePortalKeepingFiles(synced.portal, caseRow.portal),
+  };
+}
+
 export async function submitPortal(token: string, portal: PortalPayload): Promise<OnboardingCase | null> {
   const all = loadCases();
   const idx = findCaseIndexByToken(all, token);
   const caseId = idx >= 0 ? all[idx].id : null;
+  const storageKey = caseId || `token:${token}`;
 
-  let portalForStorage = portal;
   const signedFull = portal.policies?.signedDocuments?.filter((d) => d.fileDataUrl) ?? [];
-  if (caseId && signedFull.length) {
+  if (signedFull.length) {
     try {
-      await saveSignedPolicyDocsForCase(caseId, signedFull);
-      portalForStorage = {
-        ...portal,
-        policies: {
-          ...portal.policies,
-          // Keep metadata in the case; payloads live in IndexedDB.
-          signedDocuments: stripSignedDocPayloads(signedFull),
-        },
-      };
+      await saveSignedPolicyDocsForCase(storageKey, signedFull);
     } catch (err) {
       devError("Failed to persist signed policy PDFs");
     }
   }
+  try {
+    await savePortalFilePayloads(storageKey, portal);
+  } catch {
+    /* IDB optional */
+  }
+
+  // Push file bytes to the server before lean submit strips them (HR preview depends on this).
+  // Prefer one document at a time so a large PDF does not fail the whole payload.
+  const docsWithFiles = (portal.documents ?? []).filter((d) => d.fileDataUrl?.trim());
+  if (docsWithFiles.length || portal.policies?.signatureDataUrl?.trim()) {
+    for (const doc of docsWithFiles) {
+      const singleDocPortal: PortalPayload = {
+        ...portal,
+        documents: [doc],
+        policies: {
+          ...portal.policies,
+          // Avoid re-sending bulky stamped PDFs on each doc push
+          signedDocuments: stripSignedDocPayloads(portal.policies?.signedDocuments ?? []),
+        },
+      };
+      try {
+        await savePortalProgress(token, singleDocPortal, false);
+      } catch (e) {
+        if (e instanceof ApiClientError && e.status === 400) throw e;
+        throw new ApiClientError(
+          `Could not save “${doc.fileName}” for HR preview. Try a smaller file, then submit again.`,
+          e instanceof ApiClientError ? e.status : 0,
+        );
+      }
+    }
+    if (portal.policies?.signatureDataUrl?.trim()) {
+      try {
+        await savePortalProgress(
+          token,
+          {
+            ...leanPortalForSubmit(portal),
+            policies: {
+              ...portal.policies,
+              signedDocuments: stripSignedDocPayloads(portal.policies?.signedDocuments ?? []),
+            },
+            documents: leanPortalForSubmit(portal).documents,
+          },
+          false,
+        );
+      } catch (e) {
+        if (e instanceof ApiClientError && e.status === 400) throw e;
+        // Signature image is small — non-fatal if earlier doc pushes succeeded
+        devWarn("Could not push signature image before submit");
+      }
+    }
+  }
+
+  // Ensure latest non-file fields are on the server before final submit
+  try {
+    await savePortalProgress(token, leanPortalForSubmit(portal), false);
+  } catch (e) {
+    if (e instanceof ApiClientError && e.status === 400) throw e;
+    // Continue to submit — prior step saves may already have the data
+  }
 
   const submitted: PortalPayload = {
-    ...portalForStorage,
+    ...leanPortalForSubmit(portal),
     submittedAt: nowIso(),
   };
   try {
@@ -1017,17 +1348,40 @@ export async function submitPortal(token: string, portal: PortalPayload): Promis
     );
     const normalized = normalizeApiCase((res.data ?? {}) as Record<string, unknown>);
     if (normalized) {
-      upsertCaseLocal(normalized);
-      return normalized;
+      const withFiles = {
+        ...normalized,
+        portal: await mergePortalFilePayloads(normalized.id, normalized.portal),
+      };
+      upsertCaseLocal(withFiles);
+      return withFiles;
     }
   } catch (e) {
-    if (e instanceof ApiClientError && e.status === 400) throw e;
+    // Surface validation / conflict / server errors to the candidate UI
+    if (e instanceof ApiClientError) {
+      if (e.status === 0 && idx >= 0) {
+        /* fall through to local offline submit */
+      } else {
+        throw e;
+      }
+    } else {
+      throw e;
+    }
   }
 
-  if (idx < 0) return null;
+  if (idx < 0) {
+    throw new ApiClientError(
+      "Could not submit onboarding to the server. Check your connection and try again.",
+      0,
+    );
+  }
   const c = all[idx];
   const next = upsertCase({ ...c, portal: submitted, status: "hr_review" });
-  if (!next) return null;
+  if (!next) {
+    throw new ApiClientError(
+      "Could not save onboarding locally (browser storage full). Try again after clearing site data, or contact HR.",
+      0,
+    );
+  }
   appendOnboardingAudit({
     caseId: c.id,
     action: "portal_submit",
@@ -1076,7 +1430,12 @@ export async function verifyDocument(
   notes?: string,
 ): Promise<OnboardingCase | null> {
   const c = getCaseById(caseId);
-  if (!c) return null;
+  if (!c) {
+    throw new Error("Onboarding case was not found. Refresh the page and try again.");
+  }
+  if (!c.portal.documents.some((d) => d.id === docId)) {
+    throw new Error("That document is no longer on this case. Refresh and try again.");
+  }
   const documents = c.portal.documents.map((d) =>
     d.id === docId ? { ...d, verifyStatus, notes } : d,
   );
@@ -1109,13 +1468,12 @@ export async function verifyDocument(
     }
   }
 
-  const next = upsertCase({
+  const next: OnboardingCase = {
     ...c,
     portal,
     status,
     invitation,
-  });
-  if (!next) return null;
+  };
   appendOnboardingAudit({
     caseId,
     action: "verify_document",
@@ -1134,7 +1492,7 @@ export async function verifyDocument(
       actor: actor(),
     });
   }
-  return syncCaseToApi(next);
+  return persistOnboardingCase(next);
 }
 
 /** Prefer copy + invitation drawer - mailto opens Outlook and often fails mid-update. */
@@ -1253,18 +1611,25 @@ export async function updateOnboardingAssignment(
 export async function approveCandidateReview(caseId: string): Promise<OnboardingCase | null> {
   const c = getCaseById(caseId);
   if (!c) return null;
-  if (!c.portal.submittedAt) {
+  const docs = c.portal.documents ?? [];
+  const allDocsVerified =
+    docs.length > 0 &&
+    docs.every((d) => d.verifyStatus === "verified" || d.verifyStatus === "accepted");
+  if (!c.portal.submittedAt && !allDocsVerified) {
     throw new Error("Candidate has not submitted the onboarding portal yet.");
   }
-  const pendingDocs = c.portal.documents.filter((d) => d.verifyStatus === "pending");
+  const pendingDocs = docs.filter((d) => d.verifyStatus === "pending");
   if (pendingDocs.length > 0) {
     throw new Error("Verify or reject all uploaded documents before approving.");
   }
-  const rejected = c.portal.documents.filter((d) => d.verifyStatus === "rejected");
+  const rejected = docs.filter((d) => d.verifyStatus === "rejected");
   if (rejected.length > 0) {
     throw new Error(
       "Some documents were rejected - the candidate has been asked to re-upload. Wait for their re-submission.",
     );
+  }
+  if (!docs.length) {
+    throw new Error("No documents uploaded yet.");
   }
   if (!c.department?.trim() || !c.designation?.trim()) {
     throw new Error("Set department and designation on Overview before approving.");
@@ -1275,7 +1640,10 @@ export async function approveCandidateReview(caseId: string): Promise<Onboarding
   if (!c.employmentType?.trim()) {
     throw new Error("Set employment type on Overview before approving.");
   }
-  const next = upsertCase({ ...c, status: "ready_to_join" });
+  const portal = c.portal.submittedAt
+    ? c.portal
+    : { ...c.portal, submittedAt: c.portal.submittedAt || nowIso() };
+  const next = upsertCase({ ...c, portal, status: "ready_to_join" });
   if (!next) return null;
   appendOnboardingAudit({
     caseId,
@@ -1286,10 +1654,10 @@ export async function approveCandidateReview(caseId: string): Promise<Onboarding
   return syncCaseToApi(next);
 }
 
-function resolveOnboardingEmployeeCode(
+async function resolveOnboardingEmployeeCode(
   c: OnboardingCase,
   opts?: { employeeCode?: string; employeeIdMode?: "auto" | "manual" },
-): string {
+): Promise<string> {
   const explicit = (opts?.employeeCode || "").trim().toUpperCase();
   if (explicit) return explicit;
   const mode = opts?.employeeIdMode ?? c.employeeIdMode ?? "auto";
@@ -1300,7 +1668,153 @@ function resolveOnboardingEmployeeCode(
     }
     return assigned;
   }
+  // Auto: {entity company_code}-NNNNNN — new company code starts its own serial.
+  try {
+    const entities = await listEntityOptions();
+    const ent = entities.find((e) => e.value === c.entityId);
+    if (ent?.code) {
+      return (await allocateNextEmployeeCodeForEntity(c.entityId, ent.code)).toUpperCase();
+    }
+  } catch {
+    /* fall through */
+  }
   return previewNextEmployeeCode().trim().toUpperCase();
+}
+
+/** Aadhaar / PAN live on the BG document portal — copy onto the onboarding case before employee import. */
+async function mergeBgGovernmentIdsIntoCase(caseRow: OnboardingCase): Promise<OnboardingCase> {
+  if (caseRow.portal.governmentIds.aadhaar && caseRow.portal.governmentIds.pan) {
+    return caseRow;
+  }
+  const bgGov = await resolveBgGovernmentIds({
+    offerId: caseRow.offerId,
+    offerCode: caseRow.offerCode,
+    candidateId: caseRow.candidateId,
+  });
+  if (!bgGov.aadhaar && !bgGov.pan) return caseRow;
+  return {
+    ...caseRow,
+    portal: {
+      ...caseRow.portal,
+      governmentIds: {
+        ...caseRow.portal.governmentIds,
+        aadhaar: caseRow.portal.governmentIds.aadhaar || bgGov.aadhaar,
+        pan: caseRow.portal.governmentIds.pan || bgGov.pan,
+      },
+    },
+  };
+}
+
+function mapBgKindToDocumentKind(kind: string): DocumentKind {
+  const key = kind.toLowerCase().replace(/-/g, "_");
+  const known: DocumentKind[] = [
+    "photo",
+    "resume",
+    "pan",
+    "aadhaar",
+    "passport",
+    "education",
+    "experience",
+    "cancelled_cheque",
+    "bank_details",
+    "appointment_letter",
+    "relieving_letter",
+    "salary_slips",
+    "previous_employer",
+    "signature",
+    "other",
+  ];
+  if (known.includes(key as DocumentKind)) {
+    return key as DocumentKind;
+  }
+  if (key.includes("photo") || key === "live_photo") return "photo";
+  if (key.includes("sign")) return "signature";
+  if (key.includes("aadhaar") || key.includes("aadhar")) return "aadhaar";
+  if (key.includes("pan")) return "pan";
+  if (key.includes("passport")) return "passport";
+  if (key.includes("resume") || key.includes("cv")) return "resume";
+  if (key.includes("cheque")) return "cancelled_cheque";
+  if (key.includes("bank")) return "bank_details";
+  if (key.includes("education") || key.includes("marksheet")) return "education";
+  if (key.includes("experience") || key.includes("employment")) return "experience";
+  return "other";
+}
+
+/**
+ * Merge BG-check portal uploads into the onboarding case document list for HR view.
+ * Does not replace existing onboarding files; skips duplicates by id / file name.
+ */
+export async function mergeBgCheckDocumentsIntoCase(
+  caseRow: OnboardingCase,
+): Promise<OnboardingCase> {
+  const bgDocs = await fetchBgDocumentsForCandidate({
+    offerId: caseRow.offerId,
+    offerCode: caseRow.offerCode,
+    candidateId: caseRow.candidateId,
+  }).catch(() => []);
+  if (!bgDocs.length) return caseRow;
+
+  const existing = caseRow.portal.documents ?? [];
+  const byId = new Set(existing.map((d) => d.id));
+  const byFile = new Set(existing.map((d) => d.fileName.trim().toLowerCase()).filter(Boolean));
+
+  const imported: OnboardingDocument[] = [];
+  for (const d of bgDocs) {
+    const fileKey = d.fileName.trim().toLowerCase();
+    if (byId.has(d.id) || (fileKey && byFile.has(fileKey))) continue;
+    imported.push({
+      id: d.id,
+      kind: mapBgKindToDocumentKind(d.kind),
+      fileName: d.fileName,
+      uploadedAt: nowIso(),
+      verifyStatus: "verified",
+      notes: "Uploaded via BG check portal",
+      fileDataUrl: d.fileDataUrl,
+      mimeType: d.mimeType,
+      source: "bg_check",
+    });
+    byId.add(d.id);
+    if (fileKey) byFile.add(fileKey);
+  }
+  if (!imported.length) return caseRow;
+  return {
+    ...caseRow,
+    portal: {
+      ...caseRow.portal,
+      documents: [...existing, ...imported],
+    },
+  };
+}
+
+async function withBgDocumentsOnDraft(
+  caseRow: OnboardingCase,
+  draft: ReturnType<typeof portalToWizardDraft>,
+): Promise<ReturnType<typeof portalToWizardDraft>> {
+  const bgDocs = await fetchBgDocumentsForCandidate({
+    offerId: caseRow.offerId,
+    offerCode: caseRow.offerCode,
+    candidateId: caseRow.candidateId,
+  }).catch(() => []);
+  if (!bgDocs.length) return draft;
+  const existing = new Set(
+    draft.documents.map((d) => `${d.documentType}|${d.fileName}`.toLowerCase()),
+  );
+  const imported = bgDocs
+    .filter((d) => !existing.has(`${d.label}|${d.fileName}`.toLowerCase()))
+    .map((d) => ({
+      id: d.id,
+      documentType: d.label,
+      documentNumber: "",
+      issueDate: "",
+      expiryDate: "",
+      fileName: d.fileName,
+      fileDataUrl: d.fileDataUrl,
+      uploadedBy: "BG check portal",
+      uploadedAt: nowIso(),
+      source: "bg_check" as const,
+    }));
+  if (!imported.length) return draft;
+  return { ...draft, documents: [...draft.documents, ...imported] };
 }
 
 /** Create employee profile after HR approval. Activates immediately if joining date has passed. */
@@ -1319,7 +1833,7 @@ export async function completeOnboarding(
 
   // Prefer clear PII from API for employee import; HR list views stay masked
   const full = await fetchPortalFullCase(caseId);
-  const c: OnboardingCase = full
+  let c: OnboardingCase = full
     ? {
         ...localCase,
         ...full,
@@ -1339,8 +1853,10 @@ export async function completeOnboarding(
     throw new Error("Candidate has not submitted the onboarding portal yet.");
   }
 
+  c = await mergeBgGovernmentIdsIntoCase(c);
+
   const activateNow = isJoiningDateReached(c.joiningDate);
-  const employeeCode = resolveOnboardingEmployeeCode(c, opts);
+  const employeeCode = await resolveOnboardingEmployeeCode(c, opts);
 
   const apiOnboardingId = (c as OnboardingCase & { apiOnboardingId?: string }).apiOnboardingId;
   let employmentId =
@@ -1384,14 +1900,17 @@ export async function completeOnboarding(
         const lifecycle = activateNow ? (startProbation ? "probation" : "active") : "onboarding";
         await applyOnboardingPortalToEmployee(
           employeeUuid,
-          portalToWizardDraft(
-            {
-              ...c,
-              managementGroupId: opts?.managementGroupId || c.managementGroupId,
-              managementGroupName: opts?.managementGroupName || c.managementGroupName,
-            },
-            employeeCode,
-            lifecycle,
+          await withBgDocumentsOnDraft(
+            c,
+            portalToWizardDraft(
+              {
+                ...c,
+                managementGroupId: opts?.managementGroupId || c.managementGroupId,
+                managementGroupName: opts?.managementGroupName || c.managementGroupName,
+              },
+              employeeCode,
+              lifecycle,
+            ),
           ),
         );
       }
@@ -1401,7 +1920,7 @@ export async function completeOnboarding(
           ? { ...item, status: "done" as const, completedAt: nowIso() }
           : item,
       );
-      const next = upsertCase({
+      const next = {
         ...c,
         employeeId: employeeCode,
         apiEmploymentId: employmentId,
@@ -1411,7 +1930,7 @@ export async function completeOnboarding(
         status: activateNow ? "joined" : "pending_join",
         activatedAt: activateNow ? nowIso() : undefined,
         progressPct: activateNow ? 100 : 96,
-      } as OnboardingCase & { apiEmploymentId?: string });
+      } as OnboardingCase & { apiEmploymentId?: string };
       appendOnboardingAudit({
         caseId,
         action: activateNow ? "activate_employee" : "complete_onboarding",
@@ -1420,7 +1939,7 @@ export async function completeOnboarding(
           : `Employee profile created (${employeeCode}); activation pending until ${c.joiningDate || "joining date"}`,
         actor: actor(),
       });
-      return next;
+      return persistOnboardingCase(next);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Completion failed";
       appendOnboardingAudit({
@@ -1437,33 +1956,44 @@ export async function completeOnboarding(
   const firstName = nameParts[0] || c.candidateName;
   const lastName = nameParts.slice(1).join(" ");
 
-  const local = registerLocalEmployee({
-    firstName,
-    lastName,
-    email: c.candidateEmail,
-    phone: c.candidatePhone,
-    department: c.department,
-    designation: c.designation,
-    branch: c.branch,
-    shift: c.shift,
-    leavePolicy: c.leavePolicy,
-    employmentType: c.employmentType,
-    reportingManager: c.reportingManager,
-    joiningDate: c.joiningDate,
-    employeeCode,
-    lifecycleStatus: activateNow ? "probation" : "onboarding",
-  });
+  const remembered = rememberedEmployeeCode(caseId);
+  const existingLocal = remembered
+    ? listLocalEmployees().find(
+        (row) => row.employeeCode === remembered || row.id === remembered,
+      )
+    : undefined;
+  const local =
+    existingLocal ??
+    registerLocalEmployee({
+      firstName,
+      lastName,
+      email: c.candidateEmail,
+      phone: c.candidatePhone,
+      department: c.department,
+      designation: c.designation,
+      branch: c.branch,
+      shift: c.shift,
+      leavePolicy: c.leavePolicy,
+      employmentType: c.employmentType,
+      reportingManager: c.reportingManager,
+      joiningDate: c.joiningDate,
+      employeeCode: remembered || employeeCode,
+      lifecycleStatus: activateNow ? "probation" : "onboarding",
+    });
 
   await applyOnboardingPortalToEmployee(
     local.id,
-    portalToWizardDraft(
-      {
-        ...c,
-        managementGroupId: opts?.managementGroupId || c.managementGroupId,
-        managementGroupName: opts?.managementGroupName || c.managementGroupName,
-      },
-      employeeCode,
-      activateNow ? "probation" : "onboarding",
+    await withBgDocumentsOnDraft(
+      c,
+      portalToWizardDraft(
+        {
+          ...c,
+          managementGroupId: opts?.managementGroupId || c.managementGroupId,
+          managementGroupName: opts?.managementGroupName || c.managementGroupName,
+        },
+        local.employeeCode,
+        activateNow ? "probation" : "onboarding",
+      ),
     ),
   );
 
@@ -1472,7 +2002,7 @@ export async function completeOnboarding(
       ? { ...item, status: "done" as const, completedAt: nowIso() }
       : item,
   );
-  const next = upsertCase({
+  const next: OnboardingCase = {
     ...c,
     employeeId: local.employeeCode,
     managementGroupId: opts?.managementGroupId || c.managementGroupId,
@@ -1481,22 +2011,8 @@ export async function completeOnboarding(
     status: activateNow ? "joined" : "pending_join",
     activatedAt: activateNow ? nowIso() : undefined,
     progressPct: activateNow ? 100 : 96,
-  });
-
-  try {
-    const key = "erp_onboarding_activated_employees_v1";
-    const list = readJson<
-      {
-        employeeCode: string;
-        caseId: string;
-        at: string;
-      }[]
-    >(key, []);
-    list.unshift({ employeeCode: local.employeeCode, caseId, at: nowIso() });
-    writeJson(key, list.slice(0, 200));
-  } catch {
-    /* ignore */
-  }
+  };
+  rememberActivatedEmployee(caseId, local.employeeCode);
 
   appendOnboardingAudit({
     caseId,
@@ -1506,7 +2022,7 @@ export async function completeOnboarding(
       : `Local profile ${local.employeeCode} - pending activation until ${c.joiningDate || "joining date"}`,
     actor: actor(),
   });
-  return next;
+  return persistOnboardingCase(next);
 }
 
 /** Activate a pending employee on or after joining date. */
@@ -1564,17 +2080,22 @@ export async function activateOnboardingEmployee(
         updateLocalEmployeeLifecycle(c.employeeId, startProbation ? "probation" : "active");
       }
 
-      // Re-import portal contact / email / gender / DOB onto the employee record
+      // Re-import portal contact / email / gender / DOB / gov IDs onto the employee record
       try {
-        const full = (await fetchPortalFullCase(caseId).catch(() => null)) ?? c;
-        const draft = portalToWizardDraft(
-          {
-            ...full,
-            managementGroupId: opts?.managementGroupId || c.managementGroupId,
-            managementGroupName: opts?.managementGroupName || c.managementGroupName,
-          },
-          employeeCode,
-          startProbation ? "probation" : "active",
+        const full = await mergeBgGovernmentIdsIntoCase(
+          (await fetchPortalFullCase(caseId).catch(() => null)) ?? c,
+        );
+        const draft = await withBgDocumentsOnDraft(
+          full,
+          portalToWizardDraft(
+            {
+              ...full,
+              managementGroupId: opts?.managementGroupId || c.managementGroupId,
+              managementGroupName: opts?.managementGroupName || c.managementGroupName,
+            },
+            employeeCode,
+            startProbation ? "probation" : "active",
+          ),
         );
         const apiUuid =
           (c as OnboardingCase & { apiEmployeeId?: string }).apiEmployeeId ||
@@ -1602,7 +2123,10 @@ export async function activateOnboardingEmployee(
         detail: `Activated Emp ID ${employeeCode}; employment ${employmentId}`,
         actor: actor(),
       });
-      return next;
+      if (!next) {
+        throw new Error("Could not save activation. Browser storage is full.");
+      }
+      return persistOnboardingCase(next);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Activation failed";
       appendOnboardingAudit({
@@ -1618,15 +2142,20 @@ export async function activateOnboardingEmployee(
   updateLocalEmployeeLifecycle(c.employeeId, "probation");
 
   try {
-    const full = (await fetchPortalFullCase(caseId).catch(() => null)) ?? c;
-    const draft = portalToWizardDraft(
-      {
-        ...full,
-        managementGroupId: opts?.managementGroupId || c.managementGroupId,
-        managementGroupName: opts?.managementGroupName || c.managementGroupName,
-      },
-      employeeCode,
-      "probation",
+    const full = await mergeBgGovernmentIdsIntoCase(
+      (await fetchPortalFullCase(caseId).catch(() => null)) ?? c,
+    );
+    const draft = await withBgDocumentsOnDraft(
+      full,
+      portalToWizardDraft(
+        {
+          ...full,
+          managementGroupId: opts?.managementGroupId || c.managementGroupId,
+          managementGroupName: opts?.managementGroupName || c.managementGroupName,
+        },
+        employeeCode,
+        "probation",
+      ),
     );
     if (c.employeeId && c.employeeId !== employeeCode) {
       await applyOnboardingPortalToEmployee(c.employeeId, draft);
@@ -1651,7 +2180,10 @@ export async function activateOnboardingEmployee(
     detail: `Local activate Emp ID ${employeeCode}`,
     actor: actor(),
   });
-  return next;
+  if (!next) {
+    throw new Error("Could not save activation. Browser storage is full.");
+  }
+  return persistOnboardingCase(next);
 }
 
 /** @deprecated Use completeOnboarding or activateOnboardingEmployee */

@@ -92,13 +92,19 @@ class ShiftAssignmentService:
         company_id: UUID | None = None,
         **fields,
     ):
-        cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
+        cid = self._scope.resolve_create_company_id(
+            ctx, branch_id=branch_id, company_id=company_id
+        )
         self._master.get_employee(ctx, employee_id)
         if self._shifts.get(ctx, shift_id) is None:
             raise NotFoundException("Shift not found")
         doc = self._numbers.generate(
-            HrEntityType.SHIFT_ASSIGNMENT, cid, HrShiftAssignment, "document_number"
+            HrEntityType.SHIFT_ASSIGNMENT,
+            cid,
+            HrShiftAssignment,
+            "document_number",
+            tenant_id=ctx.tenant_id,
         )
         return self._repo.create(
             ctx,
@@ -120,6 +126,7 @@ class ShiftAssignmentService:
     def approve(self, ctx: TenantContext, row_id: UUID):
         row = self.get(ctx, row_id)
         self._engine.approve(row)
+        self._engine.activate(row)
         updated = self._repo.update(ctx, row_id, status=row.status)
         try:
             from modules.hr.service.hr_notify import notify_employee

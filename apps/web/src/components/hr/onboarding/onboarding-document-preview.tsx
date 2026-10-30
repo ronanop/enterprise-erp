@@ -58,10 +58,10 @@ export function OnboardingDocumentPreviewDialog({ doc, subtitle, onClose }: Prev
         </div>
 
         <div className="min-h-[200px] flex-1 overflow-auto bg-muted/20 p-4">
-          {!doc.fileDataUrl ? (
+          {!doc.fileDataUrl?.trim() ? (
             <p className="text-sm text-muted-foreground">
-              Preview is not available for this upload. Ask the candidate to upload the file again
-              from the portal so HR can view it.
+              File content was not saved for this upload (metadata only). Reject the document so the
+              candidate can re-upload from the portal — then View will show the preview.
             </p>
           ) : (
             <DocumentPreviewContent

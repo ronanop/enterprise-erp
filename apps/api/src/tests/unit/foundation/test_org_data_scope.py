@@ -24,6 +24,42 @@ def test_effective_company_ids_uses_assigned_scope() -> None:
     assert effective_company_ids(ctx, module_key="crm") == [c1, c2]
 
 
+def test_effective_company_ids_pins_to_active_session_company() -> None:
+    c1, c2 = uuid4(), uuid4()
+    ctx = TenantContext(
+        tenant_id=uuid4(),
+        user_id=uuid4(),
+        user_type="employee",
+        company_id=c1,
+        scoped_company_ids=(c1, c2),
+    )
+    assert effective_company_ids(ctx, module_key="hr") == [c1]
+
+
+def test_effective_company_ids_all_companies_uses_allowlist() -> None:
+    c1, c2 = uuid4(), uuid4()
+    ctx = TenantContext(
+        tenant_id=uuid4(),
+        user_id=uuid4(),
+        user_type="employee",
+        all_companies=True,
+        scoped_company_ids=(c1, c2),
+    )
+    assert effective_company_ids(ctx, module_key="hr") == [c1, c2]
+
+
+def test_effective_company_ids_rejects_active_outside_scope() -> None:
+    c1, c2, other = uuid4(), uuid4(), uuid4()
+    ctx = TenantContext(
+        tenant_id=uuid4(),
+        user_id=uuid4(),
+        user_type="employee",
+        company_id=other,
+        scoped_company_ids=(c1, c2),
+    )
+    assert effective_company_ids(ctx, module_key="hr") == []
+
+
 def test_platform_admin_effective_company_ids_none() -> None:
     ctx = TenantContext(
         tenant_id=uuid4(),

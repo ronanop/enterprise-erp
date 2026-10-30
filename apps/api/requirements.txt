@@ -23,6 +23,7 @@ openpyxl==3.1.5
 xlrd==2.0.1
 pypdfium2==4.30.1
 pillow==11.3.0
+pyzk==0.9
 -r requirements-ocr.txt
 
 pytest==9.0.3

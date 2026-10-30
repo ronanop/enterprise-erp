@@ -90,6 +90,7 @@ from modules.hr.schemas import (
     BiometricDeviceFeedResponse,
     BiometricDeviceResponse,
     DeviceSyncRequest,
+    BiometricDownloadResponse,
     DeviceSyncResponse,
     ShiftRotationCreate,
     ShiftRotationResponse,
@@ -1399,6 +1400,29 @@ def create_biometric_device(
     row, api_key = BiometricDeviceService(db).create(ctx, generate_api_key=generate, **payload)
     data = BiometricDeviceResponse.model_validate(row).model_copy(update={"api_key": api_key})
     return APIResponse(message="OK", data=data)
+
+
+@biometric_devices_router.delete("/{row_id}", response_model=APIResponse[None])
+def delete_biometric_device(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    BiometricDeviceService(db).delete(ctx, row_id)
+    return APIResponse(message="Deleted", data=None)
+
+
+@biometric_devices_router.post(
+    "/{row_id}/download",
+    response_model=APIResponse[BiometricDownloadResponse],
+)
+def download_biometric_logs(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:create"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    result = BiometricDeviceService(db).download_logs(ctx, row_id)
+    return APIResponse(message="Attendance downloaded", data=result)
 
 
 @biometric_devices_router.post("/{row_id}/rotate-api-key", response_model=APIResponse[dict])

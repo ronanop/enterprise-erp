@@ -1,7 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, Fragment } from "react";
-import { Check, ChevronDown, ClipboardList, Clock, FileText, GitBranch, MessageSquare, Plus, Trash2, Upload, Wallet } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ClipboardList,
+  Clock,
+  FileSignature,
+  FileText,
+  GitBranch,
+  MessageSquare,
+  Plus,
+  Trash2,
+  Upload,
+  Wallet,
+} from "lucide-react";
 
 import { ExitAgreementsPanel } from "@/components/hr/offboarding/exit-agreements-panel";
 import {

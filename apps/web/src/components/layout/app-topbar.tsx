@@ -5,6 +5,7 @@ import Link from "next/link";
 import { LogIn } from "lucide-react";
 
 import { AppTopbarNotifications } from "@/components/layout/app-topbar-notifications";
+import { CompanyContextBadge } from "@/components/layout/company-context-badge";
 import { ShellGlobalSearch } from "@/components/layout/shell-global-search";
 import { useAuthUser } from "@/hooks/use-auth-user";
 
@@ -34,6 +35,7 @@ export function AppTopbar() {
       <ShellGlobalSearch className="min-w-0 flex-1" />
 
       <div className="flex shrink-0 items-center gap-2">
+        {signedIn ? <CompanyContextBadge /> : null}
         <AppTopbarNotifications />
         {!signedIn && !loading ? (
           <Link

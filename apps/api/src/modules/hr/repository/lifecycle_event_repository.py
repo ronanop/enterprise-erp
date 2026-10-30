@@ -28,11 +28,16 @@ class LifecycleEventRepository(HrScopedRepository):
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> HrLifecycleEvent:
+        # Table has NOT NULL created_at/updated_at without DB defaults in some envs;
+        # set them in Python so INSERT does not rely on server_default.
+        now = utcnow()
         row = HrLifecycleEvent(
             id=uuid4(),
             tenant_id=ctx.tenant_id,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
+            created_at=now,
+            updated_at=now,
             event_at=fields.pop("event_at", datetime.now(timezone.utc)),
             **fields,
         )

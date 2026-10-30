@@ -3,8 +3,8 @@
 import { formatInr } from "@/services/payroll-management-service";
 import { amountInIndianWords } from "@/utils/purchase-order-amount-words";
 import {
-  payslipFigures,
-  payslipProjection,
+  buildPayslipView,
+  capitalizeWords,
   type PayslipMoneyRow,
   type PayslipPdfContext,
 } from "@/utils/payslip-pdf";
@@ -12,6 +12,11 @@ import type { PayslipRecord } from "@/types/payroll-management";
 
 function show(value: string): string {
   return value.trim() ? value : "—";
+}
+
+function showName(value: string): string {
+  const text = value.trim();
+  return text ? capitalizeWords(text) : "—";
 }
 
 function moneyOrBlank(value: number | null): string {
@@ -81,7 +86,7 @@ function MoneyTable({
 const NOTES = [
   "This is a system generated payslip and does not require a signature.",
   "Salary is processed based on attendance and company policies.",
-  "Tax calculations are shown only when a tax amount is stored. Declarations such as Section 80C are not estimated.",
+  "Tax calculations are based on current declarations and may change subject to actual investments.",
   "For any discrepancies, contact HR within 7 days.",
 ];
 
@@ -92,8 +97,12 @@ export function PayslipLetterhead({
   slip: PayslipRecord;
   ctx: PayslipPdfContext;
 }) {
-  const figures = payslipFigures(slip);
-  const projection = payslipProjection(figures, ctx);
+  const { figures, projection } = buildPayslipView(slip, ctx);
+  const tax = projection.tax;
+  const nextMonthTds =
+    ctx.nextMonths.length > 0
+      ? Math.round(projection.nextTds / Math.min(3, ctx.nextMonths.length))
+      : 0;
 
   return (
     <div className="space-y-3 text-xs text-foreground">
@@ -123,34 +132,33 @@ export function PayslipLetterhead({
       <div className="text-center">
         <p className="text-sm font-semibold tracking-wide">SALARY SLIP</p>
         <p className="text-muted-foreground">For the month of {slip.monthLabel}</p>
-        <p className="text-muted-foreground">
-          {show(slip.payslipCode)} · {show(ctx.paymentStatus)}
-        </p>
+        <p className="text-muted-foreground">{show(slip.payslipCode)}</p>
       </div>
 
       <div className="grid grid-cols-1 gap-x-4 gap-y-1 rounded-lg border border-border p-2 sm:grid-cols-2">
-        <Field label="Name" value={slip.employeeName} />
+        <Field label="Employee Name" value={showName(slip.employeeName)} />
+        <Field label="Employment Type" value={show(ctx.employmentType)} />
         <Field label="Employee ID" value={ctx.employeeCode} />
-        <Field label="Designation" value={ctx.designation} />
-        <Field label="Department" value={ctx.department} />
-        <Field label="Location" value={ctx.location} />
-        <Field label="Date of joining" value={ctx.joiningDate} />
-        <Field label="Employment type" value={ctx.employmentType} />
+        <Field label="Designation" value={show(ctx.designation)} />
+        <Field label="Department" value={show(ctx.department)} />
+        <Field label="Location" value={show(ctx.location)} />
+        <Field label="Date Of Joining" value={ctx.joiningDate} />
         <Field label="PAN" value={ctx.pan} />
         <Field label="UAN" value={ctx.uan} />
-        <Field label="Bank account" value={ctx.bank} />
+        <Field label="Bank Account Number" value={ctx.bankAccountNumber} />
+        <Field label="Bank Name" value={show(ctx.bankName)} />
         <Field label="IFSC" value={ctx.ifsc} />
       </div>
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {(
           [
-            ["Working days", String(figures.salaryDays)],
-            ["Present days", String(figures.presentDays)],
-            ["Paid leave", String(figures.leaveDays)],
-            ["Unpaid leave", figures.unpaidLeaveDays == null ? "—" : String(figures.unpaidLeaveDays)],
-            ["LOP days", String(figures.lopDays)],
-            ["Late count", show(ctx.lateCount)],
+            ["Working Days", String(figures.salaryDays)],
+            ["Present Days", String(figures.presentDays)],
+            ["Paid Leave", String(figures.leaveDays)],
+            ["Unpaid Leave", figures.unpaidLeaveDays == null ? "—" : String(figures.unpaidLeaveDays)],
+            ["LOP Days", String(figures.lopDays)],
+            ["Late Count", show(ctx.lateCount)],
           ] as const
         ).map(([label, value]) => (
           <div key={label} className="rounded-md border border-border px-2 py-1.5 text-center">
@@ -164,14 +172,14 @@ export function PayslipLetterhead({
         <MoneyTable
           title="Earnings (A)"
           rows={figures.earnings}
-          totalLabel="Total earnings (A)"
+          totalLabel="Total Earnings (A)"
           totalMonthly={figures.monthlyGross}
           totalYearly={figures.yearlyGross}
         />
         <MoneyTable
           title="Deductions (B)"
           rows={figures.deductions}
-          totalLabel="Total deductions (B)"
+          totalLabel="Total Deductions (B)"
           totalMonthly={figures.monthlyDeductions}
           totalYearly={figures.yearlyDeductions}
         />
@@ -179,68 +187,65 @@ export function PayslipLetterhead({
 
       <div className="grid gap-2 sm:grid-cols-3">
         <div className="rounded-md border border-border bg-muted/40 px-3 py-2">
-          <p className="text-[10px] text-muted-foreground">Net payable salary</p>
+          <p className="text-[10px] text-muted-foreground">Net Payable Salary</p>
           <p className="text-base font-semibold tabular-nums">{formatInr(figures.net)}</p>
           <p className="mt-1 text-[10px] text-muted-foreground">{amountInIndianWords(figures.net)}</p>
         </div>
         <div className="rounded-md border border-border px-3 py-2">
-          <p className="text-[10px] text-muted-foreground">Cost to company (monthly)</p>
+          <p className="text-[10px] text-muted-foreground">Cost To Company (Monthly)</p>
           <p className="font-semibold tabular-nums">{formatInr(figures.costToCompany)}</p>
         </div>
         <div className="rounded-md border border-border px-3 py-2">
-          <p className="text-[10px] text-muted-foreground">Employer contribution (monthly)</p>
-          <p>PF (employer) {formatInr(figures.employerPf)}</p>
-          <p>ESI (employer) {formatInr(figures.employerEsi)}</p>
+          <p className="text-[10px] text-muted-foreground">Employer Contribution (Monthly)</p>
+          <p>PF (Employer) {formatInr(figures.employerPf)}</p>
+          <p>ESI (Employer) {formatInr(figures.employerEsi)}</p>
           <p className="font-semibold">Total {formatInr(figures.employerContribution)}</p>
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-md border border-border p-2">
-          <p className="text-[11px] font-semibold">Year to date {ctx.yearLabel ? `(${ctx.yearLabel})` : ""}</p>
-          <FieldLine label="Total earnings" value={moneyOrBlank(ctx.ytdEarnings)} />
-          <FieldLine label="Total deductions" value={moneyOrBlank(ctx.ytdDeductions)} />
-          <FieldLine label="Net salary paid" value={moneyOrBlank(ctx.ytdNet)} />
-          <FieldLine label="TDS deducted" value={moneyOrBlank(ctx.ytdTds)} />
-          <FieldLine label="PF (employee)" value={moneyOrBlank(ctx.ytdPf)} />
-          <FieldLine label="Professional tax" value={moneyOrBlank(ctx.ytdProfessionalTax)} />
-          <FieldLine label="LOP deduction" value={moneyOrBlank(ctx.ytdLop)} />
+          <p className="text-[11px] font-semibold">Year To Date {ctx.yearLabel ? `(${ctx.yearLabel})` : ""}</p>
+          <FieldLine label="Total Earnings" value={moneyOrBlank(ctx.ytdEarnings)} />
+          <FieldLine label="Total Deductions" value={moneyOrBlank(ctx.ytdDeductions)} />
+          <FieldLine label="Net Salary Paid" value={moneyOrBlank(ctx.ytdNet)} />
+          <FieldLine label="TDS Deducted" value={formatInr(tax.ytdTds)} />
+          <FieldLine label="PF (Employee)" value={moneyOrBlank(ctx.ytdPf)} />
+          <FieldLine label="Professional Tax" value={moneyOrBlank(ctx.ytdProfessionalTax)} />
+          <FieldLine label="LOP Deduction" value={moneyOrBlank(ctx.ytdLop)} />
         </div>
         <div className="rounded-md border border-border p-2">
-          <p className="text-[11px] font-semibold">Annual projection {ctx.yearLabel ? `(${ctx.yearLabel})` : ""}</p>
-          <FieldLine label="Projected earnings" value={formatInr(projection.earnings)} />
-          <FieldLine label="Projected deductions" value={formatInr(projection.deductions)} />
-          <FieldLine label="Projected net salary" value={formatInr(projection.net)} />
+          <p className="text-[11px] font-semibold">Annual Projection {ctx.yearLabel ? `(${ctx.yearLabel})` : ""}</p>
+          <FieldLine label="Projected Earnings" value={formatInr(projection.earnings)} />
+          <FieldLine label="Projected Deductions" value={formatInr(projection.deductions)} />
+          <FieldLine label="Projected Net Salary" value={formatInr(projection.net)} />
           <FieldLine label="Projected TDS" value={formatInr(projection.tdsYear)} />
-          <FieldLine label="Balance months" value={String(ctx.monthsLeft)} />
+          <FieldLine label="Balance Months" value={String(ctx.monthsLeft)} />
           <FieldLine
-            label="Estimated TDS (next 3 months)"
+            label="Estimated TDS (Next 3 Months)"
             value={formatInr(projection.nextTds)}
           />
           <FieldLine
-            label="Estimated net (next 3 months)"
+            label="Estimated Net (Next 3 Months)"
             value={projection.nextNet == null ? "—" : formatInr(projection.nextNet)}
           />
         </div>
         <div className="rounded-md border border-border p-2">
-          <p className="text-[11px] font-semibold">Tax summary</p>
-          <FieldLine label="Annual gross salary" value={formatInr(projection.earnings)} />
-          <FieldLine label="Standard deduction" value="—" />
-          <FieldLine label="HRA exemption" value="—" />
-          <FieldLine label="Section 80C" value="—" />
-          <FieldLine label="Section 80D" value="—" />
-          <FieldLine label="Taxable income" value="—" />
-          <FieldLine label="Estimated annual tax" value={formatInr(projection.tdsYear)} />
-          <FieldLine label="TDS deducted (YTD)" value={moneyOrBlank(ctx.ytdTds)} />
-          <FieldLine
-            label="Balance TDS"
-            value={formatInr(Math.max(0, projection.tdsYear - (ctx.ytdTds ?? 0)))}
-          />
+          <p className="text-[11px] font-semibold">Tax Summary</p>
+          <FieldLine label="Annual Gross Salary" value={formatInr(tax.annualGross)} />
+          <FieldLine label="Standard Deduction" value={formatInr(tax.standardDeduction)} />
+          <FieldLine label="HRA Exemption" value={formatInr(tax.hraExemption)} />
+          <FieldLine label="Section 80C" value={formatInr(tax.section80C)} />
+          <FieldLine label="Section 80D" value={formatInr(tax.section80D)} />
+          <FieldLine label="Taxable Income" value={formatInr(tax.taxableIncome)} />
+          <FieldLine label="Estimated Annual Tax" value={formatInr(tax.estimatedAnnualTax)} />
+          <FieldLine label="TDS Deducted (YTD)" value={formatInr(tax.ytdTds)} />
+          <FieldLine label="Balance TDS" value={formatInr(tax.balanceTds)} />
         </div>
       </div>
 
       <div className="rounded-md border border-border p-2">
-        <p className="text-[11px] font-semibold">Next months TDS</p>
+        <p className="text-[11px] font-semibold">Next Months TDS</p>
         {ctx.nextMonths.length === 0 ? (
           <p className="mt-1 text-muted-foreground">—</p>
         ) : (
@@ -249,16 +254,12 @@ export function PayslipLetterhead({
               {ctx.nextMonths.map((key) => (
                 <tr key={key}>
                   <td className="py-0.5">{monthLabelFromKey(key)}</td>
-                  <td className="py-0.5 text-right tabular-nums">
-                    {formatInr(projection.monthTds)}
-                  </td>
+                  <td className="py-0.5 text-right tabular-nums">{formatInr(nextMonthTds)}</td>
                 </tr>
               ))}
               <tr className="font-semibold">
                 <td className="py-0.5">Total</td>
-                <td className="py-0.5 text-right tabular-nums">
-                  {formatInr(projection.monthTds * ctx.nextMonths.length)}
-                </td>
+                <td className="py-0.5 text-right tabular-nums">{formatInr(projection.nextTds)}</td>
               </tr>
             </tbody>
           </table>

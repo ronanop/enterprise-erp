@@ -9,6 +9,7 @@ export type HrAdminRecord = {
   user_id: string;
   login_created: boolean;
   temporary_password: string | null;
+  email_sent?: boolean;
   company_ids: string[];
   nav_keys: string[];
   nav_unrestricted: boolean;
@@ -31,7 +32,8 @@ export type HrAdminPasswordResponse = {
   employee_id: string;
   display_name: string;
   email: string;
-  temporary_password: string;
+  temporary_password: string | null;
+  email_sent: boolean;
 };
 
 export type HrActivityLogRecord = {

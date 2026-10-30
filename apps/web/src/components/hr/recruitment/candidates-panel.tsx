@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Search,
   Target,
+  Trash2,
   UserRound,
 } from "lucide-react";
 
@@ -97,6 +98,7 @@ export function CandidatesPanel({
   jobs,
   applications,
   onAdd,
+  onDelete,
   onView,
   onEdit,
   onChangeStage,
@@ -105,6 +107,7 @@ export function CandidatesPanel({
   jobs: JobOpening[];
   applications: PipelineApplication[];
   onAdd: () => void;
+  onDelete: (ids: string[]) => void;
   onView: (c: AtsCandidate) => void;
   onEdit: (c: AtsCandidate) => void;
   onChangeStage: (applicationId: string, stage: PipelineStage) => void;
@@ -250,15 +253,31 @@ export function CandidatesPanel({
           <button
             type="button"
             onClick={resetFilters}
-            className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium text-[#7C3AED] hover:bg-[#F4EDFB]"
+            className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full px-2.5 text-[12px] font-medium text-primary hover:bg-primary/10"
           >
             <RotateCcw className="size-3.5" strokeWidth={1.75} />
             Reset
           </button>
+          {selected.size > 0 ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-9 cursor-pointer rounded-full border-red-200 px-3.5 text-[12px] text-red-600 hover:bg-red-50"
+              onClick={() => {
+                const ids = [...selected];
+                setSelected(new Set());
+                onDelete(ids);
+              }}
+            >
+              <Trash2 className="size-3.5" strokeWidth={2} />
+              Delete ({selected.size})
+            </Button>
+          ) : null}
           <Button
             type="button"
             size="sm"
-            className="h-9 cursor-pointer rounded-full bg-[#7C3AED] px-3.5 text-[12px] text-white hover:bg-[#6D28D9]"
+            className="h-9 cursor-pointer rounded-full bg-primary px-3.5 text-[12px] text-primary-foreground hover:bg-primary/90"
             onClick={onAdd}
           >
             <Plus className="size-3.5" strokeWidth={2} />
@@ -270,8 +289,12 @@ export function CandidatesPanel({
       <div className="overflow-hidden rounded-[12px] border border-[#EEEFF3] bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
-            <p className="text-sm text-muted-foreground">No candidates match these filters</p>
-            <Button size="sm" className="cursor-pointer bg-[#7C3AED] text-white hover:bg-[#6D28D9]" onClick={onAdd}>
+            <p className="text-sm text-muted-foreground">
+              {candidates.length === 0
+                ? "No candidates yet — upload a resume to add one"
+                : "No candidates match these filters"}
+            </p>
+            <Button size="sm" className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90" onClick={onAdd}>
               Add Candidate
             </Button>
           </div>
@@ -397,6 +420,14 @@ export function CandidatesPanel({
                               onClick={() => onEdit(c)}
                             >
                               <Pencil className="size-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Delete"
+                              className="inline-flex size-6 cursor-pointer items-center justify-center rounded-md border border-[#EEEFF3] text-[#6B7280] transition-colors hover:bg-red-50 hover:text-red-600"
+                              onClick={() => onDelete([c.id])}
+                            >
+                              <Trash2 className="size-3.5" />
                             </button>
                           </div>
                         </td>

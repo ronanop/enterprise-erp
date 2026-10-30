@@ -41,3 +41,6 @@ class RecruitmentHrAdapter:
 
     def get_designation(self, ctx: TenantContext, designation_id: UUID):
         return self._designations.get(ctx, designation_id)
+
+    def list_designations(self, ctx: TenantContext, company_id: UUID | None = None):
+        return self._designations.list(ctx, company_id)

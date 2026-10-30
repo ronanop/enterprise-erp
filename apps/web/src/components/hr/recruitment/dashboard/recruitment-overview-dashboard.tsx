@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 
 import { HrAuthBanner } from "@/components/hr/hr-primitives";
 import { DashboardChrome, ViewAllLink } from "@/components/hr/recruitment/dashboard/dashboard-chrome";
@@ -8,14 +8,12 @@ import {
   buildRecruitmentDashboardModel,
   formatPostedOn,
   type KpiKey,
-  type TrendRangeKey,
 } from "@/components/hr/recruitment/dashboard/dashboard-model";
 import { DataTable, VerticalKebab } from "@/components/hr/recruitment/dashboard/data-table";
 import { InterviewCard } from "@/components/hr/recruitment/dashboard/interview-card";
 import { KpiCard } from "@/components/hr/recruitment/dashboard/kpi-card";
 import { PipelineCard } from "@/components/hr/recruitment/dashboard/pipeline-card";
-import { InitialsAvatar, JobStatusBadge, StageBadge } from "@/components/hr/recruitment/dashboard/status-badge";
-import { TrendChart } from "@/components/hr/recruitment/dashboard/trend-chart";
+import { JobStatusBadge } from "@/components/hr/recruitment/dashboard/status-badge";
 import type { AtsDirectory } from "@/services/recruitment-ats-service";
 import type {
   AtsCandidate,
@@ -26,11 +24,12 @@ import type {
 
 export type RecruitmentOverviewHandlers = {
   onCreateJob: () => void;
-  onAddCandidate: () => void;
+  onAddCandidate?: () => void;
   onImport: () => void;
   onExport: () => void;
   onScheduleInterview: () => void;
-  onGenerateOffer: () => void;
+  onOpenCareers?: () => void;
+  onRefresh?: () => void;
   onViewJobs: () => void;
   onViewCandidates: () => void;
   onViewInterviews: () => void;
@@ -60,15 +59,10 @@ export function RecruitmentOverviewDashboard({
   tabsSlot?: ReactNode;
   /** Tab body content (jobs table, pipeline, …). When set with showHome=false, replaces home panels. */
   children?: ReactNode;
-  /** When true, render dashboard home panels (pipeline/trend/tables). */
+  /** When true, render dashboard home panels (pipeline / jobs / interviews). */
   showHome?: boolean;
 }) {
-  const [trendRange, setTrendRange] = useState<TrendRangeKey>("last_6");
-
-  const model = useMemo(
-    () => (dir ? buildRecruitmentDashboardModel(dir, { trendRange }) : null),
-    [dir, trendRange],
-  );
+  const model = useMemo(() => (dir ? buildRecruitmentDashboardModel(dir) : null), [dir]);
 
   function handleKpi(key: KpiKey) {
     switch (key) {
@@ -97,17 +91,27 @@ export function RecruitmentOverviewDashboard({
     <div className="space-y-4 pb-6">
       <DashboardChrome
         onCreateJob={handlers.onCreateJob}
-        onAddCandidate={handlers.onAddCandidate}
-        onScheduleInterview={handlers.onScheduleInterview}
-        onGenerateOffer={handlers.onGenerateOffer}
+        onOpenCareers={handlers.onOpenCareers}
+        onRefresh={handlers.onRefresh}
+        refreshing={loading}
       />
 
       {authBlocked ? <HrAuthBanner /> : null}
 
       {loading && !dir ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        <div
+          className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6"
+          aria-busy="true"
+          aria-label="Loading KPIs"
+        >
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-[68px] animate-pulse rounded-[12px] border border-[#EEEFF3] bg-white" />
+            <div
+              key={i}
+              className="rounded-[12px] border border-[#EEEFF3] bg-white px-3 py-2.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+            >
+              <div className="h-2.5 w-16 animate-pulse rounded bg-[#E5E7EB]" />
+              <div className="mt-2.5 h-5 w-10 animate-pulse rounded bg-[#E5E7EB]" />
+            </div>
           ))}
         </div>
       ) : (
@@ -124,23 +128,35 @@ export function RecruitmentOverviewDashboard({
         loading && !dir ? (
           <DashboardSkeleton />
         ) : (
-          <>
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.15fr_0.85fr]">
+            <div className="flex min-h-0 flex-col gap-3">
               <PipelineCard
                 stages={model?.pipeline ?? []}
                 onStageClick={(stage) => handlers.onViewPipeline(stage)}
               />
-              <TrendChart data={model?.trend ?? []} range={trendRange} onRangeChange={setTrendRange} />
-            </div>
 
-            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.2fr_1.05fr_0.9fr]">
               <section className="rounded-[12px] border border-[#EEEFF3] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-                <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-[15px] font-semibold tracking-tight text-[#111827]">Recent Job Openings</h2>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-[15px] font-semibold tracking-tight text-[#111827]">
+                      Recent Job Openings
+                    </h2>
+                    <p className="mt-0.5 text-[12px] text-[#9CA3AF]">
+                      Latest roles and applicant volume
+                    </p>
+                  </div>
                   <ViewAllLink onClick={handlers.onViewJobs} label="View All →" />
                 </div>
                 <DataTable
-                  headers={["Job Title", "Department", "Openings", "Applicants", "Status", "Posted On", ""]}
+                  headers={[
+                    "Job Title",
+                    "Department",
+                    "Openings",
+                    "Applicants",
+                    "Status",
+                    "Posted On",
+                    "",
+                  ]}
                   empty="No job openings yet"
                   rows={(model?.recentJobs ?? []).map((row) => [
                     <span key="t" className="font-medium text-[#111827]">
@@ -166,59 +182,54 @@ export function RecruitmentOverviewDashboard({
                   ])}
                 />
               </section>
-
-              <section className="rounded-[12px] border border-[#EEEFF3] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-                <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-[15px] font-semibold tracking-tight text-[#111827]">Recent Candidates</h2>
-                  <ViewAllLink onClick={handlers.onViewCandidates} label="View All →" />
-                </div>
-                <DataTable
-                  headers={["Name", "Position", "Stage", "Applied On", ""]}
-                  empty="No candidates yet"
-                  rows={(model?.recentCandidates ?? []).map((row, i) => [
-                    <span key="n" className="flex items-center gap-2">
-                      <InitialsAvatar name={row.candidate.fullName} toneIndex={i} />
-                      <span className="font-medium text-[#111827]">{row.candidate.fullName}</span>
-                    </span>,
-                    row.jobTitle,
-                    <StageBadge key="st" stage={row.stage} label={row.stageLabel} />,
-                    row.appliedOn,
-                    <VerticalKebab
-                      key="m"
-                      items={[
-                        { label: "View", onClick: () => handlers.onOpenCandidate(row.candidate) },
-                        { label: "Edit", onClick: () => handlers.onEditCandidate(row.candidate) },
-                      ]}
-                    />,
-                  ])}
-                />
-              </section>
-
-              <section className="rounded-[12px] border border-[#EEEFF3] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-                <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-[15px] font-semibold tracking-tight text-[#111827]">Upcoming Interviews</h2>
-                  <ViewAllLink onClick={handlers.onViewInterviews} />
-                </div>
-                {(model?.upcomingInterviews.length ?? 0) === 0 ? (
-                  <p className="py-8 text-center text-sm text-muted-foreground">No upcoming interviews</p>
-                ) : (
-                  <div className="space-y-2.5">
-                    {(model?.upcomingInterviews ?? []).map((row) => (
-                      <InterviewCard
-                        key={row.interview.id}
-                        row={row}
-                        onOpen={() => handlers.onOpenInterview(row.interview)}
-                        onMenu={[
-                          { label: "View details", onClick: () => handlers.onOpenInterview(row.interview) },
-                          { label: "All interviews", onClick: handlers.onViewInterviews },
-                        ]}
-                      />
-                    ))}
-                  </div>
-                )}
-              </section>
             </div>
-          </>
+
+            <section className="flex h-full min-h-[280px] flex-col rounded-[12px] border border-[#EEEFF3] bg-white p-5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+              <div className="mb-3 flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-[15px] font-semibold tracking-tight text-[#111827]">
+                    Upcoming Interviews
+                  </h2>
+                  <p className="mt-0.5 text-[12px] text-[#9CA3AF]">
+                    Next scheduled conversations
+                  </p>
+                </div>
+                <ViewAllLink onClick={handlers.onViewInterviews} />
+              </div>
+              {(model?.upcomingInterviews.length ?? 0) === 0 ? (
+                <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-[#E5E7EB] bg-[#FAFBFC] px-4 py-10 text-center">
+                  <p className="text-[13px] font-medium text-[#374151]">No upcoming interviews</p>
+                  <p className="mt-1 text-[12px] text-[#9CA3AF]">
+                    Schedule from a candidate or the Interviews tab
+                  </p>
+                  <button
+                    type="button"
+                    className="mt-4 cursor-pointer rounded-lg bg-primary px-3 py-1.5 text-[12px] font-semibold text-primary-foreground transition-opacity duration-150 hover:opacity-90"
+                    onClick={handlers.onScheduleInterview}
+                  >
+                    Schedule interview
+                  </button>
+                </div>
+              ) : (
+                <div className="erp-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-0.5">
+                  {(model?.upcomingInterviews ?? []).map((row) => (
+                    <InterviewCard
+                      key={row.interview.id}
+                      row={row}
+                      onOpen={() => handlers.onOpenInterview(row.interview)}
+                      onMenu={[
+                        {
+                          label: "View details",
+                          onClick: () => handlers.onOpenInterview(row.interview),
+                        },
+                        { label: "All interviews", onClick: handlers.onViewInterviews },
+                      ]}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
         )
       ) : null}
 
@@ -229,11 +240,16 @@ export function RecruitmentOverviewDashboard({
 
 function DashboardSkeleton() {
   return (
-    <div className="space-y-3" aria-busy="true" aria-label="Loading recruitment dashboard">
-      <div className="grid gap-3 xl:grid-cols-2">
+    <div
+      className="grid grid-cols-1 gap-3 xl:grid-cols-[1.15fr_0.85fr]"
+      aria-busy="true"
+      aria-label="Loading recruitment dashboard"
+    >
+      <div className="flex flex-col gap-3">
         <div className="h-[280px] animate-pulse rounded-[12px] border border-[#EEEFF3] bg-white" />
-        <div className="h-[280px] animate-pulse rounded-[12px] border border-[#EEEFF3] bg-white" />
+        <div className="h-[200px] animate-pulse rounded-[12px] border border-[#EEEFF3] bg-white" />
       </div>
+      <div className="h-[500px] animate-pulse rounded-[12px] border border-[#EEEFF3] bg-white" />
     </div>
   );
 }

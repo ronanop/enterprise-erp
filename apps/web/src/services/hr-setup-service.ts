@@ -667,13 +667,72 @@ export async function listLocalSetup(tabId: HrSetupTabId): Promise<SetupRow[]> {
 
 export async function listReportingManagers(): Promise<SetupRow[]> {
   try {
-    const [employees, roles] = await Promise.all([
-      resourceService.list("/employees"),
-      resourceService.list("/roles").catch(() => ({ data: [] })),
-    ]);
-    const empRows = normalizeRows(employees.data);
-    const rows = buildReportingManagerOptions(empRows).map((o) => {
-      const e = empRows.find((r) => String(r.id) === o.id);
+    // Prefer people-roles (company-scoped). `/employees` is branch-scoped, so HQ
+    // managers (e.g. CEO Shraddha) disappear when the session branch differs.
+    const roleRows = await listAllNormalized("/hrms/people-roles");
+    const empLike = roleRows.map((r) => ({
+      id: String(r.id),
+      employee_code: String(r.employee_code ?? ""),
+      first_name: String(r.first_name ?? ""),
+      last_name: String(r.last_name ?? ""),
+      display_name: String(r.display_name ?? ""),
+      designation: String(r.designation ?? ""),
+      reporting_manager_id: r.reporting_manager_id ? String(r.reporting_manager_id) : null,
+      is_hiring_manager: r.is_hiring_manager === true,
+      status: String(r.status ?? "active"),
+      is_deleted: false,
+    }));
+
+    const withDirectReports = roleRows
+      .filter((r) => Number(r.reports_count ?? 0) > 0)
+      .map((r) => String(r.id));
+
+    const byId = new Map(empLike.map((r) => [r.id, r]));
+    const options = buildReportingManagerOptions(empLike, { includeIds: withDirectReports });
+
+    // Hydrate managers referenced as RM but missing from the scoped directory.
+    const present = new Set(options.map((o) => o.id));
+    const missingMgrIds = [
+      ...new Set(
+        empLike
+          .map((r) => String(r.reporting_manager_id ?? ""))
+          .filter((id) => Boolean(id) && !present.has(id)),
+      ),
+    ];
+    for (const id of missingMgrIds) {
+      try {
+        const res = await resourceService.get<Record<string, unknown>>("/employees", id);
+        const e = (res.data ?? {}) as Record<string, unknown>;
+        if (!e.id || e.is_deleted) continue;
+        const first = String(e.first_name ?? "");
+        const last = String(e.last_name ?? "");
+        const code = String(e.employee_code ?? "");
+        const name = `${first} ${last}`.trim() || String(e.display_name ?? code);
+        byId.set(id, {
+          id,
+          employee_code: code,
+          first_name: first,
+          last_name: last,
+          display_name: name,
+          designation: String(e.designation ?? ""),
+          reporting_manager_id: e.reporting_manager_id ? String(e.reporting_manager_id) : null,
+          is_hiring_manager: e.is_hiring_manager === true,
+          status: String(e.status ?? "active"),
+          is_deleted: false,
+        });
+        options.push({
+          id,
+          label: name ? `${name}${code ? ` (${code})` : ""}` : code || id,
+        });
+      } catch {
+        /* manager may be soft-deleted / out of scope */
+      }
+    }
+
+    options.sort((a, b) => a.label.localeCompare(b.label));
+
+    return options.map((o) => {
+      const e = byId.get(o.id);
       return {
         ...(e ?? {}),
         id: o.id,
@@ -684,8 +743,6 @@ export async function listReportingManagers(): Promise<SetupRow[]> {
         __source: "derived" as const,
       };
     });
-    void roles;
-    return rows;
   } catch (err) {
     if (err instanceof ApiClientError) throw err;
     return [];
@@ -825,17 +882,25 @@ export function cell(row: SetupRow, ...keys: string[]): string {
   return "-";
 }
 
-export type SetupMasterOption = { value: string; label: string };
+export type SetupMasterOption = { value: string; label: string; code?: string };
 
 /** Legal entities from organization.org_company (same source as Assign HR). */
 export async function listEntityOptions(): Promise<SetupMasterOption[]> {
   const rows = await listAllNormalized("/hr/legal-entities");
   return rows
     .filter((r) => String(r.status ?? "active").toLowerCase() === "active")
-    .map((r) => ({
-      value: String(r.id),
-      label: String(r.company_name ?? r.name ?? r.legal_name ?? r.company_code ?? "Entity"),
-    }));
+    .map((r) => {
+      const code = String(r.company_code ?? r.code ?? "")
+        .trim()
+        .toUpperCase();
+      return {
+        value: String(r.id),
+        label: String(
+          r.company_name ?? r.name ?? r.legal_name ?? (code || "Entity"),
+        ),
+        code: code || undefined,
+      };
+    });
 }
 
 /** Employment types (Permanent, Contract, etc.) from HR Setup → Employment Type. */

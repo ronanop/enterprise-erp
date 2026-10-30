@@ -4,10 +4,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import ForbiddenException, NotFoundException
 from core.redis import SessionStore
 from modules.foundation.domain.org_data_scope import (
     has_module_wide_data_access,
+    has_tenant_wide_data_access,
     is_platform_admin,
 )
 from modules.foundation.domain.value_objects import TenantContext
@@ -76,6 +77,7 @@ class OrgContextService:
         all_companies: bool = False,
     ) -> dict:
         if all_companies:
+            self._assert_can_use_all_companies(ctx)
             if ctx.session_id:
                 self._store.set_session(
                     ctx.session_id,
@@ -143,3 +145,16 @@ class OrgContextService:
         from modules.hr.service.hr_module_admin import HrModuleAdminService
 
         return HrModuleAdminService(self._db).has_hr_admin_role(ctx.tenant_id, ctx.user_id)
+
+    def _assert_can_use_all_companies(self, ctx: TenantContext) -> None:
+        """All-entities mode is for elevated users or members with 2+ assigned entities."""
+        if is_platform_admin(ctx) or has_tenant_wide_data_access(ctx):
+            return
+        if ctx.admin_module_keys:
+            return
+        company_ids = {row.company_id for row in self._scopes.list_user_scopes(ctx.user_id, ctx.tenant_id)}
+        if len(company_ids) >= 2:
+            return
+        raise ForbiddenException(
+            "All entities is only available when you are assigned more than one company"
+        )

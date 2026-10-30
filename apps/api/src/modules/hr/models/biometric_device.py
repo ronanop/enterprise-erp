@@ -16,7 +16,7 @@ class HrBiometricDevice(Base, *HrDetailMixin):
         UniqueConstraint("company_id", "device_code", name="uk_hr_bio_device_code"),
         CheckConstraint("status IN ('active','inactive')", name="ck_hr_bio_device_status"),
         CheckConstraint(
-            "device_model IN ('fingerprint_k40_timelabs')",
+            "device_model IN ('fingerprint_k40_timelabs', 'fingerprint_k40_zkteco_pro')",
             name="ck_hr_bio_device_model",
         ),
         {"schema": "hr"},
@@ -30,6 +30,9 @@ class HrBiometricDevice(Base, *HrDetailMixin):
     )
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    subnet_mask: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    gateway: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    comm_password: Mapped[str | None] = mapped_column(String(8), nullable=True)
     location_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
     api_key_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active", index=True)

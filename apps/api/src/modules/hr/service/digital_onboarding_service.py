@@ -54,6 +54,102 @@ def seal_case_payload(payload: dict) -> dict:
     return sealed
 
 
+def merge_portal_preserving_files(
+    existing: dict | None,
+    incoming: dict | None,
+) -> dict:
+    """
+    Merge candidate portal updates while keeping previously stored file bytes
+    when the incoming payload omits them (lean submit / large-body avoidance).
+    """
+    base = dict(existing) if isinstance(existing, dict) else {}
+    inc = dict(incoming) if isinstance(incoming, dict) else {}
+    if not base:
+        return inc
+    if not inc:
+        return base
+
+    merged = {**base, **inc}
+
+    # Documents: match by id, keep fileDataUrl from prior when incoming is empty
+    prior_docs = {
+        str(d.get("id")): d
+        for d in (base.get("documents") or [])
+        if isinstance(d, dict) and d.get("id")
+    }
+    incoming_docs = inc.get("documents")
+    if isinstance(incoming_docs, list):
+        out_docs: list[dict] = []
+        for doc in incoming_docs:
+            if not isinstance(doc, dict):
+                continue
+            doc_id = str(doc.get("id") or "")
+            prior = prior_docs.get(doc_id) if doc_id else None
+            file_url = str(doc.get("fileDataUrl") or "").strip()
+            if not file_url and prior and str(prior.get("fileDataUrl") or "").strip():
+                out_docs.append(
+                    {
+                        **prior,
+                        **doc,
+                        "fileDataUrl": prior.get("fileDataUrl"),
+                        "mimeType": doc.get("mimeType") or prior.get("mimeType"),
+                    }
+                )
+            else:
+                out_docs.append(doc)
+        # Keep prior docs not listed in incoming (don't drop uploaded files on lean submit)
+        seen = {str(d.get("id")) for d in out_docs if isinstance(d, dict) and d.get("id")}
+        for doc_id, prior in prior_docs.items():
+            if doc_id not in seen:
+                out_docs.append(prior)
+        merged["documents"] = out_docs
+
+    # Policies / signature
+    prior_pol = base.get("policies") if isinstance(base.get("policies"), dict) else {}
+    inc_pol = inc.get("policies") if isinstance(inc.get("policies"), dict) else {}
+    if prior_pol or inc_pol:
+        pol = {**prior_pol, **inc_pol}
+        if not str(pol.get("signatureDataUrl") or "").strip() and str(
+            prior_pol.get("signatureDataUrl") or ""
+        ).strip():
+            pol["signatureDataUrl"] = prior_pol.get("signatureDataUrl")
+            pol["signatureMimeType"] = pol.get("signatureMimeType") or prior_pol.get(
+                "signatureMimeType"
+            )
+            pol["signatureFileName"] = pol.get("signatureFileName") or prior_pol.get(
+                "signatureFileName"
+            )
+        # Prefer incoming signedDocuments when present; else keep prior
+        inc_signed = inc_pol.get("signedDocuments")
+        prior_signed = prior_pol.get("signedDocuments")
+        if isinstance(inc_signed, list) and inc_signed:
+            # Restore file payloads from prior when stripped
+            prior_by_id = {
+                str(s.get("policyId")): s
+                for s in (prior_signed or [])
+                if isinstance(s, dict) and s.get("policyId")
+            }
+            restored: list[dict] = []
+            for s in inc_signed:
+                if not isinstance(s, dict):
+                    continue
+                pid = str(s.get("policyId") or "")
+                if str(s.get("fileDataUrl") or "").strip():
+                    restored.append(s)
+                elif pid and prior_by_id.get(pid) and str(
+                    prior_by_id[pid].get("fileDataUrl") or ""
+                ).strip():
+                    restored.append({**prior_by_id[pid], **s, "fileDataUrl": prior_by_id[pid]["fileDataUrl"]})
+                else:
+                    restored.append(s)
+            pol["signedDocuments"] = restored
+        elif isinstance(prior_signed, list) and prior_signed and "signedDocuments" not in inc_pol:
+            pol["signedDocuments"] = prior_signed
+        merged["policies"] = pol
+
+    return merged
+
+
 class InvalidDigitalOnboardingState(Exception):
     def __init__(self, message: str):
         self.message = message
@@ -122,6 +218,7 @@ class DigitalOnboardingService:
         case_id = case.get("id")
         row: HrDigitalOnboarding | None = None
         prior_pii: dict | None = None
+        prior_portal: dict | None = None
         if case_id:
             try:
                 uid = UUID(str(case_id))
@@ -136,6 +233,9 @@ class DigitalOnboardingService:
             )
             if row is not None and isinstance(row.case_json, dict):
                 prior_pii = read_portal_pii(row.case_json.get("portalPii")) or None
+                existing_portal = row.case_json.get("portal")
+                if isinstance(existing_portal, dict):
+                    prior_portal = existing_portal
 
         invitation = case.get("invitation") or {}
         token = str(invitation.get("token") or "").strip()
@@ -215,7 +315,9 @@ class DigitalOnboardingService:
         incoming_pii = payload.get("portalPii") if isinstance(payload.get("portalPii"), dict) else None
         seed_pii = merge_portal_pii(prior_pii, incoming_pii)
         if isinstance(payload.get("portal"), dict):
-            masked_portal, portal_pii = mask_portal_for_storage(payload.get("portal"), seed_pii)
+            # HR/client sync often omits bulky fileDataUrl — never wipe stored uploads
+            incoming_portal = merge_portal_preserving_files(prior_portal, payload.get("portal"))
+            masked_portal, portal_pii = mask_portal_for_storage(incoming_portal, seed_pii)
             payload["portal"] = masked_portal
             payload["portalPii"] = portal_pii
         elif seed_pii:
@@ -272,8 +374,10 @@ class DigitalOnboardingService:
                 "Please accept the terms and conditions before continuing"
             )
         payload = dict(row.case_json or {})
+        existing_portal = payload.get("portal") if isinstance(payload.get("portal"), dict) else {}
+        merged_portal = merge_portal_preserving_files(existing_portal, portal)
         existing_pii = read_portal_pii(payload.get("portalPii")) or None
-        masked_portal, portal_pii = mask_portal_for_storage(portal, existing_pii)
+        masked_portal, portal_pii = mask_portal_for_storage(merged_portal, existing_pii)
         payload["portal"] = masked_portal
         payload["portalPii"] = portal_pii
         if advance_status and row.status in {"draft", "invitation_sent"}:
@@ -295,8 +399,10 @@ class DigitalOnboardingService:
         if not submitted.get("submittedAt"):
             submitted["submittedAt"] = datetime.now(timezone.utc).isoformat()
         payload = dict(row.case_json or {})
+        existing_portal = payload.get("portal") if isinstance(payload.get("portal"), dict) else {}
+        merged_portal = merge_portal_preserving_files(existing_portal, submitted)
         existing_pii = read_portal_pii(payload.get("portalPii")) or None
-        masked_portal, portal_pii = mask_portal_for_storage(submitted, existing_pii)
+        masked_portal, portal_pii = mask_portal_for_storage(merged_portal, existing_pii)
         payload["portal"] = masked_portal
         payload["portalPii"] = portal_pii
         payload["status"] = "hr_review"

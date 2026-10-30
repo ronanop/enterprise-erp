@@ -18,7 +18,7 @@ import {
   CalendarDays,
   ChevronLeft,
   Contact,
-  Download,
+  Eye,
   FileText,
   GraduationCap,
   KeyRound,
@@ -30,8 +30,10 @@ import {
   UserMinus,
   UserRound,
   Wallet,
+  X,
 } from "lucide-react";
 
+import { DocumentPreviewContent } from "@/components/hr/shared/document-preview-content";
 import { EmployeeAssetsTab } from "@/components/hr/workforce/employee-assets-tab";
 import {
   EmsAvatar,
@@ -53,10 +55,13 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { COUNTRY_OPTIONS, INDIA_STATE_OPTIONS } from "@/config/geo-options";
 import {
+  backfillEmployeeGovernmentIdsFromBg,
   getEmployeeById,
+  loadBgDocumentsForEmployee,
   loadEmployeeDirectory,
   updateEmployeeRecord,
 } from "@/services/employee-management-service";
+import type { BgDocumentDisplay } from "@/services/bg-check-portal-service";
 import { ApiClientError, resourceService } from "@/services/api-client";
 import { hrEssPoliciesService } from "@/services/hr-ess-policies-service";
 import { listEntityOptions } from "@/services/hr-setup-service";
@@ -392,6 +397,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
   const [entityOptions, setEntityOptions] = useState<{ value: string; label: string }[]>([]);
   const [linked, setLinked] = useState<LinkedData | null>(null);
   const [linkedLoading, setLinkedLoading] = useState(false);
+  const [bgDocs, setBgDocs] = useState<BgDocumentDisplay[]>([]);
   const [attendanceMonth, setAttendanceMonth] = useState<string>("all");
   const [attendanceStatus, setAttendanceStatus] = useState<"all" | "present" | "absent">("all");
 
@@ -404,16 +410,32 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
       ]);
       setEmploymentOptions(options);
       setEntityOptions(entities);
-      const found = getEmployeeById(records, employeeId) ?? null;
+      let found = getEmployeeById(records, employeeId) ?? null;
+      if (found) {
+        // Gov IDs (Aadhaar/PAN) are collected on BG portal — backfill if missing on employee.
+        const needsGov =
+          !found.extension.governmentIds.aadhaar?.trim() ||
+          !found.extension.governmentIds.pan?.trim();
+        if (needsGov) {
+          found = await backfillEmployeeGovernmentIdsFromBg(found);
+        }
+      }
       setRecord(found);
       if (found) {
         setDraft(wizardDraftFromRecord(found));
         setLinkedLoading(true);
         try {
-          setLinked(await loadLinkedData(found.id, found.employeeCode));
+          const [linkedData, bgDocuments] = await Promise.all([
+            loadLinkedData(found.id, found.employeeCode),
+            loadBgDocumentsForEmployee(found.employeeCode).catch(() => []),
+          ]);
+          setLinked(linkedData);
+          setBgDocs(bgDocuments);
         } finally {
           setLinkedLoading(false);
         }
+      } else {
+        setBgDocs([]);
       }
     } finally {
       setLoading(false);
@@ -659,6 +681,7 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
         {tab === "documents" ? (
           <DocumentsTab
             onboardingDocs={record.extension.documents ?? []}
+            bgDocs={bgDocs}
             hrDocs={linked?.hrDocuments ?? []}
             loading={linkedLoading}
           />
@@ -1998,19 +2021,75 @@ function DataTableTab({
   );
 }
 
+type ProfileDocPreview = {
+  fileName: string;
+  label: string;
+  fileDataUrl: string;
+  mimeType?: string;
+};
+
 function DocumentsTab({
   onboardingDocs,
+  bgDocs,
   hrDocs,
   loading,
 }: {
   onboardingDocs: EmployeeDocumentItem[];
+  bgDocs: BgDocumentDisplay[];
   hrDocs: Record<string, unknown>[];
   loading: boolean;
 }) {
+  const [preview, setPreview] = useState<ProfileDocPreview | null>(null);
+
   const portalDocs = onboardingDocs.filter(
-    (d) => !d.source || d.source === "onboarding" || d.uploadedBy.toLowerCase().includes("onboarding"),
+    (d) =>
+      d.source === "onboarding" ||
+      (!d.source && d.uploadedBy.toLowerCase().includes("onboarding")),
   );
-  const otherLocal = onboardingDocs.filter((d) => !portalDocs.includes(d));
+  const storedBgDocs = onboardingDocs.filter((d) => d.source === "bg_check");
+  const otherLocal = onboardingDocs.filter(
+    (d) => !portalDocs.includes(d) && !storedBgDocs.includes(d),
+  );
+
+  // Prefer live BG portal files; fall back to any previously imported copies.
+  const bgSectionDocs: {
+    id: string;
+    label: string;
+    fileName: string;
+    fileDataUrl?: string;
+    mimeType?: string;
+    meta: string;
+  }[] = bgDocs.length
+    ? bgDocs.map((d) => ({
+        id: d.id,
+        label: d.label,
+        fileName: d.fileName,
+        fileDataUrl: d.fileDataUrl,
+        mimeType: d.mimeType,
+        meta: "BG check portal",
+      }))
+    : storedBgDocs.map((d) => ({
+        id: d.id,
+        label: d.documentType,
+        fileName: d.fileName,
+        fileDataUrl: d.fileDataUrl,
+        meta: `${d.uploadedBy}${d.uploadedAt ? ` · ${new Date(d.uploadedAt).toLocaleDateString()}` : ""}`,
+      }));
+
+  function openPreview(doc: {
+    fileName: string;
+    label: string;
+    fileDataUrl?: string;
+    mimeType?: string;
+  }) {
+    if (!doc.fileDataUrl?.trim()) return;
+    setPreview({
+      fileName: doc.fileName,
+      label: doc.label,
+      fileDataUrl: doc.fileDataUrl,
+      mimeType: doc.mimeType,
+    });
+  }
 
   return (
     <div className="space-y-5">
@@ -2033,13 +2112,67 @@ function DocumentsTab({
                   {d.expiryDate ? <p className="text-amber-700">Expires {d.expiryDate}</p> : null}
                 </div>
                 {d.fileDataUrl ? (
-                  <a
-                    href={d.fileDataUrl}
-                    download={d.fileName}
-                    className="cursor-pointer text-primary transition-colors duration-200 hover:underline"
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 cursor-pointer gap-1"
+                    onClick={() =>
+                      openPreview({
+                        fileName: d.fileName,
+                        label: d.documentType,
+                        fileDataUrl: d.fileDataUrl,
+                      })
+                    }
                   >
-                    <Download className="inline size-3.5" /> Download
-                  </a>
+                    <Eye className="size-3.5" />
+                    Preview
+                  </Button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      <Section title="Uploaded During Background Check">
+        {loading && !bgSectionDocs.length ? (
+          <p className="text-xs text-muted-foreground">Loading BG documents…</p>
+        ) : !bgSectionDocs.length ? (
+          <p className="text-xs text-muted-foreground">
+            No documents uploaded during background check.
+          </p>
+        ) : (
+          <ul className="space-y-2 text-xs">
+            {bgSectionDocs.map((d) => (
+              <li
+                key={d.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2"
+              >
+                <div>
+                  <p className="font-medium">{d.label}</p>
+                  <p className="text-muted-foreground">
+                    {d.fileName} · {d.meta}
+                  </p>
+                </div>
+                {d.fileDataUrl ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 cursor-pointer gap-1"
+                    onClick={() =>
+                      openPreview({
+                        fileName: d.fileName,
+                        label: d.label,
+                        fileDataUrl: d.fileDataUrl,
+                        mimeType: d.mimeType,
+                      })
+                    }
+                  >
+                    <Eye className="size-3.5" />
+                    Preview
+                  </Button>
                 ) : null}
               </li>
             ))}
@@ -2066,13 +2199,22 @@ function DocumentsTab({
                   </p>
                 </div>
                 {d.fileDataUrl ? (
-                  <a
-                    href={d.fileDataUrl}
-                    download={d.fileName}
-                    className="cursor-pointer text-primary transition-colors duration-200 hover:underline"
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 cursor-pointer gap-1"
+                    onClick={() =>
+                      openPreview({
+                        fileName: d.fileName,
+                        label: d.documentType,
+                        fileDataUrl: d.fileDataUrl,
+                      })
+                    }
                   >
-                    <Download className="inline size-3.5" /> Download
-                  </a>
+                    <Eye className="size-3.5" />
+                    Preview
+                  </Button>
                 ) : null}
               </li>
             ))}
@@ -2092,6 +2234,56 @@ function DocumentsTab({
           </ul>
         )}
       </Section>
+
+      {preview ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="emp-doc-preview-title"
+          onClick={() => setPreview(null)}
+        >
+          <div
+            className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-border/70 px-4 py-3">
+              <div className="min-w-0">
+                <h3 id="emp-doc-preview-title" className="truncate text-sm font-semibold">
+                  {preview.fileName}
+                </h3>
+                <p className="text-[10px] uppercase text-muted-foreground">{preview.label}</p>
+              </div>
+              <button
+                type="button"
+                className="cursor-pointer shrink-0 rounded-md p-1 text-muted-foreground transition-colors duration-200 hover:bg-muted"
+                aria-label="Close"
+                onClick={() => setPreview(null)}
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+            <div className="min-h-[200px] flex-1 overflow-auto bg-muted/20 p-4">
+              <DocumentPreviewContent
+                fileName={preview.fileName}
+                dataUrl={preview.fileDataUrl}
+                mimeType={preview.mimeType}
+                viewOnly
+              />
+            </div>
+            <div className="flex justify-end border-t border-border/70 px-4 py-3">
+              <Button
+                type="button"
+                size="sm"
+                className="cursor-pointer"
+                onClick={() => setPreview(null)}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

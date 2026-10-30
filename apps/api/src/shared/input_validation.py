@@ -15,6 +15,9 @@ _EXEMPT_MARKUP_KEYS = frozenset(
     {
         "content_base64",
         "file_content_base64",
+        "filedataurl",  # camelCase fileDataUrl (onboarding portal uploads)
+        "signaturedataurl",
+        "dataurl",
         "password",
         "new_password",
         "current_password",
@@ -36,6 +39,17 @@ _EXEMPT_MARKUP_KEYS = frozenset(
         "payload_json",
     }
 )
+
+
+def _is_large_binary_field(key_lower: str) -> bool:
+    """True for base64 / data-URL payload fields that exceed normal text limits."""
+    if key_lower in _EXEMPT_MARKUP_KEYS:
+        return True
+    if key_lower.endswith("_base64") or key_lower.endswith("base64"):
+        return True
+    if key_lower.endswith("dataurl") or key_lower.endswith("_data_url"):
+        return True
+    return False
 
 _FILENAME_KEYS = frozenset(
     {
@@ -139,7 +153,8 @@ def validate_json_entries(
                     if value.strip():
                         assert_safe_filename(value, required=True)
                     continue
-                if key_lower in _EXEMPT_MARKUP_KEYS or key_lower.endswith("_base64"):
+                # data:… base64 payloads (portal docs / signatures) — size-capped, no XSS scan
+                if _is_large_binary_field(key_lower) or value.startswith("data:"):
                     limit = max(max_string_length * 4, 60 * 1024 * 1024)
                     if len(value) > limit:
                         raise UnsafeInputError(f"{child} exceeds maximum allowed size")

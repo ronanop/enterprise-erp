@@ -2,6 +2,7 @@
  * Enterprise Payroll Management service - local rich store + payroll API merge.
  */
 
+import { getStoredOrgContext } from "@/lib/org-context-storage";
 import { payrollTargetCompanyIds } from "@/lib/payroll-company";
 import { formatInr, listAllPayrollRows, loadPayrollOverview } from "@/services/payroll-service";
 import { apiClient, resourceService } from "@/services/api-client";
@@ -100,8 +101,10 @@ function structureApiPayload(
   const row = withExcelAmounts(input);
   const ctx = readJson<{ branchId?: string }>(PAY_CTX_KEY, {});
   const code = extras.structureCode || row.code?.trim();
+  const branchId =
+    ctx.branchId && UUID_RE.test(ctx.branchId) ? ctx.branchId : null;
   return {
-    branch_id: ctx.branchId || null,
+    branch_id: branchId,
     structure_name: row.name,
     ...(code ? { structure_code: code } : {}),
     effective_from: extras.effectiveFrom || row.effectiveFrom || nowIso().slice(0, 10),
@@ -1132,7 +1135,10 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
     const fromApi = overview.structures.map((s, i) =>
       mapApiStructure(s as Record<string, unknown>, i, previous),
     );
-    const localOnly = previous.filter((s) => !UUID_RE.test(s.id));
+    const apiIds = new Set(fromApi.map((s) => s.id));
+    // Keep non-UUID local drafts, and any UUID rows not yet visible from API
+    // (e.g. just created before commit/list refresh, or other-company filter).
+    const localOnly = previous.filter((s) => !apiIds.has(s.id));
     structures = normalizeStructures([...fromApi, ...localOnly]);
     save(K.structures, structures);
 
@@ -1319,8 +1325,11 @@ export async function createStructure(
   input: Omit<SalaryStructure, "id" | "createdAt">,
 ): Promise<SalaryStructure> {
   const prepared = withExcelAmounts(input);
+  const stored = getStoredOrgContext();
   const companies = await payrollTargetCompanyIds();
-  const companyId = companies[0];
+  // Prefer the company selected in the header so list (scoped by session company) sees it.
+  const companyId =
+    (stored && !stored.allCompanies && stored.companyId) || companies[0] || "";
   if (!companyId) {
     throw new Error("Select a company in the header before creating a salary structure.");
   }
@@ -1335,7 +1344,7 @@ export async function createStructure(
     ...mapped,
     createdAt: nowIso(),
   };
-  const all = load<SalaryStructure>(K.structures);
+  const all = load<SalaryStructure>(K.structures).filter((s) => s.id !== row.id);
   all.unshift(row);
   save(K.structures, all);
   appendPayrollAudit({ action: "structure_created", detail: row.name, actor: actor() });
@@ -1741,9 +1750,7 @@ export function advancePayrollApproval(runId: string): PayrollRun | null {
   const all = load<PayrollRun>(K.runs);
   const idx = all.findIndex((r) => r.id === runId);
   if (idx < 0) return null;
-  if (isMonthLocked(all[idx].month) && all[idx].status !== "locked") {
-    throw new Error("Month is locked");
-  }
+  // Month lock blocks regenerate/edits — approval chain must still be able to finish.
   const cur = all[idx].status;
   const i = flow.indexOf(cur);
   if (i < 0) {

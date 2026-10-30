@@ -13,6 +13,7 @@ from modules.recruitment.routers import (
     interviews_router,
     job_postings_router,
     job_requisitions_router,
+    lookups_router,
     offer_approvals_router,
     offers_router,
     onboarding_router,
@@ -24,8 +25,20 @@ from modules.recruitment.routers import (
     resumes_router,
     talent_pools_router,
 )
+from modules.recruitment.routers.public_bg_check import public_bg_check_router
+from modules.recruitment.routers.public_bg_vendor import public_bg_vendor_router
+from modules.recruitment.routers.public_careers import public_careers_router
+from modules.recruitment.routers.recruitment_email import recruitment_email_router
+
+__all__ = [
+    "recruitment_router",
+    "public_careers_router",
+    "public_bg_check_router",
+    "public_bg_vendor_router",
+]
 
 recruitment_router = APIRouter(prefix="/recruitment")
+recruitment_router.include_router(lookups_router)
 recruitment_router.include_router(job_requisitions_router)
 recruitment_router.include_router(job_postings_router)
 recruitment_router.include_router(recruitment_sources_router)
@@ -46,3 +59,4 @@ recruitment_router.include_router(candidate_notes_router)
 recruitment_router.include_router(onboarding_router)
 recruitment_router.include_router(onboarding_tasks_router)
 recruitment_router.include_router(reports_router)
+recruitment_router.include_router(recruitment_email_router)

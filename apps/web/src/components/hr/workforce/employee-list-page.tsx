@@ -214,16 +214,8 @@ export function EmployeeManagementPage() {
   function renderColumnFilter(key: EmployeeTableColumnKey): ReactNode {
     switch (key) {
       case "entity":
-        return (
-          <HeaderFilterSelect
-            value={filters.entityId}
-            onChange={(v) => setFilters((f) => ({ ...f, entityId: v }))}
-            options={[
-              { value: "digitech", label: "Digitech" },
-              { value: "technology", label: "Technologies" },
-            ]}
-          />
-        );
+        // Company/entity scope is the top-right header switcher — no table filter.
+        return null;
       case "location":
         return (
           <HeaderFilterSelect

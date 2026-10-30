@@ -5,14 +5,14 @@ import type { PipelineStage } from "@/types/recruitment-ats";
 import { cn } from "@/lib/utils";
 
 const STAGE_COLORS: Record<PipelineStage, string> = {
-  sourced: "#9B5BB8",
-  screening: "#3B82F6",
-  interview_round_1: "#22D3EE",
-  interview_round_2: "#84CC16",
-  hr_discussion: "#22C55E",
-  background_check: "#F59E0B",
-  offer_sent: "#F472B6",
-  offer_accepted: "#E879F9",
+  sourced: "#94A3B8",
+  screening: "#0EA5E9",
+  interview_round_1: "#14B8A6",
+  interview_round_2: "#10B981",
+  hr_discussion: "#64748B",
+  background_check: "#D97706",
+  offer_sent: "#2563EB",
+  offer_accepted: "#059669",
 };
 
 export function PipelineCard({

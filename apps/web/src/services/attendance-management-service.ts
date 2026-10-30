@@ -531,6 +531,27 @@ export function filterAttendanceRecords(
 
 export type AttendanceStatBucket = "present" | "absent" | "late" | "missing";
 
+/** Counted as present for today's dashboard (punched / on site). */
+const PRESENT_LIKE_STATUSES = new Set([
+  "present",
+  "late",
+  "half_day",
+  "work_from_home",
+  "early_exit",
+  "missed_punch",
+]);
+
+/** Excused from work — not present and not absent. */
+const EXCUSED_STATUSES = new Set(["leave", "holiday", "weekend"]);
+
+export type AttendanceRosterEmployee = {
+  id: string;
+  label: string;
+  code: string;
+  departmentId: string;
+  designation: string;
+};
+
 export function matchesAttendanceStatBucket(
   record: AttendanceRecord,
   bucket: AttendanceStatBucket,
@@ -539,28 +560,131 @@ export function matchesAttendanceStatBucket(
   if (record.attendanceDate !== date) return false;
   switch (bucket) {
     case "present":
-      return record.status === "present" || record.status === "late";
+      return PRESENT_LIKE_STATUSES.has(record.status);
     case "absent":
       return record.status === "absent";
     case "late":
       return record.status === "late" || record.extension.isLate;
     case "missing":
       return record.status === "missed_punch" || record.extension.missedPunch;
-    default:
-      return false;
+    default: {
+      const _exhaustive: never = bucket;
+      return _exhaustive;
+    }
   }
+}
+
+function rosterMatchingFilters(
+  employees: AttendanceRosterEmployee[],
+  filters: Pick<AttendanceFilters, "departmentId" | "employeeId" | "designation">,
+): AttendanceRosterEmployee[] {
+  return employees.filter((e) => {
+    if (filters.employeeId && e.id !== filters.employeeId) return false;
+    if (filters.departmentId && e.departmentId !== filters.departmentId) return false;
+    if (filters.designation && e.designation !== filters.designation) return false;
+    return true;
+  });
+}
+
+function employeeIdsPresentOrExcused(records: AttendanceRecord[], date: string): Set<string> {
+  const ids = new Set<string>();
+  for (const r of records) {
+    if (r.attendanceDate !== date) continue;
+    if (PRESENT_LIKE_STATUSES.has(r.status) || EXCUSED_STATUSES.has(r.status)) {
+      ids.add(r.employeeId);
+    }
+  }
+  return ids;
+}
+
+/** Synthetic absent rows for employees with no punch / leave record today. */
+export function impliedAbsentRecords(
+  records: AttendanceRecord[],
+  date: string,
+  employees: AttendanceRosterEmployee[],
+  filters: Pick<AttendanceFilters, "departmentId" | "employeeId" | "designation" | "branchId" | "shiftId" | "location">,
+): AttendanceRecord[] {
+  const todayRows = records.filter((r) => {
+    if (r.attendanceDate !== date) return false;
+    if (filters.branchId && r.branchId !== filters.branchId) return false;
+    if (filters.shiftId && r.shiftId !== filters.shiftId) return false;
+    if (filters.location && !r.location.toLowerCase().includes(filters.location.toLowerCase())) {
+      return false;
+    }
+    return true;
+  });
+  const covered = employeeIdsPresentOrExcused(todayRows, date);
+  const markedAbsent = todayRows.filter((r) => r.status === "absent");
+  const markedIds = new Set(markedAbsent.map((r) => r.employeeId));
+  const roster = rosterMatchingFilters(employees, filters);
+  const synthetic: AttendanceRecord[] = roster
+    .filter((e) => !covered.has(e.id) && !markedIds.has(e.id))
+    .map((e) => ({
+      id: `implied-absent:${date}:${e.id}`,
+      employeeId: e.id,
+      branchId: "",
+      shiftId: "",
+      attendanceDate: date,
+      checkIn: "",
+      checkOut: "",
+      workingHours: 0,
+      breakTime: 0,
+      overtimeHours: 0,
+      status: "absent",
+      apiStatus: "absent",
+      location: "",
+      device: "",
+      source: "system",
+      approvalStatus: "none",
+      recordStatus: "implied",
+      version: 0,
+      notes: "No attendance punch for today",
+      extension: {
+        displayStatus: "absent",
+        breakStart: "",
+        breakEnd: "",
+        breakMinutes: 0,
+        location: "",
+        device: "",
+        gpsCoordinates: "",
+        sourceDetail: "manual",
+        approvalStatus: "none",
+        overtimeNormal: 0,
+        overtimeDouble: 0,
+        isLate: false,
+        isEarlyExit: false,
+        missedPunch: false,
+        departmentName: "",
+        departmentId: e.departmentId,
+        designationName: e.designation,
+        employeeCode: e.code,
+        employeeName: e.label,
+        shiftName: "",
+        managerName: "",
+      },
+    }));
+  return [...markedAbsent, ...synthetic];
 }
 
 export function computeDashboardStats(
   records: AttendanceRecord[],
   date: string,
+  expectedEmployees: AttendanceRosterEmployee[] = [],
+  filters: Pick<AttendanceFilters, "departmentId" | "employeeId" | "designation"> = {
+    departmentId: "",
+    employeeId: "",
+    designation: "",
+  },
 ): Record<AttendanceStatBucket, number> {
-  return {
-    present: records.filter((r) => matchesAttendanceStatBucket(r, "present", date)).length,
-    absent: records.filter((r) => matchesAttendanceStatBucket(r, "absent", date)).length,
-    late: records.filter((r) => matchesAttendanceStatBucket(r, "late", date)).length,
-    missing: records.filter((r) => matchesAttendanceStatBucket(r, "missing", date)).length,
-  };
+  const present = records.filter((r) => matchesAttendanceStatBucket(r, "present", date)).length;
+  const late = records.filter((r) => matchesAttendanceStatBucket(r, "late", date)).length;
+  const missing = records.filter((r) => matchesAttendanceStatBucket(r, "missing", date)).length;
+  const roster = rosterMatchingFilters(expectedEmployees, filters);
+  const absent =
+    roster.length > 0
+      ? roster.filter((e) => !employeeIdsPresentOrExcused(records, date).has(e.id)).length
+      : records.filter((r) => matchesAttendanceStatBucket(r, "absent", date)).length;
+  return { present, absent, late, missing };
 }
 
 export async function markAttendance(payload: MarkAttendancePayload): Promise<void> {

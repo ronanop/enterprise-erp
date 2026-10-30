@@ -14,6 +14,12 @@ apps/api/var/project-trackers/*
 !apps/api/var/project-trackers/.gitkeep
 apps/api/var/marketing-deliverables/*
 !apps/api/var/marketing-deliverables/.gitkeep
+apps/api/var/recruitment-resumes/*
+!apps/api/var/recruitment-resumes/.gitkeep
+apps/api/var/recruitment-bg-docs/*
+!apps/api/var/recruitment-bg-docs/.gitkeep
+# Misplaced local uploads (cwd drift) — never commit
+apps/api/src/var/
 apps/api/var/*.jsonl
 var/vm-sync/
 

@@ -83,8 +83,16 @@ def conflict_from_integrity(exc: IntegrityError) -> ConflictException:
             "Cannot delete or change this record because other data still depends on it.",
         )
     if "UniqueViolation" in name or "unique constraint" in lowered:
+        if "uk_hr_bio_device_code" in lowered or "hr_biometric_device" in lowered:
+            return ConflictException(
+                "Device code already registered for this company. Choose a different code."
+            )
         return ConflictException("A record with these values already exists.")
     if "NotNullViolation" in name or "not-null constraint" in lowered:
+        if "company_id" in lowered:
+            return ConflictException(
+                "Company is required. Select a branch that belongs to a company and try again."
+            )
         return ConflictException("A required value is missing, so this could not be saved.")
     return ConflictException("This change conflicts with existing data.")
 
@@ -169,9 +177,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(IntegrityError)
     async def integrity_error_handler(_: Request, exc: IntegrityError) -> JSONResponse:
         logger.warning("database integrity error: %s", exc)
+        conflict = conflict_from_integrity(exc)
         return JSONResponse(
-            status_code=status.HTTP_409_CONFLICT,
-            content=ErrorResponse(message="Conflict with existing data").model_dump(),
+            status_code=conflict.status_code,
+            content=ErrorResponse(message=conflict.message).model_dump(),
         )
 
     @app.exception_handler(DBAPIError)

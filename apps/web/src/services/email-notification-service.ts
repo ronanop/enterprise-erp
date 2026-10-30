@@ -1,4 +1,40 @@
-import { apiClient } from "@/services/api-client";
+import { ApiClientError, apiClient, formatApiError } from "@/services/api-client";
+import { downloadFailedEmailAsEml } from "@/lib/recruitment/download-failed-email";
+import { env, getApiUrl, setApiUrl } from "@/utils/env";
+
+/** Client-side spacing between compose calls (ms). Server also paces SMTP. */
+const CLIENT_SEND_GAP_MS = 2_500;
+let lastComposeAt = 0;
+let composeChain: Promise<unknown> = Promise.resolve();
+
+async function paceClientCompose(): Promise<void> {
+  const now = Date.now();
+  const wait = CLIENT_SEND_GAP_MS - (now - lastComposeAt);
+  if (wait > 0) {
+    await new Promise((r) => setTimeout(r, wait));
+  }
+  lastComposeAt = Date.now();
+}
+
+/**
+ * Large JSON email bodies (portal docs as base64) often fail through the Next.js
+ * same-origin `/api/v1` rewrite. Prefer the direct API origin for compose.
+ */
+function withDirectApiBase<T>(fn: () => Promise<T>): Promise<T> {
+  const previous = getApiUrl();
+  const direct = env.apiUrlPrimary || env.apiUrlFallback;
+  const shouldSwitch =
+    Boolean(direct) &&
+    previous !== direct &&
+    /:3000\b|:3001\b/.test(previous) &&
+    !/:3000\b|:3001\b/.test(direct);
+  if (shouldSwitch) {
+    setApiUrl(direct);
+  }
+  return fn().finally(() => {
+    if (shouldSwitch) setApiUrl(previous);
+  });
+}
 
 type SmtpDiagnostics = {
   configured: boolean;
@@ -73,6 +109,12 @@ export type EmailOverview = {
   recent_events: EmailEventRow[];
 };
 
+export type EmailAttachmentPayload = {
+  filename: string;
+  content_base64: string;
+  content_type?: string;
+};
+
 export type EmailComposePayload = {
   to_address: string;
   subject: string;
@@ -80,6 +122,7 @@ export type EmailComposePayload = {
   event_type?: string;
   template_id?: string | null;
   payload_json?: Record<string, unknown> | null;
+  attachments?: EmailAttachmentPayload[];
 };
 
 export type EmailTemplateCreatePayload = {
@@ -119,12 +162,77 @@ export async function testEmailConnection() {
   return res.data;
 }
 
-export async function sendEmailCompose(body: EmailComposePayload) {
-  const res = await apiClient<{ id: string; status: string; recipient_address: string; event_type: string }>(
-    "/notifications/email/send",
-    { method: "POST", body },
+export type EmailComposeResult = {
+  id: string;
+  status: string;
+  recipient_address: string;
+  event_type: string;
+  error?: string | null;
+  /** Set when SMTP failed and a .eml was downloaded for manual send */
+  failedEmlDownloaded?: string | null;
+};
+
+/**
+ * Send via API SMTP.
+ * Only downloads a .eml when the API accepted the request but SMTP delivery failed.
+ * Auth / permission / network errors surface as clear errors (no fake "download = sent").
+ */
+export async function sendEmailCompose(body: EmailComposePayload): Promise<EmailComposeResult> {
+  const run = async (): Promise<EmailComposeResult> => {
+    await paceClientCompose();
+    try {
+      // ATS / recruitment mails use a module endpoint so HR users do not need
+      // foundation.notification:create (that permission is for the Email console).
+      const eventType = String(body.event_type || "");
+      const path = eventType.startsWith("recruitment.")
+        ? "/recruitment/email/send"
+        : "/notifications/email/send";
+      const res = await withDirectApiBase(() =>
+        apiClient<EmailComposeResult>(path, {
+          method: "POST",
+          body,
+        }),
+      );
+      const data = res.data;
+      if (!data) {
+        throw new Error("Empty email send response");
+      }
+      if (data.status === "failed" || data.status === "error") {
+        const file = downloadFailedEmailAsEml({
+          to_address: body.to_address,
+          subject: body.subject,
+          body_html: body.body_html,
+        });
+        const err =
+          data.error ||
+          `SMTP delivery failed (${data.status}). Downloaded ${file} — open and send manually.`;
+        const wrapped = new Error(err) as Error & { failedEmlDownloaded?: string };
+        wrapped.failedEmlDownloaded = file;
+        throw wrapped;
+      }
+      return data;
+    } catch (err) {
+      if (err && typeof err === "object" && "failedEmlDownloaded" in err) {
+        throw err;
+      }
+      // Do not auto-download .eml for 401/403/network — that looked like "mail sent as file".
+      const msg = formatApiError(err, "Email send failed");
+      if (err instanceof ApiClientError && (err.status === 401 || err.status === 403)) {
+        throw new Error(
+          `${msg}. Your account needs recruitment email permission — ask an admin to grant recruitment access.`,
+        );
+      }
+      throw err instanceof Error ? err : new Error(msg);
+    }
+  };
+
+  // Serialize compose calls so delays stack correctly under parallel offer/BG sends
+  const next = composeChain.then(run, run);
+  composeChain = next.then(
+    () => undefined,
+    () => undefined,
   );
-  return res.data;
+  return next;
 }
 
 export async function listEmailTemplates() {

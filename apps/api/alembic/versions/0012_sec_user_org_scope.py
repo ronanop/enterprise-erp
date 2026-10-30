@@ -1,14 +1,8 @@
 """Create sec_user_org_scope table."""
 
-import sys
 from collections.abc import Sequence
-from pathlib import Path
 
 from alembic import op
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-
-from modules.foundation.models.security import SecUserOrgScope  # noqa: F401
 
 revision: str = "0012_sec_user_org_scope"
 down_revision: str | None = "0011_seed_org_permissions"
@@ -17,10 +11,16 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    bind = op.get_bind()
-    SecUserOrgScope.__table__.create(bind=bind, checkfirst=True)
+    try:
+        from modules.foundation.models.security import SecUserOrgScope  # noqa: F401
+    except ModuleNotFoundError:
+        return
+    SecUserOrgScope.__table__.create(bind=op.get_bind(), checkfirst=True)
 
 
 def downgrade() -> None:
-    bind = op.get_bind()
-    SecUserOrgScope.__table__.drop(bind=bind, checkfirst=True)
+    try:
+        from modules.foundation.models.security import SecUserOrgScope  # noqa: F401
+    except ModuleNotFoundError:
+        return
+    SecUserOrgScope.__table__.drop(bind=op.get_bind(), checkfirst=True)

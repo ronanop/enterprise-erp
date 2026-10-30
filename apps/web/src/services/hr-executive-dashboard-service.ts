@@ -340,20 +340,34 @@ function buildStats(
   onboardingInProcess = 0,
 ): HrDashboardStats {
   const today = todayIso();
-  const activeEmployees = people.filter((p) =>
+  const activePeople = people.filter((p) =>
     ["active", "confirmed", "probation"].includes(p.status),
-  ).length;
+  );
+  const activeEmployees = activePeople.length || people.length;
+  const activeIds = new Set(
+    (activePeople.length ? activePeople : people).map((p) => String(p.emp.id)),
+  );
 
   const todayAttendance = overview.attendance.filter(
     (r) => isoDate(r.attendance_date) === today,
   );
-  const bucketsToday = todayAttendance.map((r) => attendanceBucket(r));
-  const presentToday = bucketsToday.filter((b) =>
-    b === "present" || b === "late" || b === "halfDay",
-  ).length;
-  const absentToday = bucketsToday.filter((b) => b === "absent").length;
+
+  /** Unique employees who punched / are on site today (present, late, half-day, WFH, on duty). */
+  const presentIds = new Set<string>();
+  const lateIds = new Set<string>();
+  for (const r of todayAttendance) {
+    const empId = String(r.employee_id ?? "");
+    if (!empId) continue;
+    if (activeIds.size > 0 && !activeIds.has(empId)) continue;
+    const bucket = attendanceBucket(r);
+    if (bucket === "present" || bucket === "late" || bucket === "halfDay") {
+      presentIds.add(empId);
+    }
+    if (bucket === "late") lateIds.add(empId);
+  }
+  const presentToday = presentIds.size;
+  const lateArrivals = lateIds.size;
   const onDutyToday = todayAttendance.filter((r) => asStatus(r.attendance_status) === "on_duty").length;
-  const lateArrivals = bucketsToday.filter((b) => b === "late").length;
 
   const onLeaveIds = new Set<string>();
   for (const r of overview.leaveRequests) {
@@ -367,7 +381,12 @@ function buildStats(
     if (attendanceBucket(r) === "leave") onLeaveIds.add(String(r.employee_id ?? ""));
   }
   onLeaveIds.delete("");
+  // Leave that also has a present punch should not inflate leave vs present double-count for absent.
+  for (const id of presentIds) onLeaveIds.delete(id);
   const onLeave = onLeaveIds.size;
+
+  // Same idea as Attendance Management: no-shows (not present, not on leave) count as absent.
+  const absentToday = Math.max(0, activeEmployees - presentToday - onLeave);
 
   const pendingLeave = countByStatus(overview.leaveRequests, [
     "draft",

@@ -193,8 +193,25 @@ def send_email(
         template_id=body.template_id,
         payload_json=body.payload_json,
         created_by=ctx.user_id,
+        attachments=[
+            {
+                "filename": item.filename,
+                "content_base64": item.content_base64,
+                "content_type": item.content_type,
+            }
+            for item in body.attachments
+        ]
+        if body.attachments
+        else None,
     )
     db.commit()
+    db.refresh(event)
+    provider_error: str | None = None
+    if event.status == "failed":
+        for d in NotificationService(db).list_deliveries(ctx.tenant_id, limit=30):
+            if str(d.get("event_id") or "") == str(event.id) and d.get("channel") == "email":
+                provider_error = d.get("provider_response") or d.get("status")
+                break
     return APIResponse(
         message="Email queued" if event.status == "queued" else f"Email {event.status}",
         data={
@@ -202,6 +219,7 @@ def send_email(
             "status": event.status,
             "recipient_address": event.recipient_address,
             "event_type": event.event_type,
+            "error": provider_error,
         },
     )
 

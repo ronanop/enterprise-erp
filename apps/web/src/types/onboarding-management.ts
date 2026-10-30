@@ -46,14 +46,19 @@ export type DocumentKind =
 
 export type DocumentVerifyStatus = "pending" | "verified" | "rejected" | "accepted";
 
+/** Candidate onboarding link steps (KYC docs are collected on the BG-check portal). */
 export const PORTAL_STEPS: { id: PortalStepId; label: string; description: string }[] = [
-  { id: "personal", label: "Personal Details", description: "Identity and contact" },
-  { id: "government_ids", label: "Government IDs", description: "Aadhaar, PAN, and more" },
+  { id: "personal", label: "Personal Details", description: "Identity, contact, and live photo" },
   { id: "bank", label: "Bank Details", description: "Salary account (required)" },
-  { id: "emergency", label: "Emergency Contact", description: "Primary contact" },
-  { id: "documents", label: "Upload Documents", description: "Marksheets, resume, bank & employment proofs" },
-  { id: "policies", label: "Policies", description: "Agree and upload signature" },
+  { id: "policies", label: "Policies", description: "Agree and digitally sign" },
   { id: "review", label: "Review & Submit", description: "Confirm all steps" },
+];
+
+/** Legacy steps kept for type/compat when older cases still reference them. */
+export const LEGACY_PORTAL_STEPS: PortalStepId[] = [
+  "government_ids",
+  "emergency",
+  "documents",
 ];
 
 export const DEFAULT_HR_CHECKLIST: { code: string; name: string }[] = [
@@ -175,6 +180,8 @@ export type OnboardingDocument = {
   /** Base64 data URL for HR preview (stored with portal progress in local demo). */
   fileDataUrl?: string;
   mimeType?: string;
+  /** Origin of the file — BG-check uploads are shown alongside onboarding docs. */
+  source?: "onboarding" | "bg_check";
 };
 
 export type SignedPolicyDocument = {

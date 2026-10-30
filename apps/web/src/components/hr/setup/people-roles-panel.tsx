@@ -17,7 +17,11 @@ import {
 } from "@/services/people-role-service";
 import { cn } from "@/lib/utils";
 
-type RoleFilter = "all" | "manager" | "recruiter" | "hr";
+type RoleFilter = "all" | "manager" | "hiring_manager" | "recruiter" | "hr";
+
+function isTaggedManager(row: PeopleRoleRow): boolean {
+  return row.is_manager || row.is_hiring_manager || Number(row.reports_count) > 0;
+}
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -37,7 +41,7 @@ function reportingManagerLabel(row: PeopleRoleRow, all: PeopleRoleRow[]): string
   const id = normId(row.reporting_manager_id);
   if (!id) return "";
   const match = all.find((r) => normId(r.id) === id);
-  if (match) return personLabel(match.display_name, match.employee_code, match.is_hiring_manager);
+  if (match) return personLabel(match.display_name, match.employee_code, isTaggedManager(match));
   const name = (row.reporting_manager_name ?? "").trim();
   if (name && !UUID_RE.test(name)) {
     return personLabel(name, row.reporting_manager_code, true);
@@ -106,12 +110,12 @@ export function PeopleRolesPanel() {
       [...rows]
         .sort(
           (a, b) =>
-            Number(b.is_hiring_manager) - Number(a.is_hiring_manager) ||
+            Number(isTaggedManager(b)) - Number(isTaggedManager(a)) ||
             a.display_name.localeCompare(b.display_name),
         )
         .map((r) => ({
           value: normId(r.id),
-          label: personLabel(r.display_name, r.employee_code, r.is_hiring_manager),
+          label: personLabel(r.display_name, r.employee_code, isTaggedManager(r)),
         })),
     [rows],
   );
@@ -119,7 +123,8 @@ export function PeopleRolesPanel() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((row) => {
-      if (filter === "manager" && !row.is_hiring_manager) return false;
+      if (filter === "manager" && !row.is_manager) return false;
+      if (filter === "hiring_manager" && !row.is_hiring_manager) return false;
       if (filter === "recruiter" && !row.is_recruiter) return false;
       if (filter === "hr" && !row.is_hr) return false;
       if (!q) return true;
@@ -144,7 +149,7 @@ export function PeopleRolesPanel() {
       if (body.reporting_manager_id) {
         setRows((prev) =>
           prev.map((r) =>
-            r.id === body.reporting_manager_id ? { ...r, is_hiring_manager: true } : r,
+            r.id === body.reporting_manager_id ? { ...r, is_manager: true } : r,
           ),
         );
       }
@@ -157,7 +162,8 @@ export function PeopleRolesPanel() {
 
   const filters: { id: RoleFilter; label: string }[] = [
     { id: "all", label: "All" },
-    { id: "manager", label: "Hiring managers" },
+    { id: "manager", label: "Managers" },
+    { id: "hiring_manager", label: "Hiring managers" },
     { id: "recruiter", label: "Recruiters" },
     { id: "hr", label: "HR" },
   ];
@@ -165,9 +171,10 @@ export function PeopleRolesPanel() {
   return (
     <div className="space-y-3">
       <p className="text-[12px] text-muted-foreground">
-        Tick who is a hiring manager, recruiter, or HR. Leave and team approvals still go to the
-        assigned reporting manager. HR also gets the HR_MANAGER login pack so they can approve in
-        the ESS inbox.
+        Tick Manager for line managers, Hiring manager for recruitment ownership, plus Recruiter /
+        HR as needed. Leave and team approvals still go to the assigned reporting manager. Assigning
+        someone as a reporting manager also tags them as Manager. HR also gets the HR_MANAGER login
+        pack so they can approve in the ESS inbox.
       </p>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative min-w-0 flex-1">
@@ -276,6 +283,12 @@ export function PeopleRolesPanel() {
                       </td>
                       <td className="px-3 py-2 align-top">
                         <div className="flex flex-wrap gap-1.5">
+                          <RoleToggle
+                            checked={row.is_manager}
+                            disabled={busy}
+                            label="Manager"
+                            onChange={(next) => void patch(row, { is_manager: next })}
+                          />
                           <RoleToggle
                             checked={row.is_hiring_manager}
                             disabled={busy}

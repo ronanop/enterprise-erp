@@ -57,17 +57,31 @@ def effective_company_ids(
     ctx: TenantContext,
     module_key: str | None = None,
 ) -> list[UUID] | None:
-    """Company IDs visible to the user. None means no company filter (tenant-wide)."""
+    """Company IDs visible to the user. None means no company filter (tenant-wide).
+
+    Member rules (not elevated):
+    - Active session company pins data to that entity (must be in assigned scope).
+    - ``all_companies`` uses the full assigned allowlist (never the whole tenant).
+    - No session company falls back to the assigned allowlist.
+    """
     if module_key:
         if has_module_wide_data_access(ctx, module_key):
             return None
     elif is_platform_admin(ctx):
         return None
 
-    if ctx.scoped_company_ids:
-        return list(ctx.scoped_company_ids)
+    scoped = list(ctx.scoped_company_ids) if ctx.scoped_company_ids else []
+
+    if ctx.all_companies:
+        return scoped
+
     if ctx.company_id is not None:
+        if scoped and ctx.company_id not in scoped:
+            return []
         return [ctx.company_id]
+
+    if scoped:
+        return scoped
     return []
 
 

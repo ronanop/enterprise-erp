@@ -19,10 +19,14 @@ class CodeGeneratorService:
         *,
         model,
         code_column: str,
+        prefix: str | None = None,
+        pad_width: int | None = None,
     ) -> str:
         return self._repo.next_code(
             entity_type,
             company_id,
             model=model,
             code_column=code_column,
+            prefix=prefix,
+            pad_width=pad_width,
         )

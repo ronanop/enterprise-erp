@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import type { PayslipRecord } from "@/types/payroll-management";
 import {
+  buildPayslipView,
   createPayslipPdf,
   payslipFigures,
   payslipPdfContext,
   payslipProjection,
   type PayslipPdfContext,
 } from "@/utils/payslip-pdf";
+import { tdsForTheYear } from "@/lib/salary-structure-excel";
 
 function slip(overrides: Partial<PayslipRecord> = {}): PayslipRecord {
   return {
@@ -57,7 +59,8 @@ function context(overrides: Partial<PayslipPdfContext> = {}): PayslipPdfContext 
     employmentType: "Permanent",
     pan: "ABCDE1234F",
     uan: "100",
-    bank: "******1234",
+    bankAccountNumber: "******1234",
+    bankName: "HDFC Bank",
     ifsc: "HDFC0001",
     lateCount: "",
     paymentStatus: "Paid",
@@ -232,5 +235,89 @@ describe("payslipProjection", () => {
     const figures = payslipFigures(slip());
     const projection = payslipProjection(figures, context({ ytdMonths: 1, monthsLeft: 3 }));
     expect(projection.earnings).toBe(70000 + 65000 * 11);
+  });
+
+  it("injects TDS into Deduction (B) and fills tax summary from projected gross", () => {
+    const high = slip({
+      earnings: [
+        { label: "Basic", amount: 99600 },
+        { label: "HRA", amount: 49800 },
+        { label: "Special Allowance", amount: 14800 },
+      ],
+      deductions: [{ label: "Employee PF", amount: 1800 }],
+      gross: 164200,
+      totalDeductions: 1800,
+      net: 162400,
+      taxRegime: "new",
+      month: "2026-09",
+    });
+    const ctx = context({
+      ytdEarnings: 32840,
+      ytdDeductions: 1800,
+      ytdNet: 31040,
+      ytdTds: null,
+      ytdPf: 1800,
+      ytdLop: 131360,
+      ytdMonths: 1,
+      monthsLeft: 6,
+      nextMonths: ["2026-10", "2026-11", "2026-12"],
+      yearLabel: "April 2026 – March 2027",
+    });
+    const { figures, projection } = buildPayslipView(high, ctx);
+    const tdsRow = figures.deductions.find((row) => /tds|income tax/i.test(row.label));
+    expect(tdsRow?.monthly).toBeGreaterThan(0);
+    expect(figures.monthlyDeductions).toBe(1800 + (tdsRow?.monthly ?? 0));
+    expect(projection.tax.annualGross).toBe(projection.earnings);
+    expect(projection.tax.standardDeduction).toBe(75000);
+    expect(projection.tax.hraExemption).toBe(0);
+    expect(projection.tax.section80C).toBe(0);
+    expect(projection.tax.section80D).toBe(0);
+    expect(projection.tax.taxableIncome).toBe(Math.max(0, projection.earnings - 75000));
+    expect(projection.tax.estimatedAnnualTax).toBe(tdsForTheYear(projection.earnings));
+    expect(projection.tdsYear).toBe(projection.tax.estimatedAnnualTax);
+    expect(projection.tax.ytdTds).toBe(tdsRow?.monthly ?? 0);
+    expect(projection.tax.balanceTds).toBe(
+      Math.max(0, projection.tax.estimatedAnnualTax - projection.tax.ytdTds),
+    );
+    expect(projection.monthTds).toBe(tdsRow?.monthly);
+  });
+
+  it("keeps an existing TDS line and uses it for YTD / balance", () => {
+    const withTds = slip({
+      earnings: [
+        { label: "Basic", amount: 30000 },
+        { label: "HRA", amount: 15000 },
+        { label: "Special Allowance", amount: 20000 },
+      ],
+      deductions: [
+        { label: "Employee PF", amount: 3600 },
+        { label: "Professional Tax", amount: 200 },
+        { label: "Income Tax (TDS)", amount: 8750 },
+      ],
+      gross: 65000,
+      totalDeductions: 12550,
+      net: 52450,
+      taxRegime: "old",
+    });
+    const ctx = context({
+      ytdEarnings: 720000,
+      ytdDeductions: 128804,
+      ytdNet: 591196,
+      ytdTds: 78750,
+      ytdPf: 32400,
+      ytdMonths: 9,
+      monthsLeft: 3,
+      nextMonths: ["2026-01", "2026-02", "2026-03"],
+    });
+    const { figures, projection } = buildPayslipView(withTds, ctx);
+    expect(figures.deductions.filter((row) => /tds|income tax/i.test(row.label))).toHaveLength(1);
+    expect(projection.monthTds).toBe(8750);
+    expect(projection.tax.ytdTds).toBe(78750);
+    expect(projection.tax.standardDeduction).toBe(50000);
+    expect(projection.tax.section80C).toBeGreaterThan(0);
+    expect(projection.tax.estimatedAnnualTax).toBe(projection.tdsYear);
+    expect(projection.tax.balanceTds).toBe(
+      Math.max(0, projection.tax.estimatedAnnualTax - 78750),
+    );
   });
 });

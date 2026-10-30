@@ -277,6 +277,8 @@ class Settings(BaseSettings):
     smtp_password: str = Field(default="", alias="SMTP_PASSWORD")
     smtp_from_address: str = Field(default="", alias="SMTP_FROM_ADDRESS")
     smtp_use_tls: bool = Field(default=True, alias="SMTP_USE_TLS")
+    # Minimum seconds between SMTP sends (rate-limit friendly; Hostinger etc.)
+    smtp_send_delay_seconds: float = Field(default=2.0, alias="SMTP_SEND_DELAY_SECONDS")
     imap_enabled: bool = Field(default=False, alias="IMAP_ENABLED")
     imap_host: str = Field(default="", alias="IMAP_HOST")
     imap_port: int = Field(default=993, alias="IMAP_PORT")
@@ -411,6 +413,7 @@ class Settings(BaseSettings):
             "use_tls": self.smtp_use_tls,
             "auth": bool(self.smtp_user.strip()),
             "from_email": self.smtp_from_address.strip() or None,
+            "send_delay_seconds": self.smtp_send_delay_seconds,
             "env_files_found": [p for p in _ENV_FILES if Path(p).is_file()],
             "hint": (
                 None

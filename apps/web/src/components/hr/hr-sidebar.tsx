@@ -19,6 +19,7 @@ function navHrefMatches(pathname: string, search: string, href: string): boolean
   if (pathPart === "/hr/ess") {
     return pathname === "/hr/ess" || pathname.startsWith("/hr/ess-inbox");
   }
+  if (pathPart === "/hr/time") return pathname === "/hr/time";
   if (pathname.startsWith("/hr/payroll/salary-structures")) {
     return href === "/hr/payroll?section=salary-structure";
   }

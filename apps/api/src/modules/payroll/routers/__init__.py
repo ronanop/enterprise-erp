@@ -380,7 +380,10 @@ def create_salary_structures(
     ctx: Annotated[TenantContext, Depends(require_permission("payroll.structure:create"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="Created", data=SalaryStructureService(db).create(ctx, **body.model_dump()))
+    row = SalaryStructureService(db).create(ctx, **body.model_dump())
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="Created", data=row)
 
 @salary_structures_router.patch("/{row_id}", response_model=APIResponse[SalaryStructureResponse])
 def update_salary_structures(
@@ -389,7 +392,10 @@ def update_salary_structures(
     ctx: Annotated[TenantContext, Depends(require_permission("payroll.structure:update"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    return APIResponse(message="Updated", data=SalaryStructureService(db).update(ctx, row_id, **extract_update_fields(body)))
+    row = SalaryStructureService(db).update(ctx, row_id, **extract_update_fields(body))
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="Updated", data=row)
 
 
 @salary_structures_router.delete("/{row_id}", response_model=APIResponse[None])
@@ -399,6 +405,7 @@ def delete_salary_structure(
     db: Annotated[Session, Depends(get_db)],
 ):
     SalaryStructureService(db).delete(ctx, row_id)
+    db.commit()
     return APIResponse(message="Deleted", data=None)
 
 @salary_components_router.get("", response_model=APIResponse[list[SalaryComponentResponse]])

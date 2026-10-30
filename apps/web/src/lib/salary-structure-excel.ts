@@ -80,7 +80,7 @@ export function computeCtcSplit(input: CtcSplitInput): CtcSplit {
   };
 }
 
-/** Excel AG2 */
+/** Excel AG2 — new regime (standard deduction ₹75,000 inside). */
 export function tdsForTheYear(annualSalary: number): number {
   const ni = Math.max(0, annualSalary - 75000);
   const baseTax =
@@ -103,6 +103,23 @@ export function tdsForTheYear(annualSalary: number): number {
 /** Excel AH2 */
 export function tdsForTheMonth(annualSalary: number): number {
   return roundUpRupee(tdsForTheYear(annualSalary) / 12);
+}
+
+/** Old-regime tax on already-reduced taxable income (slabs + §87A + 4% cess). */
+export function oldRegimeTaxOnTaxable(taxableIncome: number): number {
+  const ti = Math.max(0, taxableIncome);
+  let tax =
+    Math.max(0, Math.min(ti, 500000) - 250000) * 0.05 +
+    Math.max(0, Math.min(ti, 1000000) - 500000) * 0.2 +
+    Math.max(0, ti - 1000000) * 0.3;
+  if (ti <= 500000) tax = Math.max(0, tax - 12500);
+  let totalBeforeCess = tax;
+  if (ti > 10000000) {
+    totalBeforeCess = Math.min(tax * 1.15, tax + (ti - 10000000) * 0.37);
+  } else if (ti > 5000000) {
+    totalBeforeCess = Math.min(tax * 1.1, tax + (ti - 5000000) * 0.37);
+  }
+  return rupee(totalBeforeCess * 1.04);
 }
 
 /** Excel O–AD sample month (does not run payroll). */

@@ -163,7 +163,8 @@ export const hrSetupSections: HrSetupSection[] = [
       {
         id: "reporting",
         title: "Reporting Structure",
-        description: "Reporting managers derived from who has direct reports",
+        description:
+          "Managers with direct reports, hiring-manager flag, or manager titles (company-wide)",
         source: "derived",
       },
       {

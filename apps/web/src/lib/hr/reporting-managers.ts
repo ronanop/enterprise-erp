@@ -9,6 +9,8 @@ export type EmployeeMasterRow = {
   job_title?: string;
   display_name?: string;
   reporting_manager_id?: string | number | null;
+  is_hiring_manager?: boolean;
+  is_manager?: boolean;
   is_deleted?: boolean;
   status?: string;
 };
@@ -21,7 +23,8 @@ function employeeLabel(r: EmployeeMasterRow): string {
   return name ? `${name}${code ? ` (${code})` : ""}` : code || String(r.id ?? "");
 }
 
-function looksLikeManagerRole(row: EmployeeMasterRow): boolean {
+/** CEO / CFO / head / director / manager-style titles (and MGR codes). */
+export function looksLikeManagerRole(row: EmployeeMasterRow): boolean {
   const code = String(row.employee_code ?? "");
   const title = String(row.designation ?? row.job_title ?? row.display_name ?? "").toLowerCase();
   if (/^mgr[-_]/i.test(code) || /\bMGR[-_]/i.test(code)) return true;
@@ -29,7 +32,16 @@ function looksLikeManagerRole(row: EmployeeMasterRow): boolean {
     title.includes("manager") ||
     title.includes("lead") ||
     title.includes("head") ||
-    title.includes("director")
+    title.includes("director") ||
+    title.includes("ceo") ||
+    title.includes("coo") ||
+    title.includes("cfo") ||
+    title.includes("cto") ||
+    title.includes("chief") ||
+    title.includes("founder") ||
+    title.includes("president") ||
+    /\bvp\b/.test(title) ||
+    title.includes("vice president")
   );
 }
 
@@ -51,6 +63,8 @@ export function buildReportingManagerOptions(
       if (status === "deleted" || status === "archived") return false;
       if (include.has(id)) return true;
       if (referencedManagerIds.has(id)) return true;
+      if (r.is_manager === true) return true;
+      if (r.is_hiring_manager === true) return true;
       return looksLikeManagerRole(r);
     })
     .map((r) => ({

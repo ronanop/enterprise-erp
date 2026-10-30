@@ -142,8 +142,10 @@ class SeparationService:
         )
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, employee_id: UUID, company_id: UUID | None = None, **fields):
-        cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
+        cid = self._scope.resolve_create_company_id(
+            ctx, branch_id=branch_id, company_id=company_id
+        )
         self._master.get_employee(ctx, employee_id)
         doc = self._numbers.generate(HrEntityType.SEPARATION, cid, HrSeparation, "document_number")
         clearance = fields.pop("clearance_json", None) or default_clearance()

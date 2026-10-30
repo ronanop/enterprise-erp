@@ -8,6 +8,7 @@ export type RecruitmentOverview = {
   sources: RecruitmentRow[];
   recruiters: RecruitmentRow[];
   candidates: RecruitmentRow[];
+  resumes: RecruitmentRow[];
   applications: RecruitmentRow[];
   stages: RecruitmentRow[];
   interviews: RecruitmentRow[];
@@ -20,9 +21,11 @@ export type RecruitmentOverview = {
   errors: string[];
   statusCodes: number[];
   partial: boolean;
+  requisitionsLoaded: boolean;
   candidatesLoaded: boolean;
   applicationsLoaded: boolean;
   offersLoaded: boolean;
+  resumesLoaded: boolean;
 };
 
 function normalizeRows(data: unknown): RecruitmentRow[] {
@@ -44,9 +47,13 @@ function normalizeRows(data: unknown): RecruitmentRow[] {
 
 async function safeList(
   apiPath: string,
+  query?: { page?: number; page_size?: number },
 ): Promise<{ rows: RecruitmentRow[]; error?: string; status?: number }> {
   try {
-    const response = await resourceService.list(apiPath);
+    const response = await resourceService.list(apiPath, {
+      page: query?.page ?? 1,
+      page_size: query?.page_size ?? 200,
+    });
     return { rows: normalizeRows(response.data) };
   } catch (err) {
     if (err instanceof ApiClientError) {
@@ -114,6 +121,7 @@ export async function loadRecruitmentOverview(): Promise<RecruitmentOverview> {
     sources,
     recruiters,
     candidates,
+    resumes,
     applications,
     stages,
     interviews,
@@ -129,6 +137,7 @@ export async function loadRecruitmentOverview(): Promise<RecruitmentOverview> {
     safeList("/recruitment/recruitment-sources"),
     safeList("/recruitment/recruiters"),
     safeList("/recruitment/candidates"),
+    safeList("/recruitment/resumes"),
     safeList("/recruitment/applications"),
     safeList("/recruitment/application-stages"),
     safeList("/recruitment/interviews"),
@@ -146,6 +155,7 @@ export async function loadRecruitmentOverview(): Promise<RecruitmentOverview> {
     sources,
     recruiters,
     candidates,
+    resumes,
     applications,
     stages,
     interviews,
@@ -167,6 +177,7 @@ export async function loadRecruitmentOverview(): Promise<RecruitmentOverview> {
     sources: sources.rows,
     recruiters: recruiters.rows,
     candidates: candidates.rows,
+    resumes: resumes.rows,
     applications: applications.rows,
     stages: stages.rows,
     interviews: interviews.rows,
@@ -179,8 +190,10 @@ export async function loadRecruitmentOverview(): Promise<RecruitmentOverview> {
     errors,
     statusCodes,
     partial: errors.length > 0,
+    requisitionsLoaded: !requisitions.error,
     candidatesLoaded: !candidates.error,
     applicationsLoaded: !applications.error,
     offersLoaded: !offers.error,
+    resumesLoaded: !resumes.error,
   };
 }

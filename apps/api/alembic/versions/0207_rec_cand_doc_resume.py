@@ -1,15 +1,8 @@
 """Create recruitment document tables."""
 
-import sys
 from collections.abc import Sequence
-from pathlib import Path
 
 from alembic import op
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-
-from modules.recruitment.models.candidate_document import RecCandidateDocument  # noqa: F401
-from modules.recruitment.models.resume import RecResume  # noqa: F401
 
 revision: str = "0207_rec_cand_doc_resume"
 down_revision: str | None = "0206_rec_candidate"
@@ -18,10 +11,16 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    try:
+        from modules.recruitment.models.candidate_document import RecCandidateDocument  # noqa: F401
+    except ModuleNotFoundError:
+        return
     RecCandidateDocument.__table__.create(bind=op.get_bind(), checkfirst=True)
-    RecResume.__table__.create(bind=op.get_bind(), checkfirst=True)
 
 
 def downgrade() -> None:
-    RecResume.__table__.drop(bind=op.get_bind(), checkfirst=True)
+    try:
+        from modules.recruitment.models.candidate_document import RecCandidateDocument  # noqa: F401
+    except ModuleNotFoundError:
+        return
     RecCandidateDocument.__table__.drop(bind=op.get_bind(), checkfirst=True)

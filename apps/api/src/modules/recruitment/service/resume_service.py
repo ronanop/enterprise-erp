@@ -4,7 +4,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import NotFoundException
+from core.exceptions import NotFoundException, ValidationException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.platform.compat.audit_facade import PlatformAuditFacade
 from modules.recruitment.models import RecResume
@@ -32,8 +32,10 @@ class ResumeService:
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
         cid = self._scope.resolve_company_id(ctx, company_id)
+        if cid is None:
+            raise ValidationException("Company context required to create resume")
 
-        row = self._repo.create(ctx, company_id=cid,  **fields)
+        row = self._repo.create(ctx, company_id=cid, **fields)
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="rec_resume",

@@ -52,7 +52,7 @@ export function InterviewOutcomeDrawer({
     interview.interviewType;
 
   function save() {
-    if (!recommendation || !interview) return;
+    if (!recommendation || !interview || !feedback.trim()) return;
     onSave({
       interviewId: interview.id,
       recommendation,
@@ -60,6 +60,21 @@ export function InterviewOutcomeDrawer({
     });
     onClose();
   }
+
+  const nextPhaseHint =
+    recommendation === "selected"
+      ? interview.round === "round_1"
+        ? "Selected moves the candidate to Interview Round 2."
+        : interview.round === "round_2"
+          ? "Selected moves the candidate to Negotiation Round."
+          : interview.round === "hr"
+            ? "Selected moves the candidate to Background Check."
+            : "Selected advances the candidate to the next phase."
+      : recommendation === "rejected"
+        ? "Rejected exits the candidate from the pipeline."
+        : recommendation === "hold"
+          ? "Hold keeps the candidate on the current stage."
+          : null;
 
   return (
     <SetupDrawer
@@ -74,8 +89,8 @@ export function InterviewOutcomeDrawer({
           </Button>
           <Button
             type="button"
-            className="cursor-pointer bg-[#7C3AED] text-white hover:bg-[#6D28D9]"
-            disabled={!recommendation}
+            className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"
+            disabled={!recommendation || !feedback.trim()}
             onClick={save}
           >
             Save outcome
@@ -93,11 +108,15 @@ export function InterviewOutcomeDrawer({
             <HrStatusBadge status={interview.status} />
           </div>
           {interview.participantNames?.length ? (
-            <p className="mt-2 text-muted-foreground">
-              Participants: {interview.participantNames.join(", ")}
-            </p>
+            <div className="mt-2 space-y-0.5 text-muted-foreground">
+              {interview.participantNames.map((name, i) => (
+                <p key={`${name}-${i}`}>
+                  Interviewer {i + 1}: {name}
+                </p>
+              ))}
+            </div>
           ) : interview.interviewer ? (
-            <p className="mt-2 text-muted-foreground">Interviewer: {interview.interviewer}</p>
+            <p className="mt-2 text-muted-foreground">Interviewer 1: {interview.interviewer}</p>
           ) : null}
           {interview.sectionContent ? (
             <p className="mt-2 whitespace-pre-wrap text-foreground">{interview.sectionContent}</p>
@@ -116,14 +135,32 @@ export function InterviewOutcomeDrawer({
           </SetupSelect>
         </SetupField>
 
-        <SetupField label="Feedback">
+        <SetupField
+          label={
+            recommendation === "selected"
+              ? "Review / feedback"
+              : recommendation === "rejected"
+                ? "Rejection reason"
+                : "Feedback"
+          }
+          required
+        >
           <SetupTextarea
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
             rows={4}
-            placeholder="Strengths, gaps, overall notes…"
+            placeholder={
+              recommendation === "selected"
+                ? "Required review before advancing to the next phase…"
+                : recommendation === "rejected"
+                  ? "Required reason for rejection…"
+                  : "Strengths, gaps, overall notes…"
+            }
           />
         </SetupField>
+        {nextPhaseHint ? (
+          <p className="text-[11px] text-muted-foreground">{nextPhaseHint}</p>
+        ) : null}
       </div>
     </SetupDrawer>
   );

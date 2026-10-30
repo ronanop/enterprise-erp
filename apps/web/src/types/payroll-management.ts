@@ -480,8 +480,10 @@ export function emptyPayrollFilters(): PayrollFilters {
 export const RUN_STATUS_LABELS: Record<PayrollRunStatus, string> = {
   draft: "Draft",
   processing: "Processing",
-  pending_hr: "Pending HR",
-  pending_finance: "Pending Finance",
+  /** After Generate — payroll is calculated and waiting for HR to approve the run. */
+  pending_hr: "HR review",
+  /** After HR approval — waiting for Finance to approve. */
+  pending_finance: "Finance review",
   approved: "Approved",
   paid: "Paid",
   locked: "Locked",

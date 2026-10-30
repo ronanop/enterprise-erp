@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Plus, X } from "lucide-react";
 
 import {
   SetupDrawer,
@@ -10,6 +11,7 @@ import {
 } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { cn } from "@/lib/utils";
 import {
   formatInrGrouping,
   INDIAN_STATES,
@@ -27,19 +29,43 @@ import type {
   CandidateSource,
   CreateCandidateInput,
   JobOpening,
+  PipelineApplication,
 } from "@/types/recruitment-ats";
 import { SOURCE_LABELS } from "@/types/recruitment-ats";
+
+const SKILL_TONES = [
+  "bg-sky-50 text-sky-800",
+  "bg-emerald-50 text-emerald-800",
+  "bg-amber-50 text-amber-800",
+  "bg-slate-100 text-slate-700",
+];
 
 type Props = {
   open: boolean;
   onClose: () => void;
   jobs: JobOpening[];
+  applications?: PipelineApplication[];
   /** When set, drawer edits this candidate instead of creating */
   initial?: AtsCandidate | null;
-  onSubmit: (input: CreateCandidateInput, jobId?: string) => void;
+  /** Prefill job opening when adding from a job detail page */
+  initialJobId?: string | null;
+  onSubmit: (input: CreateCandidateInput, jobId?: string) => void | Promise<void>;
 };
 
-export function CandidateDrawer({ open, onClose, jobs, initial, onSubmit }: Props) {
+function looksLikeResumeLabel(value: string): boolean {
+  const v = value.trim();
+  return /^resume\s*:/i.test(v) || /\.(pdf|docx?|txt)$/i.test(v);
+}
+
+export function CandidateDrawer({
+  open,
+  onClose,
+  jobs,
+  applications = [],
+  initial,
+  initialJobId,
+  onSubmit,
+}: Props) {
   const editing = Boolean(initial);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -59,10 +85,13 @@ export function CandidateDrawer({ open, onClose, jobs, initial, onSubmit }: Prop
   const [resumeUrl, setResumeUrl] = useState("");
   const [portfolioUrl, setPortfolioUrl] = useState("");
   const [linkedinUrl, setLinkedinUrl] = useState("");
+  const [skills, setSkills] = useState<string[]>([]);
+  const [skillDraft, setSkillDraft] = useState("");
   const [source, setSource] = useState<CandidateSource>("linkedin");
   const [recruiter, setRecruiter] = useState("");
   const [jobId, setJobId] = useState("");
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [recruiters, setRecruiters] = useState<NamedOption[]>([]);
   const [recruiterSource, setRecruiterSource] = useState<AtsLookupSource>("demo");
 
@@ -74,6 +103,15 @@ export function CandidateDrawer({ open, onClose, jobs, initial, onSubmit }: Prop
     });
   }, [open]);
 
+  const linkedJobId = useMemo(() => {
+    if (!initial) return "";
+    if (initialJobId) return initialJobId;
+    const apps = applications
+      .filter((a) => a.candidateId === initial.id && a.status === "active")
+      .sort((a, b) => b.appliedAt.localeCompare(a.appliedAt));
+    return apps[0]?.jobId || "";
+  }, [initial, initialJobId, applications]);
+
   useEffect(() => {
     if (!open) return;
     if (initial) {
@@ -84,7 +122,8 @@ export function CandidateDrawer({ open, onClose, jobs, initial, onSubmit }: Prop
       setGender(initial.gender);
       setDob(initial.dob);
       setCurrentCompany(initial.currentCompany);
-      setCurrentDesignation(initial.currentDesignation);
+      const designation = initial.currentDesignation || "";
+      setCurrentDesignation(looksLikeResumeLabel(designation) ? "" : designation);
       setExperienceYears(String(initial.experienceYears ?? 0));
       setExpectedSalaryDisplay(
         initial.expectedSalary ? formatInrGrouping(initial.expectedSalary) : "",
@@ -93,14 +132,24 @@ export function CandidateDrawer({ open, onClose, jobs, initial, onSubmit }: Prop
       setAddress(initial.address || "");
       setState(initial.state || "");
       setPincode(initial.pincode || "");
-      setResumeName(initial.resumeName || "");
+      const resumeFromTitle = looksLikeResumeLabel(initial.currentDesignation || "")
+        ? initial.currentDesignation.replace(/^resume\s*:\s*/i, "").trim()
+        : "";
+      setResumeName(initial.resumeName || resumeFromTitle || "");
       setResumeUrl(initial.resumeUrl || "");
       setPortfolioUrl(initial.portfolioUrl || "");
       setLinkedinUrl(initial.linkedinUrl || "");
+      setSkills(
+        (initial.skills ?? [])
+          .map((s) => s.trim())
+          .filter(Boolean),
+      );
+      setSkillDraft("");
       setSource(initial.source);
       setRecruiter(initial.recruiter || "");
-      setJobId("");
+      setJobId(linkedJobId || initialJobId || "");
       setError("");
+      setSaving(false);
       return;
     }
     setFullName("");
@@ -121,13 +170,42 @@ export function CandidateDrawer({ open, onClose, jobs, initial, onSubmit }: Prop
     setResumeUrl("");
     setPortfolioUrl("");
     setLinkedinUrl("");
-    setSource("linkedin");
+    setSkills([]);
+    setSkillDraft("");
+    setSource("recruiter");
     setRecruiter("");
-    setJobId("");
+    setJobId(initialJobId || "");
     setError("");
-  }, [open, initial]);
+    setSaving(false);
+  }, [open, initial, initialJobId, linkedJobId]);
 
-  function save() {
+  function handleResumeFile(file: File) {
+    setResumeName(file.name);
+    setError("");
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") setResumeUrl(reader.result);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function addSkill(raw?: string) {
+    const parts = (raw ?? skillDraft)
+      .split(/[,;\n]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (!parts.length) return;
+    setSkills((prev) => {
+      const next = [...prev];
+      for (const p of parts) {
+        if (!next.some((s) => s.toLowerCase() === p.toLowerCase())) next.push(p);
+      }
+      return next;
+    });
+    setSkillDraft("");
+  }
+
+  async function save() {
     setError("");
     if (!fullName.trim()) {
       setError("Full name is required");
@@ -151,37 +229,58 @@ export function CandidateDrawer({ open, onClose, jobs, initial, onSubmit }: Prop
     }
 
     const location = [address, state, pincode].filter(Boolean).join(", ");
-    onSubmit(
-      {
-        fullName: fullName.trim(),
-        email: email.trim(),
-        phone: phone.replace(/\s+/g, ""),
-        alternatePhone: alternatePhone.replace(/\s+/g, ""),
-        gender,
-        dob,
-        currentCompany,
-        currentDesignation,
-        experienceYears: Number(experienceYears) || 0,
-        expectedSalary: parseInrInput(expectedSalaryDisplay),
-        noticePeriodDays: Number(noticePeriodDays) || 0,
-        location,
-        address,
-        state,
-        pincode,
-        resumeName,
-        resumeUrl,
-        portfolioUrl,
-        linkedinUrl,
-        source,
-        recruiter: recruiter || "HR Recruiter",
-      },
-      editing ? undefined : jobId || undefined,
-    );
-    onClose();
+    setSaving(true);
+    try {
+      await Promise.resolve(
+        onSubmit(
+          {
+            fullName: fullName.trim(),
+            email: email.trim(),
+            phone: phone.replace(/\s+/g, ""),
+            alternatePhone: alternatePhone.replace(/\s+/g, ""),
+            gender,
+            dob,
+            currentCompany,
+            currentDesignation,
+            experienceYears: Number(experienceYears) || 0,
+            expectedSalary: parseInrInput(expectedSalaryDisplay),
+            noticePeriodDays: Number(noticePeriodDays) || 0,
+            location,
+            address,
+            state,
+            pincode,
+            resumeName,
+            resumeUrl,
+            portfolioUrl,
+            linkedinUrl,
+            skills,
+            source,
+            recruiter: recruiter || "HR Recruiter",
+          },
+          jobId || undefined,
+        ),
+      );
+      onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to save candidate");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const canSubmit =
     Boolean(fullName.trim()) && isValidEmail(email) && isValidIndianMobile(phone);
+
+  const openJobs = jobs.filter((j) => j.status === "open");
+  const jobOptions = useMemo(() => {
+    const map = new Map(openJobs.map((j) => [j.id, j]));
+    if (jobId && !map.has(jobId)) {
+      const linked = jobs.find((j) => j.id === jobId);
+      if (linked) map.set(linked.id, linked);
+    }
+    return Array.from(map.values());
+  }, [openJobs, jobs, jobId]);
+  const selectedJob = jobOptions.find((j) => j.id === jobId) ?? null;
 
   return (
     <SetupDrawer
@@ -199,8 +298,13 @@ export function CandidateDrawer({ open, onClose, jobs, initial, onSubmit }: Prop
           <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" className="cursor-pointer bg-[#7C3AED] text-white hover:bg-[#6D28D9]" disabled={!canSubmit} onClick={save}>
-            {editing ? "Save changes" : "Add Candidate"}
+          <Button
+            type="button"
+            className="cursor-pointer bg-primary text-primary-foreground hover:opacity-90"
+            disabled={!canSubmit || saving}
+            onClick={() => void save()}
+          >
+            {saving ? "Saving…" : editing ? "Save changes" : "Add Candidate"}
           </Button>
         </>
       }
@@ -323,19 +427,70 @@ export function CandidateDrawer({ open, onClose, jobs, initial, onSubmit }: Prop
             />
           </SetupField>
         </div>
-        <SetupField label="Resume upload">
+        <SetupField
+          label="Skills"
+          hint="Type a skill and press Enter, or paste comma-separated"
+        >
+          <div className="space-y-2">
+            {skills.length ? (
+              <div className="flex flex-wrap gap-1.5">
+                {skills.map((skill, i) => (
+                  <span
+                    key={skill}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium",
+                      SKILL_TONES[i % SKILL_TONES.length],
+                    )}
+                  >
+                    {skill}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${skill}`}
+                      className="inline-flex size-4 cursor-pointer items-center justify-center rounded-full transition-opacity duration-150 hover:opacity-70"
+                      onClick={() => setSkills((prev) => prev.filter((s) => s !== skill))}
+                    >
+                      <X className="size-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            <div className="flex gap-2">
+              <SetupInput
+                value={skillDraft}
+                onChange={(e) => setSkillDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === ",") {
+                    e.preventDefault();
+                    addSkill();
+                  }
+                }}
+                placeholder="e.g. React, Python, SQL"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 shrink-0 cursor-pointer px-3"
+                onClick={() => addSkill()}
+                disabled={!skillDraft.trim()}
+              >
+                <Plus className="size-3.5" />
+                Add
+              </Button>
+            </div>
+          </div>
+        </SetupField>
+        <SetupField label="Resume upload" hint="Optional — attach file; enter profile details manually">
           <SetupInput
             type="file"
-            accept=".pdf,.doc,.docx"
+            accept=".pdf,.doc,.docx,.txt"
             onChange={(e) => {
               const f = e.target.files?.[0];
-              if (!f) return;
-              setResumeName(f.name);
-              setResumeUrl(URL.createObjectURL(f));
+              if (f) handleResumeFile(f);
             }}
           />
           {resumeName ? (
-            <p className="mt-1 text-[10px] text-muted-foreground">Uploaded: {resumeName}</p>
+            <p className="mt-1 text-[10px] text-muted-foreground">Attached: {resumeName}</p>
           ) : null}
         </SetupField>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -369,20 +524,37 @@ export function CandidateDrawer({ open, onClose, jobs, initial, onSubmit }: Prop
             />
           </SetupField>
         </div>
-        {!editing ? (
-          <SetupField label="Select job" hint="Optional — apply candidate to an opening">
-            <SetupSelect value={jobId} onChange={(e) => setJobId(e.target.value)}>
-              <option value="">None — add to talent pool only</option>
-              {jobs
-                .filter((j) => j.status === "open")
-                .map((j) => (
-                  <option key={j.id} value={j.id}>
-                    {j.jobCode} · {j.title}
-                  </option>
-                ))}
-            </SetupSelect>
-          </SetupField>
-        ) : null}
+        <SetupField
+          label="Apply to job"
+          hint={
+            selectedJob
+              ? editing
+                ? `Applied for ${selectedJob.title} (${selectedJob.jobCode})`
+                : `Will apply to ${selectedJob.title}`
+              : jobOptions.length
+                ? editing
+                  ? "Select the role this candidate should be linked to"
+                  : "Optional — apply candidate to an opening"
+                : "No open job openings available. Create/publish a job first."
+          }
+        >
+          <SetupSelect
+            value={jobId}
+            onChange={(e) => setJobId(e.target.value)}
+            disabled={!jobOptions.length}
+          >
+            <option value="">
+              {editing ? "None — no job link" : "None — add to talent pool only"}
+            </option>
+            {jobOptions.map((j) => (
+              <option key={j.id} value={j.id}>
+                {j.jobCode} · {j.title}
+                {j.department ? ` · ${j.department}` : ""}
+                {j.status !== "open" ? ` (${j.status})` : ""}
+              </option>
+            ))}
+          </SetupSelect>
+        </SetupField>
       </div>
     </SetupDrawer>
   );

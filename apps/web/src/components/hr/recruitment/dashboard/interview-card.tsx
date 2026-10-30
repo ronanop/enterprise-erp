@@ -22,7 +22,7 @@ export function InterviewCard({
         className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
       >
         <span className="flex w-11 shrink-0 flex-col items-center leading-none">
-          <span className="text-[20px] font-semibold tracking-tight text-[#7C3AED]">{row.day}</span>
+          <span className="text-[20px] font-semibold tracking-tight text-primary">{row.day}</span>
           <span className="mt-1 text-[10px] font-medium tracking-[0.08em] text-[#9CA3AF]">{row.month}</span>
         </span>
         <span className="min-w-0 flex-1">
@@ -35,7 +35,7 @@ export function InterviewCard({
         <button
           type="button"
           title="Join meeting"
-          className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-[#9B5BB8] transition-colors duration-150 hover:bg-[#F4EDFB]"
+          className="inline-flex size-7 cursor-pointer items-center justify-center rounded-md text-primary transition-colors duration-150 hover:bg-accent"
           onClick={onOpen}
         >
           <Video className="size-4" strokeWidth={1.75} />

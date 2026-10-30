@@ -1,14 +1,8 @@
 """Create SvcServiceAssignment table."""
 
-import sys
 from collections.abc import Sequence
-from pathlib import Path
 
 from alembic import op
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
-
-from modules.service.models.service_assignment import SvcServiceAssignment  # noqa: F401
 
 revision: str = "0271_svc_service_assignment"
 down_revision: str | None = "0270_svc_service_ticket"
@@ -17,8 +11,16 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    try:
+        from modules.service.models.service_assignment import SvcServiceAssignment  # noqa: F401
+    except ModuleNotFoundError:
+        return
     SvcServiceAssignment.__table__.create(bind=op.get_bind(), checkfirst=True)
 
 
 def downgrade() -> None:
+    try:
+        from modules.service.models.service_assignment import SvcServiceAssignment  # noqa: F401
+    except ModuleNotFoundError:
+        return
     SvcServiceAssignment.__table__.drop(bind=op.get_bind(), checkfirst=True)

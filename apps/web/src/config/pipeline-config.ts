@@ -1,20 +1,32 @@
 /**
- * Recruitment pipeline redesign — stage (kanban column) is independent of
+ * Recruitment pipeline — stage (kanban column) is independent of
  * status (active / exit outcome). Ported helpers for frontend + API parity.
+ *
+ * `sourced` = applied / awaiting HR accept on job detail (not shown in Pipeline nav).
+ * Pipeline UI stages start at Screening.
  */
 
+/** Applied / awaiting HR decision — hidden from Pipeline left nav */
+export const APPLIED_STAGE_ID = "sourced" as const;
+
+/** Hiring funnel stages (full set — includes offer_sent for data/legacy). */
 export const PIPELINE_STAGES = [
-  { id: "sourced", label: "Sourced", order: 1 },
-  { id: "screening", label: "Screening", order: 2 },
-  { id: "interview_round_1", label: "Interview Round 1", order: 3 },
-  { id: "interview_round_2", label: "Interview Round 2", order: 4 },
-  { id: "hr_discussion", label: "HR Discussion", order: 5 },
-  { id: "background_check", label: "Background Check", order: 6 },
-  { id: "offer_sent", label: "Offer Sent", order: 7 },
-  { id: "offer_accepted", label: "Offer Accepted", order: 8 },
+  { id: "screening", label: "Screening", order: 1 },
+  { id: "interview_round_1", label: "Interview Round 1", order: 2 },
+  { id: "interview_round_2", label: "Interview Round 2", order: 3 },
+  { id: "hr_discussion", label: "Negotiation Round", order: 4 },
+  { id: "background_check", label: "Background Check", order: 5 },
+  { id: "offer_sent", label: "Offer Sent", order: 6 },
+  { id: "offer_accepted", label: "Offer Accepted", order: 7 },
 ] as const;
 
-export type PipelineStageId = (typeof PIPELINE_STAGES)[number]["id"];
+/** Left-nav stages on Pipeline (Offer Sent hidden — handled under Background Check). */
+export const PIPELINE_NAV_STAGES = PIPELINE_STAGES.filter(
+  (s) => s.id !== "offer_sent",
+);
+
+export type PipelineUiStageId = (typeof PIPELINE_STAGES)[number]["id"];
+export type PipelineStageId = typeof APPLIED_STAGE_ID | PipelineUiStageId;
 
 export const CANDIDATE_STATUSES = [
   "active",
@@ -34,10 +46,16 @@ export const STATUS_LABELS: Record<CandidatePipelineStatus, string> = {
   hired: "Hired",
 };
 
-/** Legacy ATS / API stage codes → new stage ids */
+/** Full order including applied (sourced) → screening → … */
+const FULL_STAGE_ORDER: PipelineStageId[] = [
+  APPLIED_STAGE_ID,
+  ...PIPELINE_STAGES.map((s) => s.id),
+];
+
+/** Legacy ATS / API stage codes → stage ids */
 export const LEGACY_STAGE_MAP: Record<string, PipelineStageId> = {
-  applied: "sourced",
-  sourced: "sourced",
+  applied: APPLIED_STAGE_ID,
+  sourced: APPLIED_STAGE_ID,
   resume_screening: "screening",
   hr_screening: "screening",
   screening: "screening",
@@ -57,19 +75,19 @@ export const LEGACY_STAGE_MAP: Record<string, PipelineStageId> = {
 };
 
 export function normalizeStage(raw: string | null | undefined): PipelineStageId {
-  if (!raw) return "sourced";
+  if (!raw) return APPLIED_STAGE_ID;
   const key = raw.toLowerCase().trim();
-  return LEGACY_STAGE_MAP[key] ?? "sourced";
+  return LEGACY_STAGE_MAP[key] ?? "screening";
 }
 
 export function stageIndex(stage: PipelineStageId): number {
-  return PIPELINE_STAGES.findIndex((s) => s.id === stage);
+  return FULL_STAGE_ORDER.indexOf(stage);
 }
 
 export function nextStage(stage: PipelineStageId): PipelineStageId | null {
   const i = stageIndex(stage);
-  if (i < 0 || i >= PIPELINE_STAGES.length - 1) return null;
-  return PIPELINE_STAGES[i + 1].id;
+  if (i < 0 || i >= FULL_STAGE_ORDER.length - 1) return null;
+  return FULL_STAGE_ORDER[i + 1];
 }
 
 export function canAdvance(
@@ -97,9 +115,7 @@ export function canReject(
   stage: PipelineStageId,
   status: CandidatePipelineStatus,
 ): boolean {
-  return status === "active" && stage !== "offer_accepted"
-    ? true
-    : status === "active";
+  return status === "active";
 }
 
 export function markRejected(input: {

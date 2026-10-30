@@ -2,30 +2,42 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import {
-  Expand,
-  FileText,
-  Send,
-  Upload,
-  X,
-} from "lucide-react";
+import { Expand, FileText, Send, X } from "lucide-react";
 
 import { InitialsAvatar } from "@/components/hr/recruitment/dashboard/status-badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { composeOfferLetterPdf } from "@/lib/recruitment/compose-offer-letter-pdf";
+import { buildOfferLetterFileName } from "@/lib/recruitment/offer-letter-file-name";
+import {
+  applyOfferMergeFields,
+  type OfferMergeValues,
+} from "@/lib/recruitment/offer-letter-merge";
 import {
   formatInrGrouping,
   parseInrInput,
 } from "@/services/recruitment-ats-lookups";
+import { ensureOfferLetterTemplatesLoaded } from "@/services/offer-letter-templates-service";
 import type {
   AtsCandidate,
   AtsOffer,
   EmploymentType,
   JobOpening,
-  OfferTemplateKind,
+  OfferLetterTemplate,
   PipelineApplication,
 } from "@/types/recruitment-ats";
-import { OFFER_TEMPLATE_OPTIONS } from "@/types/recruitment-ats";
+export type OfferDrawerPrefill = {
+  candidateId?: string;
+  jobId?: string;
+  applicationId?: string;
+  department?: string;
+  location?: string;
+  joiningDate?: string;
+  ctc?: number;
+  reportingManager?: string;
+  employmentType?: EmploymentType | string;
+  notes?: string;
+};
 
 type Props = {
   open: boolean;
@@ -33,35 +45,36 @@ type Props = {
   candidates: AtsCandidate[];
   jobs: JobOpening[];
   applications: PipelineApplication[];
+  initial?: OfferDrawerPrefill | null;
   onSubmit: (
-    input: Omit<AtsOffer, "id" | "offerCode" | "createdAt" | "updatedAt">,
+    input: Omit<AtsOffer, "id" | "offerCode" | "createdAt" | "updatedAt"> & {
+      documentContentDataUrl?: string;
+      documentMimeType?: string;
+    },
   ) => void;
 };
 
-const EMPLOYMENT_OPTIONS: { value: EmploymentType; label: string }[] = [
-  { value: "full_time", label: "Full Time" },
-  { value: "contract", label: "Contract" },
-  { value: "intern", label: "Intern" },
-  { value: "part_time", label: "Part Time" },
-];
-
-function buildMergedPreview(opts: {
+function buildLetterBody(opts: {
   candidateName: string;
   role: string;
   department: string;
   ctc: number;
   joiningDate: string;
-  templateLabel: string;
+  templateKind: "standard" | "internship";
   notes?: string;
 }): string {
+  const isIntern = opts.templateKind === "internship";
   return [
-    "OFFER LETTER",
-    `Template: ${opts.templateLabel}`,
-    "",
     `Dear ${opts.candidateName || "[Candidate Name]"},`,
     "",
-    `We are pleased to offer you the position of ${opts.role || "[Role]"} in the ${opts.department || "[Department]"} department.`,
-    `Your annual CTC will be ₹${opts.ctc ? formatInrGrouping(opts.ctc) : "[CTC]"}.`,
+    isIntern
+      ? `We are pleased to offer you an internship for the role of ${opts.role || "[Role]"}${opts.department ? ` in the ${opts.department} department` : ""}.`
+      : `We are pleased to offer you the position of ${opts.role || "[Role]"}${opts.department ? ` in the ${opts.department} department` : ""}.`,
+    opts.ctc
+      ? isIntern
+        ? `Your stipend / CTC will be ₹${formatInrGrouping(opts.ctc)}.`
+        : `Your annual CTC will be ₹${formatInrGrouping(opts.ctc)}.`
+      : "",
     opts.joiningDate ? `Proposed joining date: ${opts.joiningDate}.` : "",
     opts.notes ? `\nNotes: ${opts.notes}` : "",
     "",
@@ -70,23 +83,8 @@ function buildMergedPreview(opts: {
     "Regards,",
     "HR Team",
   ]
-    .filter((line) => line !== undefined)
+    .filter((line) => line !== undefined && line !== "")
     .join("\n");
-}
-
-function formatDisplayDate(iso: string): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) {
-    const parts = iso.split("-");
-    if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
-    return iso;
-  }
-  return d.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
 }
 
 function InrField({
@@ -111,7 +109,7 @@ function InrField({
           ₹
         </span>
         <input
-          className="h-9 w-full rounded-lg border border-[#E5E7EB] bg-white pl-6 pr-3 text-[12px] text-[#111827] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+          className="h-9 w-full rounded-lg border border-[#E5E7EB] bg-white pl-6 pr-3 text-[12px] text-[#111827] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           inputMode="numeric"
           value={value}
           placeholder={placeholder ?? "0"}
@@ -145,7 +143,7 @@ function FieldSelect({
         {required ? <span className="text-[#F43F5E]"> *</span> : null}
       </span>
       <select
-        className="h-9 w-full cursor-pointer rounded-lg border border-[#E5E7EB] bg-white px-2.5 text-[12px] text-[#111827] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+        className="h-9 w-full cursor-pointer rounded-lg border border-[#E5E7EB] bg-white px-2.5 text-[12px] text-[#111827] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -178,7 +176,7 @@ function FieldInput({
       </span>
       <input
         type={type}
-        className="h-9 w-full rounded-lg border border-[#E5E7EB] bg-white px-2.5 text-[12px] text-[#111827] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+        className="h-9 w-full rounded-lg border border-[#E5E7EB] bg-white px-2.5 text-[12px] text-[#111827] outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
@@ -193,6 +191,7 @@ export function OfferDrawer({
   candidates,
   jobs,
   applications,
+  initial = null,
   onSubmit,
 }: Props) {
   const [candidateId, setCandidateId] = useState("");
@@ -207,11 +206,77 @@ export function OfferDrawer({
   const [reportingManager, setReportingManager] = useState("");
   const [employmentType, setEmploymentType] = useState<EmploymentType | "">("full_time");
   const [notes, setNotes] = useState("");
-  const [templateKind, setTemplateKind] = useState<OfferTemplateKind>("standard");
-  const [templateFileName, setTemplateFileName] = useState("");
+  const [templateKind, setTemplateKind] = useState<"standard" | "internship">("standard");
+  const [libraryTemplates, setLibraryTemplates] = useState<OfferLetterTemplate[]>([]);
+  const [libraryTemplateId, setLibraryTemplateId] = useState<string | null>(null);
+  const [letterShellFileName, setLetterShellFileName] = useState("");
+  const [letterShellDataUrl, setLetterShellDataUrl] = useState("");
+  const [letterBody, setLetterBody] = useState("");
+  const [letterDirty, setLetterDirty] = useState(false);
   const [fullscreenPreview, setFullscreenPreview] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [composePreviewUrl, setComposePreviewUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const candId = initial?.candidateId || "";
+    const jId = initial?.jobId || "";
+    const job = jobs.find((j) => j.id === jId || j.apiId === jId);
+    const empRaw = String(initial?.employmentType || job?.employmentType || "full_time");
+    const emp =
+      empRaw === "permanent" || empRaw === "full_time"
+        ? "full_time"
+        : empRaw === "intern"
+          ? "intern"
+          : empRaw === "contract"
+            ? "contract"
+            : empRaw === "part_time"
+              ? "part_time"
+              : "full_time";
+    setCandidateId(candId);
+    setJobId(jId);
+    setDepartment(initial?.department || job?.department || "");
+    setLocation(initial?.location || job?.location || "");
+    setJoiningDate(initial?.joiningDate || "");
+    setExpiryDate("");
+    const appMatch = initial?.applicationId
+      ? applications.find((a) => a.id === initial.applicationId)
+      : applications.find(
+          (a) =>
+            a.status === "active" &&
+            a.candidateId === candId &&
+            (!jId || a.jobId === jId),
+        );
+    const negotiated = appMatch?.negotiatedCtc;
+    const ctcSeed = initial?.ctc || negotiated || job?.salaryMax || 0;
+    setCtcDisplay(ctcSeed > 0 ? formatInrGrouping(ctcSeed) : "");
+    setBasicDisplay("");
+    setVariableDisplay("");
+    setReportingManager(initial?.reportingManager || job?.hiringManager || "");
+    setEmploymentType(emp);
+    setNotes(initial?.notes || "");
+    setTemplateKind(emp === "intern" ? "internship" : "standard");
+    setLetterDirty(false);
+    setFullscreenPreview(false);
+    setComposePreviewUrl(null);
+    setLibraryTemplateId(null);
+    setLetterShellFileName("");
+    setLetterShellDataUrl("");
+    setLetterBody("");
+    void ensureOfferLetterTemplatesLoaded().then((templates) => {
+      if (!open) return;
+      setLibraryTemplates(templates);
+      const first = templates[0];
+      if (first) {
+        setLibraryTemplateId(first.id);
+        setLetterShellFileName(first.pdfFileName);
+        setLetterShellDataUrl(first.pdfDataUrl);
+      }
+    });
+  }, [open, initial, jobs, applications]);
 
   const applicationId = useMemo(() => {
+    if (initial?.applicationId) return initial.applicationId;
     const match = applications.find(
       (a) =>
         a.status === "active" &&
@@ -223,7 +288,7 @@ export function OfferDrawer({
       applications.find((a) => a.candidateId === candidateId && (!jobId || a.jobId === jobId))
         ?.id ?? ""
     );
-  }, [applications, candidateId, jobId]);
+  }, [applications, candidateId, jobId, initial?.applicationId]);
 
   const selectedJob = jobs.find((j) => j.id === jobId);
   const selectedCandidate = candidates.find((c) => c.id === candidateId);
@@ -231,35 +296,15 @@ export function OfferDrawer({
   const basicSalary = parseInrInput(basicDisplay);
   const variablePay = parseInrInput(variableDisplay);
 
-  const departments = useMemo(() => {
-    const set = new Set(jobs.map((j) => j.department).filter(Boolean));
-    if (department) set.add(department);
-    return Array.from(set).sort();
-  }, [jobs, department]);
-
-  const locations = useMemo(() => {
-    const set = new Set(jobs.map((j) => j.location).filter(Boolean));
-    if (location) set.add(location);
-    return Array.from(set).sort();
-  }, [jobs, location]);
-
-  const managers = useMemo(() => {
-    const set = new Set(jobs.map((j) => j.hiringManager).filter(Boolean));
-    return Array.from(set).sort();
-  }, [jobs]);
-
-  const templateMeta =
-    OFFER_TEMPLATE_OPTIONS.find((t) => t.id === templateKind) ?? OFFER_TEMPLATE_OPTIONS[0]!;
-
-  const preview = useMemo(
+  const generatedLetter = useMemo(
     () =>
-      buildMergedPreview({
+      buildLetterBody({
         candidateName: selectedCandidate?.fullName ?? "",
         role: selectedJob?.title ?? "",
         department: department || selectedJob?.department || "",
         ctc,
         joiningDate,
-        templateLabel: templateFileName || templateMeta.label,
+        templateKind,
         notes,
       }),
     [
@@ -268,11 +313,42 @@ export function OfferDrawer({
       department,
       ctc,
       joiningDate,
-      templateFileName,
-      templateMeta.label,
+      templateKind,
       notes,
     ],
   );
+
+  useEffect(() => {
+    if (!open) return;
+    if (libraryTemplateId) {
+      if (letterDirty) return;
+      const tpl = libraryTemplates.find((t) => t.id === libraryTemplateId);
+      if (!tpl) return;
+      setLetterBody(
+        applyOfferMergeFields(tpl.bodyContent, buildMergeValues(), { blankMissing: false }),
+      );
+      return;
+    }
+    if (!letterDirty) setLetterBody(generatedLetter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- merge from live form fields
+  }, [
+    open,
+    generatedLetter,
+    letterDirty,
+    libraryTemplateId,
+    libraryTemplates,
+    candidateId,
+    ctc,
+    joiningDate,
+    department,
+    location,
+    reportingManager,
+    employmentType,
+    selectedCandidate,
+    selectedJob,
+  ]);
+
+  const preview = letterBody || generatedLetter;
 
   useEffect(() => {
     if (!open) return;
@@ -299,36 +375,139 @@ export function OfferDrawer({
     setEmploymentType("full_time");
     setNotes("");
     setTemplateKind("standard");
-    setTemplateFileName("");
+    setLibraryTemplateId(null);
+    setLetterShellFileName("");
+    setLetterShellDataUrl("");
+    setLetterBody("");
+    setLetterDirty(false);
+    setComposePreviewUrl(null);
+    setSaving(false);
   }
 
-  function save(asSent: boolean) {
-    if (!candidateId || !joiningDate) return;
-    onSubmit({
-      candidateId,
-      jobId: jobId || selectedJob?.id || "",
-      applicationId,
-      department: department || selectedJob?.department || "General",
-      location: location || selectedJob?.location || "",
-      joiningDate,
-      ctc,
-      basicSalary: basicSalary || undefined,
-      variablePay: variablePay || undefined,
-      reportingManager: reportingManager || undefined,
-      employmentType: employmentType || selectedJob?.employmentType || "full_time",
-      notes: notes || undefined,
-      expiryDate,
-      templateKind,
-      offerLetterName: templateFileName || `${templateMeta.label}.pdf`,
-      templateFileName: templateFileName || `${templateMeta.label}.pdf`,
-      mergedPreview: preview,
-      status: asSent ? "sent" : "draft",
+  function buildMergeValues(): OfferMergeValues {
+    const today = new Date();
+    const dd = String(today.getDate()).padStart(2, "0");
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const yyyy = today.getFullYear();
+    return {
+      candidate_full_name: selectedCandidate?.fullName || "",
+      candidate_email: selectedCandidate?.email || "",
+      candidate_phone: selectedCandidate?.phone || "",
+      candidate_address: selectedCandidate?.address || selectedCandidate?.location || "",
+      company_name: "Cache Digitech",
+      company_address: location || selectedJob?.location || "",
+      company_location: location || selectedJob?.location || "",
+      company_email: "hr@cachedigitech.com",
+      company_website: "www.cachedigitech.com",
+      role: selectedJob?.title || "",
+      department: department || selectedJob?.department || "",
+      ctc: ctc > 0 ? `₹${formatInrGrouping(ctc)}` : "",
+      joining_date: joiningDate || "",
+      reporting_manager: reportingManager || selectedJob?.hiringManager || "",
+      employment_type:
+        employmentType === "full_time"
+          ? "Full Time"
+          : employmentType === "intern"
+            ? "Intern"
+            : employmentType === "contract"
+              ? "Contract"
+              : employmentType === "part_time"
+                ? "Part Time"
+                : String(employmentType || ""),
+      offer_date: `${dd}/${mm}/${yyyy}`,
+      offer_code: "",
+    };
+  }
+
+  function applyLibraryTemplate(tpl: OfferLetterTemplate) {
+    setLibraryTemplateId(tpl.id);
+    setLetterShellFileName(tpl.pdfFileName);
+    setLetterShellDataUrl(tpl.pdfDataUrl);
+    const merged = applyOfferMergeFields(tpl.bodyContent, buildMergeValues(), {
+      blankMissing: false,
     });
-    onClose();
-    resetForm();
+    setLetterBody(merged);
+    setLetterDirty(false);
   }
 
-  const canSave = Boolean(candidateId && joiningDate);
+  // Compose letterhead + body for live PDF preview when a shell is present
+  useEffect(() => {
+    if (!open || !letterShellDataUrl) {
+      setComposePreviewUrl(null);
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      void composeOfferLetterPdf({
+        letterheadDataUrl: letterShellDataUrl,
+        body: letterBody || generatedLetter,
+      })
+        .then((url) => {
+          if (!cancelled) setComposePreviewUrl(url);
+        })
+        .catch(() => {
+          if (!cancelled) setComposePreviewUrl(letterShellDataUrl);
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [open, letterShellDataUrl, letterBody, generatedLetter]);
+
+  async function save(asSent: boolean) {
+    if (!candidateId || !joiningDate || saving) return;
+    const letterName = buildOfferLetterFileName({
+      candidateName: selectedCandidate?.fullName,
+      role: selectedJob?.title,
+    });
+    const templatePdfName =
+      letterShellFileName ||
+      (templateKind === "internship" ? "internship-offer-letter.pdf" : "standard-offer-letter.pdf");
+    setSaving(true);
+    try {
+      let documentContentDataUrl = letterShellDataUrl || undefined;
+      if (letterShellDataUrl) {
+        try {
+          documentContentDataUrl = await composeOfferLetterPdf({
+            letterheadDataUrl: letterShellDataUrl,
+            body: letterBody || generatedLetter,
+          });
+        } catch {
+          /* keep letterhead-only if compose fails */
+        }
+      }
+      onSubmit({
+        candidateId,
+        jobId: jobId || selectedJob?.id || "",
+        applicationId,
+        department: department || selectedJob?.department || "General",
+        location: location || selectedJob?.location || "",
+        joiningDate,
+        ctc,
+        basicSalary: basicSalary || undefined,
+        variablePay: variablePay || undefined,
+        reportingManager: reportingManager || undefined,
+        employmentType: employmentType || selectedJob?.employmentType || "full_time",
+        notes: notes || undefined,
+        expiryDate,
+        templateKind,
+        offerLetterName: letterName,
+        templateFileName: templatePdfName,
+        mergedPreview: preview,
+        status: asSent ? "sent" : "draft",
+        documentContentDataUrl,
+        documentMimeType: documentContentDataUrl ? "application/pdf" : undefined,
+      });
+      onClose();
+      resetForm();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const canSave =
+    Boolean(candidateId && joiningDate && libraryTemplateId && letterShellDataUrl) && !saving;
 
   if (!open) return null;
 
@@ -344,13 +523,15 @@ export function OfferDrawer({
       <div
         role="dialog"
         aria-modal="true"
-        className="flex h-[min(920px,94vh)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-2xl"
+        className="flex h-[min(880px,94vh)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-[#F3F4F6] px-5 py-4">
           <div>
-            <h2 className="text-base font-semibold text-[#111827]">Generate Offer</h2>
+            <h2 className="text-base font-semibold text-[#111827]">Send offer</h2>
+            <p className="mt-0.5 text-[12px] text-[#6B7280]">
+              Select a letter template and preview the full offer before sending
+            </p>
           </div>
           <button
             type="button"
@@ -365,212 +546,141 @@ export function OfferDrawer({
           </button>
         </div>
 
-        {/* Body — independent column scroll so left form stays put while preview scrolls */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden lg:grid-cols-[1.15fr_0.85fr]">
-          {/* Left column */}
-          <div className="erp-scroll min-h-0 space-y-4 overflow-y-auto px-5 py-4 lg:border-r lg:border-[#F3F4F6]">
-                <section className="rounded-xl border border-[#E5E7EB] bg-[#FAFBFC] p-4">
-                  <p className="text-[11px] font-semibold tracking-wide text-[#6B7280] uppercase">
-                    Candidate Information
-                  </p>
-                  <div className="mt-3">
-                    <FieldSelect
-                      label="Select candidate"
-                      required
-                      value={candidateId}
-                      onChange={setCandidateId}
-                    >
-                      <option value="">Choose candidate…</option>
-                      {candidates.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.candidateCode} · {c.fullName}
-                        </option>
-                      ))}
-                    </FieldSelect>
-                  </div>
-                  {selectedCandidate ? (
-                    <div className="mt-3 flex items-center gap-3 rounded-xl border border-[#E5E7EB] bg-white p-3">
-                      <InitialsAvatar name={selectedCandidate.fullName} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-semibold text-[#111827]">
-                          {selectedCandidate.fullName}
-                        </p>
-                        <p className="truncate text-[11px] text-[#6B7280]">
-                          {selectedCandidate.email}
-                        </p>
-                      </div>
-                      <span className="shrink-0 rounded-full bg-[#ECFDF5] px-2 py-0.5 text-[10px] font-semibold text-[#00A866]">
-                        Ready for Offer
-                      </span>
-                    </div>
-                  ) : null}
+        <div className="erp-scroll min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          {selectedCandidate ? (
+            <div className="flex items-center gap-3 rounded-xl border border-[#E5E7EB] bg-[#FAFBFC] p-3">
+              <InitialsAvatar name={selectedCandidate.fullName} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[13px] font-semibold text-[#111827]">
+                  {selectedCandidate.fullName}
+                </p>
+                <p className="truncate text-[11px] text-[#6B7280]">
+                  {selectedJob?.title || "Role"}
+                  {ctc > 0 ? ` · CTC ₹${formatInrGrouping(ctc)}` : ""}
+                  {joiningDate ? ` · Join ${joiningDate}` : ""}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <section className="rounded-xl border border-[#E5E7EB] p-4">
+              <FieldSelect
+                label="Select candidate"
+                required
+                value={candidateId}
+                onChange={setCandidateId}
+              >
+                <option value="">Choose candidate…</option>
+                {candidates.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.candidateCode} · {c.fullName}
+                  </option>
+                ))}
+              </FieldSelect>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <FieldSelect
+                  label="Job Role"
+                  value={jobId}
+                  onChange={(v) => {
+                    setJobId(v);
+                    const j = jobs.find((x) => x.id === v);
+                    if (j) {
+                      setDepartment(j.department);
+                      setLocation(j.location);
+                      setEmploymentType(j.employmentType);
+                      if (j.hiringManager) setReportingManager(j.hiringManager);
+                      if (j.salaryMax) setCtcDisplay(formatInrGrouping(j.salaryMax));
+                    }
+                  }}
+                >
+                  <option value="">Select job…</option>
+                  {jobs.map((j) => (
+                    <option key={j.id} value={j.id}>
+                      {j.title}
+                    </option>
+                  ))}
+                </FieldSelect>
+                <FieldInput
+                  label="Joining Date"
+                  type="date"
+                  required
+                  value={joiningDate}
+                  onChange={setJoiningDate}
+                />
+                <InrField
+                  label="Annual CTC (₹)"
+                  value={ctcDisplay}
+                  onChange={setCtcDisplay}
+                  placeholder="12,00,000"
+                />
+              </div>
+            </section>
+          )}
 
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <FieldSelect
-                      label="Job Role"
-                      value={jobId}
-                      onChange={(v) => {
-                        setJobId(v);
-                        const j = jobs.find((x) => x.id === v);
-                        if (j) {
-                          setDepartment(j.department);
-                          setLocation(j.location);
-                          setEmploymentType(j.employmentType);
-                          if (j.hiringManager) setReportingManager(j.hiringManager);
-                          if (j.salaryMax) setCtcDisplay(formatInrGrouping(j.salaryMax));
-                        }
-                      }}
-                    >
-                      <option value="">Select job…</option>
-                      {jobs.map((j) => (
-                        <option key={j.id} value={j.id}>
-                          {j.title}
-                        </option>
-                      ))}
-                    </FieldSelect>
-                    <FieldSelect
-                      label="Department"
-                      value={department}
-                      onChange={setDepartment}
-                    >
-                      <option value="">Select…</option>
-                      {departments.map((d) => (
-                        <option key={d} value={d}>
-                          {d}
-                        </option>
-                      ))}
-                    </FieldSelect>
-                    <FieldSelect label="Location" value={location} onChange={setLocation}>
-                      <option value="">Select…</option>
-                      {locations.map((l) => (
-                        <option key={l} value={l}>
-                          {l}
-                        </option>
-                      ))}
-                    </FieldSelect>
-                    <FieldInput
-                      label="Joining Date"
-                      type="date"
-                      required
-                      value={joiningDate}
-                      onChange={setJoiningDate}
-                    />
-                    <FieldInput
-                      label="Offer Expiry Date"
-                      type="date"
-                      value={expiryDate}
-                      onChange={setExpiryDate}
-                    />
-                  </div>
-                </section>
+          {!joiningDate || !ctcDisplay ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              {!joiningDate ? (
+                <FieldInput
+                  label="Joining Date"
+                  type="date"
+                  required
+                  value={joiningDate}
+                  onChange={setJoiningDate}
+                />
+              ) : null}
+              {!ctcDisplay ? (
+                <InrField
+                  label="Annual CTC (₹)"
+                  value={ctcDisplay}
+                  onChange={setCtcDisplay}
+                  placeholder="12,00,000"
+                />
+              ) : null}
+            </div>
+          ) : null}
 
-                  <section className="rounded-xl border border-[#E5E7EB] p-4">
-                    <p className="text-[11px] font-semibold tracking-wide text-[#6B7280] uppercase">
-                      Compensation Details
-                    </p>
-                    <div className="mt-3 space-y-3">
-                      <InrField
-                        label="Annual CTC (₹)"
-                        hint="Indian Rupees"
-                        value={ctcDisplay}
-                        onChange={setCtcDisplay}
-                        placeholder="12,00,000"
-                      />
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <InrField
-                          label="Basic Salary (₹)"
-                          value={basicDisplay}
-                          onChange={setBasicDisplay}
-                        />
-                        <InrField
-                          label="Variable Pay (₹)"
-                          value={variableDisplay}
-                          onChange={setVariableDisplay}
-                        />
-                      </div>
-                    </div>
-                  </section>
+          <section className="rounded-xl border border-[#E5E7EB] p-4">
+            <TemplatePicker
+              libraryTemplates={libraryTemplates}
+              libraryTemplateId={libraryTemplateId}
+              onSelectLibrary={(tpl) => applyLibraryTemplate(tpl)}
+            />
+          </section>
 
-                  <section className="rounded-xl border border-[#E5E7EB] p-4">
-                    <p className="text-[11px] font-semibold tracking-wide text-[#6B7280] uppercase">
-                      Additional Details
-                    </p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <FieldSelect
-                        label="Reporting Manager"
-                        value={reportingManager}
-                        onChange={setReportingManager}
-                      >
-                        <option value="">Select manager…</option>
-                        {managers.map((m) => (
-                          <option key={m} value={m}>
-                            {m}
-                          </option>
-                        ))}
-                      </FieldSelect>
-                      <FieldSelect
-                        label="Employment Type"
-                        value={employmentType}
-                        onChange={(v) => setEmploymentType(v as EmploymentType)}
-                      >
-                        {EMPLOYMENT_OPTIONS.map((o) => (
-                          <option key={o.value} value={o.value}>
-                            {o.label}
-                          </option>
-                        ))}
-                      </FieldSelect>
-                    </div>
-                    <label className="mt-3 block space-y-1">
-                      <span className="text-[11px] font-medium text-[#374151]">
-                        Additional Notes (Optional)
-                      </span>
-                      <textarea
-                        className="min-h-[80px] w-full rounded-lg border border-[#E5E7EB] bg-white px-2.5 py-2 text-[12px] text-[#111827] outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        placeholder="Any special clauses or notes…"
-                      />
-                    </label>
-                  </section>
-          </div>
-
-          {/* Right column — scrolls independently */}
-          <div className="erp-scroll min-h-0 space-y-4 overflow-y-auto px-5 py-4">
-                  <section className="rounded-xl border border-[#E5E7EB] p-4">
-                    <TemplatePicker
-                      templateKind={templateKind}
-                      onKindChange={setTemplateKind}
-                      templateFileName={templateFileName}
-                      onFileName={setTemplateFileName}
-                    />
-                  </section>
-
-                  <section className="rounded-xl border border-[#E5E7EB] p-4">
-                    <div className="mb-3 flex items-center justify-between">
-                      <p className="text-[11px] font-semibold tracking-wide text-[#6B7280] uppercase">
-                        Preview
-                      </p>
-                      <button
-                        type="button"
-                        className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-[#7C3AED] hover:underline"
-                        onClick={() => setFullscreenPreview(true)}
-                      >
-                        <Expand className="size-3.5" />
-                        View Full Screen
-                      </button>
-                    </div>
-                    <OfferLetterPreview
-                      candidateName={selectedCandidate?.fullName ?? ""}
-                      role={selectedJob?.title ?? ""}
-                      department={department || selectedJob?.department || ""}
-                      joiningDate={joiningDate}
-                      ctc={ctc}
-                    />
-                  </section>
-          </div>
+          <section className="rounded-xl border border-[#E5E7EB] p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold tracking-wide text-[#6B7280] uppercase">
+                Full offer preview
+              </p>
+              {composePreviewUrl ? (
+                <button
+                  type="button"
+                  className="inline-flex cursor-pointer items-center gap-1 text-[11px] font-medium text-primary hover:underline"
+                  onClick={() => setFullscreenPreview(true)}
+                >
+                  <Expand className="size-3.5" />
+                  Full screen
+                </button>
+              ) : null}
+            </div>
+            {composePreviewUrl ? (
+              <iframe
+                title="Full offer letter preview"
+                src={`${composePreviewUrl}${composePreviewUrl.includes("#") ? "&" : "#"}toolbar=0&navpanes=0`}
+                className="h-[min(520px,50vh)] w-full rounded-lg border border-[#E5E7EB] bg-white"
+              />
+            ) : (
+              <div className="flex min-h-[200px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-[#E5E7EB] bg-[#FAFBFC] px-4 py-8 text-center">
+                <FileText className="size-8 text-[#D1D5DB]" />
+                <p className="text-[12px] text-[#6B7280]">
+                  {libraryTemplates.length
+                    ? "Select a template above to preview the full offer letter"
+                    : "Create a template under Templates → Create template first"}
+                </p>
+              </div>
+            )}
+          </section>
         </div>
 
-        {/* Footer */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#F3F4F6] bg-[#FAFBFC] px-5 py-3">
           <Button
             type="button"
@@ -589,29 +699,29 @@ export function OfferDrawer({
               variant="outline"
               className="h-9 cursor-pointer"
               disabled={!canSave}
-              onClick={() => save(false)}
+              onClick={() => void save(false)}
             >
               Save as Draft
             </Button>
             <Button
               type="button"
-              className="h-9 cursor-pointer bg-[#7C3AED] hover:bg-[#6D28D9]"
+              className="h-9 cursor-pointer bg-primary hover:bg-primary/90"
               disabled={!canSave}
-              onClick={() => save(true)}
+              onClick={() => void save(true)}
             >
               <Send className="size-3.5" />
-              Generate &amp; Send Offer
+              {saving ? "Preparing…" : "Send offer + document link"}
             </Button>
           </div>
         </div>
       </div>
 
-      {fullscreenPreview
+      {fullscreenPreview && composePreviewUrl
         ? createPortal(
             <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 p-4">
-              <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+              <div className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
                 <div className="flex items-center justify-between border-b px-4 py-3">
-                  <p className="text-sm font-semibold">Offer Letter Preview</p>
+                  <p className="text-sm font-semibold">Full offer preview</p>
                   <button
                     type="button"
                     className="inline-flex size-8 cursor-pointer items-center justify-center rounded-lg hover:bg-[#F3F4F6]"
@@ -620,18 +730,12 @@ export function OfferDrawer({
                     <X className="size-4" />
                   </button>
                 </div>
-                <div className="erp-scroll flex-1 overflow-y-auto p-6">
-                  <OfferLetterPreview
-                    large
-                    candidateName={selectedCandidate?.fullName ?? ""}
-                    role={selectedJob?.title ?? ""}
-                    department={department || selectedJob?.department || ""}
-                    joiningDate={joiningDate}
-                    ctc={ctc}
+                <div className="min-h-0 flex-1 bg-[#E5E7EB] p-2">
+                  <iframe
+                    title="Full offer letter"
+                    src={`${composePreviewUrl}${composePreviewUrl.includes("#") ? "&" : "#"}toolbar=0&navpanes=0`}
+                    className="h-full min-h-[75vh] w-full rounded-lg bg-white"
                   />
-                  <pre className="mt-4 whitespace-pre-wrap rounded-lg bg-[#F9FAFB] p-3 font-mono text-[11px] text-[#374151]">
-                    {preview}
-                  </pre>
                 </div>
               </div>
             </div>,
@@ -645,169 +749,59 @@ export function OfferDrawer({
 }
 
 function TemplatePicker({
-  templateKind,
-  onKindChange,
-  templateFileName,
-  onFileName,
+  libraryTemplates,
+  libraryTemplateId,
+  onSelectLibrary,
 }: {
-  templateKind: OfferTemplateKind;
-  onKindChange: (k: OfferTemplateKind) => void;
-  templateFileName: string;
-  onFileName: (n: string) => void;
+  libraryTemplates: OfferLetterTemplate[];
+  libraryTemplateId: string | null;
+  onSelectLibrary: (tpl: OfferLetterTemplate) => void;
 }) {
   return (
     <>
-      <div className="mb-3 flex items-center justify-between">
-        <p className="text-[11px] font-semibold tracking-wide text-[#6B7280] uppercase">
-          Offer Template
+      <p className="mb-3 text-[11px] font-semibold tracking-wide text-[#6B7280] uppercase">
+        Offer template
+      </p>
+      {libraryTemplates.length === 0 ? (
+        <p className="text-[12px] text-[#6B7280]">
+          No templates yet. Create one under Templates → Create template, then return here to send.
         </p>
-        <button
-          type="button"
-          className="cursor-pointer text-[11px] font-medium text-[#7C3AED] hover:underline"
-          onClick={() => undefined}
-        >
-          Manage Templates
-        </button>
-      </div>
-      <div className="space-y-2">
-        {OFFER_TEMPLATE_OPTIONS.map((t) => {
-          const selected = templateKind === t.id;
-          return (
-            <button
-              key={t.id}
-              type="button"
-              className={cn(
-                "flex w-full cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors",
-                selected
-                  ? "border-[#7C3AED] bg-[#F5F3FF]"
-                  : "border-[#E5E7EB] bg-white hover:border-[#C4B5FD]",
-              )}
-              onClick={() => onKindChange(t.id)}
-            >
-              <span
+      ) : (
+        <div className="space-y-2">
+          {libraryTemplates.map((t) => {
+            const selected = libraryTemplateId === t.id;
+            return (
+              <button
+                key={t.id}
+                type="button"
                 className={cn(
-                  "mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-full border",
-                  selected ? "border-[#7C3AED] bg-[#7C3AED]" : "border-[#D1D5DB]",
+                  "flex w-full cursor-pointer items-start gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-colors duration-200",
+                  selected
+                    ? "border-primary bg-primary/10"
+                    : "border-[#E5E7EB] bg-white hover:border-primary/40",
                 )}
+                onClick={() => onSelectLibrary(t)}
               >
-                {selected ? <span className="size-1.5 rounded-full bg-white" /> : null}
-              </span>
-              <span className="min-w-0">
-                <span className="block text-[12px] font-semibold text-[#111827]">{t.label}</span>
-                <span className="mt-0.5 block text-[10px] text-[#6B7280]">{t.description}</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="mt-4">
-        <p className="mb-1.5 text-[11px] font-medium text-[#374151]">
-          Upload Custom Template (Optional)
-        </p>
-        <label className="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#D1D5DB] bg-[#FAFBFC] px-3 py-6 text-center transition-colors hover:border-[#7C3AED] hover:bg-[#F5F3FF]/40">
-          <Upload className="size-5 text-[#9CA3AF]" />
-          <span className="text-[11px] font-medium text-[#374151]">
-            {templateFileName || "Drag & drop or click to upload"}
-          </span>
-          <span className="text-[10px] text-[#9CA3AF]">PDF or DOCX · Max 5MB</span>
-          <input
-            type="file"
-            accept=".pdf,.doc,.docx"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              onFileName(f?.name ?? "");
-              if (f) onKindChange("custom");
-            }}
-          />
-        </label>
-      </div>
-    </>
-  );
-}
-
-function OfferLetterPreview({
-  candidateName,
-  role,
-  department,
-  joiningDate,
-  ctc,
-  large,
-}: {
-  candidateName: string;
-  role: string;
-  department: string;
-  joiningDate: string;
-  ctc: number;
-  large?: boolean;
-}) {
-  const today = new Date().toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric",
-  });
-
-  return (
-    <div
-      className={cn(
-        "rounded-lg border border-[#E5E7EB] bg-white shadow-sm",
-        large ? "p-8" : "p-4",
-      )}
-    >
-      <div className="flex items-start justify-between gap-2 border-b border-[#F3F4F6] pb-3">
-        <div className="flex items-center gap-2">
-          <span className="inline-flex size-8 items-center justify-center rounded-md bg-[#111827] text-[10px] font-bold text-white">
-            ACME
-          </span>
-          <div>
-            <p className="text-[12px] font-semibold text-[#111827]">Offer Letter</p>
-            <p className="text-[10px] text-[#9CA3AF]">{today}</p>
-          </div>
+                <span
+                  className={cn(
+                    "mt-0.5 inline-flex size-4 shrink-0 items-center justify-center rounded-full border",
+                    selected ? "border-primary bg-primary" : "border-[#D1D5DB]",
+                  )}
+                >
+                  {selected ? <span className="size-1.5 rounded-full bg-white" /> : null}
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[12px] font-semibold text-[#111827]">{t.name}</span>
+                  <span className="mt-0.5 block text-[10px] text-[#6B7280]">
+                    {t.pdfFileName}
+                    {t.description ? ` · ${t.description}` : ""}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
         </div>
-        <FileText className="size-4 text-[#D1D5DB]" />
-      </div>
-      <p className={cn("mt-3 text-[#374151]", large ? "text-sm" : "text-[11px]")}>
-        Dear <span className="font-semibold">{candidateName || "[Candidate]"}</span>,
-      </p>
-      <p className={cn("mt-2 text-[#6B7280]", large ? "text-sm" : "text-[10px]")}>
-        We are pleased to offer you employment with our organization. Please find the key
-        terms below.
-      </p>
-      <table
-        className={cn(
-          "mt-3 w-full overflow-hidden rounded-lg border border-[#E5E7EB]",
-          large ? "text-[12px]" : "text-[10px]",
-        )}
-      >
-        <tbody>
-          <PreviewRow label="Position" value={role || "—"} />
-          <PreviewRow label="Department" value={department || "—"} />
-          <PreviewRow label="Joining Date" value={formatDisplayDate(joiningDate)} />
-          <PreviewRow
-            label="Annual CTC"
-            value={ctc ? `₹${formatInrGrouping(ctc)}` : "—"}
-            last
-          />
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function PreviewRow({
-  label,
-  value,
-  last,
-}: {
-  label: string;
-  value: string;
-  last?: boolean;
-}) {
-  return (
-    <tr className={cn(!last && "border-b border-[#F3F4F6]")}>
-      <td className="bg-[#F9FAFB] px-2.5 py-1.5 font-medium text-[#6B7280]">{label}</td>
-      <td className="px-2.5 py-1.5 font-medium text-[#111827]">{value}</td>
-    </tr>
+      )}
+    </>
   );
 }

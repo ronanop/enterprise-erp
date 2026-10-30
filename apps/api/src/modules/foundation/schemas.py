@@ -257,6 +257,14 @@ class NotificationSendRequest(BaseModel):
     payload_json: dict | None = None
 
 
+class EmailAttachmentPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filename: str = Field(min_length=1, max_length=255)
+    content_base64: str = Field(min_length=1, max_length=8_000_000)
+    content_type: str = Field(default="application/octet-stream", max_length=120)
+
+
 class EmailComposeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -271,6 +279,8 @@ class EmailComposeRequest(BaseModel):
     )
     template_id: UUID | None = None
     payload_json: dict | None = None
+    # BG-check packs often include resume + portal docs (Aadhaar/PAN/etc.).
+    attachments: list[EmailAttachmentPayload] = Field(default_factory=list, max_length=10)
 
 
 class DeviceTokenRegisterRequest(BaseModel):

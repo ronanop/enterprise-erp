@@ -40,6 +40,10 @@ class RecJobRequisition(Base, *RecTransactionMixin):
             "status IN ('draft','submitted','approved','open','on_hold','filled','closed','cancelled','rejected')",
             name="ck_rec_req_status",
         ),
+        CheckConstraint(
+            "posting_audience IN ('internal','external')",
+            name="ck_rec_req_posting_audience",
+        ),
         {"schema": "recruitment"},
     )
 
@@ -73,6 +77,12 @@ class RecJobRequisition(Base, *RecTransactionMixin):
     currency_code: Mapped[str | None] = mapped_column(String(10), nullable=True)
     job_description: Mapped[str | None] = mapped_column(Text, nullable=True)
     justification: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # external → public careers; internal → employees (e.g. other location transfers)
+    posting_audience: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="external", index=True
+    )
+    evidence_email_file_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    evidence_email_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
 
     workflow_status: Mapped[str | None] = mapped_column(String(30), nullable=True)

@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 import smtplib
+import threading
+import time
 from dataclasses import dataclass
 from email.message import EmailMessage
+from typing import Sequence
 
 from core.config import settings
 from shared.email_utils import strip_html
+
+# Process-wide spacing between sends to avoid SMTP provider rate limits
+_SEND_LOCK = threading.Lock()
+_LAST_SEND_AT = 0.0
 
 
 @dataclass(frozen=True)
@@ -16,6 +23,13 @@ class EmailSendResult:
     status_code: int
     message: str
     provider_response: str
+
+
+@dataclass(frozen=True)
+class EmailAttachment:
+    filename: str
+    content: bytes
+    content_type: str = "application/pdf"
 
 
 class SmtpEmailAdapter:
@@ -47,14 +61,38 @@ class SmtpEmailAdapter:
         return self._from_email
 
     def _connect(self) -> smtplib.SMTP:
-        client = smtplib.SMTP(self._host, self._port, timeout=30)
-        if self._use_tls:
-            client.starttls()
+        # Hostinger (and many hosts) use implicit SSL on 465; 587 uses STARTTLS.
+        if self._port == 465:
+            client: smtplib.SMTP = smtplib.SMTP_SSL(self._host, self._port, timeout=30)
+        else:
+            client = smtplib.SMTP(self._host, self._port, timeout=30)
+            if self._use_tls:
+                client.starttls()
         if self._user:
             client.login(self._user, self._password)
         return client
 
-    def send_mail(self, *, to_address: str, subject: str, body_html: str) -> EmailSendResult:
+    def _pace_sends(self) -> None:
+        """Wait between SMTP sends so Hostinger / relay rate limits are less likely."""
+        global _LAST_SEND_AT
+        delay = float(getattr(settings, "smtp_send_delay_seconds", 0) or 0)
+        if delay <= 0:
+            return
+        with _SEND_LOCK:
+            now = time.monotonic()
+            wait = delay - (now - _LAST_SEND_AT)
+            if wait > 0:
+                time.sleep(wait)
+            _LAST_SEND_AT = time.monotonic()
+
+    def send_mail(
+        self,
+        *,
+        to_address: str,
+        subject: str,
+        body_html: str,
+        attachments: Sequence[EmailAttachment] | None = None,
+    ) -> EmailSendResult:
         recipient = (to_address or "").strip()
         if not recipient:
             return EmailSendResult(False, 400, "Recipient address is required", "missing_recipient")
@@ -69,6 +107,19 @@ class SmtpEmailAdapter:
         if body_html:
             msg.add_alternative(body_html, subtype="html")
 
+        for attachment in attachments or []:
+            filename = (attachment.filename or "attachment.bin").strip() or "attachment.bin"
+            maintype, _, subtype = (attachment.content_type or "application/octet-stream").partition("/")
+            if not subtype:
+                maintype, subtype = "application", "octet-stream"
+            msg.add_attachment(
+                attachment.content,
+                maintype=maintype,
+                subtype=subtype,
+                filename=filename,
+            )
+
+        self._pace_sends()
         try:
             with self._connect() as client:
                 refused = client.send_message(msg)

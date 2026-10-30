@@ -39,6 +39,25 @@ def test_validate_json_entries_allows_plain() -> None:
     validate_json_entries({"title": "Acme Corp", "notes": "Follow up next week"})
 
 
+def test_validate_json_entries_allows_large_file_data_url() -> None:
+    """Onboarding portal stores uploads as data URLs — must not hit the 20k text cap."""
+    payload = {
+        "portal": {
+            "documents": [
+                {
+                    "id": "doc-1",
+                    "fileName": "offer.pdf",
+                    "fileDataUrl": "data:application/pdf;base64," + ("A" * 50_000),
+                }
+            ],
+            "policies": {
+                "signatureDataUrl": "data:image/png;base64," + ("B" * 30_000),
+            },
+        }
+    }
+    validate_json_entries(payload)
+
+
 def test_extract_multipart_filenames() -> None:
     body = (
         b"------boundary\r\n"

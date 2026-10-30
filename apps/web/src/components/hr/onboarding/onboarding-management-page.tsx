@@ -5,21 +5,14 @@ import { useRouter } from "next/navigation";
 import {
   Check,
   ChevronDown,
-  ClipboardList,
-  Download,
   Eye,
   FileText,
   FolderOpen,
   LayoutList,
-  Mail,
   Plus,
   RefreshCw,
   Search,
-  Send,
-  Trash2,
-  UserCheck,
   UserPlus,
-  Users,
 } from "lucide-react";
 
 import { CaseDetailDrawer } from "@/components/hr/onboarding/case-detail-drawer";
@@ -43,7 +36,6 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { FilterSelect } from "@/components/ui/filter-select";
 import { Input } from "@/components/ui/input";
-import { hrmsPastelSurface } from "@/config/hrms-theme";
 import { isAuthenticated } from "@/lib/auth";
 import {
   buildOnboardingWorkflowSteps,
@@ -69,22 +61,17 @@ import {
   activateOnboardingEmployee,
   approveCandidateReview,
   completeOnboarding,
-  clearAllOnboardingCases,
-  computeOnboardingStats,
-  downloadTextFile,
-  exportOnboardingCsv,
   filterOnboardingCases,
+  hydrateOnboardingCaseFiles,
   listOnboardingAudit,
   loadOnboardingDirectory,
+  mergeBgCheckDocumentsIntoCase,
   sendInvitation,
   startOnboarding,
   updateChecklistItem,
   updateOnboardingAssignment,
   verifyDocument,
-  copyInvitationLink,
-  openInvitationMailto,
   type OnboardingDirectory,
-  type OnboardingStatBucket,
 } from "@/services/onboarding-management-service";
 import {
   listManagementGroups,
@@ -119,73 +106,6 @@ const ACTIVE_ONBOARDING_STATUSES = new Set([
   "overdue",
 ]);
 
-const STAT_CARDS: {
-  key: OnboardingStatBucket;
-  label: string;
-  statKey: keyof ReturnType<typeof computeOnboardingStats>;
-  tab: Tab;
-  icon: typeof Users;
-  hint: string;
-}[] = [
-  {
-    key: "invitations_sent",
-    label: "Invitations Sent",
-    statKey: "invitationsSent",
-    tab: "onboarding",
-    icon: Mail,
-    hint: "Portal invites",
-  },
-  {
-    key: "pending_forms",
-    label: "Pending Forms",
-    statKey: "pendingForms",
-    tab: "onboarding",
-    icon: ClipboardList,
-    hint: "Awaiting submission",
-  },
-  {
-    key: "documents_pending",
-    label: "Documents Pending",
-    statKey: "documentsPending",
-    tab: "documents",
-    icon: FolderOpen,
-    hint: "Verify uploads",
-  },
-  {
-    key: "ready_to_join",
-    label: "Ready to Join",
-    statKey: "readyToJoin",
-    tab: "onboarding",
-    icon: UserCheck,
-    hint: "Cleared for join",
-  },
-  {
-    key: "pending_join",
-    label: "Pending Join",
-    statKey: "pendingJoin",
-    tab: "onboarding",
-    icon: Users,
-    hint: "Before join date",
-  },
-  {
-    key: "joined_today",
-    label: "Joined Today",
-    statKey: "joinedToday",
-    tab: "onboarding",
-    icon: UserPlus,
-    hint: "Today",
-  },
-];
-
-const STAT_LABELS: Record<OnboardingStatBucket, string> = {
-  invitations_sent: "Invitations Sent",
-  pending_forms: "Pending Forms",
-  documents_pending: "Documents Pending",
-  ready_to_join: "Ready to Join",
-  pending_join: "Pending Join",
-  joined_today: "Joined Today",
-};
-
 function isoDaysAgo(days: number): string {
   const d = new Date();
   d.setDate(d.getDate() - days);
@@ -203,10 +123,8 @@ export function OnboardingManagementPage() {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<OnboardingFilters>(() => emptyOnboardingFilters());
   const [datePreset, setDatePreset] = useState<DatePreset>("30");
-  const [statsBucket, setStatsBucket] = useState<OnboardingStatBucket | null>(null);
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [startOpen, setStartOpen] = useState(false);
   const [inviteCase, setInviteCase] = useState<OnboardingCase | null>(null);
   const [detailCase, setDetailCase] = useState<OnboardingCase | null>(null);
@@ -215,7 +133,6 @@ export function OnboardingManagementPage() {
   const [docsPoliciesLoading, setDocsPoliciesLoading] = useState(false);
   const [previewDoc, setPreviewDoc] = useState<OnboardingDocument | null>(null);
   const [managementGroups, setManagementGroups] = useState<ManagementGroup[]>([]);
-  const [clearing, setClearing] = useState(false);
 
   async function openEmployeeDetails(employeeKey: string | undefined) {
     if (!employeeKey) return;
@@ -252,6 +169,10 @@ export function OnboardingManagementPage() {
               signatureDataUrl: sigUrl,
               signatureMimeType: c.portal?.policies?.signatureMimeType,
               candidateName: c.candidateName,
+              signedAt:
+                c.portal?.policies?.acceptedAt ||
+                c.portal?.policies?.signedDocuments?.[0]?.signedAt ||
+                undefined,
             });
             await saveSignedPolicyDocsForCase(c.id, stamped);
             fromIdb = stamped;
@@ -284,8 +205,69 @@ export function OnboardingManagementPage() {
       setDocsSignedPolicies([]);
       return;
     }
-    void loadSignedPoliciesForCase(docsCase);
+    let cancelled = false;
+    void (async () => {
+      const [hydrated, withBg] = await Promise.all([
+        hydrateOnboardingCaseFiles(docsCase),
+        mergeBgCheckDocumentsIntoCase(docsCase),
+      ]);
+      if (cancelled) return;
+      const byId = new Map(hydrated.portal.documents.map((d) => [d.id, d]));
+      const mergedDocs = withBg.portal.documents.map((d) => {
+        const h = byId.get(d.id);
+        if (d.fileDataUrl?.trim()) return d;
+        if (h?.fileDataUrl?.trim()) {
+          return { ...d, fileDataUrl: h.fileDataUrl, mimeType: d.mimeType || h.mimeType };
+        }
+        return d;
+      });
+      for (const d of hydrated.portal.documents) {
+        if (!mergedDocs.some((x) => x.id === d.id)) mergedDocs.push(d);
+      }
+      const next = {
+        ...hydrated,
+        portal: { ...hydrated.portal, documents: mergedDocs },
+      };
+      const gainedFiles =
+        next.portal.documents.length !== docsCase.portal.documents.length ||
+        next.portal.documents.some((d, i) => {
+          const prev = docsCase.portal.documents[i];
+          return Boolean(d.fileDataUrl?.trim()) && !prev?.fileDataUrl?.trim();
+        }) ||
+        (Boolean(next.portal.policies?.signatureDataUrl?.trim()) &&
+          !docsCase.portal.policies?.signatureDataUrl?.trim());
+      if (gainedFiles) setDocsCase(next);
+      await loadSignedPoliciesForCase(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [docsCase?.id, docsCase?.updatedAt, loadSignedPoliciesForCase]);
+
+  async function openDocsPreview(doc: OnboardingDocument) {
+    if (doc.fileDataUrl?.trim()) {
+      setPreviewDoc(doc);
+      return;
+    }
+    if (!docsCase) {
+      setPreviewDoc(doc);
+      return;
+    }
+    const hydrated = await hydrateOnboardingCaseFiles(docsCase);
+    const restored =
+      hydrated.portal.documents.find((d) => d.id === doc.id) ||
+      (hydrated.portal.policies?.signatureDataUrl && doc.kind === "signature"
+        ? {
+            ...doc,
+            fileDataUrl: hydrated.portal.policies.signatureDataUrl,
+            mimeType: hydrated.portal.policies.signatureMimeType || doc.mimeType,
+          }
+        : doc);
+    if (restored.fileDataUrl?.trim() && restored.fileDataUrl !== doc.fileDataUrl) {
+      setDocsCase(hydrated);
+    }
+    setPreviewDoc(restored);
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -310,13 +292,29 @@ export function OnboardingManagementPage() {
     void load();
   }, [load]);
 
-  const stats = useMemo(() => computeOnboardingStats(dir?.cases ?? []), [dir]);
+  const statusFilterOptions = useMemo(() => {
+    const present = new Set((dir?.cases ?? []).map((c) => c.status));
+    const ordered = (
+      Object.entries(ONBOARDING_STATUS_LABELS) as [keyof typeof ONBOARDING_STATUS_LABELS, string][]
+    )
+      .filter(([key]) => present.has(key))
+      .map(([value, label]) => ({ value, label }));
+    return [{ value: "all", label: "Active" }, ...ordered];
+  }, [dir]);
+
+  useEffect(() => {
+    if (filters.status === "all") return;
+    if (!statusFilterOptions.some((opt) => opt.value === filters.status)) {
+      setFilters((f) => ({ ...f, status: "all" }));
+    }
+  }, [filters.status, statusFilterOptions]);
+
   const filtered = useMemo(() => {
     const base = filterOnboardingCases(
       dir?.cases ?? [],
       query,
       { ...filters, joiningFrom: "", joiningTo: "" },
-      statsBucket,
+      null,
     );
     if (datePreset === "all") return base;
     const from = isoDaysAgo(Number(datePreset));
@@ -325,119 +323,64 @@ export function OnboardingManagementPage() {
       const join = c.joiningDate || "";
       return (created && created >= from) || (join && join >= from);
     });
-  }, [dir, query, filters, statsBucket, datePreset]);
+  }, [dir, query, filters, datePreset]);
   const pageRows = useMemo(() => {
     const start = (page - 1) * PAGE;
     return filtered.slice(start, start + PAGE);
   }, [filtered, page]);
 
-  useEffect(() => setPage(1), [query, filters, tab, statsBucket, datePreset]);
+  useEffect(() => setPage(1), [query, filters, tab, datePreset]);
 
   const activeDocumentFolders = useMemo(() => {
-    const source = statsBucket ? filtered : (dir?.cases ?? []);
-    return source.filter(
+    return (dir?.cases ?? []).filter(
       (c) =>
         ACTIVE_ONBOARDING_STATUSES.has(c.status) && c.portal.documents.length > 0,
     );
-  }, [dir, filtered, statsBucket]);
+  }, [dir]);
 
   const audit = useMemo(() => listOnboardingAudit(), [dir, tab]);
   const authBlocked = !isAuthenticated() && !loading && !(dir?.cases.length);
-
-  const allPageSelected =
-    pageRows.length > 0 && pageRows.every((r) => selected.has(r.id));
-
-  function selectStatCard(card: (typeof STAT_CARDS)[number]) {
-    const next = statsBucket === card.key ? null : card.key;
-    setStatsBucket(next);
-    if (next) {
-      setTab(card.tab);
-      setFilters(emptyOnboardingFilters());
-      setDatePreset("all");
-      setQuery("");
-    }
-  }
-
-  function toggleSelectAll() {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (allPageSelected) {
-        pageRows.forEach((r) => next.delete(r.id));
-      } else {
-        pageRows.forEach((r) => next.add(r.id));
-      }
-      return next;
-    });
-  }
-
-  function toggleSelect(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
 
   async function handleStart(input: StartOnboardingInput) {
     try {
       const created = await startOnboarding(input);
       const sent = await sendInvitation(created.id, "email", input.invitationExpiryDays);
       const row = sent ?? created;
-      await copyInvitationLink(row);
-      openInvitationMailto(row);
       toast(
-        `Onboarding ${row.caseCode} created. Login email and password emailed - shown below for testing.`,
+        `Onboarding ${row.caseCode} created — invite emailed to ${input.candidateEmail} with portal link and login`,
       );
       await load();
-      setInviteCase(row);
     } catch (e) {
       toast(e instanceof Error ? e.message : "Could not start onboarding", "error");
       throw e;
     }
   }
 
-  async function handleClearList() {
-    const count = dir?.cases.length ?? 0;
-    const ok = window.confirm(
-      count
-        ? `Remove all ${count} onboarding case(s) from this company?\n\nThis cannot be undone from the UI. New onboarding can be started afterwards.`
-        : "Clear the onboarding list and local cache?",
-    );
-    if (!ok) return;
-    setClearing(true);
-    try {
-      const result = await clearAllOnboardingCases();
-      setSelected(new Set());
-      setExpandedId(null);
-      setDetailCase(null);
-      setInviteCase(null);
-      setDocsCase(null);
-      toast(result.message || "Onboarding list cleared");
-      await load();
-    } catch (e) {
-      toast(e instanceof Error ? e.message : "Could not clear onboarding list", "error");
-    } finally {
-      setClearing(false);
-    }
-  }
-
   async function handleSend(caseId: string, channel: InvitationChannel, expiryDays: number) {
-    const updated = await sendInvitation(caseId, channel, expiryDays);
-    if (updated) {
-      await copyInvitationLink(updated);
-      if (channel === "email") {
-        openInvitationMailto(updated);
+    try {
+      const updated = await sendInvitation(caseId, channel, expiryDays);
+      if (updated) {
+        toast(
+          channel === "email"
+            ? `Invitation emailed to ${updated.candidateEmail} with portal link and login`
+            : `Invitation sent via ${channel}`,
+        );
+        setInviteCase((prev) => (prev?.id === caseId ? updated : prev));
+        setDetailCase((prev) => (prev?.id === caseId ? updated : prev));
+        setDir((prev) =>
+          prev
+            ? {
+                ...prev,
+                cases: prev.cases.map((c) => (c.id === updated.id ? updated : c)),
+              }
+            : prev,
+        );
+        await load();
+      } else {
+        toast("Could not send invitation - save the case and try again", "error");
       }
-      toast(
-        channel === "email"
-          ? "Invitation emailed with login email and password. Credentials copied for testing."
-          : `Invitation sent via ${channel}. Credentials copied for testing.`,
-      );
-      setInviteCase(updated);
-      await load();
-    } else {
-      toast("Could not send invitation - save the case and try again", "error");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Could not send invitation", "error");
     }
   }
 
@@ -457,105 +400,17 @@ export function OnboardingManagementPage() {
               size="sm"
               variant="outline"
               className="cursor-pointer"
-              disabled={!detailCase && !pageRows[0]}
-              onClick={() => setInviteCase(detailCase ?? pageRows[0] ?? null)}
-            >
-              <Send className="size-3.5" />
-              Send Invitation
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="cursor-pointer"
-              onClick={() => {
-                downloadTextFile(
-                  `onboarding-${new Date().toISOString().slice(0, 10)}.csv`,
-                  exportOnboardingCsv(filtered),
-                );
-                toast("Export downloaded");
-              }}
-            >
-              <Download className="size-3.5" />
-              Export
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="cursor-pointer"
               disabled={loading}
               onClick={() => void load()}
             >
               <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
               Refresh
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="cursor-pointer text-destructive hover:bg-destructive/10"
-              disabled={loading || clearing}
-              onClick={() => void handleClearList()}
-            >
-              <Trash2 className="size-3.5" />
-              {clearing ? "Clearing…" : "Clear list"}
-            </Button>
           </div>
         }
       />
 
       {authBlocked ? <HrAuthBanner /> : null}
-
-      <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {STAT_CARDS.map((card, index) => {
-          const active = statsBucket === card.key;
-          const value = Number(stats[card.statKey] ?? 0);
-          const Icon = card.icon;
-          return (
-            <button
-              key={card.key}
-              type="button"
-              onClick={() => selectStatCard(card)}
-              aria-pressed={active}
-              className={cn(
-                "flex min-h-[5.25rem] cursor-pointer flex-col justify-between rounded-2xl border px-3 py-3 text-left shadow-sm transition-all duration-200",
-                hrmsPastelSurface(index),
-                active
-                  ? "border-foreground/20 ring-2 ring-primary"
-                  : "border-border hover:border-primary/30 hover:shadow-md",
-              )}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <p className="text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-                  {card.label}
-                </p>
-                <Icon className="size-3.5 shrink-0 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-xl font-semibold tabular-nums text-foreground">
-                  {loading && !dir ? "-" : value.toLocaleString("en-IN")}
-                </p>
-                <p className="mt-0.5 text-[10px] text-muted-foreground">{card.hint}</p>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      {statsBucket ? (
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>Filtered by card:</span>
-          <span className="font-medium text-foreground">{STAT_LABELS[statsBucket]}</span>
-          <span>
-            · {filtered.length} case{filtered.length === 1 ? "" : "s"}
-          </span>
-          <button
-            type="button"
-            className="cursor-pointer font-medium text-primary transition-colors duration-200 hover:underline"
-            onClick={() => setStatsBucket(null)}
-          >
-            Clear
-          </button>
-        </div>
-      ) : null}
 
       <HrUnderlineTabs
         tabs={
@@ -588,12 +443,7 @@ export function OnboardingManagementPage() {
                 <FilterSelect
                   value={filters.status}
                   onChange={(status) => setFilters((f) => ({ ...f, status }))}
-                  options={[
-                    { value: "all", label: "Active" },
-                    ...Object.entries(ONBOARDING_STATUS_LABELS)
-                      .filter(([k]) => k !== "overdue")
-                      .map(([k, v]) => ({ value: k, label: v })),
-                  ]}
+                  options={statusFilterOptions}
                 />
               </div>
               <div className="w-[10.5rem]">
@@ -638,15 +488,6 @@ export function OnboardingManagementPage() {
                 <table className="w-full min-w-[960px] text-left text-xs">
                   <thead className="border-b border-border/70 bg-muted/30 text-[10px] tracking-wide text-muted-foreground uppercase">
                     <tr>
-                      <th className="w-10 px-3 py-2.5">
-                        <input
-                          type="checkbox"
-                          className="cursor-pointer accent-primary"
-                          checked={allPageSelected}
-                          onChange={toggleSelectAll}
-                          aria-label="Select all on page"
-                        />
-                      </th>
                       <th className="px-3 py-2.5 font-medium">Case ID</th>
                       <th className="px-3 py-2.5 font-medium">Candidate</th>
                       <th className="px-3 py-2.5 font-medium">Join Date</th>
@@ -677,15 +518,6 @@ export function OnboardingManagementPage() {
                               open ? "bg-muted/20" : "hover:bg-muted/30",
                             )}
                           >
-                            <td className="px-3 py-3 align-middle">
-                              <input
-                                type="checkbox"
-                                className="cursor-pointer accent-primary"
-                                checked={selected.has(row.id)}
-                                onChange={() => toggleSelect(row.id)}
-                                aria-label={`Select ${row.caseCode}`}
-                              />
-                            </td>
                             <td className="px-3 py-3 align-middle font-mono text-[11px] font-medium text-foreground">
                               {row.caseCode}
                             </td>
@@ -770,7 +602,7 @@ export function OnboardingManagementPage() {
                           </tr>
                           {open ? (
                             <tr className="border-b border-border/50 bg-muted/15">
-                              <td colSpan={9} className="px-4 py-4">
+                              <td colSpan={8} className="px-4 py-4">
                                 <div className="space-y-4">
                                   <ol className="flex flex-wrap items-start gap-0 overflow-x-auto pb-1">
                                     {steps.map((step, idx) => {
@@ -944,11 +776,7 @@ export function OnboardingManagementPage() {
           {activeDocumentFolders.length === 0 ? (
             <HrEmptyState
               title="No active onboarding documents"
-              description={
-                statsBucket
-                  ? "No active cases with uploads match this card filter."
-                  : "Folders appear when an active onboarding candidate uploads documents via the portal."
-              }
+              description="Folders appear when an active onboarding candidate uploads documents via the portal."
             />
           ) : null}
         </div>
@@ -1047,38 +875,75 @@ export function OnboardingManagementPage() {
                         <OnboardingDocumentRow
                           key={d.id}
                           doc={d}
-                          subtitle={d.kind.replace(/_/g, " ")}
-                          onView={setPreviewDoc}
-                          onVerify={() => {
-                            void (async () => {
-                              const next = await verifyDocument(docsCase.id, d.id, "verified");
-                              if (!next) {
-                                toast("Failed to verify document", "error");
-                                return;
-                              }
-                              setDocsCase(next);
-                              toast("Document verified");
-                              void load();
-                            })();
+                          subtitle={
+                            d.source === "bg_check"
+                              ? `${d.kind.replace(/_/g, " ")} · BG check`
+                              : d.kind.replace(/_/g, " ")
+                          }
+                          onView={(doc) => {
+                            void openDocsPreview(doc);
                           }}
-                          onReject={() => {
-                            void (async () => {
-                              const next = await verifyDocument(docsCase.id, d.id, "rejected");
-                              if (!next) {
-                                toast("Failed to reject document", "error");
-                                return;
-                              }
-                              setDocsCase(next);
-                              const copied = await copyInvitationLink(next);
-                              setInviteCase(next);
-                              toast(
-                                copied
-                                  ? "Document rejected - portal reopened. Login credentials copied - email them from the invitation drawer."
-                                  : "Document rejected - portal reopened. Use the invitation drawer to email login credentials.",
-                              );
-                              void load();
-                            })();
-                          }}
+                          onVerify={
+                            d.source === "bg_check"
+                              ? undefined
+                              : () => {
+                                  void (async () => {
+                                    try {
+                                      const next = await verifyDocument(
+                                        docsCase.id,
+                                        d.id,
+                                        "verified",
+                                      );
+                                      if (!next) {
+                                        toast("Failed to verify document", "error");
+                                        return;
+                                      }
+                                      setDocsCase(next);
+                                      toast("Document verified");
+                                      void load();
+                                    } catch (e) {
+                                      toast(
+                                        e instanceof Error
+                                          ? e.message
+                                          : "Failed to verify document",
+                                        "error",
+                                      );
+                                    }
+                                  })();
+                                }
+                          }
+                          onReject={
+                            d.source === "bg_check"
+                              ? undefined
+                              : () => {
+                                  void (async () => {
+                                    try {
+                                      const next = await verifyDocument(
+                                        docsCase.id,
+                                        d.id,
+                                        "rejected",
+                                      );
+                                      if (!next) {
+                                        toast("Failed to reject document", "error");
+                                        return;
+                                      }
+                                      setDocsCase(next);
+                                      setInviteCase(next);
+                                      toast(
+                                        "Document rejected — portal reopened. Use Resend invitation to email login credentials again.",
+                                      );
+                                      void load();
+                                    } catch (e) {
+                                      toast(
+                                        e instanceof Error
+                                          ? e.message
+                                          : "Failed to reject document",
+                                        "error",
+                                      );
+                                    }
+                                  })();
+                                }
+                          }
                         />
                       ))
                     )}
@@ -1113,7 +978,9 @@ export function OnboardingManagementPage() {
                             key={d.id}
                             doc={d}
                             subtitle={d.notes || "Signed policy"}
-                            onView={setPreviewDoc}
+                            onView={(doc) => {
+                              void openDocsPreview(doc);
+                            }}
                           />
                         ))}
                       </>
@@ -1166,7 +1033,9 @@ export function OnboardingManagementPage() {
                           mimeType: "image/png",
                         }}
                         subtitle="Signature image"
-                        onView={setPreviewDoc}
+                        onView={(doc) => {
+                          void openDocsPreview(doc);
+                        }}
                       />
                     ) : null}
                   </section>
@@ -1215,10 +1084,7 @@ export function OnboardingManagementPage() {
         caseRow={detailCase}
         managementGroups={managementGroups}
         onClose={() => setDetailCase(null)}
-        onInvite={(c) => {
-          setDetailCase(null);
-          setInviteCase(c);
-        }}
+        onResendInvitation={(caseId) => handleSend(caseId, "email", 14)}
         onChecklist={(caseId, itemId, status) => {
           updateChecklistItem(caseId, itemId, status);
           void load().then(async () => {
@@ -1251,48 +1117,20 @@ export function OnboardingManagementPage() {
           }
         }}
         onVerifyDoc={(caseId, docId, status) => {
-          void (async () => {
-            const next = await verifyDocument(caseId, docId, status);
-            if (!next) {
-              toast("Failed to update document status", "error");
-              return;
-            }
-            if (status === "rejected") {
-              const copied = await copyInvitationLink(next);
-              setInviteCase(next);
-              toast(
-                copied
-                  ? "Document rejected - portal reopened. Login credentials copied - email them from the invitation drawer."
-                  : "Document rejected - portal reopened. Use the invitation drawer to email login credentials.",
-              );
-            } else {
-              toast("Document verified");
-            }
-            setDetailCase(next);
-            setDir((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    cases: prev.cases.map((c) => (c.id === next.id ? next : c)),
-                  }
-                : prev,
-            );
-            void load().then(async () => {
-              const d = await loadOnboardingDirectory();
-              setDir(d);
-              setDetailCase(d.cases.find((x) => x.id === caseId) ?? next);
-            });
-          })();
-        }}
-        onApprove={(caseId) => {
-          void (async () => {
+          return (async () => {
             try {
-              const next = await approveCandidateReview(caseId);
+              const next = await verifyDocument(caseId, docId, status);
               if (!next) {
-                toast("Approval failed", "error");
-                return;
+                throw new Error("Failed to update document status");
               }
-              toast("Candidate submission approved");
+              if (status === "rejected") {
+                setInviteCase(next);
+                toast(
+                  "Document rejected — portal reopened. Use Resend invitation to email login credentials again.",
+                );
+              } else {
+                toast("Document verified");
+              }
               setDetailCase(next);
               setDir((prev) =>
                 prev
@@ -1302,40 +1140,81 @@ export function OnboardingManagementPage() {
                     }
                   : prev,
               );
+              // Refresh list in background; keep verified case if API lag returns stale docs.
               void load().then(async () => {
                 const d = await loadOnboardingDirectory();
+                const fromApi = d.cases.find((x) => x.id === caseId);
                 setDir(d);
-                setDetailCase(d.cases.find((x) => x.id === caseId) ?? next);
+                if (!fromApi) {
+                  setDetailCase(next);
+                  return;
+                }
+                const verifiedIds = new Set(
+                  next.portal.documents
+                    .filter((doc) => doc.verifyStatus !== "pending")
+                    .map((doc) => doc.id),
+                );
+                const mergedDocs = fromApi.portal.documents.map((doc) => {
+                  if (!verifiedIds.has(doc.id)) return doc;
+                  const local = next.portal.documents.find((x) => x.id === doc.id);
+                  return local
+                    ? { ...doc, verifyStatus: local.verifyStatus, notes: local.notes }
+                    : doc;
+                });
+                setDetailCase({
+                  ...fromApi,
+                  portal: { ...fromApi.portal, documents: mergedDocs },
+                });
               });
             } catch (e) {
-              toast(e instanceof Error ? e.message : "Approval failed", "error");
+              toast(
+                e instanceof Error ? e.message : "Failed to update document status",
+                "error",
+              );
+              throw e;
             }
           })();
         }}
-        onComplete={(caseId, managementGroup, employeeCode) =>
-          completeOnboarding(caseId, {
-            managementGroupId: managementGroup?.id,
-            managementGroupName: managementGroup?.group_name,
-            employeeCode,
-            employeeIdMode: employeeCode ? "manual" : "auto",
-          })
-            .then(async (completed) => {
-              if (!completed) return;
-              const pendingJoin = completed.status === "pending_join";
-              toast(
-                pendingJoin
-                  ? "Added to list. Active on joining date."
-                  : `Employee ${completed.employeeId} activated`,
-              );
-              await openEmployeeDetails(completed.employeeId);
-              setDetailCase(null);
-              void load();
-            })
-            .catch((e) => {
-              toast(e instanceof Error ? e.message : "Completion failed", "error");
-              throw e;
-            })
-        }
+        onApprove={async (caseId) => {
+          const next = await approveCandidateReview(caseId);
+          if (!next) {
+            throw new Error("Approval failed");
+          }
+          setDetailCase(next);
+          setDir((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  cases: prev.cases.map((c) => (c.id === next.id ? next : c)),
+                }
+              : prev,
+          );
+        }}
+        onComplete={async (caseId, managementGroup, employeeCode) => {
+          try {
+            const completed = await completeOnboarding(caseId, {
+              managementGroupId: managementGroup?.id,
+              managementGroupName: managementGroup?.group_name,
+              employeeCode,
+              employeeIdMode: employeeCode ? "manual" : "auto",
+            });
+            if (!completed) {
+              throw new Error("Activation did not save. Refresh the page and try again.");
+            }
+            const pendingJoin = completed.status === "pending_join";
+            toast(
+              pendingJoin
+                ? "Employee added. Active on joining date."
+                : `Employee ${completed.employeeId} activated`,
+            );
+            await openEmployeeDetails(completed.employeeId);
+            setDetailCase(null);
+            void load();
+          } catch (e) {
+            toast(e instanceof Error ? e.message : "Activation failed", "error");
+            throw e;
+          }
+        }}
         onActivate={async (caseId, managementGroup) => {
           const current =
             detailCase?.id === caseId

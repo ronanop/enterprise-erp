@@ -19,6 +19,7 @@ import {
   Gift,
   LayoutDashboard,
   MonitorCog,
+  Network,
   Package,
   Plane,
   Settings2,
@@ -52,7 +53,7 @@ export type HrNavGroup = {
 export type HrNavAccessToggle = { navKey: string; title: string };
 export type HrNavAccessGroup = { label: string; items: HrNavAccessToggle[] };
 
-/** Flat order: Dashboard → hire → employees → time → talent → pay → utilities → offboarding. */
+/** Flat order: Dashboard → hire → employees cluster → pay → utilities → offboarding → biometric. */
 export const hrNavGroups: HrNavGroup[] = [
   {
     label: "",
@@ -79,46 +80,54 @@ export const hrNavGroups: HrNavGroup[] = [
         navKey: "onboarding",
       },
       {
-        title: "Employees",
+        title: "Workforce",
         href: "/hr/workforce",
         icon: Users,
-        description: "Employee directory",
-        navKey: "employees",
-      },
-      {
-        title: "Attendance",
-        href: "/hr/time",
-        icon: ClipboardCheck,
-        description: "Attendance register & calendar",
-        navKey: "attendance",
-      },
-      // Hidden for now - restore to show Leave in the sidebar
-      // {
-      //   title: "Leave",
-      //   href: "/hr/leave",
-      //   icon: CalendarDays,
-      //   description: "Leave requests & approvals",
-      // },
-      {
-        title: "Biometric Devices",
-        href: "/hr/time/biometric-devices",
-        icon: Fingerprint,
-        description: "Device registry & punch sync API",
-        navKey: "biometric-devices",
-      },
-      {
-        title: "Performance",
-        href: "/hr/talent",
-        icon: BadgeCheck,
-        description: "Goals, KPIs, reviews & appraisals",
-        navKey: "performance",
-      },
-      {
-        title: "Training",
-        href: "/hr/learning",
-        icon: GraduationCap,
-        description: "Programs and completion",
-        navKey: "training",
+        description: "Employees, org chart, attendance, performance & training",
+        children: [
+          {
+            title: "Employees",
+            href: "/hr/workforce",
+            icon: Users,
+            description: "Employee directory",
+            navKey: "employees",
+          },
+          {
+            title: "Attendance",
+            href: "/hr/time?tab=list",
+            icon: ClipboardCheck,
+            description: "Attendance register & calendar",
+            navKey: "attendance",
+          },
+          {
+            title: "Performance",
+            href: "/hr/talent",
+            icon: BadgeCheck,
+            description: "Goals, KPIs, reviews & appraisals",
+            navKey: "performance",
+          },
+          {
+            title: "Org Chart",
+            href: "/hr/org-chart",
+            icon: Network,
+            description: "Reporting hierarchy — click a person to see their team",
+            navKey: "org-chart",
+          },
+          {
+            title: "Training",
+            href: "/hr/learning",
+            icon: GraduationCap,
+            description: "Programs and completion",
+            navKey: "training",
+          },
+          // Hidden for now - restore under Workforce to show Leave
+          // {
+          //   title: "Leave",
+          //   href: "/hr/leave",
+          //   icon: CalendarDays,
+          //   description: "Leave requests & approvals",
+          // },
+        ],
       },
       {
         title: "Payroll",
@@ -231,7 +240,7 @@ export const hrNavGroups: HrNavGroup[] = [
         title: "IT & Admin",
         href: "/hr/it-admin",
         icon: MonitorCog,
-        description: "Meeting rooms, stocks, travel & requisitions",
+        description: "Meeting rooms, stocks, travel, requisitions & biometric devices",
         children: [
           {
             title: "Meeting Room",
@@ -260,6 +269,13 @@ export const hrNavGroups: HrNavGroup[] = [
             icon: ShoppingBag,
             description: "ID card, visiting card, t-shirts, gifts",
             navKey: "it-requisition",
+          },
+          {
+            title: "Biometric Devices",
+            href: "/hr/time/biometric-devices",
+            icon: Fingerprint,
+            description: "Device registry & punch sync API",
+            navKey: "biometric-devices",
           },
         ],
       },

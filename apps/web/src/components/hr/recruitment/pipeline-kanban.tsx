@@ -14,7 +14,6 @@ import {
   Plus,
   Send,
   ShieldCheck,
-  UserPlus,
   Users,
   X,
 } from "lucide-react";
@@ -30,6 +29,7 @@ import {
   daysInStage,
   nextStage,
 } from "@/config/pipeline-config";
+import { stageNeedsAdvanceReview } from "@/services/recruitment-ats-service";
 import { cn } from "@/lib/utils";
 import type {
   AtsCandidate,
@@ -45,7 +45,7 @@ type Props = {
   candidates: AtsCandidate[];
   jobs: JobOpening[];
   interviews?: AtsInterview[];
-  onAdvance: (applicationId: string) => void;
+  onAdvance: (applicationId: string, feedback?: string) => void;
   onReject: (applicationId: string, reason: string) => void;
   onMarkHired: (applicationId: string) => void;
   onMarkBackedOut: (applicationId: string, reason: string) => void;
@@ -55,8 +55,9 @@ type Props = {
 };
 
 type ReasonModal = {
-  mode: "reject" | "backed_out";
+  mode: "reject" | "backed_out" | "advance";
   applicationId: string;
+  fromStage?: PipelineStage;
 } | null;
 
 type DetailTab = "overview" | "interviews" | "documents" | "activity";
@@ -69,12 +70,6 @@ type StageChrome = {
 };
 
 const STAGE_CHROME: Record<PipelineStage, StageChrome> = {
-  sourced: {
-    headerBg: "bg-[#F3F4F6]",
-    headerText: "text-[#374151]",
-    icon: UserPlus,
-    countTone: "text-[#6B7280]",
-  },
   screening: {
     headerBg: "bg-[#EEF6FF]",
     headerText: "text-[#1D4ED8]",
@@ -82,10 +77,10 @@ const STAGE_CHROME: Record<PipelineStage, StageChrome> = {
     countTone: "text-[#3B82F6]",
   },
   interview_round_1: {
-    headerBg: "bg-[#F4EDFB]",
-    headerText: "text-[#7C3AED]",
+    headerBg: "bg-primary/10",
+    headerText: "text-primary",
     icon: MessageSquare,
-    countTone: "text-[#8B5CF6]",
+    countTone: "text-primary",
   },
   interview_round_2: {
     headerBg: "bg-[#FFF4E5]",
@@ -136,7 +131,7 @@ function statusChip(app: PipelineApplication): { label: string; className: strin
     case "active":
       return {
         label: stageLabel(app.stage),
-        className: "bg-[#F5F3FF] text-[#7C3AED]",
+        className: "bg-primary/10 text-primary",
       };
     default: {
       const _exhaustive: never = app.status;
@@ -174,8 +169,8 @@ export function PipelineKanban({
     for (const s of PIPELINE_STAGES) map.set(s.id, []);
     for (const a of applications) {
       if (a.status !== "active") continue;
-      const list = map.get(a.stage) ?? map.get("sourced")!;
-      list.push(a);
+      const list = map.get(a.stage) ?? map.get("screening");
+      if (list) list.push(a);
     }
     return map;
   }, [applications]);
@@ -204,10 +199,20 @@ export function PipelineKanban({
     return () => document.removeEventListener("mousedown", onDoc);
   }, [menuAppId]);
 
+  function requestAdvance(applicationId: string, fromStage: PipelineStage) {
+    if (stageNeedsAdvanceReview(fromStage)) {
+      setReason("");
+      setReasonModal({ mode: "advance", applicationId, fromStage });
+      return;
+    }
+    onAdvance(applicationId);
+  }
+
   function confirmReason() {
     if (!reasonModal || !reason.trim()) return;
     if (reasonModal.mode === "reject") onReject(reasonModal.applicationId, reason.trim());
-    else onMarkBackedOut(reasonModal.applicationId, reason.trim());
+    else if (reasonModal.mode === "backed_out") onMarkBackedOut(reasonModal.applicationId, reason.trim());
+    else onAdvance(reasonModal.applicationId, reason.trim());
     setReasonModal(null);
     setReason("");
   }
@@ -318,13 +323,13 @@ export function PipelineKanban({
                       <MenuItem
                         label="Advance"
                         onClick={() => {
-                          onAdvance(app.id);
+                          requestAdvance(app.id, app.stage);
                           setMenuAppId(null);
                         }}
                       />
                     ) : null}
                     <MenuItem
-                      label="Reject"
+                      label="Rejected"
                       danger
                       onClick={() => {
                         setReason("");
@@ -378,7 +383,7 @@ export function PipelineKanban({
             setSelectedId(null);
           }}
           onAdvance={() => {
-            onAdvance(selected.id);
+            requestAdvance(selected.id, selected.stage);
             setSelectedId(null);
           }}
           onReject={() => {
@@ -393,14 +398,26 @@ export function PipelineKanban({
         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-md rounded-xl border border-border/70 bg-card p-4 shadow-sm">
             <p className="text-sm font-semibold text-foreground">
-              {reasonModal.mode === "reject" ? "Reject candidate" : "Mark backed out"}
+              {reasonModal.mode === "reject"
+                ? "Mark as rejected"
+                : reasonModal.mode === "backed_out"
+                  ? "Mark backed out"
+                  : "Advance with review"}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">Exit reason is required.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {reasonModal.mode === "advance"
+                ? "Review / feedback is required before moving to the next interview phase."
+                : "Exit reason is required."}
+            </p>
             <textarea
               className="mt-3 min-h-[88px] w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Reason…"
+              placeholder={
+                reasonModal.mode === "advance"
+                  ? "Strengths, gaps, recommendation for next round…"
+                  : "Reason…"
+              }
               autoFocus
             />
             <div className="mt-3 flex justify-end gap-2">
@@ -417,11 +434,11 @@ export function PipelineKanban({
               </Button>
               <Button
                 type="button"
-                className="cursor-pointer bg-[#7C3AED] text-white hover:bg-[#6D28D9]"
+                className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"
                 disabled={!reason.trim()}
                 onClick={confirmReason}
               >
-                Confirm
+                {reasonModal.mode === "advance" ? "Save review & advance" : "Confirm"}
               </Button>
             </div>
           </div>
@@ -481,7 +498,7 @@ function PipelineCard({
       }}
       className={cn(
         "cursor-pointer rounded-xl border border-[#E5E7EB] bg-white p-3 shadow-[0_1px_2px_rgba(16,24,40,0.04)] transition-shadow duration-150 hover:shadow-md",
-        menuOpen && "ring-1 ring-[#7C3AED]/40",
+        menuOpen && "ring-1 ring-primary/40",
       )}
     >
       <div className="flex items-start gap-2">
@@ -654,7 +671,7 @@ function CandidateDetailPopover({
               className={cn(
                 "cursor-pointer rounded-t-md px-3 py-2 text-[11px] font-medium transition-colors",
                 tab === t.id
-                  ? "border-b-2 border-[#7C3AED] text-[#7C3AED]"
+                  ? "border-b-2 border-primary text-primary"
                   : "text-[#6B7280] hover:text-[#374151]",
               )}
               onClick={() => onTabChange(t.id)}
@@ -736,7 +753,7 @@ function CandidateDetailPopover({
           {tab === "documents" ? (
             candidate.resumeName || candidate.resumeUrl ? (
               <div className="flex items-center gap-2 rounded-lg border border-[#E5E7EB] px-3 py-2.5">
-                <FileText className="size-4 text-[#7C3AED]" />
+                <FileText className="size-4 text-primary" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[11px] font-medium text-[#111827]">
                     {candidate.resumeName || "Resume"}
@@ -746,7 +763,7 @@ function CandidateDetailPopover({
                       href={candidate.resumeUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-[10px] text-[#7C3AED] hover:underline"
+                      className="text-[10px] text-primary hover:underline"
                     >
                       Open
                     </a>
@@ -773,7 +790,7 @@ function CandidateDetailPopover({
               <ol className="space-y-2">
                 {history.map((h, i) => (
                   <li key={`${h.stage}-${i}`} className="flex gap-2 text-[11px]">
-                    <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[#7C3AED]" />
+                    <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-primary" />
                     <div>
                       <p className="font-medium text-[#111827]">{h.label}</p>
                       <p className="text-[10px] text-[#9CA3AF]">
@@ -817,12 +834,12 @@ function CandidateDetailPopover({
               className="h-8 cursor-pointer text-[11px] text-[#F43F5E]"
               onClick={onReject}
             >
-              Reject
+              Rejected
             </Button>
             <label className="inline-flex items-center gap-1.5 text-[11px] text-[#374151]">
               <span className="sr-only">Move stage</span>
               <select
-                className="h-8 cursor-pointer rounded-lg border border-[#E5E7EB] bg-white px-2 text-[11px] font-medium text-[#7C3AED] outline-none focus:ring-2 focus:ring-[#7C3AED]/30"
+                className="h-8 cursor-pointer rounded-lg border border-[#E5E7EB] bg-white px-2 text-[11px] font-medium text-primary outline-none focus:ring-2 focus:ring-primary/30"
                 value={application.stage}
                 onChange={(e) => onMoveStage(e.target.value as PipelineStage)}
               >

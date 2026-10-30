@@ -25,7 +25,7 @@ import {
   savePortalProgress,
   submitPortal,
 } from "@/services/onboarding-management-service";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import { MAX_DOCUMENT_BYTES, MAX_PHOTO_BYTES, readFileAsDataUrl } from "@/services/employee-management-service";
 import { MAX_SIGNATURE_BYTES, stampPoliciesWithSignature } from "@/lib/stamp-policy-signatures";
 import {
@@ -40,21 +40,21 @@ import type {
   PortalPayload,
   PortalStepId,
 } from "@/types/onboarding-management";
-import { PORTAL_STEPS, emptyEducationMarks } from "@/types/onboarding-management";
-import type { PortalDocumentSection } from "@/services/hr-setup-service";
 import {
-  maskAadhaar,
-  maskAccount,
-  maskEmail,
-  maskPan,
-  maskPhone,
-} from "@/lib/pii-mask";
+  LEGACY_PORTAL_STEPS,
+  PORTAL_STEPS,
+  emptyEducationMarks,
+} from "@/types/onboarding-management";
+import type { PortalDocumentSection } from "@/services/hr-setup-service";
+import { maskAccount, maskEmail, maskPhone } from "@/lib/pii-mask";
 import {
   ensureOnboardingPoliciesLoaded,
   listActivePoliciesForPortal,
   type PortalPolicyDoc,
 } from "@/services/onboarding-policies-service";
 import { DocumentPreviewContent } from "@/components/hr/shared/document-preview-content";
+import { DigitalSignaturePad } from "@/components/hr/shared/digital-signature-pad";
+import { LivePhotoCapture } from "@/components/hr/shared/live-photo-capture";
 
 const AADHAAR_LEN = 16;
 const PHONE_LEN = 10;
@@ -83,10 +83,56 @@ function hasPassportPhoto(data: PortalPayload): boolean {
   );
 }
 
+/** Latest signature upload (DOC-SIGN / kind=signature), newest first. */
+function findSignatureDocument(docs: OnboardingDocument[]): OnboardingDocument | undefined {
+  return [...docs]
+    .reverse()
+    .find(
+      (d) =>
+        d.kind === "signature" ||
+        d.typeCode === "DOC-SIGN" ||
+        Boolean(d.typeCode?.startsWith("DOC-SIGN-")),
+    );
+}
+
+/**
+ * Native file inputs cannot restore a File after refresh. Re-attach signature
+ * metadata from the persisted document so the Policies step shows Uploaded.
+ */
+function rehydratePortalSignature(portal: PortalPayload): PortalPayload {
+  const hasName = Boolean(portal.policies.signatureFileName?.trim());
+  const hasData = Boolean(portal.policies.signatureDataUrl?.trim());
+  if (hasName && hasData) return portal;
+
+  const sigDoc = findSignatureDocument(portal.documents);
+  if (!sigDoc) return portal;
+  if (!sigDoc.fileName && !sigDoc.fileDataUrl) return portal;
+
+  return {
+    ...portal,
+    policies: {
+      ...portal.policies,
+      signatureFileName: portal.policies.signatureFileName || sigDoc.fileName,
+      signatureDataUrl: portal.policies.signatureDataUrl || sigDoc.fileDataUrl,
+      signatureMimeType:
+        portal.policies.signatureMimeType || sigDoc.mimeType || "image/png",
+    },
+  };
+}
+
+/** Map removed portal steps onto the active Personal → Bank → Policies → Review flow. */
+function normalizePortalStep(step: PortalStepId): PortalStepId {
+  if ((LEGACY_PORTAL_STEPS as readonly string[]).includes(step)) {
+    return step === "documents" ? "policies" : "bank";
+  }
+  if (!PORTAL_STEPS.some((s) => s.id === step)) return "personal";
+  return step;
+}
+
 function validateStep(
   stepId: PortalStepId,
   portal: PortalPayload,
-  docTypes: PortalDocumentType[],
+  _docTypes: PortalDocumentType[],
 ): string | null {
   switch (stepId) {
     case "personal": {
@@ -116,21 +162,14 @@ function validateStep(
         if (age < 18) return "Candidate must be at least 18 years old.";
       }
       if (!portal.personal.maritalStatus.trim()) return "Marital status is required.";
-      if (!hasPassportPhoto(portal)) return "Photo is required.";
+      if (!hasPassportPhoto(portal)) return "Capture a live photo to continue.";
       return null;
     }
-    case "government_ids": {
-      const aadhaar = digitsOnly(portal.governmentIds.aadhaar);
-      const pan = portal.governmentIds.pan.trim().toUpperCase();
-      if (aadhaar.length !== AADHAAR_LEN) {
-        return `Aadhaar must be exactly ${AADHAAR_LEN} digits.`;
-      }
-      if (!pan) return "PAN is required.";
-      if (!isValidPan(pan)) {
-        return "Wrong format - PAN must be 10 characters like ABCDE1234F.";
-      }
+    case "government_ids":
+    case "emergency":
+    case "documents":
+      // KYC / document uploads moved to the BG-check portal.
       return null;
-    }
     case "bank": {
       const account = digitsOnly(portal.bank.accountNumber);
       const ifsc = portal.bank.ifsc.trim().toUpperCase();
@@ -148,51 +187,6 @@ function validateStep(
       }
       return null;
     }
-    case "emergency": {
-      if (!portal.emergency.name.trim()) return "Emergency contact name is required.";
-      if (!portal.emergency.phone.trim()) return "Emergency contact phone number is required.";
-      if (!isValidPhone10(portal.emergency.phone)) {
-        return "Wrong format - phone must be exactly 10 digits.";
-      }
-      return null;
-    }
-    case "documents": {
-      if (!portal.documents.some((d) => d.kind === "resume" || d.typeCode === "DOC-RESUME")) {
-        return "Please upload your Resume (required).";
-      }
-      if (portal.documents.some((d) => d.verifyStatus === "rejected")) {
-        return "Please re-upload documents marked as rejected before continuing.";
-      }
-      const excludedFromMandatory = new Set([
-        "DOC-SLIPS",
-        "DOC-CERT",
-        "DOC-REL",
-        "DOC-RLV",
-        "DOC-PGDIP",
-        "doc-type-any-cert",
-        "doc-type-relieving",
-        "doc-type-relieving-letter",
-        "doc-type-slips",
-        "doc-type-pg-diploma",
-        "salary_slips",
-        "relieving_letter",
-        "other",
-      ]);
-      const missing = docTypes.filter(
-        (t) =>
-          t.mandatory &&
-          !t.multiple &&
-          !excludedFromMandatory.has(t.code) &&
-          !excludedFromMandatory.has(t.kind) &&
-          !portal.documents.some(
-            (d) => d.typeCode === t.code || d.typeCode?.startsWith(`${t.code}-`) || (!d.typeCode && d.kind === t.kind),
-          ),
-      );
-      if (missing.length) {
-        return `Please upload: ${missing.map((m) => m.name).join(", ")}.`;
-      }
-      return null;
-    }
     case "policies": {
       if (!portal.policies.agreed) {
         return "Please agree to the policies before continuing.";
@@ -201,7 +195,7 @@ function validateStep(
         Boolean(portal.policies.signatureDataUrl) ||
         Boolean(portal.policies.signatureFileName);
       if (!hasSignature) {
-        return "Please upload a digital signature file to continue.";
+        return "Please sign digitally to continue.";
       }
       return null;
     }
@@ -353,12 +347,20 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
           setDone(true);
         }
         setCaseRow(c);
-        const nextPortal = {
+        const nextPortal = rehydratePortalSignature({
           ...c.portal,
           educationMarks: c.portal.educationMarks ?? emptyEducationMarks(),
-          ...(hasRejected ? { currentStep: "documents" as const } : {}),
-        };
-        setPortal(nextPortal);
+          currentStep: normalizePortalStep(c.portal.currentStep),
+        });
+        applyPortal(nextPortal);
+        // Persist rehydrated signature fields if they lived only on the document row.
+        const pol = c.portal.policies;
+        const needsSigSync =
+          Boolean(nextPortal.policies.signatureDataUrl) &&
+          (!pol?.signatureDataUrl || !pol?.signatureFileName);
+        if (needsSigSync) {
+          void savePortalProgress(token, nextPortal, false).catch(() => undefined);
+        }
         setLoading(false);
       } catch (e) {
         if (cancelled) return;
@@ -546,7 +548,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
     file: File,
     typeCode?: string,
     personalPatch?: Partial<PortalPayload["personal"]>,
-    options?: { append?: boolean },
+    options?: { append?: boolean; policiesPatch?: Partial<PortalPayload["policies"]> },
   ): Promise<boolean> {
     let fileDataUrl: string;
     try {
@@ -597,9 +599,23 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
           }
           return d.kind !== kind;
         });
+    const policies =
+      kind === "signature"
+        ? {
+            ...p.policies,
+            ...options?.policiesPatch,
+            signatureFileName: file.name,
+            signatureDataUrl: fileDataUrl,
+            signatureMimeType: file.type || "image/png",
+            signature: "",
+          }
+        : options?.policiesPatch
+          ? { ...p.policies, ...options.policiesPatch }
+          : p.policies;
     const nextPortal: PortalPayload = {
       ...p,
       personal: personalPatch ? { ...p.personal, ...personalPatch } : p.personal,
+      policies,
       documents: [...rest, doc],
     };
 
@@ -709,18 +725,20 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
       let portalToSubmit = p;
       if (p.policies.agreed && p.policies.signatureDataUrl && policyDocs.length > 0) {
         try {
+          const signedAt = p.policies.acceptedAt || new Date().toISOString();
           const signedDocuments = await stampPoliciesWithSignature({
             policies: policyDocs,
             signatureDataUrl: p.policies.signatureDataUrl,
             signatureMimeType: p.policies.signatureMimeType,
             candidateName: `${p.personal.firstName} ${p.personal.lastName}`.trim(),
+            signedAt,
           });
           portalToSubmit = {
             ...p,
             policies: {
               ...p.policies,
               signedDocuments,
-              acceptedAt: p.policies.acceptedAt || new Date().toISOString(),
+              acceptedAt: signedAt,
             },
           };
           applyPortal(portalToSubmit);
@@ -743,7 +761,7 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
         setError("Could not submit onboarding. Please try again.");
       }
     } catch (e) {
-      setError(e instanceof ApiClientError ? e.message : "Could not submit onboarding. Please try again.");
+      setError(formatApiError(e, "Could not submit onboarding. Please try again."));
     } finally {
       setSaving(false);
     }
@@ -1148,30 +1166,31 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               </SetupField>
             </div>
             <div className="sm:col-span-2">
-              <FilePickField
-                label="Photo"
+              <LivePhotoCapture
+                label="Live photo"
                 required
-                accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                hint={
+                  photoUploading
+                    ? "Saving live photo…"
+                    : "Open your camera and capture a live photo · max 300 KB"
+                }
+                disabled={photoUploading}
                 fileName={
                   portal.personal.photoName ||
                   [...portal.documents]
                     .reverse()
                     .find((d) => d.kind === "photo" || d.typeCode === "DOC-PHOTO")?.fileName
                 }
-                hint={
-                  photoUploading
-                    ? "Uploading photo…"
-                    : "Upload passport size photo - max 300 KB, JPG or PNG only"
+                previewUrl={
+                  [...portal.documents]
+                    .reverse()
+                    .find((d) => d.kind === "photo" || d.typeCode === "DOC-PHOTO")?.fileDataUrl ||
+                  null
                 }
-                disabled={photoUploading}
-                onFile={async (file) => {
-                  if (!file) return;
-                  if (!file.type.startsWith("image/")) {
-                    setStepError("Photo must be an image file (JPG or PNG).");
-                    return;
-                  }
+                maxBytes={MAX_PHOTO_BYTES}
+                onCapture={async (file) => {
                   if (file.size > MAX_PHOTO_BYTES) {
-                    setStepError("Photo must be under 300 KB.");
+                    setStepError("Live photo must be under 300 KB.");
                     return;
                   }
                   setStepError(null);
@@ -1554,79 +1573,75 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                 type="checkbox"
                 className="mt-0.5 cursor-pointer"
                 checked={portal.policies.agreed}
-                onChange={(e) =>
-                  patchPortal({
+                onChange={(e) => {
+                  const p = currentPortal();
+                  if (!p) return;
+                  const nextPortal: PortalPayload = {
+                    ...p,
                     policies: {
-                      ...portal.policies,
+                      ...p.policies,
                       agreed: e.target.checked,
-                      policies: policyDocs.map((p) => p.id),
+                      policies: policyDocs.map((doc) => doc.id),
                       acceptedAt: e.target.checked ? new Date().toISOString() : undefined,
                     },
-                  })
-                }
+                  };
+                  applyPortal(nextPortal);
+                  void savePortalProgress(token, nextPortal, false).catch(() => undefined);
+                }}
               />
               <span>
                 I agree to the company policies listed above.
                 <span className="text-destructive"> *</span>
               </span>
             </label>
-            <SetupField
+            <DigitalSignaturePad
               label="Digital signature"
               required
-              hint="PNG or JPG image · max 100 KB - stamped on all policies at submit"
-            >
-              <div className="space-y-2">
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/jpg,.png,.jpg,.jpeg"
-                  className="block w-full cursor-pointer text-xs file:mr-2 file:cursor-pointer file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    if (file.size > MAX_SIGNATURE_BYTES) {
-                      setStepError("Signature file must be 100 KB or smaller.");
-                      e.target.value = "";
-                      return;
-                    }
-                    const okType =
-                      file.type === "image/png" ||
-                      file.type === "image/jpeg" ||
-                      file.type === "image/jpg" ||
-                      /\.(png|jpe?g)$/i.test(file.name);
-                    if (!okType) {
-                      setStepError("Upload a signature image (PNG or JPG).");
-                      e.target.value = "";
-                      return;
-                    }
-                    void (async () => {
-                      let fileDataUrl = "";
-                      try {
-                        fileDataUrl = await readFileAsDataUrl(file);
-                      } catch {
-                        setStepError("Could not read signature file. Try again.");
-                        return;
-                      }
-                      const policies = {
-                        ...portal.policies,
-                        signatureFileName: file.name,
-                        signatureDataUrl: fileDataUrl,
-                        signatureMimeType: file.type || "image/png",
+              hint="Sign with mouse or finger · printed bottom-right on all policies with date & time · max 100 KB"
+              valueDataUrl={
+                portal.policies.signatureDataUrl ||
+                findSignatureDocument(portal.documents)?.fileDataUrl ||
+                null
+              }
+              onChange={(dataUrl) => {
+                void (async () => {
+                  if (!dataUrl) {
+                    const p = currentPortal();
+                    if (!p) return;
+                    const nextPortal: PortalPayload = {
+                      ...p,
+                      policies: {
+                        ...p.policies,
+                        signatureFileName: "",
+                        signatureDataUrl: "",
+                        signatureMimeType: "",
                         signature: "",
-                      };
-                      patchPortal({ policies });
-                      const ok = await upsertDocument("signature", file, "DOC-SIGN");
-                      if (!ok) return;
-                      setStepError(null);
-                    })();
-                  }}
-                />
-                {portal.policies.signatureFileName ? (
-                  <p className="text-[11px] text-emerald-700">
-                    Uploaded: {portal.policies.signatureFileName}
-                  </p>
-                ) : null}
-              </div>
-            </SetupField>
+                      },
+                      documents: p.documents.filter(
+                        (d) =>
+                          d.kind !== "signature" &&
+                          d.typeCode !== "DOC-SIGN" &&
+                          !d.typeCode?.startsWith("DOC-SIGN-"),
+                      ),
+                    };
+                    applyPortal(nextPortal);
+                    void savePortalProgress(token, nextPortal, false).catch(() => undefined);
+                    return;
+                  }
+                  const blob = await (await fetch(dataUrl)).blob();
+                  if (blob.size > MAX_SIGNATURE_BYTES) {
+                    setStepError("Signature must be 100 KB or smaller. Try a simpler stroke.");
+                    return;
+                  }
+                  const file = new File([blob], `signature-${Date.now()}.png`, {
+                    type: "image/png",
+                  });
+                  const ok = await upsertDocument("signature", file, "DOC-SIGN");
+                  if (!ok) return;
+                  setStepError(null);
+                })();
+              }}
+            />
           </div>
         ) : null}
 
@@ -1641,100 +1656,32 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
               value={maskEmail(portal.personal.personalEmail || portal.personal.email) || "-"}
             />
             <ReviewRow label="Phone" value={maskPhone(portal.personal.phone) || "-"} />
-            <ReviewRow label="Aadhaar" value={maskAadhaar(portal.governmentIds.aadhaar) || "-"} />
-            <ReviewRow label="PAN" value={maskPan(portal.governmentIds.pan) || "-"} />
+            <ReviewRow
+              label="Live photo"
+              value={
+                portal.personal.photoName ||
+                [...portal.documents]
+                  .reverse()
+                  .find((d) => d.kind === "photo" || d.typeCode === "DOC-PHOTO")?.fileName ||
+                "-"
+              }
+            />
             <ReviewRow label="Bank" value={portal.bank.bankName || "-"} />
             <ReviewRow label="Account" value={maskAccount(portal.bank.accountNumber) || "-"} />
-            <ReviewRow
-              label="Emergency"
-              value={
-                portal.emergency.name
-                  ? `${portal.emergency.name} · ${maskPhone(portal.emergency.phone) || "-"}`
-                  : "-"
-              }
-            />
-            <ReviewRow
-              label="Education"
-              value={
-                portal.documents
-                  .filter(
-                    (d) =>
-                      d.kind === "education" ||
-                      d.typeCode === "DOC-10TH" ||
-                      d.typeCode === "DOC-12TH" ||
-                      d.typeCode === "DOC-GRAD" ||
-                      d.typeCode === "DOC-PGDIP",
-                  )
-                  .map((d) => d.fileName)
-                  .join(", ") || "-"
-              }
-            />
-            <ReviewRow
-              label="Certificates"
-              value={
-                portal.documents
-                  .filter((d) => d.typeCode === "DOC-CERT" || d.typeCode?.startsWith("DOC-CERT-"))
-                  .map((d) => d.fileName)
-                  .join(", ") || "-"
-              }
-            />
-            <ReviewRow
-              label="Cancelled Cheque / Passbook"
-              value={
-                portal.documents.find(
-                  (d) => d.typeCode === "DOC-CHEQUE" || d.kind === "cancelled_cheque",
-                )?.fileName || "-"
-              }
-            />
-            <ReviewRow
-              label="Offer & Appointment Letters"
-              value={
-                portal.documents
-                  .filter(
-                    (d) =>
-                      matchesDocTypeCode(d.typeCode, "DOC-REL") ||
-                      (!d.typeCode && d.kind === "relieving_letter"),
-                  )
-                  .map((d) => d.fileName)
-                  .join(", ") || "-"
-              }
-            />
-            <ReviewRow
-              label="Relieving Letters"
-              value={
-                portal.documents
-                  .filter((d) => matchesDocTypeCode(d.typeCode, "DOC-RLV"))
-                  .map((d) => d.fileName)
-                  .join(", ") || "-"
-              }
-            />
-            <ReviewRow
-              label="Last 3 Month Salary Slip"
-              value={
-                portal.documents
-                  .filter(
-                    (d) =>
-                      d.kind === "salary_slips" ||
-                      d.typeCode === "DOC-SLIPS" ||
-                      d.typeCode?.startsWith("DOC-SLIPS-"),
-                  )
-                  .map((d) => d.fileName)
-                  .join(", ") || "-"
-              }
-            />
-            <ReviewRow label="Documents" value={String(portal.documents.length)} />
+            <ReviewRow label="IFSC" value={portal.bank.ifsc || "-"} />
             <ReviewRow
               label="Policies"
               value={
                 portal.policies.agreed
-                  ? portal.policies.signatureFileName
-                    ? `Signed · ${portal.policies.signatureFileName}`
+                  ? portal.policies.signatureDataUrl || portal.policies.signatureFileName
+                    ? "Accepted · digitally signed"
                     : "Accepted"
                   : "Not accepted"
               }
             />
             <p className="text-muted-foreground">
-              After submit, HR will verify your documents. Employment details are assigned after you join.
+              KYC documents (Aadhaar, PAN, marksheets) are collected on the background-check
+              portal. After submit, HR will verify your details.
             </p>
           </div>
         ) : null}
@@ -1824,27 +1771,31 @@ export function CandidateOnboardingPortal({ token }: { token: string }) {
                     </p>
                   );
                 }
+                const hasFile = Boolean(doc.fileDataUrl?.trim());
                 return (
                   <>
-                    {doc.fileDataUrl ? (
+                    {hasFile ? (
                       <DocumentPreviewContent
                         fileName={doc.fileName || `${doc.label}.pdf`}
-                        dataUrl={doc.fileDataUrl}
+                        dataUrl={doc.fileDataUrl!}
                         mimeType={doc.mimeType || "application/pdf"}
-                        frameClassName="max-h-[55vh]"
+                        frameClassName="max-h-[55vh] min-h-[280px]"
                         viewOnly
                       />
-                    ) : null}
-                    {doc.body ? (
-                      <pre className="pointer-events-none whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
-                        {doc.body}
-                      </pre>
-                    ) : null}
-                    {!doc.fileDataUrl && !doc.body ? (
+                    ) : doc.body ? (
+                      <div className="rounded-lg border border-border/70 bg-muted/20 px-4 py-3">
+                        <p className="mb-2 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">
+                          Policy text
+                        </p>
+                        <pre className="pointer-events-none whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
+                          {doc.body}
+                        </pre>
+                      </div>
+                    ) : (
                       <p className="text-sm text-muted-foreground">
                         No policy content configured. Ask HR to update eDoc → Onboarding Policies.
                       </p>
-                    ) : null}
+                    )}
                   </>
                 );
               })()}
