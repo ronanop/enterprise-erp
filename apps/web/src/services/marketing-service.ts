@@ -709,6 +709,8 @@ export type MarketingTask = {
     content_provider_name?: string;
     approval_head_user_id?: string;
     approval_head_name?: string;
+    approval_head_user_ids?: string[];
+    approval_head_names?: string[];
     editor_user_id?: string;
     editor_name?: string;
     content_url?: string | null;
@@ -719,6 +721,7 @@ export type MarketingTask = {
     submission_kind?: "link" | "file" | string | null;
     file_storage_path?: string | null;
     improvement_comment?: string | null;
+    rejection_reason?: string | null;
   } | null;
 };
 
@@ -868,6 +871,18 @@ export async function submitDeliverableContent(
     body,
   });
   if (!res.data) throw new Error("Content submit failed");
+  return res.data;
+}
+
+export async function reviewDeliverableTask(
+  taskId: string,
+  body: { action: "approve" | "reject"; comment?: string },
+): Promise<MarketingTask> {
+  const res = await apiClient<MarketingTask>(`/marketing/tasks/${taskId}/review`, {
+    method: "POST",
+    body,
+  });
+  if (!res.data) throw new Error("Review failed");
   return res.data;
 }
 

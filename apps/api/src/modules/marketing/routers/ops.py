@@ -32,6 +32,7 @@ from modules.marketing.schemas import (
     TaskContentSubmitBody,
     TaskCreate,
     TaskResponse,
+    TaskReviewBody,
     TaskUpdate,
     TimeEntryCreate,
     TimeEntryResponse,
@@ -130,6 +131,25 @@ def submit_task_content(
     return APIResponse(message="OK", data=row)
 
 
+@tasks_router.post("/{task_id}/review", response_model=APIResponse[TaskResponse])
+def review_task_deliverable(
+    task_id: UUID,
+    body: TaskReviewBody,
+    ctx: Annotated[TenantContext, Depends(require_permission("marketing.content:approve"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Approval heads approve or reject a submitted deliverable from My Work / Tasks."""
+    row = TaskService(db).review_deliverable(
+        ctx,
+        task_id,
+        action=body.action,
+        comment=body.comment,
+    )
+    db.commit()
+    db.refresh(row)
+    return APIResponse(message="OK", data=row)
+
+
 @tasks_router.post("/{task_id}/annotations", response_model=APIResponse[TaskResponse])
 def add_task_annotation(
     task_id: UUID,
@@ -160,10 +180,17 @@ def download_task_submission_file(
     from fastapi.responses import FileResponse
 
     path, download_name, content_type = TaskService(db).resolve_submission_file(ctx, task_id)
+    ctype = (content_type or "application/octet-stream").split(";")[0].strip().lower()
+    # Images / video / PDF should open in the browser, not force-download.
+    inline = ctype.startswith(("image/", "video/", "audio/")) or ctype in {
+        "application/pdf",
+        "text/plain",
+    }
     return FileResponse(
         path=path,
-        media_type=content_type,
+        media_type=content_type or "application/octet-stream",
         filename=download_name,
+        content_disposition_type="inline" if inline else "attachment",
     )
 
 

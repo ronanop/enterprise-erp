@@ -215,20 +215,30 @@ class CampaignService:
             "self_checked": False,
         }
 
+        # Prefer campaign branch; fall back to session so branch-scoped UIs still match.
+        branch_id = campaign.branch_id or ctx.branch_id
+        # If only a provider (no editor), they own execution — keep assignee set so
+        # My Work / Tasks filters that look at assignee_user_id still surface the row.
+        owner_id = content_provider["user_id"] if content_provider else ctx.user_id
+        assignee_id = (
+            editor["user_id"]
+            if editor
+            else (content_provider["user_id"] if content_provider else None)
+        )
         return TaskService(self.db).create(
             ctx,
             company_id=campaign.company_id,
-            branch_id=campaign.branch_id,
+            branch_id=branch_id,
             campaign_id=campaign.id,
             title=resolved_title,
             description=notes,
             task_kind=dtype,
             due_at=due_at,
-            owner_user_id=content_provider["user_id"] if content_provider else ctx.user_id,
-            assignee_user_id=editor["user_id"] if editor else None,
+            owner_user_id=owner_id,
+            assignee_user_id=assignee_id,
             reviewer_user_id=primary_head["user_id"] if primary_head else None,
             metadata_json=metadata,
-            status="assigned" if editor else "draft",
+            status="assigned" if assignee_id else "draft",
         )
 
     def create_channel_program(

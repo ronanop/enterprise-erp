@@ -55,6 +55,8 @@ class ImagePostService:
 
         Uses company/tenant scope without pinning to session branch. Image posts are
         often created with a null branch; a strict branch equality filter would hide them.
+
+        Each marketing member only sees their own generations (created_by = session user).
         """
         stmt = select(MktGeneratedContent).where(MktGeneratedContent.is_deleted.is_(False))
         company = self._repo.resolve_list_company_id(ctx, company_id)
@@ -62,6 +64,8 @@ class ImagePostService:
             stmt = stmt.where(MktGeneratedContent.company_id == company)
         # branch_scoped=False so history stays visible across session branch changes
         stmt = self._repo.apply_mkt_filter(stmt, MktGeneratedContent, ctx, branch_scoped=False)
+        if ctx.user_id is not None:
+            stmt = stmt.where(MktGeneratedContent.created_by == ctx.user_id)
         rows = list(self.db.scalars(stmt).all())
         image_rows = [row for row in rows if _is_image_post(row)]
         image_rows.sort(key=lambda row: getattr(row, "created_at", None) or utcnow(), reverse=True)
@@ -70,6 +74,9 @@ class ImagePostService:
     def get_post(self, ctx: TenantContext, content_id: UUID) -> MktGeneratedContent:
         row = self._repo.get_by_id(MktGeneratedContent, ctx, content_id, branch_scoped=False)
         if row is None or not _is_image_post(row):
+            raise NotFoundException("Image post not found")
+        # Private studio: never expose another member's image by id.
+        if ctx.user_id is not None and row.created_by is not None and row.created_by != ctx.user_id:
             raise NotFoundException("Image post not found")
         return row
 

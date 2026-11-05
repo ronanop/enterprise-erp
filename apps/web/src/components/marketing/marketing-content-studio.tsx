@@ -523,7 +523,7 @@ export function MarketingContentStudio() {
     <div className="space-y-4">
       <PageHeader
         title="Content Studio"
-        description="Pick a use-case format (social, stationery, print, event), then generate. Open images in Canva to refine layers."
+        description="Available to every Marketing member. Your generations stay private — other teammates cannot see your images or spend. Pick a format, generate, then refine in Canva."
       />
 
       <nav

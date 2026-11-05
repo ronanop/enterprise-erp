@@ -28,10 +28,11 @@ class ContentService:
 
     def list_requests(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._repo.resolve_list_company_id(ctx, company_id)
-        return self._repo.list_by_company(MktContentRequest, ctx, cid, branch_scoped=True)
+        # Null branch_id is common on deliverable submissions; don't hide them.
+        return self._repo.list_by_company(MktContentRequest, ctx, cid, branch_scoped=False)
 
     def get_request(self, ctx: TenantContext, row_id: UUID) -> MktContentRequest:
-        row = self._repo.get_by_id(MktContentRequest, ctx, row_id, branch_scoped=True)
+        row = self._repo.get_by_id(MktContentRequest, ctx, row_id, branch_scoped=False)
         if row is None:
             raise NotFoundException("Content request not found")
         return row
@@ -80,10 +81,10 @@ class ContentService:
 
     def list_content(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._repo.resolve_list_company_id(ctx, company_id)
-        return self._repo.list_by_company(MktGeneratedContent, ctx, cid, branch_scoped=True)
+        return self._repo.list_by_company(MktGeneratedContent, ctx, cid, branch_scoped=False)
 
     def get_content(self, ctx: TenantContext, row_id: UUID) -> MktGeneratedContent:
-        row = self._repo.get_by_id(MktGeneratedContent, ctx, row_id, branch_scoped=True)
+        row = self._repo.get_by_id(MktGeneratedContent, ctx, row_id, branch_scoped=False)
         if row is None:
             raise NotFoundException("Generated content not found")
         return row
@@ -265,10 +266,10 @@ class ContentService:
         )
 
         cid = self._repo.resolve_list_company_id(ctx, company_id)
-        requests = self._repo.list_by_company(MktContentRequest, ctx, cid, branch_scoped=True)
+        requests = self._repo.list_by_company(MktContentRequest, ctx, cid, branch_scoped=False)
         contents = {
             c.content_request_id: c
-            for c in self._repo.list_by_company(MktGeneratedContent, ctx, cid, branch_scoped=True)
+            for c in self._repo.list_by_company(MktGeneratedContent, ctx, cid, branch_scoped=False)
         }
         role = marketing_module_role(self.db, ctx)
         is_admin = is_marketing_module_admin(self.db, ctx)
@@ -399,16 +400,20 @@ class ContentService:
             req.status = ContentRequestStatus.COMPLETED.value
             inputs["review_status"] = "approved"
             inputs["improvement_comment"] = None
+            inputs["rejection_reason"] = None
         elif action_key == "reject":
+            # Send back for rework — makers can resubmit; reason is visible to everyone.
             content.status = ContentStatus.REJECTED.value
-            req.status = ContentRequestStatus.CANCELLED.value
+            req.status = ContentRequestStatus.DRAFT.value
             inputs["review_status"] = "rejected"
             inputs["improvement_comment"] = comment_text
+            inputs["rejection_reason"] = comment_text
         else:
             content.status = ContentStatus.DRAFT.value
             req.status = ContentRequestStatus.DRAFT.value
             inputs["review_status"] = "needs_improvement"
             inputs["improvement_comment"] = comment_text
+            inputs["rejection_reason"] = comment_text
 
         content.updated_at = utcnow()
         content.updated_by = ctx.user_id
@@ -421,9 +426,10 @@ class ContentService:
             meta = dict(task.metadata_json) if isinstance(task.metadata_json, dict) else {}
             meta["submission_status"] = inputs["review_status"]
             meta["improvement_comment"] = inputs.get("improvement_comment")
+            meta["rejection_reason"] = inputs.get("rejection_reason")
             task_status = {
                 "approve": "completed",
-                "reject": "cancelled",
+                "reject": "assigned",
                 "improve": "assigned",
             }[action_key]
             TaskService(self.db).update(ctx, task.id, status=task_status, metadata_json=meta)

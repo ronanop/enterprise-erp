@@ -1,13 +1,14 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link2, ListTodo, Loader2, RefreshCw, Upload } from "lucide-react";
+import { Check, Link2, ListTodo, Loader2, RefreshCw, Upload, X } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import { MarketingSignedInProfile } from "@/components/marketing/marketing-signed-in-profile";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { canViewAllModuleScreens } from "@/lib/module-access";
 import { formatApiError } from "@/services/api-client";
@@ -16,6 +17,7 @@ import {
   executeMarketingTask,
   listMarketingTasks,
   listMarketingTeamMembers,
+  reviewDeliverableTask,
   submitDeliverableContent,
   type MarketingTask,
   type MarketingTeamMember,
@@ -60,6 +62,7 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
   const [selfChecked, setSelfChecked] = useState(false);
   const [delegateTo, setDelegateTo] = useState("");
   const [teamMembers, setTeamMembers] = useState<MarketingTeamMember[]>([]);
+  const [reviewComment, setReviewComment] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -101,20 +104,49 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
     );
   }
 
+  function isApprovalHead(task: MarketingTask): boolean {
+    const uid = user?.id;
+    if (!uid) return false;
+    const meta = task.metadata_json;
+    if (sameUser(meta?.approval_head_user_id, uid) || sameUser(task.reviewer_user_id, uid)) {
+      return true;
+    }
+    return (meta?.approval_head_user_ids ?? []).some((id) => sameUser(id, uid));
+  }
+
+  function approvalHeadsLabel(task: MarketingTask): string {
+    const meta = task.metadata_json;
+    const names = (meta?.approval_head_names ?? []).filter(Boolean);
+    if (names.length) return names.join(", ");
+    return meta?.approval_head_name || "-";
+  }
+
   function canSubmitContent(task: MarketingTask): boolean {
     if (!isDeliverable(task)) return false;
     if (["completed", "cancelled"].includes(task.status)) return false;
     const meta = task.metadata_json;
-    if (meta?.submission_status === "approved") return false;
+    const submission = (meta?.submission_status || "").toLowerCase();
+    if (submission === "approved") return false;
+    // Waiting on approval — makers should not re-submit until reject/improve.
+    if (submission === "in_review" || task.status === "in_review") return false;
+    if (viewAll) return true;
+    return isMaker(task);
+  }
+
+  function canReviewContent(task: MarketingTask): boolean {
+    if (!isDeliverable(task)) return false;
+    if (["completed", "cancelled"].includes(task.status)) return false;
+    const meta = task.metadata_json;
+    const submission = (meta?.submission_status || "").toLowerCase();
+    if (submission !== "in_review" && task.status !== "in_review") return false;
     if (viewAll) return true;
     if (
-      moduleRoles.marketing === "marketing_head" ||
-      moduleRoles.marketing === "marketing_associate" ||
-      moduleRoles.marketing === "content_creator"
+      moduleRoles.marketing === "approval_head" ||
+      moduleRoles.marketing === "marketing_head"
     ) {
-      return true;
+      return isApprovalHead(task) || moduleRoles.marketing === "marketing_head";
     }
-    return isMaker(task);
+    return isApprovalHead(task);
   }
 
   function canTransfer(task: MarketingTask): boolean {
@@ -132,6 +164,7 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
     const meta = task.metadata_json;
     setExpandedId((prev) => (prev === task.id ? null : task.id));
     setSubmitError(null);
+    setReviewComment("");
     setContentUrl(meta?.external_link || (meta?.content_url?.startsWith("http") ? meta.content_url : "") || "");
     setDocumentName(meta?.document_name || "");
     setNotes(meta?.submission_notes || "");
@@ -147,34 +180,108 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
     }
   }
 
+  async function onReview(taskId: string, action: "approve" | "reject") {
+    if (action === "reject" && !reviewComment.trim()) {
+      setSubmitError("Add a reason before rejecting.");
+      return;
+    }
+    setBusy(true);
+    setSubmitError(null);
+    setError(null);
+    try {
+      await reviewDeliverableTask(taskId, {
+        action,
+        comment: reviewComment.trim() || undefined,
+      });
+      setExpandedId(null);
+      setReviewComment("");
+      await reload();
+    } catch (err) {
+      setSubmitError(formatApiError(err, action === "approve" ? "Approve failed" : "Reject failed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function submissionLabel(task: MarketingTask): string {
+    const meta = task.metadata_json;
+    if (meta?.document_name) return meta.document_name;
+    if (meta?.external_link && /^https?:\/\//i.test(meta.external_link)) return "Open link";
+    if (meta?.content_url && /^https?:\/\//i.test(meta.content_url)) return "Open link";
+    if (meta?.file_storage_path || meta?.submission_kind === "file") return "Open file";
+    return "Open";
+  }
+
+  function hasOpenableSubmission(task: MarketingTask): boolean {
+    const meta = task.metadata_json;
+    if (!meta) return false;
+    if (meta.external_link && /^https?:\/\//i.test(meta.external_link)) return true;
+    if (meta.content_url && /^https?:\/\//i.test(meta.content_url)) return true;
+    if (meta.file_storage_path) return true;
+    if (meta.content_url?.includes("submission-file")) return true;
+    if (meta.submission_kind === "file" && meta.document_name) return true;
+    return false;
+  }
+
   async function openSubmittedContent(task: MarketingTask) {
     const meta = task.metadata_json;
-    const external = meta?.external_link;
-    if (external && /^https?:\/\//i.test(external)) {
-      window.open(external, "_blank", "noopener,noreferrer");
-      return;
+    // Prefer real external http(s) links (Canva / Drive / share URLs).
+    for (const candidate of [meta?.external_link, meta?.content_url]) {
+      if (candidate && /^https?:\/\//i.test(candidate)) {
+        window.open(candidate, "_blank", "noopener,noreferrer");
+        return;
+      }
     }
-    const contentUrlValue = meta?.content_url;
-    if (contentUrlValue && /^https?:\/\//i.test(contentUrlValue)) {
-      window.open(contentUrlValue, "_blank", "noopener,noreferrer");
-      return;
+
+    const hasFile =
+      Boolean(meta?.file_storage_path) ||
+      meta?.submission_kind === "file" ||
+      Boolean(meta?.content_url?.includes("submission-file"));
+    if (!hasFile) {
+      throw new Error("No link or file attached yet");
     }
-    if (meta?.file_storage_path || contentUrlValue?.includes("/submission-file")) {
-      const token = getAccessToken();
-      const res = await fetch(`${getApiUrl()}/marketing/tasks/${task.id}/submission-file`, {
-        headers: {
-          Accept: "*/*",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
-      if (!res.ok) throw new Error("Could not download file");
-      const blob = await res.blob();
-      const objectUrl = URL.createObjectURL(blob);
-      window.open(objectUrl, "_blank", "noopener,noreferrer");
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-      return;
+
+    const token = getAccessToken();
+    const base = getApiUrl().replace(/\/+$/, "");
+    const res = await fetch(`${base}/marketing/tasks/${task.id}/submission-file`, {
+      headers: {
+        Accept: "*/*",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    });
+    if (!res.ok) {
+      throw new Error(res.status === 404 ? "File not found" : "Could not open file");
     }
-    throw new Error("No content attached yet");
+    const raw = await res.blob();
+    const headerType = (res.headers.get("content-type") || "").split(";")[0].trim();
+    const name = (meta?.document_name || "").toLowerCase();
+    const guessed =
+      headerType && headerType !== "application/octet-stream"
+        ? headerType
+        : name.endsWith(".png")
+          ? "image/png"
+          : name.endsWith(".jpg") || name.endsWith(".jpeg")
+            ? "image/jpeg"
+            : name.endsWith(".webp")
+              ? "image/webp"
+              : name.endsWith(".gif")
+                ? "image/gif"
+                : name.endsWith(".mp4")
+                  ? "video/mp4"
+                  : name.endsWith(".webm")
+                    ? "video/webm"
+                    : name.endsWith(".pdf")
+                      ? "application/pdf"
+                      : raw.type || "application/octet-stream";
+    const blob =
+      guessed && guessed !== raw.type ? new Blob([await raw.arrayBuffer()], { type: guessed }) : raw;
+    const objectUrl = URL.createObjectURL(blob);
+    const opened = window.open(objectUrl, "_blank", "noopener,noreferrer");
+    if (!opened) {
+      // Popup blocked — fall back to same-tab navigation.
+      window.location.assign(objectUrl);
+    }
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 120_000);
   }
 
   async function onExecute(id: string) {
@@ -269,7 +376,7 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
     <div className="space-y-4">
       <PageHeader
         title="Tasks"
-        description="Open a deliverable to attach a brochure link or document, then submit it for approval."
+        description="Makers submit content; assigned approval heads approve or reject with a reason. Status updates for everyone on the deliverable."
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
             <MarketingSignedInProfile />
@@ -339,6 +446,7 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
                   const open = expandedId === row.id;
                   const meta = row.metadata_json;
                   const canSubmit = canSubmitContent(row);
+                  const canReview = canReviewContent(row);
                   return (
                     <Fragment key={row.id}>
                       <tr
@@ -356,9 +464,10 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
                               Content: {meta.content_provider_name}
                             </p>
                           ) : null}
-                          {meta?.improvement_comment ? (
+                          {meta?.rejection_reason || meta?.improvement_comment ? (
                             <p className="mt-1 text-[12px] text-amber-700 dark:text-amber-400">
-                              Improve: {meta.improvement_comment}
+                              {meta.submission_status === "rejected" ? "Rejected: " : "Feedback: "}
+                              {meta.rejection_reason || meta.improvement_comment}
                             </p>
                           ) : null}
                         </td>
@@ -383,21 +492,25 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
                           </Badge>
                         </td>
                         <td className="px-4 py-2.5 text-muted-foreground">
-                          {meta?.content_url || meta?.document_name || meta?.external_link ? (
+                          {hasOpenableSubmission(row) ? (
                             <button
                               type="button"
-                              className="inline-flex cursor-pointer items-center gap-1 text-primary transition-colors duration-200 hover:underline"
-                              onClick={() => {
+                              className="inline-flex max-w-[16rem] cursor-pointer items-center gap-1.5 text-left text-primary transition-colors duration-200 hover:underline"
+                              title={submissionLabel(row)}
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 void openSubmittedContent(row).catch((err) =>
                                   setError(formatApiError(err, "Could not open content")),
                                 );
                               }}
                             >
-                              <Link2 className="size-3.5" aria-hidden />
-                              {meta?.submission_kind === "file" || meta?.file_storage_path
-                                ? meta?.document_name || "File"
-                                : "Open link"}
+                              <Link2 className="size-3.5 shrink-0" aria-hidden />
+                              <span className="truncate">{submissionLabel(row)}</span>
                             </button>
+                          ) : meta?.document_name || meta?.submission_notes ? (
+                            <span className="truncate text-muted-foreground" title={meta.document_name || undefined}>
+                              {meta.document_name || "Notes only"}
+                            </span>
                           ) : (
                             "-"
                           )}
@@ -436,9 +549,11 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
                           <td colSpan={6} className="px-4 py-3">
                             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                               <p className="text-[12px] font-medium text-foreground">
-                                {canSubmit
-                                  ? "Attach brochure / content link and submit for approval"
-                                  : "Deliverable details"}
+                                {canReview
+                                  ? "Review submitted content — approve or reject with a reason"
+                                  : canSubmit
+                                    ? "Attach brochure / content link and submit for approval"
+                                    : "Deliverable details"}
                               </p>
                               {meta?.submission_status ? (
                                 <Badge variant="outline" className="text-[10px] uppercase">
@@ -446,23 +561,81 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
                                 </Badge>
                               ) : null}
                             </div>
-                            <div className="mb-3 grid gap-2 text-[12px] text-muted-foreground md:grid-cols-3">
-                              <p>
-                                <span className="font-medium text-foreground">Content: </span>
-                                {meta?.content_provider_name ?? "-"}
-                              </p>
-                              <p>
-                                <span className="font-medium text-foreground">Approval: </span>
-                                {meta?.approval_head_name ?? "-"}
-                              </p>
-                              <p>
-                                <span className="font-medium text-foreground">Editor: </span>
-                                {meta?.editor_name ?? "-"}
-                              </p>
+                            <div className="mb-3 flex flex-wrap gap-2 text-[12px]">
+                              <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-border/60 bg-background px-2.5 py-1 text-muted-foreground">
+                                <span className="font-medium text-foreground">Content</span>
+                                <span className="truncate">{meta?.content_provider_name ?? "-"}</span>
+                              </span>
+                              <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-border/60 bg-background px-2.5 py-1 text-muted-foreground">
+                                <span className="font-medium text-foreground">Approval</span>
+                                <span className="truncate">{approvalHeadsLabel(row)}</span>
+                              </span>
+                              <span className="inline-flex max-w-full items-center gap-1 rounded-md border border-border/60 bg-background px-2.5 py-1 text-muted-foreground">
+                                <span className="font-medium text-foreground">Editor</span>
+                                <span className="truncate">{meta?.editor_name ?? "-"}</span>
+                              </span>
                             </div>
+                            {(meta?.rejection_reason || meta?.improvement_comment) &&
+                            meta?.submission_status !== "approved" ? (
+                              <div className="mb-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-900 dark:text-amber-200">
+                                <span className="font-medium">
+                                  {meta.submission_status === "rejected"
+                                    ? "Rejection reason: "
+                                    : "Feedback: "}
+                                </span>
+                                {meta.rejection_reason || meta.improvement_comment}
+                              </div>
+                            ) : null}
+                            {canReview ? (
+                              <div className="mb-3 space-y-2 rounded-md border border-border/60 bg-background/80 p-3">
+                                <p className="text-[12px] text-muted-foreground">
+                                  Open the submission above, then approve or reject. Reject requires a
+                                  reason — it is shown to the content provider and editor, and they can
+                                  resubmit.
+                                </p>
+                                <Textarea
+                                  value={reviewComment}
+                                  onChange={(e) => setReviewComment(e.target.value)}
+                                  placeholder="Reason for reject (required) / optional note for approve"
+                                  className="min-h-[4rem] text-sm"
+                                  disabled={busy}
+                                  aria-label="Review reason"
+                                />
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="h-9 cursor-pointer gap-1.5 transition-colors duration-200"
+                                    disabled={busy}
+                                    onClick={() => void onReview(row.id, "approve")}
+                                  >
+                                    {busy ? (
+                                      <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                                    ) : (
+                                      <Check className="size-3.5" aria-hidden />
+                                    )}
+                                    Approve
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="destructive"
+                                    className="h-9 cursor-pointer gap-1.5 transition-colors duration-200"
+                                    disabled={busy}
+                                    onClick={() => void onReview(row.id, "reject")}
+                                  >
+                                    <X className="size-3.5" aria-hidden />
+                                    Reject
+                                  </Button>
+                                  {submitError ? (
+                                    <p className="text-[12px] text-destructive">{submitError}</p>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ) : null}
                             {canSubmit ? (
-                              <>
-                                <div className="mb-2 flex flex-wrap gap-2">
+                              <div className="max-w-2xl space-y-3 rounded-md border border-border/60 bg-background/80 p-3">
+                                <div className="flex flex-wrap gap-2">
                                   <Button
                                     type="button"
                                     size="sm"
@@ -471,7 +644,7 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
                                     disabled={busy}
                                     onClick={() => setSubmitMode("link")}
                                   >
-                                    <Link2 className="size-3.5" aria-hidden />
+                                    <Link2 className="size-3.5 shrink-0" aria-hidden />
                                     Submit link
                                   </Button>
                                   <Button
@@ -482,89 +655,121 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
                                     disabled={busy}
                                     onClick={() => setSubmitMode("file")}
                                   >
-                                    <Upload className="size-3.5" aria-hidden />
+                                    <Upload className="size-3.5 shrink-0" aria-hidden />
                                     Upload file
                                   </Button>
                                 </div>
-                                <div className="grid gap-2 md:grid-cols-3">
-                                  {submitMode === "link" ? (
+
+                                {submitMode === "link" ? (
+                                  <label className="block space-y-1">
+                                    <span className="text-[11px] font-medium text-muted-foreground">
+                                      Content URL
+                                    </span>
                                     <Input
                                       value={contentUrl}
                                       onChange={(e) => setContentUrl(e.target.value)}
-                                      placeholder="Brochure / content URL"
+                                      placeholder="https://…"
                                       className="h-9"
                                       disabled={busy}
                                       aria-label="Content URL"
                                     />
-                                  ) : (
-                                    <div className="flex flex-col gap-1.5">
-                                      <input
-                                        ref={fileInputRef}
-                                        type="file"
-                                        className="hidden"
-                                        accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp,.zip,.ai,.psd"
-                                        onChange={(e) => {
-                                          const file = e.target.files?.[0] ?? null;
-                                          setSelectedFile(file);
-                                          if (file && !documentName.trim()) {
-                                            setDocumentName(file.name);
-                                          }
-                                        }}
-                                      />
+                                  </label>
+                                ) : (
+                                  <div className="space-y-2">
+                                    <input
+                                      ref={fileInputRef}
+                                      type="file"
+                                      className="hidden"
+                                      accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg,.webp,.zip,.ai,.psd"
+                                      onChange={(e) => {
+                                        const file = e.target.files?.[0] ?? null;
+                                        setSelectedFile(file);
+                                        if (file && !documentName.trim()) {
+                                          setDocumentName(file.name);
+                                        }
+                                      }}
+                                    />
+                                    <div className="flex flex-wrap items-center gap-2">
                                       <Button
                                         type="button"
                                         size="sm"
                                         variant="outline"
-                                        className="h-9 cursor-pointer justify-start gap-1.5 transition-colors duration-200"
+                                        className="h-9 shrink-0 cursor-pointer gap-1.5 transition-colors duration-200"
                                         disabled={busy}
                                         onClick={() => fileInputRef.current?.click()}
                                       >
-                                        <Upload className="size-3.5" aria-hidden />
-                                        {selectedFile ? selectedFile.name : "Choose file…"}
+                                        <Upload className="size-3.5 shrink-0" aria-hidden />
+                                        {selectedFile ? "Change file" : "Choose file…"}
                                       </Button>
-                                      <p className="text-[11px] text-muted-foreground">
-                                        PDF, Office, image, or zip - max 25 MB
-                                      </p>
+                                      {selectedFile ? (
+                                        <span
+                                          className="min-w-0 flex-1 truncate rounded-md border border-border/60 bg-muted/40 px-2.5 py-1.5 text-[12px] text-foreground"
+                                          title={selectedFile.name}
+                                        >
+                                          {selectedFile.name}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[11px] text-muted-foreground">
+                                          PDF, Office, image, or zip — max 25 MB
+                                        </span>
+                                      )}
                                     </div>
-                                  )}
-                                  <Input
-                                    value={documentName}
-                                    onChange={(e) => setDocumentName(e.target.value)}
-                                    placeholder="Document name (e.g. Brochure v1)"
-                                    className="h-9"
-                                    disabled={busy}
-                                    aria-label="Document name"
-                                  />
-                                  <Input
-                                    value={notes}
-                                    onChange={(e) => setNotes(e.target.value)}
-                                    placeholder="Notes for approval head"
-                                    className="h-9"
-                                    disabled={busy}
-                                    aria-label="Submission notes"
-                                  />
+                                    <label className="block space-y-1">
+                                      <span className="text-[11px] font-medium text-muted-foreground">
+                                        Optional share link
+                                      </span>
+                                      <Input
+                                        value={contentUrl}
+                                        onChange={(e) => setContentUrl(e.target.value)}
+                                        placeholder="https://… (in addition to file)"
+                                        className="h-9"
+                                        disabled={busy}
+                                        aria-label="Optional content URL"
+                                      />
+                                    </label>
+                                  </div>
+                                )}
+
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                  <label className="block space-y-1">
+                                    <span className="text-[11px] font-medium text-muted-foreground">
+                                      Document name
+                                    </span>
+                                    <Input
+                                      value={documentName}
+                                      onChange={(e) => setDocumentName(e.target.value)}
+                                      placeholder="e.g. Brochure v1"
+                                      className="h-9"
+                                      disabled={busy}
+                                      aria-label="Document name"
+                                    />
+                                  </label>
+                                  <label className="block space-y-1">
+                                    <span className="text-[11px] font-medium text-muted-foreground">
+                                      Notes for approval head
+                                    </span>
+                                    <Input
+                                      value={notes}
+                                      onChange={(e) => setNotes(e.target.value)}
+                                      placeholder="Optional context"
+                                      className="h-9"
+                                      disabled={busy}
+                                      aria-label="Submission notes"
+                                    />
+                                  </label>
                                 </div>
-                                {submitMode === "file" ? (
-                                  <Input
-                                    value={contentUrl}
-                                    onChange={(e) => setContentUrl(e.target.value)}
-                                    placeholder="Optional share link (in addition to file)"
-                                    className="mt-2 h-9"
-                                    disabled={busy}
-                                    aria-label="Optional content URL"
-                                  />
-                                ) : null}
-                                <label className="mt-3 flex cursor-pointer items-center gap-2 text-[12px]">
+
+                                <label className="flex cursor-pointer items-start gap-2 text-[12px]">
                                   <input
                                     type="checkbox"
-                                    className="cursor-pointer"
+                                    className="mt-0.5 cursor-pointer"
                                     checked={selfChecked}
                                     disabled={busy}
                                     onChange={(e) => setSelfChecked(e.target.checked)}
                                   />
                                   <span>Self-check done — I reviewed this before approval</span>
                                 </label>
-                                <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
                                   <Button
                                     type="button"
                                     size="sm"
@@ -581,13 +786,14 @@ export function MarketingTaskBoard({ mineOnly = true }: { mineOnly?: boolean }) 
                                     <p className="text-[12px] text-destructive">{submitError}</p>
                                   ) : null}
                                 </div>
-                              </>
-                            ) : (
+                              </div>
+                            ) : !canReview ? (
                               <p className="text-[12px] text-muted-foreground">
-                                Only the assigned maker (provider/editor) or Marketing planner can
-                                submit content for this deliverable.
+                                {meta?.submission_status === "in_review" || row.status === "in_review"
+                                  ? "Waiting for an assigned approval head to approve or reject."
+                                  : "Assigned content provider / editor can submit. Assigned approval heads review after submit."}
                               </p>
-                            )}
+                            ) : null}
                             {canTransfer(row) ? (
                               <div className="mt-3 flex flex-wrap items-end gap-2 border-t border-border/50 pt-3">
                                 <label className="space-y-1">

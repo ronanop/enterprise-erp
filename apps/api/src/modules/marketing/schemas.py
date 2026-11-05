@@ -582,6 +582,13 @@ class TaskContentSubmitBody(BaseModel):
     approval_head_user_ids: list[UUID] | None = None
 
 
+class TaskReviewBody(BaseModel):
+    """Approve or reject a deliverable from My Work / Tasks."""
+
+    action: str  # approve | reject
+    comment: str | None = Field(default=None, max_length=4000)
+
+
 class TaskAnnotationCreate(BaseModel):
     kind: str  # image_mark | video_timestamp | text
     body: str = Field(..., min_length=1, max_length=2000)

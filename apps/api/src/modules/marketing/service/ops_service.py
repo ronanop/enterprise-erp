@@ -100,6 +100,32 @@ class TaskService:
         self._numbers = MarketingNumberService(db)
         self._ops = OpsEventService(db)
 
+    @staticmethod
+    def _involved_user_ids(row: MktTask) -> set[UUID]:
+        """Users who should see a task in My Work (columns + deliverable metadata)."""
+        ids: set[UUID | None] = {
+            row.owner_user_id,
+            row.assignee_user_id,
+            row.reviewer_user_id,
+            row.delegated_by_user_id,
+        }
+        meta = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+        for key in ("content_provider_user_id", "editor_user_id", "approval_head_user_id"):
+            raw = meta.get(key)
+            if raw:
+                try:
+                    ids.add(UUID(str(raw)))
+                except (TypeError, ValueError):
+                    pass
+        for raw in meta.get("approval_head_user_ids") or []:
+            if not raw:
+                continue
+            try:
+                ids.add(UUID(str(raw)))
+            except (TypeError, ValueError):
+                pass
+        return {uid for uid in ids if uid is not None}
+
     def list(
         self,
         ctx: TenantContext,
@@ -109,7 +135,9 @@ class TaskService:
         deliverables_only: bool = False,
     ):
         cid = self._repo.resolve_list_company_id(ctx, company_id)
-        rows = self._repo.list_by_company(MktTask, ctx, cid, branch_scoped=True)
+        # Deliverables often have null branch_id; strict session-branch equality hides
+        # assigned work from providers/editors/approval heads. Scope by company only.
+        rows = self._repo.list_by_company(MktTask, ctx, cid, branch_scoped=False)
         if campaign_id is not None:
             rows = [r for r in rows if r.campaign_id == campaign_id]
         if deliverables_only:
@@ -119,16 +147,11 @@ class TaskService:
                 if isinstance(r.metadata_json, dict) and r.metadata_json.get("is_deliverable") is True
             ]
         if mine and ctx.user_id:
-            rows = [
-                r
-                for r in rows
-                if ctx.user_id
-                in {r.owner_user_id, r.assignee_user_id, r.reviewer_user_id, r.delegated_by_user_id}
-            ]
+            rows = [r for r in rows if ctx.user_id in self._involved_user_ids(r)]
         return rows
 
     def get(self, ctx: TenantContext, row_id: UUID) -> MktTask:
-        row = self._repo.get_by_id(MktTask, ctx, row_id, branch_scoped=True)
+        row = self._repo.get_by_id(MktTask, ctx, row_id, branch_scoped=False)
         if row is None:
             raise NotFoundException("Task not found")
         return row
@@ -430,6 +453,35 @@ class TaskService:
         )
         return updated
 
+    def review_deliverable(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        *,
+        action: str,
+        comment: str | None = None,
+    ) -> MktTask:
+        """Approve / reject a submitted deliverable (approval heads on My Work)."""
+        from modules.marketing.service.content_service import ContentService
+
+        row = self.get(ctx, row_id)
+        meta = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+        if meta.get("is_deliverable") is not True:
+            raise ValidationException("Only campaign deliverables support this review action")
+        if not row.content_request_id:
+            raise ValidationException("Content must be submitted before it can be reviewed")
+        submission = (meta.get("submission_status") or "").strip().lower()
+        if row.status != "in_review" and submission != "in_review":
+            raise ValidationException("This deliverable is not waiting for approval")
+
+        ContentService(self.db).review_submission(
+            ctx,
+            row.content_request_id,
+            action=action,
+            comment=comment,
+        )
+        return self.get(ctx, row_id)
+
     def resolve_submission_file(self, ctx: TenantContext, row_id: UUID):
         """Return (path, download_name, content_type) for a deliverable upload."""
         from pathlib import Path
@@ -446,7 +498,27 @@ class TaskService:
         if not str(path).startswith(str(root.resolve())) or not path.is_file():
             raise NotFoundException("Uploaded file is missing on disk")
         download_name = meta.get("document_name") or path.name
-        content_type = meta.get("file_content_type") or "application/octet-stream"
+        content_type = (meta.get("file_content_type") or "").strip() or "application/octet-stream"
+        if content_type == "application/octet-stream":
+            suffix = path.suffix.lower()
+            by_ext = {
+                ".png": "image/png",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
+                ".gif": "image/gif",
+                ".webp": "image/webp",
+                ".svg": "image/svg+xml",
+                ".mp4": "video/mp4",
+                ".webm": "video/webm",
+                ".mov": "video/quicktime",
+                ".pdf": "application/pdf",
+            }
+            # Also sniff from display name when storage file has a hashed extension-less prefix.
+            name_l = str(download_name).lower()
+            for ext, mime in by_ext.items():
+                if suffix == ext or name_l.endswith(ext):
+                    content_type = mime
+                    break
         return path, str(download_name), str(content_type)
 
     def delegate(self, ctx: TenantContext, row_id: UUID, assignee_user_id: UUID) -> MktTask:
@@ -837,7 +909,7 @@ class WorkloadService:
 
     def overview(self, ctx: TenantContext, company_id: UUID | None = None) -> dict:
         cid = self._repo.resolve_company_id(ctx, company_id)
-        tasks = self._repo.list_by_company(MktTask, ctx, cid, branch_scoped=True)
+        tasks = self._repo.list_by_company(MktTask, ctx, cid, branch_scoped=False)
         by_user: dict[str, list[MktTask]] = defaultdict(list)
         for task in tasks:
             key = str(task.assignee_user_id or task.owner_user_id or "unassigned")
