@@ -1,23 +1,23 @@
 import type { ReactNode } from "react";
 
 import { HrStatusBadge } from "@/components/hr/hr-primitives";
-import { formatEmploymentTypeLabel } from "@/config/hr-master-options";
+import {
+  formatEmploymentTypeLabel,
+  formatRelationshipLabel,
+} from "@/config/hr-master-options";
 import type { EmployeeTableColumnKey } from "@/hooks/use-employee-table-prefs";
 import type { EmployeeRecord } from "@/types/employee-management";
 
 export function excelEntityCell(row: EmployeeRecord): string {
-  const blob = `${row.extension.employment.entityName || ""} ${row.companyName || ""}`.toLowerCase();
-  if (blob.includes("technolog")) return "Technologies";
-  if (blob.includes("digitech")) return "Digitech";
-  return row.extension.employment.entityName?.trim() || "-";
+  return (
+    row.extension.employment.entityName?.trim() ||
+    row.companyName?.trim() ||
+    "-"
+  );
 }
 
 export function excelOrganisationCell(row: EmployeeRecord): string {
-  const blob = `${row.extension.employment.entityName || ""} ${row.companyName || ""}`.toLowerCase();
-  if (blob.includes("digitech") || blob.includes("technolog") || blob.includes("cache")) {
-    return "Cache";
-  }
-  return row.companyName || row.branchName || "-";
+  return row.companyName?.trim() || row.branchName?.trim() || "-";
 }
 
 function dash(value?: string | null): string {
@@ -39,6 +39,8 @@ export function renderEmployeeCell(key: EmployeeTableColumnKey, row: EmployeeRec
   switch (key) {
     case "employeeCode":
       return <span className="font-mono text-xs text-muted-foreground">{row.employeeCode}</span>;
+    case "name":
+      return dash(row.displayName);
     case "entity":
       return excelEntityCell(row);
     case "organisation":
@@ -69,6 +71,21 @@ export function renderEmployeeCell(key: EmployeeTableColumnKey, row: EmployeeRec
       return dash(row.extension.personal.personalEmail);
     case "phone":
       return dash(row.mobile || row.extension.personal.mobile);
+    case "fatherName":
+      return dash(row.extension.personal.fatherName);
+    case "emergencyName":
+      return dash(row.extension.personal.emergency?.name);
+    case "emergencyRelation":
+      return dash(
+        formatRelationshipLabel(row.extension.personal.emergency?.relationship),
+      );
+    case "emergencyPhone":
+      return dash(row.extension.personal.emergency?.phone);
+    case "esi": {
+      const esic = row.extension.governmentIds?.esic?.trim();
+      if (esic) return esic;
+      return row.extension.salary?.esi ? "Yes" : "No";
+    }
     case "grade":
       return dash(row.extension.employment.grade);
     case "jobLevel":
@@ -91,8 +108,11 @@ export function renderEmployeeCell(key: EmployeeTableColumnKey, row: EmployeeRec
       return dash(row.extension.employment.confirmationDate);
     case "status":
       return <HrStatusBadge status={lifecycleLabel(row.lifecycleStatus)} />;
-    default:
+    default: {
+      const _exhaustive: never = key;
+      void _exhaustive;
       return "-";
+    }
   }
 }
 
@@ -110,6 +130,11 @@ export const EXACT_CASE_HEADER_COLUMNS = new Set<EmployeeTableColumnKey>([
   "phone",
   "personalEmail",
   "email",
+  "fatherName",
+  "emergencyName",
+  "emergencyRelation",
+  "emergencyPhone",
+  "esi",
   "gender",
   "dob",
   "joiningDate",

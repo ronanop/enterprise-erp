@@ -1002,20 +1002,12 @@ export function filterEmployees(
   const q = query.trim().toLowerCase();
   return records.filter((r) => {
     if (filters.branchId && r.branchId !== filters.branchId) return false;
-    if (filters.entityId) {
-      const eid = filters.entityId.toLowerCase();
-      const entityLabel = (
-        r.extension.employment.entityName ||
-        r.companyName ||
-        ""
-      ).toLowerCase();
-      if (eid === "technology" || eid === "technologies") {
-        if (!entityLabel.includes("technolog")) return false;
-      } else if (eid === "digitech") {
-        if (entityLabel.includes("technolog") || !entityLabel.includes("digitech")) return false;
-      } else if (r.companyId !== filters.entityId && r.extension.employment.entityId !== filters.entityId) {
-        return false;
-      }
+    if (
+      filters.entityId &&
+      r.companyId !== filters.entityId &&
+      r.extension.employment.entityId !== filters.entityId
+    ) {
+      return false;
     }
     if (filters.departmentId && r.departmentId !== filters.departmentId) return false;
     if (filters.designation && r.designationName !== filters.designation) return false;

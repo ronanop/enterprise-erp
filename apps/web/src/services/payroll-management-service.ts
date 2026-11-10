@@ -1825,6 +1825,19 @@ export function unlockPayrollMonth(month: string, reason: string): MonthLock | n
   return all[idx];
 }
 
+/** Salary revisions for one employee, newest effective date first. */
+export function listSalaryRevisionsForEmployee(employeeId: string): SalaryRevision[] {
+  const id = (employeeId || "").trim().toLowerCase();
+  if (!id) return [];
+  return load<SalaryRevision>(K.revisions)
+    .filter((r) => (r.employeeId || "").trim().toLowerCase() === id)
+    .sort((a, b) => {
+      const byDate = (b.effectiveDate || "").localeCompare(a.effectiveDate || "");
+      if (byDate !== 0) return byDate;
+      return (b.createdAt || "").localeCompare(a.createdAt || "");
+    });
+}
+
 export function createRevision(
   input: Omit<SalaryRevision, "id" | "createdAt">,
 ): SalaryRevision {

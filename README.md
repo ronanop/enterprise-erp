@@ -135,6 +135,12 @@ npm install
 npm run dev
 ```
 
+Biometric punches auto-fetch every 1 minute via Celery beat (`hr.biometric_fetch_punches`). Without Celery, run the always-on script from `apps/api`:
+
+```powershell
+.\scripts\run_fetch_biometric_punches.ps1
+```
+
 ## Quality checks
 
 ```bash

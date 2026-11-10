@@ -85,6 +85,7 @@ function mapEntity(row: SetupRow): SetupRow {
     ...row,
     code: row.company_code,
     name: row.company_name,
+    employee_code_prefix: String(row.employee_code_prefix ?? "").trim().toUpperCase(),
   };
 }
 
@@ -764,6 +765,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     columns: [
       { key: "name", label: "Entity" },
       { key: "code", label: "Code" },
+      { key: "employee_code_prefix", label: "Emp prefix" },
       { key: "status", label: "Status" },
     ],
     fields: [
@@ -778,6 +780,13 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         label: "Code",
         required: true,
         hint: "Company code used in Assign HR (e.g. DEMOCO)",
+      },
+      {
+        key: "employee_code_prefix",
+        label: "Employee code prefix",
+        required: true,
+        placeholder: "e.g. CDPL / CT / VPL",
+        hint: "Used on Excel import — CDPL0001 goes to this entity. Letters/numbers only, no hyphen.",
       },
       {
         key: "country_code",
@@ -822,10 +831,15 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     },
     buildCreateBody: (f) => {
       const companyName = String(f.company_name || "").trim();
+      const empPrefix = String(f.employee_code_prefix || "")
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "");
       return {
         company_code: String(f.company_code || "").trim().toUpperCase(),
         company_name: companyName,
         legal_name: companyName,
+        employee_code_prefix: empPrefix || null,
         country_code: f.country_code || "IN",
         currency_code: f.currency_code || "INR",
         timezone: "Asia/Kolkata",
@@ -842,10 +856,15 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     },
     buildUpdateBody: (f) => {
       const companyName = String(f.company_name || "").trim();
+      const empPrefix = String(f.employee_code_prefix || "")
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "");
       return {
         company_code: String(f.company_code || "").trim().toUpperCase() || undefined,
         company_name: companyName,
         legal_name: companyName,
+        employee_code_prefix: empPrefix || null,
         country_code: f.country_code || undefined,
         currency_code: f.currency_code || undefined,
         status: f.status,

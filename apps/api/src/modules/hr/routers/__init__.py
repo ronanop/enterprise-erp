@@ -1,5 +1,6 @@
 """HR REST routers."""
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -89,6 +90,7 @@ from modules.hr.schemas import (
     BiometricDeviceCreate,
     BiometricDeviceFeedResponse,
     BiometricDeviceResponse,
+    BiometricPunchResponse,
     DeviceSyncRequest,
     BiometricDownloadResponse,
     DeviceSyncResponse,
@@ -1422,7 +1424,7 @@ def download_biometric_logs(
     db: Annotated[Session, Depends(get_db)],
 ):
     result = BiometricDeviceService(db).download_logs(ctx, row_id)
-    return APIResponse(message="Attendance downloaded", data=result)
+    return APIResponse(message="Punches fetched", data=result)
 
 
 @biometric_devices_router.post("/{row_id}/rotate-api-key", response_model=APIResponse[dict])
@@ -1445,6 +1447,33 @@ def biometric_device_live_feed(
     return APIResponse(
         message="OK",
         data=BiometricDeviceService(db).live_feed(ctx, row_id, days=days),
+    )
+
+
+@attendance_router.get(
+    "/biometric-punches",
+    response_model=APIResponse[list[BiometricPunchResponse]],
+)
+def list_biometric_punches(
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    employee_id: UUID,
+    company_id: UUID | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    limit: int = 500,
+):
+    """List all stored biometric punches for an employee (across every device)."""
+    return APIResponse(
+        message="OK",
+        data=BiometricDeviceService(db).list_employee_punches(
+            ctx,
+            employee_id=employee_id,
+            company_id=company_id,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+        ),
     )
 
 

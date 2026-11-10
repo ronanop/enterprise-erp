@@ -23,7 +23,16 @@ import {
   loadAttendanceForEmployee,
   type AttendanceDirectory,
 } from "@/services/attendance-management-service";
+import { apiClient } from "@/services/api-client";
 import type { AttendanceRecord } from "@/types/attendance-management";
+
+type BiometricPunch = {
+  id: string;
+  device_code: string;
+  punched_at: string;
+  attendance_date: string;
+  employee_code?: string | null;
+};
 
 type StatusFilter = "all" | "present" | "absent" | "half_day";
 
@@ -120,6 +129,8 @@ export function EmployeeAttendanceExplorer({
   const [rowsLoading, setRowsLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [dayPunches, setDayPunches] = useState<BiometricPunch[]>([]);
+  const [dayPunchesLoading, setDayPunchesLoading] = useState(false);
 
   const searchWrapRef = useRef<HTMLDivElement>(null);
   const autoMonthRef = useRef("");
@@ -243,6 +254,36 @@ export function EmployeeAttendanceExplorer({
   }, [pageRows]);
 
   const selectedRow = pageRows.find((r) => r.id === selectedId) ?? null;
+
+  useEffect(() => {
+    if (!employeeId || !selectedRow?.attendanceDate) {
+      setDayPunches([]);
+      return;
+    }
+    let cancelled = false;
+    setDayPunchesLoading(true);
+    void apiClient<BiometricPunch[]>("/hr/attendance/biometric-punches", {
+      method: "GET",
+      query: {
+        employee_id: employeeId,
+        date_from: selectedRow.attendanceDate,
+        date_to: selectedRow.attendanceDate,
+        limit: 200,
+      },
+    })
+      .then((res) => {
+        if (!cancelled) setDayPunches(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch(() => {
+        if (!cancelled) setDayPunches([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDayPunchesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [employeeId, selectedRow?.attendanceDate]);
 
   const monthOptions = useMemo(() => {
     const set = new Set(recentMonths());
@@ -585,13 +626,46 @@ export function EmployeeAttendanceExplorer({
             </div>
             <div className="erp-scroll min-h-0 flex-1 overflow-auto p-3 text-xs">
               {selectedRow ? (
-                <div className="space-y-1.5">
-                  <p className="text-[11px] font-medium uppercase text-muted-foreground">Selected day</p>
-                  <p>Date {selectedRow.attendanceDate}</p>
-                  <p>Status {selectedRow.status.replace(/_/g, " ")}</p>
-                  <p>Check in {formatTime12(selectedRow.checkIn)}</p>
-                  <p>Check out {formatTime12(selectedRow.checkOut)}</p>
-                  <p>Hours {selectedRow.workingHours || "—"}</p>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] font-medium uppercase text-muted-foreground">Selected day</p>
+                    <p>Date {selectedRow.attendanceDate}</p>
+                    <p>Status {selectedRow.status.replace(/_/g, " ")}</p>
+                    <p>Check in {formatTime12(selectedRow.checkIn)}</p>
+                    <p>Check out {formatTime12(selectedRow.checkOut)}</p>
+                    <p>Hours {selectedRow.workingHours || "—"}</p>
+                  </div>
+                  <div className="space-y-1.5 border-t border-border/60 pt-3">
+                    <p className="text-[11px] font-medium uppercase text-muted-foreground">
+                      All punches (every device)
+                    </p>
+                    {dayPunchesLoading ? (
+                      <p className="text-muted-foreground">Loading punches…</p>
+                    ) : dayPunches.length === 0 ? (
+                      <p className="text-muted-foreground">No biometric punches stored for this day.</p>
+                    ) : (
+                      <ul className="space-y-1.5">
+                        {[...dayPunches]
+                          .sort(
+                            (a, b) =>
+                              new Date(a.punched_at).getTime() - new Date(b.punched_at).getTime(),
+                          )
+                          .map((p) => (
+                            <li
+                              key={p.id}
+                              className="flex items-center justify-between gap-2 rounded-md border border-border/60 px-2 py-1.5"
+                            >
+                              <span className="font-medium tabular-nums">
+                                {formatTime12(p.punched_at)}
+                              </span>
+                              <span className="font-mono text-[10px] text-muted-foreground">
+                                {p.device_code}
+                              </span>
+                            </li>
+                          ))}
+                      </ul>
+                    )}
+                  </div>
                 </div>
               ) : (
                 <p className="text-muted-foreground">Select a day in the list.</p>

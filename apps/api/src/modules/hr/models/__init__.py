@@ -39,6 +39,7 @@ from modules.hr.models.ot_allotment import HrOtAllotment
 from modules.hr.models.kpi import HrKpi
 from modules.hr.models.okr import HrOkr, HrOkrKeyResult
 from modules.hr.models.biometric_device import HrBiometricDevice
+from modules.hr.models.biometric_punch import HrBiometricPunch
 from modules.hr.models.compoff_request import HrCompoffRequest
 from modules.hr.models.shift_rotation import HrShiftRotation
 from modules.hr.models.shift_swap import HrShiftSwapRequest
@@ -74,6 +75,7 @@ __all__ = [
     "HrOkr",
     "HrOkrKeyResult",
     "HrBiometricDevice",
+    "HrBiometricPunch",
     "HrCompoffRequest",
     "HrShiftRotation",
     "HrShiftSwapRequest",

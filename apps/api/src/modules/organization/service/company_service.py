@@ -50,6 +50,7 @@ class CompanyService:
         fiscal_year_start_month: int = 4,
         timezone: str = "Asia/Kolkata",
         status: str = "active",
+        employee_code_prefix: str | None = None,
     ):
         if self._repo.get_by_code(ctx, company_code):
             raise ConflictException("Company code already exists")
@@ -72,6 +73,7 @@ class CompanyService:
             fiscal_year_start_month=fiscal_year_start_month,
             timezone=timezone,
             status=status or "active",
+            employee_code_prefix=employee_code_prefix,
         )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,

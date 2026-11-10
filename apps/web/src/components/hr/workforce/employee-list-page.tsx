@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -58,15 +58,6 @@ import {
 } from "@/services/employee-management-service";
 import type { EmployeeListFilters, EmployeeRecord } from "@/types/employee-management";
 import { cn } from "@/lib/utils";
-import {
-  EMPLOYMENT_TYPE_FILTER_OPTIONS,
-  GENDER_OPTIONS,
-  LIFECYCLE_STATUS_OPTIONS,
-} from "@/config/hr-master-options";
-import {
-  listEmploymentTypeOptions,
-  type SetupMasterOption,
-} from "@/services/hr-setup-service";
 
 const EMPTY_FILTERS: EmployeeListFilters = {
   branchId: "",
@@ -104,9 +95,6 @@ export function EmployeeManagementPage() {
   } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [menuId, setMenuId] = useState<string | null>(null);
-  const [employmentTypeOptions, setEmploymentTypeOptions] = useState<SetupMasterOption[]>(
-    EMPLOYMENT_TYPE_FILTER_OPTIONS,
-  );
   const [columnsOpen, setColumnsOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -118,13 +106,9 @@ export function EmployeeManagementPage() {
       setRecords(first.records);
       setLoading(false);
 
-      const [{ records: rows, options: opts, errors }, employmentTypes] = await Promise.all([
-        loadEmployeeDirectory(),
-        listEmploymentTypeOptions(),
-      ]);
+      const { records: rows, options: opts, errors } = await loadEmployeeDirectory();
       setRecords(rows);
       setOptions(opts);
-      setEmploymentTypeOptions(employmentTypes);
       setDirectoryReady(true);
       if (errors.length) toast(errors.join(" · "), "info");
     } catch {
@@ -211,96 +195,6 @@ export function EmployeeManagementPage() {
     void load();
   }
 
-  function renderColumnFilter(key: EmployeeTableColumnKey): ReactNode {
-    switch (key) {
-      case "entity":
-        // Company/entity scope is the top-right header switcher — no table filter.
-        return null;
-      case "location":
-        return (
-          <HeaderFilterSelect
-            value={filters.location}
-            onChange={(v) => setFilters((f) => ({ ...f, location: v }))}
-            options={[
-              ...new Map(
-                (options?.locations ?? []).map((loc) => [
-                  loc.label.toLowerCase(),
-                  { value: loc.label, label: loc.label },
-                ]),
-              ).values(),
-            ]}
-          />
-        );
-      case "designation":
-        return (
-          <HeaderFilterSelect
-            value={filters.designation}
-            onChange={(v) => setFilters((f) => ({ ...f, designation: v }))}
-            options={[...new Set(records.map((r) => r.designationName))]
-              .filter(Boolean)
-              .map((d) => ({ value: d, label: d }))}
-          />
-        );
-      case "department":
-        return (
-          <HeaderFilterSelect
-            value={filters.departmentId}
-            onChange={(v) => setFilters((f) => ({ ...f, departmentId: v }))}
-            options={options?.departments.map((d) => ({ value: d.id, label: d.label })) ?? []}
-          />
-        );
-      case "reportingManager":
-        return (
-          <HeaderFilterSelect
-            value={filters.reportingManagerId}
-            onChange={(v) => setFilters((f) => ({ ...f, reportingManagerId: v }))}
-            options={options?.managers.map((m) => ({ value: m.id, label: m.label })) ?? []}
-          />
-        );
-      case "employmentType":
-        return (
-          <HeaderFilterSelect
-            value={filters.employmentType}
-            onChange={(v) => setFilters((f) => ({ ...f, employmentType: v }))}
-            options={employmentTypeOptions.map((t) => ({
-              value: t.value,
-              label: t.label,
-            }))}
-          />
-        );
-      case "gender":
-        return (
-          <HeaderFilterSelect
-            value={filters.gender}
-            onChange={(v) => setFilters((f) => ({ ...f, gender: v }))}
-            options={GENDER_OPTIONS.map((g) => ({ value: g.value, label: g.label }))}
-          />
-        );
-      case "joiningDate":
-        return (
-          <Input
-            type="date"
-            className="h-7 w-full min-w-[110px] text-[10px]"
-            value={filters.joiningFrom}
-            onChange={(e) => setFilters((f) => ({ ...f, joiningFrom: e.target.value }))}
-          />
-        );
-      case "status":
-        return (
-          <HeaderFilterSelect
-            value={filters.status}
-            onChange={(v) => setFilters((f) => ({ ...f, status: v }))}
-            options={LIFECYCLE_STATUS_OPTIONS.map((s) => ({
-              value: s.value,
-              label: s.label,
-            }))}
-          />
-        );
-      default:
-        return null;
-    }
-  }
-
   return (
     <div className="space-y-5">
       <SetupToastHost />
@@ -376,6 +270,22 @@ export function EmployeeManagementPage() {
               placeholder="Search name, ID, email, phone…"
               className="h-8 w-full max-w-xs text-xs"
             />
+            <SetupSelect
+              className={cn(
+                "h-8 w-[180px] cursor-pointer text-xs",
+                filters.entityId && "border-primary/40 bg-primary/5 font-medium",
+              )}
+              value={filters.entityId}
+              onChange={(e) => setFilters((f) => ({ ...f, entityId: e.target.value }))}
+              aria-label="Filter by entity"
+            >
+              <option value="">All entities</option>
+              {(options?.companies ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.label}
+                </option>
+              ))}
+            </SetupSelect>
             <div className="relative">
               <Button
                 type="button"
@@ -385,7 +295,7 @@ export function EmployeeManagementPage() {
                 onClick={() => setColumnsOpen((open) => !open)}
               >
                 <Columns3 className="size-3.5" />
-                Columns
+                Edit columns
               </Button>
               {columnsOpen ? (
                 <>
@@ -395,9 +305,9 @@ export function EmployeeManagementPage() {
                     aria-label="Close column picker"
                     onClick={() => setColumnsOpen(false)}
                   />
-                  <div className="absolute top-9 left-0 z-20 max-h-72 w-56 overflow-y-auto rounded-lg border border-border bg-card p-2 shadow-md">
+                  <div className="absolute top-9 left-0 z-20 max-h-80 w-64 overflow-y-auto rounded-lg border border-border bg-card p-2 shadow-md">
                     <p className="px-1.5 pb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      Show columns
+                      Excel fields — add or remove
                     </p>
                     {(Object.keys(EMPLOYEE_TABLE_COLUMN_LABELS) as EmployeeTableColumnKey[]).map(
                       (key) => {
@@ -432,13 +342,18 @@ export function EmployeeManagementPage() {
                 </>
               ) : null}
             </div>
-            <button
-              type="button"
-              className="cursor-pointer text-xs font-medium text-primary hover:underline"
-              onClick={() => setFilters(EMPTY_FILTERS)}
-            >
-              Clear filters
-            </button>
+            {filters.entityId || query ? (
+              <button
+                type="button"
+                className="cursor-pointer text-xs font-medium text-primary hover:underline"
+                onClick={() => {
+                  setFilters(EMPTY_FILTERS);
+                  setQuery("");
+                }}
+              >
+                Clear filters
+              </button>
+            ) : null}
           </div>
 
           <div className="space-y-3">
@@ -531,13 +446,18 @@ export function EmployeeManagementPage() {
                             />
                           </th>
                           {orderedVisibleColumns.map((key) => (
-                            <HeaderFilterTh
-                              key={key}
-                              label={EMPLOYEE_TABLE_COLUMN_LABELS[key]}
-                              exactCase={EXACT_CASE_HEADER_COLUMNS.has(key)}
-                            >
-                              {renderColumnFilter(key)}
-                            </HeaderFilterTh>
+                            <th key={key} className="px-2 py-2.5 align-middle">
+                              <span
+                                className={cn(
+                                  "block whitespace-nowrap text-[10px] font-semibold tracking-wide text-muted-foreground",
+                                  EXACT_CASE_HEADER_COLUMNS.has(key)
+                                    ? "normal-case"
+                                    : "uppercase",
+                                )}
+                              >
+                                {EMPLOYEE_TABLE_COLUMN_LABELS[key]}
+                              </span>
+                            </th>
                           ))}
                           <th className="w-12 px-2 py-2" />
                         </tr>
@@ -665,60 +585,5 @@ export function EmployeeManagementPage() {
         }}
       />
     </div>
-  );
-}
-
-function HeaderFilterTh({
-  label,
-  children,
-  exactCase = false,
-}: {
-  label: string;
-  children?: ReactNode;
-  /** Keep label casing (Excel-style) instead of forcing uppercase */
-  exactCase?: boolean;
-}) {
-  return (
-    <th className="px-1.5 py-2 align-bottom">
-      <div className="space-y-1">
-        <span
-          className={cn(
-            "block whitespace-nowrap text-[10px] font-semibold tracking-wide text-muted-foreground",
-            exactCase ? "normal-case" : "uppercase",
-          )}
-        >
-          {label}
-        </span>
-        {children ?? <span className="block h-7" />}
-      </div>
-    </th>
-  );
-}
-
-function HeaderFilterSelect({
-  value,
-  onChange,
-  options,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <SetupSelect
-      className={cn(
-        "h-7 w-full min-w-[88px] max-w-[130px] cursor-pointer px-1.5 text-[10px]",
-        value && "border-primary/40 bg-primary/5 font-medium",
-      )}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option value="">All</option>
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label}
-        </option>
-      ))}
-    </SetupSelect>
   );
 }

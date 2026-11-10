@@ -21,6 +21,7 @@ class CompanyCreateRequest(BaseModel):
     city: str | None = None
     state_name: str | None = None
     postal_code: str | None = None
+    employee_code_prefix: str | None = Field(default=None, max_length=20)
     fiscal_year_start_month: int = 4
     timezone: str = "Asia/Kolkata"
     status: str = "active"
@@ -42,6 +43,7 @@ class CompanyUpdateRequest(BaseModel):
     city: str | None = None
     state_name: str | None = None
     postal_code: str | None = None
+    employee_code_prefix: str | None = Field(default=None, max_length=20)
 
 
 class CompanyResponse(BaseModel):
@@ -65,6 +67,7 @@ class CompanyResponse(BaseModel):
     city: str | None = None
     state_name: str | None = None
     postal_code: str | None = None
+    employee_code_prefix: str | None = None
     created_at: datetime | None = None
     created_by: UUID | None = None
     updated_at: datetime | None = None

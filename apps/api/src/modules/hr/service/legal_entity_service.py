@@ -1,5 +1,6 @@
 """HR Setup → Legal Entities - tenant-wide org_company master (same rows as Assign HR)."""
 
+import re
 from uuid import UUID
 
 from sqlalchemy import select
@@ -11,6 +12,12 @@ from modules.platform.compat.audit_facade import PlatformAuditFacade
 from modules.organization.models.company import OrgCompany
 from modules.organization.repository.company_repository import CompanyRepository
 from modules.organization.service.company_service import CompanyService
+
+
+def normalize_employee_code_prefix(raw: str | None) -> str | None:
+    """Letters/digits only, uppercased, no hyphen/spaces. Empty → None."""
+    cleaned = re.sub(r"[^A-Za-z0-9]", "", (raw or "").strip().upper())
+    return cleaned or None
 
 
 class HrLegalEntityService:
@@ -34,6 +41,12 @@ class HrLegalEntityService:
         return [CompanyRepository._to_entity(row) for row in rows]
 
     def create(self, ctx: TenantContext, **fields):
+        if "employee_code_prefix" in fields:
+            fields["employee_code_prefix"] = normalize_employee_code_prefix(
+                fields.get("employee_code_prefix")  # type: ignore[arg-type]
+            )
+        if isinstance(fields.get("company_code"), str):
+            fields["company_code"] = fields["company_code"].strip().upper()
         return self._companies.create_company(ctx, **fields)
 
     def update(self, ctx: TenantContext, company_id: UUID, **fields):
@@ -47,6 +60,10 @@ class HrLegalEntityService:
                 existing = self._repo.get_by_code(ctx, code)
                 if existing is not None and existing.id != company_id:
                     raise ConflictException("Company code already exists")
+        if "employee_code_prefix" in fields:
+            fields["employee_code_prefix"] = normalize_employee_code_prefix(
+                fields.get("employee_code_prefix")  # type: ignore[arg-type]
+            )
         company = self._repo.update(ctx, company_id, **fields)
         if company is None:
             raise NotFoundException("Legal entity not found")

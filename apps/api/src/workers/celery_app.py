@@ -21,6 +21,11 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     beat_schedule={
+        # Pull ZK/K40 punches into attendance every minute (idempotent by emp+date).
+        "hr-biometric-fetch-punches": {
+            "task": "hr.biometric_fetch_punches",
+            "schedule": 60.0,
+        },
         "hr-attendance-auto-absent": {
             "task": "hr.attendance_auto_absent",
             "schedule": 3600.0,  # hourly; safe if idempotent per day

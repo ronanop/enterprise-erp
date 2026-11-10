@@ -1,5 +1,6 @@
-"""Comp Off request + biometric device repositories."""
+"""Comp Off request + biometric device / punch repositories."""
 
+from datetime import date, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from modules.foundation.domain.value_objects import TenantContext
 from modules.hr.models.biometric_device import HrBiometricDevice
+from modules.hr.models.biometric_punch import HrBiometricPunch
 from modules.hr.models.compoff_request import HrCompoffRequest
 from modules.hr.repository.base import HrScopedRepository, utcnow
 
@@ -132,3 +134,144 @@ class BiometricDeviceRepository(HrScopedRepository):
         row.version = int(row.version or 1) + 1
         self.db.flush()
         return True
+
+
+class BiometricPunchRepository(HrScopedRepository):
+    def __init__(self, db: Session) -> None:
+        super().__init__(db)
+
+    def find_live(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        device_code: str,
+        employee_code_raw: str,
+        punched_at: datetime,
+    ) -> HrBiometricPunch | None:
+        stmt = select(HrBiometricPunch).where(
+            HrBiometricPunch.company_id == company_id,
+            HrBiometricPunch.device_code == device_code,
+            HrBiometricPunch.employee_code_raw == employee_code_raw,
+            HrBiometricPunch.punched_at == punched_at,
+            HrBiometricPunch.is_deleted.is_(False),
+        )
+        stmt = self.apply_hr_filter(stmt, HrBiometricPunch, ctx, branch_scoped=True)
+        return self.db.scalar(stmt)
+
+    def upsert(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        device_id: UUID | None,
+        device_code: str,
+        employee_id: UUID | None,
+        employee_code_raw: str,
+        punched_at: datetime,
+        attendance_date: date,
+        notes: str | None = None,
+    ) -> tuple[HrBiometricPunch, bool]:
+        """Insert punch if new. Returns (row, created)."""
+        existing = self.find_live(
+            ctx,
+            company_id=company_id,
+            device_code=device_code,
+            employee_code_raw=employee_code_raw,
+            punched_at=punched_at,
+        )
+        if existing is not None:
+            # Backfill employee match if a later sync resolves the code.
+            if employee_id and existing.employee_id is None:
+                existing.employee_id = employee_id
+                existing.updated_at = utcnow()
+                existing.updated_by = ctx.user_id
+                existing.version = int(existing.version or 1) + 1
+                self.db.flush()
+            return existing, False
+
+        row = HrBiometricPunch(
+            id=uuid4(),
+            tenant_id=ctx.tenant_id,
+            company_id=company_id,
+            branch_id=branch_id,
+            device_id=device_id,
+            device_code=device_code,
+            employee_id=employee_id,
+            employee_code_raw=employee_code_raw,
+            punched_at=punched_at,
+            attendance_date=attendance_date,
+            notes=notes,
+            created_by=ctx.user_id,
+            updated_by=ctx.user_id,
+        )
+        self.db.add(row)
+        self.db.flush()
+        return row, True
+
+    def list_for_employee_date(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        employee_id: UUID,
+        attendance_date: date,
+    ) -> list[HrBiometricPunch]:
+        stmt = (
+            select(HrBiometricPunch)
+            .where(
+                HrBiometricPunch.company_id == company_id,
+                HrBiometricPunch.employee_id == employee_id,
+                HrBiometricPunch.attendance_date == attendance_date,
+                HrBiometricPunch.is_deleted.is_(False),
+            )
+            .order_by(HrBiometricPunch.punched_at.asc())
+        )
+        stmt = self.apply_hr_filter(stmt, HrBiometricPunch, ctx, branch_scoped=True)
+        return list(self.db.scalars(stmt).all())
+
+    def list_for_employee(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID | None,
+        employee_id: UUID,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int = 500,
+    ) -> list[HrBiometricPunch]:
+        stmt = select(HrBiometricPunch).where(
+            HrBiometricPunch.employee_id == employee_id,
+            HrBiometricPunch.is_deleted.is_(False),
+        )
+        if company_id is not None:
+            stmt = stmt.where(HrBiometricPunch.company_id == company_id)
+        if date_from is not None:
+            stmt = stmt.where(HrBiometricPunch.attendance_date >= date_from)
+        if date_to is not None:
+            stmt = stmt.where(HrBiometricPunch.attendance_date <= date_to)
+        stmt = self.apply_hr_filter(stmt, HrBiometricPunch, ctx, branch_scoped=True)
+        stmt = stmt.order_by(HrBiometricPunch.punched_at.desc()).limit(max(1, min(limit, 2000)))
+        return list(self.db.scalars(stmt).all())
+
+    def list_for_device(
+        self,
+        ctx: TenantContext,
+        *,
+        device_id: UUID,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int = 200,
+    ) -> list[HrBiometricPunch]:
+        stmt = select(HrBiometricPunch).where(
+            HrBiometricPunch.device_id == device_id,
+            HrBiometricPunch.is_deleted.is_(False),
+        )
+        if date_from is not None:
+            stmt = stmt.where(HrBiometricPunch.attendance_date >= date_from)
+        if date_to is not None:
+            stmt = stmt.where(HrBiometricPunch.attendance_date <= date_to)
+        stmt = self.apply_hr_filter(stmt, HrBiometricPunch, ctx, branch_scoped=True)
+        stmt = stmt.order_by(HrBiometricPunch.punched_at.desc()).limit(max(1, min(limit, 1000)))
+        return list(self.db.scalars(stmt).all())

@@ -2,6 +2,12 @@
 
 Hire-to-exit walkthrough (Recruitment → Onboarding → Employees → Attendance → Performance → Payroll → Offboarding), plus Org Setup / Leave Setup and all primary sidebar panes.
 
+## Start here (how-to)
+
+| File | Description |
+|------|-------------|
+| [`HRMS-How-To-Manual.md`](./HRMS-How-To-Manual.md) | Step-by-step: Dashboard, Recruitment, Onboarding, Workforce (no Performance), Payroll through Payslip, EDoc, Org Setup, IT & Admin, Offboarding |
+
 ## Outputs
 
 | File | Description |

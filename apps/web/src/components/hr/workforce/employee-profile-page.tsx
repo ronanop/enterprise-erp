@@ -21,7 +21,6 @@ import {
   Eye,
   FileText,
   GraduationCap,
-  KeyRound,
   Landmark,
   Laptop,
   Pencil,
@@ -63,8 +62,10 @@ import {
 } from "@/services/employee-management-service";
 import type { BgDocumentDisplay } from "@/services/bg-check-portal-service";
 import { ApiClientError, resourceService } from "@/services/api-client";
-import { hrEssPoliciesService } from "@/services/hr-ess-policies-service";
+import { listSalaryRevisionsForEmployee } from "@/services/payroll-management-service";
+import { formatInr } from "@/services/payroll-service";
 import { listEntityOptions } from "@/services/hr-setup-service";
+import type { SalaryRevision } from "@/types/payroll-management";
 import { resolveOrgHeadsForEmployment } from "@/lib/hr/org-heads";
 import {
   formatEmploymentTypeLabel,
@@ -130,8 +131,18 @@ const EDIT_SECTIONS: {
   { id: "personal", title: "Personal & contact", description: "Identity, contact details, addresses, and emergency contact.", icon: UserRound },
   { id: "employment", title: "Employment", description: "Organisation, role, manager, work location, and status.", icon: Building2 },
   { id: "government", title: "Government IDs", description: "Tax, identity, statutory, and licence details.", icon: ShieldCheck },
-  { id: "bank", title: "Bank account", description: "Salary account details collected during onboarding.", icon: Landmark },
-  { id: "salary", title: "Payroll & salary", description: "Salary structure, statutory deductions, and tax setup.", icon: BriefcaseBusiness },
+  {
+    id: "bank",
+    title: "Bank account",
+    description: "Personal onboarding account and company-opened salary account.",
+    icon: Landmark,
+  },
+  {
+    id: "salary",
+    title: "Payroll & salary",
+    description: "Salary structure, statutory deductions, tax setup, and salary credit account.",
+    icon: BriefcaseBusiness,
+  },
   { id: "education", title: "Education", description: "Qualifications, institutions, and certificates.", icon: GraduationCap },
   { id: "history", title: "Previous employment", description: "Prior employers and work history.", icon: Contact },
   { id: "documents", title: "Documents", description: "Employee documents and file metadata.", icon: FileText },
@@ -145,6 +156,7 @@ type LinkedData = {
   payslips: Record<string, unknown>[];
   salaries: Record<string, unknown>[];
   separation: Record<string, unknown>[];
+  salaryRevisions: SalaryRevision[];
 };
 
 function asRows(data: unknown): Record<string, unknown>[] {
@@ -312,7 +324,12 @@ function validateEditSection(
   if (section === "employment") return validateEmploymentEdit(draft.employment);
   if (section === "government") return validateGovernmentEdit(draft.governmentIds);
   if (section === "bank") {
-    return validateBankEdit(draft.bank, "Salary account");
+    const personalErr = validateBankEdit(draft.bank, "Personal account (onboarding)");
+    if (personalErr) return personalErr;
+    if (bankFilled(draft.companyBank)) {
+      return validateBankEdit(draft.companyBank, "Company salary account");
+    }
+    return null;
   }
   if (section === "education") return validateEducationEdit(draft.education);
   if (section === "history") return validateHistoryEdit(draft.previousEmployment);
@@ -373,6 +390,44 @@ async function loadLinkedData(employeeId: string, employeeCode: string): Promise
     payslips: filter(asRows(payslips.data)),
     salaries: filter(asRows(salaries.data)),
     separation: filter(asRows(separation.data)),
+    salaryRevisions: listSalaryRevisionsForEmployee(employeeId),
+  };
+}
+
+function salaryCreditLabel(bank?: BankDetails | null): string {
+  if (!bankFilled(bank)) return "-";
+  const parts = [
+    bank?.bankName?.trim(),
+    bank?.accountNumber ? maskAccount(bank.accountNumber) : "",
+    bank?.ifsc?.trim() ? `IFSC ${bank.ifsc.trim()}` : "",
+  ].filter(Boolean);
+  return parts.join(" · ") || "-";
+}
+
+function latestEffectiveSalary(salaries: Record<string, unknown>[]): {
+  ctc: string;
+  basic: string;
+  structure: string;
+  effectiveFrom: string;
+} | null {
+  if (!salaries.length) return null;
+  const sorted = [...salaries].sort((a, b) =>
+    String(b.effective_from ?? b.effective_date ?? "").localeCompare(
+      String(a.effective_from ?? a.effective_date ?? ""),
+    ),
+  );
+  const row = sorted[0]!;
+  const ctc =
+    row.ctc ??
+    row.annual_ctc ??
+    row.ctc_amount ??
+    (row.monthly_ctc != null ? Number(row.monthly_ctc) * 12 : row.gross);
+  const basic = row.basic_salary ?? row.basic ?? row.basic_amount;
+  return {
+    ctc: ctc != null && String(ctc).trim() ? String(ctc) : "-",
+    basic: basic != null && String(basic).trim() ? String(basic) : "-",
+    structure: String(row.structure_name ?? row.salary_structure_id ?? "-"),
+    effectiveFrom: String(row.effective_from ?? row.effective_date ?? "-").slice(0, 10),
   };
 }
 
@@ -474,23 +529,6 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
     }
   }
 
-  async function forceEssPasswordReset() {
-    if (!record) return;
-    const ok = window.confirm(
-      "Require this employee to change their password on the next ESS login?",
-    );
-    if (!ok) return;
-    try {
-      await hrEssPoliciesService.forcePasswordReset(record.id);
-      toast("ESS password reset required on next login", "success");
-    } catch (err) {
-      toast(
-        err instanceof ApiClientError ? err.message : "Force password reset failed",
-        "error",
-      );
-    }
-  }
-
   const attendanceMonthOptions = useMemo(() => {
     const months = new Set<string>();
     for (const r of linked?.attendance ?? []) {
@@ -560,15 +598,6 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
             >
               <Pencil className="size-3.5" />
               Edit
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="cursor-pointer transition-colors duration-200"
-              onClick={() => void forceEssPasswordReset()}
-            >
-              <KeyRound className="size-3.5" />
-              Require ESS password change
             </Button>
           </div>
         }
@@ -660,22 +689,48 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
         ) : null}
 
         {tab === "bank" ? (
-          <Section title="Salary Account">
-            <p className="mb-2 text-xs text-muted-foreground">
-              Verified account details provided by the employee during onboarding.
-            </p>
-            {bankFilled(record.extension.bank) ? (
-              <EmsFormGrid>
-                <Info label="Bank" value={record.extension.bank.bankName || "-"} />
-                <Info label="Holder" value={record.extension.bank.accountHolderName || "-"} />
-                <Info label="IFSC" value={record.extension.bank.ifsc || "-"} />
-                <Info label="Account" value={maskAccount(record.extension.bank.accountNumber)} />
-                <Info label="Branch" value={record.extension.bank.branchName || "-"} />
-              </EmsFormGrid>
-            ) : (
-              <p className="text-xs text-muted-foreground">No verified bank details on file.</p>
-            )}
-          </Section>
+          <div className="space-y-5">
+            <Section title="Personal account (onboarding)">
+              <p className="mb-2 text-xs text-muted-foreground">
+                Account details provided by the employee during onboarding.
+              </p>
+              {bankFilled(record.extension.bank) ? (
+                <EmsFormGrid>
+                  <Info label="Bank" value={record.extension.bank.bankName || "-"} />
+                  <Info label="Holder" value={record.extension.bank.accountHolderName || "-"} />
+                  <Info label="IFSC" value={record.extension.bank.ifsc || "-"} />
+                  <Info label="Account" value={maskAccount(record.extension.bank.accountNumber)} />
+                  <Info label="Branch" value={record.extension.bank.branchName || "-"} />
+                </EmsFormGrid>
+              ) : (
+                <p className="text-xs text-muted-foreground">No personal bank details on file.</p>
+              )}
+            </Section>
+            <Section title="Company salary account">
+              <p className="mb-2 text-xs text-muted-foreground">
+                Salary account opened by the company after hire.
+              </p>
+              {bankFilled(record.extension.companyBank) ? (
+                <EmsFormGrid>
+                  <Info label="Bank" value={record.extension.companyBank.bankName || "-"} />
+                  <Info
+                    label="Holder"
+                    value={record.extension.companyBank.accountHolderName || "-"}
+                  />
+                  <Info label="IFSC" value={record.extension.companyBank.ifsc || "-"} />
+                  <Info
+                    label="Account"
+                    value={maskAccount(record.extension.companyBank.accountNumber)}
+                  />
+                  <Info label="Branch" value={record.extension.companyBank.branchName || "-"} />
+                </EmsFormGrid>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No company salary account recorded yet. Add it via Edit → Bank account.
+                </p>
+              )}
+            </Section>
+          </div>
         ) : null}
 
         {tab === "documents" ? (
@@ -783,45 +838,11 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
         ) : null}
 
         {tab === "payroll" ? (
-          <div className="space-y-4">
-            <Section title="Salary Structure">
-              <EmsFormGrid>
-                <Info label="CTC" value={record.extension.salary.ctc || "-"} />
-                <Info label="Basic" value={record.extension.salary.basicSalary || "-"} />
-                <Info label="Structure" value={record.extension.salary.salaryStructure || "-"} />
-                <Info label="Payroll group" value={record.extension.salary.payrollGroup || "-"} />
-                <Info label="Tax regime" value={record.extension.salary.incomeTaxRegime || "-"} />
-              </EmsFormGrid>
-              {(linked?.salaries.length ?? 0) > 0 ? (
-                <div className="mt-3">
-                  <DataTableTab
-                    loading={false}
-                    empty=""
-                    columns={["Structure", "Effective", "CTC", "Status"]}
-                    rows={(linked?.salaries ?? []).map((r) => [
-                      String(r.structure_name ?? r.salary_structure_id ?? "-"),
-                      String(r.effective_from ?? "-"),
-                      String(r.ctc ?? r.gross ?? "-"),
-                      String(r.status ?? "-"),
-                    ])}
-                  />
-                </div>
-              ) : null}
-            </Section>
-            <Section title="Payslips">
-              <DataTableTab
-                loading={linkedLoading}
-                empty="No payslips for this employee."
-                columns={["Document", "Period", "Net", "Status"]}
-                rows={(linked?.payslips ?? []).map((r) => [
-                  String(r.document_number ?? r.payslip_code ?? r.id ?? "-"),
-                  String(r.period_label ?? r.payroll_period_id ?? r.month ?? "-"),
-                  String(r.net_pay ?? r.net_amount ?? "-"),
-                  String(r.status ?? "-"),
-                ])}
-              />
-            </Section>
-          </div>
+          <PayrollSalaryStructureTab
+            record={record}
+            linked={linked}
+            linkedLoading={linkedLoading}
+          />
         ) : null}
 
         {tab === "separation" ? (
@@ -1410,11 +1431,28 @@ function BankFields({
 
 function BankForm({ draft, update }: EditFormProps) {
   return (
-    <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">
-        This is the employee&apos;s verified salary account from onboarding.
-      </p>
-      <BankFields required value={draft.bank} onChange={(bank) => update({ bank })} />
+    <div className="space-y-6">
+      <div className="space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Personal account (onboarding)</h3>
+          <p className="text-xs text-muted-foreground">
+            Account the employee added during onboarding.
+          </p>
+        </div>
+        <BankFields required value={draft.bank} onChange={(bank) => update({ bank })} />
+      </div>
+      <div className="space-y-3 border-t border-border/60 pt-4">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Company salary account</h3>
+          <p className="text-xs text-muted-foreground">
+            Account opened by the company for salary credit. Optional until available.
+          </p>
+        </div>
+        <BankFields
+          value={draft.companyBank}
+          onChange={(companyBank) => update({ companyBank })}
+        />
+      </div>
     </div>
   );
 }
@@ -1423,30 +1461,188 @@ function SalaryForm({ draft, update }: EditFormProps) {
   const s = draft.salary;
   const set = (salary: Partial<typeof s>) => update({ salary: { ...s, ...salary } });
   return (
+    <div className="space-y-6">
+      <div className="space-y-3">
+        <p className="text-xs text-muted-foreground">
+          Optional — same as hire wizard salary step. Revised amounts from Payroll appear on the
+          Payroll tab.
+        </p>
+        <EmsFormGrid>
+          <Field label="CTC" value={s.ctc} onChange={(ctc) => set({ ctc })} />
+          <Field
+            label="Basic salary"
+            value={s.basicSalary}
+            onChange={(basicSalary) => set({ basicSalary })}
+          />
+          <Field
+            label="Salary structure"
+            value={s.salaryStructure}
+            onChange={(salaryStructure) => set({ salaryStructure })}
+          />
+          <Field
+            label="Income tax regime"
+            value={s.incomeTaxRegime}
+            onChange={(incomeTaxRegime) => set({ incomeTaxRegime })}
+          />
+          <Toggle label="Provident fund (PF)" checked={s.pf} onChange={(pf) => set({ pf })} />
+          <Toggle
+            label="Employee state insurance (ESI)"
+            checked={s.esi}
+            onChange={(esi) => set({ esi })}
+          />
+          <Toggle
+            label="Professional tax"
+            checked={s.professionalTax}
+            onChange={(professionalTax) => set({ professionalTax })}
+          />
+        </EmsFormGrid>
+      </div>
+      <div className="space-y-3 border-t border-border/60 pt-4">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground">Salary credit account</h3>
+          <p className="text-xs text-muted-foreground">
+            Company-opened account used for salary credit.
+          </p>
+        </div>
+        <BankFields
+          value={draft.companyBank}
+          onChange={(companyBank) => update({ companyBank })}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PayrollSalaryStructureTab({
+  record,
+  linked,
+  linkedLoading,
+}: {
+  record: EmployeeRecord;
+  linked: LinkedData | null;
+  linkedLoading: boolean;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const revisions = linked?.salaryRevisions ?? [];
+  const activeRevision =
+    revisions.find((r) => (r.effectiveDate || "") <= today) ?? revisions[0] ?? null;
+  const upcomingRevision = revisions.find((r) => (r.effectiveDate || "") > today) ?? null;
+  const assigned = latestEffectiveSalary(linked?.salaries ?? []);
+
+  const baseCtc = record.extension.salary.ctc || "-";
+  const baseBasic = record.extension.salary.basicSalary || "-";
+  const currentCtc =
+    activeRevision != null
+      ? formatInr(activeRevision.newSalary)
+      : assigned && assigned.ctc !== "-"
+        ? assigned.ctc
+        : baseCtc;
+  const previousCtc =
+    activeRevision != null
+      ? formatInr(activeRevision.oldSalary)
+      : baseCtc !== currentCtc
+        ? baseCtc
+        : null;
+  const currentBasic =
+    assigned && assigned.basic !== "-" ? assigned.basic : baseBasic;
+  const structureName =
+    (assigned && assigned.structure !== "-"
+      ? assigned.structure
+      : record.extension.salary.salaryStructure) || "-";
+
+  return (
     <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">Optional - same as hire wizard salary step.</p>
-      <EmsFormGrid>
-        <Field label="CTC" value={s.ctc} onChange={(ctc) => set({ ctc })} />
-        <Field label="Basic salary" value={s.basicSalary} onChange={(basicSalary) => set({ basicSalary })} />
-        <Field
-          label="Salary structure"
-          value={s.salaryStructure}
-          onChange={(salaryStructure) => set({ salaryStructure })}
+      <Section title="Salary Structure">
+        <EmsFormGrid>
+          <Info label="Structure" value={structureName} />
+          <Info
+            label="Salary credit"
+            value={salaryCreditLabel(record.extension.companyBank)}
+          />
+          <Info label="Current CTC" value={currentCtc} />
+          <Info label="Basic" value={currentBasic} />
+          {previousCtc ? <Info label="Previous CTC" value={previousCtc} /> : null}
+          {activeRevision ? (
+            <Info
+              label="Revised from"
+              value={`${activeRevision.effectiveDate || "-"} · ${activeRevision.reason}`}
+            />
+          ) : assigned?.effectiveFrom && assigned.effectiveFrom !== "-" ? (
+            <Info label="Effective from" value={assigned.effectiveFrom} />
+          ) : null}
+          <Info label="Tax regime" value={record.extension.salary.incomeTaxRegime || "-"} />
+          <Info label="PF" value={record.extension.salary.pf ? "Enabled" : "Disabled"} />
+          <Info label="ESI" value={record.extension.salary.esi ? "Enabled" : "Disabled"} />
+        </EmsFormGrid>
+
+        {upcomingRevision ? (
+          <div className="mt-3 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-xs">
+            <p className="font-medium text-foreground">Upcoming salary revision</p>
+            <p className="mt-0.5 text-muted-foreground">
+              {formatInr(upcomingRevision.oldSalary)} → {formatInr(upcomingRevision.newSalary)}{" "}
+              effective {upcomingRevision.effectiveDate} ({upcomingRevision.reason})
+            </p>
+          </div>
+        ) : null}
+
+        {activeRevision && !upcomingRevision ? (
+          <div className="mt-3 rounded-lg border border-border/70 bg-muted/30 px-3 py-2 text-xs">
+            <p className="font-medium text-foreground">Latest salary change</p>
+            <p className="mt-0.5 text-muted-foreground">
+              {formatInr(activeRevision.oldSalary)} → {formatInr(activeRevision.newSalary)} from{" "}
+              {activeRevision.effectiveDate} ({activeRevision.reason})
+            </p>
+          </div>
+        ) : null}
+
+        {(linked?.salaries.length ?? 0) > 0 ? (
+          <div className="mt-3">
+            <DataTableTab
+              loading={false}
+              empty=""
+              columns={["Structure", "Effective", "CTC", "Status"]}
+              rows={(linked?.salaries ?? []).map((r) => [
+                String(r.structure_name ?? r.salary_structure_id ?? "-"),
+                String(r.effective_from ?? r.effective_date ?? "-"),
+                String(r.ctc ?? r.gross ?? r.annual_ctc ?? "-"),
+                String(r.status ?? "-"),
+              ])}
+            />
+          </div>
+        ) : null}
+
+        {revisions.length > 1 ? (
+          <div className="mt-3">
+            <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Revision history
+            </p>
+            <DataTableTab
+              loading={false}
+              empty=""
+              columns={["Old", "New", "Effective", "Reason"]}
+              rows={revisions.map((r) => [
+                formatInr(r.oldSalary),
+                formatInr(r.newSalary),
+                r.effectiveDate || "-",
+                r.reason,
+              ])}
+            />
+          </div>
+        ) : null}
+      </Section>
+      <Section title="Payslips">
+        <DataTableTab
+          loading={linkedLoading}
+          empty="No payslips for this employee."
+          columns={["Document", "Period", "Net", "Status"]}
+          rows={(linked?.payslips ?? []).map((r) => [
+            String(r.document_number ?? r.payslip_code ?? r.id ?? "-"),
+            String(r.period_label ?? r.payroll_period_id ?? r.month ?? "-"),
+            String(r.net_pay ?? r.net_amount ?? "-"),
+            String(r.status ?? "-"),
+          ])}
         />
-        <Field label="Payroll group" value={s.payrollGroup} onChange={(payrollGroup) => set({ payrollGroup })} />
-        <Field
-          label="Income tax regime"
-          value={s.incomeTaxRegime}
-          onChange={(incomeTaxRegime) => set({ incomeTaxRegime })}
-        />
-        <Toggle label="Provident fund (PF)" checked={s.pf} onChange={(pf) => set({ pf })} />
-        <Toggle label="Employee state insurance (ESI)" checked={s.esi} onChange={(esi) => set({ esi })} />
-        <Toggle
-          label="Professional tax"
-          checked={s.professionalTax}
-          onChange={(professionalTax) => set({ professionalTax })}
-        />
-      </EmsFormGrid>
+      </Section>
     </div>
   );
 }

@@ -1201,9 +1201,6 @@ function SalaryStep({
             />
           )}
         </SetupField>
-        <SetupField label="Payroll group">
-          <SetupInput value={s.payrollGroup} onChange={(e) => set({ payrollGroup: e.target.value })} />
-        </SetupField>
         <SetupField label="Income tax regime">
           <SetupSelect value={s.incomeTaxRegime} onChange={(e) => set({ incomeTaxRegime: e.target.value })}>
             <option value="new">New</option>

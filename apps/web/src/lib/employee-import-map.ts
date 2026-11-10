@@ -261,6 +261,7 @@ export function parseEmployeeImportMatrix(matrix: string[][]): {
 }
 
 export const EMPLOYEE_IMPORT_SAMPLE_CSV = `Emp Code,NAME,Entity,Organisation,Base Location,Designation,Department,Reporting Manager,Emp. Contact No.,Email id,cache email id,Gender,DOB,DOJ,Family Member Name,Relation,Contact No.,Fathers name,ESI
-EMP-1001,Jane Doe,digitech,Cache,Mumbai,HR Manager,Human Resources,Sana Qureshi,9876543210,jane@gmail.com,jane@cache.com,Female,1990-01-15,2024-04-01,John Doe,Spouse,9876500001,Robert Doe,Yes
-EMP-1002,Rahul Sharma,technology,Cache,Bengaluru,Developer,Engineering,Jane Doe,9876543211,rahul@gmail.com,rahul@cache.com,Male,1992-06-20,2024-05-01,Priya Sharma,Spouse,9876500002,Suresh Sharma,No
+CDPL0001,Jane Doe,Cache Digitech,Cache,Mumbai,HR Manager,Human Resources,Sana Qureshi,9876543210,jane@gmail.com,jane@cache.com,Female,1990-01-15,2024-04-01,John Doe,Spouse,9876500001,Robert Doe,Yes
+CT0001,Rahul Sharma,Cache Technologies,Cache,Bengaluru,Developer,Engineering,Jane Doe,9876543211,rahul@gmail.com,rahul@cache.com,Male,1992-06-20,2024-05-01,Priya Sharma,Spouse,9876500002,Suresh Sharma,No
+VPL0001,Anita Verma,Vyuha,Vyuha,Delhi,Analyst,Operations,Jane Doe,9876543212,anita@gmail.com,anita@vyuha.com,Female,1994-03-10,2024-06-01,Ravi Verma,Spouse,9876500003,Mohan Verma,No
 `;

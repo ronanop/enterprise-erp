@@ -27,6 +27,7 @@ class CompanyEntity:
     city: str | None = None
     state_name: str | None = None
     postal_code: str | None = None
+    employee_code_prefix: str | None = None
 
 
 @dataclass

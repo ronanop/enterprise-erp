@@ -1375,11 +1375,26 @@ class BiometricDeviceLiveLogItem(BaseModel):
     updated_at: datetime | None = None
 
 
+class BiometricPunchResponse(BaseModel):
+    id: UUID
+    device_id: UUID | None = None
+    device_code: str
+    employee_id: UUID | None = None
+    employee_code: str | None = None
+    employee_name: str | None = None
+    employee_code_raw: str
+    punched_at: datetime
+    attendance_date: date
+    notes: str | None = None
+
+
 class BiometricDeviceFeedResponse(BaseModel):
     device: BiometricDeviceResponse
     reachable: bool
     reachability_message: str
     today_ingested_count: int
+    today_punch_count: int = 0
+    punches: list[BiometricPunchResponse] = []
     ingested_records: list[BiometricDeviceLiveLogItem]
 
 
@@ -1410,6 +1425,8 @@ class DeviceSyncResponse(BaseModel):
     updated: int
     skipped: int
     total: int
+    punch_created: int = 0
+    punch_existing: int = 0
 
 
 class BiometricDownloadResponse(DeviceSyncResponse):

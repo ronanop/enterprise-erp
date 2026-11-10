@@ -4,6 +4,24 @@ from modules.platform.celery_idempotent import system_job
 from workers.celery_app import celery_app
 
 
+@celery_app.task(name="hr.biometric_fetch_punches")
+def biometric_fetch_punches() -> dict:
+    """Pull punches from all active biometric devices (runs every 1 minute via beat)."""
+    from database.session import SessionLocal
+    from modules.hr.service.compoff_bio_service import BiometricDeviceService
+
+    db = SessionLocal()
+    try:
+        summary = BiometricDeviceService.fetch_punches_all_active(db)
+        db.commit()
+        return {"status": "ok", **summary}
+    except Exception as exc:
+        db.rollback()
+        return {"status": "error", "message": str(exc)}
+    finally:
+        db.close()
+
+
 @celery_app.task(name="hr.attendance_auto_lock")
 @system_job("hr.attendance_auto_lock", window="day")
 def attendance_auto_lock() -> dict:

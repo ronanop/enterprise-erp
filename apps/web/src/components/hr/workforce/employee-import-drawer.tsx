@@ -246,8 +246,8 @@ export function EmployeeImportDrawer({
               Map Excel columns → employee fields
             </p>
             <p className="mb-3 text-[10px] text-muted-foreground">
-              Auto-detected where possible. Change any dropdown if your headers differ. EMPLOYEE ID
-              and NAME are required.
+              Auto-detected where possible. Emp Code prefixes (CDPL / CT / VPL — set on each Legal
+              Entity) place each row under the right company. EMPLOYEE ID and NAME are required.
             </p>
             <ul className="space-y-2">
               {displayHeaders.map((header, idx) => (

@@ -60,11 +60,26 @@ type LiveLogItem = {
   updated_at?: string | null;
 };
 
+type PunchItem = {
+  id: string;
+  device_id?: string | null;
+  device_code: string;
+  employee_id?: string | null;
+  employee_code?: string | null;
+  employee_name?: string | null;
+  employee_code_raw: string;
+  punched_at: string;
+  attendance_date: string;
+  notes?: string | null;
+};
+
 type LiveFeed = {
   device: Device;
   reachable: boolean;
   reachability_message: string;
   today_ingested_count: number;
+  today_punch_count?: number;
+  punches?: PunchItem[];
   ingested_records: LiveLogItem[];
 };
 
@@ -178,7 +193,7 @@ export default function BiometricDevicesPage() {
     void load();
   }, [load]);
 
-  const downloadLogs = useCallback(
+  const fetchPunches = useCallback(
     async (device: Device, opts?: { silent?: boolean }) => {
       if (downloadingLock.current) return;
       downloadingLock.current = true;
@@ -207,13 +222,13 @@ export default function BiometricDevicesPage() {
             toast(`Saved ${saved} attendance rows from ${read} punches${skipNote}.`, "success");
           }
         } else if (saved > 0) {
-          toast(`Auto-sync: ${saved} attendance row(s) updated.`, "success");
+          toast(`Auto-fetch: ${saved} attendance row(s) updated.`, "success");
         }
         if (feedDevice?.id === device.id) void loadFeed(device.id);
       } catch (err) {
         if (!opts?.silent) {
           toast(
-            err instanceof ApiClientError ? err.message : "Could not download attendance",
+            err instanceof ApiClientError ? err.message : "Could not fetch punches",
             "error",
           );
         }
@@ -225,14 +240,62 @@ export default function BiometricDevicesPage() {
     [feedDevice?.id, loadFeed],
   );
 
+  const fetchAllActive = useCallback(
+    async (opts?: { silent?: boolean }) => {
+      const active = rows.filter(
+        (r) => r.status === "active" && r.ip_address && r.port,
+      );
+      if (!active.length || downloadingLock.current) return;
+      downloadingLock.current = true;
+      let totalSaved = 0;
+      try {
+        for (const device of active) {
+          setDownloadingId(device.id);
+          try {
+            const res = await apiClient<{
+              logs_read: number;
+              created: number;
+              updated: number;
+              skipped: number;
+            }>(`/hr/biometric-devices/${device.id}/download`, { method: "POST" });
+            totalSaved += (res.data?.created ?? 0) + (res.data?.updated ?? 0);
+          } catch (err) {
+            if (!opts?.silent) {
+              toast(
+                err instanceof ApiClientError
+                  ? err.message
+                  : `Could not fetch punches from ${device.device_code}`,
+                "error",
+              );
+            }
+          }
+        }
+        if (opts?.silent && totalSaved > 0) {
+          toast(`Auto-fetch: ${totalSaved} attendance row(s) updated.`, "success");
+        }
+        if (feedDevice) void loadFeed(feedDevice.id);
+      } finally {
+        downloadingLock.current = false;
+        setDownloadingId(null);
+      }
+    },
+    [rows, feedDevice, loadFeed],
+  );
+
+  // Always auto-fetch punches from every active device every 1 minute while this page is open.
   useEffect(() => {
-    if (!feedDevice) return;
-    // Sync punches from the K40 every 1 minute, then refresh the feed.
-    const id = window.setInterval(() => {
-      void downloadLogs(feedDevice, { silent: true });
-    }, 60_000);
-    return () => window.clearInterval(id);
-  }, [feedDevice, downloadLogs]);
+    const active = rows.filter((r) => r.status === "active" && r.ip_address && r.port);
+    if (!active.length) return;
+    const tick = () => {
+      void fetchAllActive({ silent: true });
+    };
+    const first = window.setTimeout(tick, 5_000);
+    const id = window.setInterval(tick, 60_000);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(id);
+    };
+  }, [rows, fetchAllActive]);
 
   function openCreate() {
     const model = DEVICE_MODELS[0];
@@ -356,7 +419,7 @@ export default function BiometricDevicesPage() {
       <SetupToastHost />
       <PageHeader
         title="Biometric devices"
-        description="Register a ZKTeco K40 Pro with the IP, subnet, gateway, port, and communication password from the device Comm. menu."
+        description="Register a ZKTeco K40 Pro with the IP, subnet, gateway, port, and communication password from the device Comm. menu. Punches auto-fetch every 1 minute."
         actions={
           <div className="flex gap-2">
             <Button
@@ -368,6 +431,16 @@ export default function BiometricDevicesPage() {
             >
               <RefreshCw className="size-3.5" />
               Refresh
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="cursor-pointer transition-colors duration-200"
+              onClick={() => void fetchAllActive()}
+              disabled={!!downloadingId || !rows.some((r) => r.status === "active" && r.ip_address)}
+            >
+              <Download className="size-3.5" />
+              {downloadingId ? "Fetching…" : "Fetch punches"}
             </Button>
             <Button
               size="sm"
@@ -427,14 +500,14 @@ export default function BiometricDevicesPage() {
                         size="sm"
                         className="cursor-pointer transition-colors duration-200"
                         disabled={downloadingId === r.id}
-                        aria-label={`Download punches from ${r.device_code}`}
+                        aria-label={`Fetch punches from ${r.device_code}`}
                         onClick={(event) => {
                           event.stopPropagation();
-                          void downloadLogs(r);
+                          void fetchPunches(r);
                         }}
                       >
                         <Download className="size-3.5" />
-                        {downloadingId === r.id ? "Downloading…" : "Download punches"}
+                        {downloadingId === r.id ? "Fetching…" : "Fetch punches"}
                       </Button>
                       <Button
                         type="button"
@@ -477,11 +550,11 @@ export default function BiometricDevicesPage() {
               <Button
                 size="sm"
                 className="cursor-pointer transition-colors duration-200"
-                onClick={() => void downloadLogs(feedDevice)}
+                onClick={() => void fetchPunches(feedDevice)}
                 disabled={downloadingId === feedDevice.id}
               >
                 <Download className="size-3.5" />
-                {downloadingId === feedDevice.id ? "Downloading…" : "Download punches"}
+                {downloadingId === feedDevice.id ? "Fetching…" : "Fetch punches"}
               </Button>
               <Button
                 size="sm"
@@ -520,21 +593,64 @@ export default function BiometricDevicesPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
               <Activity className="size-4 text-muted-foreground" aria-hidden />
               <span>
+                <span className="font-medium tabular-nums">{feed.today_punch_count ?? 0}</span>
+                <span className="text-muted-foreground"> raw punches today</span>
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span>
                 <span className="font-medium tabular-nums">{feed.today_ingested_count}</span>
-                <span className="text-muted-foreground"> punches ingested today (via device-sync)</span>
+                <span className="text-muted-foreground"> day records updated</span>
               </span>
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Matches K40 user IDs to employee codes (e.g. CT5353). Auto-syncs every 1 minute while this panel is open.
+              All punches are kept per employee across every machine, then Attendance Policy + shift decide present / half day / late. Auto-fetch every 1 minute.
             </p>
 
+            <div>
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Punch log (this device)
+              </p>
+              {!(feed.punches?.length) ? (
+                <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
+                  No punches stored for this device in the last 14 days.
+                </p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full min-w-[480px] text-left text-sm">
+                    <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Time</th>
+                        <th className="px-3 py-2 font-medium">Employee</th>
+                        <th className="px-3 py-2 font-medium">Code</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {(feed.punches ?? []).map((p) => (
+                        <tr key={p.id} className="transition-colors duration-150 hover:bg-muted/20">
+                          <td className="px-3 py-2 whitespace-nowrap text-xs">{formatDateTime(p.punched_at)}</td>
+                          <td className="px-3 py-2 font-medium">{p.employee_name || "—"}</td>
+                          <td className="px-3 py-2 font-mono text-[11px] text-muted-foreground">
+                            {p.employee_code || p.employee_code_raw}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                Day status (policy applied)
+              </p>
             {!feed.ingested_records.length ? (
               <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                No ingested punches for this device in the last 14 days.
+                No day attendance rows linked to this device yet.
               </p>
             ) : (
               <div className="overflow-x-auto rounded-lg border border-border">
@@ -575,6 +691,7 @@ export default function BiometricDevicesPage() {
                 </table>
               </div>
             )}
+            </div>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Could not load feed.</p>

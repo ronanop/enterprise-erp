@@ -48,6 +48,7 @@ ENTITY_COMPANY_SPECS: dict[str, dict[str, str]] = {
         "alt_codes": "CACHEDIG",
         "company_name": "Cache Digitech",
         "legal_name": "Cache Digitech",
+        "employee_code_prefix": "CDPL",
         "branch_code": "HQ",
         "branch_name": "Head Office",
         "city": "Bengaluru",
@@ -57,6 +58,7 @@ ENTITY_COMPANY_SPECS: dict[str, dict[str, str]] = {
         "alt_codes": "",
         "company_name": "Cache Technologies & Infotech",
         "legal_name": "Cache Technologies & Infotech",
+        "employee_code_prefix": "CT",
         "branch_code": "GK",
         "branch_name": "Greater Kailash",
         "city": "New Delhi",
@@ -110,22 +112,48 @@ def _entity_key(raw: str | None) -> str | None:
 
 
 def _infer_entity_key(entity_raw: str, org_raw: str, emp_code: str) -> str | None:
-    """Map Excel Entity/Organisation (+ emp code hints) → digitech | technology."""
-    # Combined: Organisation=Cache + Entity=Technologies → "cache technologies"
+    """Legacy alias map for Entity/Organisation text → digitech | technology."""
     combined = " ".join(p for p in (_norm(org_raw), _norm(entity_raw)) if p).strip()
     for candidate in (entity_raw, org_raw, combined):
         key = _entity_key(candidate)
         if key:
             return key
-
-    code = (emp_code or "").strip().upper()
-    if code.startswith("CDPL"):
-        return "digitech"
-    if code.startswith("CTS") or code.startswith("CT"):
-        return "technology"
-    if code.startswith("GBP"):
-        return "technology"
     return None
+
+
+def _normalize_prefix(raw: str | None) -> str:
+    return re.sub(r"[^A-Za-z0-9]", "", (raw or "").strip().upper())
+
+
+def _effective_emp_prefix(company) -> str:
+    """Prefer employee_code_prefix; else letters/digits from company_code."""
+    explicit = _normalize_prefix(getattr(company, "employee_code_prefix", None) or "")
+    if explicit:
+        return explicit
+    return _normalize_prefix(getattr(company, "company_code", None) or "")
+
+
+def _match_company_by_emp_code_prefix(emp_code: str, companies: list) -> object | None:
+    """Longest prefix match of Emp Code against entity employee_code_prefix values."""
+    code = _normalize_prefix(emp_code)
+    if not code:
+        return None
+    scored: list[tuple[int, object]] = []
+    for company in companies:
+        prefix = _effective_emp_prefix(company)
+        if not prefix:
+            continue
+        if code.startswith(prefix) and len(code) > len(prefix):
+            # Require at least one digit after prefix when code is PREFIX+digits
+            rest = code[len(prefix) :]
+            if rest.isdigit() or len(rest) >= 1:
+                scored.append((len(prefix), company))
+        elif code == prefix:
+            scored.append((len(prefix), company))
+    if not scored:
+        return None
+    scored.sort(key=lambda item: item[0], reverse=True)
+    return scored[0][1]
 
 
 class EmployeeImportService:
@@ -419,6 +447,7 @@ class EmployeeImportService:
                     company_code=spec["company_code"],
                     company_name=spec["company_name"],
                     legal_name=spec["legal_name"],
+                    employee_code_prefix=spec.get("employee_code_prefix") or None,
                     country_code="IN",
                     currency_code="INR",
                     fiscal_year_start_month=4,
@@ -436,6 +465,10 @@ class EmployeeImportService:
                 company.status = "active"
                 company.company_name = spec["company_name"]
                 company.legal_name = spec["legal_name"]
+                if not (company.employee_code_prefix or "").strip() and spec.get(
+                    "employee_code_prefix"
+                ):
+                    company.employee_code_prefix = spec["employee_code_prefix"]
                 company.updated_by = ctx.user_id
                 self._db.flush()
 
@@ -505,6 +538,10 @@ class EmployeeImportService:
                 out[name] = c
             if legal:
                 out[legal] = c
+            prefix = _effective_emp_prefix(c)
+            if prefix:
+                out[f"prefix:{prefix}"] = c
+                out[prefix.lower()] = c
         return out
 
     def _resolve_company(
@@ -518,10 +555,12 @@ class EmployeeImportService:
         warnings,
         idx,
     ):
-        key = _infer_entity_key(entity_raw, org_raw, emp_code)
-        if key and key in company_by_key:
-            return company_by_key[key]
+        # 1) Primary: Emp Code prefix set on Legal Entity (CDPL0001 → Digitech, VPL0001 → Vyuha)
+        by_prefix = _match_company_by_emp_code_prefix(emp_code, companies)
+        if by_prefix is not None:
+            return by_prefix
 
+        # 2) Entity / Organisation column against name, legal name, company code
         for raw in (entity_raw, org_raw, f"{org_raw} {entity_raw}".strip()):
             n = _norm(raw)
             if not n or n == "cache":
@@ -532,10 +571,25 @@ class EmployeeImportService:
                 name = _norm(getattr(c, "company_name", "") or "")
                 legal = _norm(getattr(c, "legal_name", "") or "")
                 code = _norm(getattr(c, "company_code", "") or "")
-                if n in {name, legal, code} or (len(n) > 3 and (n in name or n in legal)):
+                prefix = _effective_emp_prefix(c).lower()
+                if n in {name, legal, code, prefix} or (
+                    len(n) > 3 and (n in name or n in legal)
+                ):
                     return c
 
-        if entity_raw or org_raw:
+        # 3) Legacy digitech/technology aliases (Entity text only)
+        key = _infer_entity_key(entity_raw, org_raw, emp_code)
+        if key and key in company_by_key:
+            return company_by_key[key]
+
+        label = entity_raw or org_raw or emp_code
+        if len(companies) > 1:
+            warnings.append(
+                f"Row {idx}: could not match Emp Code/Entity '{label}' "
+                f"to a Legal Entity prefix — using {default_company.company_name}. "
+                f"Set Employee code prefix on the entity (e.g. CDPL, CT, VPL)."
+            )
+        elif entity_raw or org_raw:
             warnings.append(
                 f"Row {idx}: entity/organisation "
                 f"'{entity_raw or org_raw}' not matched - using {default_company.company_name}"
