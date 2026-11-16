@@ -18,7 +18,6 @@ import {
   addTicketFieldEngineer,
   ApiClientError,
   assignTicketOwner,
-  attachmentDownloadUrl,
   deleteTicketAttachment,
   exportTicketTimelineXlsx,
   formatStatus,
@@ -30,6 +29,7 @@ import {
   listTicketAttachments,
   loadTicketFormLookups,
   openTicket,
+  openTicketAttachment,
   removeTicketCoOwner,
   removeTicketFieldEngineer,
   reopenTicket,
@@ -45,6 +45,41 @@ import {
   type TimelineItem,
   uploadTicketAttachment,
 } from "@/services/service-request-ticket-service";
+
+function AttachmentOpenLink({
+  ticketId,
+  attachmentId,
+  fileName,
+  className,
+}: {
+  ticketId: string;
+  attachmentId: string;
+  fileName: string;
+  className?: string;
+}) {
+  const [opening, setOpening] = useState(false);
+  return (
+    <button
+      type="button"
+      disabled={opening}
+      className={cn(
+        "inline-flex max-w-full cursor-pointer items-center gap-1.5 text-left font-medium text-primary hover:underline disabled:opacity-60",
+        className,
+      )}
+      onClick={() => {
+        setOpening(true);
+        void openTicketAttachment(ticketId, attachmentId)
+          .catch(() => {
+            // Keep UX quiet; parent pages already surface load errors elsewhere.
+          })
+          .finally(() => setOpening(false));
+      }}
+    >
+      <Paperclip className="size-3.5 shrink-0" />
+      <span className="truncate">{opening ? "Opening…" : fileName}</span>
+    </button>
+  );
+}
 
 function DetailRow({ label, value }: { label: string; value?: string | null }) {
   const display = value?.trim() ? formatServiceDisplayText(value) : "—";
@@ -222,15 +257,12 @@ function FieldEngineerStatusCard({
                   <ul className="space-y-1">
                     {fe.attachments?.map((a) => (
                       <li key={a.id}>
-                        <a
-                          href={attachmentDownloadUrl(ticketId, a.id)}
-                          className="inline-flex max-w-full items-center gap-1.5 truncate rounded-md border border-border/50 bg-background px-2 py-1 text-xs text-primary hover:underline"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <Paperclip className="size-3 shrink-0" />
-                          <span className="truncate">{a.file_name}</span>
-                        </a>
+                        <AttachmentOpenLink
+                          ticketId={ticketId}
+                          attachmentId={a.id}
+                          fileName={a.file_name}
+                          className="rounded-md border border-border/50 bg-background px-2 py-1 text-xs"
+                        />
                       </li>
                     ))}
                   </ul>
@@ -287,15 +319,11 @@ function TicketAttachmentsCard({
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0 flex-1">
-                  <a
-                    href={attachmentDownloadUrl(ticketId, a.id)}
-                    className="inline-flex max-w-full items-center gap-1.5 font-medium text-primary hover:underline"
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <Paperclip className="size-3.5 shrink-0" />
-                    <span className="truncate">{a.file_name}</span>
-                  </a>
+                  <AttachmentOpenLink
+                    ticketId={ticketId}
+                    attachmentId={a.id}
+                    fileName={a.file_name}
+                  />
                   {a.field_engineer_id ? (
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       From field engineer
@@ -678,7 +706,7 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
     setError(null);
     try {
       await updateServiceRequestTicket(ticketId, { field_engineer: saveVisitPayload() });
-      await load();
+    await load();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to save visit details");
     } finally {
@@ -779,13 +807,13 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
     setResolving(true);
     setError(null);
     try {
-      await resolveTicket(ticketId, {
-        solution_type: solutionType,
-        solution_summary: solutionSummary.trim(),
-      });
-      setSolutionSummary("");
+    await resolveTicket(ticketId, {
+      solution_type: solutionType,
+      solution_summary: solutionSummary.trim(),
+    });
+    setSolutionSummary("");
       setResolveOpen(false);
-      await load();
+    await load();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Failed to resolve ticket");
     } finally {
@@ -907,8 +935,8 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
               >
                 {resolving ? "Ending…" : "Confirm — End & Close Ticket"}
               </Button>
-            </div>
-          </div>
+        </div>
+        </div>
         </div>
       ) : null}
 
@@ -1165,7 +1193,7 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
                   </div>
                 ) : (
                   <DetailGrid>
-                    <DetailRow label="Asset Name" value={ticket.asset_name} />
+                  <DetailRow label="Asset Name" value={ticket.asset_name} />
                     <DetailRow
                       label="Device"
                       value={
@@ -1176,16 +1204,16 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
                             : ticket.asset_status
                       }
                     />
-                    <DetailRow label="Serial Number" value={ticket.serial_number} />
-                    <DetailRow label="Warranty Start" value={ticket.warranty_start_date?.slice(0, 10)} />
-                    <DetailRow label="Warranty End" value={ticket.warranty_end_date?.slice(0, 10)} />
-                    <DetailRow label="AMC End" value={ticket.amc_end_date?.slice(0, 10)} />
+                  <DetailRow label="Serial Number" value={ticket.serial_number} />
+                  <DetailRow label="Warranty Start" value={ticket.warranty_start_date?.slice(0, 10)} />
+                  <DetailRow label="Warranty End" value={ticket.warranty_end_date?.slice(0, 10)} />
+                  <DetailRow label="AMC End" value={ticket.amc_end_date?.slice(0, 10)} />
                   </DetailGrid>
                 )}
               </SectionCard>
 
           {showVisitSection ? (
-            <SectionCard title="Field Engineer Visit">
+                <SectionCard title="Field Engineer Visit">
               {canEditVisitPlan ? (
                 <>
                   <p className="mb-4 text-sm text-muted-foreground">
@@ -1502,8 +1530,8 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
                         : null
                     }
                   />
-                  <DetailRow
-                    label="Total Charges"
+                    <DetailRow
+                      label="Total Charges"
                     value={
                       ticket?.field_engineer?.total_charges != null
                         ? String(ticket.field_engineer.total_charges)
@@ -1512,13 +1540,13 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
                   />
                   {ticket?.field_engineer?.remarks ? (
                     <div className="sm:col-span-2">
-                      <DetailRow label="Remarks" value={ticket.field_engineer.remarks} />
+                    <DetailRow label="Remarks" value={ticket.field_engineer.remarks} />
                     </div>
                   ) : null}
                 </DetailGrid>
               )}
-            </SectionCard>
-          ) : null}
+                </SectionCard>
+              ) : null}
 
           {canWork || ticketEnded ? (
             <>
@@ -1536,16 +1564,16 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
               ) : null}
             </>
           ) : null}
-        </div>
+                </div>
 
         <div className="min-w-0 space-y-4">
           {(canWork || access?.is_manager || isViewOnly || isPreview || ticketEnded) ? (
             <SectionCard title="Ticket Timeline">
               <div className="mb-3 flex justify-end">
-                <Button
-                  type="button"
+                          <Button
+                            type="button"
                   variant="outline"
-                  size="sm"
+                            size="sm"
                   onClick={() =>
                     void exportTicketTimelineXlsx(ticketId).catch((err) =>
                       setError(err instanceof ApiClientError ? err.message : "Timeline export failed"),
@@ -1553,8 +1581,8 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
                   }
                 >
                   Excel Export
-                </Button>
-              </div>
+                          </Button>
+                        </div>
               <ul className="max-h-72 space-y-2 overflow-y-auto pr-0.5">
                 {timeline.length === 0 ? (
                   <li className="rounded-md border border-dashed border-border/60 px-3 py-4 text-center text-sm text-muted-foreground">
@@ -1577,11 +1605,11 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
                           {formatServiceDisplayText(item.description)}
                         </p>
                       ) : null}
-                    </li>
-                  ))
-                )}
-              </ul>
-            </SectionCard>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </SectionCard>
           ) : null}
 
           {(ticketEnded || ticket.solution_summary) ? (
@@ -1603,7 +1631,7 @@ export function ServiceRequestTicketDetailPage({ ticketId }: { ticketId: string 
                       Summary
                     </p>
                     <ProseBlock>{ticket.solution_summary}</ProseBlock>
-                  </div>
+        </div>
                 </div>
               ) : (
                 <p className="rounded-md border border-dashed border-border/60 px-3 py-4 text-center text-sm text-muted-foreground">

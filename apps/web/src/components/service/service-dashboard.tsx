@@ -22,6 +22,7 @@ import {
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { isAuthenticated } from "@/lib/auth";
 import { shouldScopeServiceToMine } from "@/lib/service-engineer-access";
+import { resolveServiceLoginRoleLabel } from "@/lib/service-role-label";
 import { cn } from "@/lib/utils";
 import {
   countByStatus,
@@ -114,6 +115,20 @@ export function ServiceDashboard() {
   const { profile, loading: profileLoading } = useUserPermissions();
   const scopedToMine = shouldScopeServiceToMine(profile?.roleCodes, profile?.permissions);
   const linkOpts = useMemo<ServiceDashboardLinkOpts>(() => ({ mine: scopedToMine }), [scopedToMine]);
+  const loginRoleLabel = useMemo(
+    () =>
+      profile
+        ? resolveServiceLoginRoleLabel({
+            email: profile.email,
+            designation: profile.designation,
+            roleName: profile.roleName,
+            roleNames: profile.roleNames,
+            roleCodes: profile.roleCodes,
+            permissions: profile.permissions,
+          })
+        : null,
+    [profile],
+  );
 
   const [data, setData] = useState<ServiceOverview | null>(null);
   const [slaComplianceSummary, setSlaComplianceSummary] = useState<SlaComplianceSummary>({
@@ -168,8 +183,32 @@ export function ServiceDashboard() {
 
   return (
     <div className="space-y-5">
+      {profile && loginRoleLabel ? (
+        <div className="flex items-center gap-3">
+          <span
+            className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted/50 text-xs font-semibold tracking-wide text-foreground"
+            aria-hidden
+          >
+            {profile.initials}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-foreground">{profile.displayName}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              Signed in as <span className="font-medium text-foreground">{loginRoleLabel}</span>
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       <PageHeader
         title={scopedToMine ? "My Service Dashboard" : "Service Dashboard"}
+        description={
+          loginRoleLabel
+            ? scopedToMine
+              ? `${loginRoleLabel} view — tickets assigned to you.`
+              : `${loginRoleLabel} overview — team tickets, SLA, and support mode.`
+            : undefined
+        }
         actions={
           <button
             type="button"

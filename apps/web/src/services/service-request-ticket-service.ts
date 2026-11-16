@@ -700,6 +700,30 @@ export function attachmentDownloadUrl(ticketId: string, attachmentId: string): s
   return `${base}${API}/${ticketId}/attachments/${attachmentId}/content`;
 }
 
+/** Open attachment content with Bearer auth (plain href has no token → 401 JSON). */
+export async function openTicketAttachment(ticketId: string, attachmentId: string): Promise<void> {
+  const { getAccessToken } = await import("@/lib/auth");
+  const { env } = await import("@/utils/env");
+  const token = getAccessToken();
+  if (!token) {
+    throw new ApiClientError("Missing authentication token", 401);
+  }
+  const res = await fetch(`${env.apiUrl}${API}/${ticketId}/attachments/${attachmentId}/content`, {
+    headers: {
+      Accept: "*/*",
+      Authorization: `Bearer ${token}`,
+    },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    throw new ApiClientError(`Failed to open attachment (${res.status})`, res.status);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export async function getTicketTimeline(id: string): Promise<TimelineItem[]> {
   const res = await apiClient<TimelineItem[]>(`${API}/${id}/timeline`);
   return Array.isArray(res.data) ? res.data : [];
