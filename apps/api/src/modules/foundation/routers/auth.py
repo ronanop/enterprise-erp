@@ -14,6 +14,13 @@ from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import SecUser
 from modules.foundation.schemas import (
     ChangePasswordRequest,
+    EssCaptchaChallenge,
+    EssCompanyOption,
+    EssLoginRequest,
+    EssLookupPhoneRequest,
+    EssLookupPhoneResponse,
+    EssVerifyPhoneRequest,
+    EssVerifyPhoneResponse,
     ForgotPasswordRequest,
     LoginRequest,
     MfaVerifyRequest,
@@ -54,6 +61,87 @@ def login(
     result = service.login(
         email=body.email,
         password=body.password,
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("User-Agent"),
+    )
+    db.commit()
+    if result.get("access_token"):
+        _apply_auth_cookies(response, result)
+    return APIResponse(message="Login successful", data=TokenResponse(**result))
+
+
+@router.get("/ess/companies", response_model=APIResponse[list[EssCompanyOption]])
+def list_ess_companies(
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[list[EssCompanyOption]]:
+    """Public list of active companies for the ESS login entity dropdown."""
+    rows = AuthService(db).list_ess_companies()
+    return APIResponse(
+        message="OK",
+        data=[EssCompanyOption(**row) for row in rows],
+    )
+
+
+@router.get("/ess/captcha", response_model=APIResponse[EssCaptchaChallenge])
+def ess_captcha() -> APIResponse[EssCaptchaChallenge]:
+    """Always issues a typeable code for ESS step-1 phone verification."""
+    from security.ess_login_captcha import issue_challenge
+
+    captcha_id, question, code = issue_challenge()
+    return APIResponse(
+        message="OK",
+        data=EssCaptchaChallenge(
+            captcha_id=captcha_id,
+            question=question,
+            code=code,
+            enabled=True,
+        ),
+    )
+
+
+@router.post("/ess/lookup-phone", response_model=APIResponse[EssLookupPhoneResponse])
+def ess_lookup_phone(
+    body: EssLookupPhoneRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[EssLookupPhoneResponse]:
+    """Identify company + mobile before captcha is shown."""
+    data = AuthService(db).lookup_ess_phone(
+        company_code=body.company_code,
+        mobile=body.mobile,
+    )
+    return APIResponse(message="Phone identified", data=EssLookupPhoneResponse(**data))
+
+
+@router.post("/ess/verify-phone", response_model=APIResponse[EssVerifyPhoneResponse])
+def ess_verify_phone(
+    body: EssVerifyPhoneRequest,
+    db: Annotated[Session, Depends(get_db)],
+) -> APIResponse[EssVerifyPhoneResponse]:
+    """Confirm captcha after phone was identified; then continue to password step."""
+    data = AuthService(db).verify_ess_phone(
+        company_code=body.company_code,
+        mobile=body.mobile,
+        captcha_id=body.captcha_id,
+        captcha_answer=body.captcha_answer,
+    )
+    return APIResponse(message="Phone verified", data=EssVerifyPhoneResponse(**data))
+
+
+@router.post("/ess/login", response_model=APIResponse[TokenResponse])
+def ess_login(
+    body: EssLoginRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    response: Response,
+) -> APIResponse[TokenResponse]:
+    """ESS sign-in with company code, employee code, and password (code+DOB default)."""
+    service = AuthService(db)
+    result = service.login_ess(
+        company_code=body.company_code,
+        employee_code=body.employee_code,
+        password=body.password,
+        captcha_id=body.captcha_id,
+        captcha_answer=body.captcha_answer,
         ip_address=get_client_ip(request),
         user_agent=request.headers.get("User-Agent"),
     )

@@ -2,28 +2,29 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { CacheBrandLogo } from "@/components/cache-brand-logo";
 import { IconBack } from "@/components/icons";
 import { NotificationBellLink } from "@/components/notification-bell-link";
 import { Avatar } from "@/components/ui";
 
 export function AppHeader({
   title = "Employee Portal",
-  name,
 }: {
   title?: string;
+  /** Kept for call-site compatibility; avatar replaced by company logo. */
   name?: string;
 }) {
   return (
-    <header className="sticky top-0 z-40 -mx-5 mb-1 flex h-14 items-center justify-between gap-3 border-b border-[#c3c6d7]/30 bg-[#f8f9ff]/80 px-5 backdrop-blur-xl">
-      <div className="flex min-w-0 items-center gap-3">
-        <Link href="/profile" className="shrink-0">
-          <Avatar name={name ?? ""} size="sm" ring />
-        </Link>
-        <span className="truncate text-lg font-bold tracking-tight text-[#004ac6]">
-          {title}
-        </span>
+    <header className="relative sticky top-0 z-40 -mx-5 mb-1 flex h-14 items-center justify-between gap-3 border-b border-[#c3c6d7]/30 bg-[#f8f9ff]/80 px-5 backdrop-blur-xl">
+      <div className="relative z-10 shrink-0">
+        <CacheBrandLogo href="/home" height={28} />
       </div>
-      <NotificationBellLink />
+      <h1 className="pointer-events-none absolute inset-x-0 mx-auto max-w-[58%] truncate text-center text-lg font-bold tracking-tight text-[#004ac6]">
+        {title}
+      </h1>
+      <div className="relative z-10 shrink-0">
+        <NotificationBellLink />
+      </div>
     </header>
   );
 }

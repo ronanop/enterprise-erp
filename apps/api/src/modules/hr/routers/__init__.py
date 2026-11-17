@@ -82,6 +82,7 @@ from modules.hr.schemas import (
     EmployeeFeatureAccessResponse,
     OnDutyRequestCreate,
     OnDutyRequestResponse,
+    WfhRequestResponse,
     OtAllotmentCreate,
     OtAllotmentResponse,
     CompoffRequestCreate,
@@ -212,6 +213,7 @@ attendance_rules_router = APIRouter(
     prefix="/attendance-rules", tags=["HR - Attendance Rules"]
 )
 on_duty_router = APIRouter(prefix="/on-duty-requests", tags=["HR - On Duty"])
+wfh_router = APIRouter(prefix="/wfh-requests", tags=["HR - WFH"])
 ot_allotments_router = APIRouter(prefix="/ot-allotments", tags=["HR - OT Allotments"])
 compoff_requests_router = APIRouter(prefix="/compoff-requests", tags=["HR - Comp Off Requests"])
 biometric_devices_router = APIRouter(prefix="/biometric-devices", tags=["HR - Biometric Devices"])
@@ -1251,6 +1253,43 @@ def reject_on_duty(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=OnDutyRequestService(db).reject(ctx, row_id))
+
+
+@wfh_router.get("", response_model=APIResponse[list[WfhRequestResponse]])
+def list_wfh_requests(
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    pagination: Annotated[PaginationParams, Depends(get_pagination)],
+    company_id: UUID | None = None,
+):
+    from modules.hr.service.wfh_service import WfhRequestService
+
+    return APIResponse(
+        message="OK",
+        data=paginate(WfhRequestService(db).list(ctx, company_id), pagination),
+    )
+
+
+@wfh_router.post("/{row_id}/approve", response_model=APIResponse[WfhRequestResponse])
+def approve_wfh(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    from modules.hr.service.wfh_service import WfhRequestService
+
+    return APIResponse(message="OK", data=WfhRequestService(db).approve(ctx, row_id))
+
+
+@wfh_router.post("/{row_id}/reject", response_model=APIResponse[WfhRequestResponse])
+def reject_wfh(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    from modules.hr.service.wfh_service import WfhRequestService
+
+    return APIResponse(message="OK", data=WfhRequestService(db).reject(ctx, row_id))
 
 
 @ot_allotments_router.get("", response_model=APIResponse[list[OtAllotmentResponse]])

@@ -154,13 +154,13 @@ export function Avatar({
     sm: "h-10 w-10 text-sm",
     md: "h-12 w-12 text-base",
     lg: "h-16 w-16 text-xl",
-    xl: "h-24 w-24 text-3xl",
+    xl: "h-[6.5rem] w-[6.5rem] text-3xl",
   };
 
   return (
     <div
       className={`flex items-center justify-center rounded-full bg-gradient-to-br from-[#2563eb] to-[#712ae2] font-bold text-white shadow-md shadow-[#2563eb]/20 ${sizes[size]} ${
-        ring ? "ring-2 ring-[#2563eb]/30" : ""
+        ring ? "ring-[3px] ring-white" : ""
       }`}
     >
       {initials || "?"}
@@ -224,7 +224,7 @@ export function FieldRow({ label, value }: { label: string; value: string }) {
     <div className={`${ui.listRow} justify-between text-sm`}>
       <span className={ui.muted}>{label}</span>
       <span className="max-w-[62%] truncate text-right font-semibold capitalize text-[#0b1c30]">
-        {value || "-"}
+        {value || "—"}
       </span>
     </div>
   );

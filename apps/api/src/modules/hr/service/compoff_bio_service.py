@@ -126,6 +126,7 @@ class CompoffRequestService:
                 title="Comp Off request submitted",
                 body=f"Comp Off for {row.earned_date} ({row.requested_days} day(s)) pending manager approval.",
                 kind="compoff",
+                extra={"compoff_request_id": str(row.id), "href": "/leave"},
             )
         except Exception:
             pass
@@ -182,6 +183,7 @@ class CompoffRequestService:
                 title="Comp Off allocated",
                 body=f"{row.requested_days} Comp Off day(s) credited for {row.earned_date}.",
                 kind="compoff",
+                extra={"compoff_request_id": str(row.id), "href": "/leave"},
             )
         except Exception:
             pass

@@ -105,11 +105,24 @@ class EssAttendanceSummaryResponse(BaseModel):
     work_from_home_days: int
 
 
+class EssWorkLocationItem(BaseModel):
+    id: UUID
+    location_name: str
+    city: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    geofence_radius_meters: int | None = None
+    location_type: str | None = None
+    is_home: bool = False
+
+
 class EssPunchPolicyResponse(BaseModel):
     geofence_required: bool = False
     selfie_required: bool = False
     face_at_punch_required: bool = False
     face_enrolled: bool = False
+    work_locations: list[EssWorkLocationItem] = Field(default_factory=list)
+    home_office_name: str | None = None
 
 
 class EssPunchRequest(BaseModel):

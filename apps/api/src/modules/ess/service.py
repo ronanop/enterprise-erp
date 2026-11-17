@@ -74,6 +74,7 @@ from modules.hr.service.leave_service import (
     LeaveTypeService,
 )
 from modules.master_data.domain.entities import EmployeeEntity
+from modules.master_data.models.employee import MasterEmployee
 from modules.master_data.repository.employee_repository import EmployeeRepository
 from modules.organization.models.hierarchy import OrgLocation
 from modules.payroll.service.payslip_service import PayslipService
@@ -124,17 +125,157 @@ def _mask_id(value: str | None, *, keep: int = 4) -> str | None:
     return ("*" * (len(value) - keep)) + value[-keep:]
 
 
+_EARNING_ALIASES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    ("basic", "Basic Salary", ("basic", "BASIC", "basic_salary", "basic_pay", "COMP-BASIC")),
+    ("hra", "House Rent Allowance (HRA)", ("hra", "house_rent_allowance", "HRA")),
+    ("special", "Special Allowance", ("special", "special_allowance", "SPECIAL")),
+    ("medical", "Medical", ("medical", "MEDICAL")),
+    ("conveyance", "Conveyance", ("conveyance", "CONVEYANCE")),
+    ("lta", "LTA", ("lta", "LTA")),
+    ("ot", "Overtime", ("ot", "overtime", "overtime_pay")),
+    ("bonus", "Performance Bonus", ("bonus", "BONUS")),
+    ("arrears", "Arrears", ("arrears",)),
+    ("incentive", "Performance Incentive", ("incentive", "incentives")),
+)
+
+_DEDUCTION_ALIASES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
+    (
+        "pf_employee",
+        "Provident Fund (EPF)",
+        ("pf_employee", "pf", "employee_pf", "ee_pf", "EE_PF", "PF"),
+    ),
+    ("esi", "ESI", ("esi", "esi_employee", "ESI")),
+    (
+        "pt",
+        "Professional Tax (PT)",
+        ("pt", "professional_tax", "PT"),
+    ),
+    (
+        "tds",
+        "Income Tax (TDS)",
+        ("tds", "tax", "income_tax", "itax", "ITAX"),
+    ),
+    ("adj", "Other Deductions", ("adj", "deduction_adjustments", "other_deductions")),
+)
+
+_SKIP_DEDUCTION_CODES = {
+    "pf_employer",
+    "employer_pf",
+    "empr_pf",
+    "EMPR_PF",
+    "pf_total",
+}
+
+
+def _money_amount(value) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _pick_breakdown_amount(bd: dict, aliases: tuple[str, ...]) -> float:
+    lowered = {str(k).lower(): v for k, v in bd.items()}
+    for alias in aliases:
+        key = alias.lower()
+        if key in lowered:
+            amount = _money_amount(lowered[key])
+            if amount:
+                return amount
+    return 0.0
+
+
+def _normalize_money_lines(rows: list | None) -> list[dict] | None:
+    if not isinstance(rows, list) or not rows:
+        return None
+    out: list[dict] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        code = str(row.get("code") or "").strip()
+        if code.lower() in {c.lower() for c in _SKIP_DEDUCTION_CODES}:
+            continue
+        amount = _money_amount(row.get("amount"))
+        label = str(row.get("label") or code or "Item").strip()
+        if amount == 0 and not label.lower().startswith("basic"):
+            continue
+        out.append({"code": code or None, "label": label, "amount": amount})
+    return out or None
+
+
+def _lines_from_component_breakdown(
+    bd: dict,
+    *,
+    earning_labels: dict[str, str] | None = None,
+    deduction_labels: dict[str, str] | None = None,
+) -> tuple[list[dict], list[dict]]:
+    earning_labels = earning_labels or {}
+    deduction_labels = deduction_labels or {}
+    earnings: list[dict] = []
+    for code, default_label, aliases in _EARNING_ALIASES:
+        amount = _pick_breakdown_amount(bd, aliases)
+        if amount == 0:
+            continue
+        label = (
+            earning_labels.get(code.upper())
+            or next((earning_labels[a.upper()] for a in aliases if a.upper() in earning_labels), None)
+            or default_label
+        )
+        earnings.append({"code": code, "label": label, "amount": amount})
+
+    deductions: list[dict] = []
+    for code, default_label, aliases in _DEDUCTION_ALIASES:
+        amount = _pick_breakdown_amount(bd, aliases)
+        if amount == 0:
+            continue
+        label = (
+            deduction_labels.get(code.upper())
+            or next(
+                (deduction_labels[a.upper()] for a in aliases if a.upper() in deduction_labels),
+                None,
+            )
+            or default_label
+        )
+        # Prefer HRMS deduction-type name for PF when catalog has it.
+        if code == "pf_employee" and "PF" in deduction_labels:
+            label = deduction_labels["PF"]
+            if "provident" in label.lower() and "epf" not in label.lower():
+                label = f"{label} (EPF)"
+        deductions.append({"code": code, "label": label, "amount": amount})
+    return earnings, deductions
+
+
 def _payslip_ess_fields(payslip_json: dict | None) -> dict:
     pj = payslip_json if isinstance(payslip_json, dict) else {}
-    period = pj.get("period") if isinstance(pj.get("period"), dict) else {}
+    period_raw = pj.get("period")
+    if isinstance(period_raw, dict):
+        period = period_raw
+        period_name = period.get("name") or period.get("code")
+        period_start = period.get("start")
+        period_end = period.get("end")
+    elif isinstance(period_raw, str) and period_raw.strip():
+        period_name = period_raw.strip()
+        period_start = None
+        period_end = None
+    else:
+        period_name = None
+        period_start = None
+        period_end = None
     return {
-        "period_name": period.get("name"),
-        "period_start": period.get("start"),
-        "period_end": period.get("end"),
+        "period_name": period_name,
+        "period_start": period_start,
+        "period_end": period_end,
         "export_text": pj.get("export_text"),
         "attendance_summary": pj.get("attendance") if isinstance(pj.get("attendance"), dict) else None,
-        "earnings": pj.get("earnings") if isinstance(pj.get("earnings"), list) else None,
-        "deductions": pj.get("deductions") if isinstance(pj.get("deductions"), list) else None,
+        "earnings": _normalize_money_lines(pj.get("earnings") if isinstance(pj.get("earnings"), list) else None),
+        "deductions": _normalize_money_lines(
+            pj.get("deductions") if isinstance(pj.get("deductions"), list) else None
+        ),
+        "component_breakdown": (
+            pj.get("component_breakdown")
+            if isinstance(pj.get("component_breakdown"), dict)
+            else None
+        ),
     }
 
 
@@ -166,15 +307,51 @@ class EssService:
     def _notification_from_event(row: NtfEvent) -> EssNotificationResponse:
         payload = row.payload_json or {}
         kind = str(payload.get("kind") or row.event_type)
+        title = str(payload.get("title") or row.event_type)
         href_raw = payload.get("href") or payload.get("action_href")
+        # Prefer deep links into the request the notification is about.
+        leave_id = payload.get("leave_request_id")
+        correction_id = payload.get("correction_id") or payload.get(
+            "attendance_correction_id"
+        )
+        wfh_id = payload.get("wfh_request_id")
+        on_duty_id = payload.get("on_duty_request_id")
+        payslip_id = payload.get("payslip_id")
+        title_l = title.lower()
+        kind_l = kind.lower()
+        ess_href: str | None = None
+        if title_l.startswith("[manager]") or "pending approval" in title_l:
+            ess_href = "/approvals"
+        elif leave_id:
+            ess_href = f"/leave/{leave_id}"
+        elif payslip_id:
+            ess_href = f"/payslips/{payslip_id}"
+        elif correction_id or "miss" in kind_l or "attendance" in kind_l:
+            ess_href = "/attendance/correction"
+        elif wfh_id or kind_l == "wfh":
+            ess_href = "/attendance/wfh"
+        elif on_duty_id or kind_l == "on_duty":
+            ess_href = "/attendance/on-duty"
+        elif "payslip" in kind_l or "salary" in kind_l or "payroll" in kind_l:
+            ess_href = "/payslips"
+        elif "leave" in kind_l:
+            ess_href = "/leave/history" if any(
+                t in title_l for t in ("approv", "reject", "cancel")
+            ) else "/leave"
+        href = sanitize_inbox_href(ess_href or href_raw, kind=kind)
+        # Never send employees to HRMS paths from ESS notifications.
+        if href and str(href).startswith("/hr/"):
+            href = ess_href or "/home"
         return EssNotificationResponse(
             id=row.id,
-            title=str(payload.get("title") or row.event_type),
+            title=title,
             body=str(payload.get("body") or ""),
             kind=kind,
-            read=row.read_at is not None or row.status in {"delivered", "read"},
+            # Only explicit read markers count — channel dispatch sets status
+            # to "sent"/"delivered" without meaning the user opened the item.
+            read=row.read_at is not None or row.status == "read",
             created_at=row.created_at,
-            href=sanitize_inbox_href(href_raw, kind=kind),
+            href=href,
         )
 
     def resolve_employee(self, ctx: TenantContext) -> EmployeeEntity:
@@ -229,7 +406,9 @@ class EssService:
         manager_name: str | None = None
         manager_id = getattr(emp, "reporting_manager_id", None)
         if manager_id:
-            manager = self._db.get(MasterEmployee, manager_id)
+            from modules.master_data.models.employee import MasterEmployee as _MasterEmployee
+
+            manager = self._db.get(_MasterEmployee, manager_id)
             if manager and not getattr(manager, "is_deleted", False):
                 manager_name = f"{manager.first_name} {manager.last_name}".strip()
 
@@ -276,7 +455,12 @@ class EssService:
         return self.get_me(ctx)
 
     def list_leave_types(self, ctx: TenantContext) -> list[EssLeaveTypeResponse]:
+        from modules.ess.dependencies import pin_ess_employee_context
+
         emp = self.resolve_employee(ctx)
+        ctx = pin_ess_employee_context(
+            ctx, company_id=emp.company_id, branch_id=emp.branch_id
+        )
         rows = self._leave_types.list(ctx, emp.company_id)
         return [
             EssLeaveTypeResponse.model_validate(row)
@@ -285,7 +469,12 @@ class EssService:
         ]
 
     def list_leave_balances(self, ctx: TenantContext) -> list[EssLeaveBalanceResponse]:
+        from modules.ess.dependencies import pin_ess_employee_context
+
         emp = self.resolve_employee(ctx)
+        ctx = pin_ess_employee_context(
+            ctx, company_id=emp.company_id, branch_id=emp.branch_id
+        )
         rows = self._leave_balances.list(ctx, emp.company_id)
         return [
             EssLeaveBalanceResponse.model_validate(row)
@@ -294,14 +483,24 @@ class EssService:
         ]
 
     def list_leave_requests(self, ctx: TenantContext) -> list[EssLeaveRequestResponse]:
+        from modules.ess.dependencies import pin_ess_employee_context
+
         emp = self.resolve_employee(ctx)
+        ctx = pin_ess_employee_context(
+            ctx, company_id=emp.company_id, branch_id=emp.branch_id
+        )
         rows = self._leave_requests.list(ctx, emp.company_id)
         return [_leave_request_response(row) for row in rows if row.employee_id == emp.id]
 
     def create_leave_request(
         self, ctx: TenantContext, body: EssLeaveRequestCreate
     ) -> EssLeaveRequestResponse:
+        from modules.ess.dependencies import pin_ess_employee_context
+
         emp = self.resolve_employee(ctx)
+        ctx = pin_ess_employee_context(
+            ctx, company_id=emp.company_id, branch_id=emp.branch_id
+        )
         row = self._leave_requests.create(
             ctx,
             branch_id=emp.branch_id,
@@ -317,14 +516,24 @@ class EssService:
         return _leave_request_response(submitted)
 
     def get_leave_request(self, ctx: TenantContext, request_id: UUID) -> EssLeaveRequestResponse:
+        from modules.ess.dependencies import pin_ess_employee_context
+
         emp = self.resolve_employee(ctx)
+        ctx = pin_ess_employee_context(
+            ctx, company_id=emp.company_id, branch_id=emp.branch_id
+        )
         row = self._leave_requests.get(ctx, request_id)
         if row.employee_id != emp.id:
             raise NotFoundException("Leave request not found")
         return _leave_request_response(row)
 
     def cancel_leave_request(self, ctx: TenantContext, request_id: UUID) -> EssLeaveRequestResponse:
+        from modules.ess.dependencies import pin_ess_employee_context
+
         emp = self.resolve_employee(ctx)
+        ctx = pin_ess_employee_context(
+            ctx, company_id=emp.company_id, branch_id=emp.branch_id
+        )
         row = self._leave_requests.cancel(ctx, request_id, employee_id=emp.id)
         return _leave_request_response(row)
 
@@ -335,12 +544,16 @@ class EssService:
         from_date: date | None = None,
         to_date: date | None = None,
     ) -> list[EssAttendanceResponse]:
+        from modules.ess.dependencies import pin_ess_employee_context
+
         emp = self.resolve_employee(ctx)
-        rows = self._attendance.list(ctx, emp.company_id)
+        ctx = pin_ess_employee_context(
+            ctx, company_id=emp.company_id, branch_id=emp.branch_id
+        )
+        # Shared HRMS attendance (web / mobile / biometric / machine / manual).
+        rows = self._attendance.list(ctx, emp.company_id, employee_id=emp.id)
         result: list[EssAttendanceResponse] = []
         for row in rows:
-            if row.employee_id != emp.id:
-                continue
             if from_date and row.attendance_date < from_date:
                 continue
             if to_date and row.attendance_date > to_date:
@@ -378,20 +591,61 @@ class EssService:
         )
 
     def get_punch_policy(self, ctx: TenantContext):
-        from modules.ess.schemas import EssPunchPolicyResponse
+        from modules.ess.dependencies import pin_ess_employee_context
+        from modules.ess.schemas import EssPunchPolicyResponse, EssWorkLocationItem
 
         emp = self.resolve_employee(ctx)
-        rule = self._att_rules.get_active(ctx, emp.company_id)
-        profile = self._profiles.get_orm_by_employee_id(ctx, emp.id)
+        ctx = pin_ess_employee_context(
+            ctx, company_id=emp.company_id, branch_id=emp.branch_id
+        )
+        rule = None
+        try:
+            rule = self._att_rules.get_active(ctx, emp.company_id)
+        except ForbiddenException:
+            # ESS sessions can park on a different company than the employee row;
+            # still return office geofences for the location chip.
+            rule = None
+        profile = None
+        try:
+            profile = self._profiles.get_orm_by_employee_id(ctx, emp.id)
+        except (ForbiddenException, NotFoundException):
+            # HR company scope can hide the profile when ctx.company_id differs.
+            profile = None
         face_enrolled = bool(getattr(profile, "face_auth_fingerprint", None))
         face_enabled = bool(getattr(profile, "face_auth_enabled", False))
         selfie = bool(rule and getattr(rule, "ess_selfie_required", False))
         face_punch = bool(rule and getattr(rule, "ess_face_at_punch_required", False))
+        offices = self._office_locations(ctx, emp)
+        home_loc = self._home_work_location(ctx, emp, offices)
+        home_office_name = self._home_office_name(ctx, emp, offices, home_loc)
+        home_id = home_loc.id if home_loc is not None else None
+        work_locations = [
+            EssWorkLocationItem(
+                id=loc.id,
+                location_name=str(loc.location_name),
+                city=getattr(loc, "city", None),
+                latitude=float(loc.latitude) if loc.latitude is not None else None,
+                longitude=float(loc.longitude) if loc.longitude is not None else None,
+                geofence_radius_meters=(
+                    int(loc.geofence_radius_meters)
+                    if loc.geofence_radius_meters is not None
+                    else None
+                ),
+                location_type=getattr(loc, "location_type", None),
+                is_home=bool(home_id is not None and loc.id == home_id),
+            )
+            for loc in offices
+        ]
+        # If HRMS has office lat/lng + radius, treat geofence as required for ESS check-in
+        # even when the attendance-rule flag was never set.
+        has_office_fence = any(self._location_has_geofence(loc) for loc in offices)
         return EssPunchPolicyResponse(
-            geofence_required=bool(rule and rule.geofence_required),
+            geofence_required=bool(rule and rule.geofence_required) or has_office_fence,
             selfie_required=selfie,
             face_at_punch_required=face_punch or face_enabled,
             face_enrolled=face_enrolled,
+            work_locations=work_locations,
+            home_office_name=home_office_name,
         )
 
     def _approved_wfh_today(self, ctx: TenantContext, emp, day: date) -> bool:
@@ -423,19 +677,115 @@ class EssService:
                 raise ForbiddenException("Face does not match enrolled profile")
         return fp
 
-    def _geofence_locations(self, ctx: TenantContext, emp: EmployeeEntity) -> list[OrgLocation]:
+    @staticmethod
+    def _location_has_geofence(loc: OrgLocation) -> bool:
+        return (
+            loc.latitude is not None
+            and loc.longitude is not None
+            and loc.geofence_radius_meters is not None
+            and int(loc.geofence_radius_meters) > 0
+        )
+
+    def _office_locations(self, ctx: TenantContext, emp: EmployeeEntity) -> list[OrgLocation]:
+        """Active office locations for the employee (branch first, else company)."""
         stmt = select(OrgLocation).where(
             OrgLocation.tenant_id == ctx.tenant_id,
             OrgLocation.company_id == emp.company_id,
             OrgLocation.is_deleted.is_(False),
             OrgLocation.status == "active",
-            OrgLocation.geofence_radius_meters.isnot(None),
-            OrgLocation.latitude.isnot(None),
-            OrgLocation.longitude.isnot(None),
         )
         rows = list(self._db.scalars(stmt).all())
         branch_rows = [r for r in rows if r.branch_id == emp.branch_id]
-        return branch_rows if branch_rows else rows
+        scoped = branch_rows if branch_rows else rows
+        return sorted(
+            scoped,
+            key=lambda loc: (
+                0 if self._location_has_geofence(loc) else 1,
+                str(loc.location_name or ""),
+            ),
+        )
+
+    def _employment_work_location_text(
+        self, ctx: TenantContext, emp: EmployeeEntity
+    ) -> str | None:
+        from modules.hr.models import HrEmployment
+
+        row = self._db.scalar(
+            select(HrEmployment)
+            .where(
+                HrEmployment.tenant_id == ctx.tenant_id,
+                HrEmployment.employee_id == emp.id,
+                HrEmployment.is_deleted.is_(False),
+            )
+            .order_by(HrEmployment.updated_at.desc())
+            .limit(1)
+        )
+        text = (getattr(row, "work_location_text", None) or "").strip()
+        return text or None
+
+    def _branch_office_label(self, emp: EmployeeEntity) -> str | None:
+        """Branch name from HRMS (e.g. Head Office) — preferred chip label at work."""
+        from modules.organization.models.branch import OrgBranch
+
+        if not emp.branch_id:
+            return None
+        branch = self._db.get(OrgBranch, emp.branch_id)
+        if branch is None or getattr(branch, "is_deleted", False):
+            return None
+        name = str(getattr(branch, "branch_name", None) or "").strip()
+        return name or None
+
+    def _home_work_location(
+        self,
+        ctx: TenantContext,
+        emp: EmployeeEntity,
+        offices: list[OrgLocation],
+    ) -> OrgLocation | None:
+        """OrgLocation used as the employee's base / home office geofence."""
+        if not offices:
+            return None
+        geofenced = [loc for loc in offices if self._location_has_geofence(loc)]
+        work_text = self._employment_work_location_text(ctx, emp)
+        if work_text:
+            key = work_text.casefold()
+            search_in = geofenced or offices
+            for loc in search_in:
+                name = str(loc.location_name or "")
+                city = str(getattr(loc, "city", None) or "")
+                if key in name.casefold() or name.casefold() in key:
+                    return loc
+                if city and (city.casefold() in key or key in city.casefold()):
+                    return loc
+        if geofenced:
+            return geofenced[0]
+        return offices[0]
+
+    def _home_office_name(
+        self,
+        ctx: TenantContext,
+        emp: EmployeeEntity,
+        offices: list[OrgLocation],
+        home_loc: OrgLocation | None = None,
+    ) -> str | None:
+        """Prefer branch name (Head Office), then base work location / employment text."""
+        branch = self._branch_office_label(emp)
+        if branch:
+            return branch
+        loc = home_loc if home_loc is not None else self._home_work_location(ctx, emp, offices)
+        if loc is not None:
+            return str(loc.location_name)
+        work_text = self._employment_work_location_text(ctx, emp)
+        return work_text
+
+    def _geofence_locations(self, ctx: TenantContext, emp: EmployeeEntity) -> list[OrgLocation]:
+        rows = self._office_locations(ctx, emp)
+        return [
+            r
+            for r in rows
+            if r.geofence_radius_meters is not None
+            and r.latitude is not None
+            and r.longitude is not None
+        ]
 
     def _validate_geofence(
         self,
@@ -444,16 +794,26 @@ class EssService:
         latitude: float | None,
         longitude: float | None,
     ) -> None:
-        rule = self._att_rules.get_active(ctx, emp.company_id)
+        rule = None
+        try:
+            rule = self._att_rules.get_active(ctx, emp.company_id)
+        except Exception:
+            rule = None
         geofence_required = bool(rule and rule.geofence_required)
         locations = self._geofence_locations(ctx, emp)
+        # Office fences in HRMS always enforce check-in distance.
         if not locations and not geofence_required:
             return
         if latitude is None or longitude is None:
-            raise AppException("GPS coordinates required for punch at this location")
+            raise AppException(
+                "GPS is required for check-in. Enable location and try again at the office."
+            )
         if not locations:
             # Policy requires GPS but no fence configured - accept any coords.
             return
+        nearest_m: float | None = None
+        nearest_name = "office"
+        nearest_radius = 0.0
         for loc in locations:
             dist = _haversine_meters(
                 float(latitude),
@@ -461,9 +821,19 @@ class EssService:
                 float(loc.latitude),
                 float(loc.longitude),
             )
-            if dist <= float(loc.geofence_radius_meters):
+            radius = float(loc.geofence_radius_meters or 0)
+            if nearest_m is None or dist < nearest_m:
+                nearest_m = dist
+                nearest_name = str(loc.location_name or "office")
+                nearest_radius = radius
+            if dist <= radius:
                 return
-        raise ConflictException("Punch location is outside the allowed geofence")
+        branch = self._branch_office_label(emp) or nearest_name
+        raise ConflictException(
+            f"You are outside {branch} geofence "
+            f"(~{int(nearest_m or 0)}m away; allowed {int(nearest_radius)}m). "
+            "Move closer to the office and try again."
+        )
 
     def _resolve_shift(self, ctx: TenantContext, emp: EmployeeEntity, day: date):
         """Prefer published roster for the day; else active/approved shift assignment."""
@@ -563,7 +933,12 @@ class EssService:
         ctx: TenantContext,
         body: EssPunchRequest | None = None,
     ) -> EssPunchResponse:
+        from modules.ess.dependencies import pin_ess_employee_context
+
         emp = self.resolve_employee(ctx)
+        ctx = pin_ess_employee_context(
+            ctx, company_id=emp.company_id, branch_id=emp.branch_id
+        )
         local_now = _business_now()
         today = local_now.date()
         policy = self.get_punch_policy(ctx)
@@ -572,8 +947,6 @@ class EssService:
         wfh_day = self._approved_wfh_today(ctx, emp, today)
         latitude = body.latitude if body else None
         longitude = body.longitude if body else None
-        if not wfh_day:
-            self._validate_geofence(ctx, emp, latitude, longitude)
 
         now_utc = local_now.astimezone(timezone.utc)
         geo_fields: dict = {}
@@ -590,12 +963,16 @@ class EssService:
         if wfh_day:
             check_in_fields["attendance_status"] = "work_from_home"
 
-        rows = [
-            row
-            for row in self._attendance.list(ctx, emp.company_id)
-            if row.employee_id == emp.id and row.attendance_date == today
-        ]
-        if not rows:
+        # Same HRMS attendance row as biometric/machine punches.
+        rows = self._attendance.list(ctx, emp.company_id, employee_id=emp.id)
+        rows = [row for row in rows if row.attendance_date == today]
+        current = rows[0] if rows else None
+        already_in = bool(current and getattr(current, "check_in_at", None))
+        # Geofence only for check-in; allow check-out after machine punch from anywhere.
+        if not already_in and not wfh_day:
+            self._validate_geofence(ctx, emp, latitude, longitude)
+
+        if current is None:
             created = self._attendance.create(
                 ctx,
                 branch_id=emp.branch_id,
@@ -613,7 +990,6 @@ class EssService:
                 action="check_in", attendance=_attendance_response(created)
             )
 
-        current = rows[0]
         if getattr(current, "status", None) == "locked":
             raise ConflictException("Today's attendance is locked")
         if getattr(current, "check_out_at", None) is not None:
@@ -791,9 +1167,13 @@ class EssService:
         return svc.submit(ctx, row.id)
 
     def list_wfh(self, ctx: TenantContext):
+        from modules.ess.dependencies import pin_ess_employee_context
         from modules.hr.service.wfh_service import WfhRequestService
 
         emp = self.resolve_employee(ctx)
+        ctx = pin_ess_employee_context(
+            ctx, company_id=emp.company_id, branch_id=emp.branch_id
+        )
         rows = WfhRequestService(self._db).list(ctx, emp.company_id)
         return [r for r in rows if r.employee_id == emp.id]
 
@@ -806,9 +1186,13 @@ class EssService:
         portion: str = "full_day",
         reason: str | None = None,
     ):
+        from modules.ess.dependencies import pin_ess_employee_context
         from modules.hr.service.wfh_service import WfhRequestService
 
         emp = self.resolve_employee(ctx)
+        ctx = pin_ess_employee_context(
+            ctx, company_id=emp.company_id, branch_id=emp.branch_id
+        )
         svc = WfhRequestService(self._db)
         row = svc.create(
             ctx,
@@ -908,18 +1292,22 @@ class EssService:
     ):
         emp = self.resolve_employee(ctx)
         rule = self._att_rules.get_active(ctx, emp.company_id)
-        window_h = int(rule.miss_punch_window_hours) if rule else 48
+        # ESS regularization: allow at least 14 days even if HR rule is tighter/unset.
+        raw_window = getattr(rule, "miss_punch_window_hours", None) if rule else None
+        try:
+            window_h = int(raw_window) if raw_window is not None else 336
+        except (TypeError, ValueError):
+            window_h = 336
+        window_h = max(window_h, 336)
         today = _business_now().date()
-        age_hours = (today - attendance_date).days * 24
-        if age_hours > window_h and attendance_date < today:
-            # Allow same-day; otherwise enforce window in days (hours/24).
+        if attendance_date < today:
             max_days = max(1, window_h // 24)
             if (today - attendance_date).days > max_days:
                 raise AppException(
                     f"Miss-punch / correction window is {max_days} day(s); date is too old"
                 )
 
-        # V2: max 3 regularization / miss-punch requests per calendar year
+        # Cap open requests (draft/submitted). Approved history does not block new ones.
         year_count = 0
         for corr in self._corrections.list(ctx, emp.company_id):
             if corr.employee_id != emp.id:
@@ -928,11 +1316,12 @@ class EssService:
                 continue
             if corr.attendance_date.year != attendance_date.year:
                 continue
-            if corr.status in {"draft", "submitted", "approved"}:
+            if corr.status in {"draft", "submitted"}:
                 year_count += 1
-        if year_count >= 3:
+        if year_count >= 5:
             raise AppException(
-                "Maximum 3 miss-punch / regularization requests allowed per calendar year"
+                "You already have 5 open regularization requests this year. "
+                "Wait for your manager to action them before submitting more."
             )
 
         row = self._corrections.create(
@@ -951,6 +1340,14 @@ class EssService:
         if submit:
             row = self._corrections.submit(ctx, row.id)
         return row
+
+    def cancel_correction(self, ctx: TenantContext, row_id: UUID):
+        """Employee revokes a submitted regularization before manager action."""
+        emp = self.resolve_employee(ctx)
+        row = self._corrections.get(ctx, row_id)
+        if row.employee_id != emp.id:
+            raise ForbiddenException("Not your correction request")
+        return self._corrections.cancel(ctx, row_id)
 
     def get_bank(self, ctx: TenantContext) -> EssBankResponse:
         emp = self.resolve_employee(ctx)
@@ -1094,8 +1491,110 @@ class EssService:
             out.append(self._notification_from_event(row))
         return out
 
+    def _payroll_component_labels(
+        self, company_id: UUID
+    ) -> tuple[dict[str, str], dict[str, str]]:
+        """HRMS salary-component + deduction-type names for payslip line labels."""
+        from modules.payroll.models import PayDeductionType, PaySalaryComponent
+
+        earning_labels = {
+            str(row.component_code).upper(): str(row.component_name)
+            for row in self._db.scalars(
+                select(PaySalaryComponent).where(
+                    PaySalaryComponent.company_id == company_id,
+                    PaySalaryComponent.is_deleted.is_(False),
+                )
+            ).all()
+            if row.component_code and row.component_name
+        }
+        deduction_labels = {
+            str(row.deduction_type_code).upper(): str(row.deduction_type_name)
+            for row in self._db.scalars(
+                select(PayDeductionType).where(
+                    PayDeductionType.company_id == company_id,
+                    PayDeductionType.is_deleted.is_(False),
+                )
+            ).all()
+            if row.deduction_type_code and row.deduction_type_name
+        }
+        # Mirror component codes that are deductions (EE_PF, PT, ITAX, …).
+        for code, name in list(earning_labels.items()):
+            if code in {"EE_PF", "PF", "PT", "ESI", "ITAX", "EMPR_PF"}:
+                deduction_labels.setdefault(code, name)
+        return earning_labels, deduction_labels
+
+    def _run_line_breakdown(self, row) -> dict | None:
+        pj = row.payslip_json if isinstance(getattr(row, "payslip_json", None), dict) else {}
+        bd = pj.get("component_breakdown")
+        if isinstance(bd, dict) and bd:
+            return bd
+        line_id = getattr(row, "payroll_run_line_id", None)
+        if line_id is None:
+            return None
+        from modules.payroll.models import PayPayrollRunLine
+
+        line = self._db.get(PayPayrollRunLine, line_id)
+        if line is None:
+            return None
+        raw = getattr(line, "component_breakdown_json", None)
+        return raw if isinstance(raw, dict) and raw else None
+
+    def _enrich_payslip_lines(self, row) -> dict:
+        """Resolve earnings/deductions from payslip JSON or HRMS payroll run line."""
+        meta = _payslip_ess_fields(getattr(row, "payslip_json", None))
+        earnings = meta.get("earnings")
+        deductions = meta.get("deductions")
+        if earnings and deductions:
+            return meta
+
+        bd = meta.get("component_breakdown") or self._run_line_breakdown(row) or {}
+        if not bd:
+            # Last resort: surface totals so the salary UI is never empty.
+            if not deductions and _money_amount(getattr(row, "total_deductions", 0)) > 0:
+                meta["deductions"] = [
+                    {
+                        "code": "total",
+                        "label": "Total Deductions",
+                        "amount": _money_amount(row.total_deductions),
+                    }
+                ]
+            if not earnings and _money_amount(getattr(row, "gross_salary", 0)) > 0:
+                meta["earnings"] = [
+                    {
+                        "code": "gross",
+                        "label": "Gross Earnings",
+                        "amount": _money_amount(row.gross_salary),
+                    }
+                ]
+            return meta
+
+        earning_labels, deduction_labels = self._payroll_component_labels(row.company_id)
+        built_earn, built_ded = _lines_from_component_breakdown(
+            bd,
+            earning_labels=earning_labels,
+            deduction_labels=deduction_labels,
+        )
+        if not earnings and built_earn:
+            meta["earnings"] = built_earn
+        if not deductions and built_ded:
+            meta["deductions"] = built_ded
+        elif not deductions and _money_amount(getattr(row, "total_deductions", 0)) > 0:
+            meta["deductions"] = [
+                {
+                    "code": "total",
+                    "label": "Total Deductions",
+                    "amount": _money_amount(row.total_deductions),
+                }
+            ]
+        return meta
+
     def list_payslips(self, ctx: TenantContext) -> list[EssPayslipSummary]:
+        from modules.ess.dependencies import pin_ess_employee_context
+
         emp = self.resolve_employee(ctx)
+        ctx = pin_ess_employee_context(
+            ctx, company_id=emp.company_id, branch_id=emp.branch_id
+        )
         rows = self._payslips.list(ctx, emp.company_id)
         out: list[EssPayslipSummary] = []
         for row in rows:
@@ -1103,7 +1602,7 @@ class EssService:
                 continue
             if row.status != "issued":
                 continue
-            meta = _payslip_ess_fields(row.payslip_json)
+            meta = self._enrich_payslip_lines(row)
             out.append(
                 EssPayslipSummary(
                     id=row.id,
@@ -1126,13 +1625,18 @@ class EssService:
         return out
 
     def get_payslip(self, ctx: TenantContext, payslip_id: UUID) -> EssPayslipDetail:
+        from modules.ess.dependencies import pin_ess_employee_context
+
         emp = self.resolve_employee(ctx)
+        ctx = pin_ess_employee_context(
+            ctx, company_id=emp.company_id, branch_id=emp.branch_id
+        )
         row = self._payslips.get(ctx, payslip_id)
         if row.employee_id != emp.id:
             raise ForbiddenException("Payslip does not belong to this employee")
         if row.status != "issued":
             raise ForbiddenException("Payslip is not available until issued")
-        meta = _payslip_ess_fields(row.payslip_json)
+        meta = self._enrich_payslip_lines(row)
         return EssPayslipDetail(
             id=row.id,
             document_number=row.document_number,
@@ -1419,11 +1923,26 @@ class EssService:
                 )
             )
 
-        for row in self._corrections.list(ctx, emp.company_id):
-            if row.employee_id not in report_ids or row.status != "submitted":
+        # Load by direct-report ids (not manager company/branch HR filter) so
+        # regularization always appears in the manager ESS inbox.
+        from modules.hr.models.attendance_correction import HrAttendanceCorrection
+
+        corr_rows = list(
+            self._db.scalars(
+                select(HrAttendanceCorrection).where(
+                    HrAttendanceCorrection.tenant_id == ctx.tenant_id,
+                    HrAttendanceCorrection.is_deleted.is_(False),
+                    HrAttendanceCorrection.employee_id.in_(report_ids),
+                    HrAttendanceCorrection.status == "submitted",
+                )
+            ).all()
+        )
+        for row in corr_rows:
+            member = by_id.get(row.employee_id)
+            if member is None:
                 continue
-            member = by_id[row.employee_id]
             created = getattr(row, "created_at", None) or datetime.now(timezone.utc)
+            field = str(row.field_name or "").replace("_", " ")
             items.append(
                 EssApprovalItem(
                     category="attendance_correction",
@@ -1431,8 +1950,8 @@ class EssService:
                     employee_id=row.employee_id,
                     employee_code=member.employee_code,
                     display_name=_name(member),
-                    title="Attendance correction",
-                    detail=f"{row.attendance_date} · {row.field_name} → {row.new_value}",
+                    title="Attendance regularization",
+                    detail=f"{row.attendance_date} · {field} → {row.new_value}",
                     status=row.status,
                     occurred_at=created,
                 )
@@ -1465,21 +1984,30 @@ class EssService:
     def approve_team_on_duty(self, ctx: TenantContext, row_id: UUID):
         from modules.hr.service.on_duty_ot_service import OnDutyRequestService
 
+        emp = self.resolve_employee(ctx)
         row = OnDutyRequestService(self._db).get(ctx, row_id)
         self._ensure_direct_report(ctx, row.employee_id)
-        return OnDutyRequestService(self._db).approve(ctx, row_id)
+        return OnDutyRequestService(self._db).manager_approve(
+            ctx, row_id, approver_employee_id=emp.id
+        )
 
     def reject_team_on_duty(self, ctx: TenantContext, row_id: UUID):
         from modules.hr.service.on_duty_ot_service import OnDutyRequestService
 
+        emp = self.resolve_employee(ctx)
         row = OnDutyRequestService(self._db).get(ctx, row_id)
         self._ensure_direct_report(ctx, row.employee_id)
-        return OnDutyRequestService(self._db).reject(ctx, row_id)
+        return OnDutyRequestService(self._db).reject(
+            ctx, row_id, approver_employee_id=emp.id
+        )
 
     def approve_team_correction(self, ctx: TenantContext, row_id: UUID):
+        emp = self.resolve_employee(ctx)
         row = self._corrections.get(ctx, row_id)
         self._ensure_direct_report(ctx, row.employee_id)
-        return self._corrections.approve(ctx, row_id)
+        return self._corrections.manager_approve(
+            ctx, row_id, approver_employee_id=emp.id
+        )
 
     def reject_team_correction(self, ctx: TenantContext, row_id: UUID):
         row = self._corrections.get(ctx, row_id)

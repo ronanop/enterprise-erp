@@ -4,8 +4,10 @@ import { DevExtensionNoiseFilter } from "@/components/dev-extension-noise-filter
 import "./globals.css";
 
 const inter = Inter({
-  variable: "--font-display",
   subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap",
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -50,11 +52,12 @@ export default function RootLayout({
   return (
     // suppressHydrationWarning: browser extensions (e.g. QuillBot) inject
     // attributes like data-qb-installed onto <html> before React hydrates.
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${inter.variable} font-sans antialiased`}
-        suppressHydrationWarning
-      >
+    <html
+      lang="en"
+      className={`${inter.variable} ${inter.className}`}
+      suppressHydrationWarning
+    >
+      <body className="font-sans antialiased" suppressHydrationWarning>
         {process.env.NODE_ENV === "development" ? (
           <DevExtensionNoiseFilter />
         ) : null}

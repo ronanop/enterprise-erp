@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { SubHeader } from "@/components/app-header";
-import { IconChevronRight, IconEye, IconEyeOff, IconWallet } from "@/components/icons";
+import { IconEye, IconEyeOff, IconWallet } from "@/components/icons";
 import { AiFab, EmptyState } from "@/components/ui";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
@@ -107,27 +107,6 @@ export default function BankDetailsPage() {
           </div>
         </section>
       )}
-
-      <section>
-        <h2 className="mb-2 text-lg font-semibold text-[#0b1c30]">
-          UPI Configuration
-        </h2>
-        <button
-          type="button"
-          className={`${ui.card} flex w-full items-center gap-3 p-4 text-left`}
-        >
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#eaddff] text-[#712ae2]">
-            <IconWallet size={20} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="font-semibold text-[#0b1c30]">Connect UPI ID</p>
-            <p className="text-sm text-[#434655]">
-              Use UPI for expense reimbursements
-            </p>
-          </div>
-          <IconChevronRight className="text-[#c3c6d7]" />
-        </button>
-      </section>
 
       <div className="rounded-2xl bg-[#eff4ff] p-4">
         <p className="font-semibold text-[#004ac6]">Bank Grade Security</p>

@@ -20,7 +20,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isAuthenticated()) {
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      window.location.replace(`/login?next=${encodeURIComponent(pathname)}`);
       return;
     }
 
@@ -30,15 +30,32 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     }
 
     let cancelled = false;
+    // Absolute fail-open so AuthGuard cannot keep SessionSplash forever.
+    const hardOpen = window.setTimeout(() => {
+      if (!cancelled) {
+        setSessionComplete(true);
+        setReady(true);
+      }
+    }, 5_500);
+
     (async () => {
       try {
-        // Confirm token still maps to an ESS employee profile.
-        await essService.me();
+        await Promise.race([
+          essService.me(),
+          new Promise<never>((_, reject) => {
+            window.setTimeout(
+              () => reject(new ApiClientError("Session check timed out", 0)),
+              4_000,
+            );
+          }),
+        ]);
         if (!cancelled) setSessionComplete(true);
       } catch (err) {
         if (!cancelled) {
           if (err instanceof ApiClientError && err.status === 401) {
-            router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+            window.location.replace(
+              `/login?next=${encodeURIComponent(pathname)}`,
+            );
             return;
           }
           setSessionComplete(true);
@@ -48,6 +65,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
 
     return () => {
       cancelled = true;
+      window.clearTimeout(hardOpen);
     };
   }, [pathname, router]);
 

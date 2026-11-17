@@ -1,7 +1,13 @@
 """Permission-safe in-app notification destinations."""
 
 KIND_DEFAULT_HREF: dict[str, str] = {
-    "leave": "/hr/ess-inbox",
+    # ESS-first defaults (HRMS pages still pass explicit /hr/... hrefs).
+    "leave": "/leave",
+    "wfh": "/attendance/wfh",
+    "attendance": "/attendance/correction",
+    "miss_punch": "/attendance/correction",
+    "on_duty": "/attendance/on-duty",
+    "compoff": "/leave",
     "birthday": "/hr",
     "anniversary": "/hr",
     "interview": "/hr/recruitment",
@@ -10,6 +16,7 @@ KIND_DEFAULT_HREF: dict[str, str] = {
     "probation": "/hr/workforce",
     "policy": "/hr/ess-policies",
     "payroll_due": "/hr/payroll",
+    "payroll": "/payslips",
 }
 
 

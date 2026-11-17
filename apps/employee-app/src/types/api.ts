@@ -52,7 +52,15 @@ export type EssMe = {
   display_name: string;
   department_name?: string | null;
   manager_name?: string | null;
+  company_name?: string | null;
+  branch_name?: string | null;
   date_of_birth?: string | null;
+  gender?: string | null;
+  nationality?: string | null;
+  blood_group?: string | null;
+  marital_status?: string | null;
+  current_address?: string | null;
+  permanent_address?: string | null;
   role_codes?: string[];
   ess_role?: "employee" | "manager" | "admin";
   is_manager?: boolean;
@@ -96,6 +104,17 @@ export type EssLeaveRequest = {
   status: string;
 };
 
+export type EssAttendanceCorrection = {
+  id: string;
+  attendance_date: string;
+  field_name: string;
+  old_value: string | null;
+  new_value: string;
+  reason: string | null;
+  status: string;
+  attendance_id: string | null;
+};
+
 export type EssApprovalItem = {
   category: "leave" | "on_duty" | "compoff" | "attendance_correction" | "wfh";
   id: string;
@@ -130,11 +149,24 @@ export type EssAttendanceSummary = {
   work_from_home_days: number;
 };
 
+export type EssWorkLocation = {
+  id: string;
+  location_name: string;
+  city?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  geofence_radius_meters?: number | null;
+  location_type?: string | null;
+  is_home?: boolean;
+};
+
 export type EssPunchPolicy = {
   geofence_required: boolean;
   selfie_required: boolean;
   face_at_punch_required: boolean;
   face_enrolled: boolean;
+  work_locations?: EssWorkLocation[];
+  home_office_name?: string | null;
 };
 
 export type EssWfhRequest = {

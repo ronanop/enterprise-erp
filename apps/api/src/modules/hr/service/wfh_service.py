@@ -1,4 +1,4 @@
-"""Work From Home request service - employee submit → manager approve → WFH attendance."""
+"""Work From Home request service - employee → manager → HR."""
 
 from __future__ import annotations
 
@@ -77,7 +77,14 @@ class WfhRequestService:
         updated = self._repo.update(ctx, row_id, status="submitted")
         try:
             from modules.hr.service.hr_notify import notify_employee
+            from modules.master_data.models.employee import MasterEmployee
 
+            emp = self._db.get(MasterEmployee, row.employee_id)
+            emp_name = (
+                f"{emp.first_name} {emp.last_name}".strip()
+                if emp is not None
+                else "Team member"
+            )
             notify_employee(
                 self._db,
                 tenant_id=ctx.tenant_id,
@@ -88,15 +95,109 @@ class WfhRequestService:
                 title="WFH request submitted",
                 body=f"WFH for {row.wfh_date} is pending manager approval.",
                 kind="wfh",
+                cc_reporting_manager=False,
+                extra={"wfh_request_id": str(row.id), "href": "/wfh"},
+            )
+            mgr_id = getattr(emp, "reporting_manager_id", None) if emp else None
+            if mgr_id:
+                notify_employee(
+                    self._db,
+                    tenant_id=ctx.tenant_id,
+                    employee_id=mgr_id,
+                    template_code="hr.wfh_manager",
+                    template_name="Team WFH Request",
+                    event_type="hr.wfh_manager",
+                    title=f"WFH from {emp_name}",
+                    body=(
+                        f"{emp_name} requested WFH for {row.wfh_date}. "
+                        "Open Team Approvals."
+                    ),
+                    kind="wfh",
+                    cc_reporting_manager=False,
+                    extra={
+                        "wfh_request_id": str(row.id),
+                        "href": "/approvals",
+                        "employee_id": str(row.employee_id),
+                    },
+                )
+        except Exception:
+            pass
+        return updated
+
+    def manager_approve(
+        self, ctx: TenantContext, row_id: UUID, *, approver_employee_id: UUID | None = None
+    ):
+        """Manager step — pending HR; attendance applied only on HR approve."""
+        row = self.get(ctx, row_id)
+        if row.status != "submitted":
+            raise InvalidAttendanceState(
+                "Only submitted WFH requests can be manager-approved"
+            )
+        updated = self._repo.update(
+            ctx,
+            row_id,
+            status="manager_approved",
+            manager_approver_id=approver_employee_id,
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_wfh_request",
+            entity_id=row_id,
+            operation="manager_approve",
+            performed_by=ctx.user_id,
+        )
+        try:
+            from modules.hr.service.hr_notify import (
+                notify_employee,
+                notify_users_with_permission,
+            )
+
+            notify_employee(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                employee_id=row.employee_id,
+                template_code="hr.wfh_manager_approved",
+                template_name="WFH Manager Approved",
+                event_type="hr.wfh_manager_approved",
+                title="WFH approved by manager",
+                body=(
+                    f"Your WFH for {row.wfh_date} was approved by your manager "
+                    "and is pending HR."
+                ),
+                kind="wfh",
+                cc_reporting_manager=False,
+                extra={"wfh_request_id": str(row.id), "href": "/wfh"},
+            )
+            exclude: set[UUID] = set()
+            if ctx.user_id:
+                exclude.add(ctx.user_id)
+            notify_users_with_permission(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                permission_code="hr.attendance:update",
+                template_code="hr.wfh_pending_hr",
+                template_name="WFH Pending HR",
+                event_type="hr.wfh_pending_hr",
+                title="WFH pending HR approval",
+                body=(
+                    f"WFH for {row.wfh_date} was manager-approved and needs "
+                    "HR final approval."
+                ),
+                kind="wfh",
+                extra={"href": "/hr/ess-inbox", "wfh_request_id": str(row.id)},
+                exclude_user_ids=exclude,
             )
         except Exception:
             pass
         return updated
 
-    def manager_approve(self, ctx: TenantContext, row_id: UUID, *, approver_employee_id: UUID | None = None):
+    def approve(self, ctx: TenantContext, row_id: UUID):
+        """HR final approval — marks WFH attendance."""
         row = self.get(ctx, row_id)
-        if row.status != "submitted":
-            raise InvalidAttendanceState("Only submitted WFH requests can be manager-approved")
+        if row.status not in {"submitted", "manager_approved"}:
+            raise InvalidAttendanceState(
+                "WFH must be submitted or manager-approved for HR approval"
+            )
         start = row.wfh_date
         end = row.end_date or row.wfh_date
         cur = start
@@ -107,7 +208,6 @@ class WfhRequestService:
             ctx,
             row_id,
             status="approved",
-            manager_approver_id=approver_employee_id,
             approved_by=ctx.user_id,
             decided_at=datetime.now(timezone.utc),
         )
@@ -115,7 +215,7 @@ class WfhRequestService:
             tenant_id=ctx.tenant_id,
             entity_name="hr_wfh_request",
             entity_id=row_id,
-            operation="manager_approve",
+            operation="approve",
             performed_by=ctx.user_id,
         )
         try:
@@ -129,22 +229,31 @@ class WfhRequestService:
                 template_name="WFH Approved",
                 event_type="hr.wfh_approved",
                 title="WFH approved",
-                body=f"Your WFH for {row.wfh_date} was approved. You may web punch without geofence.",
+                body=(
+                    f"Your WFH for {row.wfh_date} was approved by HR. "
+                    "You may web punch without geofence."
+                ),
                 kind="wfh",
+                extra={"wfh_request_id": str(row.id), "href": "/wfh"},
             )
         except Exception:
             pass
         return updated
 
-    def reject(self, ctx: TenantContext, row_id: UUID, *, approver_employee_id: UUID | None = None):
+    def reject(
+        self, ctx: TenantContext, row_id: UUID, *, approver_employee_id: UUID | None = None
+    ):
         row = self.get(ctx, row_id)
-        if row.status != "submitted":
-            raise InvalidAttendanceState("Only submitted WFH requests can be rejected")
+        if row.status not in {"submitted", "manager_approved"}:
+            raise InvalidAttendanceState(
+                "Only submitted/manager-approved WFH requests can be rejected"
+            )
         return self._repo.update(
             ctx,
             row_id,
             status="rejected",
-            manager_approver_id=approver_employee_id,
+            manager_approver_id=approver_employee_id
+            or getattr(row, "manager_approver_id", None),
             approved_by=ctx.user_id,
             decided_at=datetime.now(timezone.utc),
         )

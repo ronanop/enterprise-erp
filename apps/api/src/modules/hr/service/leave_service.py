@@ -797,6 +797,13 @@ class LeaveRequestService:
             from modules.hr.service.hr_notify import notify_employee, notify_users_with_permission
             from modules.master_data.published import EmployeeRead
 
+            emp = self._db.get(EmployeeRead, row.employee_id)
+            emp_name = (
+                f"{getattr(emp, 'first_name', '')} {getattr(emp, 'last_name', '')}".strip()
+                if emp is not None
+                else "Team member"
+            )
+            # Employee confirmation — manager notified separately below.
             notify_employee(
                 self._db,
                 tenant_id=ctx.tenant_id,
@@ -805,14 +812,39 @@ class LeaveRequestService:
                 template_name="Leave Request Submitted",
                 event_type="hr.leave_submitted",
                 title="Leave request submitted",
-                body=f"Leave request {row.document_number} was submitted and is pending approval.",
+                body=(
+                    f"Leave request {row.document_number} was submitted "
+                    "and is pending your manager's approval."
+                ),
                 kind="leave",
-                extra={"href": "/hr/ess", "leave_request_id": str(row.id)},
+                extra={"href": "/leave", "leave_request_id": str(row.id)},
+                cc_reporting_manager=False,
             )
+            # Manager ESS Team Approvals
+            if emp is not None and emp.reporting_manager_id:
+                notify_employee(
+                    self._db,
+                    tenant_id=ctx.tenant_id,
+                    employee_id=emp.reporting_manager_id,
+                    template_code="hr.leave_submitted_manager",
+                    template_name="Team Leave Request",
+                    event_type="hr.leave_submitted_manager",
+                    title=f"Leave request from {emp_name}",
+                    body=(
+                        f"{emp_name} submitted leave {row.document_number}. "
+                        "Open Team Approvals to review."
+                    ),
+                    kind="leave",
+                    extra={
+                        "href": "/approvals",
+                        "leave_request_id": str(row.id),
+                        "employee_id": str(row.employee_id),
+                    },
+                    cc_reporting_manager=False,
+                )
             exclude: set[UUID] = set()
             if ctx.user_id:
                 exclude.add(ctx.user_id)
-            emp = self._db.get(EmployeeRead, row.employee_id)
             if emp is not None:
                 if emp.user_id:
                     exclude.add(emp.user_id)
@@ -820,6 +852,7 @@ class LeaveRequestService:
                     mgr = self._db.get(EmployeeRead, emp.reporting_manager_id)
                     if mgr is not None and mgr.user_id:
                         exclude.add(mgr.user_id)
+            # HRMS HR inbox (final stage after manager) — informational for HR roles.
             notify_users_with_permission(
                 self._db,
                 tenant_id=ctx.tenant_id,
@@ -827,8 +860,8 @@ class LeaveRequestService:
                 template_code="hr.leave_submitted",
                 template_name="Leave Request Submitted",
                 event_type="hr.leave_submitted",
-                title="Leave Pending",
-                body=f"Leave request {row.document_number} needs approval.",
+                title="Leave Pending Manager",
+                body=f"Leave request {row.document_number} was submitted (manager first).",
                 kind="leave",
                 extra={"href": "/hr/ess-inbox", "leave_request_id": str(row.id)},
                 exclude_user_ids=exclude,
@@ -855,7 +888,7 @@ class LeaveRequestService:
             performed_by=ctx.user_id,
         )
         try:
-            from modules.hr.service.hr_notify import notify_employee
+            from modules.hr.service.hr_notify import notify_employee, notify_users_with_permission
 
             notify_employee(
                 self._db,
@@ -868,6 +901,34 @@ class LeaveRequestService:
                 body=f"Leave request {row.document_number} was approved by your manager and is pending HR.",
                 kind="leave",
                 cc_reporting_manager=False,
+                extra={
+                    "leave_request_id": str(row.id),
+                    "document_number": row.document_number,
+                    "href": "/leave",
+                },
+            )
+            exclude: set[UUID] = set()
+            if ctx.user_id:
+                exclude.add(ctx.user_id)
+            notify_users_with_permission(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                permission_code="hr.leave:approve",
+                template_code="hr.leave_manager_approved",
+                template_name="Leave Manager Approved",
+                event_type="hr.leave_pending_hr",
+                title="Leave pending HR approval",
+                body=(
+                    f"Leave request {row.document_number} was manager-approved "
+                    "and needs HR final approval."
+                ),
+                kind="leave",
+                extra={
+                    "href": "/hr/ess-inbox",
+                    "leave_request_id": str(row.id),
+                    "document_number": row.document_number,
+                },
+                exclude_user_ids=exclude,
             )
         except Exception:
             pass
@@ -927,6 +988,11 @@ class LeaveRequestService:
                 body=f"Your leave request {row.document_number} has been approved.",
                 kind="leave",
                 cc_reporting_manager=False,
+                extra={
+                    "leave_request_id": str(row.id),
+                    "document_number": row.document_number,
+                    "href": "/leave",
+                },
             )
         except Exception:
             pass
@@ -974,6 +1040,11 @@ class LeaveRequestService:
                 body=f"Your leave request {row.document_number} was rejected.",
                 kind="leave",
                 cc_reporting_manager=False,
+                extra={
+                    "leave_request_id": str(row.id),
+                    "document_number": row.document_number,
+                    "href": "/leave",
+                },
             )
         except Exception:
             pass
@@ -1005,6 +1076,11 @@ class LeaveRequestService:
                 title="Leave request cancelled",
                 body=f"Leave request {row.document_number} was cancelled.",
                 kind="leave",
+                extra={
+                    "leave_request_id": str(row.id),
+                    "document_number": row.document_number,
+                    "href": "/leave",
+                },
             )
         except Exception:
             pass

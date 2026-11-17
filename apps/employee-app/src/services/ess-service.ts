@@ -4,6 +4,7 @@ import {
   mockHolidays,
   mockNotifications,
 } from "@/data/mock-portal";
+import { randomId } from "@/lib/random-id";
 import { ApiClientError, apiClient, apiClientBlob } from "@/services/api-client";
 import type {
   EssAttendance,
@@ -83,7 +84,16 @@ let essMeInflight: Promise<Awaited<ReturnType<typeof apiClient<EssMe>>>> | null 
 function essMe() {
   if (env.useMock) return wrapMock(() => mockApi.me());
   if (!essMeInflight) {
-    essMeInflight = apiClient<EssMe>("/ess/me").finally(() => {
+    // Bound wait so a hung proxy (API down) cannot pin splash forever via shared inflight.
+    essMeInflight = Promise.race([
+      apiClient<EssMe>("/ess/me"),
+      new Promise<never>((_, reject) => {
+        window.setTimeout(
+          () => reject(new ApiClientError("ESS me timed out", 0)),
+          5_000,
+        );
+      }),
+    ]).finally(() => {
       essMeInflight = null;
     });
   }
@@ -184,15 +194,39 @@ export const essService = {
             selfie_required: false,
             face_at_punch_required: false,
             face_enrolled: false,
+            work_locations: [
+              {
+                id: "mock-sul",
+                location_name: "Sultanpur, New Delhi",
+                city: "New Delhi",
+                latitude: null,
+                longitude: null,
+                geofence_radius_meters: null,
+                location_type: "office",
+                is_home: true,
+              },
+            ],
+            home_office_name: "Head Office",
           },
         }))
       : apiClient<import("@/types/api").EssPunchPolicy>(
           "/ess/attendance/punch-policy",
         ),
 
-  punch: async (opts?: { image_base64?: string | null }) => {
+  punch: async (opts?: {
+    image_base64?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+  }) => {
     if (env.useMock) return wrapMock(() => mockApi.punch());
-    const coords = await readGeolocation();
+    const fromSheet =
+      opts?.latitude != null &&
+      opts?.longitude != null &&
+      Number.isFinite(opts.latitude) &&
+      Number.isFinite(opts.longitude);
+    const coords = fromSheet
+      ? { latitude: Number(opts!.latitude), longitude: Number(opts!.longitude) }
+      : await readGeolocation();
     const body: Record<string, unknown> = { ...coords };
     if (opts?.image_base64) body.image_base64 = opts.image_base64;
     return apiClient<EssPunch>("/ess/attendance/punch", {
@@ -200,6 +234,13 @@ export const essService = {
       body,
     });
   },
+
+  listAttendanceCorrections: () =>
+    env.useMock
+      ? wrapMock(async () => ({ success: true, message: "OK", data: [] }))
+      : apiClient<import("@/types/api").EssAttendanceCorrection[]>(
+          "/ess/attendance-corrections",
+        ),
 
   createAttendanceCorrection: (body: {
     attendance_date: string;
@@ -224,10 +265,34 @@ export const essService = {
             old_value: body.old_value ?? null,
           },
         }))
-      : apiClient("/ess/attendance-corrections", {
-          method: "POST",
-          body: { ...body, submit: true },
-        }),
+      : apiClient<import("@/types/api").EssAttendanceCorrection>(
+          "/ess/attendance-corrections",
+          {
+            method: "POST",
+            body: { ...body, submit: true },
+          },
+        ),
+
+  cancelAttendanceCorrection: (id: string) =>
+    env.useMock
+      ? wrapMock(async () => ({
+          success: true,
+          message: "Correction revoked",
+          data: {
+            id,
+            attendance_date: new Date().toISOString().slice(0, 10),
+            field_name: "check_in",
+            new_value: "",
+            reason: null,
+            status: "cancelled",
+            attendance_id: null,
+            old_value: null,
+          },
+        }))
+      : apiClient<import("@/types/api").EssAttendanceCorrection>(
+          `/ess/attendance-corrections/${id}/cancel`,
+          { method: "POST" },
+        ),
 
   listOnDuty: () =>
     env.useMock
@@ -431,7 +496,7 @@ export const essService = {
           success: true,
           message: "Uploaded",
           data: {
-            id: crypto.randomUUID(),
+            id: randomId(),
             document_number: "DOC-MOCK",
             document_type: body.document_type,
             document_name: body.document_name,
@@ -551,14 +616,30 @@ export const essService = {
       : apiClient(`/ess/notifications/${id}/read`, { method: "POST", body: {} }),
 
   payslips: () =>
-    env.useMock
+    env.useMock || env.usePayslipMock
       ? wrapMock(() => mockApi.payslips())
       : apiClient<EssPayslip[]>("/ess/payslips"),
 
   payslip: (id: string) =>
-    env.useMock
+    env.useMock || env.usePayslipMock
       ? wrapMock(() => mockApi.payslip(id))
       : apiClient<EssPayslip>(`/ess/payslips/${id}`),
+
+  payslipExportText: (id: string) =>
+    env.useMock || env.usePayslipMock
+      ? wrapMock(async () => {
+          const row = await mockApi.payslip(id);
+          return {
+            success: true,
+            message: "OK",
+            data: {
+              text:
+                row.data.export_text ||
+                `Payslip ${row.data.document_number}\nNet: ${row.data.net_salary}`,
+            },
+          };
+        })
+      : apiClient<{ text: string }>(`/ess/payslips/${id}/export-text`),
 
   emergency: () =>
     env.useMock
@@ -708,7 +789,7 @@ export const essService = {
           success: true,
           message: "OK",
           data: {
-            id: crypto.randomUUID(),
+            id: randomId(),
             document_number: "SEP-LOCAL",
             separation_type: body.separation_type ?? "resignation",
             requested_last_working_date: body.requested_last_working_date,

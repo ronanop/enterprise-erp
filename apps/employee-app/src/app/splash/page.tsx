@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { isAuthenticated } from "@/lib/auth";
 import {
   hasSeenSplashThisSession,
@@ -9,7 +8,7 @@ import {
   markSplashSeenThisSession,
 } from "@/lib/onboarding";
 
-const SPLASH_MS = 3200;
+const SPLASH_MS = 2200;
 
 function nextRoute(): string {
   if (!isOnboardingComplete()) return "/onboarding";
@@ -18,33 +17,49 @@ function nextRoute(): string {
 }
 
 export default function CinematicSplashPage() {
-  const router = useRouter();
   const [status, setStatus] = useState("Preparing your workspace...");
+  const navigatedRef = useRef(false);
+
+  function goNext() {
+    if (navigatedRef.current) return;
+    navigatedRef.current = true;
+    markSplashSeenThisSession();
+    // Hard navigation — App Router soft replace can hang when LAN HMR is blocked.
+    window.location.replace(nextRoute());
+  }
 
   useEffect(() => {
     if (hasSeenSplashThisSession()) {
-      router.replace(nextRoute());
+      goNext();
       return;
     }
 
     const readyTimer = window.setTimeout(() => {
       setStatus("Almost ready...");
-    }, 2200);
+    }, 1200);
 
-    const navTimer = window.setTimeout(() => {
-      markSplashSeenThisSession();
-      router.replace(nextRoute());
-    }, SPLASH_MS);
+    const navTimer = window.setTimeout(goNext, SPLASH_MS);
+    const hardTimer = window.setTimeout(goNext, SPLASH_MS + 2000);
 
     return () => {
       window.clearTimeout(readyTimer);
       window.clearTimeout(navTimer);
+      window.clearTimeout(hardTimer);
     };
-  }, [router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only splash
+  }, []);
 
   return (
-    <main className="relative flex h-dvh max-h-dvh w-full max-w-lg flex-col items-center overflow-hidden bg-[#f8f9ff] text-[#0b1c30] touch-none">
-      {/* Soft mesh background (Stitch shader → CSS) */}
+    <main
+      className="relative flex h-dvh max-h-dvh w-full max-w-lg flex-col items-center overflow-hidden bg-[#f8f9ff] text-[#0b1c30]"
+      onClick={goNext}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") goNext();
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label="Continue"
+    >
       <div className="pointer-events-none absolute inset-0 opacity-70" aria-hidden>
         <div className="splash-blob absolute -left-16 top-10 h-72 w-72 rounded-full bg-[#2563eb]/20 blur-[90px]" />
         <div className="splash-blob-slow absolute -right-10 top-40 h-80 w-80 rounded-full bg-[#6366f1]/18 blur-[100px]" />
@@ -56,10 +71,8 @@ export default function CinematicSplashPage() {
         aria-hidden
       />
 
-      {/* Spacer - matches top breathing room without logo card */}
       <div className="h-6 shrink-0 sm:h-8" aria-hidden />
 
-      {/* Hero scaled to fit above title + loading pill (one screen) */}
       <div className="relative z-10 flex min-h-0 w-full flex-1 flex-col items-center justify-center overflow-hidden px-2">
         <div className="splash-float relative flex h-full max-h-[min(64dvh,100%)] w-[112%] max-w-none items-center justify-center">
           <div
@@ -91,6 +104,7 @@ export default function CinematicSplashPage() {
               {status}
             </span>
           </div>
+          <p className="mt-3 text-center text-xs text-[#64748B]">Tap to continue</p>
         </div>
       </footer>
     </main>

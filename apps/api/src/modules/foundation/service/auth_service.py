@@ -197,6 +197,231 @@ class AuthService:
 
         return self._issue_tokens(user, ip_address=ip_address, user_agent=user_agent)
 
+    @staticmethod
+    def _normalize_mobile(raw: str) -> str:
+        digits = "".join(ch for ch in (raw or "") if ch.isdigit())
+        if len(digits) > 10:
+            digits = digits[-10:]
+        return digits
+
+    @staticmethod
+    def _mask_mobile(digits: str) -> str:
+        if len(digits) < 4:
+            return "****"
+        return f"{'*' * max(0, len(digits) - 4)}{digits[-4:]}"
+
+    @staticmethod
+    def _ess_entity_family(code: str, name: str, legal: str) -> str:
+        """Collapse seed/alias companies into HRMS entity families (digitech | technology)."""
+        blob = f"{code} {name} {legal}".lower()
+        upper = code.strip().upper()
+        if upper in {"CDPL", "DEMOCO", "CACHEDIG"} or "digitech" in blob:
+            return "digitech"
+        if upper in {"CT", "CTS", "CACHETECH", "CTPL"} or "technolog" in blob:
+            return "technology"
+        return upper or name.strip().lower() or "other"
+
+    def list_ess_companies(self) -> list[dict[str, str]]:
+        """HRMS entities for ESS login — active companies that have employees."""
+        employee_counts: dict[UUID, int] = {}
+        for company_id in self._db.scalars(
+            select(MasterEmployee.company_id).where(MasterEmployee.is_deleted.is_(False))
+        ).all():
+            if company_id is None:
+                continue
+            employee_counts[company_id] = employee_counts.get(company_id, 0) + 1
+
+        rows = self._db.scalars(
+            select(OrgCompany)
+            .where(
+                OrgCompany.is_deleted.is_(False),
+                OrgCompany.status != "inactive",
+            )
+            .order_by(OrgCompany.company_name.asc())
+        ).all()
+
+        preferred_codes = {"CDPL": 0, "CT": 1, "CACHETECH": 2, "DEMOCO": 9}
+        best_by_family: dict[str, tuple[int, int, dict[str, str]]] = {}
+        for row in rows:
+            code = (row.company_code or "").strip().upper()
+            if not code:
+                continue
+            count = int(employee_counts.get(row.id, 0))
+            if count <= 0:
+                continue
+            item = {
+                "company_code": row.company_code,
+                "company_name": row.company_name,
+                "legal_name": row.legal_name or "",
+            }
+            family = self._ess_entity_family(code, row.company_name or "", row.legal_name or "")
+            rank = preferred_codes.get(code, 5)
+            prev = best_by_family.get(family)
+            if prev is None or count > prev[0] or (count == prev[0] and rank < prev[1]):
+                best_by_family[family] = (count, rank, item)
+
+        items = [entry[2] for entry in best_by_family.values()]
+        items.sort(key=lambda r: (r["company_name"] or "").lower())
+        return items
+
+    def _match_ess_phone(
+        self, *, company_code: str, mobile: str
+    ) -> tuple[OrgCompany, str]:
+        """Resolve company + normalized mobile if an employee matches."""
+        code = company_code.strip().upper()
+        needle = self._normalize_mobile(mobile)
+        if len(needle) < 8:
+            raise InvalidCredentialsException("Invalid phone number")
+
+        company = self._db.scalar(
+            select(OrgCompany).where(
+                OrgCompany.company_code == code,
+                OrgCompany.is_deleted.is_(False),
+            )
+        )
+        if company is None:
+            raise InvalidCredentialsException()
+
+        employees = list(
+            self._db.scalars(
+                select(MasterEmployee).where(
+                    MasterEmployee.company_id == company.id,
+                    MasterEmployee.is_deleted.is_(False),
+                )
+            ).all()
+        )
+        matched = None
+        for row in employees:
+            if self._normalize_mobile(getattr(row, "mobile", "") or "") == needle:
+                matched = row
+                break
+        if matched is None:
+            raise InvalidCredentialsException("Phone number not found for this company")
+        return company, needle
+
+    def lookup_ess_phone(
+        self,
+        *,
+        company_code: str,
+        mobile: str,
+    ) -> dict[str, str | bool]:
+        """Identify phone under company (no captcha) so UI can reveal captcha next."""
+        company, needle = self._match_ess_phone(company_code=company_code, mobile=mobile)
+        return {
+            "identified": True,
+            "company_code": company.company_code,
+            "company_name": company.company_name,
+            "mobile_masked": self._mask_mobile(needle),
+        }
+
+    def verify_ess_phone(
+        self,
+        *,
+        company_code: str,
+        mobile: str,
+        captcha_id: str,
+        captcha_answer: str,
+    ) -> dict[str, str | bool]:
+        """Step-1 ESS gate: captcha + phone must match an employee under the company."""
+        if not verify_challenge(captcha_id, captcha_answer, required=True):
+            raise InvalidCredentialsException("CAPTCHA verification failed")
+
+        company, needle = self._match_ess_phone(company_code=company_code, mobile=mobile)
+        return {
+            "verified": True,
+            "company_code": company.company_code,
+            "company_name": company.company_name,
+            "mobile_masked": self._mask_mobile(needle),
+        }
+
+    @staticmethod
+    def _resolve_ess_employee(
+        candidates: list[MasterEmployee], emp_code: str
+    ) -> MasterEmployee | None:
+        """Match ESS employee code exactly, then unique numeric-suffix fallback."""
+        exact = [
+            row
+            for row in candidates
+            if normalize_employee_code(row.employee_code) == emp_code
+        ]
+        if len(exact) == 1:
+            return exact[0]
+        if exact:
+            return exact[0]
+        digits = re.sub(r"\D", "", emp_code)
+        if len(digits) >= 3:
+            suffix_hits = [
+                row
+                for row in candidates
+                if normalize_employee_code(row.employee_code).endswith(digits)
+            ]
+            if len(suffix_hits) == 1:
+                return suffix_hits[0]
+        return None
+
+    def _find_sec_user_by_email(self, *, tenant_id: UUID, email: str | None) -> SecUser | None:
+        address = (email or "").strip().lower()
+        if not address or address.startswith("enc1:"):
+            return None
+        return self._db.scalars(
+            select(SecUser).where(
+                SecUser.tenant_id == tenant_id,
+                func.lower(SecUser.email) == address,
+                SecUser.is_deleted.is_(False),
+            )
+        ).first()
+
+    def _ensure_ess_login_user(
+        self,
+        *,
+        employee: MasterEmployee,
+        company_code: str,
+        password: str,
+        existing_user: SecUser | None,
+    ) -> SecUser:
+        """Link HRMS SecUser when present; otherwise create an ESS login user.
+
+        Many employees already have an ERP/HRMS account on the same email. Creating
+        another SecUser hits uk_sec_user_tenant_email and makes login look like
+        invalid credentials — so we reuse/link that account instead.
+        """
+        user = existing_user
+        if user is None:
+            user = self._find_sec_user_by_email(
+                tenant_id=employee.tenant_id, email=employee.email
+            )
+        if user is None:
+            emp_code = normalize_employee_code(employee.employee_code)
+            email = (employee.email or "").strip()
+            if not email or email.startswith("enc1:"):
+                email = f"{emp_code.lower()}@{company_code.lower()}.local"
+            user = SecUser(
+                tenant_id=employee.tenant_id,
+                email=email,
+                display_name=f"{employee.first_name} {employee.last_name or ''}".strip(),
+                user_type="employee",
+                status="active",
+                password_hash=PasswordHasher.hash_password(password, validate=False),
+                employee_id=employee.id,
+            )
+            self._db.add(user)
+            self._db.flush()
+        else:
+            user.password_hash = PasswordHasher.hash_password(password, validate=False)
+            if getattr(user, "employee_id", None) is None:
+                user.employee_id = employee.id
+            if user.status in BLOCKED_LOGIN_STATUSES:
+                # ESS DOB unlock for linked inactive ERP users is not allowed.
+                raise InvalidCredentialsException(
+                    "This account is inactive. Contact your ERP admin."
+                )
+            self._db.flush()
+
+        if employee.user_id != user.id:
+            employee.user_id = user.id
+            self._db.flush()
+        return user
+
     def login_ess(
         self,
         *,
@@ -230,11 +455,7 @@ class AuthService:
                 )
             ).all()
         )
-        employee = None
-        for row in candidates:
-            if normalize_employee_code(row.employee_code) == emp_code:
-                employee = row
-                break
+        employee = self._resolve_ess_employee(candidates, emp_code)
         if employee is None:
             raise InvalidCredentialsException()
 
@@ -249,6 +470,8 @@ class AuthService:
         )
 
         user = self._db.get(SecUser, employee.user_id) if employee.user_id else None
+        if user is not None and getattr(user, "is_deleted", False):
+            user = None
 
         password_valid = False
         if user and user.password_hash:
@@ -257,22 +480,12 @@ class AuthService:
         if not password_valid and profile and profile.date_of_birth:
             if verify_ess_dob_password(password, employee.employee_code, profile.date_of_birth):
                 password_valid = True
-                if user is None:
-                    user = SecUser(
-                        tenant_id=employee.tenant_id,
-                        email=employee.email or f"{emp_code.lower()}@{code.lower()}.local",
-                        display_name=f"{employee.first_name} {employee.last_name or ''}".strip(),
-                        user_type="employee",
-                        status="active",
-                        password_hash=PasswordHasher.hash_password(password, validate=False),
-                    )
-                    self._db.add(user)
-                    self._db.flush()
-                    employee.user_id = user.id
-                    self._db.flush()
-                else:
-                    user.password_hash = PasswordHasher.hash_password(password, validate=False)
-                    self._db.flush()
+                user = self._ensure_ess_login_user(
+                    employee=employee,
+                    company_code=code,
+                    password=password,
+                    existing_user=user,
+                )
 
         if user is None or user.is_deleted or not password_valid:
             if user:

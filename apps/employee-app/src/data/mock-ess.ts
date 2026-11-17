@@ -49,6 +49,7 @@ export const MOCK_DEMO_EMAIL = "demo@company.com";
 export const MOCK_DEMO_COMPANY = "CT";
 export const MOCK_DEMO_EMPLOYEE_CODE = "CT5354";
 export const MOCK_DEMO_PASSWORD = "CT535415102003";
+export const MOCK_DEMO_MOBILE = "9876543210";
 
 export const mockMe: EssMe = {
   employee_id: "emp-demo-001",
@@ -67,6 +68,12 @@ export const mockMe: EssMe = {
   department_name: "Product & Design",
   manager_name: "Team Lead",
   date_of_birth: "1994-06-12",
+  gender: "female",
+  nationality: "Indian",
+  blood_group: "B+",
+  marital_status: "single",
+  current_address: "12 MG Road, Bengaluru, KA 560001",
+  permanent_address: "12 MG Road, Bengaluru, KA 560001",
   ess_role: "employee",
   is_manager: false,
   can_approve_team_leave: false,
@@ -238,68 +245,158 @@ let mockAttendance: EssAttendance[] = [
   ...buildPastAttendance(),
 ];
 
+function mockPeriodIso(monthsAgo: number, day = 28) {
+  const d = new Date();
+  d.setMonth(d.getMonth() - monthsAgo, day);
+  d.setHours(12, 0, 0, 0);
+  return d.toISOString();
+}
+
+function mockPeriodName(monthsAgo: number) {
+  const d = new Date();
+  d.setMonth(d.getMonth() - monthsAgo, 1);
+  return d.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+}
+
 export const mockPayslips: EssPayslip[] = [
   {
-    id: "ps-2026-06",
-    document_number: "PAY-2026-06-1042",
+    id: "ps-2026-10",
+    document_number: "PAY-2026-10-1042",
     employee_code: "EMP-1042",
     employee_name: "Riya Sharma",
-    payroll_period_id: "pp-2026-06",
-    gross_salary: 75000,
-    total_deductions: 12500,
-    net_salary: 62500,
-    issued_at: new Date(
-      new Date().getFullYear(),
-      new Date().getMonth() - 1,
-      28,
-    ).toISOString(),
+    payroll_period_id: "pp-2026-10",
+    period_name: mockPeriodName(0),
+    period_start: mockPeriodIso(0, 1).slice(0, 10),
+    period_end: mockPeriodIso(0, 28).slice(0, 10),
+    gross_salary: 67500,
+    total_deductions: 5050,
+    net_salary: 72450,
+    issued_at: mockPeriodIso(0, 28),
     delivery_status: "delivered",
     payment_status: "paid",
     status: "issued",
+    earnings: [
+      { code: "basic", label: "Basic Salary", amount: 35000 },
+      { code: "hra", label: "HRA", amount: 17500 },
+      { code: "special", label: "Special Allowance", amount: 10000 },
+      { code: "other", label: "Other Allowance", amount: 5000 },
+    ],
+    deductions: [
+      { code: "pf_employee", label: "Provident Fund", amount: 3000 },
+      { code: "pt", label: "Professional Tax", amount: 200 },
+      { code: "tds", label: "Income Tax", amount: 1850 },
+    ],
+    attendance_summary: {
+      period_days: 30,
+      leave_days: 1,
+      paid_leave: 1,
+      lop_days: 0,
+    },
+    export_text: [
+      "PAYSLIP — October sample",
+      "Employee: Riya Sharma (EMP-1042)",
+      "Gross: 67500 | Deductions: 5050 | Net: 72450",
+      "Earnings: Basic 35000, HRA 17500, Special 10000, Other 5000",
+      "Deductions: PF 3000, PT 200, TDS 1850",
+    ].join("\n"),
     payslip_json: {
-      earnings: { basic: 40000, hra: 16000, special: 19000 },
-      deductions: { pf: 4800, tax: 6200, other: 1500 },
+      earnings: [
+        { code: "basic", label: "Basic Salary", amount: 35000 },
+        { code: "hra", label: "HRA", amount: 17500 },
+        { code: "special", label: "Special Allowance", amount: 10000 },
+        { code: "other", label: "Other Allowance", amount: 5000 },
+      ],
+      deductions: [
+        { code: "pf_employee", label: "Provident Fund", amount: 3000 },
+        { code: "pt", label: "Professional Tax", amount: 200 },
+        { code: "tds", label: "Income Tax", amount: 1850 },
+      ],
+      attendance: { period_days: 30, leave_days: 1, paid_leave: 1, lop_days: 0 },
     },
     company_id: "co-demo-001",
     branch_id: "br-demo-001",
   },
   {
-    id: "ps-2026-05",
-    document_number: "PAY-2026-05-1042",
+    id: "ps-2026-09",
+    document_number: "PAY-2026-09-1042",
     employee_code: "EMP-1042",
     employee_name: "Riya Sharma",
-    payroll_period_id: "pp-2026-05",
-    gross_salary: 75000,
-    total_deductions: 11800,
-    net_salary: 63200,
-    issued_at: new Date(
-      new Date().getFullYear(),
-      new Date().getMonth() - 2,
-      28,
-    ).toISOString(),
+    payroll_period_id: "pp-2026-09",
+    period_name: mockPeriodName(1),
+    gross_salary: 67500,
+    total_deductions: 5050,
+    net_salary: 72450,
+    issued_at: mockPeriodIso(1, 28),
     delivery_status: "delivered",
     payment_status: "paid",
     status: "issued",
+    earnings: [
+      { code: "basic", label: "Basic Salary", amount: 35000 },
+      { code: "hra", label: "HRA", amount: 17500 },
+      { code: "special", label: "Special Allowance", amount: 10000 },
+      { code: "other", label: "Other Allowance", amount: 5000 },
+    ],
+    deductions: [
+      { code: "pf_employee", label: "Provident Fund", amount: 3000 },
+      { code: "pt", label: "Professional Tax", amount: 200 },
+      { code: "tds", label: "Income Tax", amount: 1850 },
+    ],
     company_id: "co-demo-001",
     branch_id: "br-demo-001",
   },
   {
-    id: "ps-2026-04",
-    document_number: "PAY-2026-04-1042",
+    id: "ps-2026-08",
+    document_number: "PAY-2026-08-1042",
     employee_code: "EMP-1042",
     employee_name: "Riya Sharma",
-    payroll_period_id: "pp-2026-04",
-    gross_salary: 72000,
-    total_deductions: 11000,
-    net_salary: 61000,
-    issued_at: new Date(
-      new Date().getFullYear(),
-      new Date().getMonth() - 3,
-      28,
-    ).toISOString(),
+    payroll_period_id: "pp-2026-08",
+    period_name: mockPeriodName(2),
+    gross_salary: 65500,
+    total_deductions: 4880,
+    net_salary: 70120,
+    issued_at: mockPeriodIso(2, 28),
     delivery_status: "delivered",
     payment_status: "paid",
     status: "issued",
+    earnings: [
+      { code: "basic", label: "Basic Salary", amount: 34000 },
+      { code: "hra", label: "HRA", amount: 17000 },
+      { code: "special", label: "Special Allowance", amount: 9500 },
+      { code: "other", label: "Other Allowance", amount: 5000 },
+    ],
+    deductions: [
+      { code: "pf_employee", label: "Provident Fund", amount: 2880 },
+      { code: "pt", label: "Professional Tax", amount: 200 },
+      { code: "tds", label: "Income Tax", amount: 1800 },
+    ],
+    company_id: "co-demo-001",
+    branch_id: "br-demo-001",
+  },
+  {
+    id: "ps-2026-07",
+    document_number: "PAY-2026-07-1042",
+    employee_code: "EMP-1042",
+    employee_name: "Riya Sharma",
+    payroll_period_id: "pp-2026-07",
+    period_name: mockPeriodName(3),
+    gross_salary: 65500,
+    total_deductions: 4880,
+    net_salary: 70120,
+    issued_at: mockPeriodIso(3, 28),
+    delivery_status: "delivered",
+    payment_status: "paid",
+    status: "issued",
+    earnings: [
+      { code: "basic", label: "Basic Salary", amount: 34000 },
+      { code: "hra", label: "HRA", amount: 17000 },
+      { code: "special", label: "Special Allowance", amount: 9500 },
+      { code: "other", label: "Other Allowance", amount: 5000 },
+    ],
+    deductions: [
+      { code: "pf_employee", label: "Provident Fund", amount: 2880 },
+      { code: "pt", label: "Professional Tax", amount: 200 },
+      { code: "tds", label: "Income Tax", amount: 1800 },
+    ],
     company_id: "co-demo-001",
     branch_id: "br-demo-001",
   },
@@ -338,6 +435,93 @@ export const mockApi = {
       mfa_challenge_token: null,
     };
     return delay(ok(token, "Logged in (demo)"));
+  },
+
+  essCompanies() {
+    return delay(
+      ok([
+        {
+          company_code: "CDPL",
+          company_name: "Cache Digitech Private Limited",
+          legal_name: "Cache Digitech Pvt. Ltd.",
+        },
+        {
+          company_code: "CT",
+          company_name: "Cache Technologies & Infotech",
+          legal_name: "Cache Technologies & Infotech",
+        },
+      ]),
+    );
+  },
+
+  essCaptcha() {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 5; i += 1) {
+      code += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    return delay(
+      ok({
+        captcha_id: `mock-captcha-${Date.now()}`,
+        question: "Please type the below code",
+        code,
+        enabled: true,
+      }),
+    );
+  },
+
+  lookupEssPhone(body: { company_code: string; mobile: string }) {
+    if (!body.company_code.trim()) {
+      return Promise.reject(new Error("Company code is required"));
+    }
+    const digits = body.mobile.replace(/\D/g, "").slice(-10);
+    const expected = MOCK_DEMO_MOBILE.replace(/\D/g, "").slice(-10);
+    if (digits !== expected) {
+      return Promise.reject(new Error("Phone number not found for this company"));
+    }
+    const name =
+      body.company_code.trim().toUpperCase() === "CT"
+        ? "Cache Technologies & Infotech"
+        : "Cache Digitech Private Limited";
+    return delay(
+      ok({
+        identified: true,
+        company_code: body.company_code.trim().toUpperCase(),
+        company_name: name,
+        mobile_masked: `******${digits.slice(-4)}`,
+      }),
+    );
+  },
+
+  verifyEssPhone(body: {
+    company_code: string;
+    mobile: string;
+    captcha_id: string;
+    captcha_answer: string;
+  }) {
+    if (!body.company_code.trim()) {
+      return Promise.reject(new Error("Company code is required"));
+    }
+    if (!body.captcha_id.trim() || !body.captcha_answer.trim()) {
+      return Promise.reject(new Error("CAPTCHA verification failed"));
+    }
+    const digits = body.mobile.replace(/\D/g, "").slice(-10);
+    const expected = MOCK_DEMO_MOBILE.replace(/\D/g, "").slice(-10);
+    if (digits !== expected) {
+      return Promise.reject(new Error("Phone number not found for this company"));
+    }
+    const name =
+      body.company_code.trim().toUpperCase() === "CT"
+        ? "Cache Technologies & Infotech"
+        : "Cache Digitech Private Limited";
+    return delay(
+      ok({
+        verified: true,
+        company_code: body.company_code.trim().toUpperCase(),
+        company_name: name,
+        mobile_masked: `******${digits.slice(-4)}`,
+      }),
+    );
   },
 
   essLogin(companyCode: string, employeeCode: string, password: string) {

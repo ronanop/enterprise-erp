@@ -11,7 +11,7 @@ type WrappedConsole = Console["error"] & { __erpWrapped?: boolean };
  * Extensions rewrite the first SSR <script> (id/src/innerHTML) and cause hydration mismatches.
  */
 const NOISE_RE =
-  /Content already injected|Injection error|runInjection|Crypto site not identified|reading 'location'|sendHistory|keyboard-shortcuts|site-signal\.top|api\/finish|superior-grabber/i;
+  /Content already injected|Injection error|runInjection|Crypto site not identified|reading 'location'|sendHistory|keyboard-shortcuts|site-signal\.top|api\/finish|superior-grabber|searchParams` is a Promise|params` is a Promise|sync-dynamic-apis|params are being enumerated|keys of `searchParams`/i;
 
 function isExtNoise(text: unknown) {
   return NOISE_RE.test(String(text || ""));

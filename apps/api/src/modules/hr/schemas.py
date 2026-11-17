@@ -1277,6 +1277,19 @@ class OnDutyRequestResponse(OrmModel):
     version: int
 
 
+class WfhRequestResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    employee_id: UUID
+    wfh_date: date
+    end_date: date | None = None
+    portion: str
+    reason: str | None = None
+    status: str
+    version: int
+
+
 class OtAllotmentCreate(BaseModel):
     company_id: UUID | None = None
     branch_id: UUID

@@ -3,13 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  IconChevronRight,
   IconClock,
   IconFingerprint,
   IconLogin,
   IconLogout,
 } from "@/components/icons";
-import { AlertBox, EmptyState, FilterChips, SearchField, SubHeader, ViewportFab } from "@/components/ui";
+import { FilterChips, SearchField, SubHeader } from "@/components/app-header";
+import { AlertBox, EmptyState } from "@/components/ui";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
 import type { EssAttendance, EssMe } from "@/types/api";
@@ -108,11 +108,10 @@ export default function AttendanceHistoryPage() {
                 key={d.iso}
                 type="button"
                 onClick={() => setSelectedDate(d.iso)}
-                className={`flex flex-col items-center gap-1 rounded-2xl py-2 text-xs ${
-                  active
+                className={`flex flex-col items-center gap-1 rounded-2xl py-2 text-xs ${active
                     ? "bg-[#004ac6] text-white"
                     : "text-[#0b1c30]"
-                }`}
+                  }`}
               >
                 <span className={active ? "text-white/70" : "text-[#434655]"}>
                   {d.dow}
@@ -186,15 +185,14 @@ export default function AttendanceHistoryPage() {
                       </p>
                     </div>
                     <span
-                      className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${
-                        overtime
+                      className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase ${overtime
                           ? "bg-[#eaddff] text-[#712ae2]"
                           : late
                             ? "bg-amber-100 text-amber-800"
                             : row.attendance_status === "absent"
                               ? "bg-[#ffdad6] text-[#ba1a1a]"
                               : "bg-emerald-100 text-emerald-800"
-                      }`}
+                        }`}
                     >
                       {overtime
                         ? "Overtime"
@@ -245,35 +243,6 @@ export default function AttendanceHistoryPage() {
         )}
       </section>
 
-      <section className="grid grid-cols-2 gap-2">
-        <Link
-          href="/attendance/correction"
-          className={`${ui.card} flex items-center justify-between px-3 py-3 text-sm font-semibold text-[#0b1c30]`}
-        >
-          Correction
-          <IconChevronRight size={16} className="text-[#434655]" />
-        </Link>
-        <Link
-          href="/attendance/on-duty"
-          className={`${ui.card} col-span-2 flex items-center justify-between px-3 py-3 text-sm font-semibold text-[#0b1c30]`}
-        >
-          On Duty
-          <IconChevronRight size={16} className="text-[#434655]" />
-        </Link>
-      </section>
-
-      <ViewportFab
-        href="/attendance/correction"
-        aria-label="Request correction"
-        className="bg-[#2563eb]"
-      >
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
-          <path d="M12 16V4" />
-          <path d="M8 8l4-4 4 4" />
-          <path d="M4 20h16" />
-          <path d="M6 16h12v4H6z" />
-        </svg>
-      </ViewportFab>
     </div>
   );
 }

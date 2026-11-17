@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import {
   IconCalendar,
@@ -42,6 +43,7 @@ const BALANCE_COLORS = [
 
 export default function LeavePage() {
   const canTeamLeave = useCanApproveTeamLeave();
+  const router = useRouter();
   const [me, setMe] = useState<EssMe | null>(null);
   const [types, setTypes] = useState<EssLeaveType[]>([]);
   const [balances, setBalances] = useState<EssLeaveBalance[]>([]);
@@ -65,6 +67,22 @@ export default function LeavePage() {
   useEffect(() => {
     setPortalReady(true);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const apply = new URLSearchParams(window.location.search).get("apply");
+    if (apply !== "1") return;
+    setShowApply(true);
+    setStep(1);
+  }, []);
+
+  function closeApplySheet() {
+    setShowApply(false);
+    if (typeof window !== "undefined") {
+      const apply = new URLSearchParams(window.location.search).get("apply");
+      if (apply === "1") router.replace("/leave");
+    }
+  }
 
   useEffect(() => {
     if (!showApply) {
@@ -175,7 +193,7 @@ export default function LeavePage() {
       setReason("");
       setStartDate("");
       setEndDate("");
-      setShowApply(false);
+      closeApplySheet();
       setStep(1);
       await refresh();
     } catch (err) {
@@ -430,7 +448,7 @@ export default function LeavePage() {
               aria-modal="true"
               aria-labelledby="leave-apply-title"
               onClick={(e) => {
-                if (e.target === e.currentTarget) setShowApply(false);
+                if (e.target === e.currentTarget) closeApplySheet();
               }}
             >
               <form onSubmit={onSubmit} className="leave-sheet-panel space-y-4">
@@ -438,7 +456,7 @@ export default function LeavePage() {
                   <button
                     type="button"
                     className="flex h-10 w-10 items-center justify-center rounded-full bg-[#eff4ff] text-[#004ac6]"
-                    onClick={() => setShowApply(false)}
+                    onClick={() => closeApplySheet()}
                   >
                     <IconClose size={18} />
                   </button>

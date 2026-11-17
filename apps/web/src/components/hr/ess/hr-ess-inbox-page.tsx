@@ -42,7 +42,7 @@ type RequestBucket = "attendance" | "on_tour" | "leaves" | "others";
 const BUCKET_CATEGORIES: Record<RequestBucket, HrEssInboxCategory[]> = {
   attendance: ["attendance_correction"],
   on_tour: ["on_duty"],
-  leaves: ["leave"],
+  leaves: ["leave", "wfh"],
   others: ["ot_allotment", "compoff"],
 };
 
@@ -68,7 +68,7 @@ function isOnTourItem(item: HrEssInboxItem): boolean {
 function bucketOf(category: HrEssInboxCategory): RequestBucket {
   if (category === "attendance_correction") return "attendance";
   if (category === "on_duty") return "on_tour";
-  if (category === "leave") return "leaves";
+  if (category === "leave" || category === "wfh") return "leaves";
   return "others";
 }
 

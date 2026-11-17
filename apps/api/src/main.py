@@ -61,7 +61,15 @@ def create_app() -> FastAPI:
     if settings.cors_origin_regex:
         cors_kwargs["allow_origin_regex"] = settings.cors_origin_regex
     elif settings.is_development:
-        cors_kwargs["allow_origin_regex"] = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+        # localhost + common private LAN ranges so phones/tablets can hit ESS via IP
+        cors_kwargs["allow_origin_regex"] = (
+            r"https?://("
+            r"localhost|127\.0\.0\.1|"
+            r"192\.168\.\d{1,3}\.\d{1,3}|"
+            r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+            r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}"
+            r")(:\d+)?"
+        )
 
     application.add_middleware(CORSMiddleware, **cors_kwargs)
 

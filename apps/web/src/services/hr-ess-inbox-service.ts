@@ -5,7 +5,8 @@ export type HrEssInboxCategory =
   | "compoff"
   | "attendance_correction"
   | "ot_allotment"
-  | "on_duty";
+  | "on_duty"
+  | "wfh";
 
 export type HrEssInboxItem = {
   id: string;
@@ -29,6 +30,7 @@ export const INBOX_CATEGORY_LABELS: Record<HrEssInboxCategory, string> = {
   attendance_correction: "Attendance",
   ot_allotment: "OT / Overday",
   on_duty: "On tour / On duty",
+  wfh: "WFH",
 };
 
 export async function loadHrEssInbox(opts?: { includeCompoff?: boolean }): Promise<HrEssInboxItem[]> {
@@ -54,6 +56,7 @@ export function inboxItemHref(item: HrEssInboxItem): string {
     case "attendance_correction":
     case "ot_allotment":
     case "on_duty":
+    case "wfh":
       return "/hr/time";
     default:
       return `/hr/workforce/${item.employee_id}`;

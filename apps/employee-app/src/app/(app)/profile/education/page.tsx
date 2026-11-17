@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AppHeader } from "@/components/app-header";
 import { AiFab, EmptyState } from "@/components/ui";
+import { randomId } from "@/lib/random-id";
 import { essService } from "@/services/ess-service";
 import type { EssEducationItem, EssEducationSkills, EssSkillItem } from "@/types/api";
 import * as ui from "@/theme/classes";
@@ -50,7 +51,7 @@ export default function EducationSkillsPage() {
   async function addEducation() {
     if (!degree.trim()) return;
     const row: EssEducationItem = {
-      id: crypto.randomUUID(),
+      id: randomId(),
       degree: degree.trim(),
       institution: institution.trim() || null,
     };
@@ -62,7 +63,7 @@ export default function EducationSkillsPage() {
   async function addSkill() {
     if (!skillName.trim()) return;
     const row: EssSkillItem = {
-      id: crypto.randomUUID(),
+      id: randomId(),
       name: skillName.trim(),
       level: skillLevel,
     };

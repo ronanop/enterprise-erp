@@ -15,7 +15,7 @@ class HrAttendanceCorrection(Base, *HrTransactionMixin):
     __tablename__ = "hr_attendance_correction"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('draft','submitted','approved','rejected')",
+            "status IN ('draft','submitted','manager_approved','approved','rejected','cancelled')",
             name="ck_hr_att_corr_status",
         ),
         CheckConstraint(
@@ -43,5 +43,6 @@ class HrAttendanceCorrection(Base, *HrTransactionMixin):
     new_value: Mapped[str] = mapped_column(String(100), nullable=False)
     reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
+    manager_approver_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     approved_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

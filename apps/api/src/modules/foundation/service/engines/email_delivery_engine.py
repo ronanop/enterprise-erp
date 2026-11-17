@@ -48,11 +48,13 @@ class EmailDeliveryEngine:
             return {"status": "already_delivered", "event_id": str(event_id)}
 
         if delivery.channel != "email":
+            # Keep in-app/push inside the caller's transaction so ESS/HRMS
+            # inbox rows appear with the same commit as the business write.
             delivery.status = "delivered"
             delivery.delivered_at = utcnow()
             delivery.provider_response = "non_email_channel_stub"
             event.status = "sent"
-            self._db.commit()
+            self._db.flush()
             return {"status": "delivered", "channel": delivery.channel}
 
         if not self._adapter.configured:

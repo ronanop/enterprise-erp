@@ -1,3 +1,4 @@
+import { randomId } from "@/lib/random-id";
 import { essService } from "@/services/ess-service";
 import type { EssNotification } from "@/types/api";
 
@@ -7,22 +8,31 @@ const WARM_KEY = "ess_notif_poll_warm_v1";
 
 export function getOrCreateWebDeviceToken(): string | null {
   if (typeof window === "undefined") return null;
-  let token = window.localStorage.getItem(TOKEN_KEY);
-  if (!token) {
-    token = `web-${crypto.randomUUID()}`;
-    window.localStorage.setItem(TOKEN_KEY, token);
+  try {
+    let token = window.localStorage.getItem(TOKEN_KEY);
+    if (!token) {
+      token = `web-${randomId()}`;
+      window.localStorage.setItem(TOKEN_KEY, token);
+    }
+    return token;
+  } catch {
+    // Private mode / missing crypto — still return an ephemeral id.
+    return `web-${randomId()}`;
   }
-  return token;
 }
 
 export function registerEssWebDeviceToken(delayMs = 3500): void {
-  const token = getOrCreateWebDeviceToken();
-  if (!token) return;
-  window.setTimeout(() => {
-    void essService
-      .registerDeviceToken({ token, platform: "web" })
-      .catch(() => undefined);
-  }, delayMs);
+  try {
+    const token = getOrCreateWebDeviceToken();
+    if (!token) return;
+    window.setTimeout(() => {
+      void essService
+        .registerDeviceToken({ token, platform: "web" })
+        .catch(() => undefined);
+    }, delayMs);
+  } catch {
+    // Never block login / app boot on device-token registration.
+  }
 }
 
 export function markNotificationPollWarm(latestId: string | undefined): void {

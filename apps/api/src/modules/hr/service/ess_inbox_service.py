@@ -1,4 +1,4 @@
-"""Unified HR inbox for ESS-originated approvals (leave, comp off, attendance regularization, OT)."""
+"""Unified HR inbox for ESS-originated approvals (leave, comp off, attendance, WFH, on duty, OT)."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from modules.hr.service.compoff_bio_service import CompoffRequestService
 from modules.hr.service.hr_scope_validator import HrScopeValidator
 from modules.hr.service.leave_service import LeaveRequestService
 from modules.hr.service.on_duty_ot_service import OnDutyRequestService, OtAllotmentService
+from modules.hr.service.wfh_service import WfhRequestService
 
 
 def _emp_name(master: HrMasterDataAdapter, ctx: TenantContext, employee_id: UUID) -> str:
@@ -48,20 +49,19 @@ def _compoff_actions(status: str) -> list[str]:
     return []
 
 
-def _correction_actions(status: str) -> list[str]:
-    if status.lower() == "submitted":
+def _manager_then_hr_actions(status: str) -> list[str]:
+    """WFH / on-duty / regularization: HR acts after manager."""
+    st = status.lower()
+    if st == "manager_approved":
         return ["approve", "reject"]
+    if st == "submitted":
+        # Waiting on manager — visible in inbox but no HR final action yet.
+        return []
     return []
 
 
 def _ot_actions(status: str) -> list[str]:
     if status.lower() in {"submitted", "pending"}:
-        return ["approve", "reject"]
-    return []
-
-
-def _on_duty_actions(status: str) -> list[str]:
-    if status.lower() == "submitted":
         return ["approve", "reject"]
     return []
 
@@ -76,6 +76,7 @@ class HrEssInboxService:
         self._corrections = AttendanceCorrectionService(db)
         self._ot = OtAllotmentService(db)
         self._on_duty = OnDutyRequestService(db)
+        self._wfh = WfhRequestService(db)
 
     def list_inbox(
         self,
@@ -152,7 +153,7 @@ class HrEssInboxService:
 
         for row in self._corrections.list(ctx, cid):
             st = str(row.status)
-            pending = st == "submitted"
+            pending = st in {"submitted", "manager_approved"}
             decided = getattr(row, "decided_at", None)
             created = getattr(row, "created_at", None) or decided
             if not pending:
@@ -175,7 +176,7 @@ class HrEssInboxService:
                         + (f" · {row.reason}" if getattr(row, "reason", None) else "")
                     ),
                     pending=pending,
-                    available_actions=_correction_actions(st),
+                    available_actions=_manager_then_hr_actions(st),
                     api_path="/hr/attendance-corrections",
                 )
             )
@@ -213,7 +214,7 @@ class HrEssInboxService:
 
         for row in self._on_duty.list(ctx, cid):
             st = str(row.status)
-            pending = st == "submitted"
+            pending = st in {"submitted", "manager_approved"}
             decided = getattr(row, "decided_at", None)
             created = getattr(row, "created_at", None) or decided
             if not pending:
@@ -226,7 +227,7 @@ class HrEssInboxService:
                     source_id=row.id,
                     category="on_duty",
                     status=st,
-                    title="On duty request",
+                    title="On duty / On tour request",
                     employee_id=row.employee_id,
                     employee_name=_emp_name(self._master, ctx, row.employee_id),
                     document_number=None,
@@ -234,8 +235,36 @@ class HrEssInboxService:
                     detail=f"{row.duty_date} · {row.portion}"
                     + (f" · {row.purpose}" if getattr(row, "purpose", None) else ""),
                     pending=pending,
-                    available_actions=_on_duty_actions(st),
+                    available_actions=_manager_then_hr_actions(st),
                     api_path="/hr/on-duty-requests",
+                )
+            )
+
+        for row in self._wfh.list(ctx, cid):
+            st = str(row.status)
+            pending = st in {"submitted", "manager_approved"}
+            decided = getattr(row, "decided_at", None)
+            created = getattr(row, "created_at", None) or decided
+            if not pending:
+                if decided is None or decided < cutoff:
+                    continue
+            occurred = decided or created or datetime.now(timezone.utc)
+            items.append(
+                HrEssInboxItemResponse(
+                    id=f"wfh:{row.id}",
+                    source_id=row.id,
+                    category="wfh",
+                    status=st,
+                    title="Work from home",
+                    employee_id=row.employee_id,
+                    employee_name=_emp_name(self._master, ctx, row.employee_id),
+                    document_number=None,
+                    occurred_at=occurred,
+                    detail=f"{row.wfh_date} · {row.portion}"
+                    + (f" · {row.reason}" if getattr(row, "reason", None) else ""),
+                    pending=pending,
+                    available_actions=_manager_then_hr_actions(st),
+                    api_path="/hr/wfh-requests",
                 )
             )
 

@@ -10,6 +10,11 @@ import type { EssMe } from "@/types/api";
 import * as ui from "@/theme/classes";
 import { formatDisplayDateDDMMYYYY } from "@/utils/datetime";
 
+function display(value: string | null | undefined, fallback = "—"): string {
+  const text = value?.trim();
+  return text ? text : fallback;
+}
+
 export default function PersonalInformationPage() {
   const [me, setMe] = useState<EssMe | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,11 +51,22 @@ export default function PersonalInformationPage() {
               {me.display_name}
             </h2>
             <p className="mt-1 text-sm text-[#434655]">
-              {me.designation} • ID: {me.employee_code}
+              {display(me.designation)} • ID: {me.employee_code}
             </p>
+            {me.company_name || me.branch_name ? (
+              <p className="mt-1 text-xs text-[#737686]">
+                {[me.company_name, me.branch_name, me.department_name]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </p>
+            ) : null}
           </section>
 
-          <Card title="Bio Data" icon={<IconUser size={18} />} iconBg="bg-[#dbe1ff] text-[#004ac6]">
+          <Card
+            title="Bio Data"
+            icon={<IconUser size={18} />}
+            iconBg="bg-[#dbe1ff] text-[#004ac6]"
+          >
             <Row
               label="Date of Birth"
               value={
@@ -59,8 +75,12 @@ export default function PersonalInformationPage() {
                   : "—"
               }
             />
-            <Row label="Gender" value="—" />
-            <Row label="Nationality" value="India" />
+            <Row label="Gender" value={display(me.gender)} />
+            <Row label="Marital Status" value={display(me.marital_status)} />
+            <Row label="Nationality" value={display(me.nationality)} />
+            <Row label="Blood Group" value={display(me.blood_group)} />
+            <Row label="Date of Joining" value={formatDisplayDateDDMMYYYY(me.date_of_joining)} />
+            <Row label="Manager" value={display(me.manager_name)} />
           </Card>
 
           <Card
@@ -72,11 +92,14 @@ export default function PersonalInformationPage() {
               Current Address
             </p>
             <p className="mt-1 font-semibold text-[#0b1c30]">
-              742 Evergreen Terrace, Bengaluru, KA 560001
+              {display(me.current_address)}
             </p>
-            <div className="mt-3 flex h-28 items-center justify-center rounded-xl bg-[#eff4ff] text-sm text-[#434655]">
-              Map preview
-            </div>
+            <p className="mt-3 text-[10px] font-bold uppercase tracking-wide text-[#434655]">
+              Permanent Address
+            </p>
+            <p className="mt-1 font-semibold text-[#0b1c30]">
+              {display(me.permanent_address)}
+            </p>
           </Card>
 
           <Card
@@ -89,13 +112,13 @@ export default function PersonalInformationPage() {
                 <p className="text-[10px] font-bold uppercase text-[#434655]">
                   Work Email
                 </p>
-                <p className="font-semibold text-[#0b1c30]">{me.email}</p>
+                <p className="font-semibold text-[#0b1c30]">{display(me.email)}</p>
               </div>
               <div className="rounded-xl bg-[#eff4ff] px-3 py-3 text-sm">
                 <p className="text-[10px] font-bold uppercase text-[#434655]">
                   Personal Mobile
                 </p>
-                <p className="font-semibold text-[#0b1c30]">{me.mobile}</p>
+                <p className="font-semibold text-[#0b1c30]">{display(me.mobile)}</p>
               </div>
             </div>
           </Card>
@@ -108,9 +131,13 @@ export default function PersonalInformationPage() {
             Request Detail Update
           </button>
           <p className="text-center text-xs text-[#434655]">
-            Last updated on {me.date_of_joining}
+            Synced from HRMS · Joined {formatDisplayDateDDMMYYYY(me.date_of_joining)}
           </p>
         </>
+      ) : !error ? (
+        <div className={`${ui.card} p-8 text-center text-sm text-[#434655]`}>
+          Loading personal details…
+        </div>
       ) : null}
     </div>
   );
@@ -129,13 +156,13 @@ function Card({
 }) {
   return (
     <section className={`${ui.card} space-y-3 p-4`}>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         <span
           className={`flex h-9 w-9 items-center justify-center rounded-xl ${iconBg}`}
         >
           {icon}
         </span>
-        <h3 className="text-lg font-semibold text-[#0b1c30]">{title}</h3>
+        <h3 className="text-base font-bold text-[#0b1c30]">{title}</h3>
       </div>
       {children}
     </section>
@@ -144,9 +171,11 @@ function Card({
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between border-b border-[#c3c6d7]/20 py-2.5 text-sm last:border-0">
-      <span className="text-[#434655]">{label}</span>
-      <span className="font-semibold text-[#0b1c30]">{value}</span>
+    <div className="flex items-start justify-between gap-3 border-t border-[#c3c6d7]/25 py-2.5 first:border-t-0 first:pt-0">
+      <span className="text-xs font-medium text-[#737686]">{label}</span>
+      <span className="max-w-[60%] text-right text-sm font-semibold text-[#0b1c30]">
+        {value}
+      </span>
     </div>
   );
 }

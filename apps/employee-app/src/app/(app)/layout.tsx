@@ -16,7 +16,7 @@ export default function AppShellLayout({
         <div className={`${ui.shell} mx-auto flex max-w-lg flex-col`}>
           <DemoBanner />
           <OfflineBanner />
-          <div className="flex-1 px-5 pb-28 pt-0">{children}</div>
+          <div className="flex-1 px-5 pb-32 pt-0">{children}</div>
           <BottomNav />
         </div>
       </AppShellClient>

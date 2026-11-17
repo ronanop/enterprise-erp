@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme inline {
-  --font-sans: var(--font-display);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --animate-fade-up: fade-up 0.35s ease both;
   --color-background: #f8f9ff;
   --color-surface: #f8f9ff;
@@ -82,10 +82,22 @@
   }
 }
 
+html,
+body {
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
 body {
   min-height: 100dvh;
   background: #f8f9ff;
   color: #0b1c30;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 .animate-pulse-soft {
@@ -173,6 +185,25 @@ body {
 
 .splash-pulse {
   animation: splash-pulse-glow 2s infinite;
+}
+
+@keyframes splash-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.splash-orbit {
+  animation: splash-orbit 2.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash-orbit {
+    animation: none;
+  }
 }
 
 /* Feather image rectangle so objects sit on splash bg (one screen, not a card). */

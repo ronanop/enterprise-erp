@@ -27,10 +27,10 @@ export const colors = {
 } as const;
 
 export const shell =
-  "min-h-dvh bg-[#f8f9ff] text-[#0b1c30]";
+  "min-h-dvh bg-[#F5F8FC] text-[#0b1c30]";
 
 export const shellPlain =
-  "min-h-dvh bg-[#f8f9ff] text-[#0b1c30]";
+  "min-h-dvh bg-[#F5F8FC] text-[#0b1c30]";
 
 export const card =
   "rounded-2xl bg-white/80 shadow-[0_4px_20px_rgba(0,0,0,0.05)] backdrop-blur-[20px] border border-[#c3c6d7]/30";

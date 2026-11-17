@@ -3,7 +3,31 @@ function sleep(ms: number): Promise<void> {
 }
 
 function isRetryableHttpStatus(status: number): boolean {
-  return status === 502 || status === 503 || status === 504;
+  // 500: Next.js rewrite often returns plain "Internal Server Error" when
+  // the API proxy gets ECONNRESET during uvicorn --reload.
+  return status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+async function shouldRetryResponse(
+  response: Response,
+  idempotent: boolean,
+): Promise<boolean> {
+  if (!idempotent || !isRetryableHttpStatus(response.status)) return false;
+  if (response.status !== 500) return true;
+  // Only retry plain/non-JSON 500s (proxy blips), not structured API errors.
+  const contentType = response.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) return false;
+  try {
+    const clone = response.clone();
+    const text = (await clone.text()).trim();
+    return (
+      text.length === 0 ||
+      text === "Internal Server Error" ||
+      text.startsWith("<")
+    );
+  } catch {
+    return true;
+  }
 }
 
 /** GET-safe retry for dev proxy blips (ECONNRESET) and brief API/DB outages. */
@@ -12,8 +36,8 @@ export async function fetchWithRetry(
   init?: RequestInit,
   options?: { attempts?: number; baseDelayMs?: number },
 ): Promise<Response> {
-  const attempts = options?.attempts ?? 3;
-  const baseDelayMs = options?.baseDelayMs ?? 350;
+  const attempts = options?.attempts ?? 4;
+  const baseDelayMs = options?.baseDelayMs ?? 400;
   const method = (init?.method ?? "GET").toUpperCase();
   const idempotent = method === "GET" || method === "HEAD";
 
@@ -23,9 +47,8 @@ export async function fetchWithRetry(
     try {
       const response = await fetch(url, init);
       if (
-        idempotent &&
-        isRetryableHttpStatus(response.status) &&
-        attempt < attempts - 1
+        attempt < attempts - 1 &&
+        (await shouldRetryResponse(response, idempotent))
       ) {
         await sleep(baseDelayMs * (attempt + 1));
         continue;

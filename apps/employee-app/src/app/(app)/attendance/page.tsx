@@ -2,18 +2,28 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AttendancePunchSheet } from "@/components/attendance-punch-sheet";
+import {
+  AttendancePunchSheet,
+  type PunchConfirmPayload,
+} from "@/components/attendance-punch-sheet";
 import { AppHeader } from "@/components/app-header";
 import {
   IconAlert,
+  IconCalendar,
   IconCheck,
   IconChevronRight,
   IconClock,
+  IconHouse,
   IconLocation,
   IconLogin,
   IconLogout,
+  IconWallet,
 } from "@/components/icons";
 import { AlertBox } from "@/components/ui";
+import {
+  fetchLiveLocationLabel,
+  formatOfficeLabel,
+} from "@/lib/live-location";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
 import type { EssAttendance, EssAttendanceSummary, EssMe, EssPunchPolicy } from "@/types/api";
@@ -30,23 +40,81 @@ import {
 
 const DAILY_GOAL_H = 8;
 
+const ATTENDANCE_ACTIONS = [
+  {
+    href: "/attendance/wfh",
+    title: "Work From Home",
+    subtitle: "Request remote work",
+    Icon: IconHouse,
+    iconWrap: "bg-[#F3E8FF] text-[#7C3AED]",
+  },
+  {
+    href: "/attendance/on-duty",
+    title: "On Duty",
+    subtitle: "Official duty request",
+    Icon: IconCalendar,
+    iconWrap: "bg-[#DCFCE7] text-[#16A34A]",
+  },
+  {
+    href: "/attendance/correction",
+    title: "Regularization",
+    subtitle: "Correct missing punch",
+    Icon: IconClock,
+    iconWrap: "bg-[#FFEDD5] text-[#EA580C]",
+  },
+  {
+    href: "/attendance/compoff",
+    title: "Comp Off",
+    subtitle: "Request comp off",
+    Icon: IconWallet,
+    iconWrap: "bg-[#FEE2E2] text-[#DC2626]",
+  },
+] as const;
+
+/** Normalize API attendance_date (date or ISO) to YYYY-MM-DD. */
+function attendanceDayKey(value: string | null | undefined): string {
+  if (!value) return "";
+  return String(value).slice(0, 10);
+}
+
+function findTodayRow(
+  rows: EssAttendance[],
+  day: string,
+): EssAttendance | undefined {
+  return rows.find((row) => attendanceDayKey(row.attendance_date) === day);
+}
+
+function upsertTodayRow(
+  rows: EssAttendance[],
+  next: EssAttendance,
+): EssAttendance[] {
+  const key = attendanceDayKey(next.attendance_date);
+  const idx = rows.findIndex((r) => attendanceDayKey(r.attendance_date) === key);
+  if (idx < 0) return [next, ...rows];
+  const copy = rows.slice();
+  copy[idx] = next;
+  return copy;
+}
+
 export default function AttendancePage() {
   const [me, setMe] = useState<EssMe | null>(null);
   const [rows, setRows] = useState<EssAttendance[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [todayStr, setTodayStr] = useState<string | null>(null);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [todayStr] = useState(() => todayLocalDate());
   const [workedHours, setWorkedHours] = useState(0);
   const [timer, setTimer] = useState("00:00:00");
   const [showSuccess, setShowSuccess] = useState(false);
-  const [greeting, setGreeting] = useState("Good day");
+  const [greeting, setGreeting] = useState(() => greetingForNow());
   const [summary, setSummary] = useState<EssAttendanceSummary | null>(null);
   const [punchPolicy, setPunchPolicy] = useState<EssPunchPolicy | null>(null);
   const [punchSheet, setPunchSheet] = useState<"in" | "out" | null>(null);
+  const [officeLabel, setOfficeLabel] = useState("Office");
 
   async function refresh() {
-    const monthKey = (todayStr ?? todayLocalDate()).slice(0, 7);
+    const monthKey = todayStr.slice(0, 7);
     const [att, meRes, sumRes, polRes] = await Promise.all([
       essService.attendance(),
       essService.me(),
@@ -60,18 +128,56 @@ export default function AttendancePage() {
   }
 
   useEffect(() => {
-    setTodayStr(todayLocalDate());
+    let cancelled = false;
     setGreeting(greetingForNow());
-    refresh().catch((err) =>
-      setError(
-        err instanceof ApiClientError ? err.message : "Failed to load attendance",
-      ),
-    );
+    setPageLoading(true);
+    refresh()
+      .catch((err) => {
+        if (!cancelled) {
+          setError(
+            err instanceof ApiClientError
+              ? err.message
+              : "Failed to load attendance",
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPageLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once on mount
   }, []);
 
-  const today = todayStr
-    ? rows.find((row) => row.attendance_date === todayStr)
-    : undefined;
+  useEffect(() => {
+    let cancelled = false;
+    const locations = punchPolicy?.work_locations ?? [];
+    const homeOfficeName = punchPolicy?.home_office_name ?? null;
+    (async () => {
+      const label = await fetchLiveLocationLabel({
+        workLocations: locations,
+        homeOfficeName,
+      });
+      if (cancelled) return;
+      if (label) {
+        setOfficeLabel(label);
+        return;
+      }
+      setOfficeLabel(
+        homeOfficeName
+          ? formatOfficeLabel(homeOfficeName)
+          : locations[0]?.location_name
+            ? formatOfficeLabel(locations[0].location_name)
+            : "Office",
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [punchPolicy]);
+
+  const today = findTodayRow(rows, todayStr);
   const done = Boolean(today?.check_out_at);
   const punchedIn = Boolean(today?.check_in_at);
   const isOut = punchedIn && !done;
@@ -94,18 +200,34 @@ export default function AttendancePage() {
     return () => window.clearInterval(id);
   }, [today?.check_in_at, today?.check_out_at, today?.total_hours]);
 
-  async function runPunch(kind: "in" | "out", imageBase64: string | null) {
+  async function runPunch(_kind: "in" | "out", payload: PunchConfirmPayload) {
     setLoading(true);
     setError(null);
     setMessage(null);
     try {
-      const res = await essService.punch({ image_base64: imageBase64 });
+      const res = await essService.punch({
+        image_base64: payload.imageBase64,
+        latitude: payload.latitude,
+        longitude: payload.longitude,
+      });
       const action = res.data?.action;
-      const hours = res.data?.attendance?.total_hours;
+      const attendance = res.data?.attendance;
+      const hours = attendance?.total_hours;
+
+      // Apply punch result immediately so Check Out enables without waiting on reload.
+      if (attendance) {
+        setRows((prev) => upsertTodayRow(prev, attendance));
+      }
+
       if (action === "check_in") {
-        setMessage("Checked in successfully");
+        setMessage(
+          payload.locationLabel
+            ? `Checked in at ${payload.locationLabel}`
+            : "Checked in successfully",
+        );
         setShowSuccess(true);
       } else {
+        setShowSuccess(false);
         setMessage(
           hours != null
             ? `Checked out · total ${formatHoursLabel(hours)}`
@@ -113,7 +235,9 @@ export default function AttendancePage() {
         );
       }
       setPunchSheet(null);
-      await refresh();
+      void refresh().catch(() => {
+        /* keep optimistic row if background refresh fails */
+      });
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Punch failed");
     } finally {
@@ -122,6 +246,7 @@ export default function AttendancePage() {
   }
 
   function onPunch(kind: "in" | "out") {
+    if (pageLoading || loading) return;
     if (kind === "in" && punchedIn) return;
     if (kind === "out" && (!punchedIn || done)) return;
     setPunchSheet(kind);
@@ -132,6 +257,7 @@ export default function AttendancePage() {
   const overtimeH = (summary?.total_overtime_minutes ?? 0) / 60;
   const firstName = me?.display_name?.split(/\s+/)[0] ?? "there";
   const calendar = useMemo(() => buildMonthGrid(todayStr), [todayStr]);
+  const punchBusy = loading || pageLoading;
 
   if (showSuccess && today?.check_in_at && !today.check_out_at) {
     return (
@@ -139,7 +265,12 @@ export default function AttendancePage() {
         name={me?.display_name}
         checkInAt={today.check_in_at}
         timer={timer}
+        officeLabel={officeLabel}
         onContinue={() => setShowSuccess(false)}
+        onCheckOut={() => {
+          setShowSuccess(false);
+          setPunchSheet("out");
+        }}
       />
     );
   }
@@ -147,18 +278,6 @@ export default function AttendancePage() {
   return (
     <div className="space-y-6">
       <AppHeader title="Attendance" name={me?.display_name} />
-
-      <div className="flex justify-end gap-3">
-        <Link href="/attendance/wfh" className="text-sm font-semibold text-[#004ac6]">
-          WFH
-        </Link>
-        <Link
-          href="/attendance/history"
-          className="text-sm font-semibold text-[#004ac6]"
-        >
-          History
-        </Link>
-      </div>
 
       <section className={`${ui.card} flex flex-col items-center gap-5 p-6`}>
         <Ring pct={ringPct} label={formatHours(workedHours)} />
@@ -171,7 +290,7 @@ export default function AttendancePage() {
           <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-[#434655]">
             <span className="inline-flex items-center gap-1">
               <IconLocation size={14} className="text-[#004ac6]" />
-              HQ Office
+              {officeLabel}
             </span>
             {punchedIn ? (
               <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-800">
@@ -186,22 +305,27 @@ export default function AttendancePage() {
             type="button"
             className={`${ui.btn} w-full !py-3`}
             onClick={() => onPunch("in")}
-            disabled={loading || punchedIn}
+            disabled={punchBusy || punchedIn}
           >
             <IconLogin size={18} />
-            Check In
+            {pageLoading ? "Loading…" : "Check In"}
           </button>
           <button
             type="button"
             className={`${ui.btnPunchOut} w-full !py-3`}
             onClick={() => onPunch("out")}
-            disabled={loading || !isOut}
+            disabled={punchBusy || !isOut}
           >
             <IconLogout size={18} />
-            Check Out
+            {pageLoading ? "Loading…" : "Check Out"}
           </button>
         </div>
 
+        {pageLoading ? (
+          <p className="text-center text-xs font-medium text-[#64748B]">
+            Syncing today&apos;s attendance…
+          </p>
+        ) : null}
         {error ? <AlertBox onLight>{error}</AlertBox> : null}
         {message && !showSuccess ? (
           <AlertBox tone="success" onLight>
@@ -253,10 +377,34 @@ export default function AttendancePage() {
         </div>
       </div>
 
+      <section className="grid grid-cols-2 gap-3">
+        {ATTENDANCE_ACTIONS.map((action) => (
+          <Link
+            key={action.href}
+            href={action.href}
+            className={`${ui.card} flex items-center gap-3 p-3.5 transition active:scale-[0.99]`}
+          >
+            <span
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${action.iconWrap}`}
+            >
+              <action.Icon size={20} />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-bold text-[#0b1c30]">
+                {action.title}
+              </span>
+              <span className="mt-0.5 block truncate text-[11px] leading-snug text-[#64748B]">
+                {action.subtitle}
+              </span>
+            </span>
+          </Link>
+        ))}
+      </section>
+
       <section className={`${ui.card} overflow-hidden p-5`}>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="font-semibold text-[#0b1c30]">{calendar.label}</h3>
-          <span className="text-xs text-[#434655]">This month</span>
+          <IconCalendar size={18} className="text-[#64748B]" />
         </div>
         <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase text-[#434655]">
           {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => (
@@ -265,9 +413,7 @@ export default function AttendancePage() {
         </div>
         <div className="grid grid-cols-7 gap-1">
           {calendar.cells.map((cell, i) => {
-            const row = cell.iso
-              ? rows.find((r) => r.attendance_date === cell.iso)
-              : undefined;
+            const row = cell.iso ? findTodayRow(rows, cell.iso) : undefined;
             const isToday = cell.iso === todayStr;
             const st = (row?.attendance_status ?? "").toLowerCase();
             const dotColor =
@@ -317,8 +463,10 @@ export default function AttendancePage() {
         kind={punchSheet ?? "in"}
         policy={punchPolicy}
         loading={loading}
-        onClose={() => setPunchSheet(null)}
-        onConfirm={(img) => void runPunch(punchSheet ?? "in", img)}
+        onClose={() => {
+          if (!loading) setPunchSheet(null);
+        }}
+        onConfirm={(payload) => void runPunch(punchSheet ?? "in", payload)}
       />
 
       <div className="pb-2 text-center">
@@ -377,12 +525,16 @@ function CheckInSuccess({
   name,
   checkInAt,
   timer,
+  officeLabel,
   onContinue,
+  onCheckOut,
 }: {
   name?: string;
   checkInAt: string;
   timer: string;
+  officeLabel: string;
   onContinue: () => void;
+  onCheckOut: () => void;
 }) {
   return (
     <div className="flex min-h-[70dvh] flex-col">
@@ -410,7 +562,7 @@ function CheckInSuccess({
               <p className="text-xs font-semibold text-[#434655]">
                 Location Verified
               </p>
-              <p className="text-lg font-semibold text-[#0b1c30]">HQ Office</p>
+              <p className="text-lg font-semibold text-[#0b1c30]">{officeLabel}</p>
             </div>
           </div>
           <div className={`${ui.card} flex items-center gap-4 p-4`}>
@@ -444,7 +596,19 @@ function CheckInSuccess({
           </div>
         </div>
 
-        <button type="button" className={`${ui.btn} mt-4 w-full`} onClick={onContinue}>
+        <button
+          type="button"
+          className={`${ui.btnPunchOut} mt-4 w-full !py-3`}
+          onClick={onCheckOut}
+        >
+          <IconLogout size={18} />
+          Check Out
+        </button>
+        <button
+          type="button"
+          className={`${ui.btn} mt-3 w-full !bg-transparent !text-[#004ac6] !shadow-none`}
+          onClick={onContinue}
+        >
           View Today&apos;s Schedule
           <IconChevronRight />
         </button>
@@ -453,8 +617,8 @@ function CheckInSuccess({
   );
 }
 
-function buildMonthGrid(todayIso: string | null) {
-  const base = todayIso ? new Date(`${todayIso}T12:00:00`) : new Date();
+function buildMonthGrid(todayIso: string) {
+  const base = new Date(`${todayIso}T12:00:00`);
   const year = base.getFullYear();
   const month = base.getMonth();
   const label = base.toLocaleString(undefined, {

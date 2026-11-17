@@ -74,9 +74,12 @@ export async function apiClient<T>(
       | ErrorResponse;
   } catch {
     const preview = text.trim().slice(0, 120);
-    const hint = preview.startsWith("<")
-      ? "Server returned HTML (check API URL / proxy)."
-      : preview || `HTTP ${response.status}`;
+    const hint =
+      preview === "Internal Server Error" || response.status >= 500
+        ? "API proxy failed (server restarting or unreachable). Refresh and try again."
+        : preview.startsWith("<")
+          ? "Server returned HTML (check API URL / proxy)."
+          : preview || `HTTP ${response.status}`;
     throw new ApiClientError(`Invalid API response: ${hint}`, response.status);
   }
 
@@ -153,12 +156,77 @@ export const authService = {
     });
   },
 
-  essCaptcha: () =>
-    apiClient<{
+  essCaptcha: async () => {
+    if (env.useMock) {
+      return mockApi.essCaptcha();
+    }
+    return apiClient<{
       captcha_id: string;
       question: string;
+      code: string;
       enabled: boolean;
-    }>("/auth/ess/captcha", { method: "GET", auth: false }),
+    }>("/auth/ess/captcha", { method: "GET", auth: false });
+  },
+
+  listEssCompanies: async () => {
+    if (env.useMock) {
+      return mockApi.essCompanies();
+    }
+    return apiClient<
+      Array<{ company_code: string; company_name: string; legal_name?: string }>
+    >("/auth/ess/companies", { method: "GET", auth: false });
+  },
+
+  lookupEssPhone: async (body: { company_code: string; mobile: string }) => {
+    if (env.useMock) {
+      try {
+        return await mockApi.lookupEssPhone(body);
+      } catch (err) {
+        throw new ApiClientError(
+          err instanceof Error ? err.message : "Phone lookup failed",
+          400,
+        );
+      }
+    }
+    return apiClient<{
+      identified: boolean;
+      company_code: string;
+      company_name: string;
+      mobile_masked: string;
+    }>("/auth/ess/lookup-phone", {
+      method: "POST",
+      auth: false,
+      body,
+    });
+  },
+
+  verifyEssPhone: async (body: {
+    company_code: string;
+    mobile: string;
+    captcha_id: string;
+    captcha_answer: string;
+  }) => {
+    if (env.useMock) {
+      try {
+        return await mockApi.verifyEssPhone(body);
+      } catch (err) {
+        throw new ApiClientError(
+          err instanceof Error ? err.message : "Phone verification failed",
+          400,
+        );
+      }
+    }
+    return apiClient<{
+      verified: boolean;
+      company_code: string;
+      company_name: string;
+      mobile_masked: string;
+    }>("/auth/ess/verify-phone", {
+      method: "POST",
+      auth: false,
+      body,
+    });
+  },
 
   essLogin: async (body: {
     company_code: string;
@@ -166,6 +234,7 @@ export const authService = {
     password: string;
     captcha_id?: string;
     captcha_answer?: string;
+    login_role?: string;
   }) => {
     if (env.useMock) {
       try {

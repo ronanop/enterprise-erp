@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SubHeader } from "@/components/app-header";
+import { PortionPicker } from "@/components/portion-picker";
 import { AlertBox } from "@/components/ui";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
@@ -93,18 +94,7 @@ export default function WfhPage() {
             onChange={(e) => setEndDate(e.target.value)}
           />
         </label>
-        <label className="block text-xs font-semibold text-[#434655]">
-          Portion
-          <select
-            className="mt-1 w-full rounded-lg border border-[#c4c6d4] px-3 py-2 text-sm"
-            value={portion}
-            onChange={(e) => setPortion(e.target.value)}
-          >
-            <option value="full_day">Full day</option>
-            <option value="first_half">First half</option>
-            <option value="second_half">Second half</option>
-          </select>
-        </label>
+        <PortionPicker value={portion} onChange={setPortion} />
         <label className="block text-xs font-semibold text-[#434655]">
           Reason
           <textarea

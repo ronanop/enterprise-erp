@@ -20,13 +20,39 @@ const projectRoot = path.resolve(__dirname);
 
 const DEV_PORT = Number(process.env.PORT ?? 3001);
 
+/** Normalize host entries for next `allowedDevOrigins` (hostname, optional :port). */
+function normalizeDevOrigin(raw: string): string[] {
+  const value = raw.trim();
+  if (!value) return [];
+  try {
+    const withProto = value.includes("://") ? value : `http://${value}`;
+    const url = new URL(withProto);
+    const host = url.hostname;
+    if (!host) return [value];
+    // Next matches both bare host and host:port in different builds.
+    return url.port ? [host, `${host}:${url.port}`] : [host];
+  } catch {
+    return [value.replace(/^https?:\/\//, "").split("/")[0] ?? value];
+  }
+}
+
 /** LAN / tunnel hosts for `next dev` (comma-separated in ALLOWED_DEV_ORIGINS). */
 function allowedDevOriginsForPort(port: number): string[] {
   const fromEnv =
     process.env.ALLOWED_DEV_ORIGINS?.split(",")
-      .map((s) => s.trim())
+      .flatMap(normalizeDevOrigin)
       .filter(Boolean) ?? [];
-  return [`localhost:${port}`, `127.0.0.1:${port}`, ...fromEnv];
+  return Array.from(
+    new Set([
+      "localhost",
+      `localhost:${port}`,
+      "127.0.0.1",
+      `127.0.0.1:${port}`,
+      "172.16.110.94",
+      `172.16.110.94:${port}`,
+      ...fromEnv,
+    ]),
+  );
 }
 
 const nextConfig: NextConfig = {

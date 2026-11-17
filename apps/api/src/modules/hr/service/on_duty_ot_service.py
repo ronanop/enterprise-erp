@@ -83,7 +83,14 @@ class OnDutyRequestService:
         updated = self._repo.update(ctx, row_id, status="submitted")
         try:
             from modules.hr.service.hr_notify import notify_employee
+            from modules.master_data.models.employee import MasterEmployee
 
+            emp = self._db.get(MasterEmployee, row.employee_id)
+            emp_name = (
+                f"{emp.first_name} {emp.last_name}".strip()
+                if emp is not None
+                else "Team member"
+            )
             notify_employee(
                 self._db,
                 tenant_id=ctx.tenant_id,
@@ -92,17 +99,117 @@ class OnDutyRequestService:
                 template_name="On Duty Submitted",
                 event_type="hr.on_duty_submitted",
                 title="On Duty request submitted",
-                body=f"On Duty for {row.duty_date} ({row.portion}) is pending approval.",
+                body=(
+                    f"On Duty for {row.duty_date} ({row.portion}) is "
+                    "pending manager approval."
+                ),
                 kind="on_duty",
+                cc_reporting_manager=False,
+                extra={"on_duty_request_id": str(row.id), "href": "/on-duty"},
+            )
+            mgr_id = getattr(emp, "reporting_manager_id", None) if emp else None
+            if mgr_id:
+                notify_employee(
+                    self._db,
+                    tenant_id=ctx.tenant_id,
+                    employee_id=mgr_id,
+                    template_code="hr.on_duty_manager",
+                    template_name="Team On Duty Request",
+                    event_type="hr.on_duty_manager",
+                    title=f"On Duty from {emp_name}",
+                    body=(
+                        f"{emp_name} requested On Duty for {row.duty_date}. "
+                        "Open Team Approvals."
+                    ),
+                    kind="on_duty",
+                    cc_reporting_manager=False,
+                    extra={
+                        "on_duty_request_id": str(row.id),
+                        "href": "/approvals",
+                        "employee_id": str(row.employee_id),
+                    },
+                )
+        except Exception:
+            pass
+        return updated
+
+    def manager_approve(
+        self, ctx: TenantContext, row_id: UUID, *, approver_employee_id: UUID | None = None
+    ):
+        """Manager step — pending HR; attendance applied only on HR approve."""
+        row = self.get(ctx, row_id)
+        if row.status != "submitted":
+            raise InvalidAttendanceState(
+                "Only submitted On Duty requests can be manager-approved"
+            )
+        updated = self._repo.update(
+            ctx,
+            row_id,
+            status="manager_approved",
+            manager_approver_id=approver_employee_id,
+        )
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_on_duty_request",
+            entity_id=row_id,
+            operation="manager_approve",
+            performed_by=ctx.user_id,
+        )
+        try:
+            from modules.hr.service.hr_notify import (
+                notify_employee,
+                notify_users_with_permission,
+            )
+
+            notify_employee(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                employee_id=row.employee_id,
+                template_code="hr.on_duty_manager_approved",
+                template_name="On Duty Manager Approved",
+                event_type="hr.on_duty_manager_approved",
+                title="On Duty approved by manager",
+                body=(
+                    f"Your On Duty for {row.duty_date} was approved by your "
+                    "manager and is pending HR."
+                ),
+                kind="on_duty",
+                cc_reporting_manager=False,
+                extra={"on_duty_request_id": str(row.id), "href": "/on-duty"},
+            )
+            exclude: set[UUID] = set()
+            if ctx.user_id:
+                exclude.add(ctx.user_id)
+            notify_users_with_permission(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                permission_code="hr.attendance:update",
+                template_code="hr.on_duty_pending_hr",
+                template_name="On Duty Pending HR",
+                event_type="hr.on_duty_pending_hr",
+                title="On Duty / On Tour pending HR approval",
+                body=(
+                    f"On Duty for {row.duty_date} was manager-approved and "
+                    "needs HR final approval."
+                ),
+                kind="on_duty",
+                extra={
+                    "href": "/hr/ess-inbox",
+                    "on_duty_request_id": str(row.id),
+                },
+                exclude_user_ids=exclude,
             )
         except Exception:
             pass
         return updated
 
     def approve(self, ctx: TenantContext, row_id: UUID):
+        """HR final approval — marks on-duty attendance."""
         row = self.get(ctx, row_id)
-        if row.status != "submitted":
-            raise InvalidAttendanceState("Only submitted On Duty requests can be approved")
+        if row.status not in {"submitted", "manager_approved"}:
+            raise InvalidAttendanceState(
+                "On Duty must be submitted or manager-approved for HR approval"
+            )
 
         start = row.duty_date
         end = row.end_date or row.duty_date
@@ -136,24 +243,30 @@ class OnDutyRequestService:
                 template_name="On Duty Approved",
                 event_type="hr.on_duty_approved",
                 title="On Duty approved",
-                body=f"Your On Duty for {row.duty_date} was approved.",
+                body=f"Your On Duty for {row.duty_date} was approved by HR.",
                 kind="on_duty",
+                extra={"on_duty_request_id": str(row.id), "href": "/on-duty"},
             )
         except Exception:
             pass
         return updated
 
-    def reject(self, ctx: TenantContext, row_id: UUID):
+    def reject(
+        self, ctx: TenantContext, row_id: UUID, *, approver_employee_id: UUID | None = None
+    ):
         row = self.get(ctx, row_id)
-        if row.status != "submitted":
-            raise InvalidAttendanceState("Only submitted On Duty requests can be rejected")
-        return self._repo.update(
-            ctx,
-            row_id,
-            status="rejected",
-            approved_by=ctx.user_id,
-            decided_at=datetime.now(timezone.utc),
-        )
+        if row.status not in {"submitted", "manager_approved"}:
+            raise InvalidAttendanceState(
+                "Only submitted/manager-approved On Duty requests can be rejected"
+            )
+        patch: dict = {
+            "status": "rejected",
+            "approved_by": ctx.user_id,
+            "decided_at": datetime.now(timezone.utc),
+        }
+        if approver_employee_id is not None:
+            patch["manager_approver_id"] = approver_employee_id
+        return self._repo.update(ctx, row_id, **patch)
 
     def _upsert_on_duty_attendance(self, ctx: TenantContext, row, day: date) -> None:
         status = "on_duty"

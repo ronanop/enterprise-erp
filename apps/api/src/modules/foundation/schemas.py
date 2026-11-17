@@ -27,6 +27,63 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
+class EssLoginRequest(BaseModel):
+    """Employee Self-Service login: company + employee code + password."""
+
+    company_code: str = Field(min_length=1, max_length=50)
+    employee_code: str = Field(min_length=1, max_length=50)
+    password: str = Field(min_length=1, max_length=128)
+    captcha_id: str | None = None
+    captcha_answer: str | None = None
+    login_role: str | None = Field(
+        default=None,
+        description="UI hint only: employee | manager | hr_team",
+    )
+
+
+class EssCompanyOption(BaseModel):
+    """Public company option for ESS login dropdown."""
+
+    company_code: str
+    company_name: str
+    legal_name: str = ""
+
+
+class EssCaptchaChallenge(BaseModel):
+    captcha_id: str
+    question: str
+    code: str = ""
+    enabled: bool = True
+
+
+class EssLookupPhoneRequest(BaseModel):
+    """Identify employee phone under a company before captcha is shown."""
+
+    company_code: str = Field(min_length=1, max_length=50)
+    mobile: str = Field(min_length=8, max_length=20)
+
+
+class EssLookupPhoneResponse(BaseModel):
+    identified: bool = True
+    company_code: str
+    company_name: str
+    mobile_masked: str = ""
+
+
+class EssVerifyPhoneRequest(BaseModel):
+    company_code: str = Field(min_length=1, max_length=50)
+    mobile: str = Field(min_length=8, max_length=20)
+    captcha_id: str = Field(min_length=1, max_length=64)
+    captcha_answer: str = Field(min_length=1, max_length=32)
+
+
+class EssVerifyPhoneResponse(BaseModel):
+    verified: bool = True
+    company_code: str
+    company_name: str
+    mobile_masked: str = ""
+
+
 class MfaVerifyRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
