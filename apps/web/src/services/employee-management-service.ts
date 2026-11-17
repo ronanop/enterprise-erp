@@ -350,17 +350,27 @@ function mergeRow(
   const companyId = String(master.company_id ?? "");
   const companyInfo = companyMap.get(companyId);
   const extEntity = (hydrated.employment.entityName || "").trim();
+  const empCode = String(master.employee_code ?? hydrated.employment.employeeCode ?? "").toUpperCase();
   // Prefer Excel-synced entity label when present (Digitech / Technologies)
+  const entityFromCode =
+    empCode.startsWith("CDPL")
+      ? "Cache Digitech Private Limited"
+      : empCode.startsWith("CT") || empCode.startsWith("VPL")
+        ? "Cache Technologies"
+        : "";
   const entityName = /technolog/i.test(extEntity)
     ? "Cache Technologies"
     : /digitech/i.test(extEntity)
-      ? "Cache Digitech"
+      ? "Cache Digitech Private Limited"
       : companyInfo
         ? entityLabelForCompany(companyInfo.name, companyInfo.code)
-        : extEntity || "-";
-  const companyName = /technolog/i.test(extEntity)
-    ? "Cache Technologies & Infotech"
-    : companyInfo?.name || "-";
+        : extEntity || entityFromCode || "-";
+  // Company/entity display name (CT = Cache Technologies). Parent Organisation is "Cache".
+  const companyName = /technolog/i.test(extEntity) || /technolog/i.test(companyInfo?.name || "")
+    ? "Cache Technologies"
+    : /digitech/i.test(extEntity) || /digitech/i.test(companyInfo?.name || "")
+      ? companyInfo?.name || "Cache Digitech Private Limited"
+      : companyInfo?.name || entityFromCode || "-";
 
   const managerId = String(
     master.reporting_manager_id ?? hydrated.employment.reportingManagerId ?? "",

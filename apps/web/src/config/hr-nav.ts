@@ -120,13 +120,13 @@ export const hrNavGroups: HrNavGroup[] = [
             description: "Programs and completion",
             navKey: "training",
           },
-          // Hidden for now - restore under Workforce to show Leave
-          // {
-          //   title: "Leave",
-          //   href: "/hr/leave",
-          //   icon: CalendarDays,
-          //   description: "Leave requests & approvals",
-          // },
+          {
+            title: "Leave",
+            href: "/hr/leave",
+            icon: CalendarDays,
+            description: "Requests, balances & Excel upload",
+            navKey: "leave",
+          },
         ],
       },
       {

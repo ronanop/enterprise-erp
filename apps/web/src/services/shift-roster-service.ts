@@ -2,6 +2,10 @@ import { resourceService } from "@/services/api-client";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import { cacheRosterAssignments } from "@/services/hr-master-connector";
 import { listPeopleRoles } from "@/services/people-role-service";
+import {
+  loadSetupOrgLookups,
+  resolveSetupCompanyId,
+} from "@/services/hr-setup-service";
 import { isWeeklyOffDay } from "@/lib/hr/weekly-off-rules";
 import { consumeShiftCode, syncShiftCodesFromList } from "@/config/shift-id";
 import type { HrRow } from "@/services/hr-service";
@@ -20,7 +24,45 @@ import type {
   WeeklyOffRule,
 } from "@/types/shift-roster-management";
 import { DEFAULT_SHIFT_EXTENSION } from "@/types/shift-roster-management";
+import { getStoredOrgContext } from "@/lib/org-context-storage";
 import { devError, devWarn } from "@/lib/dev-log";
+
+function sessionCompanyId(): string | undefined {
+  const id = getStoredOrgContext()?.companyId;
+  return id ? String(id) : undefined;
+}
+
+/** Normalize HH:MM or HH:MM:SS to API HH:MM:SS (avoids `09:00:00:00` double-append). */
+function toShiftApiTime(value: string | null | undefined): string {
+  const m = String(value ?? "").trim().match(/^(\d{1,2}):(\d{2})(?::\d{2})?/);
+  if (!m) return "";
+  return `${m[1].padStart(2, "0")}:${m[2]}:00`;
+}
+
+function asUuidOrNull(value: string | null | undefined): string | null {
+  const v = String(value ?? "").trim();
+  if (!v) return null;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v)
+    ? v
+    : null;
+}
+
+async function resolveShiftWriteCompanyId(branchId?: string | null): Promise<string | undefined> {
+  const branch = asUuidOrNull(branchId);
+  const fromSession = sessionCompanyId();
+  if (fromSession) return fromSession;
+  try {
+    const org = await loadSetupOrgLookups();
+    return resolveSetupCompanyId({
+      branchId: branch,
+      branches: org.branches,
+      companies: org.companies,
+    });
+  } catch (err) {
+    devWarn("resolveShiftWriteCompanyId lookup failed", err);
+    return undefined;
+  }
+}
 
 type EmpLookup = {
   id: string;
@@ -564,20 +606,33 @@ export function filterAssignments(
 }
 
 export async function createShift(payload: CreateShiftPayload): Promise<void> {
-  const code = payload.shiftCode || consumeShiftCode();
+  const code = payload.shiftCode?.trim() || consumeShiftCode();
+  // Drawer peeks the next code; always advance local seq so retries don't collide.
+  syncShiftCodesFromList([code]);
+  const branchId = asUuidOrNull(payload.branchId);
+  const companyId = await resolveShiftWriteCompanyId(branchId);
+  const startTime = toShiftApiTime(payload.startTime);
+  const endTime = toShiftApiTime(payload.endTime);
+  if (!startTime || !endTime) {
+    throw new Error("Start and end time are required");
+  }
   const res = await resourceService.create("/hr/shifts", {
-    branch_id: payload.branchId || null,
+    company_id: companyId || null,
+    branch_id: branchId,
     shift_code: code,
     shift_name: payload.shiftName,
     shift_type: mapApiShiftType(payload.shiftType),
-    start_time: `${payload.startTime}:00`,
-    end_time: `${payload.endTime}:00`,
+    start_time: startTime,
+    end_time: endTime,
     grace_minutes: payload.graceMinutes,
     break_minutes: payload.breakMinutes || null,
     is_overnight: payload.isOvernight,
     status: "active",
   });
-  const id = String((res.data as HrRow).id);
+  const id = String((res.data as HrRow | null | undefined)?.id ?? "");
+  if (!id) {
+    throw new Error("Shift API returned no id");
+  }
   writeJson(EXT_KEY, { ...readJson(EXT_KEY, {}), [id]: payload.extension });
   appendShiftAudit({ action: "shift_created", detail: `${payload.shiftName} (${code})`, actor: actor() });
 }
@@ -588,12 +643,17 @@ export async function updateShift(
     status?: string;
   },
 ): Promise<void> {
+  const startTime = toShiftApiTime(payload.startTime);
+  const endTime = toShiftApiTime(payload.endTime);
+  if (!startTime || !endTime) {
+    throw new Error("Start and end time are required");
+  }
   await resourceService.update("/hr/shifts", record.id, {
     version: record.version,
     shift_name: payload.shiftName,
     shift_type: mapApiShiftType(payload.shiftType),
-    start_time: `${payload.startTime}:00`,
-    end_time: `${payload.endTime}:00`,
+    start_time: startTime,
+    end_time: endTime,
     grace_minutes: payload.graceMinutes,
     break_minutes: payload.breakMinutes || null,
     is_overnight: payload.isOvernight,
@@ -634,6 +694,7 @@ async function publishAssignment(id: string): Promise<void> {
 
 export async function assignShift(payload: AssignShiftPayload): Promise<void> {
   const res = await resourceService.create("/hr/shift-assignments", {
+    company_id: sessionCompanyId(),
     branch_id: payload.branchId,
     employee_id: payload.employeeId,
     shift_id: payload.shiftId,
@@ -703,6 +764,7 @@ export async function saveRotation(rotation: Omit<ShiftRotation, "id"> & { id?: 
   if (branchId) {
     try {
       await resourceService.create("/hr/shift-rotations", {
+        company_id: sessionCompanyId(),
         branch_id: branchId,
         rotation_code: rotation.code,
         rotation_name: rotation.name,
@@ -740,6 +802,7 @@ export async function submitShiftSwap(
   if (branchId && uuidRe.test(req.employeeId)) {
     try {
       const created = await resourceService.create<{ id?: string }>("/hr/shift-swaps", {
+        company_id: sessionCompanyId(),
         branch_id: branchId,
         employee_id: req.employeeId,
         swap_with_employee_id: uuidRe.test(req.swapWithEmployeeId) ? req.swapWithEmployeeId : null,
@@ -802,6 +865,7 @@ export async function setRosterCell(cell: RosterCell): Promise<void> {
         readJson<{ branchId?: string }>("erp_ats_api_context_v1", {}).branchId ||
         readJson<{ defaultBranchId?: string }>("erp_user_profile", {}).defaultBranchId;
       await resourceService.create("/hr/roster-entries", {
+        company_id: sessionCompanyId(),
         branch_id: branchId,
         employee_id: cell.employeeId,
         shift_id: cell.shiftId,
@@ -1358,6 +1422,7 @@ export async function applyManagerRosterImport(
     if (!uuidRe.test(cell.employeeId) || !cell.shiftId || !uuidRe.test(cell.shiftId)) continue;
     try {
       await resourceService.create("/hr/roster-entries", {
+        company_id: sessionCompanyId(),
         branch_id: branchId,
         employee_id: cell.employeeId,
         shift_id: cell.shiftId,
@@ -1397,6 +1462,7 @@ export async function saveWeeklyOffRules(
   } catch {
     try {
       await resourceService.create("/hr/weekly-off-policies", {
+        company_id: sessionCompanyId(),
         policy_code: "WOFF-001",
         policy_name: "Default Weekly Off",
         rules_json: rules,

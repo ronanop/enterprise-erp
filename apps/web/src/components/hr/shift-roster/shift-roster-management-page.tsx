@@ -595,15 +595,6 @@ export function ShiftRosterManagementPage() {
                 {jobBusy ? "Running…" : "Run for yesterday"}
               </Button>
             </div>
-            <h3 className="text-sm font-semibold pt-2">Holiday Rules</h3>
-            <p className="text-xs text-muted-foreground">
-              {dir.holidays.length} holidays loaded from HR holiday calendars (national / company).
-            </p>
-            <ul className="max-h-32 overflow-y-auto text-xs text-muted-foreground">
-              {dir.holidays.slice(0, 12).map((h) => (
-                <li key={h.date + h.name}>{h.date} - {h.name}</li>
-              ))}
-            </ul>
           </div>
           <div className="rounded-xl border border-border/70 bg-card p-4 shadow-sm space-y-3">
             <div className="flex items-center justify-between">

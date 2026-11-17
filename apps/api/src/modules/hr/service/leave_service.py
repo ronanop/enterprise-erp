@@ -1,5 +1,7 @@
 """Leave type / balance / request / adjustment services."""
 
+from __future__ import annotations
+
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import UUID
@@ -106,7 +108,10 @@ class LeaveTypeService:
         return row
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
-        cid = self._scope.resolve_company_id(ctx, company_id)
+        branch_id = fields.get("branch_id")
+        cid = self._scope.resolve_write_company_id(
+            ctx, company_id or fields.pop("company_id", None), branch_id=branch_id
+        )
         return self._repo.create(ctx, company_id=cid, **fields)
 
     def update(self, ctx: TenantContext, row_id: UUID, **fields):
@@ -188,13 +193,43 @@ class LeaveBalanceService:
         return row
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, employee_id: UUID, company_id: UUID | None = None, **fields):
-        cid = self._scope.resolve_company_id(ctx, company_id)
+        """Create or revive/update existing balance for (company, employee, leave_type, year)."""
+        cid = self._scope.resolve_write_company_id(ctx, company_id, branch_id=branch_id)
         self._scope.validate_branch_access(ctx, branch_id)
         self._master.get_employee(ctx, employee_id)
         opening = Decimal(str(fields.get("opening_balance", 0)))
         accrued = Decimal(str(fields.get("accrued", 0)))
         used = Decimal(str(fields.get("used", 0)))
-        fields.setdefault("closing_balance", opening + accrued - used)
+        closing = opening + accrued - used
+        fields = {**fields, "closing_balance": closing}
+        leave_type_id = fields.get("leave_type_id")
+        balance_year = fields.get("balance_year")
+        if leave_type_id is not None and balance_year is not None:
+            existing = self._repo.find_by_natural_key(
+                ctx,
+                company_id=cid,
+                employee_id=employee_id,
+                leave_type_id=leave_type_id,
+                balance_year=int(balance_year),
+                include_deleted=True,
+            )
+            if existing is not None:
+                # Preserve used days on live rows (Assign UI may re-hit an existing unique key).
+                keep_used = Decimal(str(existing.used or 0))
+                if not getattr(existing, "is_deleted", False):
+                    used = keep_used
+                    closing = opening + accrued - used
+                payload = {
+                    "branch_id": branch_id,
+                    "opening_balance": opening,
+                    "accrued": accrued,
+                    "used": used,
+                    "closing_balance": closing,
+                    "status": fields.get("status") or "open",
+                }
+                if getattr(existing, "is_deleted", False):
+                    return self._repo.revive_and_update(ctx, existing, **payload)
+                return self._repo.update(ctx, existing.id, **payload) or existing
         return self._repo.create(
             ctx,
             company_id=cid,
@@ -202,6 +237,167 @@ class LeaveBalanceService:
             employee_id=employee_id,
             **fields,
         )
+
+    def import_rows(self, ctx: TenantContext, rows: list[dict]) -> dict:
+        """Upsert leave balances from Excel/CSV rows (employee_code + leave_type_code)."""
+        from modules.master_data.published import EmployeeRead
+
+        created = 0
+        updated = 0
+        skipped = 0
+        warnings: list[str] = []
+        errors: list[str] = []
+        results: list[dict] = []
+
+        # Prefetch employees + leave types for tenant scope
+        emp_rows = list(
+            self._db.scalars(
+                select(EmployeeRead).where(
+                    EmployeeRead.tenant_id == ctx.tenant_id,
+                    EmployeeRead.is_deleted.is_(False),
+                )
+            ).all()
+        )
+        emp_by_code: dict[str, object] = {}
+        for emp in emp_rows:
+            code = str(getattr(emp, "employee_code", "") or "").strip().upper()
+            if code and code not in emp_by_code:
+                emp_by_code[code] = emp
+
+        type_cache: dict[UUID, dict[str, object]] = {}
+
+        def types_for_company(company_id: UUID) -> dict[str, object]:
+            if company_id not in type_cache:
+                by_code: dict[str, object] = {}
+                for lt in self._types.list_rows(ctx, company_id):
+                    code = str(getattr(lt, "leave_type_code", "") or "").strip().upper()
+                    if code:
+                        by_code[code] = lt
+                type_cache[company_id] = by_code
+            return type_cache[company_id]
+
+        def find_open_balance(company_id: UUID, employee_id: UUID, leave_type_id: UUID, year: int):
+            for bal in self._repo.list_rows(ctx, company_id):
+                if (
+                    bal.employee_id == employee_id
+                    and bal.leave_type_id == leave_type_id
+                    and int(bal.balance_year) == year
+                    and bal.status == "open"
+                    and not getattr(bal, "is_deleted", False)
+                ):
+                    return bal
+            return None
+
+        for idx, raw in enumerate(rows, start=2):
+            try:
+                emp_code = str(raw.get("employee_code") or "").strip().upper()
+                type_code = str(raw.get("leave_type_code") or "").strip().upper()
+                if not emp_code or not type_code:
+                    skipped += 1
+                    errors.append(f"Row {idx}: employee_code and leave_type_code are required")
+                    continue
+
+                emp = emp_by_code.get(emp_code)
+                if emp is None:
+                    skipped += 1
+                    errors.append(f"Row {idx}: employee '{emp_code}' not found")
+                    continue
+
+                company_id = getattr(emp, "company_id", None)
+                branch_id = getattr(emp, "branch_id", None)
+                if company_id is None or branch_id is None:
+                    skipped += 1
+                    errors.append(f"Row {idx}: employee '{emp_code}' has no company/branch")
+                    continue
+
+                lt = types_for_company(company_id).get(type_code)
+                if lt is None:
+                    skipped += 1
+                    errors.append(
+                        f"Row {idx}: leave type '{type_code}' not found for employee company"
+                    )
+                    continue
+
+                year_raw = raw.get("balance_year")
+                if year_raw is None or str(year_raw).strip() == "":
+                    year = leave_financial_year(date.today())
+                else:
+                    year = int(year_raw)
+
+                used = Decimal(str(raw.get("used") if raw.get("used") is not None else 0))
+                accrued = Decimal(str(raw.get("accrued") if raw.get("accrued") is not None else 0))
+                remaining = raw.get("remaining")
+                opening_raw = raw.get("opening_balance")
+
+                if remaining is not None and str(remaining).strip() != "":
+                    # "Leaves left" from legacy sheet → employee app closing balance
+                    remaining_dec = Decimal(str(remaining))
+                    opening = remaining_dec + used - accrued
+                elif opening_raw is not None and str(opening_raw).strip() != "":
+                    opening = Decimal(str(opening_raw))
+                else:
+                    skipped += 1
+                    errors.append(
+                        f"Row {idx}: provide remaining (leaves left) or opening_balance"
+                    )
+                    continue
+
+                closing = opening + accrued - used
+                existing = find_open_balance(company_id, emp.id, lt.id, year)
+                if existing is None:
+                    row = self.create(
+                        ctx,
+                        branch_id=branch_id,
+                        employee_id=emp.id,
+                        company_id=company_id,
+                        leave_type_id=lt.id,
+                        balance_year=year,
+                        opening_balance=opening,
+                        accrued=accrued,
+                        used=used,
+                        status="open",
+                    )
+                    action = "created"
+                    created += 1
+                    balance_id = row.id
+                    closing_out = row.closing_balance
+                else:
+                    row = self.update(
+                        ctx,
+                        existing.id,
+                        opening_balance=opening,
+                        accrued=accrued,
+                        used=used,
+                        status="open",
+                    )
+                    action = "updated"
+                    updated += 1
+                    balance_id = row.id
+                    closing_out = row.closing_balance
+
+                results.append(
+                    {
+                        "row": idx,
+                        "employee_code": emp_code,
+                        "leave_type_code": type_code,
+                        "action": action,
+                        "balance_id": str(balance_id),
+                        "closing_balance": Decimal(str(closing_out if closing_out is not None else closing)),
+                    }
+                )
+            except Exception as exc:  # noqa: BLE001 — collect per-row errors for import UX
+                skipped += 1
+                errors.append(f"Row {idx}: {exc}")
+
+        self._db.flush()
+        return {
+            "created": created,
+            "updated": updated,
+            "skipped": skipped,
+            "warnings": warnings,
+            "errors": errors,
+            "results": results,
+        }
 
     def credit_compoff(
         self,

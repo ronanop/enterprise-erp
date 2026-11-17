@@ -40,11 +40,38 @@ import {
   renderEmployeeCell,
 } from "@/lib/employee-table-columns";
 import {
+  ALL_EMPLOYEE_TABLE_COLUMN_KEYS,
   EMPLOYEE_TABLE_COLUMN_LABELS,
+  EXCEL_EMPLOYEE_TABLE_COLUMNS,
+  EXTRA_EMPLOYEE_TABLE_COLUMNS,
   REQUIRED_EMPLOYEE_TABLE_COLUMNS,
   useEmployeeTablePrefs,
   type EmployeeTableColumnKey,
 } from "@/hooks/use-employee-table-prefs";
+
+/** Keep header and body cells on the same grid (avoids Excel-field column drift). */
+const COLUMN_CELL_CLASS: Partial<Record<EmployeeTableColumnKey, string>> = {
+  employeeCode: "min-w-[7.5rem] max-w-[9rem]",
+  name: "min-w-[11rem] max-w-[14rem]",
+  entity: "min-w-[8rem] max-w-[11rem]",
+  organisation: "min-w-[7rem] max-w-[10rem]",
+  location: "min-w-[7rem] max-w-[10rem]",
+  designation: "min-w-[8rem] max-w-[11rem]",
+  department: "min-w-[8rem] max-w-[11rem]",
+  reportingManager: "min-w-[8rem] max-w-[11rem]",
+  phone: "min-w-[7.5rem] max-w-[9rem]",
+  personalEmail: "min-w-[10rem] max-w-[14rem]",
+  email: "min-w-[10rem] max-w-[14rem]",
+  gender: "min-w-[4.5rem]",
+  dob: "min-w-[6rem]",
+  joiningDate: "min-w-[6rem]",
+  emergencyName: "min-w-[8rem] max-w-[11rem]",
+  emergencyRelation: "min-w-[5.5rem]",
+  emergencyPhone: "min-w-[7.5rem] max-w-[9rem]",
+  fatherName: "min-w-[7rem] max-w-[10rem]",
+  esi: "min-w-[5rem]",
+  status: "min-w-[5.5rem]",
+};
 import {
   computeEmployeeStats,
   downloadTextFile,
@@ -158,10 +185,7 @@ export function EmployeeManagementPage() {
     }
   }
   const orderedVisibleColumns = useMemo(
-    () =>
-      (Object.keys(EMPLOYEE_TABLE_COLUMN_LABELS) as EmployeeTableColumnKey[]).filter((key) =>
-        visibleColumns.has(key),
-      ),
+    () => ALL_EMPLOYEE_TABLE_COLUMN_KEYS.filter((key) => visibleColumns.has(key)),
     [visibleColumns],
   );
 
@@ -305,32 +329,50 @@ export function EmployeeManagementPage() {
                     aria-label="Close column picker"
                     onClick={() => setColumnsOpen(false)}
                   />
-                  <div className="absolute top-9 left-0 z-20 max-h-80 w-64 overflow-y-auto rounded-lg border border-border bg-card p-2 shadow-md">
+                  <div className="absolute top-9 left-0 z-20 max-h-80 w-72 overflow-y-auto rounded-lg border border-border bg-card p-2 shadow-md">
                     <p className="px-1.5 pb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                       Excel fields — add or remove
                     </p>
-                    {(Object.keys(EMPLOYEE_TABLE_COLUMN_LABELS) as EmployeeTableColumnKey[]).map(
-                      (key) => {
-                        const required = REQUIRED_EMPLOYEE_TABLE_COLUMNS.includes(key);
-                        return (
+                    {EXCEL_EMPLOYEE_TABLE_COLUMNS.map((key) => {
+                      const required = REQUIRED_EMPLOYEE_TABLE_COLUMNS.includes(key);
+                      return (
+                        <label
+                          key={key}
+                          className={cn(
+                            "flex items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted/60",
+                            required ? "cursor-default opacity-80" : "cursor-pointer",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={visibleColumns.has(key)}
+                            disabled={required}
+                            onChange={() => toggleColumn(key)}
+                          />
+                          {EMPLOYEE_TABLE_COLUMN_LABELS[key]}
+                        </label>
+                      );
+                    })}
+                    {EXTRA_EMPLOYEE_TABLE_COLUMNS.length ? (
+                      <>
+                        <p className="mt-2 px-1.5 pb-1 pt-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground border-t border-border/60">
+                          More columns
+                        </p>
+                        {EXTRA_EMPLOYEE_TABLE_COLUMNS.map((key) => (
                           <label
                             key={key}
-                            className={cn(
-                              "flex items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted/60",
-                              required ? "cursor-default opacity-80" : "cursor-pointer",
-                            )}
+                            className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted/60"
                           >
                             <input
                               type="checkbox"
                               checked={visibleColumns.has(key)}
-                              disabled={required}
                               onChange={() => toggleColumn(key)}
                             />
                             {EMPLOYEE_TABLE_COLUMN_LABELS[key]}
                           </label>
-                        );
-                      },
-                    )}
+                        ))}
+                      </>
+                    ) : null}
                     <button
                       type="button"
                       className="mt-2 w-full cursor-pointer rounded-md border border-border/70 px-2 py-1 text-[11px] font-medium text-primary hover:bg-muted/40"
@@ -433,11 +475,11 @@ export function EmployeeManagementPage() {
                 />
               ) : (
                 <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-                  <div className="erp-scroll max-h-[calc(100vh-18rem)] overflow-auto">
-                    <table className="w-full min-w-[960px] text-left text-sm">
+                  <div className="erp-scroll max-h-[calc(100vh-18rem)] overflow-auto [scrollbar-gutter:stable]">
+                    <table className="w-max min-w-full border-collapse text-left text-sm">
                       <thead className="sticky top-0 z-10 border-b border-border/70 bg-muted/95 backdrop-blur-sm">
                         <tr>
-                          <th className="w-10 px-2 py-2 align-bottom">
+                          <th className="w-10 min-w-10 px-2 py-2 align-middle">
                             <input
                               type="checkbox"
                               className="cursor-pointer"
@@ -446,20 +488,27 @@ export function EmployeeManagementPage() {
                             />
                           </th>
                           {orderedVisibleColumns.map((key) => (
-                            <th key={key} className="px-2 py-2.5 align-middle">
+                            <th
+                              key={key}
+                              className={cn(
+                                "px-2 py-2 align-middle",
+                                COLUMN_CELL_CLASS[key] ?? "min-w-[6.5rem]",
+                              )}
+                            >
                               <span
                                 className={cn(
-                                  "block whitespace-nowrap text-[10px] font-semibold tracking-wide text-muted-foreground",
+                                  "block truncate text-[10px] font-semibold tracking-wide text-muted-foreground",
                                   EXACT_CASE_HEADER_COLUMNS.has(key)
                                     ? "normal-case"
                                     : "uppercase",
                                 )}
+                                title={EMPLOYEE_TABLE_COLUMN_LABELS[key]}
                               >
                                 {EMPLOYEE_TABLE_COLUMN_LABELS[key]}
                               </span>
                             </th>
                           ))}
-                          <th className="w-12 px-2 py-2" />
+                          <th className="w-12 min-w-12 px-2 py-2" />
                         </tr>
                       </thead>
                       <tbody>
@@ -468,7 +517,7 @@ export function EmployeeManagementPage() {
                             key={row.id}
                             className="border-b border-border/50 transition-colors hover:bg-muted/30"
                           >
-                            <td className="px-2 py-2">
+                            <td className="w-10 min-w-10 px-2 py-2 align-middle">
                               <input
                                 type="checkbox"
                                 className="cursor-pointer"
@@ -477,25 +526,33 @@ export function EmployeeManagementPage() {
                               />
                             </td>
                             {orderedVisibleColumns.map((key) => (
-                              <td key={key} className="px-2 py-2 text-xs">
+                              <td
+                                key={key}
+                                className={cn(
+                                  "px-2 py-2 align-middle text-xs",
+                                  COLUMN_CELL_CLASS[key] ?? "min-w-[6.5rem]",
+                                )}
+                              >
                                 {key === "name" ? (
                                   <Link
                                     href={`/hr/workforce/${row.id}`}
-                                    className="flex cursor-pointer items-center gap-2 hover:text-primary"
+                                    className="flex min-w-0 cursor-pointer items-center gap-2 hover:text-primary"
                                   >
                                     <EmsAvatar
                                       name={row.displayName}
                                       photoUrl={row.profilePhotoDataUrl}
                                       size="sm"
                                     />
-                                    <span className="font-medium">{row.displayName}</span>
+                                    <span className="truncate font-medium">{row.displayName}</span>
                                   </Link>
                                 ) : (
-                                  renderEmployeeCell(key, row)
+                                  <span className="block truncate">
+                                    {renderEmployeeCell(key, row)}
+                                  </span>
                                 )}
                               </td>
                             ))}
-                            <td className="px-2 py-2">
+                            <td className="w-12 min-w-12 px-2 py-2 align-middle">
                               <RowActionsMenu
                                 open={menuId === row.id}
                                 onOpenChange={(open) => setMenuId(open ? row.id : null)}

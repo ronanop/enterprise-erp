@@ -1055,6 +1055,8 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       archive: "inactive",
     },
     buildCreateBody: (f) => ({
+      company_id: f.company_id || undefined,
+      branch_id: f.branch_id || undefined,
       leave_type_code: f.leave_type_code,
       leave_type_name: f.leave_type_name,
       is_paid: f.is_paid === "true",
@@ -1184,6 +1186,8 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       STATUS_FIELD,
     ],
     buildCreateBody: (f) => ({
+      company_id: f.company_id || undefined,
+      branch_id: f.branch_id || undefined,
       shift_code: f.shift_code,
       shift_name: f.shift_name,
       shift_type: f.shift_type || "general",

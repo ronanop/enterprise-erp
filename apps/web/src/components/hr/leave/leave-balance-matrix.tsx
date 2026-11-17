@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Plus, Trash2, Wand2 } from "lucide-react";
 
 import { SetupDrawer, SetupField, SetupInput, SetupSelect, SetupTextarea } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
@@ -15,17 +15,106 @@ import {
   type LeaveDirectory,
 } from "@/services/leave-management-service";
 import type { LeaveBalanceRecord, LeaveTypeRecord } from "@/types/leave-management";
+import { isVisibleLeaveType } from "@/types/leave-management";
+import { formatApiError } from "@/services/api-client";
 
 type EmployeeRow = {
   id: string;
   name: string;
   code: string;
   branchId: string;
+  companyName: string;
+  lifecycleStatus?: string;
 };
+
+/** Leave balances: activated employees only. */
+function isLeaveBalanceEligible(status: string | undefined): boolean {
+  return String(status || "").trim().toLowerCase() === "active";
+}
 
 function currentYearMonth(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** Leave FY starts 1 Mar (matches API leave_financial_year). */
+function currentLeaveBalanceYear(d = new Date()): number {
+  return d.getMonth() >= 2 ? d.getFullYear() : d.getFullYear() - 1;
+}
+
+function isActiveLeaveType(t: LeaveTypeRecord): boolean {
+  return String(t.status || "active").trim().toLowerCase() === "active";
+}
+
+type PolicyCredit = {
+  mode: "monthly" | "yearly" | "none";
+  days: number;
+  label: string;
+};
+
+/** Prefer monthly credit from leave type policy; else yearly entitlement. */
+export function leaveTypePolicyCredit(t: LeaveTypeRecord): PolicyCredit {
+  if (Number(t.daysPerMonth) > 0) {
+    return {
+      mode: "monthly",
+      days: Number(t.daysPerMonth),
+      label: `${Number(t.daysPerMonth)} day(s) / month`,
+    };
+  }
+  if (Number(t.maxDays) > 0) {
+    return {
+      mode: "yearly",
+      days: Number(t.maxDays),
+      label: `${Number(t.maxDays)} day(s) / year`,
+    };
+  }
+  return { mode: "none", days: 0, label: "No credit in leave policy" };
+}
+
+/** Completed calendar months in leave FY up to (not including) current month. */
+function completedMonthsInLeaveFy(fyStartYear: number, ref = new Date()): number {
+  const fyStart = new Date(fyStartYear, 2, 1);
+  const lastCompleted = new Date(ref.getFullYear(), ref.getMonth(), 0);
+  if (lastCompleted < fyStart) return 0;
+  let count = 0;
+  let y = fyStartYear;
+  let m = 2;
+  for (let i = 0; i < 12; i += 1) {
+    const monthEnd = new Date(y, m + 1, 0);
+    if (monthEnd > lastCompleted) break;
+    if (y === fyStartYear + 1 && m > 1) break;
+    count += 1;
+    m += 1;
+    if (m > 11) {
+      m = 0;
+      y += 1;
+    }
+  }
+  return count;
+}
+
+function defaultAssignAmounts(
+  t: LeaveTypeRecord,
+  fyYear: number,
+): { openingBalance: number; accruedDays: number; hint: string } {
+  const policy = leaveTypePolicyCredit(t);
+  if (policy.mode === "monthly") {
+    const months = completedMonthsInLeaveFy(fyYear);
+    const accrued = Number((policy.days * months).toFixed(2));
+    return {
+      openingBalance: 0,
+      accruedDays: accrued,
+      hint: `Policy ${policy.label} × ${months} completed month(s) = ${accrued}`,
+    };
+  }
+  if (policy.mode === "yearly") {
+    return {
+      openingBalance: policy.days,
+      accruedDays: 0,
+      hint: `Policy yearly credit ${policy.days} day(s)`,
+    };
+  }
+  return { openingBalance: 0, accruedDays: 0, hint: "No policy credit — set days manually" };
 }
 
 export function LeaveBalancePanel({
@@ -36,100 +125,105 @@ export function LeaveBalancePanel({
   onSaved?: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const [employeeId, setEmployeeId] = useState("");
   const [selected, setSelected] = useState<EmployeeRow | null>(null);
 
   const leaveTypes = useMemo(
     () =>
       directory.leaveTypes
-        .filter((t) => t.status === "active")
+        .filter((t) => isActiveLeaveType(t) && isVisibleLeaveType(t.code, t.name))
         .sort((a, b) => a.name.localeCompare(b.name)),
     [directory.leaveTypes],
   );
 
+  const balanceYear = currentLeaveBalanceYear();
   const balanceByEmpType = useMemo(() => {
     const map = new Map<string, LeaveBalanceRecord>();
-    const year = new Date().getFullYear();
     for (const b of directory.balances) {
-      if (b.balanceYear !== year) continue;
-      map.set(`${b.employeeId}:${b.leaveTypeId}`, b);
+      // Prefer FY year; also accept same calendar year rows from older creates
+      if (b.balanceYear !== balanceYear && b.balanceYear !== new Date().getFullYear()) continue;
+      const key = `${b.employeeId}:${b.leaveTypeId}`;
+      const prev = map.get(key);
+      if (!prev || b.balanceYear === balanceYear) map.set(key, b);
     }
     return map;
-  }, [directory.balances]);
+  }, [directory.balances, balanceYear]);
 
   const employees = useMemo(() => {
-    const map = new Map<string, EmployeeRow>();
+    // Unique by employee id, then by emp code (avoid directory/balance double-add)
+    const byId = new Map<string, EmployeeRow>();
     for (const e of directory.options.employees) {
-      map.set(e.id, {
+      if (!isLeaveBalanceEligible(e.lifecycleStatus)) continue;
+      const name = (e.label.split(" · ")[0] || e.label || "").trim();
+      const code = String(e.code || "").trim();
+      // Skip blank identity rows (bad master data / orphan balance ghosts)
+      if (!name && !code) continue;
+      const entity = String(e.companyName || "").trim();
+      byId.set(e.id, {
         id: e.id,
-        name: e.label.split(" · ")[0] || e.label,
-        code: e.code,
+        name: name || code,
+        code,
         branchId: e.branchId,
+        companyName: !entity || entity === "-" || entity === "—" ? "" : entity,
+        lifecycleStatus: e.lifecycleStatus,
       });
     }
-    for (const b of directory.balances) {
-      if (!map.has(b.employeeId)) {
-        map.set(b.employeeId, {
-          id: b.employeeId,
-          name: b.employeeName,
-          code: b.employeeCode,
-          branchId: b.branchId,
-        });
+    // Do NOT invent grid rows from orphan leave_balance employee_ids —
+    // those create empty name/code/entity cells when the employee was deleted
+    // or never synced into the directory.
+    // Collapse same emp code (legacy EMP- vs CDPL/CT re-imports) — keep preferred code
+    const byCode = new Map<string, EmployeeRow>();
+    const ranked = [...byId.values()].sort((a, b) => {
+      const score = (r: EmployeeRow) => {
+        const c = r.code.toUpperCase();
+        if (c.startsWith("CDPL") || c.startsWith("CT") || c.startsWith("VPL")) return 0;
+        if (c.startsWith("EMP-") || c.startsWith("EMP")) return 2;
+        return 1;
+      };
+      return score(a) - score(b) || a.name.localeCompare(b.name);
+    });
+    for (const row of ranked) {
+      const key = row.code.trim().toUpperCase();
+      if (!key) {
+        byCode.set(row.id, row);
+        continue;
       }
+      if (!byCode.has(key)) byCode.set(key, row);
     }
-    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+    return [...byCode.values()].sort((a, b) => a.name.localeCompare(b.name) || a.code.localeCompare(b.code));
   }, [directory]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return employees.filter((e) => {
-      if (employeeId && e.id !== employeeId) return false;
-      if (!q) return true;
-      return `${e.name} ${e.code}`.toLowerCase().includes(q);
-    });
-  }, [employees, employeeId, query]);
+    if (!q) return employees;
+    return employees.filter((e) =>
+      `${e.name} ${e.code} ${e.companyName}`.toLowerCase().includes(q),
+    );
+  }, [employees, query]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-2 rounded-xl border border-border/70 bg-card p-3 shadow-sm">
-        <div className="min-w-[12rem] flex-1 space-y-1">
-          <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Employee
-          </label>
-          <SetupSelect value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="w-full">
-            <option value="">All employees</option>
-            {employees.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name} ({e.code})
-              </option>
-            ))}
-          </SetupSelect>
-        </div>
-        <div className="min-w-[14rem] flex-[2] space-y-1">
-          <label className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-            Search
-          </label>
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search name, ID…"
-          />
-        </div>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          className="cursor-pointer"
-          onClick={() => {
-            setEmployeeId("");
-            setQuery("");
-          }}
-        >
-          Clear
-        </Button>
-        <p className="w-full text-[11px] text-muted-foreground">
-          Click a row to adjust monthly leave, add a leave type, or remove an assignment. Balances are for{" "}
-          {new Date().getFullYear()}.
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search employee name or code…"
+          className="h-8 max-w-sm"
+        />
+        {query ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="cursor-pointer h-8"
+            onClick={() => setQuery("")}
+          >
+            Clear
+          </Button>
+        ) : null}
+        <p className="text-[11px] text-muted-foreground">
+          Leave FY {balanceYear}–{String(balanceYear + 1).slice(2)}
+          {leaveTypes.length ? ` · ${leaveTypes.length} leave type(s)` : " · no leave types in setup"}
+          {` · ${filtered.length} employee(s)`}
         </p>
       </div>
 
@@ -139,9 +233,10 @@ export function LeaveBalancePanel({
             <tr className="border-b border-border/70 bg-muted/40">
               <th className="sticky left-0 z-10 bg-muted/95 px-3 py-2 font-medium">Employee</th>
               <th className="px-2 py-2 font-medium">Code</th>
+              <th className="px-2 py-2 font-medium">Entity</th>
               {leaveTypes.map((t) => (
                 <th key={t.id} className="px-2 py-2 font-medium whitespace-nowrap">
-                  <span className="inline-flex items-center gap-1">
+                  <span className="inline-flex items-center gap-1" title={leaveTypePolicyCredit(t).label}>
                     <span className="size-2 rounded-full" style={{ backgroundColor: t.color }} />
                     {t.code}
                   </span>
@@ -159,8 +254,9 @@ export function LeaveBalancePanel({
                 )}
                 onClick={() => setSelected(emp)}
               >
-                <td className="sticky left-0 z-10 bg-card px-3 py-2 font-medium">{emp.name}</td>
-                <td className="px-2 py-2 font-mono text-muted-foreground">{emp.code}</td>
+                <td className="sticky left-0 z-10 bg-card px-3 py-2 font-medium">{emp.name || "—"}</td>
+                <td className="px-2 py-2 font-mono text-muted-foreground">{emp.code || "—"}</td>
+                <td className="px-2 py-2 text-muted-foreground">{emp.companyName || "—"}</td>
                 {leaveTypes.map((t) => {
                   const bal = balanceByEmpType.get(`${emp.id}:${t.id}`);
                   return (
@@ -180,7 +276,13 @@ export function LeaveBalancePanel({
           </tbody>
         </table>
         {!filtered.length ? (
-          <p className="px-4 py-8 text-center text-xs text-muted-foreground">No employees match filters.</p>
+          <p className="px-4 py-8 text-center text-xs text-muted-foreground">No employees match search.</p>
+        ) : null}
+        {filtered.length && !leaveTypes.length ? (
+          <p className="px-4 py-4 text-center text-xs text-amber-800">
+            Leave types are missing. Open <strong>Org Setup → Leave Types</strong> and create SL / CL / etc. with
+            monthly or yearly credit.
+          </p>
         ) : null}
       </div>
 
@@ -190,6 +292,7 @@ export function LeaveBalancePanel({
         directory={directory}
         leaveTypes={leaveTypes}
         balances={selected ? directory.balances.filter((b) => b.employeeId === selected.id) : []}
+        balanceYear={balanceYear}
         onClose={() => setSelected(null)}
         onSaved={() => {
           onSaved?.();
@@ -205,6 +308,7 @@ function EmployeeLeaveBalanceDrawer({
   directory,
   leaveTypes,
   balances,
+  balanceYear,
   onClose,
   onSaved,
 }: {
@@ -213,22 +317,101 @@ function EmployeeLeaveBalanceDrawer({
   directory: LeaveDirectory;
   leaveTypes: LeaveTypeRecord[];
   balances: LeaveBalanceRecord[];
+  balanceYear: number;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const year = new Date().getFullYear();
-  const yearBalances = balances.filter((b) => b.balanceYear === year);
+  const year = balanceYear;
+  /** Prefer FY year, then calendar year, then any year — so existing DB rows surface in the UI. */
+  const balanceByType = useMemo(() => {
+    const map = new Map<string, LeaveBalanceRecord>();
+    const byCode = new Map<string, LeaveBalanceRecord>();
+    const rank = (b: LeaveBalanceRecord) => {
+      if (b.balanceYear === year) return 0;
+      if (b.balanceYear === new Date().getFullYear()) return 1;
+      return 2;
+    };
+    const sorted = [...balances].sort((a, b) => rank(a) - rank(b));
+    for (const b of sorted) {
+      if (!map.has(b.leaveTypeId)) map.set(b.leaveTypeId, b);
+      const code = String(b.leaveTypeCode || "").toUpperCase();
+      if (code && !byCode.has(code)) byCode.set(code, b);
+    }
+    // Attach code aliases so policy leave types match even if ids differ across companies
+    for (const t of leaveTypes) {
+      if (map.has(t.id)) continue;
+      const hit = byCode.get(String(t.code || "").toUpperCase());
+      if (hit) map.set(t.id, hit);
+    }
+    return map;
+  }, [balances, year, leaveTypes]);
+
+  const yearBalances = useMemo(() => {
+    const seen = new Set<string>();
+    const out: LeaveBalanceRecord[] = [];
+    for (const t of leaveTypes) {
+      const b = balanceByType.get(t.id);
+      if (b && !seen.has(b.id)) {
+        seen.add(b.id);
+        out.push(b);
+      }
+    }
+    for (const b of balances) {
+      if (!seen.has(b.id) && (b.balanceYear === year || b.balanceYear === new Date().getFullYear())) {
+        seen.add(b.id);
+        out.push(b);
+      }
+    }
+    return out;
+  }, [balanceByType, leaveTypes, balances, year]);
 
   const [adjustTypeId, setAdjustTypeId] = useState("");
   const [adjustMonth, setAdjustMonth] = useState(currentYearMonth());
+  /** Editable "leaves left" — seeded from balance when type is selected. */
   const [adjustDays, setAdjustDays] = useState("");
+  const [adjustBaselineLeft, setAdjustBaselineLeft] = useState<number | null>(null);
   const [adjustReason, setAdjustReason] = useState("");
-  const [addTypeId, setAddTypeId] = useState("");
-  const [addDays, setAddDays] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const assignedTypeIds = new Set(yearBalances.map((b) => b.leaveTypeId));
-  const unassignedTypes = leaveTypes.filter((t) => !assignedTypeIds.has(t.id));
+  const adjustBalance = adjustTypeId ? balanceByType.get(adjustTypeId) ?? null : null;
+
+  function selectAdjustType(typeId: string) {
+    setAdjustTypeId(typeId);
+    if (!typeId) {
+      setAdjustDays("");
+      setAdjustBaselineLeft(null);
+      return;
+    }
+    const bal = balanceByType.get(typeId);
+    if (!bal) {
+      setAdjustDays("");
+      setAdjustBaselineLeft(null);
+      return;
+    }
+    const left = Number(bal.available);
+    setAdjustBaselineLeft(left);
+    setAdjustDays(String(left));
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    setAdjustTypeId("");
+    setAdjustDays("");
+    setAdjustBaselineLeft(null);
+    setAdjustReason("");
+    setAdjustMonth(currentYearMonth());
+  }, [open, employee?.id]);
+
+  // After save / balance reload, reseed only when server "left" changed.
+  const serverLeft = adjustBalance != null ? Number(adjustBalance.available) : null;
+  useEffect(() => {
+    if (!open || !adjustTypeId || serverLeft == null || !Number.isFinite(serverLeft)) return;
+    if (adjustBaselineLeft === serverLeft) return;
+    setAdjustBaselineLeft(serverLeft);
+    setAdjustDays(String(serverLeft));
+  }, [open, adjustTypeId, serverLeft, adjustBaselineLeft]);
+
+  const unassignedTypes = leaveTypes.filter((t) => !balanceByType.has(t.id));
 
   const branchId =
     employee?.branchId ||
@@ -244,9 +427,35 @@ function EmployeeLeaveBalanceDrawer({
       toast(okMsg, "success");
       onSaved();
     } catch (e) {
-      toast(e instanceof Error ? e.message : "Action failed", "error");
+      toast(formatApiError(e, "Action failed"), "error");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function assignType(t: LeaveTypeRecord) {
+    if (!employee || !branchId) {
+      toast("Employee branch is missing — set branch on the employee first", "error");
+      return;
+    }
+    const amounts = defaultAssignAmounts(t, year);
+    await createEmployeeLeaveBalance({
+      branchId,
+      employeeId: employee.id,
+      leaveTypeId: t.id,
+      balanceYear: year,
+      openingBalance: amounts.openingBalance,
+      accruedDays: amounts.accruedDays,
+    });
+  }
+
+  async function assignAllFromPolicy() {
+    if (!unassignedTypes.length) {
+      toast("All leave types already assigned", "error");
+      return;
+    }
+    for (const t of unassignedTypes) {
+      await assignType(t);
     }
   }
 
@@ -256,7 +465,7 @@ function EmployeeLeaveBalanceDrawer({
       onClose={onClose}
       wide
       title={employee ? `Leave balances - ${employee.name}` : "Leave balances"}
-      description="Adjust days by month, assign a new leave type, or remove an unused assignment."
+      description="All leave types from Leave Setup, with monthly or yearly credit from policy. Same balances as ESS."
       footer={
         <Button type="button" variant="outline" className="cursor-pointer" onClick={onClose}>
           Close
@@ -266,41 +475,99 @@ function EmployeeLeaveBalanceDrawer({
       {!employee ? null : (
         <div className="space-y-6">
           <section className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Assigned leave types ({year})
-            </h3>
-            {!yearBalances.length ? (
-              <p className="text-xs text-muted-foreground">No leave types assigned for this year.</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Leave types ({year}–{String(year + 1).slice(2)})
+              </h3>
+              {unassignedTypes.length ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="cursor-pointer h-7 text-[11px]"
+                  disabled={busy || !branchId}
+                  onClick={() =>
+                    void run(assignAllFromPolicy, `Assigned ${unassignedTypes.length} leave type(s) from policy`)
+                  }
+                >
+                  <Wand2 className="size-3.5" />
+                  Assign all from policy
+                </Button>
+              ) : null}
+            </div>
+
+            {!leaveTypes.length ? (
+              <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                No leave types loaded. Create them under <strong>Org Setup → Leave Types</strong> (set monthly credit
+                or max days / year), then refresh.
+              </p>
             ) : (
               <ul className="space-y-2">
-                {yearBalances.map((b) => (
-                  <li
-                    key={b.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2"
-                  >
-                    <div>
-                      <p className="text-sm font-medium">{b.leaveTypeName}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        Alloc {b.allocated} · Used {b.used} · Pending {b.pending} · Avail {b.available}
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      className="cursor-pointer text-destructive hover:text-destructive"
-                      disabled={busy || b.used > 0}
-                      title={b.used > 0 ? "Cannot remove while used balance &gt; 0" : "Remove leave type"}
-                      onClick={() => {
-                        if (!window.confirm(`Remove ${b.leaveTypeName} from this employee?`)) return;
-                        void run(() => removeEmployeeLeaveBalance(b.id), "Leave type removed");
-                      }}
+                {leaveTypes.map((t) => {
+                  const bal = balanceByType.get(t.id);
+                  const policy = leaveTypePolicyCredit(t);
+                  const amounts = defaultAssignAmounts(t, year);
+                  return (
+                    <li
+                      key={t.id}
+                      className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border/60 px-3 py-2"
                     >
-                      <Trash2 className="size-3.5" />
-                      Remove
-                    </Button>
-                  </li>
-                ))}
+                      <div className="min-w-0 flex-1">
+                        <p className="flex items-center gap-2 text-sm font-medium">
+                          <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: t.color }} />
+                          {t.name}
+                          <span className="font-mono text-[10px] text-muted-foreground">({t.code})</span>
+                        </p>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          Policy: {policy.label}
+                          {policy.mode === "monthly" ? ` · credited to date ≈ ${amounts.accruedDays}` : null}
+                        </p>
+                        {bal ? (
+                          <p className="mt-1 text-[11px] tabular-nums text-foreground">
+                            Opening {bal.opening} · Accrued {bal.accrued} · Used {bal.used} ·{" "}
+                            <span className="font-semibold">Left {bal.available}</span>
+                            {bal.pending ? ` · Pending ${bal.pending}` : ""}
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-[11px] text-muted-foreground">Not assigned for this employee yet</p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1">
+                        {!bal ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="cursor-pointer h-7 text-[11px]"
+                            disabled={busy || !branchId}
+                            title={amounts.hint}
+                            onClick={() =>
+                              void run(() => assignType(t), `${t.code} assigned (${amounts.hint})`)
+                            }
+                          >
+                            <Plus className="size-3.5" />
+                            Assign
+                          </Button>
+                        ) : (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="cursor-pointer h-7 text-destructive hover:text-destructive"
+                            disabled={busy || bal.used > 0}
+                            title={bal.used > 0 ? "Cannot remove while used > 0" : "Remove leave type"}
+                            onClick={() => {
+                              if (!window.confirm(`Remove ${t.name} from this employee?`)) return;
+                              void run(() => removeEmployeeLeaveBalance(bal.id), "Leave type removed");
+                            }}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </section>
@@ -310,15 +577,18 @@ function EmployeeLeaveBalanceDrawer({
               Monthly adjustment
             </h3>
             <p className="text-[10px] text-muted-foreground">
-              Positive days credit the month; negative days debit. Cannot target a future month.
+              Select a leave type to load current left / used. Edit leaves left, then apply for the month.
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <SetupField label="Leave type" required>
-                <SetupSelect value={adjustTypeId} onChange={(e) => setAdjustTypeId(e.target.value)}>
+                <SetupSelect
+                  value={adjustTypeId}
+                  onChange={(e) => selectAdjustType(e.target.value)}
+                >
                   <option value="">Select…</option>
                   {yearBalances.map((b) => (
                     <option key={b.leaveTypeId} value={b.leaveTypeId}>
-                      {b.leaveTypeName}
+                      {b.leaveTypeName} ({b.leaveTypeCode})
                     </option>
                   ))}
                 </SetupSelect>
@@ -326,27 +596,69 @@ function EmployeeLeaveBalanceDrawer({
               <SetupField label="Month" required>
                 <SetupInput type="month" value={adjustMonth} onChange={(e) => setAdjustMonth(e.target.value)} />
               </SetupField>
-              <SetupField label="Days (+ / -)" required>
+              <SetupField
+                label="Leaves left"
+                required
+                hint={
+                  adjustBalance
+                    ? `Loaded: left ${adjustBalance.available} · used ${adjustBalance.used} · accrued ${adjustBalance.accrued}`
+                    : "Pick a leave type to auto-fill"
+                }
+              >
                 <SetupInput
                   inputMode="decimal"
-                  placeholder="e.g. 1.5 or -0.5"
+                  placeholder="Select leave type first"
                   value={adjustDays}
                   onChange={(e) => setAdjustDays(e.target.value)}
+                  disabled={!adjustTypeId}
                 />
               </SetupField>
               <SetupField label="Reason">
                 <SetupTextarea rows={2} value={adjustReason} onChange={(e) => setAdjustReason(e.target.value)} />
               </SetupField>
             </div>
+            {adjustBalance ? (
+              <p className="text-[11px] tabular-nums text-muted-foreground">
+                Now: <span className="font-medium text-foreground">Left {adjustBalance.available}</span>
+                {" · "}Used {adjustBalance.used}
+                {" · "}Opening {adjustBalance.opening}
+                {" · "}Accrued {adjustBalance.accrued}
+                {adjustBaselineLeft != null && adjustDays !== "" && Number.isFinite(Number(adjustDays)) ? (
+                  <>
+                    {" · "}Change{" "}
+                    <span className="font-medium text-foreground">
+                      {Number(adjustDays) - adjustBaselineLeft >= 0 ? "+" : ""}
+                      {(Number(adjustDays) - adjustBaselineLeft).toFixed(2)}
+                    </span>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
             <Button
               type="button"
               size="sm"
               className="cursor-pointer"
-              disabled={busy || !adjustTypeId || !adjustDays || !branchId}
+              disabled={
+                busy ||
+                !adjustTypeId ||
+                adjustDays === "" ||
+                !branchId ||
+                !yearBalances.length ||
+                adjustBaselineLeft == null
+              }
               onClick={() => {
-                const daysDelta = Number(adjustDays);
-                if (!Number.isFinite(daysDelta) || daysDelta === 0) {
-                  toast("Enter a non-zero days value", "error");
+                const newLeft = Number(adjustDays);
+                if (!Number.isFinite(newLeft) || newLeft < 0) {
+                  toast("Enter a valid leaves-left value (0 or more)", "error");
+                  return;
+                }
+                if (adjustBaselineLeft == null) {
+                  toast("Select a leave type first", "error");
+                  return;
+                }
+                const daysDelta = Number((newLeft - adjustBaselineLeft).toFixed(2));
+                if (daysDelta === 0) {
+                  toast("No change from current leaves left", "error");
                   return;
                 }
                 void run(
@@ -357,70 +669,20 @@ function EmployeeLeaveBalanceDrawer({
                       leaveTypeId: adjustTypeId,
                       month: adjustMonth,
                       daysDelta,
-                      reason: adjustReason.trim() || undefined,
+                      reason:
+                        adjustReason.trim() ||
+                        `Set leaves left to ${newLeft} (was ${adjustBaselineLeft})`,
                     }),
-                  "Monthly adjustment applied",
+                  `Leaves left updated to ${newLeft}`,
                 );
               }}
             >
               Apply adjustment
             </Button>
-          </section>
-
-          <section className="space-y-3 rounded-lg border border-dashed border-border/70 p-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Add leave type
-            </h3>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <SetupField label="Leave type" required>
-                <SetupSelect value={addTypeId} onChange={(e) => setAddTypeId(e.target.value)}>
-                  <option value="">Select…</option>
-                  {unassignedTypes.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name} ({t.code})
-                    </option>
-                  ))}
-                </SetupSelect>
-              </SetupField>
-              <SetupField label={`Opening / credit days (${year})`}>
-                <SetupInput
-                  inputMode="decimal"
-                  placeholder="e.g. monthly credit"
-                  value={addDays}
-                  onChange={(e) => setAddDays(e.target.value)}
-                />
-              </SetupField>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="cursor-pointer"
-              disabled={busy || !addTypeId || !branchId}
-              onClick={() => {
-                const days = Number(addDays || 0);
-                if (!Number.isFinite(days) || days < 0) {
-                  toast("Enter valid days", "error");
-                  return;
-                }
-                void run(
-                  () =>
-                    createEmployeeLeaveBalance({
-                      branchId,
-                      employeeId: employee.id,
-                      leaveTypeId: addTypeId,
-                      balanceYear: year,
-                      accruedDays: days,
-                    }),
-                  "Leave type added",
-                );
-              }}
-            >
-              <Plus className="size-3.5" />
-              Add for employee
-            </Button>
-            {!unassignedTypes.length ? (
-              <p className="text-[10px] text-muted-foreground">All active leave types are already assigned.</p>
+            {!yearBalances.length ? (
+              <p className="text-[10px] text-muted-foreground">
+                Assign at least one leave type above before adjusting.
+              </p>
             ) : null}
           </section>
         </div>

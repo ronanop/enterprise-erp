@@ -31,7 +31,10 @@ class HolidayCalendarService:
         return row
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
-        cid = self._scope.resolve_company_id(ctx, company_id)
+        branch_id = fields.get("branch_id")
+        cid = self._scope.resolve_write_company_id(
+            ctx, company_id or fields.pop("company_id", None), branch_id=branch_id
+        )
         status = fields.get("status", HolidayCalendarStatus.DRAFT.value)
         if status not in _ALLOWED_STATUSES:
             raise AppException(

@@ -14,6 +14,7 @@ import {
 } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import { createShift, peekNextShiftCode, updateShift } from "@/services/shift-roster-service";
 import type { ShiftRosterDirectory } from "@/services/shift-roster-service";
 import type { ShiftRecord, ShiftTypeCode } from "@/types/shift-roster-management";
@@ -144,15 +145,21 @@ export function CreateShiftDrawer({
       } else {
         await createShift({
           ...body,
-          shiftCode,
+          shiftCode: shiftCode.trim() || peekNextShiftCode(),
           branchId: directory?.options.branches[0]?.id,
         });
         toast("Shift created", "success");
       }
       onSaved();
       onClose();
-    } catch {
-      toast(isEdit ? "Update failed" : "Create failed", "error");
+    } catch (err) {
+      toast(
+        formatApiError(err, isEdit ? "Update failed" : "Create failed"),
+        "error",
+      );
+      if (!(err instanceof ApiClientError)) {
+        console.error(isEdit ? "Shift update failed" : "Shift create failed", err);
+      }
     } finally {
       setSaving(false);
     }

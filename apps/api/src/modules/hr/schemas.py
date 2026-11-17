@@ -1752,6 +1752,41 @@ class EmployeeClearResponse(BaseModel):
     message: str = ""
 
 
+class LeaveBalanceImportRow(BaseModel):
+    """Normalized Excel row for leave balance bulk upsert."""
+
+    employee_code: str
+    leave_type_code: str
+    balance_year: int | None = None
+    # Prefer remaining/leaves_left when migrating from another HR system.
+    remaining: Decimal | None = None
+    opening_balance: Decimal | None = None
+    accrued: Decimal | None = None
+    used: Decimal | None = None
+
+
+class LeaveBalanceImportRequest(BaseModel):
+    rows: list[LeaveBalanceImportRow]
+
+
+class LeaveBalanceImportResultRow(BaseModel):
+    row: int
+    employee_code: str
+    leave_type_code: str
+    action: str
+    balance_id: str
+    closing_balance: Decimal
+
+
+class LeaveBalanceImportResponse(BaseModel):
+    created: int
+    updated: int
+    skipped: int
+    warnings: list[str] = []
+    errors: list[str] = []
+    results: list[LeaveBalanceImportResultRow] = []
+
+
 class HrAdminAssignRequest(BaseModel):
     employee_id: UUID
     company_ids: list[UUID] = []

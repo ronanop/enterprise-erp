@@ -56,8 +56,9 @@ ENTITY_COMPANY_SPECS: dict[str, dict[str, str]] = {
     "technology": {
         "company_code": "CACHETECH",
         "alt_codes": "",
-        "company_name": "Cache Technologies & Infotech",
-        "legal_name": "Cache Technologies & Infotech",
+        # Entity under parent Organisation "Cache" (not "…& Infotech")
+        "company_name": "Cache Technologies",
+        "legal_name": "Cache Technologies",
         "employee_code_prefix": "CT",
         "branch_code": "GK",
         "branch_name": "Greater Kailash",
@@ -425,6 +426,16 @@ class EmployeeImportService:
 
     def _ensure_entity_companies(self, ctx: TenantContext) -> None:
         """Undelete/create Cache Digitech + Cache Technologies so Entity column can map."""
+        # Drop legacy wrong name "Cache Technologies & Infotech"
+        for legacy in self._db.scalars(
+            select(OrgCompany).where(
+                OrgCompany.tenant_id == ctx.tenant_id,
+                OrgCompany.company_name.ilike("%Infotech%"),
+            )
+        ).all():
+            legacy.company_name = "Cache Technologies"
+            legacy.legal_name = "Cache Technologies"
+            legacy.updated_by = ctx.user_id
         for key, spec in ENTITY_COMPANY_SPECS.items():
             codes = [spec["company_code"]] + [
                 c for c in (spec.get("alt_codes") or "").split(",") if c.strip()

@@ -25,7 +25,12 @@ import { Input } from "@/components/ui/input";
 import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { nextCode, type HrSetupTab } from "@/config/hr-setup";
 import { ApiClientError, resourceService } from "@/services/api-client";
-import { listSetupApi, loadSetupOrgLookups, type SetupRow } from "@/services/hr-setup-service";
+import {
+  listSetupApi,
+  loadSetupOrgLookups,
+  resolveSetupCompanyId,
+  type SetupRow,
+} from "@/services/hr-setup-service";
 import {
   emptyHolidayEntry,
   HOLIDAY_APPLICABLE,
@@ -64,7 +69,10 @@ export function HolidayCalendarPanel({ tab }: { tab: HrSetupTab }) {
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [entryError, setEntryError] = useState<string | null>(null);
 
-  const [branches, setBranches] = useState<{ value: string; label: string }[]>([]);
+  const [branches, setBranches] = useState<{ value: string; label: string; companyId?: string }[]>(
+    [],
+  );
+  const [companies, setCompanies] = useState<{ value: string; label: string }[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -81,6 +89,7 @@ export function HolidayCalendarPanel({ tab }: { tab: HrSetupTab }) {
       );
       const lookups = await loadSetupOrgLookups();
       setBranches(lookups.branches);
+      setCompanies(lookups.companies);
     } catch (err) {
       toast(err instanceof ApiClientError ? err.message : "Failed to load calendars", "error");
       setRows([]);
@@ -215,11 +224,17 @@ export function HolidayCalendarPanel({ tab }: { tab: HrSetupTab }) {
     }
     setSaving(true);
     try {
+      const companyId = resolveSetupCompanyId({
+        branchId,
+        branches,
+        companies,
+      });
       const payload = {
         calendar_code: calendarCode,
         calendar_name: calendarName.trim(),
         calendar_year: year,
         branch_id: branchId || null,
+        company_id: companyId || undefined,
         status: status || "draft",
         holidays_json: serializeHolidays(holidays),
       };

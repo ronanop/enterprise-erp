@@ -47,6 +47,7 @@ import {
   listReportingManagers,
   listSetupApi,
   loadSetupOrgLookups,
+  resolveSetupCompanyId,
   softDeleteLocal,
   updateLocalSetup,
   type SetupRow,
@@ -309,7 +310,8 @@ export function SetupEntityPanel({
   }>({ companies: [], branches: [], departments: [], employees: [], shifts: [] });
   const [usersById, setUsersById] = useState<Record<string, string>>({});
 
-  const needsOrgLookups = fields.some((f) => f.optionsSource);
+  // Always load org lookups for API tabs so create can attach company_id even when the form has no company field.
+  const needsOrgLookups = tab.source === "api" || fields.some((f) => f.optionsSource);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -534,7 +536,17 @@ export function SetupEntityPanel({
               createForm = { ...createForm, [codeKey]: code };
             }
           }
-          const body = buildCreateBody ? buildCreateBody(createForm) : createForm;
+          const body = {
+            ...(buildCreateBody ? buildCreateBody(createForm) : createForm),
+          } as Record<string, unknown>;
+          const companyId = resolveSetupCompanyId({
+            companyId: String(body.company_id ?? createForm.company_id ?? ""),
+            branchId: String(body.branch_id ?? createForm.branch_id ?? ""),
+            branches: orgLookups.branches,
+            companies: orgLookups.companies,
+          });
+          if (companyId && !body.company_id) body.company_id = companyId;
+          if (!body.branch_id && createForm.branch_id) body.branch_id = createForm.branch_id;
           await resourceService.create(tab.apiPath, body);
         } else if (active) {
           const body = buildUpdateBody ? buildUpdateBody(form) : form;

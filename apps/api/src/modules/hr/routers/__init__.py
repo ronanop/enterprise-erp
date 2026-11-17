@@ -66,6 +66,8 @@ from modules.hr.schemas import (
     LeaveAdjustmentResponse,
     LeaveApproveRequest,
     LeaveBalanceCreate,
+    LeaveBalanceImportRequest,
+    LeaveBalanceImportResponse,
     LeaveBalanceResponse,
     LeaveBalanceUpdate,
     CompOffCreditRequest,
@@ -830,6 +832,21 @@ def create_balance(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=LeaveBalanceService(db).create(ctx, **body.model_dump()))
+
+
+@leave_balances_router.post("/bulk-import", response_model=APIResponse[LeaveBalanceImportResponse])
+def bulk_import_leave_balances(
+    body: LeaveBalanceImportRequest,
+    ctx: Annotated[TenantContext, Depends(_require_leave_balance_manage)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Upsert leave balances from Excel/CSV (employee_code + leave_type_code + remaining)."""
+    rows = [r.model_dump() for r in body.rows]
+    data = LeaveBalanceService(db).import_rows(ctx, rows)
+    return APIResponse(
+        message="Leave balance import completed",
+        data=LeaveBalanceImportResponse.model_validate(data),
+    )
 
 
 @leave_balances_router.patch("/{row_id}", response_model=APIResponse[LeaveBalanceResponse])

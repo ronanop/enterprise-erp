@@ -9,15 +9,29 @@ import type { EmployeeTableColumnKey } from "@/hooks/use-employee-table-prefs";
 import type { EmployeeRecord } from "@/types/employee-management";
 
 export function excelEntityCell(row: EmployeeRecord): string {
-  return (
+  const raw =
     row.extension.employment.entityName?.trim() ||
     row.companyName?.trim() ||
-    "-"
-  );
+    "";
+  const blob = raw.toLowerCase();
+  if (blob.includes("digitech")) return "Cache Digitech";
+  if (blob.includes("technolog")) return "Cache Technologies";
+  return raw || "-";
 }
 
+/**
+ * Excel Organisation = parent group under which entities sit.
+ * Cache Digitech (CDPL) + Cache Technologies (CT) → Organisation "Cache".
+ */
 export function excelOrganisationCell(row: EmployeeRecord): string {
-  return row.companyName?.trim() || row.branchName?.trim() || "-";
+  const entity = row.extension.employment.entityName?.trim() || "";
+  const company = row.companyName?.trim() || "";
+  const blob = `${entity} ${company}`.toLowerCase();
+  if (blob.includes("vyuha")) return company || entity || "-";
+  if (blob.includes("digitech") || blob.includes("technolog") || /\bcache\b/.test(blob)) {
+    return "Cache";
+  }
+  return company || row.branchName?.trim() || "-";
 }
 
 function dash(value?: string | null): string {

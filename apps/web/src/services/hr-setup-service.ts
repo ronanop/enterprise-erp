@@ -5,6 +5,27 @@
 import { ApiClientError, resourceService } from "@/services/api-client";
 import { buildReportingManagerOptions } from "@/lib/hr/reporting-managers";
 import { nextCode, type HrSetupTabId } from "@/config/hr-setup";
+import { getStoredOrgContext } from "@/lib/org-context-storage";
+
+/** Resolve a concrete company UUID for create payloads (session → branch → first company). */
+export function resolveSetupCompanyId(opts?: {
+  companyId?: string | null;
+  branchId?: string | null;
+  branches?: { value: string; companyId?: string }[];
+  companies?: { value: string }[];
+}): string | undefined {
+  const explicit = String(opts?.companyId ?? "").trim();
+  if (explicit) return explicit;
+  const session = String(getStoredOrgContext()?.companyId ?? "").trim();
+  if (session) return session;
+  const branchId = String(opts?.branchId ?? "").trim();
+  if (branchId && opts?.branches?.length) {
+    const br = opts.branches.find((b) => b.value === branchId);
+    if (br?.companyId) return br.companyId;
+  }
+  const first = opts?.companies?.[0]?.value;
+  return first ? String(first) : undefined;
+}
 
 export type SetupRow = Record<string, unknown> & {
   id: string;

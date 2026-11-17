@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Upload } from "lucide-react";
 
-import { LeaveApprovalDrawer } from "@/components/hr/leave/leave-panels";
+import { LeaveBalanceImportDrawer } from "@/components/hr/leave/leave-balance-import-drawer";
+import { LeaveBalancePanel, LeaveApprovalDrawer } from "@/components/hr/leave/leave-panels";
 import { LeaveStatusBadge } from "@/components/hr/leave/leave-status-badge";
 import {
   HrAuthBanner,
@@ -14,6 +16,7 @@ import {
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { EmsPagination, EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
 import { PageHeader } from "@/components/layout/page-header";
+import { Button } from "@/components/ui/button";
 import { FilterSelect } from "@/components/ui/filter-select";
 import { Input } from "@/components/ui/input";
 import { isAuthenticated } from "@/lib/auth";
@@ -28,6 +31,7 @@ import type { LeaveFilters, LeaveRequestRecord } from "@/types/leave-management"
 import { emptyLeaveFilters } from "@/types/leave-management";
 
 const PAGE_SIZE = 12;
+type LeavePageTab = "requests" | "balances";
 
 type StatCard = {
   label: string;
@@ -55,6 +59,7 @@ function FilterControl({
 }
 
 export function LeaveManagementPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [dir, setDir] = useState<LeaveDirectory | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,9 +67,20 @@ export function LeaveManagementPage() {
   const [filters, setFilters] = useState<LeaveFilters>(() => emptyLeaveFilters());
   const [page, setPage] = useState(1);
   const [approvalRequest, setApprovalRequest] = useState<LeaveRequestRecord | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const statusBucket = searchParams.get("status");
   const onLeaveTodayView = searchParams.get("view") === "on-leave-today";
+  const tabParam = searchParams.get("tab");
+  const tab: LeavePageTab = tabParam === "balances" ? "balances" : "requests";
+
+  function setTab(next: LeavePageTab) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "requests") params.delete("tab");
+    else params.set("tab", next);
+    const qs = params.toString();
+    router.replace(qs ? `/hr/leave?${qs}` : "/hr/leave");
+  }
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -113,13 +129,58 @@ export function LeaveManagementPage() {
       <SetupToastHost />
       <PageHeader
         title="Leave Management"
-        actions={<HrToolbar onRefresh={() => void load()} loading={loading} />}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            {tab === "balances" ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="cursor-pointer"
+                onClick={() => setImportOpen(true)}
+              >
+                <Upload className="size-3.5" />
+                Upload balances
+              </Button>
+            ) : null}
+            <HrToolbar onRefresh={() => void load()} loading={loading} />
+          </div>
+        }
       />
 
       {authBlocked ? <HrAuthBanner /> : null}
       {loading && !dir ? <EmsSkeleton /> : null}
 
-      {statCards.length ? (
+      <div className="flex shrink-0 gap-1 border-b border-border/70">
+        {(
+          [
+            { id: "requests" as const, label: "Requests" },
+            { id: "balances" as const, label: "Balances" },
+          ] as const
+        ).map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={cn(
+              "cursor-pointer border-b-2 px-3 py-2 text-xs font-medium transition-colors duration-200",
+              tab === t.id
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "balances" && dir ? (
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto">
+          <LeaveBalancePanel directory={dir} onSaved={() => void load()} />
+        </div>
+      ) : null}
+
+      {tab === "requests" && statCards.length ? (
         <div className="grid shrink-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {statCards.map(({ label, value, href }) => {
             const active =
@@ -159,7 +220,7 @@ export function LeaveManagementPage() {
         </div>
       ) : null}
 
-      {(statusBucket || onLeaveTodayView) ? (
+      {tab === "requests" && (statusBucket || onLeaveTodayView) ? (
         <div className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground">
           <span>Filtered view:</span>
           <span className="font-medium text-foreground">
@@ -175,6 +236,7 @@ export function LeaveManagementPage() {
         </div>
       ) : null}
 
+      {tab === "requests" ? (
       <div className="flex min-h-0 flex-1 flex-col gap-3">
         <div className="shrink-0 rounded-lg border border-border/70 bg-card px-3 py-2.5 shadow-sm">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-9">
@@ -400,6 +462,16 @@ export function LeaveManagementPage() {
           </div>
         )}
       </div>
+      ) : null}
+
+      <LeaveBalanceImportDrawer
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={() => {
+          setImportOpen(false);
+          void load();
+        }}
+      />
     </div>
   );
 }

@@ -84,7 +84,7 @@ export const EMPLOYEE_TABLE_COLUMN_LABELS: Record<EmployeeTableColumnKey, string
   emergencyName: "Family Member Name",
   emergencyRelation: "Relation",
   emergencyPhone: "Contact No.",
-  esi: "ESI",
+  esi: "ESI / ESIC",
   grade: "Grade",
   jobLevel: "Job Level",
   shift: "Shift",
@@ -98,7 +98,46 @@ export const EMPLOYEE_TABLE_COLUMN_LABELS: Record<EmployeeTableColumnKey, string
   status: "Status",
 };
 
-const ALL_COLUMN_KEYS = Object.keys(EMPLOYEE_TABLE_COLUMN_LABELS) as EmployeeTableColumnKey[];
+/**
+ * Excel import fields in sample-sheet order (must match `IMPORT_FIELD_OPTIONS` / workforce Excel).
+ * Shown first in Edit columns.
+ */
+export const EXCEL_EMPLOYEE_TABLE_COLUMNS: EmployeeTableColumnKey[] = [
+  "employeeCode",
+  "name",
+  "entity",
+  "organisation",
+  "location",
+  "designation",
+  "department",
+  "reportingManager",
+  "phone",
+  "personalEmail",
+  "email",
+  "gender",
+  "dob",
+  "joiningDate",
+  "emergencyName",
+  "emergencyRelation",
+  "emergencyPhone",
+  "fatherName",
+  "esi",
+];
+
+const EXCEL_COLUMN_SET = new Set<EmployeeTableColumnKey>(EXCEL_EMPLOYEE_TABLE_COLUMNS);
+
+/** Non-Excel extras (branch, status, grade, …) after Excel fields in the picker. */
+export const EXTRA_EMPLOYEE_TABLE_COLUMNS: EmployeeTableColumnKey[] = (
+  Object.keys(EMPLOYEE_TABLE_COLUMN_LABELS) as EmployeeTableColumnKey[]
+).filter((k) => !EXCEL_COLUMN_SET.has(k));
+
+/** Picker / table column order: Excel fields first, then extras. */
+export const ALL_EMPLOYEE_TABLE_COLUMN_KEYS: EmployeeTableColumnKey[] = [
+  ...EXCEL_EMPLOYEE_TABLE_COLUMNS,
+  ...EXTRA_EMPLOYEE_TABLE_COLUMNS,
+];
+
+const ALL_COLUMN_KEYS = ALL_EMPLOYEE_TABLE_COLUMN_KEYS;
 
 const DEFAULTS: EmployeeTablePrefs = {
   visibleColumns: DEFAULT_EMPLOYEE_TABLE_COLUMNS,
@@ -150,7 +189,9 @@ export function useEmployeeTablePrefs() {
       if (set.has(key)) set.delete(key);
       else set.add(key);
       for (const required of REQUIRED_EMPLOYEE_TABLE_COLUMNS) set.add(required);
-      return { visibleColumns: ALL_COLUMN_KEYS.filter((k) => set.has(k)) };
+      return {
+        visibleColumns: ALL_EMPLOYEE_TABLE_COLUMN_KEYS.filter((k) => set.has(k)),
+      };
     });
   }
 
