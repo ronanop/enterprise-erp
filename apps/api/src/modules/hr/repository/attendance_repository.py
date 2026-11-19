@@ -42,6 +42,33 @@ class AttendanceRepository(HrScopedRepository):
         stmt = stmt.order_by(HrAttendance.attendance_date.desc())
         return list(self.db.scalars(stmt).all())
 
+    def list_for_employee_period(
+        self,
+        ctx: TenantContext,
+        *,
+        employee_id: UUID,
+        date_from: date,
+        date_to: date,
+    ):
+        """Employee drill-down: ignore stamped company_id mismatches.
+
+        Biometric / entity ingest can write attendance under a different company
+        than hr_employment.company_id. Leave-adjust and similar views must still
+        see the employee's punches for the period (tenant-scoped only).
+        """
+        stmt = (
+            select(HrAttendance)
+            .where(
+                HrAttendance.is_deleted.is_(False),
+                HrAttendance.employee_id == employee_id,
+                HrAttendance.attendance_date >= date_from,
+                HrAttendance.attendance_date <= date_to,
+            )
+            .order_by(HrAttendance.attendance_date.desc())
+        )
+        stmt = self.apply_tenant_filter(stmt, HrAttendance, ctx)
+        return list(self.db.scalars(stmt).all())
+
     def get_for_employee_date(
         self,
         ctx: TenantContext,
