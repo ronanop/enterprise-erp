@@ -15,7 +15,7 @@ import { queueWelcomeSplash } from "@/lib/welcome-splash-session";
 import { ApiClientError, authService } from "@/services/api-client";
 
 function safeReturnPath(value: string | null): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/home";
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return "/hr";
   return value;
 }
 

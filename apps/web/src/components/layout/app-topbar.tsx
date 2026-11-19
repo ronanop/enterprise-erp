@@ -1,41 +1,19 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { LogIn } from "lucide-react";
 
 import { AppTopbarNotifications } from "@/components/layout/app-topbar-notifications";
 import { CompanyContextBadge } from "@/components/layout/company-context-badge";
 import { ShellGlobalSearch } from "@/components/layout/shell-global-search";
-import { isHrPath } from "@/config/hr-nav";
 import { useAuthUser } from "@/hooks/use-auth-user";
 
 export function AppTopbar() {
   const { signedIn, loading } = useAuthUser();
-  const pathname = usePathname() || "";
-  const showEntitySwitcher = signedIn && isHrPath(pathname);
+  const showEntitySwitcher = signedIn;
 
   return (
     <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-4 border-b border-border/80 bg-card/80 px-4 backdrop-blur-md supports-backdrop-filter:bg-card/70 sm:px-6">
-      <div className="min-w-0 shrink-0">
-        <Link
-          href="/home"
-          className="flex cursor-pointer items-center transition-opacity duration-200 hover:opacity-80"
-          aria-label="iConnect Plus home"
-        >
-          <Image
-            src="/brand/iconnect-plus-topbar.png"
-            alt="iConnect Plus"
-            width={200}
-            height={80}
-            priority
-            unoptimized
-            className="h-9 w-auto max-w-[200px] object-contain object-left sm:h-10"
-          />
-        </Link>
-      </div>
-
       <ShellGlobalSearch className="min-w-0 flex-1" />
 
       <div className="flex shrink-0 items-center gap-2">

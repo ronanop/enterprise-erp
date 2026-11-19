@@ -475,7 +475,7 @@ export function PipelineStageBoard({
                           }}
                         >
                           <Mail className="size-3.5 shrink-0" />
-                          Send BG check
+                          Resend BG check
                         </RowActionsItem>
                         {findOfferForApp(app, cand.id) ? (
                           <RowActionsItem

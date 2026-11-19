@@ -1,5 +1,6 @@
 """HR HrAttendance repository."""
 
+from datetime import date
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -25,15 +26,39 @@ class AttendanceRepository(HrScopedRepository):
         company_id: UUID | None,
         *,
         employee_id: UUID | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
     ):
         stmt = select(HrAttendance).where(HrAttendance.is_deleted.is_(False))
         if company_id is not None:
             stmt = stmt.where(HrAttendance.company_id == company_id)
         if employee_id is not None:
             stmt = stmt.where(HrAttendance.employee_id == employee_id)
+        if date_from is not None:
+            stmt = stmt.where(HrAttendance.attendance_date >= date_from)
+        if date_to is not None:
+            stmt = stmt.where(HrAttendance.attendance_date <= date_to)
         stmt = self.apply_hr_filter(stmt, HrAttendance, ctx, branch_scoped=True)
         stmt = stmt.order_by(HrAttendance.attendance_date.desc())
         return list(self.db.scalars(stmt).all())
+
+    def get_for_employee_date(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID | None,
+        employee_id: UUID,
+        attendance_date: date,
+    ) -> HrAttendance | None:
+        stmt = select(HrAttendance).where(
+            HrAttendance.employee_id == employee_id,
+            HrAttendance.attendance_date == attendance_date,
+            HrAttendance.is_deleted.is_(False),
+        )
+        if company_id is not None:
+            stmt = stmt.where(HrAttendance.company_id == company_id)
+        stmt = self.apply_hr_filter(stmt, HrAttendance, ctx, branch_scoped=True)
+        return self.db.scalar(stmt)
 
     def create(self, ctx: TenantContext, **fields) -> HrAttendance:
         row = HrAttendance(

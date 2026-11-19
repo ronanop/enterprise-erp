@@ -36,6 +36,7 @@ import {
 } from "@/types/employee-management";
 import { profilePhotoFromExtension } from "@/lib/onboarding-to-employee";
 import {
+  entityLabelsMatch,
   excelEntityCell,
   excelOrganisationCell,
 } from "@/lib/employee-table-columns";
@@ -354,17 +355,22 @@ function mergeRow(
   // Prefer Excel-synced entity label when present (Digitech / Technologies)
   const entityFromCode =
     empCode.startsWith("CDPL")
-      ? "Cache Digitech Private Limited"
-      : empCode.startsWith("CT") || empCode.startsWith("VPL")
+      ? "Cache Digitech"
+      : /^CT\d/i.test(empCode)
         ? "Cache Technologies"
-        : "";
-  const entityName = /technolog/i.test(extEntity)
-    ? "Cache Technologies"
-    : /digitech/i.test(extEntity)
-      ? "Cache Digitech Private Limited"
-      : companyInfo
-        ? entityLabelForCompany(companyInfo.name, companyInfo.code)
-        : extEntity || entityFromCode || "-";
+        : empCode.startsWith("VPL")
+          ? "Cache Digitech"
+          : "";
+  // Code prefix wins when present — company_id is often mis-tagged across entities.
+  const entityName = entityFromCode
+    ? entityFromCode
+    : /technolog/i.test(extEntity)
+      ? "Cache Technologies"
+      : /digitech/i.test(extEntity)
+        ? "Cache Digitech Private Limited"
+        : companyInfo
+          ? entityLabelForCompany(companyInfo.name, companyInfo.code)
+          : extEntity || "-";
   // Company/entity display name (CT = Cache Technologies). Parent Organisation is "Cache".
   const companyName = /technolog/i.test(extEntity) || /technolog/i.test(companyInfo?.name || "")
     ? "Cache Technologies"
@@ -511,7 +517,7 @@ async function listAllPages(apiPath: string): Promise<{ data: HrRow[]; error?: u
 const EMPTY_LABEL_MAP = new Map<string, string>();
 const EMPTY_COMPANY_MAP = new Map<string, { name: string; code: string }>();
 
-/** First-paint list: one page of master employees, no full directory hydrate. */
+/** First-paint list: one page of master employees + best-effort profiles for gender/DOB. */
 export async function listEmployeesPage(
   page: number,
   pageSize = EMPLOYEE_LIST_PAGE_SIZE,
@@ -523,6 +529,31 @@ export async function listEmployeesPage(
   });
   const masterRows = (Array.isArray(res.data) ? res.data : []) as HrRow[];
   const extensions = loadExtensions();
+
+  // Profiles + companies so Entity column is correct before full directory hydrates.
+  const profileByEmployee = new Map<string, HrRow>();
+  const companyMap = new Map<string, { name: string; code: string }>();
+  try {
+    const [profiles, companies] = await Promise.all([
+      listAllPages("/hr/employee-profiles"),
+      listAllPages("/companies"),
+    ]);
+    for (const p of (Array.isArray(profiles.data) ? profiles.data : []) as HrRow[]) {
+      const empId = String(p.employee_id ?? "");
+      if (empId) profileByEmployee.set(empId, p);
+    }
+    for (const c of (Array.isArray(companies.data) ? companies.data : []) as HrRow[]) {
+      const id = String(c.id ?? "");
+      if (!id) continue;
+      companyMap.set(id, {
+        name: String(c.company_name ?? c.name ?? ""),
+        code: String(c.company_code ?? ""),
+      });
+    }
+  } catch {
+    /* optional for first paint */
+  }
+
   const records = masterRows
     .filter((m) => !m.is_deleted)
     .filter((m) => !isDemoEmployeeCode(String(m.employee_code ?? "")))
@@ -530,12 +561,12 @@ export async function listEmployeesPage(
       const id = String(m.id);
       return mergeRow(
         m,
+        profileByEmployee.get(id),
         undefined,
-        undefined,
         EMPTY_LABEL_MAP,
         EMPTY_LABEL_MAP,
         EMPTY_LABEL_MAP,
-        EMPTY_COMPANY_MAP,
+        companyMap.size ? companyMap : EMPTY_COMPANY_MAP,
         EMPTY_LABEL_MAP,
         defaultExtension(extensions[id]),
       );
@@ -1008,15 +1039,26 @@ export function filterEmployees(
   records: EmployeeRecord[],
   query: string,
   filters: EmployeeListFilters,
+  meta?: { entityLabelById?: Map<string, string> },
 ): EmployeeRecord[] {
   const q = query.trim().toLowerCase();
+  const entityLabel = filters.entityId
+    ? (meta?.entityLabelById?.get(filters.entityId) ?? "").trim()
+    : "";
   return records.filter((r) => {
     if (filters.branchId && r.branchId !== filters.branchId) return false;
-    if (
-      filters.entityId &&
-      r.companyId !== filters.entityId &&
-      r.extension.employment.entityId !== filters.entityId
-    ) {
+    if (filters.entityId) {
+      const idHit =
+        r.companyId === filters.entityId ||
+        r.extension.employment.entityId === filters.entityId;
+      const labelHit = entityLabel
+        ? entityLabelsMatch(excelEntityCell(r), entityLabel) ||
+          entityLabelsMatch(r.companyName || "", entityLabel) ||
+          entityLabelsMatch(r.extension.employment.entityName || "", entityLabel)
+        : false;
+      if (!idHit && !labelHit) return false;
+    }
+    if (filters.organisation && excelOrganisationCell(r) !== filters.organisation) {
       return false;
     }
     if (filters.departmentId && r.departmentId !== filters.departmentId) return false;
@@ -1027,11 +1069,13 @@ export function filterEmployees(
       return false;
     }
     if (filters.location) {
-      const locName = (r.locationName || "").trim();
+      const locName = (r.locationName || r.extension.employment.location || "").trim();
       if (!locName || locName === "-") return false;
       if (locName.toLowerCase() !== filters.location.toLowerCase()) return false;
     }
-    if (filters.gender && r.gender !== filters.gender) return false;
+    if (filters.gender && r.gender !== filters.gender && r.extension.personal.gender !== filters.gender) {
+      return false;
+    }
     if (filters.joiningFrom && r.joiningDate && r.joiningDate < filters.joiningFrom) return false;
 
     if (!q) return true;
@@ -1042,6 +1086,7 @@ export function filterEmployees(
       r.mobile,
       r.departmentName,
       r.designationName,
+      excelEntityCell(r),
     ]
       .join(" ")
       .toLowerCase();
@@ -1543,6 +1588,7 @@ export async function createEmployeeFromWizard(
   const masterRes = await apiClient<HrRow>("/employees", {
     method: "POST",
     body: {
+      company_id: draft.employment.entityId || undefined,
       branch_id: branchId,
       department_id: departmentId,
       first_name: firstName,

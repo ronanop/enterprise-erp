@@ -92,6 +92,7 @@ from modules.hr.schemas import (
     BiometricDeviceCreate,
     BiometricDeviceFeedResponse,
     BiometricDeviceResponse,
+    BiometricDeviceUpdate,
     BiometricPunchResponse,
     DeviceSyncRequest,
     BiometricDownloadResponse,
@@ -1023,10 +1024,21 @@ def list_attendance(
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
     employee_id: UUID | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ):
     return APIResponse(
         message="OK",
-        data=paginate(AttendanceService(db).list(ctx, company_id, employee_id), pagination),
+        data=paginate(
+            AttendanceService(db).list(
+                ctx,
+                company_id,
+                employee_id,
+                date_from=date_from,
+                date_to=date_to,
+            ),
+            pagination,
+        ),
     )
 
 
@@ -1421,6 +1433,17 @@ def create_biometric_device(
     return APIResponse(message="OK", data=data)
 
 
+@biometric_devices_router.patch("/{row_id}", response_model=APIResponse[BiometricDeviceResponse])
+def update_biometric_device(
+    row_id: UUID,
+    body: BiometricDeviceUpdate,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = BiometricDeviceService(db).update(ctx, row_id, **extract_update_fields(body))
+    return APIResponse(message="OK", data=BiometricDeviceResponse.model_validate(row))
+
+
 @biometric_devices_router.delete("/{row_id}", response_model=APIResponse[None])
 def delete_biometric_device(
     row_id: UUID,
@@ -1474,24 +1497,32 @@ def biometric_device_live_feed(
 def list_biometric_punches(
     ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:read"))],
     db: Annotated[Session, Depends(get_db)],
-    employee_id: UUID,
+    employee_id: UUID | None = None,
     company_id: UUID | None = None,
     date_from: date | None = None,
     date_to: date | None = None,
-    limit: int = 500,
+    limit: int = 5000,
 ):
-    """List all stored biometric punches for an employee (across every device)."""
-    return APIResponse(
-        message="OK",
-        data=BiometricDeviceService(db).list_employee_punches(
+    """List biometric punches (one employee or a date range across devices)."""
+    svc = BiometricDeviceService(db)
+    if employee_id is not None:
+        data = svc.list_employee_punches(
             ctx,
             employee_id=employee_id,
             company_id=company_id,
             date_from=date_from,
             date_to=date_to,
             limit=limit,
-        ),
-    )
+        )
+    else:
+        data = svc.list_punches_for_range(
+            ctx,
+            company_id=company_id,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+        )
+    return APIResponse(message="OK", data=data)
 
 
 @attendance_router.post("/device-sync", response_model=APIResponse[DeviceSyncResponse])

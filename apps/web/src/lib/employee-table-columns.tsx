@@ -8,7 +8,18 @@ import {
 import type { EmployeeTableColumnKey } from "@/hooks/use-employee-table-prefs";
 import type { EmployeeRecord } from "@/types/employee-management";
 
+/** Prefer employee-code prefix when company_id is mis-tagged (common CT* → wrong entity). */
+export function entityFromEmployeeCode(employeeCode?: string | null): string {
+  const code = String(employeeCode ?? "").trim().toUpperCase();
+  if (!code) return "";
+  if (code.startsWith("CDPL") || code.startsWith("VPL")) return "Cache Digitech";
+  if (/^CT\d/i.test(code)) return "Cache Technologies";
+  return "";
+}
+
 export function excelEntityCell(row: EmployeeRecord): string {
+  const fromCode = entityFromEmployeeCode(row.employeeCode);
+  if (fromCode) return fromCode;
   const raw =
     row.extension.employment.entityName?.trim() ||
     row.companyName?.trim() ||
@@ -19,18 +30,33 @@ export function excelEntityCell(row: EmployeeRecord): string {
   return raw || "-";
 }
 
+/** Normalized compare for entity filter (Cache Digitech ≈ Digitech Private Limited). */
+export function entityLabelsMatch(a: string, b: string): boolean {
+  const na = a.trim().toLowerCase();
+  const nb = b.trim().toLowerCase();
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const digitech = (s: string) => s.includes("digitech");
+  const tech = (s: string) => s.includes("technolog");
+  if (digitech(na) && digitech(nb)) return true;
+  if (tech(na) && tech(nb)) return true;
+  return na.includes(nb) || nb.includes(na);
+}
+
 /**
  * Excel Organisation = parent group under which entities sit.
  * Cache Digitech (CDPL) + Cache Technologies (CT) → Organisation "Cache".
  */
 export function excelOrganisationCell(row: EmployeeRecord): string {
+  const fromCode = entityFromEmployeeCode(row.employeeCode);
+  if (fromCode === "Cache Digitech" || fromCode === "Cache Technologies") return "Cache";
   const entity = row.extension.employment.entityName?.trim() || "";
   const company = row.companyName?.trim() || "";
   const blob = `${entity} ${company}`.toLowerCase();
-  if (blob.includes("vyuha")) return company || entity || "-";
   if (blob.includes("digitech") || blob.includes("technolog") || /\bcache\b/.test(blob)) {
     return "Cache";
   }
+  if (blob.includes("vyuha")) return company || entity || "-";
   return company || row.branchName?.trim() || "-";
 }
 

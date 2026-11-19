@@ -124,8 +124,7 @@ export async function apiClientBlob(path: string): Promise<Blob> {
   return response.blob();
 }
 
-export const authService = {
-  login: async (email: string, password: string) => {
+async function signIn(email: string, password: string) {
     if (env.useMock) {
       try {
         const res = await mockApi.login(email, password);
@@ -144,14 +143,17 @@ export const authService = {
     return apiClient<TokenData>("/auth/login", {
       method: "POST",
       auth: false,
-      body: { email, password },
+      body: { email, user_id: email, password },
     }).then((res) => {
       if (res.data?.access_token) {
         setTokens(res.data.access_token, res.data.refresh_token ?? undefined);
       }
       return res;
     });
-  },
+}
+
+export const authService = {
+  login: signIn,
 
   essCaptcha: () =>
     apiClient<{
@@ -160,43 +162,14 @@ export const authService = {
       enabled: boolean;
     }>("/auth/ess/captcha", { method: "GET", auth: false }),
 
-  essLogin: async (body: {
-    company_code: string;
+  /** @deprecated Prefer login(). Still signs in through POST /auth/login. */
+  essLogin: (body: {
+    company_code?: string;
     employee_code: string;
     password: string;
     captcha_id?: string;
     captcha_answer?: string;
-  }) => {
-    if (env.useMock) {
-      try {
-        const res = await mockApi.essLogin(
-          body.company_code,
-          body.employee_code,
-          body.password,
-        );
-        if (res.data?.access_token) {
-          setTokens(res.data.access_token, res.data.refresh_token ?? undefined);
-        }
-        return res;
-      } catch (err) {
-        throw new ApiClientError(
-          err instanceof Error ? err.message : "Login failed",
-          400,
-        );
-      }
-    }
-
-    return apiClient<TokenData>("/auth/ess/login", {
-      method: "POST",
-      auth: false,
-      body,
-    }).then((res) => {
-      if (res.data?.access_token) {
-        setTokens(res.data.access_token, res.data.refresh_token ?? undefined);
-      }
-      return res;
-    });
-  },
+  }) => signIn(body.employee_code, body.password),
 
   me: () =>
     env.useMock

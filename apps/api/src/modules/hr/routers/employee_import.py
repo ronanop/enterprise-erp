@@ -32,7 +32,11 @@ def bulk_import_employees(
     db: Annotated[Session, Depends(get_db)],
 ):
     rows = [r.model_dump() for r in body.rows]
-    data = EmployeeImportService(db).import_rows(ctx, rows)
+    data = EmployeeImportService(db).import_rows(
+        ctx,
+        rows,
+        company_id=body.company_id,
+    )
     return APIResponse(message="Import completed", data=EmployeeImportResponse.model_validate(data))
 
 

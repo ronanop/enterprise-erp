@@ -274,8 +274,8 @@ class BiometricDeviceService:
         return row
 
     def live_feed(self, ctx: TenantContext, row_id: UUID, *, days: int = 14) -> BiometricDeviceFeedResponse:
+        """Punch list from DB; short TCP probe only for reachability banner (no ZK protocol)."""
         device = self.get(ctx, row_id)
-        reachable, reachability_message = self._probe_device(device.ip_address, device.port)
         cid = device.company_id
         today = date.today()
         cutoff = today - timedelta(days=max(1, min(days, 90)))
@@ -285,64 +285,66 @@ class BiometricDeviceService:
             device_id=device.id,
             date_from=cutoff,
             date_to=today,
-            limit=300,
+            limit=500,
         )
+        device_meta = self._device_meta_map(ctx, cid)
+        emp_cache: dict[UUID, object | None] = {}
         punches: list[BiometricPunchResponse] = []
         today_punch_count = 0
         touched_emp_dates: set[tuple[UUID, date]] = set()
+
+        def _emp(emp_id: UUID):
+            if emp_id not in emp_cache:
+                try:
+                    emp_cache[emp_id] = self._master.get_employee(ctx, emp_id)
+                except Exception:
+                    emp_cache[emp_id] = None
+            return emp_cache[emp_id]
+
         for p in punch_rows:
             emp_name: str | None = None
             emp_code: str | None = p.employee_code_raw
             if p.employee_id:
                 touched_emp_dates.add((p.employee_id, p.attendance_date))
-                try:
-                    emp = self._master.get_employee(ctx, p.employee_id)
+                emp = _emp(p.employee_id)
+                if emp is not None:
                     emp_name = " ".join(
                         x
                         for x in (getattr(emp, "first_name", None), getattr(emp, "last_name", None))
                         if x
                     ).strip() or None
                     emp_code = str(getattr(emp, "employee_code", None) or p.employee_code_raw) or None
-                except Exception:
-                    pass
             if p.attendance_date == today:
                 today_punch_count += 1
             punches.append(
-                BiometricPunchResponse(
-                    id=p.id,
-                    device_id=p.device_id,
-                    device_code=p.device_code,
-                    employee_id=p.employee_id,
-                    employee_code=emp_code,
-                    employee_name=emp_name,
-                    employee_code_raw=p.employee_code_raw,
-                    punched_at=p.punched_at,
-                    attendance_date=p.attendance_date,
-                    notes=p.notes,
+                self._punch_to_response(
+                    p,
+                    device_meta=device_meta,
+                    emp_code=emp_code,
+                    emp_name=emp_name,
                 )
             )
 
         ingested: list[BiometricDeviceLiveLogItem] = []
         for emp_id, att_date in touched_emp_dates:
-            row = None
-            for cand in self._attendance.list_rows(ctx, cid):
-                if cand.employee_id == emp_id and cand.attendance_date == att_date:
-                    row = cand
-                    break
+            row = self._attendance.get_for_employee_date(
+                ctx,
+                company_id=cid,
+                employee_id=emp_id,
+                attendance_date=att_date,
+            )
             if row is None:
                 continue
+            emp = _emp(row.employee_id)
             emp_name = None
             emp_code = None
-            try:
-                emp = self._master.get_employee(ctx, row.employee_id)
+            if emp is not None:
                 emp_name = " ".join(
                     x
                     for x in (getattr(emp, "first_name", None), getattr(emp, "last_name", None))
                     if x
                 ).strip() or None
                 emp_code = str(getattr(emp, "employee_code", None) or "") or None
-            except Exception:
-                pass
             ingested.append(
                 BiometricDeviceLiveLogItem(
                     id=row.id,
@@ -365,6 +367,19 @@ class BiometricDeviceService:
             reverse=True,
         )
 
+        punch_total = len(punch_rows)
+        window_days = max(1, min(days, 90))
+        reachable, probe_msg = self._probe_device(device.ip_address, device.port)
+        if punch_total == 0:
+            reachability_message = (
+                f"{probe_msg} No punches saved in ERP for this device (last {window_days} days). "
+                "Click Fetch punches to pull logs from the machine into the database."
+            )
+        else:
+            reachability_message = (
+                f"{probe_msg} Showing {punch_total} punch(es) already saved in ERP "
+                f"(last {window_days} days). Use Fetch punches only to pull new machine logs."
+            )
         return BiometricDeviceFeedResponse(
             device=BiometricDeviceResponse.model_validate(device),
             reachable=reachable,
@@ -373,6 +388,48 @@ class BiometricDeviceService:
             today_punch_count=today_punch_count,
             punches=punches,
             ingested_records=ingested[:100],
+        )
+
+    def _device_meta_map(self, ctx: TenantContext, company_id: UUID | None) -> dict[str, tuple[str | None, str | None]]:
+        """device_code → (device_name, location_text)."""
+        out: dict[str, tuple[str | None, str | None]] = {}
+        for d in self._repo.list_rows(ctx, company_id):
+            code = str(getattr(d, "device_code", "") or "").strip()
+            if not code:
+                continue
+            name = str(getattr(d, "device_name", "") or "").strip() or None
+            loc = str(getattr(d, "location_text", "") or "").strip() or None
+            out[code] = (name, loc)
+            if d.id is not None:
+                out[str(d.id)] = (name, loc)
+        return out
+
+    def _punch_to_response(
+        self,
+        p,
+        *,
+        device_meta: dict[str, tuple[str | None, str | None]],
+        emp_code: str | None = None,
+        emp_name: str | None = None,
+    ) -> BiometricPunchResponse:
+        meta = device_meta.get(str(p.device_code or "")) or (
+            device_meta.get(str(p.device_id)) if p.device_id else None
+        )
+        device_name = meta[0] if meta else None
+        device_location = meta[1] if meta else None
+        return BiometricPunchResponse(
+            id=p.id,
+            device_id=p.device_id,
+            device_code=p.device_code,
+            device_name=device_name,
+            device_location=device_location,
+            employee_id=p.employee_id,
+            employee_code=emp_code or p.employee_code_raw,
+            employee_name=emp_name,
+            employee_code_raw=p.employee_code_raw,
+            punched_at=p.punched_at,
+            attendance_date=p.attendance_date,
+            notes=p.notes,
         )
 
     def list_employee_punches(
@@ -394,7 +451,7 @@ class BiometricDeviceService:
             date_to=date_to,
             limit=limit,
         )
-        out: list[BiometricPunchResponse] = []
+        device_meta = self._device_meta_map(ctx, cid)
         emp_name: str | None = None
         emp_code: str | None = None
         try:
@@ -405,22 +462,30 @@ class BiometricDeviceService:
             emp_code = str(getattr(emp, "employee_code", None) or "") or None
         except Exception:
             pass
-        for p in rows:
-            out.append(
-                BiometricPunchResponse(
-                    id=p.id,
-                    device_id=p.device_id,
-                    device_code=p.device_code,
-                    employee_id=p.employee_id,
-                    employee_code=emp_code or p.employee_code_raw,
-                    employee_name=emp_name,
-                    employee_code_raw=p.employee_code_raw,
-                    punched_at=p.punched_at,
-                    attendance_date=p.attendance_date,
-                    notes=p.notes,
-                )
-            )
-        return out
+        return [
+            self._punch_to_response(p, device_meta=device_meta, emp_code=emp_code, emp_name=emp_name)
+            for p in rows
+        ]
+
+    def list_punches_for_range(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        limit: int = 5000,
+    ) -> list[BiometricPunchResponse]:
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        rows = self._punches.list_for_date_range(
+            ctx,
+            company_id=cid,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+        )
+        device_meta = self._device_meta_map(ctx, cid)
+        return [self._punch_to_response(p, device_meta=device_meta) for p in rows]
 
     def resolve_shift_for_employee(
         self,
@@ -554,6 +619,74 @@ class BiometricDeviceService:
         )
         return row, plaintext
 
+    def update(self, ctx: TenantContext, row_id: UUID, **fields):
+        row = self.get(ctx, row_id)
+
+        if "branch_id" in fields and fields["branch_id"] is not None:
+            self._scope.validate_branch_access(ctx, fields["branch_id"])
+
+        if "device_model" in fields and fields["device_model"] is not None:
+            if fields["device_model"] not in {
+                "fingerprint_k40_timelabs",
+                "fingerprint_k40_zkteco_pro",
+            }:
+                raise AppException(f"Unsupported biometric device model: {fields['device_model']}")
+
+        if "device_code" in fields and fields["device_code"] is not None:
+            code = str(fields["device_code"]).strip()
+            if not code:
+                raise AppException("Device code is required")
+            if code != row.device_code:
+                clash = self._repo.get_by_code(ctx, row.company_id, code)
+                if clash is not None and clash.id != row.id:
+                    raise ConflictException(
+                        f"Device code '{code}' is already registered. Use a different code."
+                    )
+            fields["device_code"] = code
+
+        if "device_name" in fields and fields["device_name"] is not None:
+            name = str(fields["device_name"]).strip()
+            if not name:
+                raise AppException("Device name is required")
+            fields["device_name"] = name
+
+        if "ip_address" in fields:
+            ip = fields["ip_address"]
+            if ip is not None and not str(ip).strip():
+                fields["ip_address"] = None
+            elif ip is not None:
+                fields["ip_address"] = str(ip).strip()
+
+        if "port" in fields and fields["port"] is not None:
+            port = fields["port"]
+            if port < 1 or port > 65535:
+                raise AppException("Port must be between 1 and 65535")
+
+        if "subnet_mask" in fields:
+            fields["subnet_mask"] = _clean_ipv4(fields["subnet_mask"], "Subnet mask")
+        if "gateway" in fields:
+            fields["gateway"] = _clean_ipv4(fields["gateway"], "Gateway")
+        if "comm_password" in fields:
+            fields["comm_password"] = _clean_comm_password(fields["comm_password"])
+        if "location_text" in fields:
+            loc = fields["location_text"]
+            if loc is None or not str(loc).strip():
+                fields["location_text"] = None
+            else:
+                fields["location_text"] = str(loc).strip()
+
+        updated = self._repo.update(ctx, row_id, **fields)
+        if updated is None:
+            raise NotFoundException("Biometric device not found")
+        self._audit.log_entity_change(
+            tenant_id=ctx.tenant_id,
+            entity_name="hr_biometric_device",
+            entity_id=row_id,
+            operation="update",
+            performed_by=ctx.user_id,
+        )
+        return updated
+
     def delete(self, ctx: TenantContext, row_id: UUID) -> None:
         if not self._repo.soft_delete(ctx, row_id):
             raise NotFoundException("Biometric device not found")
@@ -606,8 +739,15 @@ class BiometricDeviceService:
                     pass
 
         cutoff = datetime.now(_DEVICE_LOCAL_TZ) - timedelta(days=_LOG_LOOKBACK_DAYS)
+        # Incremental: only ingest punches newer than what this device already has in DB.
+        last_saved = self._punches.max_punched_at_for_device(device.id)
+        if last_saved is not None and last_saved.tzinfo is None:
+            last_saved = last_saved.replace(tzinfo=_DEVICE_LOCAL_TZ)
+
         punch_payloads: list[dict] = []
-        logs_read = 0
+        logs_on_device = 0
+        logs_already_saved = 0
+        logs_new = 0
         for log in raw_logs:
             user_id = str(getattr(log, "user_id", "") or "").strip()
             stamped = getattr(log, "timestamp", None)
@@ -617,7 +757,12 @@ class BiometricDeviceService:
                 stamped = stamped.replace(tzinfo=_DEVICE_LOCAL_TZ)
             if stamped < cutoff:
                 continue
-            logs_read += 1
+            logs_on_device += 1
+            # Strict < keeps same-second punches at the watermark so a partial sync can finish.
+            if last_saved is not None and stamped < last_saved:
+                logs_already_saved += 1
+                continue
+            logs_new += 1
             punch_payloads.append(
                 {
                     "employee_code": user_id.strip().upper(),
@@ -629,15 +774,35 @@ class BiometricDeviceService:
                 }
             )
 
-        result = self.device_sync(
-            ctx,
-            punches=punch_payloads,
-            device_code=device.device_code,
-            company_id=device.company_id,
-            device_id=device.id,
-            branch_id=device.branch_id,
-        )
-        result["logs_read"] = logs_read
+        if punch_payloads:
+            result = self.device_sync(
+                ctx,
+                punches=punch_payloads,
+                device_code=device.device_code,
+                company_id=device.company_id,
+                device_id=device.id,
+                branch_id=device.branch_id,
+            )
+        else:
+            result = {
+                "created": 0,
+                "updated": 0,
+                "skipped": 0,
+                "punch_created": 0,
+                "punch_existing": 0,
+                "total": 0,
+            }
+        # Relink older unmatched punches (e.g. CDPL* saved before digit rematch existed).
+        relinked = self._relink_unmatched_punches(ctx, device)
+        result["created"] = int(result.get("created") or 0) + int(relinked.get("created") or 0)
+        result["updated"] = int(result.get("updated") or 0) + int(relinked.get("updated") or 0)
+        result["relinked"] = int(relinked.get("relinked") or 0)
+        # logs_read = new punches considered for ingest (keeps older UI fields working).
+        result["logs_read"] = logs_new
+        result["logs_on_device"] = logs_on_device
+        result["logs_already_saved"] = logs_already_saved
+        result["logs_new"] = logs_new
+        result["since"] = last_saved.isoformat() if last_saved is not None else None
         return result
 
     @classmethod
@@ -772,7 +937,8 @@ class BiometricDeviceService:
                     emp = self._master.get_employee(ctx, UUID(str(employee_id)))
                     code_raw = str(getattr(emp, "employee_code", None) or code_raw).strip().upper()
                 else:
-                    emp = self._master.get_employee_by_code(ctx, cid, code_raw)
+                    # Exact + digit rematch (CDPL5356 → CT5356) so machine prefixes still map.
+                    emp = self._master.resolve_by_machine_code(ctx, cid, code_raw)
             except Exception:
                 emp = None
 
@@ -882,6 +1048,60 @@ class BiometricDeviceService:
             "total": len(punches),
         }
 
+    def _relink_unmatched_punches(self, ctx: TenantContext, device) -> dict:
+        """Attach HR employees to stored punches that have no employee_id yet, then rebuild days."""
+        from modules.hr.repository.base import utcnow
+
+        unmatched = self._punches.list_unmatched_for_device(ctx, device_id=device.id)
+        if not unmatched:
+            return {"relinked": 0, "created": 0, "updated": 0}
+
+        cid = device.company_id
+        rebuild_keys: set[tuple[UUID, date, UUID]] = set()
+        relinked = 0
+        code_cache: dict[str, object | None] = {}
+
+        for punch in unmatched:
+            code = str(punch.employee_code_raw or "").strip().upper()
+            if not code:
+                continue
+            if code not in code_cache:
+                try:
+                    code_cache[code] = self._master.resolve_by_machine_code(ctx, cid, code)
+                except Exception:
+                    code_cache[code] = None
+            emp = code_cache[code]
+            if emp is None:
+                continue
+            punch.employee_id = emp.id
+            punch.updated_at = utcnow()
+            punch.updated_by = ctx.user_id
+            punch.version = int(punch.version or 1) + 1
+            relinked += 1
+            emp_branch = UUID(str(getattr(emp, "branch_id", None) or punch.branch_id or device.branch_id))
+            day = punch.attendance_date or punch.punched_at.date()
+            rebuild_keys.add((emp.id, day, emp_branch))
+
+        if relinked:
+            self._punches.db.flush()
+
+        created = 0
+        updated = 0
+        for emp_id, att_date, emp_branch in rebuild_keys:
+            result = self._rebuild_attendance_day(
+                ctx,
+                company_id=cid,
+                branch_id=emp_branch,
+                employee_id=emp_id,
+                attendance_date=att_date,
+            )
+            if result == "created":
+                created += 1
+            elif result == "updated":
+                updated += 1
+
+        return {"relinked": relinked, "created": created, "updated": updated}
+
     def _rebuild_attendance_day(
         self,
         ctx: TenantContext,
@@ -903,6 +1123,13 @@ class BiometricDeviceService:
 
         events = [p.punched_at for p in punch_rows]
         device_codes = sorted({p.device_code for p in punch_rows if p.device_code})
+        device_meta = self._device_meta_map(ctx, company_id)
+        first_loc = ""
+        for p in punch_rows:
+            meta = device_meta.get(str(p.device_code or ""))
+            if meta and meta[1]:
+                first_loc = meta[1]
+                break
         shift_id = self.resolve_shift_for_employee(
             ctx, company_id, employee_id, attendance_date
         )
@@ -938,6 +1165,8 @@ class BiometricDeviceService:
             f"biometric:{','.join(device_codes)}" if device_codes else "biometric",
             f"punches={len(events)}",
         ]
+        if first_loc:
+            note_parts.append(f"Location: {first_loc}")
         if aggregated.get("sessions"):
             note_parts.append(f"mode_sessions={len(aggregated['sessions'])}")
         if shift_id:
@@ -959,11 +1188,12 @@ class BiometricDeviceService:
             "notes": " | ".join(note_parts),
         }
 
-        existing = None
-        for cand in self._attendance.list_rows(ctx, company_id):
-            if cand.employee_id == employee_id and cand.attendance_date == attendance_date:
-                existing = cand
-                break
+        existing = self._attendance.get_for_employee_date(
+            ctx,
+            company_id=company_id,
+            employee_id=employee_id,
+            attendance_date=attendance_date,
+        )
 
         if existing:
             if getattr(existing, "status", None) == "locked":

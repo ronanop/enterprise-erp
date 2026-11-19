@@ -8,6 +8,8 @@ from modules.hr.models.department_assignment import HrDepartmentAssignment
 from modules.hr.models.designation import HrDesignation
 from modules.hr.models.designation_assignment import HrDesignationAssignment
 from modules.hr.models.employee_document import HrEmployeeDocument
+from modules.hr.models.hr_employee_asset import HrEmployeeAsset
+from modules.hr.models.hr_support_ticket import HrSupportTicket, HrSupportTicketComment
 from modules.hr.models.employee_profile import HrEmployeeProfile
 from modules.hr.models.employment import HrEmployment
 from modules.hr.models.exit_agreement import HrExitAgreement
@@ -15,6 +17,7 @@ from modules.hr.models.goal import HrGoal
 from modules.hr.models.grade import HrGrade
 from modules.hr.models.holiday_calendar import HrHolidayCalendar
 from modules.hr.models.hr_admin_nav_access import HrAdminNavAccess
+from modules.hr.models.integration_api_key import HrIntegrationApiKey
 from modules.hr.models.job_level import HrJobLevel
 from modules.hr.models.leave_adjust_event import HrLeaveAdjustEvent
 from modules.hr.models.leave_adjustment import HrLeaveAdjustment
@@ -44,6 +47,7 @@ from modules.hr.models.compoff_request import HrCompoffRequest
 from modules.hr.models.shift_rotation import HrShiftRotation
 from modules.hr.models.shift_swap import HrShiftSwapRequest
 from modules.hr.models.digital_onboarding import HrDigitalOnboarding
+from modules.hr.models.lifecycle_event import HrLifecycleEvent
 
 __all__ = [
     "HrDesignation",
@@ -57,6 +61,7 @@ __all__ = [
     "HrShiftAssignment",
     "HrHolidayCalendar",
     "HrAdminNavAccess",
+    "HrIntegrationApiKey",
     "HrLeaveType",
     "HrLeaveBalance",
     "HrLeaveRequest",
@@ -80,6 +85,9 @@ __all__ = [
     "HrShiftRotation",
     "HrShiftSwapRequest",
     "HrEmployeeDocument",
+    "HrEmployeeAsset",
+    "HrSupportTicket",
+    "HrSupportTicketComment",
     "HrPerformanceReview",
     "HrGoal",
     "HrAppraisal",

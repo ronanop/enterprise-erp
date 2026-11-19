@@ -4,7 +4,7 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
-  BadgeCheck,
+  // BadgeCheck, // Performance nav (commented out below)
   Bell,
   Briefcase,
   Building2,
@@ -21,7 +21,7 @@ import {
   MonitorCog,
   Network,
   Package,
-  Plane,
+  // Plane, // Travel Desk (commented out below)
   Settings2,
   Shield,
   ShoppingBag,
@@ -39,6 +39,8 @@ export type HrNavItem = {
   description?: string;
   /** Nested links (e.g. Org Setup sections) */
   children?: HrNavItem[];
+  /** Parent expands/collapses only — not a navigable link (children remain clickable). */
+  expandOnly?: boolean;
   /** Superadmin Panel - hidden from HR Admins */
   superAdminOnly?: boolean;
   /** Superadmin can grant this key to an HR Admin. Omit on Superadmin Panel. */
@@ -83,7 +85,7 @@ export const hrNavGroups: HrNavGroup[] = [
         title: "Workforce",
         href: "/hr/workforce",
         icon: Users,
-        description: "Employees, org chart, attendance, performance & training",
+        description: "Employees, org chart, attendance & training",
         children: [
           {
             title: "Employees",
@@ -99,13 +101,14 @@ export const hrNavGroups: HrNavGroup[] = [
             description: "Attendance register & calendar",
             navKey: "attendance",
           },
-          {
-            title: "Performance",
-            href: "/hr/talent",
-            icon: BadgeCheck,
-            description: "Goals, KPIs, reviews & appraisals",
-            navKey: "performance",
-          },
+          // Hidden for now — restore when Performance module is ready for HRMS sidebar.
+          // {
+          //   title: "Performance",
+          //   href: "/hr/talent",
+          //   icon: BadgeCheck,
+          //   description: "Goals, KPIs, reviews & appraisals",
+          //   navKey: "performance",
+          // },
           {
             title: "Org Chart",
             href: "/hr/org-chart",
@@ -240,7 +243,8 @@ export const hrNavGroups: HrNavGroup[] = [
         title: "IT & Admin",
         href: "/hr/it-admin",
         icon: MonitorCog,
-        description: "Meeting rooms, stocks, travel, requisitions & biometric devices",
+        description: "Meeting rooms, stock storage, requisitions & biometric devices",
+        expandOnly: true,
         children: [
           {
             title: "Meeting Room",
@@ -250,19 +254,20 @@ export const hrNavGroups: HrNavGroup[] = [
             navKey: "it-meeting-room",
           },
           {
-            title: "Stocks Manage",
+            title: "Stock Storage",
             href: "/hr/it-admin/stocks",
             icon: Package,
             description: "Admin stock inventory & issues",
             navKey: "it-stocks",
           },
-          {
-            title: "Travel Desk",
-            href: "/hr/it-admin/travel",
-            icon: Plane,
-            description: "Travel requests & bookings",
-            navKey: "it-travel",
-          },
+          // Hidden for now — restore when Travel Desk is ready for HRMS sidebar.
+          // {
+          //   title: "Travel Desk",
+          //   href: "/hr/it-admin/travel",
+          //   icon: Plane,
+          //   description: "Travel requests & bookings",
+          //   navKey: "it-travel",
+          // },
           {
             title: "Requisition",
             href: "/hr/it-admin/requisition",
@@ -306,7 +311,7 @@ export function flattenHrNavHrefs(groups: HrNavGroup[] = hrNavGroups): string[] 
   const hrefs: string[] = [];
   for (const g of groups) {
     for (const item of g.items) {
-      hrefs.push(item.href);
+      if (!item.expandOnly) hrefs.push(item.href);
       for (const child of item.children ?? []) hrefs.push(child.href);
     }
   }

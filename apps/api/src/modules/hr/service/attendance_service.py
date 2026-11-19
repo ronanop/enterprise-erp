@@ -1,5 +1,6 @@
 """Attendance service."""
 
+from datetime import date
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -29,9 +30,18 @@ class AttendanceService:
         ctx: TenantContext,
         company_id: UUID | None = None,
         employee_id: UUID | None = None,
+        *,
+        date_from: date | None = None,
+        date_to: date | None = None,
     ):
         cid = self._scope.resolve_company_id(ctx, company_id)
-        return self._repo.list_rows(ctx, cid, employee_id=employee_id)
+        return self._repo.list_rows(
+            ctx,
+            cid,
+            employee_id=employee_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
 
     def get(self, ctx: TenantContext, row_id: UUID):
         row = self._repo.get(ctx, row_id)
@@ -40,9 +50,29 @@ class AttendanceService:
         return row
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, employee_id: UUID, company_id: UUID | None = None, **fields):
-        cid = self._scope.resolve_company_id(ctx, company_id)
-        self._scope.validate_branch_access(ctx, branch_id)
-        self._master.get_employee(ctx, employee_id)
+        # Never allow company_id=None on insert (module-wide admins often have no session company).
+        # Prefer: explicit → employee master → branch → write-scope fallback.
+        fields.pop("company_id", None)
+        emp = self._master.get_employee(ctx, employee_id)
+        emp_company = getattr(emp, "company_id", None)
+        emp_branch = getattr(emp, "branch_id", None)
+        if emp_branch is not None:
+            try:
+                self._scope.validate_branch_access(ctx, emp_branch)
+                branch_id = emp_branch
+            except Exception:
+                pass
+        else:
+            self._scope.validate_branch_access(ctx, branch_id)
+
+        cid = company_id or emp_company
+        cid = self._scope.resolve_write_company_id(ctx, cid, branch_id=branch_id)
+        if cid is None:
+            from core.exceptions import ValidationException
+
+            raise ValidationException(
+                "Company is required. Select a company (or a branch that belongs to one) and try again."
+            )
         record_status = fields.pop("status", AttendanceRecordStatus.RECORDED.value)
         fields = self._policy.apply_to_fields(ctx, cid, employee_id, fields)
         return self._repo.create(

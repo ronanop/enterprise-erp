@@ -1,1 +1,0 @@
-"""Inventory adapters package."""

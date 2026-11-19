@@ -1,32 +1,12 @@
-"""Assignable ERP module keys (mirrors apps/web/src/config/modules.ts top-level keys)."""
+"""Assignable HRMS module keys (product is HRMS-only)."""
 
+# Product module + nested permission prefixes unlocked by an `hr` assignment.
 ERP_MODULE_KEYS: tuple[str, ...] = (
-    "foundation",
-    "email",
-    "voice-agent",
+    "hr",
     "organization",
     "master-data",
-    "finance",
-    "sales",
-    "procurement",
-    "inventory",
-    "manufacturing",
-    "quality",
-    "crm",
-    "hr",
     "payroll",
     "recruitment",
-    "projects",
-    "assets",
-    "service",
-    "helpdesk",
-    "documents",
-    "grc",
-    "analytics",
-    "integration",
-    "ecommerce",
-    "portal",
-    "marketing",
 )
 
 ERP_MODULE_KEY_SET = frozenset(ERP_MODULE_KEYS)
@@ -38,71 +18,8 @@ MODULE_ROLE_ADMIN = "admin"
 MODULE_ROLE_MEMBER = "member"
 MODULE_ROLES = frozenset({MODULE_ROLE_ADMIN, MODULE_ROLE_MEMBER})
 
-# Marketing team roles (stored on sec_user_module.role for module_key=marketing).
-# Work-structure permissions will layer on these later.
-MARKETING_ROLE_HEAD = "marketing_head"
-MARKETING_ROLE_ASSOCIATE = "marketing_associate"
-MARKETING_ROLE_APPROVAL_HEAD = "approval_head"
-MARKETING_ROLE_CONTENT_CREATOR = "content_creator"
-MARKETING_ROLE_VIDEO_EDITOR = "video_editor"
-MARKETING_ROLE_GRAPHIC_DESIGNER = "graphic_designer"
-MARKETING_ROLE_SUPPORTING_MEMBER = "supporting_member"
-MARKETING_TEAM_ROLES = frozenset(
-    {
-        MARKETING_ROLE_HEAD,
-        MARKETING_ROLE_ASSOCIATE,
-        MARKETING_ROLE_APPROVAL_HEAD,
-        MARKETING_ROLE_CONTENT_CREATOR,
-        MARKETING_ROLE_VIDEO_EDITOR,
-        MARKETING_ROLE_GRAPHIC_DESIGNER,
-        MARKETING_ROLE_SUPPORTING_MEMBER,
-        MODULE_ROLE_ADMIN,
-        MODULE_ROLE_MEMBER,
-    }
-)
-
-# Head + associate (+ legacy content_creator) can plan events/channel work.
-MARKETING_PLANNER_ROLES = frozenset(
-    {
-        MARKETING_ROLE_HEAD,
-        MARKETING_ROLE_ASSOCIATE,
-        MARKETING_ROLE_CONTENT_CREATOR,
-    }
-)
-
-MARKETING_FUNCTIONAL_ROLES: tuple[tuple[str, str], ...] = (
-    (MARKETING_ROLE_HEAD, "Marketing head"),
-    (MARKETING_ROLE_ASSOCIATE, "Marketing associate"),
-    (MARKETING_ROLE_VIDEO_EDITOR, "Video editor"),
-    (MARKETING_ROLE_GRAPHIC_DESIGNER, "Graphic designer"),
-    (MARKETING_ROLE_CONTENT_CREATOR, "Content creator"),
-    (MARKETING_ROLE_APPROVAL_HEAD, "Approval head"),
-    (MARKETING_ROLE_SUPPORTING_MEMBER, "Supporting member"),
-)
-MARKETING_FUNCTIONAL_ROLE_SET = frozenset(code for code, _ in MARKETING_FUNCTIONAL_ROLES)
-MARKETING_FUNCTIONAL_ROLE_LABELS = dict(MARKETING_FUNCTIONAL_ROLES)
-
-
-def module_member_roles(module_key: str) -> frozenset[str]:
-    """Roles that may be assigned when adding a module user (excludes module admin)."""
-    if module_key == "marketing":
-        return MARKETING_FUNCTIONAL_ROLE_SET | {MODULE_ROLE_MEMBER}
-    return frozenset({MODULE_ROLE_MEMBER})
-
-
-def is_module_admin_role(role: str | None) -> bool:
-    return (role or MODULE_ROLE_MEMBER) == MODULE_ROLE_ADMIN
-
-
-def default_module_member_role(module_key: str) -> str:
-    if module_key == "marketing":
-        return MARKETING_ROLE_SUPPORTING_MEMBER
-    return MODULE_ROLE_MEMBER
-
 # Permission seed `module` column occasionally differs from UI/module-assignment keys.
 PERMISSION_MODULE_ALIASES: dict[str, str] = {
-    "project": "projects",
-    "asset": "assets",
     "master": "master-data",
 }
 
@@ -118,8 +35,23 @@ HRMS_NESTED_MODULE_KEYS = frozenset(
 )
 
 
+def module_member_roles(module_key: str) -> frozenset[str]:
+    """Roles that may be assigned when adding a module user (excludes module admin)."""
+    _ = module_key
+    return frozenset({MODULE_ROLE_MEMBER})
+
+
+def is_module_admin_role(role: str | None) -> bool:
+    return (role or MODULE_ROLE_MEMBER) == MODULE_ROLE_ADMIN
+
+
+def default_module_member_role(module_key: str) -> str:
+    _ = module_key
+    return MODULE_ROLE_MEMBER
+
+
 def resolve_erp_module_key(module_or_permission_prefix: str) -> str | None:
-    """Map a permission module / code prefix to an assignable ERP module key."""
+    """Map a permission module / code prefix to an assignable module key."""
     raw = (module_or_permission_prefix or "").strip().lower()
     if not raw:
         return None
@@ -150,13 +82,13 @@ def assignment_module_keys_for_permission(permission_code: str) -> list[str]:
 
 
 def has_platform_module_access(user_type: str, role_codes: list[str] | None = None) -> bool:
-    """ERP-wide access is driven by resolved user_type only (not SUPER_ADMIN role alone)."""
+    """Platform-wide access is driven by resolved user_type only."""
     _ = role_codes
     return user_type in ADMIN_USER_TYPES
 
 
 def has_all_modules_admin(admin_assigned: list[str] | None) -> bool:
-    """True when every ERP module is assigned as module-admin (All modules entitlement)."""
+    """True when every product module is assigned as module-admin."""
     if not admin_assigned:
         return False
     return ERP_MODULE_KEY_SET.issubset({k for k in admin_assigned if k})
@@ -167,10 +99,7 @@ def resolve_session_user_type(
     email: str = "",
     role_codes: list[str] | None = None,
 ) -> str:
-    """ERP admin status comes from ``sec_user.user_type`` in the database.
-
-    Promote or demote via Organization → Users / ``bootstrap_erp_admin`` — not env.
-    """
+    """Admin status comes from ``sec_user.user_type`` in the database."""
     _ = email, role_codes
     return stored_user_type
 

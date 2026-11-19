@@ -1,1 +1,0 @@
-"""Procurement inventory integration adapters."""

@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronDown, Minus, Plus, RotateCcw, Search, UserRound, Users } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChevronDown, Minus, Plus, RotateCcw, Search, UserRound, Users, X } from "lucide-react";
 
 import { HrAuthBanner, HrEmptyState } from "@/components/hr/hr-primitives";
 import { EmsAvatar, EmsSkeleton } from "@/components/hr/workforce/ems-primitives";
@@ -15,7 +15,6 @@ import { cn } from "@/lib/utils";
 import { ApiClientError } from "@/services/api-client";
 import { listPeopleRoles, type PeopleRoleRow } from "@/services/people-role-service";
 
-const MAX_CHILDREN_SHOWN = 12;
 const ZOOM_MIN = 0.5;
 const ZOOM_MAX = 1.75;
 const ZOOM_STEP = 0.15;
@@ -116,38 +115,32 @@ function OrgChildrenRow({
   onSelect: (id: string) => void;
   expandGrandchildren: boolean;
 }) {
-  const shown = children.slice(0, MAX_CHILDREN_SHOWN);
-  const hidden = children.length - shown.length;
-  const multi = shown.length > 1;
+  const multi = children.length > 1;
 
   return (
     <div className="flex flex-col items-center">
       <ul className="flex flex-wrap justify-center">
-        {shown.map((child, index) => {
+        {children.map((child, index) => {
           const grand = childrenByManager.get(child.id) ?? [];
           const isFirst = index === 0;
-          const isLast = index === shown.length - 1;
+          const isLast = index === children.length - 1;
           return (
             <li
               key={child.id}
               className="relative flex flex-col items-center px-2.5 pt-4"
             >
-              {/* Vertical drop from horizontal rail */}
               <span
                 className="absolute left-1/2 top-0 h-4 w-px -translate-x-1/2 bg-border"
                 aria-hidden
               />
-              {/* Horizontal rail segments */}
               {multi ? (
-                <>
-                  <span
-                    className={cn(
-                      "absolute top-0 h-px bg-border",
-                      isFirst ? "left-1/2 right-0" : isLast ? "left-0 right-1/2" : "left-0 right-0",
-                    )}
-                    aria-hidden
-                  />
-                </>
+                <span
+                  className={cn(
+                    "absolute top-0 h-px bg-border",
+                    isFirst ? "left-1/2 right-0" : isLast ? "left-0 right-1/2" : "left-0 right-0",
+                  )}
+                  aria-hidden
+                />
               ) : null}
 
               {expandGrandchildren && grand.length > 0 ? (
@@ -181,11 +174,6 @@ function OrgChildrenRow({
           );
         })}
       </ul>
-      {hidden > 0 ? (
-        <p className="mt-3 text-[11px] text-muted-foreground">
-          +{hidden} more — select them from the list to focus
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -241,8 +229,18 @@ export function OrgChartPage() {
   const [authBlocked, setAuthBlocked] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [zoom, setZoom] = useState(ZOOM_DEFAULT);
+  const searchWrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onDocMouseDown(e: MouseEvent) {
+      if (!searchWrapRef.current?.contains(e.target as Node)) setSearchOpen(false);
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, []);
 
   const load = useCallback(async () => {
     if (!isAuthenticated()) {
@@ -325,15 +323,17 @@ export function OrgChartPage() {
     });
   }, [rows, topLeaders]);
 
-  const filteredLeaders = useMemo(() => {
+  const searchHits = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return topLeaders;
-    return topLeaders.filter((r) => {
-      const hay =
-        `${personName(r)} ${r.employee_code} ${r.designation} ${r.reporting_manager_name ?? ""}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [topLeaders, query]);
+    if (q.length < 1) return [];
+    return rows
+      .filter((r) => {
+        const hay =
+          `${personName(r)} ${r.employee_code} ${r.designation} ${r.reporting_manager_name ?? ""}`.toLowerCase();
+        return hay.includes(q);
+      })
+      .slice(0, 12);
+  }, [rows, query]);
 
   const selected = selectedId ? (byId.get(selectedId) ?? null) : null;
   const directReports = selectedId ? (childrenByManager.get(selectedId) ?? []) : [];
@@ -358,18 +358,90 @@ export function OrgChartPage() {
       <div className="shrink-0">
         <PageHeader
           title="Org Chart"
-          description="Leaders on the left — diagram zooms; click a card to focus their team"
+          description="Full-width reporting tree — search anyone, click a card to focus their team"
           actions={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="cursor-pointer"
-              onClick={() => void load()}
-              disabled={loading}
-            >
-              Refresh
-            </Button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <div ref={searchWrapRef} className="relative w-[min(100%,18rem)]">
+                <Search
+                  className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
+                />
+                <Input
+                  value={query}
+                  onChange={(e) => {
+                    setQuery(e.target.value);
+                    setSearchOpen(true);
+                  }}
+                  onFocus={() => setSearchOpen(true)}
+                  placeholder="Search employee…"
+                  className="h-8 pl-8 pr-8 text-xs"
+                  aria-label="Search employees"
+                  autoComplete="off"
+                />
+                {query ? (
+                  <button
+                    type="button"
+                    aria-label="Clear search"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer rounded-sm p-0.5 text-muted-foreground transition-colors duration-200 hover:text-foreground"
+                    onClick={() => {
+                      setQuery("");
+                      setSearchOpen(false);
+                    }}
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                ) : null}
+                {searchOpen && query.trim() ? (
+                  <div className="absolute right-0 z-30 mt-1 w-[min(100vw-2rem,22rem)] overflow-hidden rounded-lg border border-border bg-card shadow-md">
+                    {searchHits.length ? (
+                      <ul className="erp-scroll max-h-72 overflow-auto py-1">
+                        {searchHits.map((row) => (
+                          <li key={row.id}>
+                            <button
+                              type="button"
+                              className={cn(
+                                "flex w-full cursor-pointer items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors duration-150",
+                                "hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none",
+                                row.id === selectedId && "bg-muted/40",
+                              )}
+                              onClick={() => {
+                                setSelectedId(row.id);
+                                setQuery("");
+                                setSearchOpen(false);
+                              }}
+                            >
+                              <EmsAvatar name={personName(row)} size="sm" />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[13px] font-medium">
+                                  {personName(row)}
+                                </span>
+                                <span className="block truncate text-[11px] text-muted-foreground">
+                                  {personMeta(row) || "—"}
+                                </span>
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="px-3 py-3 text-xs text-muted-foreground">
+                        No employee matches “{query.trim()}”.
+                      </p>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 cursor-pointer"
+                onClick={() => void load()}
+                disabled={loading}
+              >
+                Refresh
+              </Button>
+            </div>
           }
         />
       </div>
@@ -397,180 +469,106 @@ export function OrgChartPage() {
           />
         </div>
       ) : (
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-hidden lg:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
-          <aside className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <div className="shrink-0 border-b border-border px-3 py-2.5">
-              <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Top leaders
-              </p>
-              <div className="relative">
-                <Search
-                  className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden
-                />
-                <Input
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search managers, heads…"
-                  className="h-8 pl-8 text-xs"
-                  aria-label="Search top leaders"
-                />
-              </div>
-              <p className="mt-1.5 text-[11px] text-muted-foreground">
-                {filteredLeaders.length} leader{filteredLeaders.length === 1 ? "" : "s"}
-              </p>
-            </div>
-            <ul
-              className="erp-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-1.5"
-              role="listbox"
-              aria-label="Top leaders"
+        <section className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-muted/30 shadow-sm">
+          <div className="flex shrink-0 items-center justify-end gap-1 border-b border-border/70 bg-card px-2 py-1.5">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 cursor-pointer p-0"
+              onClick={zoomOut}
+              disabled={zoom <= ZOOM_MIN}
+              aria-label="Zoom out"
             >
-              {filteredLeaders.length === 0 ? (
-                <li className="px-2 py-6 text-center text-xs text-muted-foreground">
-                  No matching leaders
-                </li>
-              ) : (
-                filteredLeaders.map((row) => {
-                  const active = row.id === selectedId;
-                  const reports =
-                    childrenByManager.get(row.id)?.length ?? Number(row.reports_count ?? 0);
-                  return (
-                    <li key={row.id}>
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={active}
-                        onClick={() => setSelectedId(row.id)}
-                        className={cn(
-                          "flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors duration-150",
-                          active
-                            ? "bg-primary/10 text-foreground"
-                            : "text-foreground hover:bg-muted/70",
-                        )}
-                      >
-                        <EmsAvatar name={personName(row)} size="sm" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-[13px] font-medium">
-                            {personName(row)}
-                          </span>
-                          <span className="block truncate text-[11px] text-muted-foreground">
-                            {personMeta(row) || "—"}
-                          </span>
-                        </span>
-                        {reports > 0 ? (
-                          <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
-                            {reports}
-                          </span>
-                        ) : null}
-                      </button>
-                    </li>
-                  );
-                })
-              )}
-            </ul>
-          </aside>
+              <Minus className="size-3.5" />
+            </Button>
+            <span className="min-w-[3rem] text-center text-xs font-medium tabular-nums text-muted-foreground">
+              {zoomPct}%
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 w-8 cursor-pointer p-0"
+              onClick={zoomIn}
+              disabled={zoom >= ZOOM_MAX}
+              aria-label="Zoom in"
+            >
+              <Plus className="size-3.5" />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-8 cursor-pointer gap-1 px-2 text-xs"
+              onClick={zoomReset}
+              disabled={zoom === ZOOM_DEFAULT}
+              aria-label="Reset zoom"
+            >
+              <RotateCcw className="size-3.5" />
+              Reset
+            </Button>
+          </div>
 
-          <section className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-muted/30 shadow-sm">
-            <div className="flex shrink-0 items-center justify-end gap-1 border-b border-border/70 bg-card px-2 py-1.5">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 cursor-pointer p-0"
-                onClick={zoomOut}
-                disabled={zoom <= ZOOM_MIN}
-                aria-label="Zoom out"
-              >
-                <Minus className="size-3.5" />
-              </Button>
-              <span className="min-w-[3rem] text-center text-xs font-medium tabular-nums text-muted-foreground">
-                {zoomPct}%
-              </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 cursor-pointer p-0"
-                onClick={zoomIn}
-                disabled={zoom >= ZOOM_MAX}
-                aria-label="Zoom in"
-              >
-                <Plus className="size-3.5" />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 cursor-pointer gap-1 px-2 text-xs"
-                onClick={zoomReset}
-                disabled={zoom === ZOOM_DEFAULT}
-                aria-label="Reset zoom"
-              >
-                <RotateCcw className="size-3.5" />
-                Reset
-              </Button>
+          {!selected ? (
+            <div className="flex min-h-0 flex-1 flex-col items-center justify-center text-center">
+              <UserRound className="size-8 text-muted-foreground/50" aria-hidden />
+              <p className="mt-3 text-sm font-medium text-foreground">Search an employee</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Use the search bar above to focus their reporting diagram
+              </p>
             </div>
-
-            {!selected ? (
-              <div className="flex min-h-0 flex-1 flex-col items-center justify-center text-center">
-                <UserRound className="size-8 text-muted-foreground/50" aria-hidden />
-                <p className="mt-3 text-sm font-medium text-foreground">Select a leader</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Their reporting diagram appears here
-                </p>
-              </div>
-            ) : (
-              <div className="erp-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
-                <div
-                  className="inline-block min-w-full px-6 py-8 transition-transform duration-200 motion-reduce:transition-none"
-                  style={{
-                    transform: `scale(${zoom})`,
-                    transformOrigin: "top center",
-                  }}
-                >
-                  <div className="flex min-w-max flex-col items-center">
-                    {manager ? (
-                      <div className="mb-0 flex flex-col items-center">
-                        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                          Reports to
-                        </p>
-                        <OrgPersonCard
-                          row={manager}
-                          compact
-                          reportCount={childrenByManager.get(manager.id)?.length}
-                          onSelect={setSelectedId}
-                        />
-                        <OrgStem />
-                      </div>
-                    ) : null}
-
-                    <OrgBranch
-                      parent={selected}
-                      children={directReports}
-                      childrenByManager={childrenByManager}
-                      activeId={selectedId}
-                      onSelect={setSelectedId}
-                    />
-
-                    <div className="mt-8 flex flex-wrap items-center justify-center gap-3 border-t border-border/70 pt-4 text-xs text-muted-foreground">
-                      <Link
-                        href={`/hr/workforce/${selected.id}`}
-                        className="cursor-pointer font-medium text-primary transition-opacity duration-150 hover:opacity-80"
-                      >
-                        Open {personName(selected).split(" ")[0]}’s profile
-                      </Link>
-                      <span aria-hidden>·</span>
-                      <span>
-                        {directReports.length} direct report
-                        {directReports.length === 1 ? "" : "s"}
-                      </span>
+          ) : (
+            <div className="erp-scroll min-h-0 flex-1 overflow-x-auto overflow-y-auto">
+              <div
+                className="inline-block min-w-full px-6 py-8 transition-transform duration-200 motion-reduce:transition-none"
+                style={{
+                  transform: `scale(${zoom})`,
+                  transformOrigin: "top center",
+                }}
+              >
+                <div className="flex min-w-max flex-col items-center">
+                  {manager ? (
+                    <div className="mb-0 flex flex-col items-center">
+                      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Reports to
+                      </p>
+                      <OrgPersonCard
+                        row={manager}
+                        compact
+                        reportCount={childrenByManager.get(manager.id)?.length}
+                        onSelect={setSelectedId}
+                      />
+                      <OrgStem />
                     </div>
+                  ) : null}
+
+                  <OrgBranch
+                    parent={selected}
+                    children={directReports}
+                    childrenByManager={childrenByManager}
+                    activeId={selectedId}
+                    onSelect={setSelectedId}
+                  />
+
+                  <div className="mt-8 flex flex-wrap items-center justify-center gap-3 border-t border-border/70 pt-4 text-xs text-muted-foreground">
+                    <Link
+                      href={`/hr/workforce/${selected.id}`}
+                      className="cursor-pointer font-medium text-primary transition-opacity duration-150 hover:opacity-80"
+                    >
+                      Open {personName(selected).split(" ")[0]}’s profile
+                    </Link>
+                    <span aria-hidden>·</span>
+                    <span>
+                      {directReports.length} direct report
+                      {directReports.length === 1 ? "" : "s"}
+                    </span>
                   </div>
                 </div>
               </div>
-            )}
-          </section>
-        </div>
+            </div>
+          )}
+        </section>
       )}
     </div>
   );

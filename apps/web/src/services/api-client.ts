@@ -493,6 +493,7 @@ export const contextService = {
       company_id: string | null;
       branch_id: string | null;
       user_type?: string | null;
+      all_companies?: boolean;
     }>("/auth/context"),
   listCompanies: () =>
     apiClient<

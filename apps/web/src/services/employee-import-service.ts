@@ -96,7 +96,33 @@ export function syncImportedExcelFieldsToExtensions(
     const cacheEmail = String(excel.email || "").trim();
     const personalEmail = String(excel.personal_email || "").trim();
     const mobile = String(excel.mobile || "").trim();
-    const gender = String(excel.gender || "").trim();
+    const genderRaw = String(excel.gender || "")
+      .replace(/^\ufeff/, "")
+      .trim()
+      .toLowerCase()
+      .replace(/[^\w\s-]+/g, "")
+      .replace(/\s+/g, " ");
+    const gender =
+      genderRaw === "m" ||
+      genderRaw === "male" ||
+      genderRaw === "man" ||
+      genderRaw === "1" ||
+      (genderRaw.length <= 6 && genderRaw.startsWith("m") && !genderRaw.startsWith("miss"))
+        ? "male"
+        : genderRaw === "f" ||
+            genderRaw === "female" ||
+            genderRaw === "woman" ||
+            genderRaw === "2" ||
+            genderRaw === "0" ||
+            (genderRaw.length <= 6 && genderRaw.startsWith("f"))
+          ? "female"
+          : genderRaw === "o" ||
+              genderRaw === "other" ||
+              genderRaw === "nonbinary" ||
+              genderRaw === "non-binary" ||
+              genderRaw === "nb"
+            ? "other"
+            : genderRaw;
     const dob = String(excel.dob || "").trim();
     const joining = String(excel.joining_date || "").trim();
     const fatherName = String(excel.father_name || "").trim();
@@ -113,6 +139,24 @@ export function syncImportedExcelFieldsToExtensions(
         gender: gender || prev.personal.gender,
         dateOfBirth: dob || prev.personal.dateOfBirth,
         fatherName: fatherName || prev.personal.fatherName || "",
+        maritalStatus: String(excel.marital_status || prev.personal.maritalStatus || "")
+          .trim()
+          .toLowerCase(),
+        bloodGroup: String(excel.blood_group || prev.personal.bloodGroup || "").trim(),
+        nationality: String(excel.nationality || prev.personal.nationality || "Indian").trim(),
+        alternateMobile: String(excel.alternate_mobile || prev.personal.alternateMobile || "").trim(),
+        currentAddress: excel.current_address
+          ? {
+              ...prev.personal.currentAddress,
+              line1: String(excel.current_address).trim(),
+            }
+          : prev.personal.currentAddress,
+        permanentAddress: excel.permanent_address
+          ? {
+              ...prev.personal.permanentAddress,
+              line1: String(excel.permanent_address).trim(),
+            }
+          : prev.personal.permanentAddress,
         emergency: {
           name: String(excel.emergency_name || prev.personal.emergency.name || "").trim(),
           phone: String(excel.emergency_phone || prev.personal.emergency.phone || "").trim(),
@@ -142,23 +186,129 @@ export function syncImportedExcelFieldsToExtensions(
       governmentIds: {
         ...emptyGovernmentIds(),
         ...prev.governmentIds,
+        aadhaar: String(excel.aadhaar || prev.governmentIds.aadhaar || "").trim(),
+        pan: String(excel.pan || prev.governmentIds.pan || "").trim(),
+        uan: String(excel.uan || prev.governmentIds.uan || "").trim(),
         esic:
           esiRaw && !["yes", "y", "true", "1", "no", "n", "false", "0"].includes(esiRaw.toLowerCase())
             ? esiRaw
             : prev.governmentIds.esic,
+      },
+      bank: {
+        ...emptyBank(),
+        ...prev.bank,
+        bankName: String(excel.bank_name || prev.bank.bankName || "").trim(),
+        accountNumber: String(excel.bank_account || prev.bank.accountNumber || "").trim(),
+        confirmAccountNumber: String(
+          excel.bank_account || prev.bank.confirmAccountNumber || "",
+        ).trim(),
+        ifsc: String(excel.bank_ifsc || prev.bank.ifsc || "").trim(),
+        accountHolderName: String(excel.bank_holder || prev.bank.accountHolderName || "").trim(),
+      },
+      companyBank: {
+        ...emptyBank(),
+        ...prev.companyBank,
+        bankName: String(excel.salary_bank_name || prev.companyBank.bankName || "").trim(),
+        accountNumber: String(
+          excel.salary_bank_account || prev.companyBank.accountNumber || "",
+        ).trim(),
+        confirmAccountNumber: String(
+          excel.salary_bank_account || prev.companyBank.confirmAccountNumber || "",
+        ).trim(),
+        ifsc: String(excel.salary_bank_ifsc || prev.companyBank.ifsc || "").trim(),
       },
       salary: {
         ...emptySalary(),
         ...prev.salary,
         esi: esiRaw ? truthyEsi(esiRaw) : prev.salary.esi,
       },
+      education: mergeEducationFromImport(prev.education, excel),
+      documents: mergeDocumentsFromImport(prev.documents, excel),
       updatedBy: "Import",
       updatedAt: new Date().toISOString(),
     });
   }
 }
 
-/** API only accepts master fields; cache email → email, Emp contact → mobile. */
+function truthyDoc(raw: string | undefined): boolean {
+  const v = (raw || "").trim().toLowerCase();
+  if (!v) return false;
+  if (["no", "n", "false", "0", "-", "na", "n/a", "nil", "null"].includes(v)) return false;
+  return true;
+}
+
+function mergeEducationFromImport(
+  prev: EmployeeExtension["education"],
+  excel: NormalizedEmployeeImportRow,
+): EmployeeExtension["education"] {
+  const next = [...prev];
+  const upsert = (degree: string, fileHint: string | undefined) => {
+    const hint = String(fileHint || "").trim();
+    if (!hint || !truthyDoc(hint)) return;
+    const existing = next.find((e) => e.degree.toLowerCase() === degree.toLowerCase());
+    if (existing) {
+      existing.certificateFileName = hint === "yes" || hint === "y" ? degree : hint;
+      return;
+    }
+    next.push({
+      id: `edu-import-${degree.toLowerCase().replace(/\s+/g, "-")}`,
+      degree,
+      institution: "",
+      field: "",
+      year: "",
+      grade: "",
+      certificateFileName: hint === "yes" || hint === "y" ? degree : hint,
+    });
+  };
+  upsert("10th", excel.marksheet_10th);
+  upsert("12th", excel.marksheet_12th);
+  upsert("Basic Education", excel.basic_education);
+  upsert("Higher Education", excel.higher_education);
+  upsert(String(excel.degree || "Degree").trim() || "Degree", excel.degree);
+  return next;
+}
+
+function mergeDocumentsFromImport(
+  prev: EmployeeExtension["documents"],
+  excel: NormalizedEmployeeImportRow,
+): EmployeeExtension["documents"] {
+  const next = [...prev];
+  const upsert = (documentType: string, raw: string | undefined) => {
+    const hint = String(raw || "").trim();
+    if (!hint || !truthyDoc(hint)) return;
+    const existing = next.find(
+      (d) => d.documentType.toLowerCase() === documentType.toLowerCase(),
+    );
+    const fileName = hint === "yes" || hint === "y" ? documentType : hint;
+    if (existing) {
+      existing.fileName = fileName;
+      existing.uploadedAt = new Date().toISOString();
+      existing.uploadedBy = "Import";
+      return;
+    }
+    next.push({
+      id: `doc-import-${documentType.toLowerCase().replace(/\s+/g, "-")}`,
+      documentType,
+      documentNumber: "",
+      issueDate: "",
+      expiryDate: "",
+      fileName,
+      uploadedBy: "Import",
+      uploadedAt: new Date().toISOString(),
+      source: "hr",
+    });
+  };
+  upsert("Previous-Employer Offer", excel.prev_employer_offer);
+  upsert("Previous-Employer Experience letter", excel.prev_employer_exp_letter);
+  upsert("Laptop", excel.laptop);
+  upsert("Dongle and Sim", excel.dongle_sim);
+  upsert("Joining kits", excel.joining_kit);
+  upsert("Letter of Intent", excel.letter_of_intent);
+  upsert("Appointment Letter", excel.appointment_letter);
+  return next;
+}
+
+/** API master + profile fields; cache email → email, Emp contact → mobile. */
 function toApiImportRows(rows: NormalizedEmployeeImportRow[]) {
   return rows.map((r) => ({
     employee_code: r.employee_code,
@@ -171,20 +321,68 @@ function toApiImportRows(rows: NormalizedEmployeeImportRow[]) {
     reporting_manager: r.reporting_manager,
     email: (r.email || r.personal_email || "").trim() || undefined,
     mobile: r.mobile,
+    alternate_mobile: (r.alternate_mobile || "").trim() || undefined,
     joining_date: r.joining_date,
+    gender: (r.gender || "").trim() || undefined,
+    dob: (r.dob || "").trim() || undefined,
+    marital_status: (r.marital_status || "").trim() || undefined,
+    blood_group: (r.blood_group || "").trim() || undefined,
+    nationality: (r.nationality || "").trim() || undefined,
+    aadhaar: (r.aadhaar || "").trim() || undefined,
+    pan: (r.pan || "").trim() || undefined,
+    uan: (r.uan || "").trim() || undefined,
+    bank_name: (r.bank_name || "").trim() || undefined,
+    bank_account: (r.bank_account || "").trim() || undefined,
+    bank_ifsc: (r.bank_ifsc || "").trim() || undefined,
+    bank_holder: (r.bank_holder || "").trim() || undefined,
+    current_address: (r.current_address || "").trim() || undefined,
+    permanent_address: (r.permanent_address || "").trim() || undefined,
+    emergency_name: (r.emergency_name || "").trim() || undefined,
+    emergency_phone: (r.emergency_phone || "").trim() || undefined,
+    emergency_relationship: (r.emergency_relationship || "").trim() || undefined,
+    father_name: (r.father_name || "").trim() || undefined,
+    esi: (r.esi || "").trim() || undefined,
   }));
 }
 
+const IMPORT_CHUNK_SIZE = 40;
+
 export async function bulkImportEmployees(
   rows: NormalizedEmployeeImportRow[],
+  options?: { companyId?: string },
 ): Promise<EmployeeImportResponse> {
-  const res = await apiClient<EmployeeImportResponse>("/hr/employees/bulk-import", {
-    method: "POST",
-    body: { rows: toApiImportRows(rows) },
-  });
-  if (!res.data) throw new Error("Import returned no data");
-  syncImportedExcelFieldsToExtensions(rows, res.data.results || []);
-  return res.data;
+  // Chunk to avoid proxy/API timeouts on large Excel sheets (e.g. 166 rows).
+  const merged: EmployeeImportResponse = {
+    created: 0,
+    updated: 0,
+    skipped: 0,
+    warnings: [],
+    errors: [],
+    results: [],
+  };
+
+  for (let i = 0; i < rows.length; i += IMPORT_CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + IMPORT_CHUNK_SIZE);
+    const res = await apiClient<EmployeeImportResponse>("/hr/employees/bulk-import", {
+      method: "POST",
+      body: {
+        rows: toApiImportRows(chunk),
+        company_id: options?.companyId || undefined,
+      },
+    });
+    if (!res.data) throw new Error("Import returned no data");
+    merged.created += Number(res.data.created || 0);
+    merged.updated += Number(res.data.updated || 0);
+    merged.skipped += Number(res.data.skipped || 0);
+    if (res.data.warnings?.length) merged.warnings.push(...res.data.warnings);
+    if (res.data.errors?.length) merged.errors.push(...res.data.errors);
+    if (res.data.results?.length) merged.results.push(...res.data.results);
+    syncImportedExcelFieldsToExtensions(chunk, res.data.results || []);
+  }
+
+  merged.warnings = merged.warnings.slice(0, 200);
+  merged.errors = merged.errors.slice(0, 200);
+  return merged;
 }
 
 export async function clearAllEmployees(): Promise<{ deleted: number; message: string }> {

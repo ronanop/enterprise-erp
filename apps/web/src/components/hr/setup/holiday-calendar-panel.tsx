@@ -360,7 +360,7 @@ export function HolidayCalendarPanel({ tab }: { tab: HrSetupTab }) {
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead className="border-b border-border/70 bg-muted/40">
               <tr>
-                {["Calendar", "Code", "Year", "Holidays", "Status", "Actions"].map((h) => (
+                {["Calendar", "Year", "Holidays", "Status", "Actions"].map((h) => (
                   <th
                     key={h}
                     className="px-3 py-2 text-[11px] font-medium tracking-wide text-muted-foreground uppercase"
@@ -374,7 +374,6 @@ export function HolidayCalendarPanel({ tab }: { tab: HrSetupTab }) {
               {filtered.map((row) => (
                 <tr key={String(row.id)} className="border-b border-border/50 last:border-0 hover:bg-muted/30">
                   <td className="px-3 py-2.5 font-medium">{String(row.name)}</td>
-                  <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{String(row.code)}</td>
                   <td className="px-3 py-2.5">{String(row.year)}</td>
                   <td className="px-3 py-2.5 tabular-nums">{String(row.holiday_count ?? 0)}</td>
                   <td className="px-3 py-2.5">
@@ -393,11 +392,6 @@ export function HolidayCalendarPanel({ tab }: { tab: HrSetupTab }) {
                       {row.status !== "published" ? (
                         <RowActionsItem onClick={() => void setCalendarStatus(row, "published")}>
                           Publish
-                        </RowActionsItem>
-                      ) : null}
-                      {row.status === "published" ? (
-                        <RowActionsItem onClick={() => void setCalendarStatus(row, "archived")}>
-                          Archive
                         </RowActionsItem>
                       ) : null}
                       <RowActionsItem destructive onClick={() => setConfirmDelete(row)}>
@@ -443,9 +437,6 @@ export function HolidayCalendarPanel({ tab }: { tab: HrSetupTab }) {
                 onChange={(e) => setCalendarName(e.target.value)}
                 placeholder="India National Holidays 2026"
               />
-            </SetupField>
-            <SetupField label="Code" required hint="Auto-generated">
-              <SetupInput value={calendarCode} readOnly />
             </SetupField>
             <SetupField label="Year" required>
               <SetupInput

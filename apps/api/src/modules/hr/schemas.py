@@ -1344,6 +1344,21 @@ class BiometricDeviceCreate(BaseModel):
     generate_api_key: bool = True
 
 
+class BiometricDeviceUpdate(BaseModel):
+    branch_id: UUID | None = None
+    device_code: str | None = None
+    device_name: str | None = None
+    device_model: str | None = None
+    ip_address: str | None = None
+    port: int | None = None
+    subnet_mask: str | None = None
+    gateway: str | None = None
+    comm_password: str | None = None
+    location_text: str | None = None
+    status: str | None = None
+    version: int | None = None
+
+
 class BiometricDeviceResponse(OrmModel):
     id: UUID
     company_id: UUID
@@ -1379,6 +1394,8 @@ class BiometricPunchResponse(BaseModel):
     id: UUID
     device_id: UUID | None = None
     device_code: str
+    device_name: str | None = None
+    device_location: str | None = None
     employee_id: UUID | None = None
     employee_code: str | None = None
     employee_name: str | None = None
@@ -1723,11 +1740,34 @@ class EmployeeImportRow(BaseModel):
     reporting_manager: str | None = None
     email: str | None = None
     mobile: str | None = None
+    alternate_mobile: str | None = None
     joining_date: str | None = None
+    gender: str | None = None
+    dob: str | None = None
+    date_of_birth: str | None = None
+    marital_status: str | None = None
+    blood_group: str | None = None
+    nationality: str | None = None
+    aadhaar: str | None = None
+    pan: str | None = None
+    uan: str | None = None
+    bank_name: str | None = None
+    bank_account: str | None = None
+    bank_ifsc: str | None = None
+    bank_holder: str | None = None
+    current_address: str | None = None
+    permanent_address: str | None = None
+    emergency_name: str | None = None
+    emergency_phone: str | None = None
+    emergency_relationship: str | None = None
+    father_name: str | None = None
+    esi: str | None = None
 
 
 class EmployeeImportRequest(BaseModel):
     rows: list[EmployeeImportRow]
+    # When set, every row is imported into this legal entity (UI entity picker).
+    company_id: str | None = None
 
 
 class EmployeeImportResultRow(BaseModel):
@@ -1736,6 +1776,9 @@ class EmployeeImportResultRow(BaseModel):
     action: str
     employee_id: str
     company: str
+    entity: str | None = None
+    base_location: str | None = None
+    designation: str | None = None
 
 
 class EmployeeImportResponse(BaseModel):
@@ -1905,4 +1948,51 @@ class PeopleRoleResponse(BaseModel):
     has_login: bool = False
     role_codes: list[str] = []
     hr_note: str | None = None
+
+
+class HrIntegrationCatalog(BaseModel):
+    endpoints: list[dict[str, str]]
+    fields: list[dict[str, str]]
+
+
+class HrIntegrationApiKeyCreateRequest(BaseModel):
+    name: str
+    endpoints: list[str]
+    fields: list[str]
+    company_ids: list[UUID] = []
+    notes: str | None = None
+    expires_at: datetime | None = None
+
+
+class HrIntegrationApiKeyRecord(BaseModel):
+    id: UUID
+    name: str
+    key_prefix: str
+    endpoints: list[str] = []
+    fields: list[str] = []
+    company_ids: list[UUID] = []
+    status: str
+    notes: str | None = None
+    created_at: datetime | None = None
+    last_used_at: datetime | None = None
+    expires_at: datetime | None = None
+
+
+class HrIntegrationApiKeyCreated(HrIntegrationApiKeyRecord):
+    """Returned once on create — includes plaintext API key."""
+
+    api_key: str
+
+
+class HrIntegrationEmployeeRow(BaseModel):
+    id: str
+    data: dict[str, object]
+
+
+class HrIntegrationEmployeesResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    fields: list[str]
+    rows: list[HrIntegrationEmployeeRow]
 

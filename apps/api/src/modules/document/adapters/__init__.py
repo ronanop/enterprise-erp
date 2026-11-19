@@ -1,1 +1,0 @@
-"""Document cross-module adapters."""

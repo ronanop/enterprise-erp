@@ -903,7 +903,14 @@ export function cell(row: SetupRow, ...keys: string[]): string {
   return "-";
 }
 
-export type SetupMasterOption = { value: string; label: string; code?: string };
+export type SetupMasterOption = {
+  value: string;
+  label: string;
+  /** Company code (e.g. DEMOCO). */
+  code?: string;
+  /** Emp ID prefix from Legal Entity setup (e.g. CDPL / CT). Falls back to code. */
+  empPrefix?: string;
+};
 
 /** Legal entities from organization.org_company (same source as Assign HR). */
 export async function listEntityOptions(): Promise<SetupMasterOption[]> {
@@ -914,12 +921,17 @@ export async function listEntityOptions(): Promise<SetupMasterOption[]> {
       const code = String(r.company_code ?? r.code ?? "")
         .trim()
         .toUpperCase();
+      const empPrefix = String(r.employee_code_prefix ?? "")
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "");
       return {
         value: String(r.id),
         label: String(
           r.company_name ?? r.name ?? r.legal_name ?? (code || "Entity"),
         ),
         code: code || undefined,
+        empPrefix: empPrefix || code || undefined,
       };
     });
 }

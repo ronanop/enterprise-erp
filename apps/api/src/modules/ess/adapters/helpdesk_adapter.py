@@ -1,118 +1,81 @@
-"""Helpdesk port for ESS support tickets."""
+"""Support-ticket port for ESS (hr schema)."""
 
 from __future__ import annotations
 
-from uuid import UUID, uuid4
+from datetime import datetime, timezone
+from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from modules.foundation.domain.value_objects import TenantContext
-from modules.helpdesk.models.ticket import HdTicket
-from modules.helpdesk.models.ticket_category import HdTicketCategory
-from modules.helpdesk.models.ticket_comment import HdTicketComment
-from modules.helpdesk.models.ticket_priority import HdTicketPriority
+from modules.hr.models.hr_support_ticket import HrSupportTicket, HrSupportTicketComment
+from modules.hr.repository.support_ticket_repository import SupportTicketRepository
 
 
 class EssHelpdeskAdapter:
     def __init__(self, db: Session) -> None:
         self._db = db
+        self._repo = SupportTicketRepository(db)
 
     def list_requester_tickets(
         self, ctx: TenantContext, *, company_id: UUID, employee_id: UUID, limit: int = 100
-    ) -> list[HdTicket]:
-        return list(
-            self._db.scalars(
-                select(HdTicket)
-                .where(
-                    HdTicket.tenant_id == ctx.tenant_id,
-                    HdTicket.company_id == company_id,
-                    HdTicket.requester_employee_id == employee_id,
-                    HdTicket.is_deleted.is_(False),
-                )
-                .order_by(HdTicket.created_at.desc())
-                .limit(limit)
-            ).all()
+    ) -> list[HrSupportTicket]:
+        return self._repo.list_for_requester(
+            ctx.tenant_id, company_id, employee_id, limit=limit
         )
 
-    def get_ticket(self, ticket_id: UUID) -> HdTicket | None:
-        return self._db.get(HdTicket, ticket_id)
+    def get_ticket(self, ticket_id: UUID) -> HrSupportTicket | None:
+        return self._repo.get(ticket_id)
 
-    def list_comments(self, ticket_id: UUID) -> list[HdTicketComment]:
-        return list(
-            self._db.scalars(
-                select(HdTicketComment)
-                .where(
-                    HdTicketComment.ticket_id == ticket_id,
-                    HdTicketComment.is_deleted.is_(False),
-                    HdTicketComment.status == "active",
-                )
-                .order_by(HdTicketComment.commented_at.asc())
-            ).all()
-        )
+    def list_comments(self, ticket_id: UUID) -> list[HrSupportTicketComment]:
+        return self._repo.list_comments(ticket_id)
 
-    def resolve_or_create_category(
+    def create_ticket(
         self,
         ctx: TenantContext,
         *,
         company_id: UUID,
-        category_code: str,
-        category_name: str,
-    ) -> HdTicketCategory:
-        cat = self._db.scalar(
-            select(HdTicketCategory).where(
-                HdTicketCategory.tenant_id == ctx.tenant_id,
-                HdTicketCategory.company_id == company_id,
-                HdTicketCategory.category_code == category_code,
-                HdTicketCategory.is_deleted.is_(False),
-            )
-        )
-        if cat is not None:
-            return cat
-        cat = HdTicketCategory(
-            id=uuid4(),
-            tenant_id=ctx.tenant_id,
+        branch_id: UUID | None,
+        requester_employee_id: UUID,
+        subject: str,
+        description: str | None,
+        kind: str,
+        urgency: str | None,
+        asset_id: UUID | None,
+    ) -> HrSupportTicket:
+        if branch_id is None:
+            raise ValueError("branch_id is required")
+        return self._repo.create(
+            ctx,
             company_id=company_id,
-            category_code=category_code,
-            category_name=category_name,
-            status="active",
-            created_by=ctx.user_id,
-            updated_by=ctx.user_id,
+            branch_id=branch_id,
+            requester_employee_id=requester_employee_id,
+            subject=subject,
+            description=description,
+            kind=kind,
+            urgency=urgency,
+            asset_id=asset_id,
+            opened_at=datetime.now(timezone.utc),
         )
-        self._db.add(cat)
-        self._db.flush()
-        return cat
 
-    def resolve_or_create_priority(
+    def add_comment(
         self,
         ctx: TenantContext,
         *,
         company_id: UUID,
-        priority_code: str = "ESS_MEDIUM",
-        priority_name: str = "Medium",
-        rank_order: int = 2,
-    ) -> HdTicketPriority:
-        pri = self._db.scalar(
-            select(HdTicketPriority).where(
-                HdTicketPriority.tenant_id == ctx.tenant_id,
-                HdTicketPriority.company_id == company_id,
-                HdTicketPriority.priority_code == priority_code,
-                HdTicketPriority.is_deleted.is_(False),
-            )
-        )
-        if pri is not None:
-            return pri
-        pri = HdTicketPriority(
-            id=uuid4(),
-            tenant_id=ctx.tenant_id,
+        ticket_id: UUID,
+        author_employee_id: UUID,
+        body: str,
+    ) -> HrSupportTicketComment:
+        ticket = self._repo.get(ticket_id)
+        if ticket is None:
+            raise ValueError("ticket not found")
+        return self._repo.add_comment(
+            ctx,
             company_id=company_id,
-            priority_code=priority_code,
-            priority_name=priority_name,
-            rank_order=rank_order,
-            status="active",
-            created_by=ctx.user_id,
-            updated_by=ctx.user_id,
+            branch_id=ticket.branch_id,
+            ticket_id=ticket_id,
+            author_employee_id=author_employee_id,
+            body=body,
+            commented_at=datetime.now(timezone.utc),
         )
-        self._db.add(pri)
-        self._db.flush()
-        return pri

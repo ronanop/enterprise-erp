@@ -310,7 +310,8 @@ class PeopleRoleService:
             "reporting_manager_code": mgr_code,
             "reports_count": reports_count,
             "is_hiring_manager": bool(getattr(row, "is_hiring_manager", False)),
-            "is_manager": bool(getattr(row, "is_manager", False)),
+            # Effective manager: explicit flag OR someone already reports to them.
+            "is_manager": bool(getattr(row, "is_manager", False)) or reports_count > 0,
             "is_recruiter": bool(getattr(row, "is_recruiter", False)),
             "is_hr": is_hr,
             "has_login": has_login,

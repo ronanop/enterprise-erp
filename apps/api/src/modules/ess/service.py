@@ -8,12 +8,11 @@ from math import asin, cos, radians, sin, sqrt
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from core.config import get_settings
 from core.exceptions import AppException, ConflictException, ForbiddenException, NotFoundException
-from modules.asset.models.asset import AstAsset
 from modules.ess.employee_document_storage import (
     DocumentDownload,
     load_document_download,
@@ -1603,41 +1602,17 @@ class EssService:
     def list_assets(self, ctx: TenantContext) -> list[EssAssetItem]:
         emp = self.resolve_employee(ctx)
         pairs = EssAssetAdapter(self._db).list_assigned_assets(employee_id=emp.id)
-        out: list[EssAssetItem] = []
-        for asset, asn in pairs:
-            out.append(
-                EssAssetItem(
-                    id=asset.id,
-                    asset_code=asset.asset_code,
-                    asset_name=asset.asset_name,
-                    asset_type=asset.asset_type,
-                    serial_number=asset.serial_number,
-                    status=asset.status,
-                    assignment_status=asn.status,
-                )
-            )
-        if out:
-            return out
-        # Fallback: assets where employee is custodian
-        custodians = list(
-            self._db.scalars(
-                select(AstAsset).where(
-                    AstAsset.custodian_employee_id == emp.id,
-                    AstAsset.is_deleted.is_(False),
-                )
-            ).all()
-        )
         return [
             EssAssetItem(
-                id=a.id,
-                asset_code=a.asset_code,
-                asset_name=a.asset_name,
-                asset_type=a.asset_type,
-                serial_number=a.serial_number,
-                status=a.status,
-                assignment_status="custodian",
+                id=asset.id,
+                asset_code=asset.asset_code,
+                asset_name=asset.asset_name,
+                asset_type=asset.asset_type,
+                serial_number=asset.serial_number,
+                status=asset.status,
+                assignment_status="active",
             )
-            for a in custodians
+            for asset, _asn in pairs
         ]
 
     def list_training(self, ctx: TenantContext) -> list[EssTrainingItem]:

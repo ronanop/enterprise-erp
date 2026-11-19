@@ -6,7 +6,7 @@ import { Clock3, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/** Right-side enterprise drawer for Create / Edit / View / History */
+/** Right-side enterprise drawer for Create / Edit / View */
 export function SetupDrawer({
   open,
   title,

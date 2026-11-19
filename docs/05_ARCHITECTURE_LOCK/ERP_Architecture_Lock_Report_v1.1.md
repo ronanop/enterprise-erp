@@ -7,8 +7,8 @@
 **Scope:** iConnect Plus  
 
 > **Implementation reality (do not edit this lock for progress notes):**  
-> See [`ERP_Architecture_Addendum_v1.2.md`](ERP_Architecture_Addendum_v1.2.md) and living docs under [`docs/00_CURRENT/`](../00_CURRENT/).  
-> Locked decisions in this report remain authoritative; the addendum records what has been built on top of them.
+> See [`ERP_Architecture_Addendum_v1.2.md`](ERP_Architecture_Addendum_v1.2.md), [`HRMS_Standalone_Addendum_v1.3.md`](HRMS_Standalone_Addendum_v1.3.md), and living docs under [`docs/00_CURRENT/`](../00_CURRENT/).  
+> Locked decisions in this report remain authoritative; the addenda record what has been built on top of them. This repository is an **HRMS-only** product (v1.3).
 
 ---
 

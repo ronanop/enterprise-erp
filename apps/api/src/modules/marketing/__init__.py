@@ -1,1 +1,0 @@
-"""Marketing & Social Media module."""

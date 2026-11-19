@@ -510,7 +510,8 @@ class OrgModuleAdminSyncService:
         from uuid import uuid4
 
         from modules.foundation.models.security import SecPermission, SecRolePermission
-        from modules.service.permissions import SERVICE_FIELD_ENGINEER_PERMISSIONS
+
+        SERVICE_FIELD_ENGINEER_PERMISSIONS: tuple[str, ...] = ()
 
         role = self._role(tenant_id, SERVICE_FIELD_ENGINEER_ROLE_CODE)
         if role is None:

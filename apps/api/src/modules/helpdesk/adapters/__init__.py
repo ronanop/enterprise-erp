@@ -1,1 +1,0 @@
-"""Helpdesk cross-module adapters."""

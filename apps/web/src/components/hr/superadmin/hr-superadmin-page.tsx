@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { KeyRound, Mail, ScrollText, Shield, UserPlus } from "lucide-react";
+import { Copy, KeyRound, Mail, ScrollText, Shield, UserPlus, Webhook } from "lucide-react";
 
 import {
   HrAuthBanner,
@@ -24,25 +24,33 @@ import {
 } from "@/config/hr-nav";
 import {
   assignHrAdmin,
+  createIntegrationApiKey,
+  FALLBACK_INTEGRATION_CATALOG,
+  getIntegrationApiKeyCatalog,
   listHrActivityLogs,
   listHrAdmins,
   listHrEntities,
+  listIntegrationApiKeys,
   resetHrAdminPassword,
   revokeHrAdmin,
+  revokeIntegrationApiKey,
   setHrAdminEntities,
   setHrAdminNav,
   type HrActivityLogRecord,
   type HrAdminEntityOption,
   type HrAdminRecord,
+  type HrIntegrationApiKeyRecord,
+  type HrIntegrationCatalog,
 } from "@/services/hr-superadmin-service";
 import type { EmployeeRecord } from "@/types/employee-management";
 import { ApiClientError } from "@/services/api-client";
 
-type TabId = "assign" | "passwords" | "logs";
+type TabId = "assign" | "passwords" | "api-keys" | "logs";
 
 const TABS: HrTabItem[] = [
   { id: "assign", label: "Give access", icon: UserPlus },
   { id: "passwords", label: "Passwords", icon: KeyRound },
+  { id: "api-keys", label: "API keys", icon: Webhook },
   { id: "logs", label: "Activity logs", icon: ScrollText },
 ];
 
@@ -167,6 +175,22 @@ export function HrSuperadminPage() {
   const [loading, setLoading] = useState(true);
   const [logsLoading, setLogsLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [apiKeys, setApiKeys] = useState<HrIntegrationApiKeyRecord[]>([]);
+  const [apiCatalog, setApiCatalog] = useState<HrIntegrationCatalog>(FALLBACK_INTEGRATION_CATALOG);
+  const [apiKeysLoading, setApiKeysLoading] = useState(false);
+  const [apiKeyName, setApiKeyName] = useState("");
+  const [apiKeyNotes, setApiKeyNotes] = useState("");
+  const [selectedEndpoints, setSelectedEndpoints] = useState<string[]>(["employees"]);
+  const [selectedFields, setSelectedFields] = useState<string[]>([
+    "employee_code",
+    "name",
+    "department",
+    "manager",
+    "leave_balances",
+  ]);
+  const [selectedApiCompanies, setSelectedApiCompanies] = useState<string[]>([]);
+  const [creatingKey, setCreatingKey] = useState(false);
+  const [createdPlainKey, setCreatedPlainKey] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -187,6 +211,26 @@ export function HrSuperadminPage() {
     }
   }, []);
 
+  const reloadApiKeys = useCallback(async () => {
+    setApiKeysLoading(true);
+    try {
+      const [catalog, keys] = await Promise.all([
+        getIntegrationApiKeyCatalog(),
+        listIntegrationApiKeys(),
+      ]);
+      setApiCatalog(catalog);
+      setApiKeys(keys);
+      if (catalog.endpoints.length && selectedEndpoints.length === 0) {
+        setSelectedEndpoints([catalog.endpoints[0]!.id]);
+      }
+    } catch (err) {
+      const message = err instanceof ApiClientError ? err.message : "Failed to load API keys";
+      toast(message, "error");
+    } finally {
+      setApiKeysLoading(false);
+    }
+  }, [selectedEndpoints.length]);
+
   const reloadLogs = useCallback(async () => {
     setLogsLoading(true);
     try {
@@ -204,6 +248,11 @@ export function HrSuperadminPage() {
     void reload();
     void reloadLogs();
   }, [permLoading, isHrmsSuperAdmin, reload, reloadLogs]);
+
+  useEffect(() => {
+    if (!isAuthenticated() || permLoading || !isHrmsSuperAdmin) return;
+    if (tab === "api-keys") void reloadApiKeys();
+  }, [tab, permLoading, isHrmsSuperAdmin, reloadApiKeys]);
 
   const adminByEmployee = useMemo(() => {
     const map = new Map<string, HrAdminRecord>();
@@ -381,6 +430,61 @@ export function HrSuperadminPage() {
     }
   }
 
+  function toggleSelected(list: string[], id: string, next: boolean): string[] {
+    const set = new Set(list);
+    if (next) set.add(id);
+    else set.delete(id);
+    return [...set];
+  }
+
+  async function onCreateApiKey() {
+    if (!apiKeyName.trim()) {
+      toast("Enter a name for the API key", "error");
+      return;
+    }
+    if (!selectedEndpoints.length) {
+      toast("Select at least one endpoint", "error");
+      return;
+    }
+    if (!selectedFields.length) {
+      toast("Select at least one data field", "error");
+      return;
+    }
+    setCreatingKey(true);
+    try {
+      const created = await createIntegrationApiKey({
+        name: apiKeyName.trim(),
+        endpoints: selectedEndpoints,
+        fields: selectedFields,
+        companyIds: selectedApiCompanies,
+        notes: apiKeyNotes.trim() || undefined,
+      });
+      setCreatedPlainKey(created.api_key ?? null);
+      setApiKeyName("");
+      setApiKeyNotes("");
+      toast("API key created — copy it now");
+      await reloadApiKeys();
+    } catch (err) {
+      toast(err instanceof ApiClientError ? err.message : "Could not create API key", "error");
+    } finally {
+      setCreatingKey(false);
+    }
+  }
+
+  async function onRevokeApiKey(keyId: string) {
+    setBusyId(`api-key:${keyId}`);
+    try {
+      await revokeIntegrationApiKey(keyId);
+      toast("API key revoked");
+      if (createdPlainKey) setCreatedPlainKey(null);
+      await reloadApiKeys();
+    } catch (err) {
+      toast(err instanceof ApiClientError ? err.message : "Could not revoke API key", "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (!isAuthenticated()) return <HrAuthBanner />;
   if (permLoading) return <HrLoadingBlock label="Checking access…" />;
   if (!isHrmsSuperAdmin) {
@@ -399,7 +503,7 @@ export function HrSuperadminPage() {
       <SetupToastHost />
       <PageHeader
         title="Superadmin Panel"
-        description="Give HR access, choose entities for data segregation, pick sidebar menus, email login passwords, and review activity logs."
+        description="Give HR access, choose entities for data segregation, pick sidebar menus, create integration API keys, email login passwords, and review activity logs."
       />
 
       <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
@@ -655,6 +759,283 @@ export function HrSuperadminPage() {
                     );
                   })}
                 </ul>
+              )}
+            </>
+          ) : null}
+
+          {tab === "api-keys" ? (
+            <>
+              <PanelHeader
+                icon={Webhook}
+                title="Integration API keys"
+                caption="Create a key, pick the endpoint and employee fields to expose (name, department, manager, …). Callers send header X-HRMS-Api-Key."
+              >
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 cursor-pointer"
+                  onClick={() => void reloadApiKeys()}
+                >
+                  Refresh
+                </Button>
+              </PanelHeader>
+
+              {createdPlainKey ? (
+                <div className="mb-4 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                  <p className="text-xs font-medium text-foreground">
+                    Copy this key now — it will not be shown again.
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Input readOnly value={createdPlainKey} className="h-9 flex-1 font-mono text-xs" />
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-9 cursor-pointer gap-1.5"
+                      onClick={() => {
+                        void navigator.clipboard.writeText(createdPlainKey);
+                        toast("API key copied");
+                      }}
+                    >
+                      <Copy className="size-3.5" />
+                      Copy
+                    </Button>
+                  </div>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    Example: GET /api/v1/hr/integration/employees with header{" "}
+                    <span className="font-mono">X-HRMS-Api-Key: {createdPlainKey.slice(0, 12)}…</span>
+                  </p>
+                </div>
+              ) : null}
+
+              <div className="mb-5 space-y-3 rounded-xl border border-border/70 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Create key
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1 text-xs">
+                    <span className="font-medium text-foreground">Name</span>
+                    <Input
+                      value={apiKeyName}
+                      onChange={(e) => setApiKeyName(e.target.value)}
+                      placeholder="e.g. Payroll sync"
+                      className="h-9"
+                    />
+                  </label>
+                  <label className="space-y-1 text-xs">
+                    <span className="font-medium text-foreground">Notes (optional)</span>
+                    <Input
+                      value={apiKeyNotes}
+                      onChange={(e) => setApiKeyNotes(e.target.value)}
+                      placeholder="Who uses this key"
+                      className="h-9"
+                    />
+                  </label>
+                </div>
+
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-foreground">Endpoint</p>
+                  <div className="flex flex-wrap gap-2">
+                    {apiCatalog.endpoints.map((ep) => {
+                      const checked = selectedEndpoints.includes(ep.id);
+                      return (
+                        <label
+                          key={ep.id}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors duration-200",
+                            checked
+                              ? "border-primary/40 bg-primary/5 font-medium"
+                              : "border-border/70 hover:bg-muted/40",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            className="size-3.5 cursor-pointer accent-primary"
+                            checked={checked}
+                            onChange={(e) =>
+                              setSelectedEndpoints((prev) =>
+                                toggleSelected(prev, ep.id, e.target.checked),
+                              )
+                            }
+                          />
+                          <span>
+                            {ep.label}
+                            {ep.path ? (
+                              <span className="ml-1 font-mono text-[10px] text-muted-foreground">
+                                {ep.method} {ep.path}
+                              </span>
+                            ) : null}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <p className="text-xs font-medium text-foreground">
+                      Data fields to send
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="cursor-pointer text-[11px] font-medium text-primary transition-opacity duration-200 hover:opacity-80"
+                        onClick={() =>
+                          setSelectedFields(apiCatalog.fields.map((f) => f.id))
+                        }
+                      >
+                        Select all
+                      </button>
+                      <span className="text-[11px] text-muted-foreground">·</span>
+                      <button
+                        type="button"
+                        className="cursor-pointer text-[11px] font-medium text-muted-foreground transition-opacity duration-200 hover:opacity-80"
+                        onClick={() => setSelectedFields([])}
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
+                    {apiCatalog.fields.map((field) => {
+                      const checked = selectedFields.includes(field.id);
+                      return (
+                        <label
+                          key={field.id}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-2 rounded-lg border px-2 py-1.5 text-xs transition-colors duration-200",
+                            checked
+                              ? "border-primary/40 bg-primary/5 font-medium"
+                              : "border-border/70 hover:bg-muted/40",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            className="size-3.5 cursor-pointer accent-primary"
+                            checked={checked}
+                            onChange={(e) =>
+                              setSelectedFields((prev) =>
+                                toggleSelected(prev, field.id, e.target.checked),
+                              )
+                            }
+                          />
+                          {field.label}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {entities.length ? (
+                  <div>
+                    <p className="mb-1.5 text-xs font-medium text-foreground">
+                      Limit to entities (optional — empty = all)
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {entities.map((ent) => {
+                        const checked = selectedApiCompanies.includes(ent.id);
+                        return (
+                          <label
+                            key={ent.id}
+                            className={cn(
+                              "flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors duration-200",
+                              checked
+                                ? "border-primary/40 bg-primary/5 font-medium"
+                                : "border-border/70 hover:bg-muted/40",
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              className="size-3.5 cursor-pointer accent-primary"
+                              checked={checked}
+                              onChange={(e) =>
+                                setSelectedApiCompanies((prev) =>
+                                  toggleSelected(prev, ent.id, e.target.checked),
+                                )
+                              }
+                            />
+                            {ent.company_name}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-9 cursor-pointer gap-1.5"
+                  disabled={creatingKey}
+                  onClick={() => void onCreateApiKey()}
+                >
+                  <Webhook className="size-3.5" />
+                  {creatingKey ? "Creating…" : "Create API key"}
+                </Button>
+              </div>
+
+              {apiKeysLoading ? (
+                <HrLoadingBlock label="Loading API keys…" />
+              ) : apiKeys.length === 0 ? (
+                <HrEmptyState
+                  title="No API keys yet"
+                  description="Create a key above, choose the employees endpoint and fields such as name, department, leaves, and manager."
+                />
+              ) : (
+                <div className="overflow-auto rounded-xl border border-border/70">
+                  <table className="w-full min-w-[40rem] text-left text-xs">
+                    <thead className="sticky top-0 bg-muted/80 backdrop-blur">
+                      <tr className="border-b border-border text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <th className="px-3 py-2.5 font-medium">Name</th>
+                        <th className="px-3 py-2.5 font-medium">Prefix</th>
+                        <th className="px-3 py-2.5 font-medium">Endpoint</th>
+                        <th className="px-3 py-2.5 font-medium">Fields</th>
+                        <th className="px-3 py-2.5 font-medium">Created</th>
+                        <th className="px-3 py-2.5 font-medium text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {apiKeys.map((row) => (
+                        <tr key={row.id} className="border-b border-border/50 last:border-b-0">
+                          <td className="px-3 py-2.5 align-middle">
+                            <p className="font-medium">{row.name}</p>
+                            {row.notes ? (
+                              <p className="text-[10px] text-muted-foreground">{row.notes}</p>
+                            ) : null}
+                          </td>
+                          <td className="px-3 py-2.5 align-middle font-mono text-[11px]">
+                            {row.key_prefix}…
+                          </td>
+                          <td className="px-3 py-2.5 align-middle">
+                            {row.endpoints.join(", ") || "—"}
+                          </td>
+                          <td
+                            className="max-w-[14rem] truncate px-3 py-2.5 align-middle text-muted-foreground"
+                            title={row.fields.join(", ")}
+                          >
+                            {row.fields.join(", ") || "—"}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2.5 align-middle text-muted-foreground">
+                            {row.created_at ? formatWhen(row.created_at) : "—"}
+                          </td>
+                          <td className="px-3 py-2.5 align-middle text-right">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 cursor-pointer text-destructive hover:text-destructive"
+                              disabled={busyId === `api-key:${row.id}`}
+                              onClick={() => void onRevokeApiKey(row.id)}
+                            >
+                              Revoke
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </>
           ) : null}

@@ -4,12 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Archive,
   Columns3,
   Download,
   Eye,
   Pencil,
   Plus,
+  Trash2,
   Upload,
   UserCheck,
   UserMinus,
@@ -28,7 +28,6 @@ import {
   HrToolbar,
 } from "@/components/hr/hr-primitives";
 import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
-import { SetupSelect } from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -37,6 +36,8 @@ import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu
 import { isAuthenticated } from "@/lib/auth";
 import {
   EXACT_CASE_HEADER_COLUMNS,
+  excelEntityCell,
+  excelOrganisationCell,
   renderEmployeeCell,
 } from "@/lib/employee-table-columns";
 import {
@@ -48,6 +49,7 @@ import {
   useEmployeeTablePrefs,
   type EmployeeTableColumnKey,
 } from "@/hooks/use-employee-table-prefs";
+import { FilterSelect } from "@/components/ui/filter-select";
 
 /** Keep header and body cells on the same grid (avoids Excel-field column drift). */
 const COLUMN_CELL_CLASS: Partial<Record<EmployeeTableColumnKey, string>> = {
@@ -89,6 +91,7 @@ import { cn } from "@/lib/utils";
 const EMPTY_FILTERS: EmployeeListFilters = {
   branchId: "",
   entityId: "",
+  organisation: "",
   departmentId: "",
   designation: "",
   employmentType: "",
@@ -98,6 +101,25 @@ const EMPTY_FILTERS: EmployeeListFilters = {
   joiningFrom: "",
   gender: "",
 };
+
+const HEADER_FILTER_COLUMNS = new Set<EmployeeTableColumnKey>([
+  "entity",
+  "organisation",
+  "location",
+  "designation",
+  "department",
+  "reportingManager",
+  "gender",
+  "status",
+  "employmentType",
+  "branch",
+]);
+
+function uniqueSorted(values: Iterable<string>): string[] {
+  return [...new Set([...values].map((v) => v.trim()).filter((v) => v && v !== "-"))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+}
 
 export function EmployeeManagementPage() {
   const router = useRouter();
@@ -123,6 +145,7 @@ export function EmployeeManagementPage() {
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [earlyCompanies, setEarlyCompanies] = useState<{ id: string; label: string }[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -149,11 +172,208 @@ export function EmployeeManagementPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void import("@/services/api-client")
+      .then(({ contextService }) => contextService.listCompanies())
+      .then((res) => {
+        if (cancelled) return;
+        const rows = Array.isArray(res.data) ? res.data : [];
+        setEarlyCompanies(
+          rows
+            .map((c) => ({
+              id: String(c.id ?? ""),
+              label: String(c.company_name ?? "").trim(),
+            }))
+            .filter((c) => c.id && c.label)
+            .sort((a, b) => a.label.localeCompare(b.label)),
+        );
+      })
+      .catch(() => {
+        /* directory options still populate later */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const entityOptions = useMemo(() => {
+    const fromCompanies = (options?.companies ?? []).map((c) => ({
+      id: c.id,
+      label: c.label,
+    }));
+    if (fromCompanies.length) return fromCompanies;
+    if (earlyCompanies.length) return earlyCompanies;
+    const byId = new Map<string, string>();
+    for (const r of records) {
+      const id = r.companyId || r.extension.employment.entityId;
+      const label = excelEntityCell(r);
+      if (id && label && label !== "-") byId.set(id, label);
+    }
+    return [...byId.entries()].map(([id, label]) => ({ id, label }));
+  }, [options?.companies, earlyCompanies, records]);
+
+  const entityLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const e of entityOptions) map.set(e.id, e.label);
+    return map;
+  }, [entityOptions]);
+
   const filtered = useMemo(
-    () => filterEmployees(records, query, filters),
-    [records, query, filters],
+    () => filterEmployees(records, query, filters, { entityLabelById }),
+    [records, query, filters, entityLabelById],
   );
   const stats = useMemo(() => computeEmployeeStats(records), [records]);
+
+  const headerFilterOptions = useMemo(() => {
+    const orgs = uniqueSorted(records.map((r) => excelOrganisationCell(r)));
+    const locations = uniqueSorted(
+      records.map((r) => r.locationName || r.extension.employment.location || ""),
+    );
+    const designations = uniqueSorted(
+      (options?.designations ?? []).map((d) => d.label).concat(records.map((r) => r.designationName)),
+    );
+    const departments = (options?.departments ?? []).map((d) => ({ value: d.id, label: d.label }));
+    const deptFallback = uniqueSorted(records.map((r) => r.departmentName)).map((label) => {
+      const hit = records.find((r) => r.departmentName === label);
+      return { value: hit?.departmentId || label, label };
+    });
+    const managers = (options?.managers?.length ? options.managers : options?.employees ?? []).map(
+      (m) => ({
+        value: m.id,
+        label: m.label,
+      }),
+    );
+    const managerFallback = uniqueSorted(records.map((r) => r.reportingManagerName || "")).map(
+      (label) => {
+        const hit = records.find((r) => r.reportingManagerName === label);
+        return { value: hit?.reportingManagerId || label, label };
+      },
+    );
+    const branches = (options?.branches ?? []).map((b) => ({ value: b.id, label: b.label }));
+    return {
+      organisations: orgs.map((label) => ({ value: label, label })),
+      locations: locations.map((label) => ({ value: label, label })),
+      designations: designations.map((label) => ({ value: label, label })),
+      departments: departments.length ? departments : deptFallback,
+      managers: managers.length ? managers : managerFallback,
+      branches,
+      genders: [
+        { value: "male", label: "Male" },
+        { value: "female", label: "Female" },
+        { value: "other", label: "Other" },
+      ],
+      statuses: [
+        { value: "active", label: "Active" },
+        { value: "onboarding", label: "Pending Join" },
+        { value: "probation", label: "Probation" },
+        { value: "notice", label: "Notice Period" },
+        { value: "inactive", label: "Ex Employee" },
+      ],
+      employmentTypes: uniqueSorted(records.map((r) => r.employmentType || "")).map((value) => ({
+        value,
+        label: value,
+      })),
+    };
+  }, [records, options]);
+
+  const filtersActive = Boolean(
+    query ||
+      filters.entityId ||
+      filters.organisation ||
+      filters.departmentId ||
+      filters.designation ||
+      filters.employmentType ||
+      filters.status ||
+      filters.reportingManagerId ||
+      filters.location ||
+      filters.gender ||
+      filters.branchId ||
+      filters.joiningFrom,
+  );
+
+  function headerFilterValue(key: EmployeeTableColumnKey): string {
+    switch (key) {
+      case "entity":
+        return filters.entityId;
+      case "organisation":
+        return filters.organisation;
+      case "location":
+        return filters.location;
+      case "designation":
+        return filters.designation;
+      case "department":
+        return filters.departmentId;
+      case "reportingManager":
+        return filters.reportingManagerId;
+      case "gender":
+        return filters.gender;
+      case "status":
+        return filters.status;
+      case "employmentType":
+        return filters.employmentType;
+      case "branch":
+        return filters.branchId;
+      default:
+        return "";
+    }
+  }
+
+  function onHeaderFilterChange(key: EmployeeTableColumnKey, value: string) {
+    setFilters((f) => {
+      switch (key) {
+        case "entity":
+          return { ...f, entityId: value };
+        case "organisation":
+          return { ...f, organisation: value };
+        case "location":
+          return { ...f, location: value };
+        case "designation":
+          return { ...f, designation: value };
+        case "department":
+          return { ...f, departmentId: value };
+        case "reportingManager":
+          return { ...f, reportingManagerId: value };
+        case "gender":
+          return { ...f, gender: value };
+        case "status":
+          return { ...f, status: value };
+        case "employmentType":
+          return { ...f, employmentType: value };
+        case "branch":
+          return { ...f, branchId: value };
+        default:
+          return f;
+      }
+    });
+  }
+
+  function headerFilterChoices(key: EmployeeTableColumnKey): { value: string; label: string }[] {
+    switch (key) {
+      case "entity":
+        return entityOptions.map((e) => ({ value: e.id, label: e.label }));
+      case "organisation":
+        return headerFilterOptions.organisations;
+      case "location":
+        return headerFilterOptions.locations;
+      case "designation":
+        return headerFilterOptions.designations;
+      case "department":
+        return headerFilterOptions.departments;
+      case "reportingManager":
+        return headerFilterOptions.managers;
+      case "gender":
+        return headerFilterOptions.genders;
+      case "status":
+        return headerFilterOptions.statuses;
+      case "employmentType":
+        return headerFilterOptions.employmentTypes;
+      case "branch":
+        return headerFilterOptions.branches;
+      default:
+        return [];
+    }
+  }
 
   useEffect(() => {
     setPage(1);
@@ -294,22 +514,16 @@ export function EmployeeManagementPage() {
               placeholder="Search name, ID, email, phone…"
               className="h-8 w-full max-w-xs text-xs"
             />
-            <SetupSelect
-              className={cn(
-                "h-8 w-[180px] cursor-pointer text-xs",
-                filters.entityId && "border-primary/40 bg-primary/5 font-medium",
-              )}
+            <FilterSelect
+              className={cn("w-[200px]", filters.entityId && "font-medium")}
               value={filters.entityId}
-              onChange={(e) => setFilters((f) => ({ ...f, entityId: e.target.value }))}
-              aria-label="Filter by entity"
-            >
-              <option value="">All entities</option>
-              {(options?.companies ?? []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </SetupSelect>
+              onChange={(entityId) => setFilters((f) => ({ ...f, entityId }))}
+              placeholder="All entities"
+              options={[
+                { value: "", label: "All entities" },
+                ...entityOptions.map((c) => ({ value: c.id, label: c.label })),
+              ]}
+            />
             <div className="relative">
               <Button
                 type="button"
@@ -384,10 +598,10 @@ export function EmployeeManagementPage() {
                 </>
               ) : null}
             </div>
-            {filters.entityId || query ? (
+            {filtersActive ? (
               <button
                 type="button"
-                className="cursor-pointer text-xs font-medium text-primary hover:underline"
+                className="cursor-pointer text-xs font-medium text-primary transition-colors duration-200 hover:underline"
                 onClick={() => {
                   setFilters(EMPTY_FILTERS);
                   setQuery("");
@@ -436,21 +650,6 @@ export function EmployeeManagementPage() {
                     size="sm"
                     variant="outline"
                     className="cursor-pointer h-7"
-                    onClick={() =>
-                      setConfirm({
-                        title: "Archive Employees",
-                        message: "Soft-archive selected employees? Records are retained.",
-                        action: () => runBulk("archived", "Archived"),
-                      })
-                    }
-                  >
-                    <Archive className="size-3" />
-                    Archive
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="cursor-pointer h-7"
                     onClick={() => {
                       downloadTextFile("employees-selected.csv", exportEmployeesCsv(selectedRecords), "text/csv");
                       toast("Exported selected rows", "success");
@@ -491,21 +690,43 @@ export function EmployeeManagementPage() {
                             <th
                               key={key}
                               className={cn(
-                                "px-2 py-2 align-middle",
+                                "px-2 py-2 align-top",
                                 COLUMN_CELL_CLASS[key] ?? "min-w-[6.5rem]",
                               )}
                             >
-                              <span
-                                className={cn(
-                                  "block truncate text-[10px] font-semibold tracking-wide text-muted-foreground",
-                                  EXACT_CASE_HEADER_COLUMNS.has(key)
-                                    ? "normal-case"
-                                    : "uppercase",
-                                )}
-                                title={EMPLOYEE_TABLE_COLUMN_LABELS[key]}
-                              >
-                                {EMPLOYEE_TABLE_COLUMN_LABELS[key]}
-                              </span>
+                              <div className="space-y-1">
+                                <span
+                                  className={cn(
+                                    "block truncate text-[10px] font-semibold tracking-wide text-muted-foreground",
+                                    EXACT_CASE_HEADER_COLUMNS.has(key)
+                                      ? "normal-case"
+                                      : "uppercase",
+                                  )}
+                                  title={EMPLOYEE_TABLE_COLUMN_LABELS[key]}
+                                >
+                                  {EMPLOYEE_TABLE_COLUMN_LABELS[key]}
+                                </span>
+                                {HEADER_FILTER_COLUMNS.has(key) ? (
+                                  <select
+                                    className={cn(
+                                      "h-7 w-full max-w-full cursor-pointer truncate rounded-md border border-input/80 bg-background px-1.5 text-[10px] outline-none transition-colors duration-200",
+                                      "hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40",
+                                      headerFilterValue(key) &&
+                                        "border-primary/40 bg-primary/5 font-medium text-foreground",
+                                    )}
+                                    value={headerFilterValue(key)}
+                                    onChange={(e) => onHeaderFilterChange(key, e.target.value)}
+                                    aria-label={`Filter ${EMPLOYEE_TABLE_COLUMN_LABELS[key]}`}
+                                  >
+                                    <option value="">All</option>
+                                    {headerFilterChoices(key).map((opt) => (
+                                      <option key={`${key}-${opt.value}`} value={opt.value}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : null}
+                              </div>
                             </th>
                           ))}
                           <th className="w-12 min-w-12 px-2 py-2" />
@@ -590,18 +811,18 @@ export function EmployeeManagementPage() {
                                   destructive
                                   onClick={() => {
                                     setConfirm({
-                                      title: "Archive Employee",
+                                      title: "Delete Employee",
                                       message:
-                                        "Soft delete - status becomes archived. Record is retained.",
+                                        "Soft delete this employee? The record is retained and can be restored later.",
                                       action: async () => {
-                                        await setEmployeeLifecycleStatus(row, "archived", "Archived");
+                                        await setEmployeeLifecycleStatus(row, "archived", "Deleted");
                                         await load();
                                       },
                                     });
                                     setMenuId(null);
                                   }}
                                 >
-                                  <Archive className="size-3.5" />
+                                  <Trash2 className="size-3.5" />
                                   Delete
                                 </RowActionsItem>
                               </RowActionsMenu>
@@ -629,7 +850,7 @@ export function EmployeeManagementPage() {
         open={Boolean(confirm)}
         title={confirm?.title ?? ""}
         message={confirm?.message ?? ""}
-        destructive={confirm?.title.toLowerCase().includes("archive") || confirm?.title.toLowerCase().includes("delete")}
+        destructive={confirm?.title.toLowerCase().includes("delete")}
         loading={confirmLoading}
         onCancel={() => setConfirm(null)}
         onConfirm={() => {

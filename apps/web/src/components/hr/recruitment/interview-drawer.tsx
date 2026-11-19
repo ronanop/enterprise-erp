@@ -278,9 +278,17 @@ export function InterviewDrawer({
   const hasParticipants = isInternalJob
     ? participantIds.length > 0
     : participantIds.length > 0 || externalInvitees.length > 0;
+  const meetingLinkRequired = mode === "online";
+  const hasMeetingLink = Boolean(meetingLink.trim());
+  const canSchedule =
+    Boolean(candidateId) &&
+    Boolean(date) &&
+    hasParticipants &&
+    (!meetingLinkRequired || hasMeetingLink) &&
+    !saving;
 
   async function save() {
-    if (!candidateId || !date || !hasParticipants || saving) return;
+    if (!canSchedule) return;
     setSaving(true);
     try {
       const pool = isInternalJob
@@ -362,7 +370,7 @@ export function InterviewDrawer({
           <Button
             type="button"
             className="cursor-pointer bg-primary text-primary-foreground hover:bg-primary/90"
-            disabled={!candidateId || !date || !hasParticipants || saving}
+            disabled={!canSchedule}
             onClick={() => void save()}
           >
             {saving ? "Scheduling…" : `Schedule ${roundTitle}`}
@@ -712,8 +720,13 @@ export function InterviewDrawer({
         </SetupField>
 
         {mode === "online" ? (
-          <SetupField label="Meeting link">
-            <SetupInput value={meetingLink} onChange={(e) => setMeetingLink(e.target.value)} />
+          <SetupField label="Meeting link" required>
+            <SetupInput
+              value={meetingLink}
+              onChange={(e) => setMeetingLink(e.target.value)}
+              placeholder="https://meet.google.com/…"
+              required
+            />
           </SetupField>
         ) : (
           <SetupField label="Location">

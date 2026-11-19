@@ -40,15 +40,18 @@ class OrgContextService:
         }
 
     def list_accessible_companies(self, ctx: TenantContext):
-        if is_platform_admin(ctx) or has_module_wide_data_access(ctx, ORGANIZATION_MODULE_KEY):
+        elevated = (
+            is_platform_admin(ctx)
+            or has_module_wide_data_access(ctx, ORGANIZATION_MODULE_KEY)
+            or has_module_wide_data_access(ctx, "hr")
+            or self._is_hr_admin(ctx)
+        )
+        if elevated:
             return self._companies.list_companies(ctx)
 
         scopes = self._scopes.list_user_scopes(ctx.user_id, ctx.tenant_id)
         company_ids = {s.company_id for s in scopes}
         if not company_ids:
-            # Empty org scope must not leak every company for non-admins.
-            if self._is_hr_admin(ctx):
-                return []
             return self._companies.list_permitted_companies(ctx)
 
         companies = []
@@ -60,6 +63,9 @@ class OrgContextService:
             if company is not None:
                 companies.append(company)
                 seen.add(company_id)
+        # Stale scopes (company wiped/re-imported) must not leave the entity dropdown empty.
+        if not companies:
+            return self._companies.list_permitted_companies(ctx)
         return companies
 
     def list_accessible_branches(self, ctx: TenantContext, company_id: UUID):

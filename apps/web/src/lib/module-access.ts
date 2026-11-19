@@ -27,19 +27,16 @@ export function hasAllModulesAdmin(adminModuleKeys: string[]): boolean {
   return all.every((key) => set.has(key));
 }
 
+const HR_HOME_HREFS = new Set(["/", "/home", "/hr", "/my-jobs"]);
+
 export function moduleKeyForHref(href: string): string | null {
-  if (href === "/" || href === "/home" || href === "/my-jobs") return null;
-  if (href === "/organization/users" || href.startsWith("/organization/")) {
-    return "organization";
-  }
+  if (HR_HOME_HREFS.has(href) || href.startsWith("/hr/")) return "hr";
   const mod = erpModules.find((m) => href === m.href || href.startsWith(`${m.href}/`));
   return mod?.key ?? null;
 }
 
 function moduleGroupForHref(href: string): string | null {
-  if (href === "/organization/users" || href.startsWith("/organization/")) {
-    return "organization";
-  }
+  if (HR_HOME_HREFS.has(href) || href.startsWith("/hr/")) return "operations";
   const mod = erpModules.find((m) => href === m.href || href.startsWith(`${m.href}/`));
   return mod?.group ?? null;
 }
@@ -59,11 +56,13 @@ export function canAccessHref(
   userType?: string,
   adminModuleKeys: string[] = [],
 ): boolean {
-  if (href === "/" || href === "/home" || href === "/my-jobs") return true;
+  if (href === "/" || href === "/home" || href === "/hr" || href.startsWith("/hr/") || href === "/my-jobs") {
+    return true;
+  }
 
   const group = moduleGroupForHref(href);
   if (group && ERP_ADMIN_ONLY_GROUPS.has(group)) {
-    return isErpAdmin(userType);
+    return false;
   }
 
   const key = moduleKeyForHref(href);
@@ -80,12 +79,11 @@ export function filterNavigationGroups(
   userType?: string,
   adminModuleKeys: string[] = [],
 ): NavGroup[] {
-  const erpAdmin = isErpAdmin(userType);
   return groups
     .filter((group) => {
       const title = group.title.toLowerCase();
-      if (title === "foundation" || title === "organization" || title === "master data") {
-        return erpAdmin;
+      if (title === "foundation" || title === "organization" || title === "master data" || title === "overview") {
+        return false;
       }
       return true;
     })

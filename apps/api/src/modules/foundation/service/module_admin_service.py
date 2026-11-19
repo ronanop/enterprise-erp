@@ -8,7 +8,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from core.exceptions import AppException, ConflictException, ForbiddenException, NotFoundException
-from modules.asset.service.domain_membership_service import DomainMembershipService
 from modules.foundation.domain.erp_modules import (
     ADMIN_USER_TYPES,
     ERP_MODULE_KEY_SET,
@@ -300,19 +299,6 @@ class ModuleAdminService:
         if row.role == MODULE_ROLE_ADMIN:
             raise ForbiddenException("Module admins are assigned from Organization users")
         self._modules.delete_assignment(row)
-        if module_key == "service":
-            OrgModuleAdminSyncService(self._db).demote_service_engineer(
-                ctx.tenant_id, user_id, ctx.user_id
-            )
-        if module_key == "crm":
-            OrgModuleAdminSyncService(self._db).demote_crm_member(
-                ctx.tenant_id, user_id, ctx.user_id
-            )
-        if module_key == "assets":
-            # Clear IT/Non-IT domain memberships so list_users sync cannot re-add this member.
-            DomainMembershipService(self._db).deactivate_all_for_user(
-                ctx.tenant_id, user_id, actor_id=ctx.user_id
-            )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="sec_user_module",

@@ -1,7 +1,6 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import { PlatformDashboard } from "@/components/platform/platform-dashboard";
-
-export default function DashboardPage() {
-  return <PlatformDashboard />;
+/** Standalone HRMS: product home is the HR dashboard. */
+export default function HomePage() {
+  redirect("/hr");
 }

@@ -2,11 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  MOCK_DEMO_COMPANY,
-  MOCK_DEMO_EMPLOYEE_CODE,
-  MOCK_DEMO_PASSWORD,
-} from "@/data/mock-ess";
+import { MOCK_DEMO_EMPLOYEE_CODE, MOCK_DEMO_PASSWORD } from "@/data/mock-ess";
 import { IconCheck } from "@/components/icons";
 import { AlertBox } from "@/components/ui";
 import { ApiClientError, authService } from "@/services/api-client";
@@ -17,8 +13,9 @@ import { env } from "@/utils/env";
 const REMEMBER_KEY = "ess.login.remember";
 
 type Remembered = {
-  companyCode: string;
-  employeeCode: string;
+  userId?: string;
+  employeeCode?: string;
+  email?: string;
 };
 
 function loadRemembered(): Remembered | null {
@@ -48,8 +45,7 @@ const labelClass = "block text-sm font-medium text-[#374151]";
 export default function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [companyCode, setCompanyCode] = useState(env.useMock ? MOCK_DEMO_COMPANY : "CT");
-  const [employeeCode, setEmployeeCode] = useState(env.useMock ? MOCK_DEMO_EMPLOYEE_CODE : "CT5354");
+  const [userId, setUserId] = useState(env.useMock ? MOCK_DEMO_EMPLOYEE_CODE : "");
   const [password, setPassword] = useState(env.useMock ? MOCK_DEMO_PASSWORD : "");
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,9 +61,10 @@ export default function LoginForm() {
     if (env.useMock) return;
     const saved = loadRemembered();
     if (!saved) return;
+    const remembered = saved.userId || saved.email || saved.employeeCode || "";
+    if (!remembered) return;
     setRememberMe(true);
-    if (saved.companyCode) setCompanyCode(saved.companyCode);
-    if (saved.employeeCode) setEmployeeCode(saved.employeeCode);
+    setUserId(remembered);
     setPassword("");
   }, []);
 
@@ -84,22 +81,16 @@ export default function LoginForm() {
     setError(null);
     setInfo(null);
 
+    const id = userId.trim();
     try {
-      const login = await authService.essLogin({
-        company_code: companyCode.trim().toUpperCase(),
-        employee_code: employeeCode.trim().toUpperCase(),
-        password: password.trim(),
-      });
+      const login = await authService.login(id, password);
       if (login.data?.mfa_required) {
         setError("MFA is required for this account.");
         return;
       }
 
       if (rememberMe && !env.useMock) {
-        saveRemembered({
-          companyCode: companyCode.trim().toUpperCase(),
-          employeeCode: employeeCode.trim().toUpperCase(),
-        });
+        saveRemembered({ userId: id });
       } else {
         saveRemembered(null);
       }
@@ -108,14 +99,11 @@ export default function LoginForm() {
     } catch (err) {
       if (err instanceof ApiClientError) {
         if (err.status === 403) {
-          setError(
-            err.message ||
-              "Account is locked. Wait and try again or contact HR.",
-          );
+          setError(err.message || "Account is locked. Wait and try again or contact HR.");
         } else if (err.status === 404) {
           setError("Logged in, but no employee profile is linked to this user.");
         } else {
-          setError(err.message || "Invalid company code, employee code, or password.");
+          setError(err.message || "Invalid email, employee code, or password.");
         }
       } else {
         setError("Unable to sign in. Check API connection.");
@@ -127,7 +115,7 @@ export default function LoginForm() {
 
   function onForgotPassword() {
     setError(null);
-    setInfo("Default password is your Employee Code + Date of Birth (DDMMYYYY), e.g. CT535415102003. For password resets, contact your HR team.");
+    setInfo("Password resets are managed by HR. Contact your HR team for help.");
   }
 
   return (
@@ -153,11 +141,9 @@ export default function LoginForm() {
               />
             </svg>
           </div>
-          <h1 className="text-[1.75rem] font-bold tracking-tight text-[#111827]">
-            Welcome Back
-          </h1>
+          <h1 className="text-[1.75rem] font-bold tracking-tight text-[#111827]">Welcome Back</h1>
           <p className="mt-2 max-w-xs text-[0.95rem] leading-relaxed text-[#6b7280]">
-            Log in with your company credentials.
+            Sign in with your work email or employee code.
           </p>
         </div>
 
@@ -166,32 +152,23 @@ export default function LoginForm() {
             <div className="rounded-2xl border border-[#7c5cfc]/20 bg-[#f3efff] px-3.5 py-3 text-xs text-[#5b3fd4]">
               <p className="font-semibold">Demo login</p>
               <p className="mt-0.5 text-[#374151]/80">
-                Company: {MOCK_DEMO_COMPANY} &middot; Code: {MOCK_DEMO_EMPLOYEE_CODE} &middot; Password: {MOCK_DEMO_PASSWORD}
+                {MOCK_DEMO_EMPLOYEE_CODE} · Password: {MOCK_DEMO_PASSWORD}
               </p>
             </div>
           ) : null}
 
           <label className="block space-y-1.5">
-            <span className={labelClass}>Company code</span>
+            <span className={labelClass}>Email or employee code</span>
             <input
               className={fieldClass}
+              name="username"
+              autoComplete="username"
+              autoCapitalize="none"
               suppressHydrationWarning
               required
-              value={companyCode}
-              onChange={(e) => setCompanyCode(e.target.value.toUpperCase())}
-              placeholder="e.g. CT or DEMOCO"
-            />
-          </label>
-
-          <label className="block space-y-1.5">
-            <span className={labelClass}>Employee code</span>
-            <input
-              className={fieldClass}
-              suppressHydrationWarning
-              required
-              value={employeeCode}
-              onChange={(e) => setEmployeeCode(e.target.value.toUpperCase())}
-              placeholder="e.g. CT5354"
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              placeholder="Email or employee code"
             />
           </label>
 
@@ -205,11 +182,8 @@ export default function LoginForm() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="e.g. CT535415102003"
+              placeholder="Password"
             />
-            <p className="mt-1 text-xs text-[#6b7280]">
-              Format: Employee Code + DOB (DDMMYYYY), e.g. <span className="font-mono text-[#7c5cfc]">CT535415102003</span>
-            </p>
           </label>
 
           <div className="flex items-center justify-between gap-3 pt-0.5">
@@ -224,7 +198,7 @@ export default function LoginForm() {
             </label>
             <button
               type="button"
-              className="text-sm font-semibold text-[#7c5cfc] hover:underline"
+              className="cursor-pointer text-sm font-semibold text-[#7c5cfc] hover:underline"
               onClick={onForgotPassword}
             >
               Forgot Password?
@@ -239,9 +213,9 @@ export default function LoginForm() {
           ) : null}
 
           <button
-            className="mt-1 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#7c5cfc] px-4 py-3.5 text-[1rem] font-semibold text-white shadow-[0_10px_24px_rgba(124,92,252,0.35)] transition active:scale-[0.98] hover:bg-[#6d4ff0] disabled:opacity-55 disabled:shadow-none"
+            className="mt-1 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-2xl bg-[#7c5cfc] px-4 py-3.5 text-[1rem] font-semibold text-white shadow-[0_10px_24px_rgba(124,92,252,0.35)] transition active:scale-[0.98] hover:bg-[#6d4ff0] disabled:opacity-55 disabled:shadow-none"
             type="submit"
-            disabled={loading}
+            disabled={loading || !userId.trim() || !password}
           >
             {loading ? (
               "Signing in…"
@@ -256,8 +230,7 @@ export default function LoginForm() {
       </div>
 
       <p className="mt-8 text-center text-sm text-[#6b7280]">
-        Need an account?{" "}
-        <span className="font-semibold text-[#7c5cfc]">Contact HR</span>
+        Need an account? <span className="font-semibold text-[#7c5cfc]">Contact HR</span>
       </p>
     </main>
   );

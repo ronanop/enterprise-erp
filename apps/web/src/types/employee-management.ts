@@ -82,8 +82,8 @@ export type EmployeeDocumentItem = {
   fileDataUrl?: string;
   uploadedBy: string;
   uploadedAt: string;
-  /** Where the file came from - onboarding portal vs HR/manual. */
-  source?: "onboarding" | "bg_check" | "hr" | "manual";
+  /** Where the file came from - onboarding portal vs HR/manual / certificate. */
+  source?: "onboarding" | "bg_check" | "hr" | "manual" | "certificate";
 };
 
 export type EducationEntry = {
@@ -232,6 +232,8 @@ export type EmployeeRecord = {
 export type EmployeeListFilters = {
   branchId: string;
   entityId: string;
+  /** Display organisation label (e.g. Cache, Vyuha.AI). */
+  organisation: string;
   departmentId: string;
   designation: string;
   employmentType: string;

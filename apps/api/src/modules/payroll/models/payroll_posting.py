@@ -48,7 +48,6 @@ class PayPayrollPosting(Base, *PayTransactionMixin):
     credit_total: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     finance_journal_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
-        ForeignKey("finance.fin_journal_header.id", ondelete="SET NULL"),
         nullable=True,
     )
     idempotency_key: Mapped[str] = mapped_column(String(100), nullable=False)

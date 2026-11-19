@@ -8,13 +8,19 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
+from core.exceptions import ConflictException
 from modules.foundation.domain.org_data_scope import has_module_wide_data_access
 from modules.foundation.domain.value_objects import TenantContext
-from modules.hr.models import HrDesignationAssignment, HrEmployment
+from modules.hr.domain.enums import HrEntityType
+from modules.hr.models import HrDesignationAssignment, HrEmployeeProfile, HrEmployment
+from modules.hr.repository.base import utcnow as hr_utcnow
 from modules.hr.service.assignment_service import DesignationAssignmentService
 from modules.hr.service.designation_service import DesignationService
+from modules.hr.service.document_number_service import DocumentNumberService
 from modules.hr.service.employment_service import EmploymentService
+from modules.master_data.models.employee import MasterEmployee
 from modules.master_data.published import EmployeeCommands, EmployeeRead
 from modules.master_data.service.employee_service import EmployeeService
 from modules.organization.models.branch import OrgBranch
@@ -23,6 +29,7 @@ from modules.organization.models.hierarchy import OrgLocation
 from modules.organization.service.branch_service import BranchService
 from modules.organization.service.company_service import CompanyService
 from modules.organization.service.hierarchy_service import DepartmentService, LocationService
+from security.field_crypto import pii_lookup
 
 # Excel Entity / Organisation → canonical key
 ENTITY_ALIASES: dict[str, str] = {
@@ -99,6 +106,66 @@ def _parse_date(raw: str | None) -> date:
     return date.today()
 
 
+def _parse_optional_date(raw: str | None) -> date | None:
+    text = (raw or "").strip()
+    if not text:
+        return None
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(text[:10], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _normalize_gender(raw: str | None) -> str | None:
+    """Map Excel Gender cells to male | female | other.
+
+    Handles common sheet variants: Male/Female, M/F, 1/0, trailing spaces,
+    punctuation, and zero-width characters from Excel copy/paste.
+    """
+    if raw is None:
+        return None
+    text = str(raw).replace("\ufeff", "").strip()
+    if not text:
+        return None
+    # Numbers / codes sometimes come from Excel data validation
+    if text in {"1", "1.0"}:
+        return "male"
+    if text in {"2", "2.0", "0", "0.0"}:
+        return "female"
+    n = _norm(text)
+    n = re.sub(r"[^\w\s\-]+", "", n, flags=re.UNICODE).strip()
+    n = re.sub(r"\s+", " ", n)
+    if not n:
+        return None
+    if n in {"m", "male", "man", "boy", "masculino"}:
+        return "male"
+    if n in {"f", "female", "woman", "girl", "femenino", "feminine"}:
+        return "female"
+    if n in {
+        "o",
+        "other",
+        "non-binary",
+        "nonbinary",
+        "non binary",
+        "nb",
+        "trans",
+        "prefer not to say",
+        "prefer_not_to_say",
+    }:
+        return "other"
+    # Ignore junk placeholders
+    if n in {"-", "na", "n/a", "n.a", "none", "nil", "null", "tbd", "unknown"}:
+        return None
+    # Short codes: M / F / Mo / Fe …
+    if len(n) <= 6 and n.startswith("m") and not n.startswith("miss"):
+        return "male"
+    if len(n) <= 6 and n.startswith("f"):
+        return "female"
+    return n
+
+
 def _entity_key(raw: str | None) -> str | None:
     n = _norm(raw)
     if not n:
@@ -135,7 +202,11 @@ def _effective_emp_prefix(company) -> str:
 
 
 def _match_company_by_emp_code_prefix(emp_code: str, companies: list) -> object | None:
-    """Longest prefix match of Emp Code against entity employee_code_prefix values."""
+    """Longest prefix match of Emp Code against entity employee_code_prefix values.
+
+    Requires the character after the prefix to be a digit (or end of code) so a
+    short prefix like ``CT`` does not steal ``CDPL…`` codes.
+    """
     code = _normalize_prefix(emp_code)
     if not code:
         return None
@@ -144,12 +215,14 @@ def _match_company_by_emp_code_prefix(emp_code: str, companies: list) -> object 
         prefix = _effective_emp_prefix(company)
         if not prefix:
             continue
-        if code.startswith(prefix) and len(code) > len(prefix):
-            # Require at least one digit after prefix when code is PREFIX+digits
-            rest = code[len(prefix) :]
-            if rest.isdigit() or len(rest) >= 1:
-                scored.append((len(prefix), company))
-        elif code == prefix:
+        if code == prefix:
+            scored.append((len(prefix), company))
+            continue
+        if not code.startswith(prefix) or len(code) <= len(prefix):
+            continue
+        rest = code[len(prefix) :]
+        # CT + 5301 OK; CT matching CDPL… rejected (next char is a letter).
+        if rest[:1].isdigit():
             scored.append((len(prefix), company))
     if not scored:
         return None
@@ -170,6 +243,7 @@ class EmployeeImportService:
         self._designations = DesignationService(db)
         self._desig_asg = DesignationAssignmentService(db)
         self._employment = EmploymentService(db)
+        self._doc_numbers = DocumentNumberService(db)
 
     def clear_all_employees(self, ctx: TenantContext) -> dict:
         """Soft-delete employees and liberate unique codes/emails for re-import."""
@@ -199,7 +273,13 @@ class EmployeeImportService:
             "message": f"Soft-deleted {deleted} employee(s). Codes freed for re-import.",
         }
 
-    def import_rows(self, ctx: TenantContext, rows: list[dict]) -> dict:
+    def import_rows(
+        self,
+        ctx: TenantContext,
+        rows: list[dict],
+        *,
+        company_id: str | UUID | None = None,
+    ) -> dict:
         # Make sure Digitech + Technologies companies (and HQ branches) are active
         self._ensure_entity_companies(ctx)
         companies = self._companies.list_companies(ctx)
@@ -213,8 +293,34 @@ class EmployeeImportService:
                 "results": [],
             }
 
+        # After org wipe/re-seed, keep the importer's entity dropdown scopes valid.
+        self._refresh_importer_org_scopes(ctx, companies)
+
         company_by_key = self._index_companies(companies)
         default_company = company_by_key.get("digitech") or companies[0]
+        forced_company = None
+        if company_id:
+            try:
+                cid = company_id if isinstance(company_id, UUID) else UUID(str(company_id))
+            except ValueError:
+                return {
+                    "created": 0,
+                    "updated": 0,
+                    "skipped": len(rows),
+                    "warnings": [],
+                    "errors": [f"Invalid company_id '{company_id}'."],
+                    "results": [],
+                }
+            forced_company = next((c for c in companies if c.id == cid), None)
+            if forced_company is None:
+                return {
+                    "created": 0,
+                    "updated": 0,
+                    "skipped": len(rows),
+                    "warnings": [],
+                    "errors": ["Selected legal entity was not found. Refresh and try again."],
+                    "results": [],
+                }
 
         dept_cache: dict[tuple[UUID, str], UUID] = {}
         desig_cache: dict[tuple[UUID, str], UUID] = {}
@@ -227,6 +333,9 @@ class EmployeeImportService:
         warnings: list[str] = []
         errors: list[str] = []
         results: list[dict] = []
+        gender_saved = 0
+        gender_blank = 0
+        gender_unrecognized = 0
         code_to_id: dict[str, UUID] = {}
 
         for c in companies:
@@ -252,16 +361,19 @@ class EmployeeImportService:
 
                     entity_raw = str(raw.get("entity") or "").strip()
                     org_raw = str(raw.get("organisation") or raw.get("organization") or "").strip()
-                    company = self._resolve_company(
-                        entity_raw,
-                        org_raw,
-                        emp_code,
-                        company_by_key,
-                        companies,
-                        default_company,
-                        warnings,
-                        idx,
-                    )
+                    if forced_company is not None:
+                        company = forced_company
+                    else:
+                        company = self._resolve_company(
+                            entity_raw,
+                            org_raw,
+                            emp_code,
+                            company_by_key,
+                            companies,
+                            default_company,
+                            warnings,
+                            idx,
+                        )
                     branch_id = self._default_branch(ctx, company.id, branch_by_company)
                     first_name, last_name = _split_name(name)
 
@@ -272,6 +384,21 @@ class EmployeeImportService:
                     email = str(raw.get("email") or "").strip()
                     mobile = str(raw.get("mobile") or "").strip() or "0000000000"
                     joining = _parse_date(str(raw.get("joining_date") or ""))
+                    gender_raw = str(raw.get("gender") or "").strip()
+                    gender = _normalize_gender(gender_raw)
+                    dob = _parse_optional_date(
+                        str(raw.get("dob") or raw.get("date_of_birth") or "")
+                    )
+                    if gender:
+                        gender_saved += 1
+                    elif gender_raw:
+                        gender_unrecognized += 1
+                        if gender_unrecognized <= 5:
+                            warnings.append(
+                                f"Row {idx} ({emp_code}): Gender '{gender_raw}' not recognized — skipped"
+                            )
+                    else:
+                        gender_blank += 1
 
                     if not email:
                         email = f"{emp_code.lower().replace(' ', '')}@import.cache.local"
@@ -297,30 +424,74 @@ class EmployeeImportService:
                             and existing.email
                             and "@import.cache.local" not in str(existing.email)
                         ):
-                            next_email = existing.email
+                            next_email = str(existing.email)
 
-                        # Move company if Entity changed since last import
-                        if existing.company_id != company.id:
-                            EmployeeCommands(self._db).move_company(
-                                existing.id,
-                                company_id=company.id,
-                                branch_id=branch_id,
-                                updated_by=ctx.user_id,
+                        next_email, email_note = self._resolve_import_email(
+                            company_id=company.id,
+                            preferred=next_email,
+                            emp_code=emp_code,
+                            exclude_id=existing.id,
+                        )
+                        if email_note:
+                            warnings.append(f"Row {idx} ({emp_code}): {email_note}")
+
+                        # Company move: free email + EMPL doc in *target* before company_id flips
+                        # (uk_master_employee_company_email / uk_hr_empl_company_doc).
+                        moved_company = existing.company_id != company.id
+                        if moved_company:
+                            next_email = self._prepare_company_move(
+                                ctx,
+                                employee_id=existing.id,
+                                target_company_id=company.id,
+                                target_branch_id=branch_id,
+                                preferred_email=next_email,
+                                emp_code=emp_code,
+                                row_idx=idx,
+                                warnings=warnings,
                             )
 
-                        self._employees.update_employee(
-                            ctx,
-                            existing.id,
-                            branch_id=branch_id,
-                            department_id=dept_id,
-                            first_name=first_name,
-                            last_name=last_name,
-                            email=next_email,
-                            mobile=mobile if mobile != "0000000000" else existing.mobile,
-                            designation=designation_name,
-                            date_of_joining=joining,
-                            status="active",
-                        )
+                        update_fields: dict = {
+                            "branch_id": branch_id,
+                            "department_id": dept_id,
+                            "first_name": first_name,
+                            "last_name": last_name,
+                            "mobile": mobile if mobile != "0000000000" else existing.mobile,
+                            "designation": designation_name,
+                            "date_of_joining": joining,
+                            "status": "active",
+                        }
+                        # After a company move email is already forced on the ORM row.
+                        # Same-company updates still go through EmployeeService (with fallback).
+                        if not moved_company and next_email:
+                            current_email = str(existing.email or "")
+                            if next_email != current_email:
+                                if self._email_available(
+                                    company.id, next_email, exclude_id=existing.id
+                                ):
+                                    update_fields["email"] = next_email
+                                else:
+                                    warnings.append(
+                                        f"Row {idx} ({emp_code}): kept existing email — "
+                                        f"'{next_email}' already used in this company"
+                                    )
+
+                        try:
+                            self._employees.update_employee(ctx, existing.id, **update_fields)
+                        except ConflictException as exc:
+                            if "email" not in update_fields:
+                                raise
+                            update_fields.pop("email", None)
+                            fallback, note = self._resolve_import_email(
+                                company_id=company.id,
+                                preferred=f"{emp_code.lower()}@import.cache.local",
+                                emp_code=emp_code,
+                                exclude_id=existing.id,
+                            )
+                            self._force_employee_email(existing.id, fallback)
+                            warnings.append(
+                                f"Row {idx} ({emp_code}): {note or exc} — used {fallback}"
+                            )
+                            self._employees.update_employee(ctx, existing.id, **update_fields)
                         emp_id = existing.id
                         self._upsert_employment(
                             ctx,
@@ -330,9 +501,26 @@ class EmployeeImportService:
                             joining=joining,
                             work_location=work_location,
                         )
+                        self._upsert_profile(
+                            ctx,
+                            company_id=company.id,
+                            branch_id=branch_id,
+                            employee_id=emp_id,
+                            gender=gender,
+                            date_of_birth=dob,
+                            raw=raw,
+                        )
                         updated += 1
                         action = "updated"
                     else:
+                        create_email, email_note = self._resolve_import_email(
+                            company_id=company.id,
+                            preferred=email,
+                            emp_code=emp_code,
+                            exclude_id=None,
+                        )
+                        if email_note:
+                            warnings.append(f"Row {idx} ({emp_code}): {email_note}")
                         created_emp = self._employees.create_employee(
                             ctx,
                             company_id=company.id,
@@ -341,7 +529,7 @@ class EmployeeImportService:
                             employee_code=emp_code,
                             first_name=first_name,
                             last_name=last_name,
-                            email=email,
+                            email=create_email,
                             mobile=mobile,
                             designation=designation_name,
                             date_of_joining=joining,
@@ -356,6 +544,15 @@ class EmployeeImportService:
                             employee_id=emp_id,
                             joining=joining,
                             work_location=work_location,
+                        )
+                        self._upsert_profile(
+                            ctx,
+                            company_id=company.id,
+                            branch_id=branch_id,
+                            employee_id=emp_id,
+                            gender=gender,
+                            date_of_birth=dob,
+                            raw=raw,
                         )
                         created += 1
                         action = "created"
@@ -394,6 +591,7 @@ class EmployeeImportService:
                 skipped += 1
                 errors.append(f"Row {idx}: {exc}")
 
+        tagged_manager_ids: set = set()
         for emp_id, emp_code, manager_raw in pending_managers:
             mgr_id = self._resolve_manager(manager_raw, code_to_id)
             if not mgr_id:
@@ -411,10 +609,36 @@ class EmployeeImportService:
                         emp_id,
                         reporting_manager_id=mgr_id,
                     )
+                    tagged_manager_ids.add(mgr_id)
             except Exception as exc:  # noqa: BLE001
                 warnings.append(f"{emp_code}: manager link failed - {exc}")
 
+        # Anyone assigned as a reporting manager gets the Manager people-role flag.
+        for mgr_id in tagged_manager_ids:
+            mgr = self._db.get(MasterEmployee, mgr_id)
+            if mgr is None or getattr(mgr, "is_deleted", False):
+                continue
+            if getattr(mgr, "is_manager", False):
+                continue
+            mgr.is_manager = True
+            mgr.updated_at = hr_utcnow()
+            mgr.updated_by = ctx.user_id
+            mgr.version = int(getattr(mgr, "version", 1) or 1) + 1
+
         self._db.flush()
+        if gender_saved:
+            warnings.insert(
+                0,
+                f"Gender saved on {gender_saved} employee profile(s).",
+            )
+        if gender_blank:
+            warnings.append(
+                f"{gender_blank} row(s) had empty Gender — map the Gender column and re-import those rows.",
+            )
+        if gender_unrecognized > 5:
+            warnings.append(
+                f"{gender_unrecognized - 5} more row(s) had unrecognized Gender values.",
+            )
         return {
             "created": created,
             "updated": updated,
@@ -423,6 +647,28 @@ class EmployeeImportService:
             "errors": errors[:200],
             "results": results,
         }
+
+    def _refresh_importer_org_scopes(self, ctx: TenantContext, companies: list) -> None:
+        """Replace stale user org scopes (pointing at deleted companies) with live entities."""
+        from modules.organization.repository.org_scope_repository import OrgScopeRepository
+
+        if not companies or not ctx.user_id:
+            return
+        scopes = OrgScopeRepository(self._db)
+        existing = scopes.list_user_scopes(ctx.user_id, ctx.tenant_id)
+        live_ids = {c.id for c in companies}
+        if existing and all(s.company_id in live_ids for s in existing):
+            return
+        default = next(
+            (c.id for c in companies if "digitech" in _norm(getattr(c, "company_name", ""))),
+            companies[0].id,
+        )
+        scopes.replace_company_scopes(
+            ctx,
+            user_id=ctx.user_id,
+            company_ids=[c.id for c in companies],
+            default_company_id=default,
+        )
 
     def _ensure_entity_companies(self, ctx: TenantContext) -> None:
         """Undelete/create Cache Digitech + Cache Technologies so Entity column can map."""
@@ -611,20 +857,55 @@ class EmployeeImportService:
         if company_id in cache:
             return cache[company_id]
         branches = self._branches.list_branches(ctx, company_id=company_id)
-        if not branches:
-            raise ValueError(f"No branch found for company {company_id}")
-        pick = next(
-            (
-                b
-                for b in branches
-                if "hq" in _norm(b.branch_name)
-                or "head" in _norm(b.branch_name)
-                or "kailash" in _norm(b.branch_name)
-            ),
-            branches[0],
+        if branches:
+            pick = next(
+                (
+                    b
+                    for b in branches
+                    if "hq" in _norm(b.branch_name)
+                    or "head" in _norm(b.branch_name)
+                    or "kailash" in _norm(b.branch_name)
+                ),
+                branches[0],
+            )
+            cache[company_id] = pick.id
+            return pick.id
+
+        # Reactivate a soft-deleted branch if present (common after org cleanup).
+        existing = self._db.scalar(
+            select(OrgBranch).where(
+                OrgBranch.tenant_id == ctx.tenant_id,
+                OrgBranch.company_id == company_id,
+            ).order_by(OrgBranch.is_deleted.asc(), OrgBranch.created_at.asc())
         )
-        cache[company_id] = pick.id
-        return pick.id
+        if existing is not None:
+            existing.is_deleted = False
+            existing.deleted_at = None
+            existing.deleted_by = None
+            existing.status = "active"
+            existing.updated_by = ctx.user_id
+            self._db.flush()
+            cache[company_id] = existing.id
+            return existing.id
+
+        # Auto-create Head Office so import does not fail when Org Setup has no branch yet.
+        branch = OrgBranch(
+            id=uuid4(),
+            tenant_id=ctx.tenant_id,
+            company_id=company_id,
+            branch_code="HQ",
+            branch_name="Head Office",
+            branch_type="head_office",
+            city="Bengaluru",
+            country_code="IN",
+            status="active",
+            created_by=ctx.user_id,
+            updated_by=ctx.user_id,
+        )
+        self._db.add(branch)
+        self._db.flush()
+        cache[company_id] = branch.id
+        return branch.id
 
     def _ensure_department(
         self,
@@ -634,18 +915,16 @@ class EmployeeImportService:
         name: str,
         cache: dict[tuple[UUID, str], UUID],
     ) -> UUID:
-        key = (company_id, _norm(name))
+        """Reuse one department per normalized name tenant-wide — keep Org Setup list unique."""
+        # Cache key is name-only so Digitech/Tech imports share Sales/HR/etc.
+        key = (UUID(int=0), _norm(name))
         if key in cache:
             return cache[key]
-        existing = self._departments.list_departments(ctx, company_id=company_id, branch_id=branch_id)
-        for d in existing:
-            if _norm(d.department_name) == key[1]:
-                cache[key] = d.id
-                return d.id
-        for d in self._departments.list_departments(ctx, company_id=company_id):
-            if _norm(d.department_name) == key[1] and d.branch_id == branch_id:
-                cache[key] = d.id
-                return d.id
+        for d in self._departments.list_departments(ctx):
+            if _norm(d.department_name) != key[1]:
+                continue
+            cache[key] = d.id
+            return d.id
         created = self._departments.create_department(
             ctx,
             company_id=company_id,
@@ -766,6 +1045,184 @@ class EmployeeImportService:
         cache[key] = pair
         return pair
 
+    def _email_available(
+        self, company_id: UUID, email: str, *, exclude_id: UUID | None
+    ) -> bool:
+        key = pii_lookup(email)
+        if not key:
+            return True
+        stmt = select(MasterEmployee.id).where(
+            MasterEmployee.company_id == company_id,
+            MasterEmployee.email_lookup == key,
+            MasterEmployee.is_deleted.is_(False),
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(MasterEmployee.id != exclude_id)
+        return self._db.scalar(stmt) is None
+
+    def _resolve_import_email(
+        self,
+        *,
+        company_id: UUID,
+        preferred: str,
+        emp_code: str,
+        exclude_id: UUID | None,
+    ) -> tuple[str, str | None]:
+        """Return an email that won't violate uk_master_employee_company_email."""
+        preferred = (preferred or "").strip()
+        if preferred and self._email_available(company_id, preferred, exclude_id=exclude_id):
+            return preferred, None
+        # Prefer stable per-code placeholder first, then a unique suffix.
+        candidates = [
+            f"{emp_code.lower().replace(' ', '')}@import.cache.local",
+            f"{emp_code.lower().replace(' ', '')}.{uuid4().hex[:8]}@import.cache.local",
+        ]
+        for candidate in candidates:
+            if self._email_available(company_id, candidate, exclude_id=exclude_id):
+                note = None
+                if preferred:
+                    note = (
+                        f"email '{preferred}' already used in company — "
+                        f"saved as {candidate}"
+                    )
+                return candidate, note
+        # Extremely unlikely fallback
+        fallback = f"import-{uuid4().hex}@import.cache.local"
+        return fallback, f"email collision — saved as {fallback}"
+
+    def _force_employee_email(self, employee_id: UUID, email: str) -> None:
+        """Set email + lookup without EmployeeService source-company duplicate checks."""
+        row = self._db.get(MasterEmployee, employee_id)
+        if row is None:
+            return
+        row.email = email
+        key = pii_lookup(email)
+        if key:
+            row.email_lookup = key
+        flag_modified(row, "email")
+        self._db.flush()
+
+    def _employment_doc_taken(
+        self, company_id: UUID, document_number: str, *, exclude_id: UUID | None
+    ) -> bool:
+        stmt = select(HrEmployment.id).where(
+            HrEmployment.company_id == company_id,
+            HrEmployment.document_number == document_number,
+            HrEmployment.is_deleted.is_(False),
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(HrEmployment.id != exclude_id)
+        return self._db.scalar(stmt) is not None
+
+    def _allocate_employment_doc(
+        self,
+        ctx: TenantContext,
+        company_id: UUID,
+        *,
+        exclude_id: UUID | None,
+        avoid: str | None = None,
+    ) -> str:
+        """Allocate EMPL doc unique in company; never reuse ``avoid`` (keeps ORM dirty)."""
+        for _ in range(8):
+            doc = self._doc_numbers.generate(
+                HrEntityType.EMPLOYMENT,
+                company_id,
+                HrEmployment,
+                "document_number",
+                tenant_id=ctx.tenant_id,
+            )
+            if doc != avoid and not self._employment_doc_taken(
+                company_id, doc, exclude_id=exclude_id
+            ):
+                return doc
+        # Guaranteed-unique fallback if sequence is stuck / colliding
+        return f"EMPL-{uuid4().hex[:12].upper()}"
+
+    def _reassign_employment_company(
+        self,
+        ctx: TenantContext,
+        *,
+        employee_id: UUID,
+        company_id: UUID,
+        branch_id: UUID,
+    ) -> None:
+        """Move hr_employment to target company with a fresh document_number (direct ORM)."""
+        rows = list(
+            self._db.scalars(
+                select(HrEmployment).where(
+                    HrEmployment.employee_id == employee_id,
+                    HrEmployment.is_deleted.is_(False),
+                )
+            ).all()
+        )
+        for row in rows:
+            if row.company_id == company_id and row.branch_id == branch_id:
+                continue
+            new_doc = self._allocate_employment_doc(
+                ctx,
+                company_id,
+                exclude_id=row.id,
+                avoid=str(row.document_number or ""),
+            )
+            row.document_number = new_doc
+            row.company_id = company_id
+            row.branch_id = branch_id
+            row.updated_at = hr_utcnow()
+            row.updated_by = ctx.user_id
+            flag_modified(row, "document_number")
+            flag_modified(row, "company_id")
+            flag_modified(row, "branch_id")
+        if rows:
+            self._db.flush()
+
+    def _prepare_company_move(
+        self,
+        ctx: TenantContext,
+        *,
+        employee_id: UUID,
+        target_company_id: UUID,
+        target_branch_id: UUID,
+        preferred_email: str,
+        emp_code: str,
+        row_idx: int,
+        warnings: list[str],
+    ) -> str:
+        """Make email + employment docs safe for target company, then flip master company_id."""
+        move_email, note = self._resolve_import_email(
+            company_id=target_company_id,
+            preferred=preferred_email,
+            emp_code=emp_code,
+            exclude_id=employee_id,
+        )
+        if note:
+            warnings.append(f"Row {row_idx} ({emp_code}): {note}")
+
+        row = self._db.get(MasterEmployee, employee_id)
+        current_email = str(row.email) if row is not None and row.email else ""
+        if move_email != current_email or (
+            row is not None
+            and not self._email_available(
+                target_company_id, current_email, exclude_id=employee_id
+            )
+        ):
+            self._force_employee_email(employee_id, move_email)
+
+        # Renumber employment BEFORE master company flip so a partial flush can't
+        # land (company_id, old EMPL-n) against an existing target row.
+        self._reassign_employment_company(
+            ctx,
+            employee_id=employee_id,
+            company_id=target_company_id,
+            branch_id=target_branch_id,
+        )
+        EmployeeCommands(self._db).move_company(
+            employee_id,
+            company_id=target_company_id,
+            branch_id=target_branch_id,
+            updated_by=ctx.user_id,
+        )
+        return move_email
+
     def _upsert_employment(
         self,
         ctx: TenantContext,
@@ -782,15 +1239,31 @@ class EmployeeImportService:
         )
         existing = self._db.scalar(stmt)
         if existing:
+            # Company remaps are handled in _prepare_company_move (forced new EMPL doc).
+            # Here only refresh joining / location / ensure company still matches.
+            if existing.company_id != company_id:
+                self._reassign_employment_company(
+                    ctx,
+                    employee_id=employee_id,
+                    company_id=company_id,
+                    branch_id=branch_id,
+                )
+                existing = self._db.scalar(stmt)
+            if existing is None:
+                return
             fields: dict = {
                 "date_of_joining": joining,
                 "status": "active",
-                "company_id": company_id,
                 "branch_id": branch_id,
             }
             if work_location:
                 fields["work_location_text"] = work_location
-            self._employment.update(ctx, existing.id, **fields)
+            # Prefer direct ORM so HR scope filters can't miss a mid-move row.
+            for k, v in fields.items():
+                setattr(existing, k, v)
+            existing.updated_at = hr_utcnow()
+            existing.updated_by = ctx.user_id
+            self._db.flush()
             return
         self._employment.create(
             ctx,
@@ -804,6 +1277,152 @@ class EmployeeImportService:
             lifecycle_source="bulk_import",
             work_location_text=work_location,
         )
+
+    def _upsert_profile(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        employee_id: UUID,
+        gender: str | None,
+        date_of_birth: date | None,
+        raw: dict | None = None,
+    ) -> None:
+        """Persist Excel personal / ID / bank fields onto hr_employee_profile.
+
+        Uses direct ORM (not EmployeeProfileService) so bulk import stays light and
+        does not trip company-scope / enrich paths mid-batch.
+        """
+        raw = raw or {}
+        marital = str(raw.get("marital_status") or "").strip() or None
+        blood = str(raw.get("blood_group") or "").strip() or None
+        nationality = str(raw.get("nationality") or "").strip() or None
+        aadhaar = str(raw.get("aadhaar") or "").strip() or None
+        pan = str(raw.get("pan") or "").strip() or None
+        uan = str(raw.get("uan") or "").strip() or None
+        bank_name = str(raw.get("bank_name") or "").strip() or None
+        bank_account = str(raw.get("bank_account") or "").strip() or None
+        bank_ifsc = str(raw.get("bank_ifsc") or "").strip() or None
+        bank_holder = str(raw.get("bank_holder") or "").strip() or None
+        emergency_name = str(raw.get("emergency_name") or "").strip() or None
+        emergency_phone = str(raw.get("emergency_phone") or "").strip() or None
+        current_address = str(raw.get("current_address") or "").strip()
+        permanent_address = str(raw.get("permanent_address") or "").strip()
+        current_json = {"line1": current_address} if current_address else None
+        permanent_json = {"line1": permanent_address} if permanent_address else None
+
+        has_any = any(
+            [
+                gender,
+                date_of_birth is not None,
+                marital,
+                blood,
+                nationality,
+                aadhaar,
+                pan,
+                uan,
+                bank_name,
+                bank_account,
+                bank_ifsc,
+                bank_holder,
+                emergency_name,
+                emergency_phone,
+                current_json,
+                permanent_json,
+            ]
+        )
+        if not has_any:
+            return
+
+        existing = self._db.scalar(
+            select(HrEmployeeProfile).where(
+                HrEmployeeProfile.employee_id == employee_id,
+                HrEmployeeProfile.is_deleted.is_(False),
+            )
+        )
+        if existing is None:
+            existing = self._db.scalar(
+                select(HrEmployeeProfile).where(HrEmployeeProfile.employee_id == employee_id)
+            )
+            if existing is not None and existing.is_deleted:
+                existing.is_deleted = False
+                existing.deleted_at = None
+                existing.deleted_by = None
+
+        def _apply(row: HrEmployeeProfile) -> None:
+            row.company_id = company_id
+            row.branch_id = branch_id
+            row.status = "active"
+            if gender:
+                row.gender = gender
+            if date_of_birth is not None:
+                row.date_of_birth = date_of_birth
+            if marital:
+                row.marital_status = marital.lower()
+            if blood:
+                row.blood_group = blood.upper()
+            if nationality:
+                row.nationality = nationality
+            if aadhaar:
+                row.aadhaar_number = aadhaar
+            if pan:
+                row.pan_number = pan.upper()
+            if uan:
+                row.uan_number = uan
+            if bank_name:
+                row.bank_name = bank_name
+            if bank_account:
+                row.bank_account_number = bank_account
+            if bank_ifsc:
+                row.bank_ifsc = bank_ifsc.upper()
+            if bank_holder:
+                row.bank_account_holder = bank_holder
+            if emergency_name:
+                row.emergency_contact_name = emergency_name
+            if emergency_phone:
+                row.emergency_contact_mobile = emergency_phone
+            if current_json:
+                row.current_address_json = current_json
+            if permanent_json:
+                row.permanent_address_json = permanent_json
+            row.updated_at = hr_utcnow()
+            row.updated_by = ctx.user_id
+            row.version = int(row.version or 1) + 1
+
+        if existing is not None:
+            _apply(existing)
+            self._db.flush()
+            return
+
+        row = HrEmployeeProfile(
+            id=uuid4(),
+            tenant_id=ctx.tenant_id,
+            company_id=company_id,
+            branch_id=branch_id,
+            employee_id=employee_id,
+            gender=gender,
+            date_of_birth=date_of_birth,
+            marital_status=marital.lower() if marital else None,
+            blood_group=blood.upper() if blood else None,
+            nationality=nationality,
+            aadhaar_number=aadhaar,
+            pan_number=pan.upper() if pan else None,
+            uan_number=uan,
+            bank_name=bank_name,
+            bank_account_number=bank_account,
+            bank_ifsc=bank_ifsc.upper() if bank_ifsc else None,
+            bank_account_holder=bank_holder,
+            emergency_contact_name=emergency_name,
+            emergency_contact_mobile=emergency_phone,
+            current_address_json=current_json,
+            permanent_address_json=permanent_json,
+            status="active",
+            created_by=ctx.user_id,
+            updated_by=ctx.user_id,
+        )
+        self._db.add(row)
+        self._db.flush()
 
     def _resolve_manager(self, manager_raw: str, code_to_id: dict[str, UUID]) -> UUID | None:
         raw = manager_raw.strip()

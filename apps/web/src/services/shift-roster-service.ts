@@ -23,7 +23,11 @@ import type {
   ShiftTypeCode,
   WeeklyOffRule,
 } from "@/types/shift-roster-management";
-import { DEFAULT_SHIFT_EXTENSION } from "@/types/shift-roster-management";
+import {
+  coerceShiftExtension,
+  DEFAULT_SHIFT_EXTENSION,
+  normalizeShiftWeeklyOffRules,
+} from "@/types/shift-roster-management";
 import { getStoredOrgContext } from "@/lib/org-context-storage";
 import { devError, devWarn } from "@/lib/dev-log";
 
@@ -365,7 +369,7 @@ async function loadShiftRosterDirectoryInner(): Promise<ShiftRosterDirectory> {
 
   const shifts = shiftRows.map((row) => {
     const id = String(row.id);
-    return mergeShift(row, shiftExts[id] ?? { ...DEFAULT_SHIFT_EXTENSION });
+    return mergeShift(row, coerceShiftExtension(shiftExts[id]));
   });
 
   const shiftById = new Map(shifts.map((s) => [s.id, s]));
@@ -566,14 +570,70 @@ export function computeShiftDashboardStats(dir: ShiftRosterDirectory) {
   const activeShifts = dir.shifts.filter((s) => s.status === "active").length;
   const assignedEmployees = new Set(dir.assignments.map((a) => a.employeeId)).size;
   const nightShifts = dir.shifts.filter((s) => s.shiftType === "night" || s.isOvernight).length;
+  const shiftsWithWeeklyOff = dir.shifts.filter(
+    (s) => normalizeShiftWeeklyOffRules(s.extension).length > 0,
+  ).length;
   return {
     totalShifts: dir.shifts.length,
     activeShifts,
     employeesAssigned: assignedEmployees,
     rotations: dir.rotations.length,
     nightShifts,
-    weeklyOffRules: dir.weeklyOffRules.length,
+    weeklyOffRules: shiftsWithWeeklyOff,
   };
+}
+
+/** Weekly-off for an employee on a date, from their assigned (or rotated) shift. */
+export function isEmployeeWeeklyOffOnDate(
+  dir: ShiftRosterDirectory,
+  date: string,
+  employeeId: string,
+): boolean {
+  const assign = dir.assignments.find(
+    (a) =>
+      a.employeeId === employeeId &&
+      a.effectiveFrom <= date &&
+      (!a.effectiveTo || a.effectiveTo >= date) &&
+      a.status !== "inactive",
+  );
+  if (assign) {
+    const sh = dir.shifts.find((s) => s.id === assign.shiftId);
+    const ext = coerceShiftExtension(sh?.extension);
+    return isWeeklyOffDay(date, normalizeShiftWeeklyOffRules(ext), {
+      alternateSaturdayStart: ext.weeklyOffAlternateSaturdayStart || null,
+    });
+  }
+
+  const rot = dir.rotations.find(
+    (r) =>
+      r.status === "active" &&
+      r.employeeIds.includes(employeeId) &&
+      r.effectiveFrom &&
+      r.effectiveFrom <= date &&
+      r.sequence.length > 0,
+  );
+  if (rot) {
+    const start = new Date(`${rot.effectiveFrom}T12:00:00`);
+    const cur = new Date(`${date}T12:00:00`);
+    const dayDiff = Math.floor((cur.getTime() - start.getTime()) / 86_400_000);
+    if (dayDiff >= 0) {
+      const token = String(rot.sequence[dayDiff % rot.sequence.length] ?? "").trim();
+      if (/^(off|wo|weekly.?off)$/i.test(token)) return true;
+      const sh = dir.shifts.find(
+        (s) =>
+          s.shiftCode.toLowerCase() === token.toLowerCase() ||
+          s.shiftName.toLowerCase() === token.toLowerCase() ||
+          s.shiftType.toLowerCase() === token.toLowerCase(),
+      );
+      if (sh) {
+        const ext = coerceShiftExtension(sh.extension);
+        return isWeeklyOffDay(date, normalizeShiftWeeklyOffRules(ext), {
+          alternateSaturdayStart: ext.weeklyOffAlternateSaturdayStart || null,
+        });
+      }
+    }
+  }
+  return false;
 }
 
 export function filterShifts(shifts: ShiftRecord[], query: string, filters: ShiftFilters): ShiftRecord[] {
@@ -1001,9 +1061,7 @@ function resolveCellValue(
   }
   if (holiday) return "HO";
 
-  const weeklyOff = isWeeklyOffDay(date, dir.weeklyOffRules, {
-    alternateSaturdayStart: dir.weeklyOffAlternateSaturdayStart || null,
-  });
+  const weeklyOff = isEmployeeWeeklyOffOnDate(dir, date, employeeId);
 
   const assign = dir.assignments.find(
     (a) =>
@@ -1019,11 +1077,11 @@ function resolveCellValue(
 
   const rotated = resolveRotationCode(dir, date, employeeId);
   if (rotated) {
+    if (rotated === "WO") return "WO";
     if (weeklyOff && rotated !== "HO") return "WO";
     return rotated;
   }
 
-  if (weeklyOff) return "WO";
   return "";
 }
 

@@ -1,4 +1,4 @@
-import { readSheet } from "read-excel-file/browser";
+import readXlsxFile, { readSheet } from "read-excel-file/browser";
 import writeXlsxFile from "write-excel-file/browser";
 
 export type SpreadsheetRow = Record<string, string | number | boolean | null | undefined>;
@@ -182,7 +182,12 @@ function cellToString(value: unknown): string {
 }
 
 function matrixToStringRows(matrix: unknown[][]): string[][] {
-  return matrix.map((row) => row.map((cell) => cellToString(cell)));
+  const rows = matrix.map((row) => row.map((cell) => cellToString(cell)));
+  const width = rows.reduce((w, row) => Math.max(w, row.length), 0);
+  if (width === 0) return rows;
+  return rows.map((row) =>
+    row.length >= width ? row : [...row, ...Array.from({ length: width - row.length }, () => "")],
+  );
 }
 
 function matrixToObjects(matrix: unknown[][]): Record<string, unknown>[] {
@@ -220,6 +225,83 @@ export function matrixToCsv(matrix: string[][]): string {
 /** Parse CSV or XLSX (first sheet) into a string matrix (including header row). */
 export async function parseSpreadsheetMatrix(file: File): Promise<string[][]> {
   return parseSpreadsheetFileAsMatrix(file);
+}
+
+export type SpreadsheetSheetMatrix = {
+  sheet: string;
+  matrix: string[][];
+};
+
+/** Sheet names for Excel; CSV returns a single synthetic sheet. */
+export async function listSpreadsheetSheetNames(file: File): Promise<string[]> {
+  const name = file.name.toLowerCase();
+  if (name.endsWith(".csv") || file.type === "text/csv") return ["CSV"];
+  if (name.endsWith(".xlsx") || name.endsWith(".xlsm")) {
+    const sheets = await readXlsxFile(file);
+    return sheets.map((s) => s.sheet);
+  }
+  throw new Error("Unsupported file type. Please upload a .csv or .xlsx file.");
+}
+
+/** Read one or more sheets. Omit `sheetNames` to read every sheet (CSV = one sheet). */
+export async function parseSpreadsheetSheetsAsMatrices(
+  file: File,
+  sheetNames?: string[],
+): Promise<SpreadsheetSheetMatrix[]> {
+  const name = file.name.toLowerCase();
+
+  if (name.endsWith(".csv") || file.type === "text/csv") {
+    const buffer = await file.arrayBuffer();
+    const text = new TextDecoder("utf-8").decode(buffer);
+    return [{ sheet: "CSV", matrix: parseCsvToMatrix(text) }];
+  }
+
+  if (name.endsWith(".xlsx") || name.endsWith(".xlsm")) {
+    const sheets = await readXlsxFile(file);
+    const wanted = sheetNames?.length
+      ? new Set(sheetNames.map((s) => s.toLowerCase()))
+      : null;
+    const picked = wanted
+      ? sheets.filter((s) => wanted.has(s.sheet.toLowerCase()))
+      : sheets;
+    if (!picked.length) {
+      throw new Error("No matching Excel sheet found. Select at least one sheet.");
+    }
+    return picked.map((s) => ({
+      sheet: s.sheet,
+      matrix: matrixToStringRows(s.data),
+    }));
+  }
+
+  throw new Error("Unsupported file type. Please upload a .csv or .xlsx file.");
+}
+
+/**
+ * Merge multiple sheet matrices into one. Uses the first sheet's header row as
+ * canonical columns; later sheets align by case-insensitive header name.
+ */
+export function mergeSpreadsheetMatrices(sheets: SpreadsheetSheetMatrix[]): string[][] {
+  if (!sheets.length) return [];
+  if (sheets.length === 1) return sheets[0].matrix;
+
+  const first = sheets[0].matrix;
+  if (!first.length) return [];
+  const headers = first[0];
+  const out: string[][] = [headers];
+
+  for (const { matrix } of sheets) {
+    if (!matrix.length) continue;
+    const srcHeaders = matrix[0];
+    const indexMap = headers.map((h) => {
+      const needle = h.trim().toLowerCase();
+      return srcHeaders.findIndex((s) => s.trim().toLowerCase() === needle);
+    });
+    for (const row of matrix.slice(1)) {
+      if (!row.some((c) => c !== "")) continue;
+      out.push(indexMap.map((srcIdx) => (srcIdx >= 0 ? row[srcIdx] ?? "" : "")));
+    }
+  }
+  return out;
 }
 
 export async function parseSpreadsheetFileAsMatrix(file: File): Promise<string[][]> {

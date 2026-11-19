@@ -140,17 +140,13 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
-function writeJson(key: string, value: unknown): void {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (err) {
-    const name = err instanceof DOMException ? err.name : "";
-    if (name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED") {
-      throw err;
-    }
-    throw err;
-  }
+function isQuotaError(err: unknown): boolean {
+  if (!(err instanceof DOMException)) return false;
+  return (
+    err.name === "QuotaExceededError" ||
+    err.name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+    err.code === 22
+  );
 }
 
 /** Strip oversized data: URLs so localStorage metadata stays under quota. */
@@ -159,15 +155,152 @@ function docsForLocalStorage(rows: AtsDocument[]): AtsDocument[] {
     const content = (d.contentDataUrl || "").trim();
     const url = (d.url || "").trim();
     const next = { ...d };
-    if (isOversizedDocContent(content)) {
+    if (isOversizedDocContent(content) || content.startsWith("data:")) {
       delete next.contentDataUrl;
     }
-    if (isOversizedDocContent(url) || (url.startsWith("data:") && url === content)) {
-      if (isOversizedDocContent(url)) delete next.url;
-      else if (!next.url || isOversizedDocContent(next.url)) delete next.url;
+    if (isOversizedDocContent(url) || url.startsWith("data:")) {
+      delete next.url;
     }
     return next;
   });
+}
+
+function candidatesForLocalStorage(rows: AtsCandidate[]): AtsCandidate[] {
+  return rows.map((c) => {
+    const resumeUrl = (c.resumeUrl || "").trim();
+    if (!resumeUrl.startsWith("data:") && !isOversizedDocContent(resumeUrl)) {
+      return c;
+    }
+    return { ...c, resumeUrl: "" };
+  });
+}
+
+function offersForLocalStorage(rows: AtsOffer[]): AtsOffer[] {
+  return rows.map((o) => ({
+    ...o,
+    joiningDate: toDateInputValue(o.joiningDate) || o.joiningDate || "",
+    // Keep letter body short in local cache — PDFs live in IndexedDB.
+    mergedPreview: (o.mergedPreview || "").slice(0, 4000),
+  }));
+}
+
+function appsForLocalStorage(rows: PipelineApplication[]): PipelineApplication[] {
+  return rows.map((a) => ({
+    ...a,
+    notes: (a.notes || "").slice(0, 4000),
+    stageHistory: (a.stageHistory || []).slice(-20),
+  }));
+}
+
+/** Drop bulky ATS cache / tag keys so a metadata write can succeed. */
+function freeAtsLocalStorageQuota(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const docs = readJson<AtsDocument[]>(DOCS_KEY, []);
+    localStorage.setItem(DOCS_KEY, JSON.stringify(docsForLocalStorage(docs)));
+  } catch {
+    try {
+      localStorage.removeItem(DOCS_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+  try {
+    const offers = readJson<AtsOffer[]>(OFFERS_KEY, []);
+    localStorage.setItem(
+      OFFERS_KEY,
+      JSON.stringify(
+        offers.map((o) => ({
+          ...o,
+          mergedPreview: "",
+        })),
+      ),
+    );
+  } catch {
+    try {
+      localStorage.removeItem(OFFERS_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+  try {
+    const cands = readJson<AtsCandidate[]>(CANDS_KEY, []);
+    localStorage.setItem(CANDS_KEY, JSON.stringify(candidatesForLocalStorage(cands)));
+  } catch {
+    /* ignore */
+  }
+  try {
+    const audit = readJson<AtsAuditEntry[]>(AUDIT_KEY, []);
+    localStorage.setItem(AUDIT_KEY, JSON.stringify(audit.slice(0, 200)));
+  } catch {
+    try {
+      localStorage.removeItem(AUDIT_KEY);
+    } catch {
+      /* ignore */
+    }
+  }
+  try {
+    const keysToDrop: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (
+        key.startsWith("erp_ats_candidate_tags_") ||
+        key.startsWith("erp_ats_candidate_notes_") ||
+        key.startsWith("erp_ats_doc_content_")
+      ) {
+        keysToDrop.push(key);
+      }
+    }
+    for (const key of keysToDrop) {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function writeJson(key: string, value: unknown): void {
+  if (typeof window === "undefined") return;
+  const payload = JSON.stringify(value);
+  try {
+    localStorage.setItem(key, payload);
+    return;
+  } catch (err) {
+    if (!isQuotaError(err)) throw err;
+  }
+
+  freeAtsLocalStorageQuota();
+
+  try {
+    localStorage.setItem(key, payload);
+    return;
+  } catch (err) {
+    if (!isQuotaError(err)) throw err;
+  }
+
+  // Trim large arrays until they fit; never bubble QuotaExceeded to the UI.
+  if (Array.isArray(value)) {
+    for (const n of [1000, 500, 200, 100, 50, 20, 10]) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value.slice(0, n)));
+        return;
+      } catch (err) {
+        if (!isQuotaError(err)) throw err;
+      }
+    }
+  }
+
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+  devWarn(`ATS localStorage quota exceeded for ${key}; cache write skipped`);
 }
 
 function nextCode(kind: keyof SeqBag, prefix: string, pad = 6): string {
@@ -180,7 +313,7 @@ function nextCode(kind: keyof SeqBag, prefix: string, pad = 6): string {
 export function appendAtsAudit(entry: Omit<AtsAuditEntry, "id" | "at">): void {
   const all = readJson<AtsAuditEntry[]>(AUDIT_KEY, []);
   all.unshift({ ...entry, id: crypto.randomUUID(), at: nowIso() });
-  writeJson(AUDIT_KEY, all.slice(0, 5000));
+  writeJson(AUDIT_KEY, all.slice(0, 500));
 }
 
 export function listAtsAudit(): AtsAuditEntry[] {
@@ -206,13 +339,13 @@ function loadCandidates(): AtsCandidate[] {
   }));
 }
 function saveCandidates(rows: AtsCandidate[]) {
-  writeJson(CANDS_KEY, rows);
+  writeJson(CANDS_KEY, candidatesForLocalStorage(rows));
 }
 function loadApps(): PipelineApplication[] {
   return readJson<PipelineApplication[]>(APPS_KEY, []);
 }
 function saveApps(rows: PipelineApplication[]) {
-  writeJson(APPS_KEY, rows);
+  writeJson(APPS_KEY, appsForLocalStorage(rows));
 }
 function loadInterviews(): AtsInterview[] {
   return readJson<AtsInterview[]>(INTS_KEY, []).map((i) => ({
@@ -325,13 +458,7 @@ function loadOffers(): AtsOffer[] {
   }));
 }
 function saveOffers(rows: AtsOffer[]) {
-  writeJson(
-    OFFERS_KEY,
-    rows.map((o) => ({
-      ...o,
-      joiningDate: toDateInputValue(o.joiningDate) || o.joiningDate || "",
-    })),
-  );
+  writeJson(OFFERS_KEY, offersForLocalStorage(rows));
 }
 function loadDocs(): AtsDocument[] {
   const rows = readJson<AtsDocument[]>(DOCS_KEY, []);
@@ -384,33 +511,13 @@ function saveDocs(rows: AtsDocument[]) {
   // Offload any oversized payloads we still have in memory to IndexedDB.
   for (const d of rows) {
     const content = (d.contentDataUrl || d.url || "").trim();
-    if (isOversizedDocContent(content)) {
+    if (isOversizedDocContent(content) || content.startsWith("data:")) {
       void saveDocumentContent(d.id, content).catch(() => {
         /* ignore */
       });
     }
   }
-  try {
-    writeJson(DOCS_KEY, slim);
-  } catch (err) {
-    const name = err instanceof DOMException ? err.name : "";
-    if (name === "QuotaExceededError" || name === "NS_ERROR_DOM_QUOTA_REACHED") {
-      // Last resort: drop all remaining data: URLs and retry once.
-      const bare = slim.map((d) => {
-        const next = { ...d };
-        if ((next.contentDataUrl || "").startsWith("data:")) delete next.contentDataUrl;
-        if ((next.url || "").startsWith("data:")) delete next.url;
-        return next;
-      });
-      try {
-        writeJson(DOCS_KEY, bare);
-        return;
-      } catch {
-        /* ignore */
-      }
-    }
-    throw err;
-  }
+  writeJson(DOCS_KEY, slim);
 }
 
 /**
@@ -609,6 +716,18 @@ export type AtsDirectory = {
 };
 
 export async function loadAtsDirectory(): Promise<AtsDirectory> {
+  // Proactively shrink cache if a previous session already filled the quota.
+  try {
+    const appsRaw = localStorage.getItem(APPS_KEY) || "";
+    const docsRaw = localStorage.getItem(DOCS_KEY) || "";
+    if (appsRaw.length + docsRaw.length > 2_500_000) {
+      freeAtsLocalStorageQuota();
+      writeJson(APPS_KEY, appsForLocalStorage(readJson<PipelineApplication[]>(APPS_KEY, [])));
+    }
+  } catch {
+    /* ignore */
+  }
+
   let jobs = loadJobs();
   let candidates = loadCandidates();
   let applications = loadAppsNormalized();
@@ -1223,7 +1342,9 @@ async function resolveJobApiContext(input: CreateJobInput): Promise<{
       ? cached.hiringManagerEmployeeId
       : undefined;
   let recruiterId = isUuid(input.recruiterId) ? input.recruiterId : undefined;
-  let companyId = isUuid(cached.companyId) ? cached.companyId : undefined;
+  // Never trust a stale cached company — always derive from the selected branch /
+  // hiring manager so Digitech vs Technologies does not cause "Company scope mismatch".
+  let companyId: string | undefined;
 
   const lookups = await loadAtsLookups();
   if (!branchId) {
@@ -1244,11 +1365,20 @@ async function resolveJobApiContext(input: CreateJobInput): Promise<{
   if (!recruiterId && input.recruiter) {
     recruiterId = lookups.recruiters.find((r) => r.name === input.recruiter && isUuid(r.id))?.id;
   }
-  if (!companyId && branchId) {
+  if (branchId) {
     const branch = lookups.branches.find((b) => b.id === branchId);
     if (branch?.companyId && isUuid(branch.companyId)) {
       companyId = branch.companyId;
     }
+  }
+  if (!companyId && hiringManagerEmployeeId) {
+    const hm = lookups.hiringManagers.find((e) => e.id === hiringManagerEmployeeId);
+    if (hm?.companyId && isUuid(hm.companyId)) {
+      companyId = hm.companyId;
+    }
+  }
+  if (!companyId && isUuid(cached.companyId)) {
+    companyId = cached.companyId;
   }
 
   if (!branchId || !departmentId || !hiringManagerEmployeeId) {

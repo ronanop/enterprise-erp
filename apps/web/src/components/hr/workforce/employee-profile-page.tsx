@@ -13,12 +13,14 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
+  Award,
   BriefcaseBusiness,
   Building2,
   CalendarDays,
   ChevronLeft,
   Contact,
   Eye,
+  EyeOff,
   FileText,
   GraduationCap,
   Landmark,
@@ -26,6 +28,8 @@ import {
   Pencil,
   Save,
   ShieldCheck,
+  Trash2,
+  Upload,
   UserMinus,
   UserRound,
   Wallet,
@@ -54,10 +58,13 @@ import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { COUNTRY_OPTIONS, INDIA_STATE_OPTIONS } from "@/config/geo-options";
 import {
+  ALLOWED_DOC_TYPES,
+  MAX_DOCUMENT_BYTES,
   backfillEmployeeGovernmentIdsFromBg,
   getEmployeeById,
   loadBgDocumentsForEmployee,
   loadEmployeeDirectory,
+  readFileAsDataUrl,
   updateEmployeeRecord,
 } from "@/services/employee-management-service";
 import type { BgDocumentDisplay } from "@/services/bg-check-portal-service";
@@ -89,8 +96,11 @@ import type {
 } from "@/types/employee-management";
 import { emptyBank } from "@/types/employee-management";
 import {
+  looksMasked,
   maskAadhaar,
   maskAccount as maskAccountNumber,
+  maskAddress,
+  maskDob,
   maskEmail,
   maskKeepLast,
   maskPan,
@@ -98,12 +108,64 @@ import {
 } from "@/lib/pii-mask";
 import { cn } from "@/lib/utils";
 
+/** Masked-by-default PII with a View toggle to reveal cleartext. */
+function PiiRevealValue({
+  value,
+  mask,
+  empty = "-",
+  mono = false,
+}: {
+  value?: string | null;
+  mask: (raw: string) => string;
+  empty?: string;
+  mono?: boolean;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  const raw = (value ?? "").trim();
+  if (!raw || raw === "-") {
+    return <span className="text-sm text-foreground">{empty}</span>;
+  }
+  // API may already return masked ciphertext placeholders — nothing further to reveal.
+  if (looksMasked(raw)) {
+    return (
+      <span className={cn("break-words text-sm text-foreground", mono && "font-mono text-[13px]")}>
+        {raw}
+      </span>
+    );
+  }
+  const shown = revealed ? raw : mask(raw) || empty;
+
+  return (
+    <span className="inline-flex max-w-full items-center gap-1.5">
+      <span
+        className={cn(
+          "min-w-0 break-words text-sm text-foreground",
+          mono && "font-mono text-[13px] tracking-wide",
+        )}
+      >
+        {shown}
+      </span>
+      <button
+        type="button"
+        className="inline-flex h-6 shrink-0 cursor-pointer items-center gap-1 rounded-md px-1.5 text-[11px] font-medium text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label={revealed ? "Hide sensitive value" : "View sensitive value"}
+        title={revealed ? "Hide" : "View"}
+        onClick={() => setRevealed((v) => !v)}
+      >
+        {revealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+        <span>{revealed ? "Hide" : "View"}</span>
+      </button>
+    </span>
+  );
+}
+
 const TABS = [
   { id: "overview", label: "Overview", icon: UserRound },
   { id: "employment", label: "Employment", icon: BriefcaseBusiness },
   { id: "gov", label: "Gov IDs", icon: ShieldCheck },
   { id: "bank", label: "Bank", icon: Landmark },
   { id: "documents", label: "Docs", icon: FileText },
+  { id: "certificates", label: "Certificate", icon: Award },
   { id: "assets", label: "Assets", icon: Laptop },
   { id: "attendance", label: "Attendance", icon: CalendarDays },
   { id: "leave", label: "Leave", icon: Contact },
@@ -625,8 +687,14 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
           <Info label="Joined" value={record.joiningDate || "-"} />
           <Info label="Employment type" value={formatEmploymentTypeLabel(record.employmentType)} />
           <Info label="Status" value={<HrStatusBadge status={record.lifecycleStatus} />} />
-          <Info label="cache email id" value={record.officialEmail} />
-          <Info label="Emp. Contact No." value={maskPhone(record.mobile) || "-"} />
+          <Info
+            label="cache email id"
+            value={<PiiRevealValue value={record.officialEmail} mask={maskEmail} />}
+          />
+          <Info
+            label="Emp. Contact No."
+            value={<PiiRevealValue value={record.mobile} mask={maskPhone} mono />}
+          />
         </div>
       </div>
 
@@ -674,16 +742,51 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
 
         {tab === "gov" ? (
           <EmsFormGrid>
-            <Info label="Aadhaar" value={maskAadhaar(record.extension.governmentIds.aadhaar) || "-"} />
-            <Info label="PAN" value={maskPan(record.extension.governmentIds.pan) || "-"} />
+            <Info
+              label="Aadhaar"
+              value={
+                <PiiRevealValue
+                  value={record.extension.governmentIds.aadhaar}
+                  mask={maskAadhaar}
+                  mono
+                />
+              }
+            />
+            <Info
+              label="PAN"
+              value={
+                <PiiRevealValue value={record.extension.governmentIds.pan} mask={maskPan} mono />
+              }
+            />
             <Info
               label="Passport"
-              value={maskKeepLast(record.extension.governmentIds.passport) || "-"}
+              value={
+                <PiiRevealValue
+                  value={record.extension.governmentIds.passport}
+                  mask={(v) => maskKeepLast(v)}
+                  mono
+                />
+              }
             />
-            <Info label="UAN" value={maskKeepLast(record.extension.governmentIds.uan) || "-"} />
+            <Info
+              label="UAN"
+              value={
+                <PiiRevealValue
+                  value={record.extension.governmentIds.uan}
+                  mask={(v) => maskKeepLast(v)}
+                  mono
+                />
+              }
+            />
             <Info
               label="DL"
-              value={maskKeepLast(record.extension.governmentIds.drivingLicense) || "-"}
+              value={
+                <PiiRevealValue
+                  value={record.extension.governmentIds.drivingLicense}
+                  mask={(v) => maskKeepLast(v)}
+                  mono
+                />
+              }
             />
           </EmsFormGrid>
         ) : null}
@@ -698,8 +801,26 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
                 <EmsFormGrid>
                   <Info label="Bank" value={record.extension.bank.bankName || "-"} />
                   <Info label="Holder" value={record.extension.bank.accountHolderName || "-"} />
-                  <Info label="IFSC" value={record.extension.bank.ifsc || "-"} />
-                  <Info label="Account" value={maskAccount(record.extension.bank.accountNumber)} />
+                  <Info
+                    label="IFSC"
+                    value={
+                      <PiiRevealValue
+                        value={record.extension.bank.ifsc}
+                        mask={(v) => maskKeepLast(v, 4)}
+                        mono
+                      />
+                    }
+                  />
+                  <Info
+                    label="Account"
+                    value={
+                      <PiiRevealValue
+                        value={record.extension.bank.accountNumber}
+                        mask={(v) => maskAccount(v)}
+                        mono
+                      />
+                    }
+                  />
                   <Info label="Branch" value={record.extension.bank.branchName || "-"} />
                 </EmsFormGrid>
               ) : (
@@ -717,10 +838,25 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
                     label="Holder"
                     value={record.extension.companyBank.accountHolderName || "-"}
                   />
-                  <Info label="IFSC" value={record.extension.companyBank.ifsc || "-"} />
+                  <Info
+                    label="IFSC"
+                    value={
+                      <PiiRevealValue
+                        value={record.extension.companyBank.ifsc}
+                        mask={(v) => maskKeepLast(v, 4)}
+                        mono
+                      />
+                    }
+                  />
                   <Info
                     label="Account"
-                    value={maskAccount(record.extension.companyBank.accountNumber)}
+                    value={
+                      <PiiRevealValue
+                        value={record.extension.companyBank.accountNumber}
+                        mask={(v) => maskAccount(v)}
+                        mono
+                      />
+                    }
                   />
                   <Info label="Branch" value={record.extension.companyBank.branchName || "-"} />
                 </EmsFormGrid>
@@ -739,6 +875,15 @@ export function EmployeeProfilePage({ employeeId }: { employeeId: string }) {
             bgDocs={bgDocs}
             hrDocs={linked?.hrDocuments ?? []}
             loading={linkedLoading}
+          />
+        ) : null}
+
+        {tab === "certificates" ? (
+          <CertificatesTab
+            record={record}
+            onChanged={(next) => {
+              setRecord(next);
+            }}
           />
         ) : null}
 
@@ -1981,15 +2126,6 @@ function EmptyEditState({ text }: { text: string }) {
   return <p className="rounded-lg border border-dashed border-border/80 p-4 text-center text-xs text-muted-foreground">{text}</p>;
 }
 
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
 function formatGenderLabel(value: string | null | undefined): string {
   if (!value) return "-";
   const hit = GENDER_OPTIONS.find((o) => o.value === value.toLowerCase());
@@ -2037,9 +2173,9 @@ function OverviewField({
   return (
     <div className={cn("min-w-0", className)}>
       <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
-      <p className="mt-0.5 break-words text-sm font-medium text-foreground">
+      <div className="mt-0.5 break-words text-sm font-medium text-foreground">
         {isEmptyValue(value) ? "-" : value}
-      </p>
+      </div>
     </div>
   );
 }
@@ -2082,17 +2218,37 @@ function OverviewTab({
                 label="Marital status"
                 value={formatMaritalStatusLabel(p.maritalStatus)}
               />
-              <OverviewField label="Date of birth" value={p.dateOfBirth} hideIfEmpty />
+              <OverviewField
+                label="Date of birth"
+                value={
+                  p.dateOfBirth ? (
+                    <PiiRevealValue value={p.dateOfBirth} mask={maskDob} />
+                  ) : undefined
+                }
+                hideIfEmpty
+              />
               <OverviewField label="Nationality" value={p.nationality} hideIfEmpty />
               <OverviewField label="Blood group" value={p.bloodGroup} hideIfEmpty />
               <OverviewField
                 label="Current address"
-                value={fullAddress}
+                value={
+                  fullAddress !== "-" ? (
+                    <PiiRevealValue value={fullAddress} mask={maskAddress} />
+                  ) : (
+                    "-"
+                  )
+                }
                 className="sm:col-span-2"
               />
               <OverviewField
                 label="Permanent address"
-                value={permanentAddress}
+                value={
+                  permanentAddress !== "-" ? (
+                    <PiiRevealValue value={permanentAddress} mask={maskAddress} />
+                  ) : (
+                    "-"
+                  )
+                }
                 className="sm:col-span-2"
               />
             </div>
@@ -2102,10 +2258,32 @@ function OverviewTab({
             <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
               <OverviewField
                 label="cache email id"
-                value={p.officialEmail || record.officialEmail}
+                value={
+                  <PiiRevealValue
+                    value={p.officialEmail || record.officialEmail}
+                    mask={maskEmail}
+                  />
+                }
               />
-              <OverviewField label="Email id" value={maskEmail(p.personalEmail) || undefined} hideIfEmpty />
-              <OverviewField label="Emp. Contact No." value={maskPhone(p.mobile || record.mobile) || undefined} />
+              <OverviewField
+                label="Email id"
+                value={
+                  p.personalEmail ? (
+                    <PiiRevealValue value={p.personalEmail} mask={maskEmail} />
+                  ) : undefined
+                }
+                hideIfEmpty
+              />
+              <OverviewField
+                label="Emp. Contact No."
+                value={
+                  <PiiRevealValue
+                    value={p.mobile || record.mobile}
+                    mask={maskPhone}
+                    mono
+                  />
+                }
+              />
             </div>
           </OverviewCard>
         </div>
@@ -2140,7 +2318,14 @@ function OverviewTab({
                 label="Relation"
                 value={formatRelationshipLabel(p.emergency.relationship)}
               />
-              <OverviewField label="Contact No." value={maskPhone(p.emergency.phone) || undefined} />
+              <OverviewField
+                label="Contact No."
+                value={
+                  p.emergency.phone ? (
+                    <PiiRevealValue value={p.emergency.phone} mask={maskPhone} mono />
+                  ) : undefined
+                }
+              />
               <OverviewField label="Fathers name" value={p.fatherName || undefined} hideIfEmpty />
             </div>
           </OverviewCard>
@@ -2158,7 +2343,7 @@ function Info({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
       <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      <p className="mt-0.5 text-sm text-foreground">{empty ? "-" : value}</p>
+      <div className="mt-0.5 text-sm text-foreground">{empty ? "-" : value}</div>
     </div>
   );
 }
@@ -2224,6 +2409,225 @@ type ProfileDocPreview = {
   mimeType?: string;
 };
 
+function CertificatesTab({
+  record,
+  onChanged,
+}: {
+  record: EmployeeRecord;
+  onChanged: (next: EmployeeRecord) => void;
+}) {
+  const [name, setName] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [preview, setPreview] = useState<ProfileDocPreview | null>(null);
+
+  const certificates = useMemo(
+    () => (record.extension.documents ?? []).filter((d) => d.source === "certificate"),
+    [record.extension.documents],
+  );
+
+  async function persistDocs(nextDocs: EmployeeDocumentItem[]) {
+    await updateEmployeeRecord(record, { documents: nextDocs });
+    const next: EmployeeRecord = {
+      ...record,
+      extension: {
+        ...record.extension,
+        documents: nextDocs,
+        updatedAt: new Date().toISOString(),
+        updatedBy: "HR",
+      },
+    };
+    onChanged(next);
+    // Best-effort mirror into HR employee-documents (metadata + short local URI).
+    try {
+      const added = nextDocs.filter(
+        (d) =>
+          d.source === "certificate" &&
+          !certificates.some((c) => c.id === d.id),
+      );
+      for (const cert of added) {
+        if (!record.branchId) continue;
+        await resourceService.create("/hr/employee-documents", {
+          branch_id: record.branchId,
+          company_id: record.companyId || undefined,
+          employee_id: record.id,
+          document_type: "certificate",
+          document_name: cert.documentType.slice(0, 255),
+          storage_uri: `local:certificate:${cert.id}`.slice(0, 500),
+        });
+      }
+    } catch {
+      /* extension is source of truth for the file */
+    }
+  }
+
+  async function onUpload() {
+    const certName = name.trim();
+    if (!certName) {
+      toast("Enter the certification name", "error");
+      return;
+    }
+    if (!file) {
+      toast("Choose a certificate file to upload", "error");
+      return;
+    }
+    if (file.size > MAX_DOCUMENT_BYTES) {
+      toast("File must be 2 MB or smaller", "error");
+      return;
+    }
+    if (file.type && !ALLOWED_DOC_TYPES.includes(file.type)) {
+      toast("Use PDF, PNG, or JPG", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const item: EmployeeDocumentItem = {
+        id: crypto.randomUUID(),
+        documentType: certName,
+        documentNumber: "",
+        issueDate: "",
+        expiryDate: "",
+        fileName: file.name,
+        fileDataUrl: dataUrl,
+        uploadedBy: "HR",
+        uploadedAt: new Date().toISOString(),
+        source: "certificate",
+      };
+      await persistDocs([...(record.extension.documents ?? []), item]);
+      setName("");
+      setFile(null);
+      toast("Certificate uploaded", "success");
+    } catch (err) {
+      toast(err instanceof ApiClientError ? err.message : "Could not upload certificate", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onRemove(id: string) {
+    setSaving(true);
+    try {
+      const nextDocs = (record.extension.documents ?? []).filter((d) => d.id !== id);
+      await persistDocs(nextDocs);
+      toast("Certificate removed", "success");
+    } catch (err) {
+      toast(err instanceof ApiClientError ? err.message : "Could not remove certificate", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <Section title="Upload certificate">
+        <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+          <SetupField label="Name of certification" required>
+            <SetupInput
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. AWS Solutions Architect"
+              disabled={saving}
+            />
+          </SetupField>
+          <SetupField label="Certificate file" required>
+            <input
+              type="file"
+              accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+              className="block w-full cursor-pointer text-xs file:mr-2 file:cursor-pointer file:rounded-md file:border-0 file:bg-muted file:px-2 file:py-1"
+              disabled={saving}
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            />
+          </SetupField>
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 cursor-pointer gap-1.5 transition-colors duration-200"
+            disabled={saving}
+            onClick={() => void onUpload()}
+          >
+            <Upload className="size-3.5" />
+            {saving ? "Saving…" : "Upload"}
+          </Button>
+        </div>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          PDF, PNG, or JPG · max 2 MB. File is stored on the employee profile.
+        </p>
+      </Section>
+
+      <Section title="Certificates on file">
+        {!certificates.length ? (
+          <p className="text-xs text-muted-foreground">No certificates uploaded yet.</p>
+        ) : (
+          <ul className="space-y-2 text-xs">
+            {certificates.map((d) => (
+              <li
+                key={d.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium text-foreground">{d.documentType}</p>
+                  <p className="text-muted-foreground">
+                    {d.fileName} · {d.uploadedBy}
+                    {d.uploadedAt ? ` · ${new Date(d.uploadedAt).toLocaleDateString()}` : ""}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {d.fileDataUrl ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 cursor-pointer gap-1"
+                      onClick={() =>
+                        setPreview({
+                          fileName: d.fileName,
+                          label: d.documentType,
+                          fileDataUrl: d.fileDataUrl!,
+                        })
+                      }
+                    >
+                      <Eye className="size-3" />
+                      View
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 cursor-pointer gap-1 text-hrms-danger"
+                    disabled={saving}
+                    onClick={() => void onRemove(d.id)}
+                  >
+                    <Trash2 className="size-3" />
+                    Remove
+                  </Button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Section>
+
+      {preview ? (
+        <SetupDrawer
+          open
+          wide
+          title={preview.label}
+          description={preview.fileName}
+          onClose={() => setPreview(null)}
+        >
+          <DocumentPreviewContent
+            fileName={preview.fileName}
+            fileDataUrl={preview.fileDataUrl}
+            mimeType={preview.mimeType}
+          />
+        </SetupDrawer>
+      ) : null}
+    </div>
+  );
+}
+
 function DocumentsTab({
   onboardingDocs,
   bgDocs,
@@ -2244,7 +2648,10 @@ function DocumentsTab({
   );
   const storedBgDocs = onboardingDocs.filter((d) => d.source === "bg_check");
   const otherLocal = onboardingDocs.filter(
-    (d) => !portalDocs.includes(d) && !storedBgDocs.includes(d),
+    (d) =>
+      !portalDocs.includes(d) &&
+      !storedBgDocs.includes(d) &&
+      d.source !== "certificate",
   );
 
   // Prefer live BG portal files; fall back to any previously imported copies.

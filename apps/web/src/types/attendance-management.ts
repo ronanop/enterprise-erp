@@ -47,19 +47,31 @@ export type AttendanceExtension = {
   managerName: string;
 };
 
+/** One biometric (or device) punch shown in the register. */
+export type AttendancePunch = {
+  id: string;
+  punchedAt: string;
+  deviceCode: string;
+  deviceName: string;
+  deviceLocation: string;
+};
+
 export type AttendanceRecord = {
   id: string;
   employeeId: string;
   branchId: string;
+  companyId?: string;
   shiftId: string;
   attendanceDate: string;
   checkIn: string;
   checkOut: string;
+  /** Elapsed hours from first punch → checkout (or now when still open). */
   workingHours: number;
   breakTime: number;
   overtimeHours: number;
   status: AttendanceStatusCode;
   apiStatus: string;
+  /** Machine location of the first / check-in punch. */
   location: string;
   device: string;
   source: string;
@@ -67,6 +79,7 @@ export type AttendanceRecord = {
   recordStatus: string;
   version: number;
   notes: string;
+  punches: AttendancePunch[];
   extension: AttendanceExtension;
 };
 
@@ -122,6 +135,8 @@ export type MarkAttendancePayload = {
   source: AttendanceSource;
   gpsCoordinates: string;
   notes: string;
+  /** Optional — resolves company when session has no company context. */
+  companyId?: string;
 };
 
 export const ATTENDANCE_STATUS_LABELS: Record<AttendanceStatusCode, string> = {

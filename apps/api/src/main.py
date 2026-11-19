@@ -1,4 +1,4 @@
-"""FastAPI application entry point."""
+"""FastAPI application entry point — standalone HRMS."""
 
 from contextlib import asynccontextmanager
 
@@ -14,7 +14,6 @@ from middleware.input_validation import InputValidationMiddleware
 from middleware.hr_api_alias import HrToHrmsAliasMiddleware
 from middleware.request_context import RequestContextMiddleware
 from middleware.security_headers import SecurityHeadersMiddleware
-from modules.mcp_server.bootstrap import mcp_lifespan, mount_mcp_on_app
 from shared.router import api_v1_router
 
 
@@ -22,12 +21,9 @@ from shared.router import api_v1_router
 async def lifespan(application: FastAPI):
     setup_logging()
     from core.infra_health import log_infrastructure_connections
-    from modules.asset.storage import validate_asset_storage_on_startup
 
     log_infrastructure_connections()
-    validate_asset_storage_on_startup()
-    async with mcp_lifespan(application):
-        yield
+    yield
 
 
 def create_app() -> FastAPI:
@@ -67,7 +63,6 @@ def create_app() -> FastAPI:
 
     register_exception_handlers(application)
     application.include_router(api_v1_router, prefix=API_V1_PREFIX)
-    mount_mcp_on_app(application)
 
     return application
 

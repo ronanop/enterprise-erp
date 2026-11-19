@@ -10,11 +10,11 @@ import { cn } from "@/lib/utils";
 type SidebarAccountSectionProps = {
   collapsed?: boolean;
   className?: string;
-  /** Module branding below the account row (e.g. Sales CRM). */
+  /** Optional content below the account row (rarely used; module brand lives at sidebar top). */
   children?: ReactNode;
 };
 
-/** Signed-in user + sign-out menu for dark module sidebars. */
+/** Signed-in user + sign-out menu for dark module sidebars (footer placement). */
 export function SidebarAccountSection({
   collapsed = false,
   className,
@@ -24,13 +24,13 @@ export function SidebarAccountSection({
 
   if (loading) {
     return (
-      <div className={cn("px-4 py-4", className)}>
-        <div className="flex items-center gap-3">
+      <div className={cn("px-4 py-3", className)}>
+        <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
           <div className="size-9 shrink-0 animate-pulse rounded-xl bg-sidebar-accent" />
           <div
             className={cn(
               "min-w-0 flex-1 space-y-1.5 transition-opacity duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
-              collapsed && "opacity-0",
+              collapsed && "hidden",
             )}
           >
             <div className="h-3.5 w-24 animate-pulse rounded bg-sidebar-accent" />
@@ -43,12 +43,12 @@ export function SidebarAccountSection({
 
   if (!signedIn) {
     return children ? (
-      <div className={cn("px-4 py-4", className)}>{children}</div>
+      <div className={cn("px-4 py-3", className)}>{children}</div>
     ) : null;
   }
 
   return (
-    <div className={cn("px-4 py-4", className)}>
+    <div className={cn("px-4 py-3", className)}>
       <UserAccountMenu
         variant="sidebar"
         collapsed={collapsed}

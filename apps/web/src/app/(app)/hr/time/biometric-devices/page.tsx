@@ -1,7 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Activity, Download, Plus, RefreshCw, Trash2, Wifi, WifiOff } from "lucide-react";
+import {
+  Activity,
+  Download,
+  Loader2,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
 
 import { PageHeader } from "@/components/layout/page-header";
 import {
@@ -109,6 +119,7 @@ export default function BiometricDevicesPage() {
   const [rows, setRows] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [branches, setBranches] = useState<Option[]>([]);
   const [branchId, setBranchId] = useState("");
@@ -128,20 +139,28 @@ export default function BiometricDevicesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const downloadingLock = useRef(false);
+  const autoFetchForFeed = useRef<string | null>(null);
 
-  const loadFeed = useCallback(async (deviceId: string) => {
-    setFeedLoading(true);
+  const loadFeed = useCallback(async (deviceId: string, opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setFeedLoading(true);
     try {
       const res = await apiClient<LiveFeed>(`/hr/biometric-devices/${deviceId}/live-feed`, {
         method: "GET",
-        query: { days: 14 },
+        query: { days: 31 },
       });
       setFeed(res.data ?? null);
-    } catch {
-      toast("Failed to load device feed", "error");
-      setFeed(null);
+    } catch (err) {
+      if (!opts?.silent) {
+        toast(
+          err instanceof ApiClientError
+            ? err.message
+            : "Failed to load device feed from database",
+          "error",
+        );
+        setFeed(null);
+      }
     } finally {
-      setFeedLoading(false);
+      if (!opts?.silent) setFeedLoading(false);
     }
   }, []);
 
@@ -155,9 +174,20 @@ export default function BiometricDevicesPage() {
   );
 
   const closeDeviceFeed = useCallback(() => {
+    autoFetchForFeed.current = null;
     setFeedDevice(null);
     setFeed(null);
   }, []);
+
+  // Refresh punch log from DB every 1 minute while the live feed drawer is open.
+  useEffect(() => {
+    if (!feedDevice?.id) return;
+    const id = feedDevice.id;
+    const timer = window.setInterval(() => {
+      void loadFeed(id, { silent: true });
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [feedDevice?.id, loadFeed]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -201,25 +231,42 @@ export default function BiometricDevicesPage() {
       try {
         const res = await apiClient<{
           logs_read: number;
+          logs_on_device?: number;
+          logs_already_saved?: number;
+          logs_new?: number;
+          relinked?: number;
           created: number;
           updated: number;
           skipped: number;
         }>(`/hr/biometric-devices/${device.id}/download`, { method: "POST" });
         const data = res.data;
-        const read = data?.logs_read ?? 0;
+        const read = data?.logs_new ?? data?.logs_read ?? 0;
+        const already = data?.logs_already_saved ?? 0;
+        const onDevice = data?.logs_on_device ?? read + already;
+        const relinked = data?.relinked ?? 0;
         const saved = (data?.created ?? 0) + (data?.updated ?? 0);
         const skipped = data?.skipped ?? 0;
         if (!opts?.silent) {
-          if (read === 0) {
+          if (onDevice === 0 && relinked === 0) {
             toast("Connected. No punch logs in the last 31 days.", "success");
-          } else if (saved === 0) {
+          } else if (read === 0 && already > 0 && saved === 0 && relinked === 0) {
             toast(
-              `Read ${read} punches. None matched an employee code (use CT codes on the K40).`,
+              `Up to date — ${already} punch(es) already in DB, 0 new.`,
+              "success",
+            );
+          } else if (saved === 0 && relinked === 0) {
+            toast(
+              `Read ${read} new punch(es). None matched an Emp ID (CDPL/VPL/CT number must exist in HR).`,
               "error",
             );
           } else {
             const skipNote = skipped ? ` · ${skipped} unmatched codes skipped` : "";
-            toast(`Saved ${saved} attendance rows from ${read} punches${skipNote}.`, "success");
+            const alreadyNote = already ? ` · ${already} already saved` : "";
+            const relinkNote = relinked ? ` · linked ${relinked} older punch(es)` : "";
+            toast(
+              `Saved ${saved} attendance row(s) from ${read} new punch(es)${alreadyNote}${relinkNote}${skipNote}.`,
+              "success",
+            );
           }
         } else if (saved > 0) {
           toast(`Auto-fetch: ${saved} attendance row(s) updated.`, "success");
@@ -240,6 +287,17 @@ export default function BiometricDevicesPage() {
     [feedDevice?.id, loadFeed],
   );
 
+  // Live feed reads the DB only. If empty on open, pull from the machine once.
+  useEffect(() => {
+    if (!feedDevice || feedLoading || !feed) return;
+    if (feed.punches?.length) return;
+    if (autoFetchForFeed.current === feedDevice.id) return;
+    if (feedDevice.status !== "active" || !feedDevice.ip_address || !feedDevice.port) return;
+    autoFetchForFeed.current = feedDevice.id;
+    toast("No punches in ERP yet — fetching from machine…", "success");
+    void fetchPunches(feedDevice);
+  }, [feedDevice, feed, feedLoading, fetchPunches]);
+
   const fetchAllActive = useCallback(
     async (opts?: { silent?: boolean }) => {
       const active = rows.filter(
@@ -254,6 +312,7 @@ export default function BiometricDevicesPage() {
           try {
             const res = await apiClient<{
               logs_read: number;
+              logs_new?: number;
               created: number;
               updated: number;
               skipped: number;
@@ -282,23 +341,12 @@ export default function BiometricDevicesPage() {
     [rows, feedDevice, loadFeed],
   );
 
-  // Always auto-fetch punches from every active device every 1 minute while this page is open.
-  useEffect(() => {
-    const active = rows.filter((r) => r.status === "active" && r.ip_address && r.port);
-    if (!active.length) return;
-    const tick = () => {
-      void fetchAllActive({ silent: true });
-    };
-    const first = window.setTimeout(tick, 5_000);
-    const id = window.setInterval(tick, 60_000);
-    return () => {
-      window.clearTimeout(first);
-      window.clearInterval(id);
-    };
-  }, [rows, fetchAllActive]);
+  // No auto machine-pull — punches stay in DB; user fetches new logs manually.
+  // (Auto-fetch every minute was blocking the API and breaking Live feed.)
 
   function openCreate() {
     const model = DEVICE_MODELS[0];
+    setEditingId(null);
     setDeviceModel(model.value);
     setDeviceCode(nextDeviceCode(rows));
     setDeviceName(model.defaultName);
@@ -313,7 +361,28 @@ export default function BiometricDevicesPage() {
     void loadBranches();
   }
 
+  function openEdit(device: Device) {
+    setEditingId(device.id);
+    setDeviceModel(device.device_model || DEVICE_MODELS[0].value);
+    setDeviceCode(device.device_code);
+    setDeviceName(device.device_name);
+    setBranchId(device.branch_id);
+    setIpAddress(device.ip_address ?? "");
+    setPort(device.port != null ? String(device.port) : DEVICE_MODELS[0].defaultPort);
+    setSubnetMask(device.subnet_mask ?? "255.255.255.0");
+    setGateway(device.gateway ?? "0.0.0.0");
+    setCommPassword(device.comm_password ?? "0");
+    setLocation(device.location_text ?? "");
+    setCreatedApiKey(null);
+    setOpen(true);
+    void loadBranches();
+  }
+
   function onModelChange(value: string) {
+    if (editingId) {
+      setDeviceModel(value);
+      return;
+    }
     setDeviceModel(value);
     const model = DEVICE_MODELS.find((m) => m.value === value);
     if (model) {
@@ -380,7 +449,7 @@ export default function BiometricDevicesPage() {
 
     setSaving(true);
     try {
-      const created = await resourceService.create("/hr/biometric-devices", {
+      const payload = {
         branch_id: branchId,
         device_code: code,
         device_name: name,
@@ -391,8 +460,19 @@ export default function BiometricDevicesPage() {
         gateway: gw || null,
         comm_password: comm || "0",
         location_text: location.trim() || null,
-        status: "active",
-      });
+        status: "active" as const,
+      };
+
+      if (editingId) {
+        await resourceService.update("/hr/biometric-devices", editingId, payload);
+        toast("Device updated", "success");
+        setOpen(false);
+        setEditingId(null);
+        void load();
+        return;
+      }
+
+      const created = await resourceService.create("/hr/biometric-devices", payload);
       const apiKey = (created.data as { api_key?: string } | undefined)?.api_key ?? null;
       setCreatedApiKey(apiKey);
       toast("Device registered", "success");
@@ -402,7 +482,9 @@ export default function BiometricDevicesPage() {
       const message =
         err instanceof ApiClientError
           ? err.message
-          : "Create failed";
+          : editingId
+            ? "Update failed"
+            : "Create failed";
       toast(
         message.includes("already")
           ? message
@@ -419,7 +501,7 @@ export default function BiometricDevicesPage() {
       <SetupToastHost />
       <PageHeader
         title="Biometric devices"
-        description="Register a ZKTeco K40 Pro with the IP, subnet, gateway, port, and communication password from the device Comm. menu. Punches auto-fetch every 1 minute."
+        description="Register a ZKTeco K40 Pro with IP, port, and Comm password. Click a device to view punches already saved in ERP (with Emp codes). Use Fetch punches only when you need new logs from the machine — attendance loads from the database, not the device."
         actions={
           <div className="flex gap-2">
             <Button
@@ -491,39 +573,64 @@ export default function BiometricDevicesPage() {
                       {r.subnet_mask || "-"}
                       <span className="mt-0.5 block">{r.gateway || "-"}</span>
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">{r.location_text || "-"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {r.location_text?.trim() ? r.location_text : "—"}
+                    </td>
                     <td className="px-3 py-2 text-xs uppercase text-muted-foreground">{r.status}</td>
                     <td className="sticky right-0 z-10 bg-card px-3 py-2 text-right whitespace-nowrap shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)]">
-                      <div className="flex justify-end gap-2">
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="cursor-pointer transition-colors duration-200"
-                        disabled={downloadingId === r.id}
-                        aria-label={`Fetch punches from ${r.device_code}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void fetchPunches(r);
-                        }}
-                      >
-                        <Download className="size-3.5" />
-                        {downloadingId === r.id ? "Fetching…" : "Fetch punches"}
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="cursor-pointer text-destructive transition-colors duration-200 hover:bg-destructive/10"
-                        disabled={deletingId === r.id}
-                        aria-label={`Remove ${r.device_code}`}
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void removeDevice(r);
-                        }}
-                      >
-                        <Trash2 className="size-3.5" />
-                        {deletingId === r.id ? "Removing…" : "Remove"}
-                      </Button>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="size-8 cursor-pointer transition-colors duration-200"
+                          disabled={downloadingId === r.id}
+                          title={downloadingId === r.id ? "Fetching…" : "Fetch punches"}
+                          aria-label={`Fetch punches from ${r.device_code}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void fetchPunches(r);
+                          }}
+                        >
+                          {downloadingId === r.id ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Download className="size-3.5" />
+                          )}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="size-8 cursor-pointer transition-colors duration-200"
+                          title="Edit device"
+                          aria-label={`Edit ${r.device_code}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openEdit(r);
+                          }}
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="size-8 cursor-pointer text-destructive transition-colors duration-200 hover:bg-destructive/10 hover:text-destructive"
+                          disabled={deletingId === r.id}
+                          title={deletingId === r.id ? "Removing…" : "Remove device"}
+                          aria-label={`Remove ${r.device_code}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void removeDevice(r);
+                          }}
+                        >
+                          {deletingId === r.id ? (
+                            <Loader2 className="size-3.5 animate-spin" />
+                          ) : (
+                            <Trash2 className="size-3.5" />
+                          )}
+                        </Button>
                       </div>
                     </td>
                   </tr>
@@ -597,17 +704,14 @@ export default function BiometricDevicesPage() {
               <Activity className="size-4 text-muted-foreground" aria-hidden />
               <span>
                 <span className="font-medium tabular-nums">{feed.today_punch_count ?? 0}</span>
-                <span className="text-muted-foreground"> raw punches today</span>
+                <span className="text-muted-foreground"> punches today</span>
               </span>
               <span className="text-muted-foreground">·</span>
-              <span>
-                <span className="font-medium tabular-nums">{feed.today_ingested_count}</span>
-                <span className="text-muted-foreground"> day records updated</span>
-              </span>
+              <span className="text-xs text-muted-foreground">Auto-refreshes every 1 min</span>
             </div>
 
             <p className="text-xs text-muted-foreground">
-              All punches are kept per employee across every machine, then Attendance Policy + shift decide present / half day / late. Auto-fetch every 1 minute.
+              Punch log reads from the database (machine Emp code + linked HR Emp ID). Use Fetch punches to pull new machine logs.
             </p>
 
             <div>
@@ -616,7 +720,9 @@ export default function BiometricDevicesPage() {
               </p>
               {!(feed.punches?.length) ? (
                 <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                  No punches stored for this device in the last 14 days.
+                  {downloadingId === feedDevice?.id
+                    ? "Fetching punches from the machine…"
+                    : "No punches stored for this device in the last 31 days. Click Fetch punches to pull logs from the machine."}
                 </p>
               ) : (
                 <div className="overflow-x-auto rounded-lg border border-border">
@@ -643,55 +749,6 @@ export default function BiometricDevicesPage() {
                 </div>
               )}
             </div>
-
-            <div>
-              <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                Day status (policy applied)
-              </p>
-            {!feed.ingested_records.length ? (
-              <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                No day attendance rows linked to this device yet.
-              </p>
-            ) : (
-              <div className="overflow-x-auto rounded-lg border border-border">
-                <table className="w-full min-w-[520px] text-left text-sm">
-                  <thead className="border-b border-border bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="px-3 py-2 font-medium">Date</th>
-                      <th className="px-3 py-2 font-medium">Employee</th>
-                      <th className="px-3 py-2 font-medium">In</th>
-                      <th className="px-3 py-2 font-medium">Out</th>
-                      <th className="px-3 py-2 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {feed.ingested_records.map((row) => (
-                      <tr key={row.id} className="transition-colors duration-150 hover:bg-muted/20">
-                        <td className="px-3 py-2 whitespace-nowrap text-xs">{row.attendance_date}</td>
-                        <td className="px-3 py-2">
-                          <span className="font-medium">{row.employee_name || "-"}</span>
-                          {row.employee_code ? (
-                            <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">
-                              {row.employee_code}
-                            </span>
-                          ) : null}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-xs text-muted-foreground">
-                          {formatDateTime(row.check_in_at)}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-xs text-muted-foreground">
-                          {formatDateTime(row.check_out_at)}
-                        </td>
-                        <td className="px-3 py-2 text-xs uppercase text-muted-foreground">
-                          {row.attendance_status}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            </div>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Could not load feed.</p>
@@ -700,19 +757,33 @@ export default function BiometricDevicesPage() {
 
       <SetupDrawer
         open={open}
-        title={createdApiKey ? "Device registered" : "Add biometric device"}
+        title={
+          createdApiKey
+            ? "Device registered"
+            : editingId
+              ? "Edit biometric device"
+              : "Add biometric device"
+        }
         description={
           createdApiKey
             ? "Copy the API key now - it will not be shown again."
-            : "Copy IP, subnet mask, gateway, port 4370, and the communication password from the K40 Comm. menu."
+            : editingId
+              ? "Update network credentials and location. Location is optional (gate / floor)."
+              : "Copy IP, subnet mask, gateway, port 4370, and the communication password from the K40 Comm. menu."
         }
-        onClose={() => setOpen(false)}
+        onClose={() => {
+          setOpen(false);
+          setEditingId(null);
+        }}
         footer={
           createdApiKey ? (
             <Button
               size="sm"
               className="cursor-pointer transition-colors duration-200"
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                setOpen(false);
+                setEditingId(null);
+              }}
             >
               Done
             </Button>
@@ -722,7 +793,10 @@ export default function BiometricDevicesPage() {
                 size="sm"
                 variant="outline"
                 className="cursor-pointer transition-colors duration-200"
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  setOpen(false);
+                  setEditingId(null);
+                }}
                 disabled={saving}
               >
                 Cancel
@@ -733,7 +807,7 @@ export default function BiometricDevicesPage() {
                 onClick={() => void submit()}
                 disabled={saving}
               >
-                {saving ? "Saving…" : "Register device"}
+                {saving ? "Saving…" : editingId ? "Save changes" : "Register device"}
               </Button>
             </>
           )
@@ -843,7 +917,14 @@ export default function BiometricDevicesPage() {
                 maxLength={6}
               />
             </SetupField>
-            <SetupField label="Location" hint="Optional gate / floor label">
+            <SetupField
+              label="Location"
+              hint={
+                location.trim()
+                  ? "Gate / floor label shown in the devices list."
+                  : "Currently empty — add a gate / floor label (optional)."
+              }
+            >
               <SetupInput
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}

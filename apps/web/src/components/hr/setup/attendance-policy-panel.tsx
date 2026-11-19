@@ -378,7 +378,6 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
                 <tr key={String(row.id)} className="border-b border-border/40 last:border-0">
                   <td className="px-3 py-2">
                     <p className="font-medium text-foreground">{String(row.name)}</p>
-                    <p className="text-[11px] text-muted-foreground">{String(row.code)}</p>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {row.arrival_policy_enabled
@@ -456,13 +455,6 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
             <div className="grid gap-3 sm:grid-cols-2">
               <SetupField label="Policy name" required>
                 <SetupInput value={ruleName} onChange={(e) => setRuleName(e.target.value)} />
-              </SetupField>
-              <SetupField label="Code" required>
-                <SetupInput
-                  value={ruleCode}
-                  onChange={(e) => setRuleCode(e.target.value)}
-                  readOnly={mode === "edit"}
-                />
               </SetupField>
               <SetupField label="Grace (minutes)">
                 <SetupInput

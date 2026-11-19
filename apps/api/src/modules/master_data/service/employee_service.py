@@ -58,21 +58,87 @@ class EmployeeService:
             raise NotFoundException(f"Employee code '{employee_code}' not found")
         return self.get_employee(ctx, row.id)
 
+    def resolve_by_machine_code(
+        self,
+        ctx: TenantContext,
+        company_id: UUID | None,
+        employee_code: str,
+    ):
+        """Resolve K40 / machine user id to an HR employee.
+
+        Order: exact code in company → digit suffix in company (CDPL5356→CT5356)
+        → unique digit match elsewhere in the tenant (module-wide admins).
+        Returns None when unmatched or ambiguous.
+        """
+        import re
+
+        raw = str(employee_code or "").strip().upper()
+        if not raw:
+            return None
+        compact = re.sub(r"[\s\-_/,]+", "", raw)
+        dig = re.sub(r"\D", "", compact).lstrip("0") or ""
+
+        cid = company_id
+        if cid is not None:
+            try:
+                self._scope.validate_company_access(ctx, cid)
+            except Exception:
+                cid = self._scope.resolve_company_id(ctx, company_id)
+
+        if cid is not None:
+            row = self._repo.get_by_code(ctx, cid, compact) or self._repo.get_by_code(ctx, cid, raw)
+            if row is not None:
+                return self.get_employee(ctx, row.id)
+            if dig:
+                matches = self._repo.find_by_code_digits(ctx, company_id=cid, digit_key=dig)
+                if len(matches) == 1:
+                    return self.get_employee(ctx, matches[0].id)
+                if len(matches) > 1:
+                    # Prefer CT* Emp IDs when machine still has old entity prefixes.
+                    ct = [m for m in matches if str(m.employee_code).upper().startswith("CT")]
+                    if len(ct) == 1:
+                        return self.get_employee(ctx, ct[0].id)
+
+        if dig:
+            # Tenant-wide unique digit match (covers Digitech CDPL Emp when device is on CT).
+            broad = self._repo.find_by_code_digits(ctx, company_id=None, digit_key=dig)
+            if len(broad) == 1:
+                return self.get_employee(ctx, broad[0].id)
+            if len(broad) > 1 and cid is not None:
+                same = [m for m in broad if m.company_id == cid]
+                if len(same) == 1:
+                    return self.get_employee(ctx, same[0].id)
+                ct = [m for m in broad if str(m.employee_code).upper().startswith("CT")]
+                if len(ct) == 1:
+                    return self.get_employee(ctx, ct[0].id)
+        return None
+
     def allocate_next_employee_code(self, ctx: TenantContext, company_id: UUID | None = None) -> str:
-        """Next employee code for a company: ``{company_code}000001`` (serial resets per company)."""
+        """Next employee code for a company.
+
+        Prefers Legal Entity ``employee_code_prefix`` (e.g. CDPL / CT), then
+        ``company_code``, then ``EMP``. Serial is independent per company.
+        """
         resolved_company_id = self._scope.resolve_company_id(ctx, company_id)
         company = self._companies.get_by_id(ctx, resolved_company_id)
-        company_code = (
-            str(getattr(company, "company_code", "") or "").strip().upper()
-            if company is not None
-            else ""
-        ) or "EMP"
+        emp_prefix = ""
+        company_code = ""
+        if company is not None:
+            emp_prefix = (
+                str(getattr(company, "employee_code_prefix", "") or "")
+                .strip()
+                .upper()
+            )
+            company_code = (
+                str(getattr(company, "company_code", "") or "").strip().upper()
+            )
+        prefix = emp_prefix or company_code or "EMP"
         return self._codes.generate(
             MasterEntityType.EMPLOYEE,
             resolved_company_id,
             model=MasterEmployee,
             code_column="employee_code",
-            prefix=company_code,
+            prefix=prefix,
         )
 
     def create_employee(

@@ -1,74 +1,34 @@
-"""API v1 router aggregation."""
+"""API v1 router aggregation — standalone HRMS."""
 
 from fastapi import APIRouter
 
-from modules.agent_read.router import agent_read_router
-from modules.analytics.router import analytics_router
-from modules.asset.router import asset_router
-from modules.crm.router import crm_router
-from modules.document.router import document_router
-from modules.ecommerce.router import ecommerce_router
 from modules.ess.router import ess_router
-from modules.finance.router import finance_router
 from modules.foundation.router import foundation_router
-from modules.helpdesk.router import helpdesk_router
 from modules.hr.router import hr_router
 from modules.hr.routers.digital_onboarding import public_onboarding_router
-from modules.procurement.routers.order_tracking import public_order_tracking_router
-from modules.procurement.routers.service_projects import public_project_tracking_router
-from modules.inventory.router import inventory_router
-from modules.landing.router import landing_router
-from modules.manufacturing.router import manufacturing_router
-from modules.marketing.router import marketing_router
 from modules.master_data.router import master_data_router
 from modules.organization.router import organization_router
 from modules.payroll.router import payroll_router
 from modules.platform.router import platform_router
-from modules.procurement.router import procurement_router
-from modules.project.router import project_router
-from modules.quality.router import quality_router
 from modules.recruitment.router import (
     public_bg_check_router,
     public_bg_vendor_router,
     public_careers_router,
     recruitment_router,
 )
-from modules.service.router import service_router
-from modules.voice_agent.router import voice_agent_router
 from shared.health import router as health_router
 
 api_v1_router = APIRouter()
 api_v1_router.include_router(health_router, tags=["Health"])
-api_v1_router.include_router(landing_router)
 api_v1_router.include_router(foundation_router)
 api_v1_router.include_router(platform_router)
 api_v1_router.include_router(organization_router)
-# Asset module before master-data: master /assets/{asset_id} must not swallow
-# /assets/asset-categories, /assets/assets, etc.
-api_v1_router.include_router(asset_router)
 api_v1_router.include_router(master_data_router)
-api_v1_router.include_router(finance_router)
-api_v1_router.include_router(procurement_router)
-api_v1_router.include_router(inventory_router)
-api_v1_router.include_router(manufacturing_router)
-api_v1_router.include_router(quality_router)
-api_v1_router.include_router(crm_router)
 api_v1_router.include_router(hr_router)
 api_v1_router.include_router(public_onboarding_router)
-api_v1_router.include_router(public_order_tracking_router)
-api_v1_router.include_router(public_project_tracking_router)
 api_v1_router.include_router(ess_router)
 api_v1_router.include_router(payroll_router)
 api_v1_router.include_router(recruitment_router)
 api_v1_router.include_router(public_careers_router)
 api_v1_router.include_router(public_bg_check_router)
 api_v1_router.include_router(public_bg_vendor_router)
-api_v1_router.include_router(project_router)
-api_v1_router.include_router(service_router)
-api_v1_router.include_router(helpdesk_router)
-api_v1_router.include_router(document_router)
-api_v1_router.include_router(marketing_router)
-api_v1_router.include_router(analytics_router)
-api_v1_router.include_router(ecommerce_router)
-api_v1_router.include_router(voice_agent_router)
-api_v1_router.include_router(agent_read_router)

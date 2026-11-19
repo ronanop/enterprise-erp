@@ -31,9 +31,15 @@ export type ShiftExtension = {
   lateAfterMinutes: number;
   earlyExitBeforeMinutes: number;
   overtimeAllowed: boolean;
-  autoAttendance: boolean;
+  /** @deprecated Not used — kept for localStorage back-compat only. */
+  autoAttendance?: boolean;
   color: string;
-  weeklyOffRule: WeeklyOffRule;
+  /** Multi weekly-off days for this shift (Sat + Sun, alternate Sat, etc.). */
+  weeklyOffRules: WeeklyOffRule[];
+  /** First Saturday in the alternate-Saturday off cycle (YYYY-MM-DD). */
+  weeklyOffAlternateSaturdayStart?: string;
+  /** @deprecated Prefer weeklyOffRules. Migrated on read. */
+  weeklyOffRule?: WeeklyOffRule;
 };
 
 export type ShiftRecord = {
@@ -164,10 +170,35 @@ export const DEFAULT_SHIFT_EXTENSION: ShiftExtension = {
   lateAfterMinutes: 15,
   earlyExitBeforeMinutes: 15,
   overtimeAllowed: true,
-  autoAttendance: false,
   color: "#059669",
-  weeklyOffRule: "sunday",
+  weeklyOffRules: ["sunday"],
+  weeklyOffAlternateSaturdayStart: "",
 };
+
+/** Normalize legacy single `weeklyOffRule` into `weeklyOffRules[]`. */
+export function normalizeShiftWeeklyOffRules(
+  ext?: Partial<ShiftExtension> | null,
+): WeeklyOffRule[] {
+  if (!ext) return ["sunday"];
+  if (Array.isArray(ext.weeklyOffRules) && ext.weeklyOffRules.length > 0) {
+    return ext.weeklyOffRules;
+  }
+  if (ext.weeklyOffRule) return [ext.weeklyOffRule];
+  return ["sunday"];
+}
+
+export function coerceShiftExtension(raw?: Partial<ShiftExtension> | null): ShiftExtension {
+  return {
+    ...DEFAULT_SHIFT_EXTENSION,
+    ...(raw ?? {}),
+    weeklyOffRules: normalizeShiftWeeklyOffRules(raw),
+    weeklyOffAlternateSaturdayStart: String(
+      raw?.weeklyOffAlternateSaturdayStart ??
+        DEFAULT_SHIFT_EXTENSION.weeklyOffAlternateSaturdayStart ??
+        "",
+    ),
+  };
+}
 
 export function emptyShiftFilters(): ShiftFilters {
   return {

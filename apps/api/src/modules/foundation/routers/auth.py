@@ -14,6 +14,7 @@ from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import SecUser
 from modules.foundation.schemas import (
     ChangePasswordRequest,
+    EssLoginRequest,
     ForgotPasswordRequest,
     LoginRequest,
     MfaVerifyRequest,
@@ -54,6 +55,30 @@ def login(
     result = service.login(
         email=body.email,
         password=body.password,
+        ip_address=get_client_ip(request),
+        user_agent=request.headers.get("User-Agent"),
+    )
+    db.commit()
+    if result.get("access_token"):
+        _apply_auth_cookies(response, result)
+    return APIResponse(message="Login successful", data=TokenResponse(**result))
+
+
+@router.post("/ess/login", response_model=APIResponse[TokenResponse], deprecated=True)
+def login_ess_alias(
+    body: EssLoginRequest,
+    request: Request,
+    db: Annotated[Session, Depends(get_db)],
+    response: Response,
+) -> APIResponse[TokenResponse]:
+    """Short-lived alias for older ESS clients. New clients call POST /auth/login."""
+    service = AuthService(db)
+    result = service.login_ess(
+        company_code=body.company_code,
+        employee_code=body.employee_code,
+        password=body.password,
+        captcha_id=body.captcha_id,
+        captcha_answer=body.captcha_answer,
         ip_address=get_client_ip(request),
         user_agent=request.headers.get("User-Agent"),
     )
@@ -188,11 +213,7 @@ def me(
         "admin_module_keys": admin_module_keys,
         "module_roles": module_roles,
     }
-    from modules.project.service.project_module_admin import ProjectModuleAdminService
     from modules.hr.service.hr_module_admin import HrModuleAdminService
-    from modules.asset.service.asset_module_admin import AssetModuleAdminService
 
-    data["project_module_admin"] = ProjectModuleAdminService(db).is_admin(ctx)
     data["hr_module_admin"] = HrModuleAdminService(db).is_admin(ctx)
-    data["assets_module_admin"] = AssetModuleAdminService(db).is_admin(ctx)
     return APIResponse(message="Current user", data=data)

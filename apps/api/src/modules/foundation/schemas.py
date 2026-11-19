@@ -27,6 +27,16 @@ class LoginRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
+class EssLoginRequest(BaseModel):
+    """Legacy ESS body (company + employee code). Prefer ``LoginRequest`` on ``POST /auth/login``."""
+
+    company_code: str = Field(min_length=1, max_length=50)
+    employee_code: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=128)
+    captcha_id: str | None = None
+    captcha_answer: str | None = None
+
+
 class MfaVerifyRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 

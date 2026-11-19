@@ -7,32 +7,25 @@ import {
   CheckCircle2,
   Clock3,
   ExternalLink,
+  Pencil,
   Search,
   UserRound,
   UserX,
   X,
 } from "lucide-react";
 
-import { HrEmptyState, HrStatusBadge } from "@/components/hr/hr-primitives";
+import { HrEmptyState } from "@/components/hr/hr-primitives";
 import { SetupField, SetupSelect } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { EmsPagination } from "@/components/hr/workforce/ems-primitives";
 import { cn } from "@/lib/utils";
 import {
+  formatHoursMinutes,
   loadAttendanceForEmployee,
   type AttendanceDirectory,
 } from "@/services/attendance-management-service";
-import { apiClient } from "@/services/api-client";
-import type { AttendanceRecord } from "@/types/attendance-management";
-
-type BiometricPunch = {
-  id: string;
-  device_code: string;
-  punched_at: string;
-  attendance_date: string;
-  employee_code?: string | null;
-};
+import type { AttendancePunch, AttendanceRecord } from "@/types/attendance-management";
 
 type StatusFilter = "all" | "present" | "absent" | "half_day";
 
@@ -84,6 +77,18 @@ function formatTime12(iso: string): string {
   }
 }
 
+/** Title-case each word (e.g. "software development engineer" → "Software Development Engineer"). */
+function toTitleCase(value: string): string {
+  const raw = String(value || "")
+    .replace(/[_-]+/g, " ")
+    .trim();
+  if (!raw) return "";
+  return raw
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function isPresentStatus(row: AttendanceRecord): boolean {
   return (
     row.status === "present" ||
@@ -128,9 +133,10 @@ export function EmployeeAttendanceExplorer({
   const [rows, setRows] = useState<AttendanceRecord[]>([]);
   const [rowsLoading, setRowsLoading] = useState(false);
   const [page, setPage] = useState(1);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [dayPunches, setDayPunches] = useState<BiometricPunch[]>([]);
-  const [dayPunchesLoading, setDayPunchesLoading] = useState(false);
+  const [punchesPopup, setPunchesPopup] = useState<{
+    date: string;
+    punches: AttendancePunch[];
+  } | null>(null);
 
   const searchWrapRef = useRef<HTMLDivElement>(null);
   const autoMonthRef = useRef("");
@@ -246,45 +252,6 @@ export function EmployeeAttendanceExplorer({
 
   useEffect(() => setPage(1), [employeeId, dateFrom, dateTo, statusFilter]);
 
-  useEffect(() => {
-    setSelectedId((cur) => {
-      if (cur && pageRows.some((r) => r.id === cur)) return cur;
-      return pageRows[0]?.id ?? null;
-    });
-  }, [pageRows]);
-
-  const selectedRow = pageRows.find((r) => r.id === selectedId) ?? null;
-
-  useEffect(() => {
-    if (!employeeId || !selectedRow?.attendanceDate) {
-      setDayPunches([]);
-      return;
-    }
-    let cancelled = false;
-    setDayPunchesLoading(true);
-    void apiClient<BiometricPunch[]>("/hr/attendance/biometric-punches", {
-      method: "GET",
-      query: {
-        employee_id: employeeId,
-        date_from: selectedRow.attendanceDate,
-        date_to: selectedRow.attendanceDate,
-        limit: 200,
-      },
-    })
-      .then((res) => {
-        if (!cancelled) setDayPunches(Array.isArray(res.data) ? res.data : []);
-      })
-      .catch(() => {
-        if (!cancelled) setDayPunches([]);
-      })
-      .finally(() => {
-        if (!cancelled) setDayPunchesLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [employeeId, selectedRow?.attendanceDate]);
-
   const monthOptions = useMemo(() => {
     const set = new Set(recentMonths());
     for (const r of rows) {
@@ -382,10 +349,10 @@ export function EmployeeAttendanceExplorer({
                         onClick={() => selectEmployee(emp)}
                       >
                         <span className="min-w-0">
-                          <span className="block truncate font-medium">{emp.label}</span>
+                          <span className="block truncate font-medium">{toTitleCase(emp.label)}</span>
                           <span className="block truncate text-[11px] text-muted-foreground">
                             {emp.code}
-                            {emp.designation ? ` · ${emp.designation}` : ""}
+                            {emp.designation ? ` · ${toTitleCase(emp.designation)}` : ""}
                           </span>
                         </span>
                         <UserRound className="size-3.5 shrink-0 text-muted-foreground" />
@@ -405,10 +372,10 @@ export function EmployeeAttendanceExplorer({
         {employeeMeta ? (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">{employeeMeta.label}</p>
+              <p className="truncate text-sm font-semibold">{toTitleCase(employeeMeta.label)}</p>
               <p className="truncate text-xs text-muted-foreground">
                 {employeeMeta.code}
-                {employeeMeta.designation ? ` · ${employeeMeta.designation}` : ""}
+                {employeeMeta.designation ? ` · ${toTitleCase(employeeMeta.designation)}` : ""}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -483,8 +450,7 @@ export function EmployeeAttendanceExplorer({
         />
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden lg:flex-row">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
           {busy ? (
             <div
               className="flex min-h-0 flex-1 flex-col gap-2 p-3"
@@ -500,19 +466,46 @@ export function EmployeeAttendanceExplorer({
             </div>
           ) : !listRows.length ? (
             <div className="flex min-h-0 flex-1 items-center justify-center">
-            <HrEmptyState
-              title="No attendance for this filter"
-              description="Try another month, custom date range, or status. Mark attendance if this period is empty."
-            />
+              <HrEmptyState
+                title="No attendance for this filter"
+                description="Try another month, custom date range, or status. Mark attendance if this period is empty."
+              />
             </div>
           ) : (
             <>
-              <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border/60 px-4 py-2 text-xs text-muted-foreground">
-                <CalendarDays className="size-3.5" />
-                <span>
-                  {listRows.length} day{listRows.length === 1 ? "" : "s"}
-                  {statusFilter !== "all" ? ` · ${statusFilter.replace("_", " ")}` : ""}
-                </span>
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-4 py-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <CalendarDays className="size-3.5" />
+                  <span>
+                    {listRows.length} Day{listRows.length === 1 ? "" : "s"}
+                    {statusFilter !== "all" ? ` · ${toTitleCase(statusFilter)}` : ""}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {cards.map((card) => {
+                    const active = statusFilter === card.key;
+                    const Icon = card.icon;
+                    return (
+                      <button
+                        key={card.key}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => setStatusFilter(active ? "all" : card.key)}
+                        className={cn(
+                          "cursor-pointer inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-left transition-all duration-200",
+                          "hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                          active ? "border-primary/50 ring-1 ring-primary/20" : "border-border/70",
+                        )}
+                      >
+                        <Icon className="size-3 text-muted-foreground" />
+                        <span className="text-[10px] font-medium text-muted-foreground">
+                          {toTitleCase(card.label)}
+                        </span>
+                        <span className="text-xs font-semibold tabular-nums">{card.value}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <div className="erp-scroll min-h-0 flex-1 overflow-auto">
                 <table className="w-full min-w-[880px] text-left text-sm">
@@ -521,11 +514,9 @@ export function EmployeeAttendanceExplorer({
                       {[
                         "Date",
                         "Status",
-                        "Check in",
-                        "Check out",
+                        "Punches",
                         "Hours",
-                        "OT",
-                        "Source",
+                        "Device",
                         "Location",
                         "Notes",
                         "",
@@ -543,37 +534,86 @@ export function EmployeeAttendanceExplorer({
                     {pageRows.map((row) => (
                       <tr
                         key={row.id}
-                        className={cn(
-                          "cursor-pointer border-b border-border/40 transition-colors duration-200 hover:bg-muted/25",
-                          selectedId === row.id && "bg-muted/40",
-                        )}
-                        onClick={() => setSelectedId(row.id)}
+                        className="border-b border-border/40 transition-colors duration-200 hover:bg-muted/25"
                       >
                         <td className="px-3 py-2 font-mono text-xs">{row.attendanceDate}</td>
                         <td className="px-3 py-2">
-                          <HrStatusBadge status={row.status.replace(/_/g, " ")} />
+                          <span
+                            className={cn(
+                              "inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium tracking-wide",
+                              row.status === "absent"
+                                ? "border-transparent bg-hrms-pink text-hrms-danger"
+                                : row.status === "late" ||
+                                    row.status === "present" ||
+                                    row.status === "work_from_home"
+                                  ? "border-transparent bg-hrms-mint text-hrms-success"
+                                  : row.status === "half_day"
+                                    ? "border-transparent bg-hrms-peach text-hrms-warning"
+                                    : "border-transparent bg-hrms-blue text-hrms-info",
+                            )}
+                          >
+                            {toTitleCase(row.status)}
+                          </span>
                         </td>
-                        <td className="px-3 py-2 text-xs whitespace-nowrap">{formatTime12(row.checkIn)}</td>
-                        <td className="px-3 py-2 text-xs whitespace-nowrap">{formatTime12(row.checkOut)}</td>
-                        <td className="px-3 py-2 text-xs tabular-nums">{row.workingHours || "—"}</td>
-                        <td className="px-3 py-2 text-xs tabular-nums">{row.overtimeHours || "—"}</td>
-                        <td className="px-3 py-2 text-xs capitalize">{row.device.replace(/_/g, " ")}</td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground">{row.location || "—"}</td>
+                        <td className="max-w-[220px] px-3 py-2 text-xs">
+                          {(() => {
+                            const punchTimes = row.punches ?? [];
+                            if (!punchTimes.length) {
+                              return <span className="text-muted-foreground">—</span>;
+                            }
+                            if (punchTimes.length === 1) {
+                              const p = punchTimes[0];
+                              return (
+                                <span
+                                  title={[p.deviceName || p.deviceCode, p.deviceLocation]
+                                    .filter(Boolean)
+                                    .join(" · ")}
+                                  className="inline-flex rounded-md border border-border/70 bg-muted/40 px-1.5 py-0.5 font-mono text-[10px] tabular-nums"
+                                >
+                                  {formatTime12(p.punchedAt)}
+                                </span>
+                              );
+                            }
+                            return (
+                              <button
+                                type="button"
+                                className="inline-flex h-7 cursor-pointer items-center gap-1 rounded-md border border-border/70 bg-background px-2 text-[11px] font-medium text-primary transition-colors duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                                onClick={() =>
+                                  setPunchesPopup({ date: row.attendanceDate, punches: punchTimes })
+                                }
+                              >
+                                View
+                                <span className="rounded bg-muted px-1 py-px text-[10px] tabular-nums text-muted-foreground">
+                                  {punchTimes.length}
+                                </span>
+                              </button>
+                            );
+                          })()}
+                        </td>
+                        <td className="px-3 py-2 text-xs tabular-nums">
+                          {formatHoursMinutes(row.workingHours)}
+                        </td>
+                        <td className="px-3 py-2 text-xs">{toTitleCase(row.device) || "—"}</td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          {row.location ? toTitleCase(row.location) : "—"}
+                        </td>
                         <td
-                          className="max-w-[200px] truncate px-3 py-2 text-xs text-muted-foreground"
+                          className="max-w-[240px] truncate px-3 py-2 text-xs text-muted-foreground"
                           title={row.notes}
                         >
                           {row.notes || "—"}
                         </td>
-                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-3 py-2">
                           <Button
                             type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 cursor-pointer text-xs"
+                            variant="outline"
+                            size="icon"
+                            className="size-7 cursor-pointer transition-colors duration-150 hover:bg-muted"
+                            title="Correct attendance"
+                            aria-label="Correct attendance"
                             onClick={() => onCorrect(row)}
                           >
-                            Correct
+                            <Pencil className="size-3.5" />
                           </Button>
                         </td>
                       </tr>
@@ -584,96 +624,58 @@ export function EmployeeAttendanceExplorer({
               <EmsPagination page={page} pageSize={PAGE_SIZE} total={listRows.length} onPageChange={setPage} />
             </>
           )}
-          </div>
-          <aside className="flex w-full shrink-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm lg:w-[22rem]">
-            <div className="shrink-0 space-y-3 border-b border-border/60 p-3">
-              {employeeMeta ? (
-                <div>
-                  <p className="truncate text-sm font-semibold">{employeeMeta.label}</p>
-                  <p className="truncate font-mono text-[11px] text-muted-foreground">
-                    {employeeMeta.code}
-                    {employeeMeta.designation ? ` · ${employeeMeta.designation}` : ""}
-                  </p>
-                </div>
-              ) : null}
-              <div className="grid grid-cols-3 gap-2">
-                {cards.map((card) => {
-                  const active = statusFilter === card.key;
-                  const Icon = card.icon;
-                  return (
-                    <button
-                      key={card.key}
-                      type="button"
-                      aria-pressed={active}
-                      onClick={() => setStatusFilter(active ? "all" : card.key)}
-                      className={cn(
-                        "cursor-pointer rounded-lg border px-2 py-1.5 text-left transition-all duration-200",
-                        "hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
-                        active ? "border-primary/50 ring-1 ring-primary/20" : "border-border/70",
-                      )}
-                    >
-                      <div className="flex items-center justify-between gap-1">
-                        <p className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">
-                          {card.label}
-                        </p>
-                        <Icon className="size-3 text-muted-foreground" />
-                      </div>
-                      <p className="text-base font-semibold tabular-nums">{card.value}</p>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="erp-scroll min-h-0 flex-1 overflow-auto p-3 text-xs">
-              {selectedRow ? (
-                <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <p className="text-[11px] font-medium uppercase text-muted-foreground">Selected day</p>
-                    <p>Date {selectedRow.attendanceDate}</p>
-                    <p>Status {selectedRow.status.replace(/_/g, " ")}</p>
-                    <p>Check in {formatTime12(selectedRow.checkIn)}</p>
-                    <p>Check out {formatTime12(selectedRow.checkOut)}</p>
-                    <p>Hours {selectedRow.workingHours || "—"}</p>
-                  </div>
-                  <div className="space-y-1.5 border-t border-border/60 pt-3">
-                    <p className="text-[11px] font-medium uppercase text-muted-foreground">
-                      All punches (every device)
-                    </p>
-                    {dayPunchesLoading ? (
-                      <p className="text-muted-foreground">Loading punches…</p>
-                    ) : dayPunches.length === 0 ? (
-                      <p className="text-muted-foreground">No biometric punches stored for this day.</p>
-                    ) : (
-                      <ul className="space-y-1.5">
-                        {[...dayPunches]
-                          .sort(
-                            (a, b) =>
-                              new Date(a.punched_at).getTime() - new Date(b.punched_at).getTime(),
-                          )
-                          .map((p) => (
-                            <li
-                              key={p.id}
-                              className="flex items-center justify-between gap-2 rounded-md border border-border/60 px-2 py-1.5"
-                            >
-                              <span className="font-medium tabular-nums">
-                                {formatTime12(p.punched_at)}
-                              </span>
-                              <span className="font-mono text-[10px] text-muted-foreground">
-                                {p.device_code}
-                              </span>
-                            </li>
-                          ))}
-                      </ul>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-muted-foreground">Select a day in the list.</p>
-              )}
-            </div>
-          </aside>
         </div>
       )}
+
+      {punchesPopup ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <button
+            type="button"
+            className="absolute inset-0 cursor-pointer bg-slate-950/40"
+            aria-label="Close punches"
+            onClick={() => setPunchesPopup(null)}
+          />
+          <div className="relative z-10 w-full max-w-sm rounded-2xl border border-border bg-card p-4 shadow-lg">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold tracking-tight">Punches</h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {punchesPopup.date} · {punchesPopup.punches.length} punch
+                  {punchesPopup.punches.length === 1 ? "" : "es"}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 shrink-0 cursor-pointer transition-colors duration-200"
+                onClick={() => setPunchesPopup(null)}
+              >
+                Close
+              </Button>
+            </div>
+            <ul className="mt-3 max-h-64 space-y-1.5 overflow-y-auto">
+              {punchesPopup.punches.map((p, index) => (
+                <li
+                  key={p.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/30 px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="font-mono text-xs tabular-nums">{formatTime12(p.punchedAt)}</p>
+                    <p className="truncate text-[10px] text-muted-foreground">
+                      {[p.deviceName || p.deviceCode, p.deviceLocation].filter(Boolean).join(" · ") ||
+                        `Punch ${index + 1}`}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-md bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    #{index + 1}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

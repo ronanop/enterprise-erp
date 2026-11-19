@@ -120,8 +120,7 @@ export async function apiClientBytes(path: string): Promise<Uint8Array> {
   return new Uint8Array(buf);
 }
 
-export const authService = {
-  login: async (email: string, password: string) => {
+async function signIn(email: string, password: string) {
     if (env.useMock) {
       try {
         const res = await mockApi.login(email, password);
@@ -143,7 +142,7 @@ export const authService = {
     return apiClient<TokenData>("/auth/login", {
       method: "POST",
       auth: false,
-      body: { email, password },
+      body: { email, user_id: email, password },
     }).then(async (res) => {
       if (res.data?.access_token) {
         await setTokens(
@@ -153,28 +152,17 @@ export const authService = {
       }
       return res;
     });
-  },
+}
 
-  essLogin: async (body: {
-    company_code: string;
+export const authService = {
+  login: signIn,
+
+  /** @deprecated Prefer login(). Still signs in through POST /auth/login. */
+  essLogin: (body: {
+    company_code?: string;
     employee_code: string;
     password: string;
-    captcha_id?: string;
-    captcha_answer?: string;
-  }) =>
-    apiClient<TokenData>("/auth/ess/login", {
-      method: "POST",
-      auth: false,
-      body,
-    }).then(async (res) => {
-      if (res.data?.access_token) {
-        await setTokens(
-          res.data.access_token,
-          res.data.refresh_token ?? undefined,
-        );
-      }
-      return res;
-    }),
+  }) => signIn(body.employee_code, body.password),
 
   me: () =>
     env.useMock ? mockApi.meProfile() : apiClient<UserProfile>("/auth/me"),

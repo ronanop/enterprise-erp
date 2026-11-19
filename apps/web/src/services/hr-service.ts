@@ -1,3 +1,4 @@
+import { isCeoOrCmdRole } from "@/lib/hr/reporting-managers";
 import { ApiClientError, resourceService } from "@/services/api-client";
 
 export type HrRow = Record<string, unknown>;
@@ -251,7 +252,10 @@ export async function listHrBranchOptions(): Promise<HrOption[]> {
   }
 }
 
-export async function listHrEmployeeOptions(): Promise<HrOption[]> {
+export async function listHrEmployeeOptions(opts?: {
+  /** Exclude CEO / CMD / Managing Director from the picker (e.g. New Exit). */
+  excludeCeoCmd?: boolean;
+}): Promise<HrOption[]> {
   try {
     const all: HrRow[] = [];
     const seenFirstIds = new Set<string>();
@@ -264,13 +268,21 @@ export async function listHrEmployeeOptions(): Promise<HrOption[]> {
       all.push(...chunk);
       if (chunk.length < 200) break;
     }
-    return all.map((r) => ({
-      id: String(r.id),
-      label:
-        `${[r.first_name, r.last_name].filter(Boolean).join(" ")}${
-          r.employee_code ? ` (${r.employee_code})` : ""
-        }`.trim() || String(r.id),
-    }));
+    return all
+      .filter((r) => {
+        if (!opts?.excludeCeoCmd) return true;
+        return !isCeoOrCmdRole({
+          designation: r.designation as string | undefined,
+          job_title: r.job_title as string | undefined,
+        });
+      })
+      .map((r) => ({
+        id: String(r.id),
+        label:
+          `${[r.first_name, r.last_name].filter(Boolean).join(" ")}${
+            r.employee_code ? ` (${r.employee_code})` : ""
+          }`.trim() || String(r.id),
+      }));
   } catch {
     return [];
   }

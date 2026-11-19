@@ -19,6 +19,14 @@ export const DASHBOARD_ROLE_LABELS: Record<DashboardRole, string> = {
 
 export type NamedCount = { label: string; value: number };
 
+/** Brief row for department / location drill-down lists on the dashboard. */
+export type DashboardEmployeeBrief = {
+  id: string;
+  name: string;
+  code?: string;
+  designation?: string;
+};
+
 export type StackedAttendancePoint = {
   label: string;
   present: number;
@@ -69,7 +77,14 @@ export type HrDashboardCharts = {
   leaveTrend: NamedCount[];
   leaveTrendByType: LeaveTrendPoint[];
   onboardingProgress: NamedCount[];
+  /** Attrition % by month (exits / headcount). */
   attritionTrend: NamedCount[];
+  /** Employees who left the company — exit counts by month. */
+  attritionByMonth: NamedCount[];
+  /** Exit counts by department (same window as attritionByMonth). */
+  attritionByDepartment: NamedCount[];
+  /** Exit counts by resignation / exit reason. */
+  attritionByReason: NamedCount[];
   performanceDistribution: NamedCount[];
   trainingCompletion: NamedCount[];
 };
@@ -90,6 +105,8 @@ export type CalendarEvent = {
   type: CalendarEventType;
   at: string;
   meta?: string;
+  /** When set, event row can open the employee profile. */
+  employeeId?: string;
 };
 
 export type ApprovalItem = {
@@ -157,6 +174,12 @@ export type HrExecutiveDashboard = {
   displayName: string;
   stats: HrDashboardStats;
   charts: HrDashboardCharts;
+  /** Employees keyed by department label (same labels as charts.departmentWise). */
+  employeesByDepartment: Record<string, DashboardEmployeeBrief[]>;
+  /** Employees keyed by location label (same labels as charts.locationWise). */
+  employeesByLocation: Record<string, DashboardEmployeeBrief[]>;
+  /** Employees keyed by gender label (Male / Female / Other). */
+  employeesByGender: Record<string, DashboardEmployeeBrief[]>;
   calendar: CalendarEvent[];
   trainingItems: DashboardTrainingItem[];
   approvals: ApprovalItem[];

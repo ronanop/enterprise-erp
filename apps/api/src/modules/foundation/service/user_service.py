@@ -296,14 +296,6 @@ class UserService:
             pass
 
     def list_users(self, tenant_id: UUID):
-        # Keep Organization "Module users" in sync with Asset domain memberships.
-        from modules.asset.service.domain_membership_service import DomainMembershipService
-
-        synced = DomainMembershipService(self._modules.db).sync_all_active_to_org_modules(
-            tenant_id
-        )
-        if synced:
-            self._modules.db.commit()
         return self._repo.list_users(tenant_id)
 
     def get_user(self, tenant_id: UUID, user_id: UUID):
