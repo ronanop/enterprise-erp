@@ -1,5 +1,6 @@
-import { ServiceRequestTicketFormPage } from "@/components/service/tickets/service-request-ticket-form-page";
+import { redirect } from "next/navigation";
 
+/** Manual ticket create is disabled — tickets come from the support mailbox. */
 export default function Page() {
-  return <ServiceRequestTicketFormPage />;
+  redirect("/service/service-request-tickets");
 }

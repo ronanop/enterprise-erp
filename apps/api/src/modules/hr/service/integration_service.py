@@ -1,5 +1,6 @@
-"""HR integration facade — Master Data sync + Payroll-ready read exports."""
+"""HR integration facade — Master Data sync + Payroll-ready read exports + roster duty."""
 
+from datetime import datetime
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -10,10 +11,11 @@ from modules.hr.repository.attendance_repository import AttendanceRepository
 from modules.hr.repository.employment_repository import EmploymentRepository
 from modules.hr.repository.leave_request_repository import LeaveRequestRepository
 from modules.hr.service.hr_scope_validator import HrScopeValidator
+from modules.hr.service.roster_duty_service import RosterDutyService
 
 
 class HRIntegrationService:
-    """Expose employment / attendance / leave facts for future Payroll. No payroll writes."""
+    """Expose employment / attendance / leave / roster facts for other modules. No payroll writes."""
 
     def __init__(self, db: Session) -> None:
         self._scope = HrScopeValidator(db)
@@ -21,6 +23,7 @@ class HRIntegrationService:
         self._employment = EmploymentRepository(db)
         self._attendance = AttendanceRepository(db)
         self._leave = LeaveRequestRepository(db)
+        self._roster_duty = RosterDutyService(db)
 
     def get_employee(self, ctx: TenantContext, employee_id: UUID):
         return self._master.get_employee(ctx, employee_id)
@@ -71,3 +74,25 @@ class HRIntegrationService:
             for r in self._leave.list_rows(ctx, cid)
             if r.status == "approved"
         ]
+
+    def list_on_duty_employee_ids(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID | None = None,
+        at: datetime | None = None,
+    ) -> set[UUID]:
+        """Employees currently on a published roster / active shift (for Service visibility)."""
+        return self._roster_duty.list_on_duty_employee_ids(ctx, company_id=company_id, at=at)
+
+    def is_employee_on_duty(
+        self,
+        ctx: TenantContext,
+        employee_id: UUID,
+        *,
+        company_id: UUID | None = None,
+        at: datetime | None = None,
+    ) -> bool:
+        return self._roster_duty.is_employee_on_duty(
+            ctx, employee_id, company_id=company_id, at=at
+        )

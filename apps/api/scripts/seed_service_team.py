@@ -34,6 +34,7 @@ from modules.organization.models.hierarchy import OrgDepartment  # noqa: E402
 from modules.service.permissions import (  # noqa: E402
     SERVICE_COORDINATOR_PERMISSIONS,
     SERVICE_ENGINEER_PERMISSIONS,
+    SERVICE_MANAGER_PERMISSIONS,
 )
 from security.password import PasswordHasher  # noqa: E402
 
@@ -46,15 +47,27 @@ SERVICE_STAKEHOLDER_PERMISSIONS = [
 TEAM_SPECS: list[dict] = [
     {
         "email": "service.head@example.com",
-        "display_name": "Service Head",
+        "display_name": "Service Delivery Head",
         "role_code": "SERVICE_COORDINATOR",
-        "role_name": "Service Coordinator",
+        "role_name": "Service Delivery Head",
         "permissions": SERVICE_COORDINATOR_PERMISSIONS,
         "employee_code": "SVC-HEAD",
         "first_name": "Vikram",
         "last_name": "Desai",
-        "designation": "Service Head",
+        "designation": "Service Delivery Head",
         "mobile_suffix": "9101",
+    },
+    {
+        "email": "service.knocktl@example.com",
+        "display_name": "Knock TL",
+        "role_code": "SERVICE_MANAGER",
+        "role_name": "Knock TL",
+        "permissions": SERVICE_MANAGER_PERMISSIONS,
+        "employee_code": "SVC-KTL",
+        "first_name": "Neha",
+        "last_name": "Singh",
+        "designation": "Knock Team Lead",
+        "mobile_suffix": "9100",
     },
     {
         "email": "service.engineer1@example.com",

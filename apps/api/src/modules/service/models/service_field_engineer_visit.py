@@ -43,3 +43,10 @@ class SvcServiceFieldEngineerVisit(Base, AuditMixin, TenantMixin, CompanyMixin, 
     total_charges: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     payment_approval: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # ITSM — hardware repair / replacement and extra charges
+    hardware_repair: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    hardware_replacement_yn: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    new_device_serial: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    other_charges: Mapped[Decimal | None] = mapped_column(Numeric(14, 2), nullable=True)
+    # Append-only change log (timestamped lines) so updates never lose earlier values
+    visit_notes_history: Mapped[str | None] = mapped_column(Text, nullable=True)

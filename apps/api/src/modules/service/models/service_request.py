@@ -3,8 +3,19 @@
 from datetime import date, datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, Date, DateTime, ForeignKey, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -34,6 +45,7 @@ class SvcServiceRequest(Base, *SvcTransactionMixin):
             "sla_status IS NULL OR sla_status IN ('within_sla','at_risk','breached')",
             name="ck_svc_service_request_sla_status",
         ),
+        Index("ix_svc_request_tenant_customer_ckt", "tenant_id", "customer_id", "ckt_id"),
         {"schema": "service"},
     )
 
@@ -173,6 +185,12 @@ class SvcServiceRequest(Base, *SvcTransactionMixin):
     asset_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
     amc_mail_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     asset_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    asset_confirmed_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
+
+    # ITSM — issue / resolution classification (codes from svc_ticket_option)
+    issue_reported_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    resolution_comment_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    other_remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Ownership workflow — solution & lifecycle
     solution_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -207,4 +225,15 @@ class SvcServiceRequest(Base, *SvcTransactionMixin):
     opened_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     opened_by: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), nullable=True)
     sla_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Active pause freezes the SLA clock; completed pauses accumulate in total minutes.
+    sla_paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sla_paused_total_minutes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # ITSM — SLA policy snapshot (captured once at SLA start; never mutated afterwards)
+    sla_policy_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    sla_target_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Mail parsing — Present Type + manual override guard (field name -> True)
+    present_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    field_manual_overrides: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 

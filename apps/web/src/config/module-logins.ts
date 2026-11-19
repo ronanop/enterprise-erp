@@ -154,30 +154,13 @@ export function getPostLoginRedirect(email: string | null | undefined): string {
   return redirectByEmail.get(email.trim().toLowerCase()) ?? "/";
 }
 
-import {
-  FIELD_ENGINEER_HOME,
-  hasServiceFieldEngineerRole,
-  isServiceFieldEngineerOnly,
-} from "@/lib/service-field-engineer-access";
-
-/** After login, send field engineers straight to their dashboard. */
+/** After login, use email map (FE portal removed — no FE-only redirect). */
 export async function resolvePostLoginRedirect(
   email: string,
-  me: () => Promise<{
+  _me?: () => Promise<{
     data?: { role_codes?: string[]; role_names?: string[]; permissions?: string[] } | null;
   }>,
 ): Promise<string> {
-  try {
-    const res = await me();
-    const roleCodes = res.data?.role_codes ?? [];
-    const roleNames = res.data?.role_names ?? [];
-    const permissions = res.data?.permissions ?? [];
-    if (isServiceFieldEngineerOnly(roleCodes, permissions, roleNames)) {
-      return FIELD_ENGINEER_HOME;
-    }
-  } catch {
-    // fall back to email map
-  }
   return getPostLoginRedirect(email);
 }
 

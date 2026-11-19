@@ -48,8 +48,9 @@ const MODE_COLORS: Record<string, string> = {
 
 const SLA_COLORS: Record<string, string> = {
   "Currently breached": SERVICE_CHART_COLORS.rose,
+  "SLA paused": SERVICE_CHART_COLORS.amber,
   "Closed within SLA": SERVICE_CHART_COLORS.emerald,
-  "Closed after breach": SERVICE_CHART_COLORS.amber,
+  "Closed after breach": SERVICE_CHART_COLORS.slate,
 };
 
 export type ServiceChartLinkPoint = {
@@ -270,11 +271,13 @@ export function ServiceSlaComplianceBarChart({
               tickFormatter={(value: string) =>
                 value === "Currently breached"
                   ? "Breached"
-                  : value === "Closed within SLA"
-                    ? "Within SLA"
-                    : value === "Closed after breach"
-                      ? "After breach"
-                      : value
+                  : value === "SLA paused"
+                    ? "Paused"
+                    : value === "Closed within SLA"
+                      ? "Within SLA"
+                      : value === "Closed after breach"
+                        ? "After breach"
+                        : value
               }
             />
             <YAxis

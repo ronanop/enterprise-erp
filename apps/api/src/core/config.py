@@ -101,14 +101,25 @@ class Settings(BaseSettings):
     graph_mailbox_email: str = Field(default="", alias="GRAPH_MAILBOX_EMAIL")
     graph_mail_poll_enabled: bool = Field(default=True, alias="GRAPH_MAIL_POLL_ENABLED")
 
+    # MailAPI — local M365 mail proxy (preferred for demo / shared mailbox without Graph secrets)
+    mailapi_enabled: bool = Field(default=False, alias="MAILAPI_ENABLED")
+    mailapi_base_url: str = Field(default="", alias="MAILAPI_BASE_URL")
+    mailapi_api_key: str = Field(default="", alias="MAILAPI_API_KEY")
+    mailapi_mailbox: str = Field(default="", alias="MAILAPI_MAILBOX")
+    mailapi_poll_interval_seconds: int = Field(default=120, alias="MAILAPI_POLL_INTERVAL_SECONDS")
+
     # Email → Service Request Ticket automation
     email_ticket_enabled: bool = Field(default=False, alias="EMAIL_TICKET_ENABLED")
     email_inbound_webhook_secret: str = Field(default="", alias="EMAIL_INBOUND_WEBHOOK_SECRET")
     email_ticket_default_branch_id: str | None = Field(default=None, alias="EMAIL_TICKET_DEFAULT_BRANCH_ID")
     email_ticket_default_category_id: str | None = Field(default=None, alias="EMAIL_TICKET_DEFAULT_CATEGORY_ID")
     email_ticket_default_customer_id: str | None = Field(default=None, alias="EMAIL_TICKET_DEFAULT_CUSTOMER_ID")
-    # Comma-separated subject substrings that mark an inbox mail as a ticket candidate (optional).
-    email_ticket_subject_patterns: str = Field(default="", alias="EMAIL_TICKET_SUBJECT_PATTERNS")
+    # Comma-separated subject substrings that mark an inbox mail as a ticket candidate.
+    # Used when EMAIL_TICKET_ACCEPT_ALL=false (demo / filtered mode).
+    email_ticket_subject_patterns: str = Field(default="ticket", alias="EMAIL_TICKET_SUBJECT_PATTERNS")
+    # true = every real inbound mail becomes a ticket (production mailbox).
+    # false = only subjects matching EMAIL_TICKET_SUBJECT_PATTERNS (demo mode).
+    email_ticket_accept_all: bool = Field(default=False, alias="EMAIL_TICKET_ACCEPT_ALL")
     smtp_host: str = Field(default="", alias="SMTP_HOST")
     smtp_port: int = Field(default=587, alias="SMTP_PORT")
     smtp_user: str = Field(default="", alias="SMTP_USER")
@@ -131,6 +142,24 @@ class Settings(BaseSettings):
     whatsapp_gateway_url: str = Field(default="", alias="WHATSAPP_GATEWAY_URL")
     whatsapp_gateway_api_key: str = Field(default="", alias="WHATSAPP_GATEWAY_API_KEY")
     service_followup_hours: int = Field(default=24, alias="SERVICE_FOLLOWUP_HOURS")
+    # ITSM: restart SLA clock when an approved reopen happens (default: keep original clock)
+    service_reopen_restart_sla: bool = Field(default=False, alias="SERVICE_REOPEN_RESTART_SLA")
+    # When true, Service ticket queues are limited to HRMS shift-roster on-duty staff
+    # (plus managers / ticket owners). Keep false until HRMS roster merge is ready.
+    service_roster_visibility_enabled: bool = Field(
+        default=False, alias="SERVICE_ROSTER_VISIBILITY_ENABLED"
+    )
+    # Ping everyone on the current shift roster every N seconds while a ticket stays unopened.
+    service_roster_open_reminder_enabled: bool = Field(
+        default=True, alias="SERVICE_ROSTER_OPEN_REMINDER_ENABLED"
+    )
+    service_roster_open_reminder_seconds: int = Field(
+        default=600, alias="SERVICE_ROSTER_OPEN_REMINDER_SECONDS"
+    )
+    # Working-hours calendar for customer priority SLAs (Mon-Fri, local business hours)
+    service_working_day_start_hour: int = Field(default=9, alias="SERVICE_WORKING_DAY_START_HOUR")
+    service_working_day_end_hour: int = Field(default=18, alias="SERVICE_WORKING_DAY_END_HOUR")
+    service_business_utc_offset_minutes: int = Field(default=330, alias="SERVICE_BUSINESS_UTC_OFFSET_MINUTES")
 
     def resolved_graph_tenant_id(self) -> str:
         return (self.azure_tenant_id or self.microsoft_tenant_id or "").strip()
@@ -142,7 +171,30 @@ class Settings(BaseSettings):
         return (self.azure_client_secret or self.microsoft_client_secret or "").strip()
 
     def resolved_graph_mailbox(self) -> str:
-        return (self.graph_mailbox_email or self.azure_from_email or self.imap_user or "").strip()
+        """Mailbox used for Microsoft Graph reads (not MailAPI)."""
+        return (
+            self.graph_mailbox_email
+            or self.azure_from_email
+            or self.imap_user
+            or ""
+        ).strip()
+
+    def resolved_support_mailbox(self) -> str:
+        """Display / default support inbox (MailAPI preferred for demo)."""
+        return (
+            self.mailapi_mailbox
+            or self.resolved_graph_mailbox()
+            or ""
+        ).strip()
+
+    @property
+    def mailapi_configured(self) -> bool:
+        return bool(
+            self.email_ticket_enabled
+            and self.mailapi_enabled
+            and (self.mailapi_base_url or "").strip()
+            and (self.mailapi_api_key or "").strip()
+        )
 
     @property
     def graph_mail_configured(self) -> bool:

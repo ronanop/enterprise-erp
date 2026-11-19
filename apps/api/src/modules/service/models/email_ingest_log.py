@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import CheckConstraint, DateTime, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.base import Base
@@ -33,3 +33,5 @@ class SvcEmailIngestLog(Base):
     source: Mapped[str] = mapped_column(String(30), nullable=False, default="webhook")
     received_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Parser diagnostics: extracted keys, NA-filled fields, customer match hints/source
+    extraction_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

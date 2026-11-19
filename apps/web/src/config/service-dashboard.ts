@@ -56,9 +56,9 @@ export function serviceStatusGroupFromKey(key: string): (typeof SERVICE_STATUS_G
   return SERVICE_STATUS_GROUPS.find((g) => g.key === key);
 }
 
-export type SlaDashboardFilter = "within" | "breached" | "at_risk" | "on_track";
+export type SlaDashboardFilter = "within" | "breached" | "at_risk" | "on_track" | "paused";
 
-export function serviceSlaFilterHref(filter: SlaDashboardFilter | "within" | "breached", opts?: ServiceDashboardLinkOpts): string {
+export function serviceSlaFilterHref(filter: SlaDashboardFilter | "within" | "breached" | "paused", opts?: ServiceDashboardLinkOpts): string {
   return withMineQuery(`/service/service-slas?filter=${encodeURIComponent(filter)}`, opts);
 }
 
@@ -69,6 +69,8 @@ export function serviceSlaComplianceHref(outcome: "within" | "breach", opts?: Se
 export function serviceSlaLabelHref(label: string, opts?: ServiceDashboardLinkOpts): string {
   const map: Record<string, string> = {
     "Currently breached": serviceSlaFilterHref("breached", opts),
+    "SLA paused": serviceSlaFilterHref("paused", opts),
+    Paused: serviceSlaFilterHref("paused", opts),
     "Closed within SLA": serviceSlaComplianceHref("within", opts),
     "Closed after breach": serviceSlaComplianceHref("breach", opts),
     "Within SLA": serviceSlaFilterHref("within", opts),

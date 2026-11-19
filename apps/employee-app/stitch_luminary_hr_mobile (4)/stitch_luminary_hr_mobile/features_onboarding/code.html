@@ -1,0 +1,245 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport">
+<title>Employee Portal - Onboarding</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<!-- Tailwind Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-surface": "#0b1c30",
+                    "on-tertiary-fixed-variant": "#005236",
+                    "on-secondary-container": "#fffbff",
+                    "tertiary-fixed-dim": "#4edea3",
+                    "tertiary-fixed": "#6ffbbe",
+                    "primary-fixed": "#dbe1ff",
+                    "secondary-fixed": "#eaddff",
+                    "surface-container-high": "#dce9ff",
+                    "tertiary": "#006242",
+                    "secondary-container": "#8a4cfc",
+                    "primary": "#004ac6",
+                    "on-primary-container": "#eeefff",
+                    "error-container": "#ffdad6",
+                    "on-tertiary-fixed": "#002113",
+                    "surface-tint": "#0053db",
+                    "surface-dim": "#cbdbf5",
+                    "surface-bright": "#f8f9ff",
+                    "on-error-container": "#93000a",
+                    "surface-container-highest": "#d3e4fe",
+                    "inverse-surface": "#213145",
+                    "primary-fixed-dim": "#b4c5ff",
+                    "on-background": "#0b1c30",
+                    "surface-container-low": "#eff4ff",
+                    "tertiary-container": "#007d55",
+                    "on-secondary": "#ffffff",
+                    "on-primary": "#ffffff",
+                    "surface-container": "#e5eeff",
+                    "surface-variant": "#d3e4fe",
+                    "on-primary-fixed-variant": "#003ea8",
+                    "primary-container": "#2563eb",
+                    "on-secondary-fixed-variant": "#5a00c6",
+                    "outline-variant": "#c3c6d7",
+                    "inverse-on-surface": "#eaf1ff",
+                    "on-tertiary-container": "#bdffdb",
+                    "error": "#ba1a1a",
+                    "background": "#f8f9ff",
+                    "secondary": "#712ae2",
+                    "on-surface-variant": "#434655",
+                    "on-secondary-fixed": "#25005a",
+                    "on-primary-fixed": "#00174b",
+                    "surface-container-lowest": "#ffffff",
+                    "surface": "#f8f9ff",
+                    "on-tertiary": "#ffffff",
+                    "outline": "#737686",
+                    "secondary-fixed-dim": "#d2bbff",
+                    "inverse-primary": "#b4c5ff",
+                    "on-error": "#ffffff"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "unit": "4px",
+                    "container-padding": "20px",
+                    "stack-gap-sm": "8px",
+                    "stack-gap-lg": "24px",
+                    "section-margin": "32px",
+                    "stack-gap-md": "16px"
+            },
+            "fontFamily": {
+                    "body-sm": ["Inter"],
+                    "title-lg": ["Inter"],
+                    "label-sm": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "headline-sm": ["Inter"],
+                    "display-lg-mobile": ["Inter"],
+                    "body-md": ["Inter"],
+                    "label-md": ["Inter"],
+                    "display-md": ["Inter"]
+            },
+            "fontSize": {
+                    "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                    "title-lg": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                    "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                    "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                    "display-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                    "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                    "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                    "display-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            overscroll-behavior-y: contain;
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .floating-animation {
+            animation: floating 6s ease-in-out infinite;
+        }
+
+        @keyframes floating {
+            0% { transform: translateY(0px) rotate(0deg); }
+            50% { transform: translateY(-15px) rotate(1deg); }
+            100% { transform: translateY(0px) rotate(0deg); }
+        }
+
+        .stagger-1 { animation-delay: 0s; }
+        .stagger-2 { animation-delay: 0.5s; }
+        .stagger-3 { animation-delay: 1s; }
+
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+
+        /* Safe area handling for mobile */
+        .pb-safe-area {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface overflow-hidden">
+<!-- Main Canvas -->
+<main class="relative h-screen w-full flex flex-col justify-between overflow-hidden">
+<!-- Top Visual Section: Glassmorphic Floating Cards -->
+<div class="relative flex-grow flex items-center justify-center pt-12 overflow-visible">
+<!-- Background Atmospheric Glows -->
+<div class="absolute top-1/4 left-1/4 w-64 h-64 bg-primary/10 rounded-full blur-[100px]"></div>
+<div class="absolute bottom-1/4 right-1/4 w-80 h-80 bg-secondary/10 rounded-full blur-[100px]"></div>
+<!-- Central Visual Container -->
+<div class="relative w-full max-w-sm aspect-[4/5] flex items-center justify-center p-container-padding">
+<!-- Using the image placeholder as requested for the visual -->
+<div class="relative w-full h-full flex flex-col items-center justify-center">
+<img alt="Floating premium cards" class="w-full h-full object-contain floating-animation" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDoBy_ZhkkJMgsRPiVm9RjKHhAp9fV0O5QU1d97qbBxLBliWN2ixgoh0zhVmZ5YRhpGS35YmlEFKD3z26XOfYLEpsccDahexvrgI5KZmr8G-RuuEqbSU4NhITc_A_REWKwsnObf0QBcLxhPnr44qh-wGTGD3j2MpxPeyByMRWhgqLwjncHiBC-ErJZg0lEdY0bYGlzP8qBi1-3oXoffXsbVjW4ikfngphi5tmZF2XuWLzBJuJa9rPywYWrSWDPu37aMNAuy-oysDh4">
+<!-- Decorative Elements to enhance the "Everything in one place" vibe -->
+<div class="absolute -top-4 -right-2 glass-card p-3 rounded-xl shadow-lg floating-animation stagger-2 border border-white/40">
+<span class="material-symbols-outlined text-primary text-2xl">payments</span>
+</div>
+<div class="absolute top-1/2 -left-4 glass-card p-3 rounded-xl shadow-lg floating-animation stagger-3 border border-white/40">
+<span class="material-symbols-outlined text-secondary text-2xl">event_upcoming</span>
+</div>
+<div class="absolute bottom-10 -right-4 glass-card p-3 rounded-xl shadow-lg floating-animation stagger-1 border border-white/40">
+<span class="material-symbols-outlined text-tertiary text-2xl">description</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Content & Controls Section -->
+<div class="bg-surface-container-lowest/80 backdrop-blur-xl rounded-t-[32px] px-container-padding pt-10 pb-safe-area shadow-[0_-10px_40px_rgba(0,0,0,0.03)] z-10 border-t border-outline-variant/20">
+<!-- Text Content -->
+<div class="flex flex-col gap-stack-gap-md mb-section-margin">
+<h1 class="font-display-lg-mobile text-display-lg-mobile text-on-surface tracking-tight">
+                    Everything in One Place
+                </h1>
+<p class="font-body-md text-body-md text-on-surface-variant max-w-[85%]">
+                    Leaves, salary, documents, meetings, and tasks—all together.
+                </p>
+</div>
+<!-- Bottom Navigation/Progress Controls -->
+<div class="flex flex-col gap-stack-gap-lg pb-8">
+<!-- Progress Indicator -->
+<div class="flex items-center justify-center gap-2">
+<div class="w-2 h-2 rounded-full bg-outline-variant/40"></div>
+<div class="w-2 h-2 rounded-full bg-outline-variant/40"></div>
+<div class="w-6 h-2 rounded-full bg-primary transition-all duration-300"></div>
+<div class="w-2 h-2 rounded-full bg-outline-variant/40"></div>
+</div>
+<!-- Action Buttons -->
+<div class="flex items-center justify-between">
+<button class="font-label-md text-label-md text-outline hover:text-on-surface transition-colors active:scale-95 px-4 py-2" onclick="handleSkip()">
+                        Skip
+                    </button>
+<button class="bg-primary text-on-primary font-label-md text-label-md px-8 py-4 rounded-full shadow-lg shadow-primary/20 flex items-center gap-2 active:scale-95 transition-all hover:bg-primary/90" onclick="handleNext()">
+                        Next
+                        <span class="material-symbols-outlined text-body-md">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</main>
+<!-- AI Assistant FAB (As mandated for specific screens, though usually suppressed on onboarding, 
+         we add it here as a subtle design element to maintain system identity if needed) -->
+<!-- Note: Following "Contextual FAB Suppression" rule, we omit it for Onboarding as it's transactional/linear. -->
+<script>
+        function handleNext() {
+            // Animation for transition
+            document.body.style.transition = 'opacity 0.4s ease-out';
+            document.body.style.opacity = '0';
+            setTimeout(() => {
+                console.log('Navigating to step 4...');
+            }, 400);
+        }
+
+        function handleSkip() {
+            // Immediate transition to dashboard
+            document.body.style.transform = 'scale(1.05)';
+            document.body.style.opacity = '0';
+            document.body.style.transition = 'all 0.5s ease-in-out';
+            setTimeout(() => {
+                console.log('Skipping to home...');
+            }, 500);
+        }
+
+        // Subtle parallax on mouse/touch movement
+        document.addEventListener('mousemove', (e) => {
+            const moveX = (e.clientX - window.innerWidth / 2) * 0.01;
+            const moveY = (e.clientY - window.innerHeight / 2) * 0.01;
+            const cards = document.querySelector('.floating-animation');
+            if (cards) {
+                cards.style.transform = `translate(${moveX}px, ${moveY}px)`;
+            }
+        });
+
+        // Touch handling for progress bar visual feedback
+        const buttons = document.querySelectorAll('button');
+        buttons.forEach(btn => {
+            btn.addEventListener('touchstart', () => {
+                btn.classList.add('opacity-70');
+            });
+            btn.addEventListener('touchend', () => {
+                btn.classList.remove('opacity-70');
+            });
+        });
+    </script>
+</body></html>

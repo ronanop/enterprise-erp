@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Security Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+        .safe-pb {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-surface": "#0b1c30",
+                      "error-container": "#ffdad6",
+                      "tertiary-fixed-dim": "#4edea3",
+                      "inverse-surface": "#213145",
+                      "on-secondary-fixed-variant": "#5a00c6",
+                      "secondary": "#712ae2",
+                      "error": "#ba1a1a",
+                      "on-background": "#0b1c30",
+                      "on-secondary-fixed": "#25005a",
+                      "on-tertiary-fixed": "#002113",
+                      "tertiary-container": "#007d55",
+                      "secondary-fixed-dim": "#d2bbff",
+                      "on-primary-fixed": "#00174b",
+                      "inverse-on-surface": "#eaf1ff",
+                      "primary": "#004ac6",
+                      "on-primary-fixed-variant": "#003ea8",
+                      "secondary-fixed": "#eaddff",
+                      "on-secondary-container": "#fffbff",
+                      "surface-container-highest": "#d3e4fe",
+                      "primary-fixed": "#dbe1ff",
+                      "outline": "#737686",
+                      "surface-container-low": "#eff4ff",
+                      "surface-tint": "#0053db",
+                      "on-surface-variant": "#434655",
+                      "primary-container": "#2563eb",
+                      "surface-container": "#e5eeff",
+                      "on-tertiary": "#ffffff",
+                      "surface-dim": "#cbdbf5",
+                      "surface": "#f8f9ff",
+                      "surface-bright": "#f8f9ff",
+                      "on-error": "#ffffff",
+                      "on-tertiary-container": "#bdffdb",
+                      "surface-container-lowest": "#ffffff",
+                      "outline-variant": "#c3c6d7",
+                      "on-primary-container": "#eeefff",
+                      "background": "#f8f9ff",
+                      "on-error-container": "#93000a",
+                      "tertiary-fixed": "#6ffbbe",
+                      "tertiary": "#006242",
+                      "on-primary": "#ffffff",
+                      "surface-container-high": "#dce9ff",
+                      "on-tertiary-fixed-variant": "#005236",
+                      "secondary-container": "#8a4cfc",
+                      "surface-variant": "#d3e4fe",
+                      "on-secondary": "#ffffff",
+                      "primary-fixed-dim": "#b4c5ff",
+                      "inverse-primary": "#b4c5ff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "stack-gap-md": "16px",
+                      "container-padding": "20px",
+                      "unit": "4px",
+                      "stack-gap-lg": "24px",
+                      "stack-gap-sm": "8px",
+                      "section-margin": "32px"
+              },
+              "fontFamily": {
+                      "label-md": ["Inter"],
+                      "headline-sm": ["Inter"],
+                      "label-sm": ["Inter"],
+                      "body-sm": ["Inter"],
+                      "display-lg-mobile": ["Inter"],
+                      "display-lg": ["Inter"],
+                      "title-lg": ["Inter"],
+                      "display-md": ["Inter"],
+                      "body-md": ["Inter"]
+              },
+              "fontSize": {
+                      "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                      "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                      "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                      "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "display-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                      "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "title-lg": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                      "display-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}]
+              }
+            },
+          },
+        }
+      </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-surface min-h-screen">
+<!-- Top App Bar -->
+<header class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl shadow-sm flex items-center justify-between px-container-padding h-16 w-full">
+<div class="flex items-center gap-3">
+<button class="transition-all duration-200 active:scale-95 text-primary hover:opacity-80">
+<span class="material-symbols-outlined">arrow_back_ios</span>
+</button>
+<h1 class="font-headline-sm text-headline-sm-mobile text-on-surface">Security Settings</h1>
+</div>
+<div class="flex items-center gap-4">
+<button class="transition-all duration-200 active:scale-95 text-primary hover:opacity-80">
+<span class="material-symbols-outlined">shield</span>
+</button>
+</div>
+</header>
+<main class="pt-24 pb-32 px-container-padding max-w-2xl mx-auto space-y-section-margin">
+<!-- Security Health Banner -->
+<section class="relative overflow-hidden rounded-xl bg-primary-container p-6 text-on-primary-container shadow-sm transition-all duration-200 active:scale-[0.99]">
+<div class="relative z-10 flex items-center gap-4">
+<div class="bg-white/20 p-3 rounded-full backdrop-blur-md">
+<span class="material-symbols-outlined text-3xl" style="font-variation-settings: 'FILL' 1;">verified_user</span>
+</div>
+<div>
+<h2 class="font-title-lg text-title-lg">Account Secure</h2>
+<p class="font-body-sm text-body-sm opacity-90">Last security scan 2 hours ago</p>
+</div>
+</div>
+<!-- Decorative atmospheric background -->
+<div class="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-3xl"></div>
+</section>
+<!-- Biometrics Section -->
+<section class="space-y-stack-gap-md">
+<h3 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider pl-1">Biometrics</h3>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden border border-outline-variant/30">
+<!-- Toggle: Face ID -->
+<div class="flex items-center justify-between p-4 hover:bg-surface-container-low transition-colors group">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-primary text-2xl">face</span>
+<div>
+<p class="font-body-md text-body-md text-on-surface">Face ID</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Use for quick authentication</p>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-outline-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="h-[1px] bg-outline-variant/30 ml-14"></div>
+<!-- Toggle: Fingerprint -->
+<div class="flex items-center justify-between p-4 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-primary text-2xl">fingerprint</span>
+<div>
+<p class="font-body-md text-body-md text-on-surface">Fingerprint</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Backup biometric access</p>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-outline-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="h-[1px] bg-outline-variant/30 ml-14"></div>
+<!-- Toggle: Biometric Login -->
+<div class="flex items-center justify-between p-4 hover:bg-surface-container-low transition-colors">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-primary text-2xl">lock_open</span>
+<div>
+<p class="font-body-md text-body-md text-on-surface">Biometric Login</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Skip password for app entry</p>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox"/>
+<div class="w-11 h-6 bg-outline-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+</div>
+</section>
+<!-- Credentials Section -->
+<section class="space-y-stack-gap-md">
+<h3 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider pl-1">Credentials</h3>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden border border-outline-variant/30">
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-container-low transition-all duration-200 active:bg-surface-container-high">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-secondary text-2xl">password</span>
+<div class="text-left">
+<p class="font-body-md text-body-md text-on-surface">Change Password</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Last updated 3 months ago</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+</button>
+<div class="h-[1px] bg-outline-variant/30 ml-14"></div>
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-container-low transition-all duration-200 active:bg-surface-container-high">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-secondary text-2xl">dialpad</span>
+<div class="text-left">
+<p class="font-body-md text-body-md text-on-surface">Change PIN</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Set a 6-digit backup code</p>
+</div>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant">chevron_right</span>
+</button>
+</div>
+</section>
+<!-- Login History Section -->
+<section class="space-y-stack-gap-md">
+<div class="flex items-center justify-between px-1">
+<h3 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Login History</h3>
+<button class="text-primary font-label-md text-label-md hover:underline">Log out all</button>
+</div>
+<div class="space-y-3">
+<!-- Device 1 -->
+<div class="glass-card p-4 rounded-xl shadow-sm border border-outline-variant/30 flex items-start gap-4">
+<div class="bg-surface-container p-2 rounded-lg">
+<span class="material-symbols-outlined text-on-surface-variant">phone_iphone</span>
+</div>
+<div class="flex-1">
+<div class="flex items-center justify-between">
+<p class="font-title-lg text-body-md font-bold text-on-surface">iPhone 15 Pro</p>
+<span class="bg-tertiary/10 text-tertiary px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-tighter">Current</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">London, United Kingdom</p>
+<p class="font-body-sm text-body-sm text-outline mt-1 italic">Active now</p>
+</div>
+</div>
+<!-- Device 2 -->
+<div class="bg-surface-container-lowest p-4 rounded-xl shadow-sm border border-outline-variant/30 flex items-start gap-4 transition-all duration-200 active:bg-surface-container-low">
+<div class="bg-surface-container p-2 rounded-lg">
+<span class="material-symbols-outlined text-on-surface-variant">laptop_mac</span>
+</div>
+<div class="flex-1">
+<p class="font-title-lg text-body-md font-bold text-on-surface">MacBook Pro 14"</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">San Francisco, USA</p>
+<p class="font-body-sm text-body-sm text-outline mt-1">Oct 12, 14:22</p>
+</div>
+<button class="text-error hover:bg-error/10 p-2 rounded-full transition-colors">
+<span class="material-symbols-outlined">logout</span>
+</button>
+</div>
+<!-- Device 3 -->
+<div class="bg-surface-container-lowest p-4 rounded-xl shadow-sm border border-outline-variant/30 flex items-start gap-4 transition-all duration-200 active:bg-surface-container-low">
+<div class="bg-surface-container p-2 rounded-lg">
+<span class="material-symbols-outlined text-on-surface-variant">desktop_windows</span>
+</div>
+<div class="flex-1">
+<p class="font-title-lg text-body-md font-bold text-on-surface">Windows Desktop</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Berlin, Germany</p>
+<p class="font-body-sm text-body-sm text-outline mt-1">Oct 08, 09:45</p>
+</div>
+<button class="text-error hover:bg-error/10 p-2 rounded-full transition-colors">
+<span class="material-symbols-outlined">logout</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Advanced Options -->
+<section class="space-y-stack-gap-md">
+<h3 class="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider pl-1">Advanced</h3>
+<div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden border border-outline-variant/30">
+<button class="w-full flex items-center justify-between p-4 hover:bg-error/5 group">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-error text-2xl">no_accounts</span>
+<p class="font-body-md text-body-md text-error font-medium">Deactivate Account</p>
+</div>
+<span class="material-symbols-outlined text-error">chevron_right</span>
+</button>
+</div>
+</section>
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center px-2 pb-safe h-20 bg-surface/80 dark:bg-on-surface/80 border-t border-outline-variant backdrop-blur-xl shadow-lg">
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-transform duration-200 active:scale-90 px-4 py-2 rounded-xl" href="#">
+<span class="material-symbols-outlined">home</span>
+<span class="font-label-sm text-label-sm mt-1">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-transform duration-200 active:scale-90 px-4 py-2 rounded-xl" href="#">
+<span class="material-symbols-outlined">fingerprint</span>
+<span class="font-label-sm text-label-sm mt-1">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-transform duration-200 active:scale-90 px-4 py-2 rounded-xl" href="#">
+<span class="material-symbols-outlined">calendar_today</span>
+<span class="font-label-sm text-label-sm mt-1">Leave</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-transform duration-200 active:scale-90 px-4 py-2 rounded-xl" href="#">
+<span class="material-symbols-outlined">payments</span>
+<span class="font-label-sm text-label-sm mt-1">Salary</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary font-bold after:content-[''] after:w-1 after:h-1 after:bg-primary after:rounded-full after:mt-1 transition-transform duration-200 active:scale-90 px-4 py-2 rounded-xl" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">person</span>
+<span class="font-label-sm text-label-sm">Profile</span>
+</a>
+</nav>
+<!-- AI Assistant FAB -->
+<button class="fixed bottom-24 right-6 w-14 h-14 rounded-full bg-gradient-to-br from-secondary to-primary shadow-2xl flex items-center justify-center text-white transition-all duration-300 hover:scale-110 active:scale-90 group z-40">
+<div class="absolute inset-0 rounded-full blur-md bg-secondary opacity-50 group-hover:opacity-70 transition-opacity"></div>
+<span class="material-symbols-outlined relative z-10 text-2xl">auto_awesome</span>
+</button>
+<script>
+        // Micro-interactions for toggles
+        document.querySelectorAll('input[type="checkbox"]').forEach(toggle => {
+            toggle.addEventListener('change', function() {
+                const parent = this.closest('.group') || this.parentElement.parentElement;
+                if (this.checked) {
+                    console.log('Security feature enabled');
+                } else {
+                    console.log('Security feature disabled');
+                }
+            });
+        });
+
+        // Simple scroll observer for header elevation
+        window.addEventListener('scroll', () => {
+            const header = document.querySelector('header');
+            if (window.scrollY > 10) {
+                header.classList.add('shadow-md');
+            } else {
+                header.classList.remove('shadow-md');
+            }
+        });
+    </script>
+</body></html>

@@ -24,6 +24,10 @@ celery_app.conf.update(
             "task": "service.poll_support_mailbox",
             "schedule": 120.0,
         },
+        "service.unopened_ticket_roster_reminders": {
+            "task": "service.unopened_ticket_roster_reminders",
+            "schedule": float(settings.service_roster_open_reminder_seconds or 600),
+        },
         "marketing-publish-reminders": {
             "task": "marketing.publish_reminders",
             "schedule": 3600.0,

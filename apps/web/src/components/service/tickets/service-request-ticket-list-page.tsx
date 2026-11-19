@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Download, Plus, RefreshCw, Sparkles, Ticket, X } from "lucide-react";
+import { Download, RefreshCw, Ticket, X } from "lucide-react";
 
 import { FinanceStatusBadge } from "@/components/finance/finance-status-badge";
 import { PageHeader } from "@/components/layout/page-header";
@@ -12,7 +12,6 @@ import { Input } from "@/components/ui/input";
 import { serviceStatusGroupFromKey, serviceSupportModeLabel } from "@/config/service-dashboard";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { shouldScopeServiceToMine } from "@/lib/service-engineer-access";
-import { createQuickServiceTicket } from "@/lib/service-quick-ticket";
 import {
   ApiClientError,
   exportTicketsCsv,
@@ -49,34 +48,12 @@ export function ServiceRequestTicketListPage() {
 
   const [rows, setRows] = useState<ServiceRequestTicket[]>([]);
   const [loading, setLoading] = useState(true);
-  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [priority, setPriority] = useState("");
   const [status, setStatus] = useState(() => urlStatus ?? "");
   const [mode, setMode] = useState(() => urlMode ?? "");
   const [view, setView] = useState<"all" | "mine">(() => (engineerScoped || urlMine ? "mine" : "all"));
-
-  const onGenerateTicket = useCallback(async () => {
-    setGenerating(true);
-    setError(null);
-    try {
-      const ticket = await createQuickServiceTicket();
-      router.push(`/service/service-request-tickets/${ticket.id}`);
-    } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? err.errors.length > 0
-            ? err.errors.join("; ")
-            : err.message
-          : err instanceof Error
-            ? err.message
-            : "Failed to generate ticket",
-      );
-    } finally {
-      setGenerating(false);
-    }
-  }, [router]);
 
   useEffect(() => {
     setStatus(urlStatus ?? "");
@@ -137,7 +114,7 @@ export function ServiceRequestTicketListPage() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title={engineerScoped ? "My Service Request Tickets" : "Service Request Tickets"}
+        title={engineerScoped ? "My Tickets & Unassigned Queue" : "Service Request Tickets"}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -161,23 +138,6 @@ export function ServiceRequestTicketListPage() {
               <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void onGenerateTicket()}
-              disabled={generating}
-            >
-              <Sparkles className={`size-3.5 ${generating ? "animate-pulse" : ""}`} />
-              {generating ? "Generating…" : "Generate Ticket"}
-            </Button>
-            <Link
-              href="/service/service-request-tickets/new"
-              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground"
-            >
-              <Plus className="size-3.5" />
-              New Ticket
-            </Link>
           </div>
         }
       />

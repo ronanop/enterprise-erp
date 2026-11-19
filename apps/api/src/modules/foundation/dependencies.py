@@ -98,6 +98,27 @@ def require_permission(permission_code: str) -> Callable:
     return _checker
 
 
+def require_any_permission(*permission_codes: str) -> Callable:
+    """Pass if the user has at least one of the listed permissions."""
+
+    codes = tuple(permission_codes)
+
+    def _checker(
+        ctx: Annotated[TenantContext, Depends(get_tenant_context)],
+        db: Annotated[Session, Depends(get_db)],
+    ) -> TenantContext:
+        if ctx.user_type in {"super_admin", "tenant_admin"}:
+            return ctx
+        rbac = RBACService(db)
+        if any(rbac.has_permission(ctx.user_id, ctx.tenant_id, code) for code in codes):
+            return ctx
+        raise ForbiddenException(
+            f"Missing permission (need one of): {', '.join(codes)}"
+        )
+
+    return _checker
+
+
 def get_client_ip(request: Request) -> str | None:
     forwarded = request.headers.get("X-Forwarded-For")
     if forwarded:

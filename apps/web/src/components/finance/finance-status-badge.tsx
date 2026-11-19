@@ -144,7 +144,14 @@ const DANGER = new Set([
   "written_off",
 ]);
 
-export function FinanceStatusBadge({ status }: { status: string | null | undefined }) {
+export function FinanceStatusBadge({
+  status,
+  label,
+}: {
+  status: string | null | undefined;
+  /** Optional display label (e.g. API status_label); colour still keyed off `status`. */
+  label?: string | null;
+}) {
   const value = (status ?? "—").toString();
   const key = value.toLowerCase();
   const variant = SUCCESS.has(key)
@@ -157,7 +164,7 @@ export function FinanceStatusBadge({ status }: { status: string | null | undefin
 
   return (
     <Badge variant={variant} className="font-medium capitalize">
-      {value.replaceAll("_", " ") || "—"}
+      {(label?.trim() || value.replaceAll("_", " ")) || "—"}
     </Badge>
   );
 }

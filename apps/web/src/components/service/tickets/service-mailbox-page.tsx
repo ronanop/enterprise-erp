@@ -195,10 +195,9 @@ function MailListItem({
                 <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                   {row.document_number}
                 </span>
-              ) : null}
-              {row.classification === "likely_ticket" ? (
-                <span className="rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
-                  Ticket
+              ) : row.classification === "likely_ticket" ? (
+                <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:text-amber-300">
+                  Eligible (subject)
                 </span>
               ) : null}
             </div>
@@ -206,6 +205,48 @@ function MailListItem({
         </div>
       </div>
     </button>
+  );
+}
+
+function MailBodyView({
+  detail,
+  fallbackPreview,
+}: {
+  detail: MailboxMessageDetail | null;
+  fallbackPreview: string;
+}) {
+  const html = detail?.body_html?.trim() || "";
+  const text = formatServiceDisplayText(
+    detail?.body_text || detail?.body_preview || fallbackPreview || "",
+  );
+
+  if (html) {
+    const srcDoc = `<!DOCTYPE html><html><head><meta charset="utf-8" />
+<style>
+  html, body { margin: 0; padding: 0; background: transparent; color: #1c1917; }
+  body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+         font-size: 14px; line-height: 1.65; padding: 4px; word-break: break-word; }
+  img { max-width: 100%; height: auto; }
+  a { color: #1d4ed8; }
+  pre, code { white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  table { max-width: 100%; border-collapse: collapse; }
+</style></head><body>${html}</body></html>`;
+    return (
+      <iframe
+        title="Email body"
+        sandbox=""
+        srcDoc={srcDoc}
+        className="min-h-[420px] w-full rounded-xl border border-border/60 bg-white"
+      />
+    );
+  }
+
+  return (
+    <article className="max-w-full overflow-hidden rounded-xl border border-border/60 bg-card p-5 shadow-sm">
+      <pre className="max-w-full font-sans text-sm leading-7 break-words whitespace-pre-wrap [overflow-wrap:anywhere] text-foreground/90">
+        {text || "(No body content available yet — try Refresh.)"}
+      </pre>
+    </article>
   );
 }
 
@@ -234,10 +275,10 @@ function MailReadingPane({
     );
   }
 
-  const body = formatServiceDisplayText(detail?.body_text || detail?.body_preview || row.body_preview || "");
   const display = { ...row, ...(detail ?? {}) };
   const initials = senderInitials(display.from_name, display.from_address);
   const ticketStatus = mailboxTicketDisplayStatus(display);
+  const hasTicket = Boolean(display.ticket_id && display.document_number);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -265,7 +306,7 @@ function MailReadingPane({
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            {ticketStatus && display.ticket_id ? (
+            {ticketStatus && hasTicket ? (
               <Link
                 href={`/service/service-request-tickets/${display.ticket_id}`}
                 className="transition-opacity hover:opacity-90"
@@ -277,7 +318,7 @@ function MailReadingPane({
             <span className="rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
               {display.is_read ? "Read" : "Unread"}
             </span>
-            {display.document_number && display.ticket_id ? (
+            {hasTicket ? (
               <Link
                 href={`/service/service-request-tickets/${display.ticket_id}`}
                 className="inline-flex items-center gap-1.5 rounded-md bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
@@ -285,6 +326,10 @@ function MailReadingPane({
                 <Ticket className="size-3" />
                 {display.document_number}
               </Link>
+            ) : display.classification === "likely_ticket" ? (
+              <span className="rounded-md bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-800 dark:text-amber-300">
+                Eligible — not created yet (Refresh to poll)
+              </span>
             ) : null}
           </div>
         </div>
@@ -296,13 +341,10 @@ function MailReadingPane({
             <div className="h-4 w-full animate-pulse rounded bg-muted" />
             <div className="h-4 w-11/12 animate-pulse rounded bg-muted" />
             <div className="h-4 w-4/5 animate-pulse rounded bg-muted" />
+            <div className="h-48 w-full animate-pulse rounded-xl bg-muted/70" />
           </div>
         ) : (
-          <article className="max-w-full overflow-hidden rounded-xl border border-border/60 bg-card p-5 shadow-sm">
-            <pre className="max-w-full font-sans text-sm leading-7 break-words whitespace-pre-wrap [overflow-wrap:anywhere] text-foreground/90">
-              {body || "(No body)"}
-            </pre>
-          </article>
+          <MailBodyView detail={detail} fallbackPreview={row.body_preview || ""} />
         )}
       </div>
     </div>
@@ -314,6 +356,8 @@ export function ServiceMailboxPage() {
   const [rows, setRows] = useState<MailboxMessageItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pollNote, setPollNote] = useState<string | null>(null);
+  const [offlineWarning, setOfflineWarning] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<MailboxMessageDetail | null>(null);
@@ -321,23 +365,34 @@ export function ServiceMailboxPage() {
 
   const unreadCount = useMemo(() => rows.filter((r) => !r.is_read).length, [rows]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { poll?: boolean }) => {
+    // Always poll on load/refresh via GET ?poll=true so tickets auto-create
+    // without a separate POST (avoids stale 403 from old poll endpoint).
+    const shouldPoll = opts?.poll !== false;
     setLoading(true);
     setError(null);
+    setPollNote(null);
+    setOfflineWarning(null);
     try {
-      const data = await listMailboxMessages(50);
+      const data = await listMailboxMessages(50, { poll: shouldPoll });
       setMailbox(data.mailbox);
       setRows(data.messages ?? []);
+      setOfflineWarning(data.offline_warning ?? null);
+      if (data.poll_summary) setPollNote(data.poll_summary);
     } catch (err) {
       setRows([]);
-      setError(err instanceof ApiClientError ? err.message : "Failed to load mailbox");
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Failed to load mailbox",
+      );
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load();
+    void load({ poll: true });
   }, [load]);
 
   const filtered = useMemo(() => {
@@ -380,12 +435,25 @@ export function ServiceMailboxPage() {
                 opened_at: full.opened_at,
                 resolved_at: full.resolved_at,
                 closed_at: full.closed_at,
+                body_preview: full.body_preview || row.body_preview,
               }
             : row,
         ),
       );
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Failed to load message");
+      // Keep list preview visible if full fetch fails.
+      setRows((prev) => {
+        const listRow = prev.find((r) => r.graph_id === graphId);
+        if (listRow) {
+          setDetail({
+            ...listRow,
+            body_text: listRow.body_preview || null,
+            body_html: null,
+          });
+        }
+        return prev;
+      });
+      setError(err instanceof ApiClientError ? err.message : "Failed to load full message");
     } finally {
       setDetailLoading(false);
     }
@@ -411,13 +479,13 @@ export function ServiceMailboxPage() {
             disabled={loading}
             onClick={() => {
               void (async () => {
-                await load();
+                await load({ poll: true });
                 if (selectedId) await selectMessage(selectedId);
               })();
             }}
           >
             <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
-            Refresh
+            Refresh &amp; poll tickets
           </Button>
         }
       />
@@ -427,9 +495,18 @@ export function ServiceMailboxPage() {
           {error}
         </div>
       ) : null}
+      {offlineWarning ? (
+        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
+          {offlineWarning}
+        </div>
+      ) : null}
+      {pollNote ? (
+        <div className="rounded-md border border-border/70 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          {pollNote}
+        </div>
+      ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-        {/* Toolbar — inbox meta */}
         <div className="shrink-0 border-b border-border/60 bg-muted/25 px-4 py-3 sm:px-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 flex-wrap items-center gap-2.5">
@@ -441,6 +518,9 @@ export function ServiceMailboxPage() {
                   <span className="text-sm font-semibold">Inbox</span>
                   <span className="truncate text-sm text-muted-foreground">{mailbox || "—"}</span>
                 </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  All mail shown here. Only subjects containing “ticket” create Request Tickets.
+                </p>
               </div>
             </div>
             {unreadCount > 0 ? (
@@ -453,9 +533,7 @@ export function ServiceMailboxPage() {
           </div>
         </div>
 
-        {/* Split pane — fixed height, internal scroll */}
         <div className="flex min-h-0 flex-1 flex-col lg:h-[calc(100dvh-15.5rem)] lg:max-h-[720px] lg:flex-row">
-          {/* Message list — left */}
           <aside className="flex min-h-0 w-full shrink-0 flex-col border-border/60 lg:w-[min(100%,340px)] lg:border-r xl:w-[360px]">
             <div className="shrink-0 border-b border-border/60 bg-background/80 px-3 py-3">
               <div className="relative">
@@ -490,7 +568,6 @@ export function ServiceMailboxPage() {
             </div>
           </aside>
 
-          {/* Reading pane — right */}
           <section className="min-h-[320px] min-w-0 flex-1 border-t border-border/60 bg-background lg:min-h-0 lg:border-t-0">
             <MailReadingPane row={selectedRow} detail={detail} loading={detailLoading} />
           </section>

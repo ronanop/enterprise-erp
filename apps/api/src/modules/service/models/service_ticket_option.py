@@ -14,7 +14,10 @@ class SvcTicketOption(Base, *SvcMasterMixin):
     __tablename__ = "svc_ticket_option"
     __table_args__ = (
         UniqueConstraint("company_id", "option_type", "option_code", name="uk_svc_ticket_option_code"),
-        CheckConstraint("option_type IN ('mode','category')", name="ck_svc_ticket_option_type"),
+        CheckConstraint(
+            "option_type IN ('mode','category','issue_reported','resolution_comment')",
+            name="ck_svc_ticket_option_type",
+        ),
         CheckConstraint("status IN ('active','inactive')", name="ck_svc_ticket_option_status"),
         {"schema": "service"},
     )

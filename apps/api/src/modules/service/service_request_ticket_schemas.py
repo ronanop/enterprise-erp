@@ -4,7 +4,9 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
+
+from modules.service.domain.ticket_status import status_label as _status_label
 
 
 class OrmModel(BaseModel):
@@ -18,15 +20,23 @@ class FieldEngineerVisitPayload(BaseModel):
     engineer_contact: str | None = None
     distance: str | None = None
     visits_count: int | None = None
-    carrying_spares: bool = False
+    # None = "not provided" so partial updates never reset the stored value
+    carrying_spares: bool | None = None
     visit_date: date | None = None
     hw_replacement: str | None = None
+    hardware_repair: str | None = Field(None, max_length=10)  # yes / no
+    hardware_replacement_yn: str | None = Field(None, max_length=10)  # yes / no
+    new_device_serial: str | None = Field(None, max_length=100)
     transport_mode: str | None = None
     movement_charges: Decimal | None = None
     visit_charges: Decimal | None = None
+    other_charges: Decimal | None = None
+    # total = visit + movement + other (server recomputes when any component is present)
     total_charges: Decimal | None = None
     remarks: str | None = None
     payment_approval: str | None = None
+    # Read-only append log; ignored on input
+    visit_notes_history: str | None = None
 
 
 class OemSupportPayload(BaseModel):
@@ -118,6 +128,8 @@ class ServiceRequestTicketCreate(BaseModel):
     ip_details: str | None = None
     mail_extra_info: str | None = None
     company_name_from_mail: str | None = None
+    present_type: str | None = None
+    field_manual_overrides: dict[str, bool] | None = None
 
     field_engineer: FieldEngineerVisitPayload | None = None
     oem_support: OemSupportPayload | None = None
@@ -202,6 +214,11 @@ class ServiceRequestTicketUpdate(BaseModel):
     ip_details: str | None = None
     mail_extra_info: str | None = None
     company_name_from_mail: str | None = None
+    issue_reported_code: str | None = Field(None, max_length=80)
+    resolution_comment_code: str | None = Field(None, max_length=80)
+    other_remarks: str | None = None
+    present_type: str | None = None
+    field_manual_overrides: dict[str, bool] | None = None
     field_engineer: FieldEngineerVisitPayload | None = None
     oem_support: OemSupportPayload | None = None
 
@@ -223,6 +240,12 @@ class ServiceRequestTicketListItem(OrmModel):
     company_id: UUID
     branch_id: UUID
     version: int
+    reopened_at: datetime | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def status_label(self) -> str:
+        return _status_label(self.status, self.reopened_at)
 
 
 class ServiceRequestTicketDetail(ServiceRequestTicketListItem):
@@ -268,6 +291,7 @@ class ServiceRequestTicketDetail(ServiceRequestTicketListItem):
     asset_status: str | None
     amc_mail_sent: bool
     asset_confirmed_at: datetime | None = None
+    asset_confirmed_by: UUID | None = None
     remote_engineer_name: str | None = None
     remote_engineer_contact: str | None = None
     remote_engineer_date: date | None = None
@@ -282,13 +306,27 @@ class ServiceRequestTicketDetail(ServiceRequestTicketListItem):
     ip_details: str | None = None
     mail_extra_info: str | None = None
     company_name_from_mail: str | None = None
+    present_type: str | None = None
+    field_manual_overrides: dict[str, bool] | None = None
+    issue_reported_code: str | None = None
+    resolution_comment_code: str | None = None
+    other_remarks: str | None = None
+    sla_target_minutes: int | None = None
+    sla_policy_snapshot: dict | None = None
+    sla_remaining_minutes: int | None = None
+    sla_elapsed_minutes: int | None = None
+    sla_breached: bool | None = None
+    sla_paused_at: datetime | None = None
+    sla_paused_total_minutes: int = 0
+    sla_is_paused: bool = False
+    sla_pauses: list["ServiceRequestSlaPauseItem"] = []
+    pending_reopen_request: "ServiceRequestReopenRequestResponse | None" = None
     field_engineer: FieldEngineerVisitPayload | None = None
     oem_support: OemSupportPayload | None = None
     solution_summary: str | None = None
     solution_type: str | None = None
     resolved_at: datetime | None = None
     closed_at: datetime | None = None
-    reopened_at: datetime | None = None
     ownership_locked: bool = False
     opened_at: datetime | None = None
     opened_by: UUID | None = None
@@ -321,7 +359,8 @@ class ServiceRequestStakeholderResponse(OrmModel):
 class TicketFieldEngineerCreate(BaseModel):
     engineer_name: str = Field(..., min_length=1, max_length=255)
     engineer_contact: str | None = Field(None, max_length=50)
-    engineer_email: str = Field(..., min_length=3, max_length=255)
+    # Optional contact only — FE portal login removed
+    engineer_email: str | None = Field(default=None, max_length=255)
     assigned_date: date | None = None
     work_brief: str | None = None
     show_issue: bool = True
@@ -330,11 +369,20 @@ class TicketFieldEngineerCreate(BaseModel):
     show_asset: bool = True
     show_circuit: bool = True
 
+    @field_validator("engineer_email", mode="before")
+    @classmethod
+    def empty_email_to_none(cls, v: object) -> object:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
 
 class TicketFieldEngineerUpdate(BaseModel):
     engineer_name: str | None = Field(None, min_length=1, max_length=255)
     engineer_contact: str | None = Field(None, max_length=50)
-    engineer_email: str | None = Field(None, min_length=3, max_length=255)
+    engineer_email: str | None = Field(default=None, max_length=255)
     assigned_date: date | None = None
     work_brief: str | None = None
     show_issue: bool | None = None
@@ -342,6 +390,15 @@ class TicketFieldEngineerUpdate(BaseModel):
     show_site: bool | None = None
     show_asset: bool | None = None
     show_circuit: bool | None = None
+
+    @field_validator("engineer_email", mode="before")
+    @classmethod
+    def empty_email_to_none(cls, v: object) -> object:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
 
 class TicketFieldEngineerSolveAttachment(BaseModel):
@@ -359,12 +416,12 @@ class TicketFieldEngineerResponse(OrmModel):
     id: UUID
     request_id: UUID
     engineer_name: str
-    engineer_contact: str | None
-    engineer_email: str
-    assigned_date: date | None
-    solution_summary: str | None
+    engineer_contact: str | None = None
+    engineer_email: str | None = None
+    assigned_date: date | None = None
+    solution_summary: str | None = None
     status: str
-    solved_at: datetime | None
+    solved_at: datetime | None = None
     work_brief: str | None = None
     show_issue: bool = True
     show_customer: bool = True
@@ -372,7 +429,6 @@ class TicketFieldEngineerResponse(OrmModel):
     show_asset: bool = True
     show_circuit: bool = True
     attachments: list["ServiceRequestAttachmentResponse"] = []
-    # Populated only on create when a login is provisioned / notified
     login_email: str | None = None
     temporary_password: str | None = None
     account_created: bool = False
@@ -433,6 +489,76 @@ class ServiceRequestResolvePayload(BaseModel):
     solution_type: str = Field(..., min_length=1, max_length=50)
     solution_summary: str = Field(..., min_length=1)
     reason: str | None = None
+    # Optionally supplied with resolve; otherwise must already be saved on the ticket
+    issue_reported_code: str | None = Field(None, max_length=80)
+    resolution_comment_code: str | None = Field(None, max_length=80)
+    other_remarks: str | None = None
+
+
+class ServiceRequestClosePayload(BaseModel):
+    reason: str | None = None
+    other_remarks: str | None = None
+    # Optional: record/update visit charges in the same call (onsite support)
+    field_engineer: FieldEngineerVisitPayload | None = None
+
+
+class ServiceRequestReopenRequestCreate(BaseModel):
+    reason: str = Field(..., min_length=1)
+
+
+class ServiceRequestReopenDecision(BaseModel):
+    note: str | None = None
+
+
+class ServiceRequestReopenRejection(BaseModel):
+    rejection_reason: str = Field(..., min_length=1)
+
+
+class ServiceRequestReopenRequestResponse(OrmModel):
+    id: UUID
+    request_id: UUID
+    reason: str
+    requested_by: UUID | None = None
+    requested_at: datetime
+    status: str
+    approved_by: UUID | None = None
+    approved_at: datetime | None = None
+    rejection_reason: str | None = None
+    # Enriched for the approval queue
+    document_number: str | None = None
+    subject: str | None = None
+    requested_by_name: str | None = None
+
+
+class AssignmentHistoryItem(OrmModel):
+    id: UUID
+    request_id: UUID
+    change_type: str
+    old_owner_employee_id: UUID | None = None
+    new_owner_employee_id: UUID | None = None
+    old_owner_name: str | None = None
+    new_owner_name: str | None = None
+    reason: str | None = None
+    changed_by: UUID | None = None
+    changed_at: datetime
+
+
+class CircuitHistoryItem(BaseModel):
+    id: UUID
+    document_number: str
+    created_at: datetime
+    issue_reported_code: str | None = None
+    resolution_comment_code: str | None = None
+    status: str
+    status_label: str
+    subject: str
+
+
+class CircuitHistoryResponse(BaseModel):
+    count: int
+    last_ticket_at: datetime | None = None
+    items: list[CircuitHistoryItem] = []
+    ckt_id: str | None = None
 
 
 class ServiceRequestReopenPayload(BaseModel):
@@ -452,7 +578,32 @@ class ServiceRequestTicketAccessInfo(BaseModel):
     can_open: bool = False
     is_opened: bool = False
     can_resume: bool = False
+    can_pause_sla: bool = False
+    can_resume_sla: bool = False
+    is_on_duty: bool = True
+    roster_visibility_enabled: bool = False
     employee_id: UUID | None = None
+
+
+class ServiceRequestSlaPausePayload(BaseModel):
+    reason: str = Field(..., min_length=1, max_length=2000)
+
+
+class ServiceRequestSlaResumePayload(BaseModel):
+    reason: str | None = Field(None, max_length=2000)
+
+
+class ServiceRequestSlaPauseItem(BaseModel):
+    id: UUID
+    request_id: UUID
+    paused_at: datetime
+    resumed_at: datetime | None = None
+    reason: str
+    resume_reason: str | None = None
+    paused_by: UUID | None = None
+    resumed_by: UUID | None = None
+    duration_minutes: int | None = None
+    is_active: bool = False
 
 
 class StakeholderFieldEngineerWork(BaseModel):
@@ -525,6 +676,7 @@ class ServiceRequestStatusChange(BaseModel):
 
 class ServiceRequestAssignOwner(BaseModel):
     owner_employee_id: UUID
+    reason: str | None = None
 
 
 class ServiceRequestStatusHistoryResponse(OrmModel):
@@ -542,6 +694,8 @@ class ServiceRequestTimelineItem(BaseModel):
     description: str | None = None
     actor_id: UUID | None = None
     occurred_at: datetime
+    from_status: str | None = None
+    to_status: str | None = None
 
 
 class ServiceRequestSlaTrackerItem(BaseModel):
@@ -558,6 +712,15 @@ class ServiceRequestSlaTrackerItem(BaseModel):
     elapsed_minutes: int
     remaining_minutes: int | None = None
     is_breached: bool = False
+    is_paused: bool = False
+    reopened_at: datetime | None = None
+    sla_target_minutes: int | None = None
+    created_at: datetime | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def status_label(self) -> str:
+        return _status_label(self.status, self.reopened_at)
 
 
 class ServiceRequestResolvedTicketItem(BaseModel):
@@ -574,17 +737,24 @@ class ServiceRequestResolvedTicketItem(BaseModel):
     closed_within_sla: bool | None = None
     owner_employee_id: UUID | None
     owner_name: str | None = None
+    reopened_at: datetime | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def status_label(self) -> str:
+        return _status_label(self.status, self.reopened_at)
 
 
 class ServiceSlaComplianceSummary(BaseModel):
     active_breached: int = 0
+    active_paused: int = 0
     closed_within_sla: int = 0
     closed_after_breach: int = 0
 
 
 class TicketOptionCreate(BaseModel):
     company_id: UUID | None = None
-    option_type: str = Field(..., pattern="^(mode|category)$")
+    option_type: str = Field(..., pattern="^(mode|category|issue_reported|resolution_comment)$")
     option_code: str = Field(..., min_length=1, max_length=80)
     option_label: str = Field(..., min_length=1, max_length=255)
     sort_order: int = 0

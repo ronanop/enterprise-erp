@@ -38,21 +38,37 @@ from modules.service.models import (
     SvcServiceRequestComment,
     SvcServiceRequestStakeholder,
     SvcServiceRequestStatusHistory,
+    SvcTicketAssignmentHistory,
     SvcTicketFieldEngineer,
+    SvcTicketOption,
+    SvcTicketReopenRequest,
+    SvcTicketSlaPause,
 )
 from modules.service.models.service_sla import SvcServiceSla
 from modules.master_data.models.employee import MasterEmployee
 from modules.service.permissions import SERVICE_FIELD_ENGINEER_PERMISSIONS
 from modules.service.repository.service_request_repository import ServiceRequestRepository
+from modules.service.domain.ticket_status import status_label
+from modules.service.service.customer_priority_sla_service import (
+    CustomerPrioritySlaService,
+    compute_due_at,
+    policy_snapshot,
+)
 from modules.service.service.document_number_service import DocumentNumberService
 from modules.service.service.engines.service_request_ticket_engine import ServiceRequestTicketEngine
 from modules.service.service.service_channel_notifier import ServiceChannelNotifier
+from modules.service.adapters.hr_port import ServiceHrAdapter
 from modules.service.service.ticket_access_service import TicketAccessLevel, TicketAccessService
 from modules.service.service.service_scope_validator import ServiceScopeValidator
 from modules.service.service_request_ticket_schemas import (
+    AssignmentHistoryItem,
+    CircuitHistoryItem,
+    CircuitHistoryResponse,
     FieldEngineerVisitPayload,
     OemSupportPayload,
     ServiceRequestCoOwnerResponse,
+    ServiceRequestReopenRequestResponse,
+    ServiceRequestSlaPauseItem,
     ServiceRequestStakeholderResponse,
     ServiceRequestStakeholderView,
     ServiceRequestTicketAccessInfo,
@@ -77,6 +93,27 @@ ALLOWED_EXTENSIONS = {
     ".doc", ".docx", ".zip", ".txt", ".log",
 }
 
+ASSET_CONFIRM_FIELDS = (
+    "asset_name",
+    "serial_number",
+    "warranty_start_date",
+    "warranty_end_date",
+    "amc_end_date",
+    "asset_status",
+)
+MAIL_OVERRIDE_FIELDS = (
+    "ckt_id",
+    "lsi",
+    "present_type",
+    "reference_sr_number",
+    "serial_number",
+    "asset_name",
+    "end_customer_name",
+    "site_availability",
+    "link_type",
+    "bandwidth",
+)
+
 
 class ServiceRequestTicketService:
     def __init__(self, db: Session) -> None:
@@ -88,12 +125,18 @@ class ServiceRequestTicketService:
         self._audit = AuditService(db)
         self._access = TicketAccessService(db)
         self._channels = ServiceChannelNotifier(db)
+        self._hr = ServiceHrAdapter(db)
 
     def _apply_mine_filter(self, stmt, ctx: TenantContext):
-        """Limit to tickets owned by or co-owned by the logged-in employee."""
+        """Limit to own/co-owned tickets plus the unassigned intake queue.
+
+        Unassigned email tickets (owner IS NULL) must stay visible to engineers
+        and heads so they can open/assign them from Request Tickets.
+        """
         emp_id = self._access.resolve_employee_id(ctx)
         if emp_id is None:
-            return stmt.where(false())
+            # Still show unassigned intake if the user has no employee link.
+            return stmt.where(SvcServiceRequest.owner_employee_id.is_(None))
         co_owner_ids = select(SvcServiceRequestCoOwner.request_id).where(
             SvcServiceRequestCoOwner.employee_id == emp_id,
             SvcServiceRequestCoOwner.is_deleted.is_(False),
@@ -102,8 +145,37 @@ class ServiceRequestTicketService:
             or_(
                 SvcServiceRequest.owner_employee_id == emp_id,
                 SvcServiceRequest.id.in_(co_owner_ids),
+                SvcServiceRequest.owner_employee_id.is_(None),
             )
         )
+
+    def _apply_roster_visibility_filter(self, stmt, ctx: TenantContext, *, company_id: UUID):
+        """When HRMS roster gate is on, non-managers only see own tickets + on-duty queue.
+
+        - Managers bypass.
+        - Off-shift engineers: only tickets they own / co-own.
+        - On-duty engineers: own/co-own tickets OR unassigned queue tickets.
+        """
+        if not self._hr.roster_visibility_enabled:
+            return stmt
+        if self._access.is_manager(ctx):
+            return stmt
+        emp_id = self._access.resolve_employee_id(ctx)
+        if emp_id is None:
+            return stmt.where(false())
+        co_owner_ids = select(SvcServiceRequestCoOwner.request_id).where(
+            SvcServiceRequestCoOwner.employee_id == emp_id,
+            SvcServiceRequestCoOwner.is_deleted.is_(False),
+        )
+        own = or_(
+            SvcServiceRequest.owner_employee_id == emp_id,
+            SvcServiceRequest.id.in_(co_owner_ids),
+        )
+        if self._hr.is_employee_on_duty(ctx, emp_id, company_id=company_id):
+            # On duty: own tickets + unassigned tickets waiting for the shift team.
+            return stmt.where(or_(own, SvcServiceRequest.owner_employee_id.is_(None)))
+        # Off duty: only tickets already owned / co-owned.
+        return stmt.where(own)
 
     def list_tickets(
         self,
@@ -127,6 +199,7 @@ class ServiceRequestTicketService:
             SvcServiceRequest.is_deleted.is_(False),
         )
         stmt = self._scope.apply_svc_filter(stmt, SvcServiceRequest, ctx, branch_scoped=True)
+        stmt = self._apply_roster_visibility_filter(stmt, ctx, company_id=cid)
 
         if priority:
             stmt = stmt.where(SvcServiceRequest.priority == priority)
@@ -174,9 +247,14 @@ class ServiceRequestTicketService:
             SvcServiceRequest.status.notin_(("resolved", "closed", "cancelled")),
         )
         stmt = self._scope.apply_svc_filter(stmt, SvcServiceRequest, ctx, branch_scoped=True)
+        stmt = self._apply_roster_visibility_filter(stmt, ctx, company_id=cid)
         if mine:
             stmt = self._apply_mine_filter(stmt, ctx)
-        stmt = stmt.order_by(SvcServiceRequest.due_at.asc().nullslast(), SvcServiceRequest.sla_started_at.desc())
+        # Newest tickets first (created_at), then document number for stable serial order.
+        stmt = stmt.order_by(
+            SvcServiceRequest.created_at.desc(),
+            SvcServiceRequest.document_number.desc(),
+        )
         rows = list(self._db.scalars(stmt).all())
         now = datetime.now(timezone.utc)
         owner_names = self._owner_display_names([r.owner_employee_id for r in rows if r.owner_employee_id])
@@ -185,14 +263,8 @@ class ServiceRequestTicketService:
             started = row.sla_started_at
             if started is None:
                 continue
-            if started.tzinfo is None:
-                started = started.replace(tzinfo=timezone.utc)
-            elapsed = int((now - started).total_seconds() // 60)
-            remaining: int | None = None
-            if row.due_at:
-                due = row.due_at if row.due_at.tzinfo else row.due_at.replace(tzinfo=timezone.utc)
-                remaining = int((due - now).total_seconds() // 60)
-            is_breached = self._is_active_breached(row, now=now)
+            started = self._as_utc(started)
+            clock = self._sla_clock(row, now=now)
             items.append(
                 ServiceRequestSlaTrackerItem(
                     id=row.id,
@@ -205,9 +277,12 @@ class ServiceRequestTicketService:
                     due_at=row.due_at,
                     owner_employee_id=row.owner_employee_id,
                     owner_name=owner_names.get(row.owner_employee_id) if row.owner_employee_id else None,
-                    elapsed_minutes=elapsed,
-                    remaining_minutes=remaining,
-                    is_breached=is_breached,
+                    elapsed_minutes=clock["elapsed_minutes"],
+                    remaining_minutes=clock["remaining_minutes"],
+                    is_breached=clock["is_breached"],
+                    is_paused=clock["is_paused"],
+                    sla_target_minutes=row.sla_target_minutes,
+                    created_at=row.created_at,
                 )
             )
         return items
@@ -217,6 +292,55 @@ class ServiceRequestTicketService:
         return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
     @classmethod
+    def _paused_total_minutes(cls, row: SvcServiceRequest, *, now: datetime) -> int:
+        total = int(getattr(row, "sla_paused_total_minutes", 0) or 0)
+        paused_at = getattr(row, "sla_paused_at", None)
+        if paused_at is not None:
+            total += max(0, int((now - cls._as_utc(paused_at)).total_seconds() // 60))
+        return total
+
+    @classmethod
+    def _sla_effective_now(cls, row: SvcServiceRequest, *, now: datetime) -> datetime:
+        """While paused, freeze the clock at the pause moment for remaining/breach math."""
+        paused_at = getattr(row, "sla_paused_at", None)
+        return cls._as_utc(paused_at) if paused_at is not None else now
+
+    @classmethod
+    def _sla_clock(cls, row: SvcServiceRequest, *, now: datetime) -> dict:
+        started = row.sla_started_at
+        if started is None:
+            return {
+                "elapsed_minutes": 0,
+                "remaining_minutes": None,
+                "is_breached": False,
+                "is_paused": False,
+                "paused_total_minutes": int(getattr(row, "sla_paused_total_minutes", 0) or 0),
+            }
+        started = cls._as_utc(started)
+        effective_now = cls._sla_effective_now(row, now=now)
+        paused_total = cls._paused_total_minutes(row, now=now)
+        # Completed pauses are already pushed into due_at on resume; active pause is
+        # excluded via effective_now. Elapsed excludes only completed pause minutes.
+        completed = int(getattr(row, "sla_paused_total_minutes", 0) or 0)
+        wall = max(0, int((effective_now - started).total_seconds() // 60))
+        elapsed = max(0, wall - completed)
+        remaining: int | None = None
+        is_breached = False
+        if row.due_at is not None:
+            due = cls._as_utc(row.due_at)
+            remaining = int((due - effective_now).total_seconds() // 60)
+            is_breached = remaining < 0 or row.sla_status == "breached"
+        elif row.sla_status == "breached":
+            is_breached = True
+        return {
+            "elapsed_minutes": elapsed,
+            "remaining_minutes": remaining,
+            "is_breached": is_breached,
+            "is_paused": getattr(row, "sla_paused_at", None) is not None,
+            "paused_total_minutes": paused_total,
+        }
+
+    @classmethod
     def _closed_within_sla(cls, due_at: datetime | None, ended_at: datetime | None) -> bool | None:
         if due_at is None or ended_at is None:
             return None
@@ -224,12 +348,7 @@ class ServiceRequestTicketService:
 
     @classmethod
     def _is_active_breached(cls, row: SvcServiceRequest, *, now: datetime) -> bool:
-        if row.sla_status == "breached":
-            return True
-        if row.due_at is None:
-            return False
-        due = cls._as_utc(row.due_at)
-        return int((due - now).total_seconds() // 60) < 0
+        return bool(cls._sla_clock(row, now=now)["is_breached"])
 
     def sla_compliance_summary(
         self, ctx: TenantContext, *, company_id: UUID | None = None, mine: bool = False
@@ -245,11 +364,12 @@ class ServiceRequestTicketService:
             SvcServiceRequest.status.notin_(("resolved", "closed", "cancelled")),
         )
         active_stmt = self._scope.apply_svc_filter(active_stmt, SvcServiceRequest, ctx, branch_scoped=True)
+        active_stmt = self._apply_roster_visibility_filter(active_stmt, ctx, company_id=cid)
         if mine:
             active_stmt = self._apply_mine_filter(active_stmt, ctx)
-        active_breached = sum(
-            1 for row in self._db.scalars(active_stmt).all() if self._is_active_breached(row, now=now)
-        )
+        active_rows = list(self._db.scalars(active_stmt).all())
+        active_breached = sum(1 for row in active_rows if self._is_active_breached(row, now=now))
+        active_paused = sum(1 for row in active_rows if getattr(row, "sla_paused_at", None) is not None)
 
         closed_stmt = select(SvcServiceRequest).where(
             SvcServiceRequest.company_id == cid,
@@ -262,6 +382,7 @@ class ServiceRequestTicketService:
             ),
         )
         closed_stmt = self._scope.apply_svc_filter(closed_stmt, SvcServiceRequest, ctx, branch_scoped=True)
+        closed_stmt = self._apply_roster_visibility_filter(closed_stmt, ctx, company_id=cid)
         if mine:
             closed_stmt = self._apply_mine_filter(closed_stmt, ctx)
         within = 0
@@ -277,6 +398,7 @@ class ServiceRequestTicketService:
                 after_breach += 1
         return ServiceSlaComplianceSummary(
             active_breached=active_breached,
+            active_paused=active_paused,
             closed_within_sla=within,
             closed_after_breach=after_breach,
         )
@@ -301,6 +423,7 @@ class ServiceRequestTicketService:
             ),
         )
         stmt = self._scope.apply_svc_filter(stmt, SvcServiceRequest, ctx, branch_scoped=True)
+        stmt = self._apply_roster_visibility_filter(stmt, ctx, company_id=cid)
         if mine:
             stmt = self._apply_mine_filter(stmt, ctx)
         if q:
@@ -325,7 +448,13 @@ class ServiceRequestTicketService:
                 ended_at.isnot(None),
                 ended_at > SvcServiceRequest.due_at,
             )
-        stmt = stmt.order_by(SvcServiceRequest.resolved_at.desc().nullslast(), SvcServiceRequest.closed_at.desc().nullslast())
+        # Newest tickets first (created_at / document number), then most recently resolved.
+        stmt = stmt.order_by(
+            SvcServiceRequest.created_at.desc(),
+            SvcServiceRequest.document_number.desc(),
+            SvcServiceRequest.resolved_at.desc().nullslast(),
+            SvcServiceRequest.closed_at.desc().nullslast(),
+        )
         rows = list(self._db.scalars(stmt).all())
         owner_names = self._owner_display_names([r.owner_employee_id for r in rows if r.owner_employee_id])
         return [
@@ -386,10 +515,16 @@ class ServiceRequestTicketService:
         )
         options: list[ServiceAssignableEmployee] = []
         seen: set[UUID] = set()
+        on_duty: set[UUID] | None = None
+        if self._hr.roster_visibility_enabled:
+            company_id = self._scope.resolve_company_id(ctx, None)
+            on_duty = self._hr.list_on_duty_employee_ids(ctx, company_id=company_id)
         for emp, user_display_name in self._db.execute(stmt).all():
             if emp.id in seen:
                 continue
             seen.add(emp.id)
+            if on_duty is not None and emp.id not in on_duty:
+                continue
             label = (user_display_name or f"{emp.first_name} {emp.last_name}".strip() or emp.employee_code)
             options.append(
                 ServiceAssignableEmployee(
@@ -478,7 +613,24 @@ class ServiceRequestTicketService:
             can_open=access.can_open,
             is_opened=access.is_opened,
             can_resume=access.can_resume,
+            can_pause_sla=access.can_pause_sla,
+            can_resume_sla=access.can_resume_sla,
+            is_on_duty=access.is_on_duty,
+            roster_visibility_enabled=access.roster_visibility_enabled,
             employee_id=access.employee_id,
+        )
+        now = datetime.now(timezone.utc)
+        clock = self._sla_clock(row, now=now)
+        detail.sla_paused_at = getattr(row, "sla_paused_at", None)
+        detail.sla_paused_total_minutes = int(getattr(row, "sla_paused_total_minutes", 0) or 0)
+        detail.sla_is_paused = bool(clock["is_paused"])
+        detail.sla_elapsed_minutes = clock["elapsed_minutes"] if row.sla_started_at else None
+        detail.sla_remaining_minutes = clock["remaining_minutes"]
+        detail.sla_breached = clock["is_breached"] if row.sla_started_at else None
+        detail.sla_pauses = self._list_sla_pause_items(row.id)
+        pending = self._pending_reopen_request(row.id)
+        detail.pending_reopen_request = (
+            self._reopen_request_response(pending, row) if pending else None
         )
         return detail
 
@@ -500,8 +652,8 @@ class ServiceRequestTicketService:
         # SLA already started on create/email — do not reset calendar clock
         if not row.sla_started_at:
             updates["sla_started_at"] = now
-            updates["due_at"] = now + timedelta(minutes=self._resolution_minutes_for(row))
             updates["sla_status"] = "within_sla"
+            updates.update(self._sla_start_updates(row, now))
             sla_msg = "Ticket opened — SLA clock started"
         else:
             sla_msg = "Ticket opened by engineer (SLA already running)"
@@ -512,6 +664,14 @@ class ServiceRequestTicketService:
         return self.get_ticket(ctx, row_id)
 
     def _resolution_minutes_for(self, row: SvcServiceRequest) -> int:
+        policy = CustomerPrioritySlaService(self._db).resolve_policy(
+            tenant_id=row.tenant_id,
+            company_id=row.company_id,
+            customer_id=row.customer_id,
+            priority=row.priority,
+        )
+        if policy:
+            return policy.duration_minutes
         if row.sla_id:
             sla = self._db.get(SvcServiceSla, row.sla_id)
             if sla and sla.status == "active":
@@ -527,6 +687,91 @@ class ServiceRequestTicketService:
             "p4": 2880,
         }
         return priority_map.get((row.priority or "medium").lower(), 1440)
+
+    def _sla_start_updates(self, row: SvcServiceRequest, start: datetime) -> dict:
+        """Snapshot customer priority SLA on the ticket (immutable after set)."""
+        policy = CustomerPrioritySlaService(self._db).resolve_policy(
+            tenant_id=row.tenant_id,
+            company_id=row.company_id,
+            customer_id=row.customer_id,
+            priority=row.priority,
+        )
+        minutes = self._resolution_minutes_for(row)
+        updates: dict = {"sla_target_minutes": minutes}
+        if policy:
+            updates["sla_policy_snapshot"] = policy_snapshot(policy, captured_at=start)
+            updates["due_at"] = compute_due_at(start, policy.duration_minutes, policy.calendar_type)
+            if policy.sla_id:
+                updates["sla_id"] = policy.sla_id
+        else:
+            updates["due_at"] = start + timedelta(minutes=minutes)
+        return updates
+
+    @staticmethod
+    def _normalize_circuit(value: str | None) -> str | None:
+        if not value or not str(value).strip():
+            return None
+        normalized = str(value).strip().upper()
+        if normalized in {"NA", "N/A", "N.A.", "NONE", "-", "--", "NULL", "UNDEFINED"}:
+            return None
+        return normalized
+
+    def _validate_option_code(self, ctx: TenantContext, company_id: UUID, option_type: str, code: str) -> None:
+        normalized = (code or "").strip().lower()
+        exists = self._db.scalar(
+            select(SvcTicketOption.id).where(
+                SvcTicketOption.company_id == company_id,
+                SvcTicketOption.option_type == option_type,
+                SvcTicketOption.option_code == normalized,
+                SvcTicketOption.status == "active",
+                SvcTicketOption.is_deleted.is_(False),
+            )
+        )
+        if exists is None:
+            raise AppException(f"Invalid or inactive {option_type.replace('_', ' ')} code: {code}")
+
+    def _record_assignment_history(
+        self,
+        ctx: TenantContext,
+        row: SvcServiceRequest,
+        *,
+        change_type: str,
+        old_owner_employee_id: UUID | None = None,
+        new_owner_employee_id: UUID | None = None,
+        reason: str | None = None,
+    ) -> None:
+        self._db.add(
+            SvcTicketAssignmentHistory(
+                id=uuid.uuid4(),
+                tenant_id=ctx.tenant_id,
+                company_id=row.company_id,
+                request_id=row.id,
+                old_owner_employee_id=old_owner_employee_id,
+                new_owner_employee_id=new_owner_employee_id,
+                reason=reason,
+                changed_by=ctx.user_id,
+                changed_at=datetime.now(timezone.utc),
+                change_type=change_type,
+            )
+        )
+        self._db.flush()
+
+    def _pending_reopen_request(self, request_id: UUID) -> SvcTicketReopenRequest | None:
+        return self._db.scalar(
+            select(SvcTicketReopenRequest).where(
+                SvcTicketReopenRequest.request_id == request_id,
+                SvcTicketReopenRequest.status == "pending",
+            ).order_by(SvcTicketReopenRequest.requested_at.desc()).limit(1)
+        )
+
+    def _reopen_request_response(
+        self, req: SvcTicketReopenRequest, row: SvcServiceRequest | None = None
+    ) -> ServiceRequestReopenRequestResponse:
+        out = ServiceRequestReopenRequestResponse.model_validate(req)
+        if row:
+            out.document_number = row.document_number
+            out.subject = row.subject
+        return out
 
     @staticmethod
     def _json_safe(value):
@@ -557,16 +802,14 @@ class ServiceRequestTicketService:
         )
 
     def _enforce_support_selection_rules(self, row: SvcServiceRequest, fields: dict) -> None:
-        """Mode/category are chosen after open, then locked."""
+        """Mode may change after open (child FE/OEM/remote data is preserved). Category stays locked."""
         if "mode_of_action" in fields:
             new_mode = fields.get("mode_of_action") or None
             current = row.mode_of_action or None
-            if current and new_mode != current:
-                raise AppException("Mode of support is fixed after selection and cannot be changed")
+            if current is None and new_mode and not self._ticket_is_opened(row):
+                raise AppException("Open the ticket before choosing mode of support")
             if current and new_mode is None:
                 raise AppException("Mode of support cannot be cleared after selection")
-            if not current and new_mode and not self._ticket_is_opened(row):
-                raise AppException("Open the ticket before choosing mode of support")
 
         if "ticket_category" in fields:
             new_cat = fields.get("ticket_category") or None
@@ -610,14 +853,14 @@ class ServiceRequestTicketService:
         # Start SLA when ticket is created / email received (calendar time — weekends included)
         if row.status != "draft" and not row.sla_started_at:
             now = datetime.now(timezone.utc)
-            due = row.due_at or (now + timedelta(minutes=self._resolution_minutes_for(row)))
+            sla_updates = self._sla_start_updates(row, now)
             self._repo.update(
                 ctx,
                 row.id,
                 sla_started_at=now,
-                due_at=due,
                 sla_status=row.sla_status or "within_sla",
                 follow_up_at=now + timedelta(hours=settings.service_followup_hours),
+                **sla_updates,
             )
             row = self._repo.get(ctx, row.id) or row
 
@@ -652,6 +895,20 @@ class ServiceRequestTicketService:
         fe_data = fields.pop("field_engineer", None)
         oem_data = fields.pop("oem_support", None)
         old_status = row.status
+        old_mode = row.mode_of_action
+
+        if any(k in fields and fields.get(k) != getattr(row, k, None) for k in ASSET_CONFIRM_FIELDS):
+            fields["asset_confirmed_at"] = None
+            fields["asset_confirmed_by"] = None
+
+        overrides = dict(row.field_manual_overrides or {})
+        override_touched = False
+        for key in MAIL_OVERRIDE_FIELDS:
+            if key in fields and fields.get(key) != getattr(row, key, None):
+                overrides[key] = True
+                override_touched = True
+        if override_touched:
+            fields["field_manual_overrides"] = overrides
 
         row = self._repo.update(ctx, row_id, **fields)
         if row is None:
@@ -666,6 +923,16 @@ class ServiceRequestTicketService:
         if fields.get("status") and fields["status"] != old_status:
             self._record_status(ctx, row, old_status, fields["status"], "Status updated")
             self._notify(ctx, row, "status_change", f"Status changed to {fields['status']}")
+
+        new_mode = fields.get("mode_of_action", row.mode_of_action)
+        if old_mode and new_mode and new_mode != old_mode:
+            self._record_status(
+                ctx,
+                row,
+                row.status,
+                row.status,
+                f"Mode of support changed: {old_mode} → {new_mode}",
+            )
 
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
@@ -730,7 +997,9 @@ class ServiceRequestTicketService:
         self._notify(ctx, row, "status_change", f"Status changed to {status}")
         return self.get_ticket(ctx, row_id)
 
-    def assign_owner(self, ctx: TenantContext, row_id: UUID, *, owner_employee_id: UUID):
+    def assign_owner(
+        self, ctx: TenantContext, row_id: UUID, *, owner_employee_id: UUID, reason: str | None = None
+    ):
         row = self._repo.get(ctx, row_id)
         if row is None:
             raise NotFoundException("Service request ticket not found")
@@ -738,13 +1007,23 @@ class ServiceRequestTicketService:
         if row.ownership_locked:
             raise AppException("Ownership is locked for closed tickets")
 
+        prior_owner = row.owner_employee_id
+        change_type = "reassign" if prior_owner else "assign"
         old = row.status
         new_status = row.status
         if row.status in ("ticket_registered", "awaiting_assignment", "new", "submitted", "approved"):
             new_status = "assigned"
         self._repo.update(ctx, row_id, owner_employee_id=owner_employee_id, status=new_status)
+        self._record_assignment_history(
+            ctx,
+            row,
+            change_type=change_type,
+            old_owner_employee_id=prior_owner,
+            new_owner_employee_id=owner_employee_id,
+            reason=reason,
+        )
         if old != new_status:
-            self._record_status(ctx, row, old, new_status, "Owner assigned")
+            self._record_status(ctx, row, old, new_status, reason or "Owner assigned")
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="svc_service_request",
@@ -829,15 +1108,12 @@ class ServiceRequestTicketService:
             )
             if fe_row is None:
                 raise NotFoundException("Field engineer assignment not found")
-            user = self._db.scalar(
-                select(SecUser).where(SecUser.id == ctx.user_id, SecUser.is_deleted.is_(False))
-            )
-            if user is None or not user.email:
-                raise AppException("User email required for field engineer uploads")
-            if fe_row.engineer_email.strip().lower() != user.email.strip().lower():
-                raise AppException("You can only upload files for your own field engineer assignment")
+            # FE portal removed — ticket owner/co-owner uploads visit docs on the ticket.
+            if not access.can_work:
+                from core.exceptions import ForbiddenException
+                raise ForbiddenException("Only the ticket owner or co-owners can upload visit attachments")
             if fe_row.status == "solved":
-                raise AppException("Cannot upload after marking solved — contact the service engineer")
+                raise AppException("Cannot upload after the visit is marked complete")
         elif not access.can_work:
             from core.exceptions import ForbiddenException
             raise ForbiddenException("You do not have permission to upload attachments")
@@ -1030,6 +1306,27 @@ class ServiceRequestTicketService:
                     "actor_id": None,
                     "occurred_at": fe.solved_at,
                 })
+        for pause in self._list_sla_pauses(row_id):
+            items.append({
+                "event_type": "sla_pause",
+                "title": "SLA Paused",
+                "description": pause.reason,
+                "actor_id": pause.paused_by,
+                "occurred_at": pause.paused_at,
+            })
+            if pause.resumed_at:
+                resume_desc = pause.resume_reason or (
+                    f"Resumed after {pause.duration_minutes} min"
+                    if pause.duration_minutes is not None
+                    else "SLA resumed"
+                )
+                items.append({
+                    "event_type": "sla_resume",
+                    "title": "SLA Resumed",
+                    "description": resume_desc,
+                    "actor_id": pause.resumed_by,
+                    "occurred_at": pause.resumed_at,
+                })
         history = self._db.scalars(
             select(SvcServiceRequestStatusHistory)
             .where(SvcServiceRequestStatusHistory.request_id == row_id)
@@ -1038,10 +1335,12 @@ class ServiceRequestTicketService:
         for h in history:
             items.append({
                 "event_type": "status_change",
-                "title": f"Status: {h.from_status or '—'} → {h.to_status}",
+                "title": "Status updated",
                 "description": h.reason,
                 "actor_id": h.changed_by,
                 "occurred_at": h.changed_at,
+                "from_status": h.from_status,
+                "to_status": h.to_status,
             })
         try:
             comments = self.list_comments(ctx, row_id)
@@ -1088,6 +1387,12 @@ class ServiceRequestTicketService:
         )
         self._db.add(co)
         self._db.flush()
+        self._record_assignment_history(
+            ctx,
+            row,
+            change_type="co_owner_add",
+            new_owner_employee_id=employee_id,
+        )
         self._audit.log_entity_change(
             tenant_id=ctx.tenant_id,
             entity_name="svc_service_request_co_owner",
@@ -1115,6 +1420,12 @@ class ServiceRequestTicketService:
         co.is_deleted = True
         co.deleted_at = datetime.now(timezone.utc)
         co.deleted_by = ctx.user_id
+        self._record_assignment_history(
+            ctx,
+            row,
+            change_type="co_owner_remove",
+            old_owner_employee_id=employee_id,
+        )
         self._db.flush()
 
     def add_stakeholder(
@@ -1178,6 +1489,9 @@ class ServiceRequestTicketService:
         solution_type: str,
         solution_summary: str,
         reason: str | None = None,
+        issue_reported_code: str | None = None,
+        resolution_comment_code: str | None = None,
+        other_remarks: str | None = None,
     ):
         row = self._repo.get(ctx, row_id)
         if row is None:
@@ -1185,17 +1499,46 @@ class ServiceRequestTicketService:
         self._access.require_work(ctx, row)
         if not (row.mode_of_action and row.ticket_category):
             raise AppException("Choose mode of support and category before resolving this ticket")
-        pending_fe = [
-            fe for fe in self._list_field_engineers(row_id) if fe.status != "solved"
-        ]
-        if pending_fe:
-            names = ", ".join(fe.engineer_name for fe in pending_fe)
+        if not row.asset_confirmed_at:
+            raise AppException("Confirm asset details before resolving this ticket")
+        issue_code = (issue_reported_code or row.issue_reported_code or "").strip().lower()
+        resolution_code = (resolution_comment_code or row.resolution_comment_code or "").strip().lower()
+        if not issue_code or not resolution_code:
             raise AppException(
-                f"Wait for field engineer(s) to mark solved before resolving: {names}"
+                "Select Issue Reported and Resolution Comment in the Resolve dialog before resolving"
             )
+        # Ensure Issue/Resolution masters exist (and are committed) before validating codes.
+        from modules.service.service.ticket_option_service import TicketOptionService
+
+        TicketOptionService(self._db)._ensure_defaults(ctx, row.company_id)
+        self._db.flush()
+        self._validate_option_code(ctx, row.company_id, "issue_reported", issue_code)
+        self._validate_option_code(ctx, row.company_id, "resolution_comment", resolution_code)
+
+        # FE portal removed — completing the visit is done by the ticket owner on Resolve.
+        now = datetime.now(timezone.utc)
+        pending_fe = [fe for fe in self._list_field_engineers(row_id) if fe.status != "solved"]
+        for fe in pending_fe:
+            fe.status = "solved"
+            fe.solved_at = now
+            fe.solution_summary = (solution_summary or "").strip()[:2000] or "Visit completed on resolve"
+            fe.updated_by = ctx.user_id
+        if pending_fe:
+            self._db.flush()
+            names = ", ".join(fe.engineer_name for fe in pending_fe)
+            self._record_status(
+                ctx,
+                row,
+                row.status,
+                row.status,
+                f"Field engineer visit(s) auto-completed on resolve: {names}",
+            )
+
+        self._finalize_open_sla_pause(
+            ctx, row, reason="SLA auto-resumed because the ticket was resolved"
+        )
         old = row.status
         self._engine.transition(row, "resolved")
-        now = datetime.now(timezone.utc)
         sla_status = "breached" if self._closed_within_sla(row.due_at, now) is False else "within_sla"
         self._repo.update(
             ctx,
@@ -1205,16 +1548,54 @@ class ServiceRequestTicketService:
             solution_summary=solution_summary,
             resolved_at=now,
             sla_status=sla_status,
+            issue_reported_code=issue_code,
+            resolution_comment_code=resolution_code,
+            other_remarks=other_remarks if other_remarks is not None else row.other_remarks,
         )
-        self._record_status(ctx, row, old, "resolved", reason or "Ticket resolved — SLA ended")
+        self._record_status(ctx, row, old, "resolved", reason or "Ticket resolved")
         self._notify(ctx, row, "ticket_resolved", f"Ticket resolved: {solution_type}")
         self._notify_service_heads(
-            ctx, row, "ticket_resolved", f"Ticket {row.document_number} resolved ({solution_type}) — SLA ended"
+            ctx, row, "ticket_resolved", f"Ticket {row.document_number} resolved ({solution_type})"
         )
+        return self.get_ticket(ctx, row_id)
 
-        # Engineer end also closes the ticket (status Closed), locking ownership
-        row = self._repo.get(ctx, row_id) or row
+    def close_ticket(
+        self,
+        ctx: TenantContext,
+        row_id: UUID,
+        *,
+        reason: str | None = None,
+        other_remarks: str | None = None,
+        field_engineer: dict | FieldEngineerVisitPayload | None = None,
+    ):
+        row = self._repo.get(ctx, row_id)
+        if row is None:
+            raise NotFoundException("Service request ticket not found")
+        access = self._access.evaluate(ctx, row)
+        if not access.can_work:
+            raise AppException("Only the owner or co-owners can close this ticket")
+        if row.status != "resolved":
+            raise AppException("Ticket must be resolved before it can be closed")
+        if not row.issue_reported_code or not row.resolution_comment_code:
+            raise AppException("Issue reported and resolution comment codes are required to close")
+        if not row.asset_confirmed_at:
+            raise AppException("Confirm asset details before closing this ticket")
+        if row.mode_of_action == "onsite_support":
+            fe_visit = self._get_field_engineer(row.id)
+            if fe_visit is None:
+                raise AppException("Record field engineer visit details before closing onsite tickets")
+            if fe_visit.visit_charges is None and fe_visit.total_charges is None:
+                raise AppException("Enter visit or total charges before closing onsite support tickets")
+        if field_engineer is not None:
+            self._upsert_field_engineer(ctx, row, field_engineer)
+        if other_remarks is not None:
+            self._repo.update(ctx, row_id, other_remarks=other_remarks)
+        self._finalize_open_sla_pause(
+            ctx, row, reason="SLA auto-resumed because the ticket was closed"
+        )
+        old = row.status
         self._engine.transition(row, "closed")
+        now = datetime.now(timezone.utc)
         self._repo.update(
             ctx,
             row_id,
@@ -1222,10 +1603,241 @@ class ServiceRequestTicketService:
             closed_at=now,
             ownership_locked=True,
         )
-        self._record_status(ctx, row, "resolved", "closed", "Ticket ended and closed")
-        self._notify(ctx, row, "ticket_ended", f"Ticket {row.document_number} ended and closed")
-        self._notify_service_heads(ctx, row, "ticket_ended", f"Ticket {row.document_number} closed")
+        self._record_status(ctx, row, old, "closed", reason or "Ticket closed")
+        self._notify(ctx, row, "ticket_closed", f"Ticket {row.document_number} closed")
+        self._notify_service_heads(ctx, row, "ticket_closed", f"Ticket {row.document_number} closed")
         return self.get_ticket(ctx, row_id)
+
+    def pause_sla(self, ctx: TenantContext, row_id: UUID, *, reason: str) -> ServiceRequestTicketDetail:
+        row = self._repo.get(ctx, row_id)
+        if row is None:
+            raise NotFoundException("Service request ticket not found")
+        access = self._access.evaluate(ctx, row)
+        if not access.can_pause_sla:
+            raise AppException("Only the owner or co-owners can pause SLA on an active ticket")
+        pause_reason = (reason or "").strip()
+        if not pause_reason:
+            raise AppException("A reason is required before pausing the SLA")
+        if not row.sla_started_at:
+            raise AppException("SLA has not started on this ticket yet")
+        if row.sla_paused_at is not None:
+            raise AppException("SLA is already paused on this ticket")
+        if self._open_sla_pause(row.id) is not None:
+            raise AppException("SLA is already paused on this ticket")
+
+        now = datetime.now(timezone.utc)
+        pause = SvcTicketSlaPause(
+            id=uuid.uuid4(),
+            tenant_id=ctx.tenant_id,
+            company_id=row.company_id,
+            request_id=row.id,
+            paused_at=now,
+            reason=pause_reason[:2000],
+            paused_by=ctx.user_id,
+        )
+        self._db.add(pause)
+        self._repo.update(ctx, row_id, sla_paused_at=now)
+        self._record_status(ctx, row, row.status, row.status, f"SLA paused: {pause_reason[:500]}")
+        self._notify(ctx, row, "sla_paused", f"SLA paused on {row.document_number}: {pause_reason[:200]}")
+        return self.get_ticket(ctx, row_id)
+
+    def resume_sla(
+        self, ctx: TenantContext, row_id: UUID, *, reason: str | None = None
+    ) -> ServiceRequestTicketDetail:
+        row = self._repo.get(ctx, row_id)
+        if row is None:
+            raise NotFoundException("Service request ticket not found")
+        access = self._access.evaluate(ctx, row)
+        if not access.can_resume_sla:
+            raise AppException("Only the owner or co-owners can resume a paused SLA")
+        self._finalize_open_sla_pause(ctx, row, reason=reason, actor_id=ctx.user_id, require_open=True)
+        return self.get_ticket(ctx, row_id)
+
+    def list_sla_pauses(self, ctx: TenantContext, row_id: UUID) -> list[ServiceRequestSlaPauseItem]:
+        row = self._repo.get(ctx, row_id)
+        if row is None:
+            raise NotFoundException("Service request ticket not found")
+        access = self._access.evaluate(ctx, row)
+        if access.level == TicketAccessLevel.DENIED:
+            from core.exceptions import ForbiddenException
+
+            raise ForbiddenException("You do not have access to this ticket")
+        return self._list_sla_pause_items(row_id)
+
+    def _list_sla_pauses(self, request_id: UUID) -> list[SvcTicketSlaPause]:
+        return list(
+            self._db.scalars(
+                select(SvcTicketSlaPause)
+                .where(SvcTicketSlaPause.request_id == request_id)
+                .order_by(SvcTicketSlaPause.paused_at.desc())
+            ).all()
+        )
+
+    def _list_sla_pause_items(self, request_id: UUID) -> list[ServiceRequestSlaPauseItem]:
+        return [
+            ServiceRequestSlaPauseItem(
+                id=p.id,
+                request_id=p.request_id,
+                paused_at=p.paused_at,
+                resumed_at=p.resumed_at,
+                reason=p.reason,
+                resume_reason=p.resume_reason,
+                paused_by=p.paused_by,
+                resumed_by=p.resumed_by,
+                duration_minutes=p.duration_minutes,
+                is_active=p.resumed_at is None,
+            )
+            for p in self._list_sla_pauses(request_id)
+        ]
+
+    def _open_sla_pause(self, request_id: UUID) -> SvcTicketSlaPause | None:
+        return self._db.scalar(
+            select(SvcTicketSlaPause).where(
+                SvcTicketSlaPause.request_id == request_id,
+                SvcTicketSlaPause.resumed_at.is_(None),
+            )
+        )
+
+    def _finalize_open_sla_pause(
+        self,
+        ctx: TenantContext,
+        row: SvcServiceRequest,
+        *,
+        reason: str | None = None,
+        actor_id: UUID | None = None,
+        require_open: bool = False,
+    ) -> None:
+        pause = self._open_sla_pause(row.id)
+        if pause is None and row.sla_paused_at is None:
+            if require_open:
+                raise AppException("SLA is not paused on this ticket")
+            return
+        now = datetime.now(timezone.utc)
+        paused_at = self._as_utc(pause.paused_at if pause is not None else row.sla_paused_at)
+        duration = max(0, int((now - paused_at).total_seconds() // 60))
+        resume_note = (reason or "").strip() or None
+        if pause is not None:
+            pause.resumed_at = now
+            pause.resumed_by = actor_id or ctx.user_id
+            pause.duration_minutes = duration
+            pause.resume_reason = resume_note[:2000] if resume_note else None
+        total = int(getattr(row, "sla_paused_total_minutes", 0) or 0) + duration
+        updates: dict = {
+            "sla_paused_at": None,
+            "sla_paused_total_minutes": total,
+        }
+        if row.due_at is not None and duration > 0:
+            updates["due_at"] = self._as_utc(row.due_at) + timedelta(minutes=duration)
+        self._repo.update(ctx, row.id, **updates)
+        self._db.flush()
+        # Keep in-memory row in sync for subsequent detail/clock reads in this request.
+        row.sla_paused_at = None
+        row.sla_paused_total_minutes = total
+        if "due_at" in updates:
+            row.due_at = updates["due_at"]
+        msg = f"SLA resumed after {duration} min"
+        if resume_note:
+            msg = f"{msg}: {resume_note[:500]}"
+        self._record_status(ctx, row, row.status, row.status, msg)
+        self._notify(ctx, row, "sla_resumed", f"SLA resumed on {row.document_number}")
+
+    def confirm_asset(self, ctx: TenantContext, row_id: UUID):
+        row = self._repo.get(ctx, row_id)
+        if row is None:
+            raise NotFoundException("Service request ticket not found")
+        self._access.require_work(ctx, row)
+        if not (row.asset_name or row.serial_number or row.master_asset_id):
+            raise AppException("Enter asset details before confirming")
+        now = datetime.now(timezone.utc)
+        self._repo.update(
+            ctx,
+            row_id,
+            asset_confirmed_at=now,
+            asset_confirmed_by=ctx.user_id,
+        )
+        self._record_status(ctx, row, row.status, row.status, "Asset details confirmed")
+        return self.get_ticket(ctx, row_id)
+
+    def get_circuit_history(self, ctx: TenantContext, row_id: UUID) -> CircuitHistoryResponse:
+        """Previous tickets that share the same normalized CKT ID / LSI."""
+        row = self._repo.get(ctx, row_id)
+        if row is None:
+            raise NotFoundException("Service request ticket not found")
+        circuit = self._normalize_circuit(row.ckt_id) or self._normalize_circuit(row.lsi)
+        if not circuit:
+            return CircuitHistoryResponse(count=0, last_ticket_at=None, items=[], ckt_id=None)
+        stmt = (
+            select(SvcServiceRequest)
+            .where(
+                SvcServiceRequest.tenant_id == ctx.tenant_id,
+                SvcServiceRequest.company_id == row.company_id,
+                SvcServiceRequest.is_deleted.is_(False),
+                SvcServiceRequest.id != row_id,
+            )
+            .order_by(SvcServiceRequest.created_at.desc())
+            .limit(400)
+        )
+        stmt = self._scope.apply_svc_filter(stmt, SvcServiceRequest, ctx, branch_scoped=False)
+        candidates = list(self._db.scalars(stmt).all())
+        items: list[CircuitHistoryItem] = []
+        for other in candidates:
+            other_ckt = self._normalize_circuit(other.ckt_id) or self._normalize_circuit(other.lsi)
+            if other_ckt != circuit:
+                continue
+            items.append(
+                CircuitHistoryItem(
+                    id=other.id,
+                    document_number=other.document_number,
+                    created_at=other.created_at,
+                    issue_reported_code=other.issue_reported_code,
+                    resolution_comment_code=other.resolution_comment_code,
+                    status=other.status,
+                    status_label=status_label(other.status, other.reopened_at),
+                    subject=other.subject,
+                )
+            )
+            if len(items) >= 50:
+                break
+        last_at = items[0].created_at if items else None
+        return CircuitHistoryResponse(
+            count=len(items),
+            last_ticket_at=last_at,
+            items=items,
+            ckt_id=circuit,
+        )
+
+    def list_assignment_history(self, ctx: TenantContext, row_id: UUID) -> list[AssignmentHistoryItem]:
+        row = self._repo.get(ctx, row_id)
+        if row is None:
+            raise NotFoundException("Service request ticket not found")
+        access = self._access.evaluate(ctx, row)
+        if access.level == TicketAccessLevel.DENIED:
+            from core.exceptions import ForbiddenException
+            raise ForbiddenException("You do not have access to this ticket")
+        rows = list(
+            self._db.scalars(
+                select(SvcTicketAssignmentHistory)
+                .where(
+                    SvcTicketAssignmentHistory.request_id == row_id,
+                    SvcTicketAssignmentHistory.tenant_id == ctx.tenant_id,
+                )
+                .order_by(SvcTicketAssignmentHistory.changed_at.desc())
+            ).all()
+        )
+        emp_ids = {
+            eid
+            for h in rows
+            for eid in (h.old_owner_employee_id, h.new_owner_employee_id)
+            if eid is not None
+        }
+        names = self._owner_display_names(list(emp_ids))
+        out: list[AssignmentHistoryItem] = []
+        for h in rows:
+            item = AssignmentHistoryItem.model_validate(h)
+            item.old_owner_name = names.get(h.old_owner_employee_id) if h.old_owner_employee_id else None
+            item.new_owner_name = names.get(h.new_owner_employee_id) if h.new_owner_employee_id else None
+            out.append(item)
+        return out
 
     def resume_ticket(self, ctx: TenantContext, row_id: UUID, *, reason: str | None = None):
         """Resume from Awaiting Assignment / pending — continue work without resetting SLA."""
@@ -1296,27 +1908,121 @@ class ServiceRequestTicketService:
         return self.get_ticket(ctx, row_id)
 
     def reopen_ticket(self, ctx: TenantContext, row_id: UUID, *, reason: str | None = None):
+        """Backward-compatible alias — creates a pending reopen approval request."""
+        if not reason or not reason.strip():
+            raise AppException("A reason is required; use reopen-request for the approval workflow")
+        self.request_reopen(ctx, row_id, reason=reason.strip())
+        return self.get_ticket(ctx, row_id)
+
+    def request_reopen(self, ctx: TenantContext, row_id: UUID, *, reason: str) -> ServiceRequestReopenRequestResponse:
         row = self._repo.get(ctx, row_id)
         if row is None:
             raise NotFoundException("Service request ticket not found")
-        self._access.require_owner(ctx, row)
+        access = self._access.evaluate(ctx, row)
+        if not (access.is_owner or access.is_co_owner):
+            raise AppException("Only the owner or co-owners can request a reopen")
         if row.status != "closed":
-            raise AppException("Only closed tickets can be reopened")
+            raise AppException("Only closed tickets can be submitted for reopen")
+        if self._pending_reopen_request(row_id):
+            raise AppException("A reopen request is already pending for this ticket")
+        now = datetime.now(timezone.utc)
+        req = SvcTicketReopenRequest(
+            id=uuid.uuid4(),
+            tenant_id=ctx.tenant_id,
+            company_id=row.company_id,
+            request_id=row_id,
+            reason=reason.strip(),
+            requested_by=ctx.user_id,
+            requested_at=now,
+            status="pending",
+        )
+        self._db.add(req)
+        self._db.flush()
+        self._notify_service_heads(
+            ctx,
+            row,
+            "reopen_requested",
+            f"Reopen requested for ticket {row.document_number}: {reason[:200]}",
+        )
+        return self._reopen_request_response(req, row)
+
+    def list_pending_reopen_requests(
+        self, ctx: TenantContext, *, company_id: UUID | None = None
+    ) -> list[ServiceRequestReopenRequestResponse]:
+        cid = self._scope.resolve_company_id(ctx, company_id)
+        stmt = (
+            select(SvcTicketReopenRequest, SvcServiceRequest)
+            .join(SvcServiceRequest, SvcServiceRequest.id == SvcTicketReopenRequest.request_id)
+            .where(
+                SvcTicketReopenRequest.tenant_id == ctx.tenant_id,
+                SvcTicketReopenRequest.company_id == cid,
+                SvcTicketReopenRequest.status == "pending",
+                SvcServiceRequest.is_deleted.is_(False),
+            )
+            .order_by(SvcTicketReopenRequest.requested_at.asc())
+        )
+        out: list[ServiceRequestReopenRequestResponse] = []
+        for req, row in self._db.execute(stmt).all():
+            out.append(self._reopen_request_response(req, row))
+        return out
+
+    def approve_reopen(
+        self, ctx: TenantContext, reopen_request_id: UUID, *, note: str | None = None
+    ) -> ServiceRequestTicketDetail:
+        req = self._db.get(SvcTicketReopenRequest, reopen_request_id)
+        if req is None or req.tenant_id != ctx.tenant_id:
+            raise NotFoundException("Reopen request not found")
+        if req.status != "pending":
+            raise AppException("Reopen request is not pending")
+        row = self._repo.get(ctx, req.request_id)
+        if row is None:
+            raise NotFoundException("Service request ticket not found")
+        self._scope.validate_company_access(ctx, row.company_id)
+        access = self._access.evaluate(ctx, row)
+        if not access.is_manager:
+            raise AppException("Only service managers can approve reopen requests")
+
+        now = datetime.now(timezone.utc)
+        req.status = "approved"
+        req.approved_by = ctx.user_id
+        req.approved_at = now
         old = row.status
         self._engine.transition(row, "engineer_working")
-        now = datetime.now(timezone.utc)
-        due = now + timedelta(minutes=self._resolution_minutes_for(row))
-        self._repo.update(
-            ctx,
-            row_id,
-            status=row.status,
-            reopened_at=now,
-            sla_started_at=now,
-            due_at=due,
-            sla_status="within_sla",
-        )
-        self._record_status(ctx, row, old, row.status, reason or "Ticket reopened by owner")
-        return self.get_ticket(ctx, row_id)
+        updates: dict = {
+            "status": row.status,
+            "reopened_at": now,
+            "ownership_locked": False,
+            "closed_at": None,
+        }
+        if settings.service_reopen_restart_sla:
+            updates["sla_started_at"] = now
+            updates["sla_status"] = "within_sla"
+            updates.update(self._sla_start_updates(row, now))
+        self._repo.update(ctx, row.id, **updates)
+        self._record_status(ctx, row, old, row.status, note or f"Reopen approved: {req.reason[:200]}")
+        self._notify(ctx, row, "ticket_reopened", f"Ticket {row.document_number} reopened")
+        return self.get_ticket(ctx, row.id)
+
+    def reject_reopen(
+        self, ctx: TenantContext, reopen_request_id: UUID, *, rejection_reason: str
+    ) -> ServiceRequestReopenRequestResponse:
+        req = self._db.get(SvcTicketReopenRequest, reopen_request_id)
+        if req is None or req.tenant_id != ctx.tenant_id:
+            raise NotFoundException("Reopen request not found")
+        if req.status != "pending":
+            raise AppException("Reopen request is not pending")
+        row = self._repo.get(ctx, req.request_id)
+        if row is None:
+            raise NotFoundException("Service request ticket not found")
+        access = self._access.evaluate(ctx, row)
+        if not access.is_manager:
+            raise AppException("Only service managers can reject reopen requests")
+        req.status = "rejected"
+        req.approved_by = ctx.user_id
+        req.approved_at = datetime.now(timezone.utc)
+        req.rejection_reason = rejection_reason.strip()
+        self._db.flush()
+        return self._reopen_request_response(req, row)
 
     def _list_co_owners(self, request_id: UUID) -> list[SvcServiceRequestCoOwner]:
         return list(
@@ -1356,8 +2062,23 @@ class ServiceRequestTicketService:
 
     def _upsert_field_engineer(self, ctx: TenantContext, row: SvcServiceRequest, data: dict | FieldEngineerVisitPayload) -> None:
         payload = data if isinstance(data, dict) else data.model_dump(exclude_none=True)
+        payload.pop("visit_notes_history", None)
+        visit = payload.get("visit_charges") or 0
+        movement = payload.get("movement_charges") or 0
+        other = payload.get("other_charges") or 0
+        if any(k in payload for k in ("visit_charges", "movement_charges", "other_charges")):
+            try:
+                payload["total_charges"] = Decimal(visit) + Decimal(movement) + Decimal(other)
+            except Exception:
+                pass
         existing = self._get_field_engineer(row.id)
         if existing:
+            remark = payload.get("remarks")
+            if remark and remark.strip() and remark.strip() != (existing.remarks or "").strip():
+                stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                line = f"[{stamp}] {remark.strip()}"
+                history = existing.visit_notes_history or ""
+                existing.visit_notes_history = f"{history}\n{line}".strip() if history else line
             for k, v in payload.items():
                 setattr(existing, k, v)
             existing.updated_by = ctx.user_id
@@ -1523,12 +2244,17 @@ class ServiceRequestTicketService:
             carrying_spares=fe.carrying_spares,
             visit_date=fe.visit_date,
             hw_replacement=fe.hw_replacement,
+            hardware_repair=fe.hardware_repair,
+            hardware_replacement_yn=fe.hardware_replacement_yn,
+            new_device_serial=fe.new_device_serial,
             transport_mode=fe.transport_mode,
             movement_charges=fe.movement_charges,
             visit_charges=fe.visit_charges,
+            other_charges=fe.other_charges,
             total_charges=fe.total_charges,
             remarks=fe.remarks,
             payment_approval=fe.payment_approval,
+            visit_notes_history=fe.visit_notes_history,
         )
 
     @staticmethod
@@ -1600,12 +2326,14 @@ class ServiceRequestTicketService:
         ws.append(["Ticket", row.document_number if row else str(row_id)])
         ws.append(["Subject", row.subject if row else ""])
         ws.append([])
-        ws.append(["Occurred At", "Event Type", "Title", "Description", "Actor ID"])
+        ws.append(["Occurred At", "Event Type", "Title", "From Status", "To Status", "Description", "Actor ID"])
         for item in reversed(items):
             ws.append([
                 str(item.get("occurred_at") or ""),
                 item.get("event_type") or "",
                 item.get("title") or "",
+                item.get("from_status") or "",
+                item.get("to_status") or "",
                 item.get("description") or "",
                 str(item.get("actor_id") or ""),
             ])
@@ -1631,7 +2359,7 @@ class ServiceRequestTicketService:
         row_id: UUID,
         *,
         engineer_name: str,
-        engineer_email: str,
+        engineer_email: str | None = None,
         engineer_contact: str | None = None,
         assigned_date=None,
         work_brief: str | None = None,
@@ -1649,7 +2377,7 @@ class ServiceRequestTicketService:
             raise AppException("Field engineers can only be added for Onsite Support or OEM Support mode")
         if not row.ticket_category:
             raise AppException("Choose ticket category before adding a field engineer")
-        email = engineer_email.strip().lower()
+        email = (engineer_email or "").strip().lower()
         fe = SvcTicketFieldEngineer(
             id=uuid.uuid4(),
             tenant_id=ctx.tenant_id,
@@ -1672,24 +2400,13 @@ class ServiceRequestTicketService:
         )
         self._db.add(fe)
         self._db.flush()
-        creds = self._provision_field_engineer_login(
-            ctx,
-            row,
-            engineer_name=fe.engineer_name,
-            engineer_email=email,
-            engineer_contact=fe.engineer_contact,
-        )
+        # FE portal login removed — assignment stays on the ticket only.
+        label = f"{fe.engineer_name}" + (f" ({email})" if email else "")
         self._record_status(
-            ctx, row, row.status, row.status, f"Field engineer added: {fe.engineer_name} ({email})"
+            ctx, row, row.status, row.status, f"Field engineer added: {label}"
         )
         self._notify(ctx, row, "field_engineer_added", f"Field engineer {fe.engineer_name} assigned")
-        data = TicketFieldEngineerResponse.model_validate(fe)
-        data.login_email = creds["login_email"]
-        data.temporary_password = creds["temporary_password"]
-        data.account_created = creds["account_created"]
-        data.credentials_email_sent = creds["credentials_email_sent"]
-        data.credentials_note = creds["credentials_note"]
-        return data
+        return TicketFieldEngineerResponse.model_validate(fe)
 
     def update_field_engineer(
         self,
@@ -1723,7 +2440,6 @@ class ServiceRequestTicketService:
         if fe is None:
             raise NotFoundException("Field engineer not found")
 
-        old_email = fe.engineer_email
         if engineer_name is not None:
             fe.engineer_name = engineer_name.strip()
         if engineer_contact is not None:
@@ -1749,22 +2465,13 @@ class ServiceRequestTicketService:
         fe.updated_by = ctx.user_id
         self._db.flush()
 
-        # If email changed, provision / grant login for the new address
-        if fe.engineer_email != old_email:
-            self._provision_field_engineer_login(
-                ctx,
-                row,
-                engineer_name=fe.engineer_name,
-                engineer_email=fe.engineer_email,
-                engineer_contact=fe.engineer_contact,
-            )
-
         self._record_status(
             ctx,
             row,
             row.status,
             row.status,
-            f"Field engineer updated: {fe.engineer_name} ({fe.engineer_email})",
+            f"Field engineer updated: {fe.engineer_name}"
+            + (f" ({fe.engineer_email})" if fe.engineer_email else ""),
         )
         return TicketFieldEngineerResponse.model_validate(fe)
 
@@ -1993,7 +2700,11 @@ class ServiceRequestTicketService:
         *,
         field_engineer_id: UUID,
     ) -> TicketFieldEngineerResponse:
-        """Create or reset FE login and return credentials (always includes a fresh password)."""
+        """FE portal login is disabled — manage visit completion on the ticket."""
+        raise AppException(
+            "Field engineer login portal is disabled. Record the visit on the ticket and mark it complete there."
+        )
+        # Unreachable — kept for signature compatibility with older callers.
         row = self._repo.get(ctx, row_id)
         if row is None:
             raise NotFoundException("Service request ticket not found")
@@ -2234,15 +2945,11 @@ class ServiceRequestTicketService:
         solution_summary: str,
         attachments: list | None = None,
     ) -> TicketFieldEngineerResponse:
-        user = self._db.scalar(
-            select(SecUser).where(
-                SecUser.id == ctx.user_id,
-                SecUser.is_deleted.is_(False),
-            )
-        )
-        if user is None or not user.email:
-            raise AppException("User email required for field engineer actions")
-        email = user.email.strip().lower()
+        """Mark FE visit complete from the ticket (owner/co-owner). No FE portal login."""
+        row = self._repo.get(ctx, row_id)
+        if row is None:
+            raise NotFoundException("Service request ticket not found")
+        self._access.require_work(ctx, row)
         fe = self._db.scalar(
             select(SvcTicketFieldEngineer).where(
                 SvcTicketFieldEngineer.id == field_engineer_id,
@@ -2252,13 +2959,8 @@ class ServiceRequestTicketService:
         )
         if fe is None:
             raise NotFoundException("Field engineer assignment not found")
-        if fe.engineer_email.strip().lower() != email:
-            raise AppException("You can only solve tickets assigned to your email")
         if fe.status == "solved":
-            raise AppException("Already marked as solved")
-        row = self._repo.get(ctx, row_id)
-        if row is None:
-            raise NotFoundException("Service request ticket not found")
+            raise AppException("Already marked as completed")
 
         uploaded_names: list[str] = []
         for item in attachments or []:
@@ -2282,7 +2984,7 @@ class ServiceRequestTicketService:
 
         files_note = f" Files: {', '.join(uploaded_names)}." if uploaded_names else ""
         reason = (
-            f"Field engineer {fe.engineer_name} marked solved — "
+            f"Field engineer visit completed for {fe.engineer_name} — "
             f"{solution_summary.strip()[:300]}{files_note}"
         )
         self._record_status(ctx, row, row.status, row.status, reason)

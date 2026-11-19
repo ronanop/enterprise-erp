@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport"/>
+<title>Employee Profile - Alex Rivers</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .safe-bottom {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+        .active-scale:active {
+            transform: scale(0.97);
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-secondary-fixed-variant": "#5a00c6",
+                      "tertiary": "#006242",
+                      "on-surface-variant": "#434655",
+                      "outline": "#737686",
+                      "surface-container-high": "#dce9ff",
+                      "error-container": "#ffdad6",
+                      "surface-container-lowest": "#ffffff",
+                      "surface-dim": "#cbdbf5",
+                      "surface-bright": "#f8f9ff",
+                      "secondary": "#712ae2",
+                      "tertiary-fixed-dim": "#4edea3",
+                      "tertiary-container": "#007d55",
+                      "tertiary-fixed": "#6ffbbe",
+                      "error": "#ba1a1a",
+                      "on-primary": "#ffffff",
+                      "on-surface": "#0b1c30",
+                      "surface-variant": "#d3e4fe",
+                      "on-tertiary-fixed": "#002113",
+                      "on-secondary-container": "#fffbff",
+                      "on-error-container": "#93000a",
+                      "outline-variant": "#c3c6d7",
+                      "primary": "#004ac6",
+                      "surface-tint": "#0053db",
+                      "on-secondary-fixed": "#25005a",
+                      "primary-container": "#2563eb",
+                      "on-tertiary-fixed-variant": "#005236",
+                      "on-tertiary-container": "#bdffdb",
+                      "primary-fixed": "#dbe1ff",
+                      "inverse-surface": "#213145",
+                      "secondary-fixed": "#eaddff",
+                      "background": "#f8f9ff",
+                      "surface-container": "#e5eeff",
+                      "surface-container-highest": "#d3e4fe",
+                      "surface": "#f8f9ff",
+                      "on-primary-fixed": "#00174b",
+                      "on-primary-fixed-variant": "#003ea8",
+                      "on-error": "#ffffff",
+                      "primary-fixed-dim": "#b4c5ff",
+                      "inverse-primary": "#b4c5ff",
+                      "secondary-fixed-dim": "#d2bbff",
+                      "surface-container-low": "#eff4ff",
+                      "secondary-container": "#8a4cfc",
+                      "on-primary-container": "#eeefff",
+                      "inverse-on-surface": "#eaf1ff",
+                      "on-tertiary": "#ffffff",
+                      "on-background": "#0b1c30",
+                      "on-secondary": "#ffffff"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "section-margin": "32px",
+                      "stack-gap-sm": "8px",
+                      "unit": "4px",
+                      "container-padding": "20px",
+                      "stack-gap-lg": "24px",
+                      "stack-gap-md": "16px"
+              },
+              "fontFamily": {
+                      "display-lg-mobile": ["Inter"],
+                      "display-md": ["Inter"],
+                      "display-lg": ["Inter"],
+                      "label-sm": ["Inter"],
+                      "title-lg": ["Inter"],
+                      "body-md": ["Inter"],
+                      "label-md": ["Inter"],
+                      "body-sm": ["Inter"],
+                      "headline-sm": ["Inter"]
+              },
+              "fontSize": {
+                      "display-lg-mobile": ["28px", {"lineHeight": "34px", "fontWeight": "700"}],
+                      "display-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "700"}],
+                      "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "label-sm": ["12px", {"lineHeight": "16px", "fontWeight": "600"}],
+                      "title-lg": ["18px", {"lineHeight": "24px", "fontWeight": "600"}],
+                      "body-md": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                      "label-md": ["14px", {"lineHeight": "20px", "fontWeight": "500"}],
+                      "body-sm": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                      "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}]
+              }
+            },
+          },
+        }
+      </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background text-on-background min-h-screen pb-32">
+<!-- Top AppBar (Mobile Only) -->
+<nav class="fixed top-0 w-full z-50 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/30 px-container-padding h-16 flex justify-between items-center md:hidden">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full overflow-hidden border border-primary/20">
+<img class="w-full h-full object-cover" data-alt="A professional close-up studio portrait of a modern corporate professional with a friendly expression. The lighting is soft and high-key, emphasizing a clean and high-end aesthetic. The background is a soft, blurred neutral tone to match a minimalist HR portal design. The style is crisp and high-definition." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAAxBMRpFhDLG-1Gs4dZhG-wHE5nnOkjYJDhFNdbG5S871Fpq3UA8QEoDalRQQpuP1ONk1axVyjWYCf13Je9fZy01853ExTzs4iUchAq_4JM2kXqc-DyJbblo5kP1WZwTXn4zOsNAOdRC-PfWhZ2yxAt8USCY5sLBkPBPhmd7Xuv2vWG3e-vx6J2yKpV0mkOhS19eQQQ1GL3DBFWcSknazFZFZU30LI3OLeEz7HtCaTBtJepsxyVsGZ6YUvf4EgRxQ0S7rYPVFiW5o"/>
+</div>
+<span class="font-title-lg text-title-lg text-primary">Employee Portal</span>
+</div>
+<button class="w-10 h-10 flex items-center justify-center text-on-surface-variant hover:opacity-80 active:scale-95 transition-all">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+</nav>
+<!-- Main Content Canvas -->
+<main class="pt-24 px-container-padding max-w-2xl mx-auto space-y-stack-gap-lg">
+<!-- Profile Header Section -->
+<section class="flex flex-col items-center text-center space-y-4">
+<div class="relative group">
+<div class="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-xl shadow-black/5 ring-1 ring-outline-variant/20">
+<img class="w-full h-full object-cover" data-alt="A sharp, professional headshot of Alex Rivers, a senior product designer in his early 30s. He has a creative yet professional appearance, wearing a clean charcoal sweater. The photo is set against a bright, airy office background with natural lighting. The visual quality is cinematic and premium, fitting for a modern HR application profile." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBdJUr0gs55ps5rqfV0Hqdc7Y-MhFnLnPMsErlw2LF0mDEtg8nA5iaHys_x6WXOs0yq9-TR5IXIMxXVLsTfKUH9DOtZo9UpbjtL6zmBrtWuOhNBwHkgcbtedGKmJYnPKyBPpxTdPciFaa-zrmDNEbOT2v8lw_7uNnd2WQI7e_P3o6SO4OEycMh2eSHu5cLERNA-GQhpVH1Nl5MTbubed496yGQdMZ2w-CwFc5PZ0J6vqDTTPCRY8218HWtuB6jSmQa55AENBHe7cE0"/>
+</div>
+<button class="absolute bottom-0 right-0 bg-primary text-on-primary p-2 rounded-full shadow-lg active:scale-90 transition-transform">
+<span class="material-symbols-outlined text-sm" data-icon="edit">edit</span>
+</button>
+</div>
+<div class="space-y-1">
+<h1 class="font-display-lg-mobile text-display-lg-mobile text-on-surface">Alex Rivers</h1>
+<p class="font-body-md text-body-md text-on-surface-variant">Senior Product Designer</p>
+<div class="inline-flex items-center px-3 py-1 bg-surface-container-high text-primary rounded-full font-label-sm text-label-sm">
+                    ID: ESS-2024-001
+                </div>
+</div>
+</section>
+<!-- Information Bento Grid -->
+<section class="grid grid-cols-2 gap-4">
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/30 shadow-sm">
+<p class="font-label-sm text-label-sm text-outline mb-1">Department</p>
+<p class="font-title-lg text-title-lg text-on-surface truncate">Product &amp; Design</p>
+</div>
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/30 shadow-sm">
+<p class="font-label-sm text-label-sm text-outline mb-1">Manager</p>
+<p class="font-title-lg text-title-lg text-on-surface truncate">Sarah Jenkins</p>
+</div>
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/30 shadow-sm col-span-2">
+<p class="font-label-sm text-label-sm text-outline mb-1">Email</p>
+<p class="font-body-md text-body-md text-on-surface">alex.rivers@modernhq.com</p>
+</div>
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/30 shadow-sm col-span-2">
+<p class="font-label-sm text-label-sm text-outline mb-1">Phone</p>
+<p class="font-body-md text-body-md text-on-surface">+1 (555) 012-3456</p>
+</div>
+</section>
+<!-- Action List -->
+<section class="space-y-3">
+<h2 class="font-headline-sm text-headline-sm px-1">Professional Details</h2>
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/30 overflow-hidden divide-y divide-outline-variant/20">
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-container transition-colors active-scale">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-primary" data-icon="contact_emergency">contact_emergency</span>
+<span class="font-body-md text-body-md text-on-surface">Emergency Contact</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant" data-icon="chevron_right">chevron_right</span>
+</button>
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-container transition-colors active-scale">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-primary" data-icon="account_balance">account_balance</span>
+<span class="font-body-md text-body-md text-on-surface">Bank Details</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant" data-icon="chevron_right">chevron_right</span>
+</button>
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-container transition-colors active-scale">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-primary" data-icon="inventory_2">inventory_2</span>
+<span class="font-body-md text-body-md text-on-surface">Company Assets</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant" data-icon="chevron_right">chevron_right</span>
+</button>
+<button class="w-full flex items-center justify-between p-4 hover:bg-surface-container transition-colors active-scale">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-primary" data-icon="settings">settings</span>
+<span class="font-body-md text-body-md text-on-surface">Personal Settings</span>
+</div>
+<span class="material-symbols-outlined text-outline-variant" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</section>
+<!-- Security Section -->
+<section class="space-y-3">
+<h2 class="font-headline-sm text-headline-sm px-1">Security</h2>
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/30 p-4 space-y-4">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="fingerprint">fingerprint</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-on-surface">Biometric Login</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Secure your account with fingerprint</p>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox" value=""/>
+<div class="w-11 h-6 bg-outline-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<div class="h-px bg-outline-variant/20"></div>
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-4">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="face">face</span>
+</div>
+<div>
+<p class="font-label-md text-label-md text-on-surface">Face ID</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Enable facial recognition</p>
+</div>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox" value=""/>
+<div class="w-11 h-6 bg-outline-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+</div>
+</section>
+<!-- Logout Section -->
+<section class="pt-4">
+<button class="w-full py-4 bg-error-container text-on-error-container rounded-xl font-title-lg text-title-lg flex items-center justify-center gap-2 active:scale-[0.98] transition-transform shadow-lg shadow-error/5">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+                Logout
+            </button>
+<p class="text-center mt-6 font-body-sm text-body-sm text-outline-variant">Version 2.4.1 (2024.11)</p>
+</section>
+</main>
+<!-- BottomNavBar (Mobile Layout) -->
+<nav class="fixed bottom-0 left-0 w-full z-50 bg-surface/80 backdrop-blur-xl border-t border-outline-variant/30 flex justify-around items-center px-4 pt-3 pb-safe-area h-20 shadow-lg shadow-black/5 md:hidden">
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-60 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="home">home</span>
+<span class="font-label-sm text-label-sm">Home</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-60 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="fingerprint">fingerprint</span>
+<span class="font-label-sm text-label-sm">Attendance</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-60 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="event_upcoming">event_upcoming</span>
+<span class="font-label-sm text-label-sm">Leave</span>
+</a>
+<a class="flex flex-col items-center justify-center text-on-surface-variant opacity-60 hover:text-primary transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="font-label-sm text-label-sm">Salary</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary relative after:content-[''] after:absolute after:-bottom-1 after:w-1 after:h-1 after:bg-primary after:rounded-full" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span class="font-label-sm text-label-sm">Profile</span>
+</a>
+</nav>
+<!-- Micro-interactions Script -->
+<script>
+        document.querySelectorAll('button, a').forEach(elem => {
+            elem.addEventListener('click', function(e) {
+                const ripple = document.createElement('span');
+                ripple.classList.add('ripple');
+                this.appendChild(ripple);
+                setTimeout(() => ripple.remove(), 600);
+            });
+        });
+
+        // Simple visibility observer for entrance animations
+        const observerOptions = {
+            threshold: 0.1
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('opacity-100', 'translate-y-0');
+                    entry.target.classList.remove('opacity-0', 'translate-y-4');
+                }
+            });
+        }, observerOptions);
+
+        document.querySelectorAll('section').forEach(section => {
+            section.classList.add('transition-all', 'duration-700', 'opacity-0', 'translate-y-4');
+            observer.observe(section);
+        });
+    </script>
+</body></html>

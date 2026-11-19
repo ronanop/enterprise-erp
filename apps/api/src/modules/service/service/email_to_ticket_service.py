@@ -66,9 +66,14 @@ class EmailToTicketService:
 
         skip_reason = skip_ticket_reason(subject=subject, from_address=from_email)
         if skip_reason:
+            skip_messages = {
+                "noise_sender": "Automated sender — no ticket created",
+                "subject_pattern_mismatch": "Subject does not match ticket patterns — no ticket created",
+                "subject_filter_required": "Subject filter required (demo mode) — no ticket created",
+            }
             return EmailToTicketResult(
                 status="skipped",
-                message="Automated sender — no ticket created",
+                message=skip_messages.get(skip_reason, f"Skipped ({skip_reason}) — no ticket created"),
             )
 
         body = (payload.body_text or "").strip()
@@ -105,6 +110,8 @@ class EmailToTicketService:
 
         try:
             parsed = parse_service_email_body(body, subject=subject)
+            extraction_meta = parsed.pop("__extraction_meta__", None)
+            log.extraction_json = extraction_meta
             # Inbound sender wins for contact email; keep parsed NOC name/phone when present
             ticket_fields = {
                 "mode_of_action": None,
@@ -121,7 +128,7 @@ class EmailToTicketService:
                 "issue_description": parsed.get("issue_description") or body[:8000],
                 "description": parsed.get("description") or body[:8000],
             }
-            for key in (
+            mail_keys = (
                 "mobile",
                 "reference_sr_number",
                 "customer_reference",
@@ -147,7 +154,9 @@ class EmailToTicketService:
                 "ip_details",
                 "mail_extra_info",
                 "company_name_from_mail",
-            ):
+                "present_type",
+            )
+            for key in mail_keys:
                 if parsed.get(key):
                     ticket_fields[key] = parsed[key]
 
@@ -161,15 +170,35 @@ class EmailToTicketService:
                 **ticket_fields,
             )
             log.request_id = ticket.id
+            self._db.flush()
             row = ticket_svc._repo.get(ctx, ticket.id)
             if row is not None:
-                # Unassigned email tickets must surface for Service Head / Manager queue.
-                ticket_svc._notify_service_heads(
-                    ctx,
-                    row,
-                    "email_ticket_created",
-                    f"New email ticket {ticket.document_number} from {from_email} — assign an engineer",
-                )
+                # Notifications must never undo ticket creation (use nested try).
+                try:
+                    ticket_svc._notify_service_heads(
+                        ctx,
+                        row,
+                        "email_ticket_created",
+                        f"New email ticket {ticket.document_number} from {from_email} — assign an engineer",
+                    )
+                except Exception:
+                    pass
+                try:
+                    from modules.service.service.roster_open_reminder_service import (
+                        RosterOpenReminderService,
+                    )
+
+                    RosterOpenReminderService(self._db).notify_on_duty_roster(
+                        ctx,
+                        row,
+                        message=(
+                            f"New ticket {ticket.document_number} arrived on your shift "
+                            f"from {from_email} — open it or assign an owner"
+                        ),
+                        force=True,
+                    )
+                except Exception:
+                    pass
             # Confirmation mail is optional — never block ticket creation.
             self._send_confirmation(from_email, contact_name, ticket.document_number, subject)
             self._db.flush()
