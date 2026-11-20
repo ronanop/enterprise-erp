@@ -27,13 +27,16 @@ import type {
   EssPayslip,
   EssPolicyItem,
   EssPolicyWalkthrough,
+  EssAttendanceCorrection,
   EssPunch,
   EssPunchPolicy,
+  EssProfileUpdateRequest,
   EssSeparationItem,
   EssSupportTicket,
   EssSupportTicketComment,
   EssSupportTicketDetail,
   EssTeamLeaveItem,
+  EssTeamMember,
   EssTrainingItem,
   EssPerformanceItem,
   EssWfhRequest,
@@ -130,10 +133,19 @@ export const essService = {
       ? wrapMock(() => mockApi.punchPolicy())
       : apiClient<EssPunchPolicy>("/ess/attendance/punch-policy"),
 
-  punch: async (opts?: { image_base64?: string | null }) => {
+  punch: async (opts?: {
+    image_base64?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+  }) => {
     if (env.useMock) return wrapMock(() => mockApi.punch());
-    const coords = await readGeolocation();
-    const body: Record<string, unknown> = { ...coords };
+    const body: Record<string, unknown> = {};
+    if (opts?.latitude != null && opts?.longitude != null) {
+      body.latitude = opts.latitude;
+      body.longitude = opts.longitude;
+    } else {
+      Object.assign(body, await readGeolocation());
+    }
     if (opts?.image_base64) body.image_base64 = opts.image_base64;
     return apiClient<EssPunch>("/ess/attendance/punch", {
       method: "POST",
@@ -142,28 +154,55 @@ export const essService = {
   },
 
   payslips: () =>
-    env.useMock
+    env.useMock || env.usePayslipMock
       ? wrapMock(() => mockApi.payslips())
       : apiClient<EssPayslip[]>("/ess/payslips"),
 
   payslip: (id: string) =>
-    env.useMock
+    env.useMock || env.usePayslipMock
       ? wrapMock(() => mockApi.payslip(id))
       : apiClient<EssPayslip>(`/ess/payslips/${id}`),
 
-  /** Returns payslip export text/bytes for sharing. */
+  payslipExportText: (id: string) =>
+    env.useMock || env.usePayslipMock
+      ? wrapMock(async () => {
+          const row = await mockApi.payslip(id);
+          return {
+            success: true,
+            message: "OK",
+            data: {
+              text:
+                row.data?.export_text ||
+                `Payslip ${row.data?.document_number}\nNet: ${row.data?.net_salary}`,
+            },
+          };
+        })
+      : apiClient<{ text: string }>(`/ess/payslips/${id}/export-text`),
+
+  /** Returns payslip export text/bytes for sharing (includes amount in words). */
   downloadPayslipText: async (id: string) => {
-    if (env.useMock) {
+    const { amountInIndianWords } = await import("@/lib/amount-in-words");
+    if (env.useMock || env.usePayslipMock) {
       const res = await mockApi.payslip(id);
       const p = res.data!;
+      const net = Number(p.net_salary) || 0;
       return [
         `Payslip ${p.document_number}`,
         `Employee: ${p.employee_name ?? ""} (${p.employee_code ?? ""})`,
         `Gross: ${p.gross_salary}`,
         `Deductions: ${p.total_deductions}`,
         `Net: ${p.net_salary}`,
+        `In words: ${amountInIndianWords(net)}`,
         `Status: ${p.payment_status}`,
       ].join("\n");
+    }
+    try {
+      const exported = await apiClient<{ text: string }>(
+        `/ess/payslips/${id}/export-text`,
+      );
+      if (exported.data?.text) return exported.data.text;
+    } catch {
+      /* fall through to binary download */
     }
     const bytes = await apiClientBytes(`/ess/payslips/${id}/download`);
     return new TextDecoder().decode(bytes);
@@ -298,7 +337,126 @@ export const essService = {
   listCorrections: () =>
     env.useMock
       ? wrapMock(() => mockApi.listCorrections())
-      : apiClient("/ess/attendance-corrections"),
+      : apiClient<EssAttendanceCorrection[]>("/ess/attendance-corrections"),
+
+  listAttendanceCorrections: () =>
+    env.useMock
+      ? wrapMock(() => mockApi.listCorrections())
+      : apiClient<EssAttendanceCorrection[]>("/ess/attendance-corrections"),
+
+  cancelAttendanceCorrection: (id: string) =>
+    env.useMock
+      ? wrapMock(async () => ({
+          success: true,
+          message: "Correction revoked",
+          data: {
+            id,
+            attendance_date: new Date().toISOString().slice(0, 10),
+            field_name: "check_in",
+            new_value: "",
+            reason: null,
+            status: "cancelled",
+            attendance_id: null,
+            old_value: null,
+          } satisfies EssAttendanceCorrection,
+        }))
+      : apiClient<EssAttendanceCorrection>(
+          `/ess/attendance-corrections/${id}/cancel`,
+          { method: "POST" },
+        ),
+
+  listDetailUpdateRequests: () =>
+    env.useMock
+      ? wrapMock(async () => ({
+          success: true,
+          message: "OK",
+          data: [] as EssProfileUpdateRequest[],
+        }))
+      : apiClient<EssProfileUpdateRequest[]>(
+          "/ess/profile/detail-update-requests",
+        ),
+
+  createDetailUpdateRequest: (body?: { notes?: string }) =>
+    env.useMock
+      ? wrapMock(async () => ({
+          success: true,
+          message: "Update request submitted for HR review",
+          data: {
+            id: "mock-profile-update",
+            notes: body?.notes ?? null,
+            status: "submitted",
+            created_at: new Date().toISOString(),
+            decided_at: null,
+            decision_notes: null,
+          } satisfies EssProfileUpdateRequest,
+        }))
+      : apiClient<EssProfileUpdateRequest>(
+          "/ess/profile/detail-update-requests",
+          { method: "POST", body: body ?? {} },
+        ),
+
+  teamMembers: () =>
+    env.useMock
+      ? wrapMock(async () => ({
+          success: true,
+          message: "OK",
+          data: [] as EssTeamMember[],
+        }))
+      : apiClient<EssTeamMember[]>("/ess/team"),
+
+  downloadDocumentBytes: (id: string) =>
+    env.useMock
+      ? Promise.reject(
+          new ApiClientError("Download not available in demo mode", 400),
+        )
+      : apiClientBytes(`/ess/documents/${id}/download`),
+
+  notificationPoll: () =>
+    env.useMock
+      ? wrapMock(async () => ({
+          success: true,
+          message: "OK",
+          data: {
+            unread_count: 0,
+            latest: null as EssNotification | null,
+          },
+        }))
+      : apiClient<{
+          unread_count: number;
+          latest: EssNotification | null;
+        }>("/ess/notifications/poll"),
+
+  faceEnroll: (image_base64: string) =>
+    env.useMock
+      ? wrapMock(async () => ({
+          success: true,
+          message: "OK",
+          data: {
+            enrolled: true,
+            enabled: true,
+            verification_required: true,
+          } satisfies EssFaceStatus,
+        }))
+      : apiClient<EssFaceStatus>("/ess/security/face/enroll", {
+          method: "POST",
+          body: { image_base64 },
+        }),
+
+  faceSetEnabled: (enabled: boolean) =>
+    env.useMock
+      ? wrapMock(async () => ({
+          success: true,
+          message: "OK",
+          data: {
+            enrolled: true,
+            enabled,
+            verification_required: enabled,
+          } satisfies EssFaceStatus,
+        }))
+      : apiClient<EssFaceStatus>("/ess/security/face/enabled", {
+          method: "PATCH",
+          body: { enabled },
+        }),
 
   approvals: () =>
     env.useMock
@@ -500,6 +658,11 @@ export const essService = {
         }),
 
   myMeetingBookings: () =>
+    env.useMock
+      ? wrapMock(() => mockApi.myMeetingBookings())
+      : apiClient<EssMeetingBooking[]>("/ess/meeting-rooms/bookings"),
+
+  meetingBookings: () =>
     env.useMock
       ? wrapMock(() => mockApi.myMeetingBookings())
       : apiClient<EssMeetingBooking[]>("/ess/meeting-rooms/bookings"),

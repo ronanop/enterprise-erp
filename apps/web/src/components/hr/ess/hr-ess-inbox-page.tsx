@@ -43,7 +43,7 @@ const BUCKET_CATEGORIES: Record<RequestBucket, HrEssInboxCategory[]> = {
   attendance: ["attendance_correction"],
   on_tour: ["on_duty"],
   leaves: ["leave", "wfh"],
-  others: ["ot_allotment", "compoff"],
+  others: ["ot_allotment", "compoff", "profile_update"],
 };
 
 const CARDS: { id: RequestBucket; label: string; icon: LucideIcon }[] = [

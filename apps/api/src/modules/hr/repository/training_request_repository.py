@@ -18,14 +18,16 @@ class TrainingRequestRepository(HrScopedRepository):
         stmt = select(HrTrainingRequest).where(
             HrTrainingRequest.id == row_id, HrTrainingRequest.is_deleted.is_(False)
         )
-        stmt = self.apply_hr_filter(stmt, HrTrainingRequest, ctx, branch_scoped=True)
+        # Company-scoped (not branch): ESS bookings from any branch must appear in
+        # HR Meeting Requests and be approvable by HR for that company.
+        stmt = self.apply_hr_filter(stmt, HrTrainingRequest, ctx, branch_scoped=False)
         return self.db.scalar(stmt)
 
     def list_rows(self, ctx: TenantContext, company_id: UUID | None):
         stmt = select(HrTrainingRequest).where(HrTrainingRequest.is_deleted.is_(False))
         if company_id is not None:
             stmt = stmt.where(HrTrainingRequest.company_id == company_id)
-        stmt = self.apply_hr_filter(stmt, HrTrainingRequest, ctx, branch_scoped=True)
+        stmt = self.apply_hr_filter(stmt, HrTrainingRequest, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 
     def create(self, ctx: TenantContext, **fields) -> HrTrainingRequest:

@@ -24,6 +24,9 @@ _ENTITY_ID_KEYS = (
     "compoff_request_id",
     "on_duty_request_id",
     "ot_request_id",
+    "meeting_request_id",
+    "training_request_id",
+    "profile_update_request_id",
     "separation_id",
     "document_number",
     "href",
@@ -90,9 +93,10 @@ def _send_in_app(
     href = sanitize_inbox_href(payload.get("href"), kind=kind)
     if href:
         payload["href"] = href
-    # Prefer outbox enqueue so approve APIs never block on sync SMTP/Celery/Redis.
-    # Local broker flakes were hanging manager→HR actions for 45s+.
-    PlatformNotifyFacade(db, use_outbox=True).send(
+    # Sync in_app publish so ESS inbox/bell update immediately without Celery.
+    # (Outbox-only delivery stays empty when the worker is not running locally.)
+    # EmailDeliveryEngine stubs non-email channels — no SMTP hang for in_app.
+    PlatformNotifyFacade(db, use_outbox=False).send(
         tenant_id=tenant_id,
         template_code=template_code,
         event_type=event_type,
@@ -149,7 +153,15 @@ def notify_employee(
         if mgr is not None:
             manager_extra = {**(extra or {}), "employee_id": str(employee_id)}
             # Reporting managers use ESS Approvals, not the HRMS inbox.
-            if kind in {"leave", "wfh", "compoff", "on_duty", "attendance", "miss_punch"}:
+            if kind in {
+                "leave",
+                "wfh",
+                "compoff",
+                "on_duty",
+                "attendance",
+                "miss_punch",
+                "meeting",
+            }:
                 manager_extra["href"] = "/approvals"
             try:
                 _send_in_app(

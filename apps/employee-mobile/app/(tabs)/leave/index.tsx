@@ -7,7 +7,7 @@ import {
   Text,
   View,
 } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { AppHeader } from "@/components/AppHeader";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import {
@@ -40,11 +40,27 @@ import { GUTTER, RADIUS_CARD, RADIUS_FULL } from "@/theme/tokens";
 import {
   formatDisplayDateDDMMYYYY,
   formatLeaveRangeLine,
+  todayLocalDate,
 } from "@/utils/datetime";
 import { leaveStatusDisplay } from "@/utils/leave-status";
 
+const BALANCE_COLORS = [
+  { stroke: "#2563eb", soft: "#dbe1ff", iconBg: "#dce9ff" },
+  { stroke: "#ba1a1a", soft: "#ffdad6", iconBg: "#ffdad6" },
+  { stroke: "#712ae2", soft: "#eaddff", iconBg: "#eaddff" },
+] as const;
+
+function historyStatusColor(status: string): string {
+  const tone = leaveStatusTone(status);
+  if (tone === "success") return "#10B981";
+  if (tone === "warn") return "#d97706";
+  if (tone === "danger") return "#ba1a1a";
+  return "#004ac6";
+}
+
 export default function LeaveScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ apply?: string }>();
   const { me } = useAuth();
   const [types, setTypes] = useState<EssLeaveType[]>([]);
   const [balances, setBalances] = useState<EssLeaveBalance[]>([]);
@@ -64,7 +80,6 @@ export default function LeaveScreen() {
   const [endDate, setEndDate] = useState("");
   const [daysCount, setDaysCount] = useState("1");
   const [reason, setReason] = useState("");
-
   const typeName = useMemo(() => {
     const map = new Map(types.map((t) => [t.id, t.leave_type_name]));
     return (id: string) => map.get(id) ?? "Leave";
@@ -72,27 +87,38 @@ export default function LeaveScreen() {
   const balanceCards = useMemo(
     () =>
       balances.slice(0, 2).map((row, index) => {
-        const closing = Number(row.closing_balance) || 0;
+        const rawClosing = Number(row.closing_balance) || 0;
         const used = Number(row.used) || 0;
         const leaveType = types.find((t) => t.id === row.leave_type_id);
-        const total = Math.max(
-          closing + used,
-          Number(leaveType?.max_days_per_year) || closing + used,
-          1,
-        );
-        const themes = [
-          { stroke: "#2563eb", soft: "#dbe1ff" },
-          { stroke: "#ba1a1a", soft: "#ffdad6" },
-        ];
+        const name = typeName(row.leave_type_id);
+        const code = (leaveType?.leave_type_code ?? "").toUpperCase();
+        const isSick =
+          code === "SL" ||
+          code.includes("SICK") ||
+          name.toLowerCase().includes("sick");
+        const configuredMax = Number(leaveType?.max_days_per_year) || 0;
+        const total = isSick
+          ? configuredMax > 0
+            ? configuredMax
+            : 5
+          : Math.max(
+              rawClosing + used,
+              configuredMax || rawClosing + used,
+              1,
+            );
+        const closing = isSick
+          ? Math.max(0, Math.min(rawClosing, total - used, total))
+          : rawClosing;
         return {
           id: row.id,
           leaveTypeId: row.leave_type_id,
-          name: typeName(row.leave_type_id),
+          name,
           closing,
+          used,
           total,
-          pct: (closing / total) * 100,
+          pct: total > 0 ? (closing / total) * 100 : 0,
           perMonth: Number(leaveType?.monthly_credit_days) || 0,
-          ...themes[index % themes.length],
+          ...BALANCE_COLORS[index % BALANCE_COLORS.length],
         };
       }),
     [balances, types, typeName],
@@ -142,6 +168,12 @@ export default function LeaveScreen() {
   );
 
   useEffect(() => {
+    if (params.apply !== "1") return;
+    setShowApply(true);
+    setStep(1);
+  }, [params.apply]);
+
+  useEffect(() => {
     if (!startDate || !endDate) return;
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -172,6 +204,9 @@ export default function LeaveScreen() {
   function closeApply() {
     setShowApply(false);
     setStep(1);
+    if (params.apply === "1") {
+      router.replace("/(tabs)/leave");
+    }
   }
 
   async function onSubmit() {
@@ -295,17 +330,18 @@ export default function LeaveScreen() {
               >
                 <Card style={styles.activeRow}>
                   <View style={styles.activeIcon}>
-                    <IconCalendar size={20} color={colors.secondary} />
+                    <IconCalendar size={20} color="#712ae2" />
                   </View>
                   <View style={styles.activeCopy}>
                     <View style={styles.reqTop}>
-                      <Text style={styles.reqTitle}>
+                      <Text style={styles.reqTitle} numberOfLines={1}>
                         {typeName(row.leave_type_id)}
                       </Text>
-                      <StatusBadge
-                        status={leaveStatusDisplay(row.status)}
-                        tone={leaveStatusTone(row.status)}
-                      />
+                      <View style={styles.pendingPill}>
+                        <Text style={styles.pendingPillText}>
+                          • {leaveStatusDisplay(row.status)}
+                        </Text>
+                      </View>
                     </View>
                     <Text style={styles.reqMeta}>
                       {formatLeaveRangeLine(
@@ -320,46 +356,6 @@ export default function LeaveScreen() {
             ))}
           </View>
         )}
-      </View>
-
-      <Card style={styles.quickApply}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.quickTitle}>Quick apply</Text>
-          <Pressable onPress={() => openApply()}>
-            <Text style={styles.actionLink}>Open calendar</Text>
-          </Pressable>
-        </View>
-        <Text style={styles.quickCopy}>
-          Use the + button to pick leave type and dates on the calendar
-          (dd/mm/yyyy).
-        </Text>
-      </Card>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionHeading}>Upcoming Holidays</Text>
-          <Pressable onPress={() => router.push("/(tabs)/leave/holidays")}>
-            <Text style={styles.actionLink}>View All</Text>
-          </Pressable>
-        </View>
-        {HOLIDAYS.map((holiday) => (
-          <Pressable
-            key={holiday.name}
-            onPress={() => router.push("/(tabs)/leave/holidays")}
-            style={styles.holiday}
-          >
-            <View style={[styles.holidayDot, { borderColor: holiday.color }]}>
-              <Text style={[styles.holidayGlyph, { color: holiday.color }]}>
-                •
-              </Text>
-            </View>
-            <View style={styles.holidayCopy}>
-              <Text style={styles.holidayName}>{holiday.name}</Text>
-              <Text style={styles.holidayDate}>{holiday.date}</Text>
-            </View>
-            <StatusBadge status={holiday.tag} tone="info" />
-          </Pressable>
-        ))}
       </View>
 
       <View style={styles.section}>
@@ -395,11 +391,15 @@ export default function LeaveScreen() {
                     </Text>
                   </View>
                   <View style={styles.historyStatus}>
-                    <StatusBadge
-                      status={leaveStatusDisplay(row.status)}
-                      tone={leaveStatusTone(row.status)}
-                    />
-                    <IconChevronRight size={14} color={colors.outlineVariant} />
+                    <Text
+                      style={[
+                        styles.historyStatusText,
+                        { color: historyStatusColor(row.status) },
+                      ]}
+                    >
+                      {row.status.replace(/_/g, " ")}
+                    </Text>
+                    <IconChevronRight size={14} color="#c3c6d7" />
                   </View>
                 </Card>
               </Pressable>
@@ -412,15 +412,15 @@ export default function LeaveScreen() {
         <View style={styles.modalBackdrop}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
-              <View style={styles.modalSpacer} />
-              <Text style={styles.modalTitle}>Apply leave</Text>
               <Pressable
                 accessibilityLabel="Close"
                 onPress={closeApply}
                 style={styles.closeButton}
               >
-                <IconClose size={18} color={colors.onSurface} />
+                <IconClose size={18} color="#004ac6" />
               </Pressable>
+              <Text style={styles.modalTitle}>Apply Leave</Text>
+              <View style={styles.modalSpacer} />
             </View>
 
             <View style={styles.stepRow}>
@@ -630,6 +630,18 @@ const styles = StyleSheet.create({
   balanceFill: { height: "100%", borderRadius: RADIUS_FULL },
   list: { gap: 8 },
   activeRow: { flexDirection: "row", alignItems: "flex-start", gap: 12 },
+  pendingPill: {
+    flexShrink: 0,
+    borderRadius: RADIUS_FULL,
+    backgroundColor: "#dbe1ff",
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+  },
+  pendingPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#004ac6",
+  },
   activeIcon: {
     width: 44,
     height: 44,
@@ -641,7 +653,7 @@ const styles = StyleSheet.create({
   activeCopy: { flex: 1, gap: 2 },
   reqTop: { flexDirection: "row", justifyContent: "space-between", gap: 8 },
   reqTitle: { fontWeight: "700", color: colors.onSurface, flex: 1 },
-  reqMeta: { fontSize: 13, color: colors.onSurfaceVariant },
+  reqMeta: { marginTop: 2, fontSize: 14, color: "#434655" },
   quickApply: { padding: 20, gap: 10 },
   quickTitle: { fontSize: 15, fontWeight: "600", color: colors.onSurface },
   quickCopy: { fontSize: 14, lineHeight: 20, color: colors.onSurfaceVariant },
@@ -676,19 +688,23 @@ const styles = StyleSheet.create({
   },
   historyMeta: { marginTop: 2, fontSize: 12, color: colors.onSurfaceVariant },
   historyStatus: { flexDirection: "row", alignItems: "center", gap: 4 },
+  historyStatusText: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
   fab: {
     position: "absolute",
-    // The tab bar renders outside the screen area, so a single gutter of
-    // clearance reproduces the PWA's gap above the nav.
+    // Match PWA ViewportFab: fixed bottom-24 above the curved dock.
     right: GUTTER,
-    bottom: GUTTER,
+    bottom: 96,
     width: 56,
     height: 56,
     borderRadius: RADIUS_FULL,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.primaryContainer,
-    shadowColor: colors.primaryContainer,
+    backgroundColor: "#2563eb",
+    shadowColor: "#2563eb",
     shadowOpacity: 0.4,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
@@ -727,15 +743,17 @@ const styles = StyleSheet.create({
   modalTitle: {
     flex: 1,
     textAlign: "center",
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
-    color: colors.onSurface,
+    color: "#004ac6",
   },
   closeButton: {
     width: 40,
     height: 40,
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: RADIUS_FULL,
+    backgroundColor: "#eff4ff",
   },
   stepRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 4 },
   stepItem: { flex: 1, flexDirection: "row", alignItems: "center" },
@@ -748,7 +766,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS_FULL,
     backgroundColor: "#e5eeff",
   },
-  stepBadgeActive: { backgroundColor: colors.primary },
+  stepBadgeActive: { backgroundColor: "#004ac6" },
   stepBadgeText: {
     fontSize: 13,
     fontWeight: "700",
@@ -756,7 +774,7 @@ const styles = StyleSheet.create({
   },
   stepBadgeTextActive: { color: "#ffffff" },
   stepLabel: { fontSize: 12, fontWeight: "500", color: colors.onSurfaceVariant },
-  stepLabelActive: { color: colors.primary },
+  stepLabelActive: { color: "#004ac6" },
   stepLine: {
     flex: 1,
     height: 1,
@@ -783,8 +801,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   chipActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: "#004ac6",
+    borderColor: "#004ac6",
   },
   chipText: { fontSize: 13, fontWeight: "600", color: colors.onSurfaceVariant },
   chipTextActive: { color: "#fff" },
@@ -804,34 +822,13 @@ const styles = StyleSheet.create({
   },
   reviewCard: {
     borderRadius: 12,
-    backgroundColor: colors.surfaceLow,
+    backgroundColor: "#eff4ff",
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 4,
   },
-  reviewType: { fontSize: 14, fontWeight: "600", color: colors.primary },
+  reviewType: { fontSize: 14, fontWeight: "600", color: "#004ac6" },
   reviewDates: { fontSize: 14, fontWeight: "500", color: colors.onSurface },
   reasonField: { minHeight: 88, textAlignVertical: "top" },
   modalActions: { flexDirection: "row", gap: 10, marginTop: 4 },
 });
-
-const HOLIDAYS = [
-  {
-    name: "Diwali - Festival of Lights",
-    date: "Oct 31, Thursday",
-    tag: "Mandatory",
-    color: "#f59e0b",
-  },
-  {
-    name: "Christmas Day",
-    date: "Dec 25, Wednesday",
-    tag: "Restricted",
-    color: "#10B981",
-  },
-  {
-    name: "New Year's Eve",
-    date: "Dec 31, Tuesday",
-    tag: "Mandatory",
-    color: "#2563eb",
-  },
-];

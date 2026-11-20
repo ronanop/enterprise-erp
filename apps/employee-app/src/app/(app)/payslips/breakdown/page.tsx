@@ -14,7 +14,7 @@ import { formatDateTime } from "@/utils/datetime";
 type MoneyLine = { label: string; amount: number };
 
 function money(value: number, hidden: boolean, prefix = "₹") {
-  if (hidden) return "••••";
+  if (hidden) return `${prefix} XX,XXX`;
   return `${prefix}${value.toLocaleString("en-IN")}`;
 }
 

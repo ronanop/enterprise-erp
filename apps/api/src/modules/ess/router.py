@@ -62,6 +62,8 @@ from modules.ess.schemas import (
     EssPolicyAckResponse,
     EssPolicyItem,
     EssPolicyWalkthrough,
+    EssProfileUpdateCreate,
+    EssProfileUpdateResponse,
     EssSeparationCreate,
     EssSeparationItem,
     EssSupportTicketCommentCreate,
@@ -70,6 +72,7 @@ from modules.ess.schemas import (
     EssSupportTicketDetail,
     EssSupportTicketItem,
     EssTeamLeaveItem,
+    EssTeamMember,
     EssTrainingItem,
     EssUnreadCountResponse,
     EssWfhCreate,
@@ -88,6 +91,30 @@ def get_me(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=EssService(db).get_me(ctx))
+
+
+@ess_router.get("/me/photo")
+def get_me_photo(
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    download = EssService(db).get_me_photo_download(ctx)
+    headers = {
+        "Content-Disposition": f'inline; filename="{quote(download.filename)}"',
+        "Cache-Control": "private, max-age=300",
+    }
+    if download.path:
+        return FileResponse(
+            download.path,
+            media_type=download.media_type,
+            filename=download.filename,
+            headers=headers,
+        )
+    return StreamingResponse(
+        BytesIO(download.content or b""),
+        media_type=download.media_type,
+        headers=headers,
+    )
 
 
 @ess_router.patch("/me", response_model=APIResponse[EssMeResponse])
@@ -296,6 +323,19 @@ def cancel_ess_correction(
     )
 
 
+def _ess_on_duty_response(row) -> EssOnDutyResponse:
+    return EssOnDutyResponse(
+        id=row.id,
+        duty_date=row.duty_date,
+        end_date=row.end_date,
+        portion=row.portion,
+        duty_location=row.duty_location,
+        purpose=row.purpose,
+        reason=row.reason,
+        status=row.status,
+    )
+
+
 @ess_router.get("/on-duty-requests", response_model=APIResponse[list[EssOnDutyResponse]])
 def list_ess_on_duty(
     ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
@@ -304,19 +344,7 @@ def list_ess_on_duty(
     rows = EssService(db).list_on_duty(ctx)
     return APIResponse(
         message="OK",
-        data=[
-            EssOnDutyResponse(
-                id=r.id,
-                duty_date=r.duty_date,
-                end_date=r.end_date,
-                portion=r.portion,
-                duty_location=r.duty_location,
-                purpose=r.purpose,
-                reason=r.reason,
-                status=r.status,
-            )
-            for r in rows
-        ],
+        data=[_ess_on_duty_response(r) for r in rows],
     )
 
 
@@ -329,16 +357,7 @@ def create_ess_on_duty(
     row = EssService(db).create_on_duty(ctx, **body.model_dump())
     return APIResponse(
         message="On Duty submitted",
-        data=EssOnDutyResponse(
-            id=row.id,
-            duty_date=row.duty_date,
-            end_date=row.end_date,
-            portion=row.portion,
-            duty_location=row.duty_location,
-            purpose=row.purpose,
-            reason=row.reason,
-            status=row.status,
-        ),
+        data=_ess_on_duty_response(row),
     )
 
 
@@ -436,6 +455,34 @@ def register_ess_device_token(
     return APIResponse(
         message="Device token registered",
         data={"id": str(row.id), "platform": row.platform, "is_active": row.is_active},
+    )
+
+
+@ess_router.get(
+    "/profile/detail-update-requests",
+    response_model=APIResponse[list[EssProfileUpdateResponse]],
+)
+def list_profile_detail_update_requests(
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="OK", data=EssService(db).list_profile_update_requests(ctx)
+    )
+
+
+@ess_router.post(
+    "/profile/detail-update-requests",
+    response_model=APIResponse[EssProfileUpdateResponse],
+)
+def create_profile_detail_update_request(
+    body: EssProfileUpdateCreate,
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(
+        message="Update request submitted for HR review",
+        data=EssService(db).create_profile_update_request(ctx, notes=body.notes),
     )
 
 
@@ -629,6 +676,14 @@ def update_education(
     db: Annotated[Session, Depends(get_db)],
 ):
     return APIResponse(message="OK", data=EssService(db).update_education_skills(ctx, body))
+
+
+@ess_router.get("/team", response_model=APIResponse[list[EssTeamMember]])
+def list_team_members(
+    ctx: Annotated[TenantContext, Depends(get_ess_tenant_context)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return APIResponse(message="OK", data=EssService(db).list_team_members(ctx))
 
 
 @ess_router.get("/team-leave", response_model=APIResponse[list[EssTeamLeaveItem]])

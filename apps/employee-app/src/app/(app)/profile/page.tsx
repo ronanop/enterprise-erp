@@ -185,7 +185,12 @@ export default function ProfilePage() {
               <div className="relative z-[1] flex flex-col items-center text-center">
                 <div className="relative">
                   <Link href="/profile/personal" aria-label="Open personal details">
-                    <Avatar name={me.display_name} size="xl" ring />
+                    <Avatar
+                      name={me.display_name}
+                      size="xl"
+                      ring
+                      photoUrl={me.photo_url}
+                    />
                   </Link>
                   <Link
                     href="/profile/personal"
@@ -253,7 +258,7 @@ export default function ProfilePage() {
 
           <section className="space-y-3">
             <h2 className="px-0.5 text-lg font-bold tracking-tight text-[#3b2a7a]">
-              Professional Details
+              More
             </h2>
 
             <div className="space-y-2.5">

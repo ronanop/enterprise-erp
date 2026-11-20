@@ -9,6 +9,7 @@ import { AlertBox } from "@/components/ui";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
 import type { EssLeaveRequest, EssLeaveType } from "@/types/api";
+import { leaveStatusDisplay } from "@/utils/leave-status";
 import * as ui from "@/theme/classes";
 
 export default function LeaveDetailsPage() {
@@ -99,7 +100,7 @@ export default function LeaveDetailsPage() {
               <p className="text-xs text-[#434655]">Status</p>
               <p
                 className={`mt-1 flex items-center gap-1.5 font-semibold ${
-                  approved
+                  approved || managerApproved
                     ? "text-[#10B981]"
                     : pending
                       ? "text-amber-600"
@@ -107,15 +108,9 @@ export default function LeaveDetailsPage() {
                 }`}
               >
                 {approved ? <IconCheck size={16} /> : null}
-                {row.status}
+                {leaveStatusDisplay(row.status)}
+                {managerApproved ? " · with HR" : ""}
               </p>
-            </div>
-          </div>
-
-          <div className={`${ui.card} flex items-center justify-between p-4`}>
-            <div>
-              <p className="text-xs text-[#434655]">Workflow</p>
-              <p className="mt-1 font-semibold text-[#0b1c30]">Employee → Manager → HR</p>
             </div>
           </div>
 
@@ -123,35 +118,71 @@ export default function LeaveDetailsPage() {
             <h3 className="mb-3 text-lg font-semibold text-[#0b1c30]">
               Approval Timeline
             </h3>
-            <div className={`${ui.card} space-y-4 p-4`}>
-              <Step title="Applied" subtitle="Submitted for approval" done />
-              <Step
-                title={
-                  rejected && pending === false && !managerApproved && !approved
-                    ? "Manager Rejected"
-                    : managerApproved || approved
-                      ? "Manager Approved"
-                      : "Manager Review"
-                }
-                subtitle={
-                  managerApproved || approved
-                    ? "Manager approved"
-                    : pending
-                      ? "Awaiting manager"
-                      : rejected
-                        ? "Declined"
-                        : "-"
-                }
-                done={managerApproved || approved || rejected}
-                active={pending}
-              />
-              <Step
-                title={approved ? "HR Approved" : rejected && managerApproved ? "HR Rejected" : "HR Review"}
-                subtitle={approved ? "Finalized" : managerApproved ? "Awaiting HR" : "Pending"}
-                done={approved || (rejected && managerApproved)}
-                active={managerApproved && !approved && !rejected}
-                last
-              />
+            <div className={`${ui.card} p-5`}>
+              <ol className="relative space-y-0">
+                <span
+                  aria-hidden
+                  className="absolute bottom-3 left-[13px] top-3 w-0.5 bg-[#d7deef]"
+                />
+                <TimelineStep
+                  title="Applied"
+                  subtitle="Leave request submitted"
+                  state="done"
+                />
+                <TimelineStep
+                  title={
+                    rejected && !managerApproved && !approved
+                      ? "Manager rejected"
+                      : managerApproved || approved
+                        ? "Manager approved"
+                        : "Manager review"
+                  }
+                  subtitle={
+                    managerApproved || approved
+                      ? "Sent to HR for final approval"
+                      : pending
+                        ? "Waiting for your manager"
+                        : rejected && !managerApproved
+                          ? "Request declined by manager"
+                          : "Pending"
+                  }
+                  state={
+                    managerApproved || approved
+                      ? "done"
+                      : rejected && !managerApproved
+                        ? "rejected"
+                        : pending
+                          ? "active"
+                          : "todo"
+                  }
+                />
+                <TimelineStep
+                  title={
+                    approved
+                      ? "HR approved"
+                      : rejected && managerApproved
+                        ? "HR rejected"
+                        : "HR review"
+                  }
+                  subtitle={
+                    approved
+                      ? "Leave finalized"
+                      : managerApproved
+                        ? "Waiting for HR"
+                        : "After manager approval"
+                  }
+                  state={
+                    approved
+                      ? "done"
+                      : rejected && managerApproved
+                        ? "rejected"
+                        : managerApproved
+                          ? "active"
+                          : "todo"
+                  }
+                  last
+                />
+              </ol>
             </div>
           </section>
 
@@ -162,20 +193,6 @@ export default function LeaveDetailsPage() {
               </h3>
               <div className={`${ui.card} border-l-4 border-l-[#2563eb] p-4`}>
                 <p className="italic text-[#434655]">“{row.reason}”</p>
-              </div>
-            </section>
-          ) : null}
-
-          {approved ? (
-            <section>
-              <h3 className="mb-3 text-lg font-semibold text-[#0b1c30]">
-                Manager Comments
-              </h3>
-              <div className={`${ui.card} border-l-4 border-l-[#2563eb] p-4`}>
-                <p className="italic text-[#434655]">
-                  “Enjoy your time off. The team has adjusted sprint capacity to
-                  cover your tasks.”
-                </p>
               </div>
             </section>
           ) : null}
@@ -214,40 +231,56 @@ export default function LeaveDetailsPage() {
   );
 }
 
-function Step({
+function TimelineStep({
   title,
   subtitle,
-  done,
-  active,
+  state,
   last,
 }: {
   title: string;
   subtitle: string;
-  done?: boolean;
-  active?: boolean;
+  state: "done" | "active" | "todo" | "rejected";
   last?: boolean;
 }) {
+  const done = state === "done";
+  const active = state === "active";
+  const rejected = state === "rejected";
   return (
-    <div className="relative flex gap-3">
-      <div className="flex flex-col items-center">
+    <li className={`relative z-[1] flex gap-3 ${last ? "pb-0" : "pb-6"}`}>
+      <div className="relative z-[1] flex w-7 shrink-0 justify-center">
         <span
-          className={`flex h-4 w-4 items-center justify-center rounded-full border-2 ${
-            done || active
-              ? "border-[#2563eb] bg-[#2563eb]"
-              : "border-[#c3c6d7] bg-white"
+          className={`flex h-7 w-7 items-center justify-center rounded-full border-2 ${
+            done
+              ? "border-[#2563eb] bg-[#2563eb] text-white"
+              : active
+                ? "border-[#2563eb] bg-white text-[#2563eb] shadow-[0_0_0_4px_rgba(37,99,235,0.15)]"
+                : rejected
+                  ? "border-[#ba1a1a] bg-[#ffdad6] text-[#ba1a1a]"
+                  : "border-[#c3c6d7] bg-white text-[#94a3b8]"
           }`}
         >
-          {(done || active) && (
-            <span className="h-1.5 w-1.5 rounded-full bg-white" />
+          {done ? (
+            <IconCheck size={14} />
+          ) : rejected ? (
+            <IconClose size={12} />
+          ) : active ? (
+            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#2563eb]" />
+          ) : (
+            <span className="h-2 w-2 rounded-full bg-[#c3c6d7]" />
           )}
         </span>
-        {!last ? <span className="mt-1 w-0.5 flex-1 bg-[#2563eb]/40" /> : null}
       </div>
-      <div className={last ? "" : "pb-2"}>
-        <p className="font-semibold text-[#0b1c30]">{title}</p>
-        <p className="text-sm text-[#434655]">{subtitle}</p>
+      <div className="min-w-0 pt-0.5">
+        <p
+          className={`font-semibold leading-6 ${
+            rejected ? "text-[#ba1a1a]" : "text-[#0b1c30]"
+          }`}
+        >
+          {title}
+        </p>
+        <p className="mt-0.5 text-sm leading-5 text-[#64748B]">{subtitle}</p>
       </div>
-    </div>
+    </li>
   );
 }
 

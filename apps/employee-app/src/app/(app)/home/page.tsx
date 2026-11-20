@@ -14,9 +14,12 @@ import {
   IconHouse,
   IconLayers,
   IconLocation,
+  IconMeetingRoom,
   IconPlane,
+  IconPolicy,
   IconSun,
   IconUser,
+  IconUsers,
 } from "@/components/icons";
 import { CacheBrandLogo } from "@/components/cache-brand-logo";
 import { NotificationBellLink } from "@/components/notification-bell-link";
@@ -33,6 +36,7 @@ import type {
   EssApprovalItem,
   EssAttendance,
   EssHolidayCalendar,
+  EssMeetingBooking,
 } from "@/types/api";
 import {
   formatTime,
@@ -112,20 +116,55 @@ const QUICK_ACTIONS: QuickAction[] = [
   {
     href: "/rooms",
     label: "Meeting Rooms",
-    Icon: IconLocation,
+    Icon: IconMeetingRoom,
     tile: "bg-[#F5FAFD]",
     border: "border-[#A8D5F0]",
     glow: "#BAE6FD",
     fg: "text-[#0284C7]",
   },
+];
+
+const MORE_TOGGLE_ACTION: QuickAction = {
+  href: "#more",
+  label: "More",
+  Icon: IconGrid,
+  tile: "bg-[#F5FBFA]",
+  border: "border-[#A7E4D8]",
+  glow: "#99F6E4",
+  fg: "text-[#0D9488]",
+};
+
+/** Extra tiles revealed after tapping the 8th "More" slot (Less stays last / right). */
+const MORE_ACTIONS: QuickAction[] = [
   {
-    href: "/profile",
-    label: "More",
-    Icon: IconGrid,
-    tile: "bg-[#F5FBFA]",
-    border: "border-[#A7E4D8]",
-    glow: "#99F6E4",
-    fg: "text-[#0D9488]",
+    href: "/attendance/on-tour",
+    label: "On Tour",
+    Icon: IconPlane,
+    tile: "bg-[#FFF9F4]",
+    border: "border-[#F5CFA8]",
+    glow: "#FED7AA",
+    fg: "text-[#EA580C]",
+  },
+  {
+    href: "/compliance",
+    label: "Policy",
+    Icon: IconPolicy,
+    tile: "bg-[#F8F6FF]",
+    border: "border-[#D4C8F8]",
+    glow: "#DDD6FE",
+    fg: "text-[#7C3AED]",
+  },
+];
+
+const MANAGER_MORE_ACTIONS: QuickAction[] = [
+  {
+    href: "/team",
+    label: "Team",
+    Icon: IconUsers,
+    tile: "bg-[#EEF2FF]",
+    border: "border-[#C7D2FE]",
+    glow: "#BFDBFE",
+    fg: "text-[#004ac6]",
   },
 ];
 
@@ -138,6 +177,9 @@ const MANAGER_QUICK_ACTION: QuickAction = {
   glow: "#BFDBFE",
   fg: "text-[#004ac6]",
 };
+
+/** Collapsed grid is always 8 tiles: 7 actions + More. */
+const PRIMARY_ACTION_SLOTS = 7;
 
 function formatWorkingDuration(hours: number): string {
   if (!Number.isFinite(hours) || hours <= 0) return "00h 00m";
@@ -170,6 +212,29 @@ function todayHolidayName(calendars: EssHolidayCalendar[]): string | null {
   return null;
 }
 
+function formatBookingTime12(t: string | null | undefined): string {
+  if (!t) return "";
+  const raw = String(t).slice(0, 5);
+  const [hh, mm] = raw.split(":").map(Number);
+  if (Number.isNaN(hh)) return raw;
+  const period = hh >= 12 ? "PM" : "AM";
+  const h12 = hh % 12 || 12;
+  return `${String(h12).padStart(2, "0")}:${String(mm || 0).padStart(2, "0")} ${period}`;
+}
+
+function formatBookingTimeLabel(b: EssMeetingBooking): string {
+  const start = formatBookingTime12(b.start_time);
+  const end = formatBookingTime12(b.end_time);
+  if (start && end) return start;
+  if (start) return start;
+  return "All Day";
+}
+
+function isActiveBooking(status: string): boolean {
+  const s = status.toLowerCase();
+  return s !== "cancelled" && s !== "rejected";
+}
+
 const APPROVAL_CATEGORY_LABEL: Record<EssApprovalItem["category"], string> = {
   leave: "Leave",
   on_duty: "On duty",
@@ -182,6 +247,7 @@ export default function HomePage() {
   const { me, loading: meLoading } = useEssMe();
   const [today, setToday] = useState<EssAttendance | null>(null);
   const [holidayName, setHolidayName] = useState<string | null>(null);
+  const [todayMeetings, setTodayMeetings] = useState<EssMeetingBooking[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
   const [workedH, setWorkedH] = useState(0);
@@ -189,7 +255,8 @@ export default function HomePage() {
   const [liveLocation, setLiveLocation] = useState<string | null>(null);
   const [liveLocationLoading, setLiveLocationLoading] = useState(true);
   const [teamApprovals, setTeamApprovals] = useState<EssApprovalItem[]>([]);
-  const isManager = Boolean(me?.can_approve_team_leave);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const isManager = Boolean(me?.can_approve_team_leave || me?.is_manager);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 1000);
@@ -242,9 +309,10 @@ export default function HomePage() {
 
     (async () => {
       try {
-        const [attRes, holidayRes] = await Promise.all([
+        const [attRes, holidayRes, bookingRes] = await Promise.all([
           essService.attendance(),
           essService.holidays().catch(() => ({ data: [] as EssHolidayCalendar[] })),
+          essService.meetingBookings().catch(() => ({ data: [] as EssMeetingBooking[] })),
         ]);
         if (cancelled) return;
         const todayStr = todayLocalDate();
@@ -254,6 +322,16 @@ export default function HomePage() {
           ) ?? null,
         );
         setHolidayName(todayHolidayName(holidayRes.data ?? []));
+        const meetings = (bookingRes.data ?? [])
+          .filter(
+            (b) =>
+              String(b.request_date).slice(0, 10) === todayStr &&
+              isActiveBooking(b.status),
+          )
+          .sort((a, b) =>
+            (a.start_time || "").localeCompare(b.start_time || ""),
+          );
+        setTodayMeetings(meetings);
         setError(null);
       } catch (err) {
         if (!cancelled) {
@@ -263,6 +341,7 @@ export default function HomePage() {
           if (/company scope mismatch/i.test(message)) {
             setError(null);
             setToday(null);
+            setTodayMeetings([]);
           } else {
             setError(message);
           }
@@ -353,11 +432,32 @@ export default function HomePage() {
       ? "Check Out"
       : "Check In";
 
-  const quickActions = useMemo(() => {
-    if (!isManager) return QUICK_ACTIONS;
-    const withoutDup = QUICK_ACTIONS.filter((a) => a.href !== "/approvals");
-    return [MANAGER_QUICK_ACTION, ...withoutDup.slice(0, 7)];
+  const { primaryActions, moreActions } = useMemo(() => {
+    // Prefer Approvals first for managers, then the shared employee actions.
+    const candidates = isManager
+      ? [
+          MANAGER_QUICK_ACTION,
+          ...QUICK_ACTIONS.filter((a) => a.href !== "/approvals"),
+        ]
+      : QUICK_ACTIONS;
+    const primary = candidates.slice(0, PRIMARY_ACTION_SLOTS);
+    const overflow = candidates.slice(PRIMARY_ACTION_SLOTS);
+    const extras = [
+      ...(isManager ? MANAGER_MORE_ACTIONS : []),
+      ...MORE_ACTIONS,
+      ...overflow,
+    ].filter(
+      (a, idx, arr) =>
+        !primary.some((p) => p.href === a.href) &&
+        arr.findIndex((x) => x.href === a.href) === idx,
+    );
+    return { primaryActions: primary, moreActions: extras };
   }, [isManager]);
+
+  // One continuous grid: collapsed = 7 + More; expanded = 7 + extras + Less (Less last/right).
+  const gridActions = moreOpen
+    ? [...primaryActions, ...moreActions]
+    : primaryActions;
 
   return (
     <div className="relative -mx-5 min-h-full overflow-x-hidden bg-[#F7FAFD] text-[#152238]">
@@ -395,7 +495,12 @@ export default function HomePage() {
             <div className="flex shrink-0 items-center gap-1.5">
               <NotificationBellLink className="!h-10 !w-10 !rounded-full !border !border-white/70 !bg-white/75 !text-[#1A2B56] !shadow-[0_2px_8px_rgba(26,43,86,0.06)] !backdrop-blur-md" />
               <Link href="/profile" className="shrink-0" aria-label="Profile">
-                <Avatar name={me?.display_name ?? ""} size="sm" ring />
+                <Avatar
+                  name={me?.display_name ?? ""}
+                  size="sm"
+                  ring
+                  photoUrl={me?.photo_url}
+                />
               </Link>
             </div>
           </header>
@@ -646,7 +751,7 @@ export default function HomePage() {
             </h2>
           </div>
           <div className="grid grid-cols-4 gap-2">
-            {quickActions.map((item) => (
+            {gridActions.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
@@ -667,40 +772,73 @@ export default function HomePage() {
                 </span>
               </Link>
             ))}
+            <button
+              type="button"
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((o) => !o)}
+              className={`qa-tile group flex flex-col items-center justify-center gap-1 rounded-[12px] border px-1 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.03)] transition active:scale-[0.96] active:brightness-[0.98] ${MORE_TOGGLE_ACTION.tile} ${MORE_TOGGLE_ACTION.border} ${
+                moreOpen ? "ring-2 ring-[#0D9488]/35" : ""
+              }`}
+            >
+              <span
+                className={`qa-icon relative flex h-8 w-8 shrink-0 items-center justify-center ${MORE_TOGGLE_ACTION.fg}`}
+              >
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute left-1/2 top-1/2 size-[32px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-35 blur-[8px]"
+                  style={{ backgroundColor: MORE_TOGGLE_ACTION.glow }}
+                />
+                <IconGrid
+                  size={26}
+                  filled
+                  className="relative z-[1]"
+                />
+              </span>
+              <span className="qa-label max-w-full px-0.5 text-center text-[12px] font-semibold leading-snug tracking-tight text-[#1A2B56]">
+                {moreOpen ? "Less" : "More"}
+              </span>
+            </button>
           </div>
         </section>
 
         <section className="pb-1">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3">
             <h2 className="text-[17px] font-semibold text-[#1A2B56]">
               Upcoming Today
             </h2>
-            <Link
-              href="/announcements"
-              className="text-[13px] font-semibold text-[#2563EB]"
-            >
-              View All &gt;
-            </Link>
           </div>
-          <div className="overflow-hidden rounded-[16px] border border-[#E5EAF2] bg-white shadow-[0_2px_8px_rgba(15,23,42,0.03)]">
-            <UpcomingRow
-              href="/rooms"
-              tone="purple"
-              Icon={IconCalendar}
-              title="Team Meeting"
-              subtitle="Product Discussion · Meeting Room 2"
-              time="11:00 AM"
-              divided
-            />
-            <UpcomingRow
-              href="/leave/holidays"
-              tone="green"
-              Icon={IconPlane}
-              title="Company Holiday"
-              subtitle={holidayName || "Check holiday calendar"}
-              time="All Day"
-            />
-          </div>
+          {todayMeetings.length === 0 && !holidayName ? (
+            <div className="rounded-[16px] border border-[#E5EAF2] bg-white px-4 py-5 text-center text-[13px] text-[#64748B] shadow-[0_2px_8px_rgba(15,23,42,0.03)]">
+              Nothing scheduled for today.
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-[16px] border border-[#E5EAF2] bg-white shadow-[0_2px_8px_rgba(15,23,42,0.03)]">
+              {todayMeetings.map((b, idx) => (
+                <UpcomingRow
+                  key={b.id}
+                  href="/rooms"
+                  tone="purple"
+                  Icon={IconMeetingRoom}
+                  title={b.title || "Meeting"}
+                  subtitle={[b.room_name, b.status.replace(/_/g, " ")]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  time={formatBookingTimeLabel(b)}
+                  divided={idx < todayMeetings.length - 1 || Boolean(holidayName)}
+                />
+              ))}
+              {holidayName ? (
+                <UpcomingRow
+                  href="/leave/holidays"
+                  tone="green"
+                  Icon={IconPlane}
+                  title="Company Holiday"
+                  subtitle={holidayName}
+                  time="All Day"
+                />
+              ) : null}
+            </div>
+          )}
         </section>
       </div>
     </div>

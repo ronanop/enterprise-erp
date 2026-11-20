@@ -155,14 +155,109 @@ export const authService = {
     });
   },
 
+  essCaptcha: async () => {
+    if (env.useMock) {
+      return mockApi.essCaptcha();
+    }
+    return apiClient<{
+      captcha_id: string;
+      question: string;
+      code: string;
+      enabled: boolean;
+    }>("/auth/ess/captcha", { method: "GET", auth: false });
+  },
+
+  listEssCompanies: async () => {
+    if (env.useMock) {
+      return mockApi.essCompanies();
+    }
+    return apiClient<
+      Array<{ company_code: string; company_name: string; legal_name?: string }>
+    >("/auth/ess/companies", { method: "GET", auth: false });
+  },
+
+  lookupEssPhone: async (body: { company_code: string; mobile: string }) => {
+    if (env.useMock) {
+      try {
+        return await mockApi.lookupEssPhone(body);
+      } catch (err) {
+        throw new ApiClientError(
+          err instanceof Error ? err.message : "Phone lookup failed",
+          400,
+        );
+      }
+    }
+    return apiClient<{
+      identified: boolean;
+      company_code: string;
+      company_name: string;
+      mobile_masked: string;
+    }>("/auth/ess/lookup-phone", {
+      method: "POST",
+      auth: false,
+      body,
+    });
+  },
+
+  verifyEssPhone: async (body: {
+    company_code: string;
+    mobile: string;
+    captcha_id: string;
+    captcha_answer: string;
+  }) => {
+    if (env.useMock) {
+      try {
+        return await mockApi.verifyEssPhone(body);
+      } catch (err) {
+        throw new ApiClientError(
+          err instanceof Error ? err.message : "Phone verification failed",
+          400,
+        );
+      }
+    }
+    return apiClient<{
+      verified: boolean;
+      company_code: string;
+      company_name: string;
+      mobile_masked: string;
+    }>("/auth/ess/verify-phone", {
+      method: "POST",
+      auth: false,
+      body,
+    });
+  },
+
   essLogin: async (body: {
     company_code: string;
     employee_code: string;
     password: string;
     captcha_id?: string;
     captcha_answer?: string;
-  }) =>
-    apiClient<TokenData>("/auth/ess/login", {
+    login_role?: string;
+  }) => {
+    if (env.useMock) {
+      try {
+        const res = await mockApi.essLogin(
+          body.company_code,
+          body.employee_code,
+          body.password,
+        );
+        if (res.data?.access_token) {
+          await setTokens(
+            res.data.access_token,
+            res.data.refresh_token ?? undefined,
+          );
+        }
+        return res;
+      } catch (err) {
+        throw new ApiClientError(
+          err instanceof Error ? err.message : "Login failed",
+          400,
+        );
+      }
+    }
+
+    return apiClient<TokenData>("/auth/ess/login", {
       method: "POST",
       auth: false,
       body,
@@ -174,7 +269,8 @@ export const authService = {
         );
       }
       return res;
-    }),
+    });
+  },
 
   me: () =>
     env.useMock ? mockApi.meProfile() : apiClient<UserProfile>("/auth/me"),

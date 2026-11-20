@@ -57,8 +57,7 @@ class EssWorkplaceService:
         for row in rooms:
             if row.status != "active":
                 continue
-            if row.branch_id is not None and emp.branch_id is not None and row.branch_id != emp.branch_id:
-                continue
+            # All active company rooms are bookable in ESS (branch is location metadata).
             out.append(
                 EssMeetingRoomItem(
                     id=row.id,
@@ -108,8 +107,10 @@ class EssWorkplaceService:
     ) -> list[EssMeetingBookingResponse]:
         emp = self._ess.resolve_employee(ctx)
         rows = self._hr.list_room_bookings(ctx, company_id=emp.company_id, on_date=on_date)
+        # ESS "Meeting Rooms" shows the signed-in employee's own requests.
+        mine = [row for row in rows if row.requested_by_employee_id == emp.id]
         room_names = {r.id: r.room_name for r in TrainingRoomService(self._db).list(ctx, emp.company_id)}
-        emp_ids = {row.requested_by_employee_id for row in rows}
+        emp_ids = {row.requested_by_employee_id for row in mine}
         names = self._hr.employee_display_names(ctx, emp_ids)
         return [
             self._booking_response(
@@ -117,7 +118,7 @@ class EssWorkplaceService:
                 room_names.get(row.room_id) if row.room_id else None,
                 names,
             )
-            for row in rows
+            for row in mine
         ]
 
     def create_meeting_booking(
@@ -152,8 +153,59 @@ class EssWorkplaceService:
             end_time=body.end_time,
             agenda=body.agenda,
             attendees_json=[],
-            status="approved",
+            status="submitted",
         )
+        try:
+            from modules.hr.service.hr_notify import (
+                notify_employee,
+                notify_users_with_permission,
+            )
+
+            room_label = room.room_name or "Meeting room"
+            notify_employee(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                employee_id=emp.id,
+                template_code="hr.meeting_submitted",
+                template_name="Meeting Room Requested",
+                event_type="hr.meeting_submitted",
+                title="Meeting room request submitted",
+                body=(
+                    f"{body.title} · {room_label} on {body.request_date} "
+                    "is pending HR approval."
+                ),
+                kind="meeting",
+                extra={
+                    "meeting_request_id": str(row.id),
+                    "href": "/rooms",
+                },
+                cc_reporting_manager=False,
+            )
+            who = (
+                f"{getattr(emp, 'first_name', '') or ''} "
+                f"{getattr(emp, 'last_name', '') or ''}"
+            ).strip() or "An employee"
+            notify_users_with_permission(
+                self._db,
+                tenant_id=ctx.tenant_id,
+                permission_code="hr.training:update",
+                template_code="hr.meeting_pending_hr",
+                template_name="Meeting Room Pending HR",
+                event_type="hr.meeting_pending_hr",
+                title="Meeting room pending HR approval",
+                body=(
+                    f"{who} requested {room_label} for {body.title} "
+                    f"on {body.request_date}."
+                ),
+                kind="meeting",
+                extra={
+                    "meeting_request_id": str(row.id),
+                    "href": "/hr/meeting-rooms",
+                },
+                exclude_user_ids={ctx.user_id} if ctx.user_id else None,
+            )
+        except Exception:
+            pass
         host_name = self._hr.employee_display_names(ctx, {emp.id})
         return self._booking_response(row, room.room_name, host_name)
 

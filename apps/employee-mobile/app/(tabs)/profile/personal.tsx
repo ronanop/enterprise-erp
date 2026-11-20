@@ -1,19 +1,57 @@
 import { useCallback, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { SubHeader } from "@/components/AppHeader";
 import { IconEdit, IconLocation, IconUser } from "@/components/icons";
-import { AlertBox, Avatar, Button, Card, ErrorBox, Screen } from "@/components/ui";
+import {
+  AlertBox,
+  Avatar,
+  Button,
+  Card,
+  ErrorBox,
+  Screen,
+  TextField,
+} from "@/components/ui";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
-import type { EssMe } from "@/types/api";
+import type { EssMe, EssProfileUpdateRequest } from "@/types/api";
 import { colors } from "@/theme/colors";
 import { RADIUS_FULL } from "@/theme/tokens";
+import { formatDisplayDateDDMMYYYY } from "@/utils/datetime";
+
+function display(value: string | null | undefined, fallback = "—"): string {
+  const text = value?.trim();
+  return text ? text : fallback;
+}
+
+function titleCase(value: string | null | undefined): string | null {
+  const text = value?.trim();
+  if (!text) return null;
+  return text
+    .split(/[\s_]+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
 
 export default function PersonalInformationScreen() {
   const [me, setMe] = useState<EssMe | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [pending, setPending] = useState<EssProfileUpdateRequest | null>(null);
+  const [requests, setRequests] = useState<EssProfileUpdateRequest[]>([]);
+
+  const loadRequests = useCallback(async () => {
+    try {
+      const res = await essService.listDetailUpdateRequests();
+      const rows = Array.isArray(res.data) ? res.data : [];
+      setRequests(rows);
+      setPending(rows.find((r) => r.status === "submitted") ?? null);
+    } catch {
+      /* non-blocking */
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -28,8 +66,34 @@ export default function PersonalInformationScreen() {
             err instanceof ApiClientError ? err.message : "Failed to load profile",
           ),
         );
-    }, []),
+      void loadRequests();
+    }, [loadRequests]),
   );
+
+  async function submitUpdateRequest() {
+    setSubmitting(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await essService.createDetailUpdateRequest({
+        notes: notes.trim() || undefined,
+      });
+      if (res.data) setPending(res.data);
+      setNotes("");
+      setMessage(
+        res.message || "Update request submitted for HR review",
+      );
+      await loadRequests();
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Failed to submit update request",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <Screen
@@ -51,7 +115,7 @@ export default function PersonalInformationScreen() {
             </View>
             <Text style={styles.name}>{me.display_name}</Text>
             <Text style={styles.meta}>
-              {me.designation || "-"} · ID: {me.employee_code}
+              {display(me.designation)} · ID: {me.employee_code}
             </Text>
           </View>
 
@@ -60,9 +124,29 @@ export default function PersonalInformationScreen() {
             icon={<IconUser size={18} color={colors.primary} />}
             iconBackground={colors.primaryFixed}
           >
-            <InfoRow label="Date of Birth" value="June 12, 1994" />
-            <InfoRow label="Gender" value="-" />
-            <InfoRow label="Nationality" value="India" />
+            <InfoRow
+              label="Date of Birth"
+              value={
+                me.date_of_birth
+                  ? formatDisplayDateDDMMYYYY(me.date_of_birth)
+                  : "—"
+              }
+            />
+            <InfoRow label="Gender" value={display(titleCase(me.gender))} />
+            <InfoRow
+              label="Marital Status"
+              value={display(titleCase(me.marital_status))}
+            />
+            <InfoRow
+              label="Nationality"
+              value={display(titleCase(me.nationality))}
+            />
+            <InfoRow label="Blood Group" value={display(me.blood_group)} />
+            <InfoRow
+              label="Date of Joining"
+              value={formatDisplayDateDDMMYYYY(me.date_of_joining)}
+            />
+            <InfoRow label="Manager" value={display(me.manager_name)} />
           </InfoCard>
 
           <InfoCard
@@ -71,13 +155,11 @@ export default function PersonalInformationScreen() {
             iconBackground="#eaddff"
           >
             <Text style={styles.fieldLabel}>Current Address</Text>
-            <Text style={styles.address}>
-              742 Evergreen Terrace, Bengaluru, KA 560001
+            <Text style={styles.address}>{display(me.current_address)}</Text>
+            <Text style={[styles.fieldLabel, { marginTop: 12 }]}>
+              Permanent Address
             </Text>
-            <View style={styles.mapPreview}>
-              <IconLocation size={20} color={colors.primary} />
-              <Text style={styles.mapText}>Map preview</Text>
-            </View>
+            <Text style={styles.address}>{display(me.permanent_address)}</Text>
           </InfoCard>
 
           <InfoCard
@@ -89,12 +171,65 @@ export default function PersonalInformationScreen() {
             <ContactTile label="Personal Mobile" value={me.mobile} />
           </InfoCard>
 
-          <Button
-            title="Request Detail Update"
-            onPress={() => setMessage("Update request submitted for HR review")}
-          />
+          <Card style={styles.requestCard}>
+            <Text style={styles.requestTitle}>Request Detail Update</Text>
+            <Text style={styles.requestHint}>
+              Tell HR what needs correcting. Your request appears in the HR
+              Employee Requests inbox.
+            </Text>
+            {pending ? (
+              <AlertBox tone="success">
+                Request pending HR review
+                {pending.notes ? ` — ${pending.notes}` : ""}.
+              </AlertBox>
+            ) : (
+              <TextField
+                multiline
+                numberOfLines={4}
+                placeholder="e.g. Update current address / mobile number…"
+                value={notes}
+                onChangeText={setNotes}
+                maxLength={1000}
+                style={styles.notesInput}
+              />
+            )}
+            <Button
+              title={
+                submitting
+                  ? "Submitting…"
+                  : pending
+                    ? "Awaiting HR"
+                    : "Request Detail Update"
+              }
+              disabled={submitting || Boolean(pending)}
+              onPress={() => void submitUpdateRequest()}
+            />
+          </Card>
+
+          {requests.length > 0 ? (
+            <Card style={styles.requestCard}>
+              <Text style={styles.requestTitle}>Update requests</Text>
+              {requests.map((row) => (
+                <View key={row.id} style={styles.requestRow}>
+                  <Text style={styles.requestStatus}>{row.status}</Text>
+                  {row.notes ? (
+                    <Text style={styles.requestNotes} numberOfLines={2}>
+                      {row.notes}
+                    </Text>
+                  ) : null}
+                  {row.created_at ? (
+                    <Text style={styles.requestDate}>
+                      {formatDisplayDateDDMMYYYY(row.created_at)}
+                    </Text>
+                  ) : null}
+                </View>
+              ))}
+            </Card>
+          ) : null}
+
           <Text style={styles.updated}>
-            Last updated on {me.date_of_joining || "-"}
+            Synced from HRMS · Joined{" "}
+            {formatDisplayDateDDMMYYYY(me.date_of_joining)}
           </Text>
         </>
       ) : null}
@@ -116,7 +251,9 @@ function InfoCard({
   return (
     <Card style={styles.card}>
       <View style={styles.cardTitle}>
-        <View style={[styles.iconTile, { backgroundColor: iconBackground }]}>{icon}</View>
+        <View style={[styles.iconTile, { backgroundColor: iconBackground }]}>
+          {icon}
+        </View>
         <Text style={styles.cardHeading}>{title}</Text>
       </View>
       {children}
@@ -137,7 +274,7 @@ function ContactTile({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.contactTile}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <Text style={styles.contactValue}>{value || "-"}</Text>
+      <Text style={styles.contactValue}>{value || "—"}</Text>
     </View>
   );
 }
@@ -157,7 +294,12 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS_FULL,
     backgroundColor: colors.primaryContainer,
   },
-  name: { marginTop: 16, fontSize: 24, fontWeight: "700", color: colors.onSurface },
+  name: {
+    marginTop: 16,
+    fontSize: 24,
+    fontWeight: "700",
+    color: colors.onSurface,
+  },
   meta: { marginTop: 4, fontSize: 14, color: colors.onSurfaceVariant },
   card: { gap: 12, padding: 16 },
   cardTitle: { flexDirection: "row", alignItems: "center", gap: 10 },
@@ -178,7 +320,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   rowLabel: { flex: 1, fontSize: 14, color: colors.onSurfaceVariant },
-  rowValue: { flex: 1, textAlign: "right", fontSize: 14, fontWeight: "600", color: colors.onSurface },
+  rowValue: {
+    flex: 1,
+    textAlign: "right",
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.onSurface,
+  },
   fieldLabel: {
     fontSize: 10,
     fontWeight: "700",
@@ -186,19 +334,38 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     color: colors.onSurfaceVariant,
   },
-  address: { marginTop: 4, fontSize: 15, fontWeight: "600", lineHeight: 21, color: colors.onSurface },
-  mapPreview: {
-    height: 112,
+  address: {
     marginTop: 4,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
+    fontSize: 15,
+    fontWeight: "600",
+    lineHeight: 21,
+    color: colors.onSurface,
+  },
+  atSign: { fontSize: 19, fontWeight: "700", color: "#047857" },
+  contactTile: {
+    gap: 4,
     borderRadius: 12,
     backgroundColor: colors.surfaceLow,
+    padding: 12,
   },
-  mapText: { fontSize: 14, color: colors.onSurfaceVariant },
-  atSign: { fontSize: 19, fontWeight: "700", color: "#047857" },
-  contactTile: { gap: 4, borderRadius: 12, backgroundColor: colors.surfaceLow, padding: 12 },
   contactValue: { fontSize: 14, fontWeight: "600", color: colors.onSurface },
+  requestCard: { gap: 12, padding: 16 },
+  requestTitle: { fontSize: 16, fontWeight: "700", color: colors.onSurface },
+  requestHint: { fontSize: 12, lineHeight: 18, color: colors.onSurfaceVariant },
+  notesInput: { minHeight: 88, textAlignVertical: "top" },
+  requestRow: {
+    borderTopWidth: 1,
+    borderTopColor: "rgba(195,198,215,0.25)",
+    paddingTop: 10,
+    gap: 2,
+  },
+  requestStatus: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.primary,
+    textTransform: "capitalize",
+  },
+  requestNotes: { fontSize: 13, color: colors.onSurface },
+  requestDate: { fontSize: 11, color: colors.onSurfaceVariant },
   updated: { textAlign: "center", fontSize: 12, color: colors.onSurfaceVariant },
 });

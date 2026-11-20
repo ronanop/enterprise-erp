@@ -1604,6 +1604,9 @@ export async function createEmployeeFromWizard(
       bank_ifsc: draft.bank.ifsc || null,
       bank_name: draft.bank.bankName || null,
       bank_account_holder: draft.bank.accountHolderName || null,
+      ...(draft.personal.profilePhotoDataUrl
+        ? { profile_photo_data_url: draft.personal.profilePhotoDataUrl }
+        : {}),
       status: draft.employment.lifecycleStatus || "active",
     },
   }).catch(() => null);
@@ -1745,6 +1748,10 @@ export async function updateEmployeeRecord(  record: EmployeeRecord,
   });
 
   if (record.profileId) {
+    const photoDataUrl =
+      nextExt.personal.profilePhotoDataUrl ||
+      profilePhotoFromExtension(nextExt) ||
+      undefined;
     await resourceService.update("/hr/employee-profiles", record.profileId, {
       version: record.profileVersion,
       date_of_birth: nextExt.personal.dateOfBirth || null,
@@ -1777,6 +1784,7 @@ export async function updateEmployeeRecord(  record: EmployeeRecord,
             }),
           }
         : null,
+      ...(photoDataUrl ? { profile_photo_data_url: photoDataUrl } : {}),
       status: nextExt.employment.lifecycleStatus,
     }).catch(() => undefined);
   }

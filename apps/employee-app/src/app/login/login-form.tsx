@@ -306,9 +306,9 @@ export default function LoginForm() {
     void loadCompanies();
 
     if (saved) {
-      setRememberMe(true);
-      if (saved.employeeCode) setEmployeeCode(saved.employeeCode);
-      setPassword("");
+    setRememberMe(true);
+    if (saved.employeeCode) setEmployeeCode(saved.employeeCode);
+    setPassword("");
     }
 
     return () => {
@@ -562,15 +562,15 @@ export default function LoginForm() {
 
         {step === 1 ? (
           <form onSubmit={onStep1Submit} className="space-y-4 overflow-visible">
-            {env.useMock ? (
+          {env.useMock ? (
               <div className="rounded-xl border border-[#7c5cfc]/20 bg-[#f3efff] px-3.5 py-3 text-xs text-[#5b3fd4]">
-                <p className="font-semibold">Demo login</p>
-                <p className="mt-0.5 text-[#374151]/80">
+              <p className="font-semibold">Demo login</p>
+              <p className="mt-0.5 text-[#374151]/80">
                   Phone: {MOCK_DEMO_MOBILE} · Code: {MOCK_DEMO_EMPLOYEE_CODE} · Password:{" "}
                   {MOCK_DEMO_PASSWORD}
-                </p>
-              </div>
-            ) : null}
+              </p>
+            </div>
+          ) : null}
 
             <div className="space-y-1.5">
               <span className={labelClass}>Company / Entity</span>
@@ -588,11 +588,11 @@ export default function LoginForm() {
                 />
               ) : (
                 <div className="space-y-2">
-                  <input
-                    className={fieldClass}
-                    suppressHydrationWarning
-                    required
-                    value={companyCode}
+            <input
+              className={fieldClass}
+              suppressHydrationWarning
+              required
+              value={companyCode}
                     onChange={(e) => {
                       setCompanyCode(e.target.value.toUpperCase());
                       resetPhoneGate();
@@ -762,78 +762,78 @@ export default function LoginForm() {
                     : companyCode
                 }
                 readOnly
-              />
-            </label>
+            />
+          </label>
 
-            <label className="block space-y-1.5">
+          <label className="block space-y-1.5">
               <span className={labelClass}>Employee ID</span>
-              <input
-                className={fieldClass}
-                suppressHydrationWarning
-                required
-                value={employeeCode}
-                onChange={(e) => setEmployeeCode(e.target.value.toUpperCase())}
+            <input
+              className={fieldClass}
+              suppressHydrationWarning
+              required
+              value={employeeCode}
+              onChange={(e) => setEmployeeCode(e.target.value.toUpperCase())}
                 placeholder="e.g. CDPL5352"
-              />
-            </label>
+            />
+          </label>
 
-            <label className="block space-y-1.5">
-              <span className={labelClass}>Password</span>
-              <input
-                className={fieldClass}
-                suppressHydrationWarning
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+          <label className="block space-y-1.5">
+            <span className={labelClass}>Password</span>
+            <input
+              className={fieldClass}
+              suppressHydrationWarning
+              type="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
                 placeholder="Employee code + DOB"
-              />
-              <p className="mt-1 text-xs text-[#6b7280]">
+            />
+            <p className="mt-1 text-xs text-[#6b7280]">
                 Format: Employee Code + DOB (DDMMYYYY)
-              </p>
+            </p>
+          </label>
+
+          <div className="flex items-center justify-between gap-3 pt-0.5">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-[#4b5563]">
+              <input
+                type="checkbox"
+                className="size-4 rounded border-[#d1d5db] text-[#7c5cfc] accent-[#7c5cfc]"
+                checked={rememberMe}
+                onChange={(e) => setRememberMe(e.target.checked)}
+              />
+              Remember me
             </label>
-
-            <div className="flex items-center justify-between gap-3 pt-0.5">
-              <label className="flex cursor-pointer items-center gap-2 text-sm text-[#4b5563]">
-                <input
-                  type="checkbox"
-                  className="size-4 rounded border-[#d1d5db] text-[#7c5cfc] accent-[#7c5cfc]"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                />
-                Remember me
-              </label>
-              <button
-                type="button"
-                className="text-sm font-semibold text-[#7c5cfc] hover:underline"
-                onClick={onForgotPassword}
-              >
-                Forgot Password?
-              </button>
-            </div>
-
-            {error ? <AlertBox>{error}</AlertBox> : null}
-            {info ? (
-              <div className="rounded-xl border border-[#7c5cfc]/20 bg-[#f3efff] px-3.5 py-3 text-sm text-[#5b3fd4]">
-                {info}
-              </div>
-            ) : null}
-
             <button
-              className="mt-1 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#7c5cfc] px-4 py-3.5 text-[1rem] font-semibold text-white shadow-[0_10px_24px_rgba(124,92,252,0.35)] transition active:scale-[0.98] hover:bg-[#6d4ff0] disabled:opacity-55 disabled:shadow-none"
-              type="submit"
-              disabled={loading || !employeeCode.trim() || !password.trim()}
+              type="button"
+              className="text-sm font-semibold text-[#7c5cfc] hover:underline"
+              onClick={onForgotPassword}
             >
-              {loading ? (
-                "Signing in…"
-              ) : (
-                <>
-                  <IconCheck size={18} className="opacity-90" />
-                  Sign In
-                </>
-              )}
+              Forgot Password?
             </button>
+          </div>
+
+          {error ? <AlertBox>{error}</AlertBox> : null}
+          {info ? (
+              <div className="rounded-xl border border-[#7c5cfc]/20 bg-[#f3efff] px-3.5 py-3 text-sm text-[#5b3fd4]">
+              {info}
+            </div>
+          ) : null}
+
+          <button
+              className="mt-1 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#7c5cfc] px-4 py-3.5 text-[1rem] font-semibold text-white shadow-[0_10px_24px_rgba(124,92,252,0.35)] transition active:scale-[0.98] hover:bg-[#6d4ff0] disabled:opacity-55 disabled:shadow-none"
+            type="submit"
+              disabled={loading || !employeeCode.trim() || !password.trim()}
+          >
+            {loading ? (
+              "Signing in…"
+            ) : (
+              <>
+                <IconCheck size={18} className="opacity-90" />
+                Sign In
+              </>
+            )}
+          </button>
 
             <button
               type="button"
@@ -841,8 +841,8 @@ export default function LoginForm() {
               onClick={backToStep1}
             >
               ← Back to phone verification
-            </button>
-          </form>
+          </button>
+        </form>
         )}
       </div>
 

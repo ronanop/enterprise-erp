@@ -14,6 +14,7 @@ export default function AttendanceLayout() {
       <Stack.Screen name="correction" />
       <Stack.Screen name="wfh" />
       <Stack.Screen name="on-duty" />
+      <Stack.Screen name="on-tour" />
       <Stack.Screen name="compoff" />
     </Stack>
   );

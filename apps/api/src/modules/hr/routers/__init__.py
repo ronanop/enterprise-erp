@@ -82,6 +82,8 @@ from modules.hr.schemas import (
     EmployeeFeatureAccessResponse,
     OnDutyRequestCreate,
     OnDutyRequestResponse,
+    ProfileUpdateDecision,
+    ProfileUpdateRequestResponse,
     WfhRequestResponse,
     OtAllotmentCreate,
     OtAllotmentResponse,
@@ -214,6 +216,9 @@ attendance_rules_router = APIRouter(
 )
 on_duty_router = APIRouter(prefix="/on-duty-requests", tags=["HR - On Duty"])
 wfh_router = APIRouter(prefix="/wfh-requests", tags=["HR - WFH"])
+profile_update_requests_router = APIRouter(
+    prefix="/profile-update-requests", tags=["HR - Profile Update Requests"]
+)
 ot_allotments_router = APIRouter(prefix="/ot-allotments", tags=["HR - OT Allotments"])
 compoff_requests_router = APIRouter(prefix="/compoff-requests", tags=["HR - Comp Off Requests"])
 biometric_devices_router = APIRouter(prefix="/biometric-devices", tags=["HR - Biometric Devices"])
@@ -1290,6 +1295,63 @@ def reject_wfh(
     from modules.hr.service.wfh_service import WfhRequestService
 
     return APIResponse(message="OK", data=WfhRequestService(db).reject(ctx, row_id))
+
+
+@profile_update_requests_router.get(
+    "", response_model=APIResponse[list[ProfileUpdateRequestResponse]]
+)
+def list_profile_update_requests(
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.employee_profile:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    pagination: Annotated[PaginationParams, Depends(get_pagination)],
+    company_id: UUID | None = None,
+):
+    from modules.hr.service.profile_update_service import ProfileUpdateRequestService
+
+    return APIResponse(
+        message="OK",
+        data=paginate(ProfileUpdateRequestService(db).list(ctx, company_id), pagination),
+    )
+
+
+@profile_update_requests_router.post(
+    "/{row_id}/approve", response_model=APIResponse[ProfileUpdateRequestResponse]
+)
+def approve_profile_update_request(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.employee_profile:update"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: ProfileUpdateDecision | None = None,
+):
+    from modules.hr.service.profile_update_service import ProfileUpdateRequestService
+
+    notes = body.decision_notes if body else None
+    return APIResponse(
+        message="OK",
+        data=ProfileUpdateRequestService(db).approve(
+            ctx, row_id, decision_notes=notes
+        ),
+    )
+
+
+@profile_update_requests_router.post(
+    "/{row_id}/reject", response_model=APIResponse[ProfileUpdateRequestResponse]
+)
+def reject_profile_update_request(
+    row_id: UUID,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.employee_profile:update"))],
+    db: Annotated[Session, Depends(get_db)],
+    body: ProfileUpdateDecision | None = None,
+):
+    from modules.hr.service.profile_update_service import ProfileUpdateRequestService
+
+    notes = body.decision_notes if body else None
+    return APIResponse(
+        message="OK",
+        data=ProfileUpdateRequestService(db).reject(
+            ctx, row_id, decision_notes=notes
+        ),
+    )
 
 
 @ot_allotments_router.get("", response_model=APIResponse[list[OtAllotmentResponse]])

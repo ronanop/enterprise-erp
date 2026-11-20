@@ -39,6 +39,10 @@ function RootNavigator() {
         <Stack.Screen name="support" />
         <Stack.Screen name="rooms" />
         <Stack.Screen name="assets" />
+        <Stack.Screen name="team" />
+        <Stack.Screen name="timesheet" />
+        <Stack.Screen name="roster" />
+        <Stack.Screen name="offline" />
         <Stack.Screen name="(tabs)" />
       </Stack>
     </>

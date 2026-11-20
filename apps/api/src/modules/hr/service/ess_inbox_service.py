@@ -15,6 +15,7 @@ from modules.hr.service.compoff_bio_service import CompoffRequestService
 from modules.hr.service.hr_scope_validator import HrScopeValidator
 from modules.hr.service.leave_service import LeaveRequestService
 from modules.hr.service.on_duty_ot_service import OnDutyRequestService, OtAllotmentService
+from modules.hr.service.profile_update_service import ProfileUpdateRequestService
 from modules.hr.service.wfh_service import WfhRequestService
 
 
@@ -66,6 +67,12 @@ def _ot_actions(status: str) -> list[str]:
     return []
 
 
+def _profile_update_actions(status: str) -> list[str]:
+    if status.lower() == "submitted":
+        return ["approve", "reject"]
+    return []
+
+
 class HrEssInboxService:
     def __init__(self, db: Session) -> None:
         self._db = db
@@ -77,6 +84,7 @@ class HrEssInboxService:
         self._ot = OtAllotmentService(db)
         self._on_duty = OnDutyRequestService(db)
         self._wfh = WfhRequestService(db)
+        self._profile_updates = ProfileUpdateRequestService(db)
 
     def list_inbox(
         self,
@@ -265,6 +273,34 @@ class HrEssInboxService:
                     pending=pending,
                     available_actions=_manager_then_hr_actions(st),
                     api_path="/hr/wfh-requests",
+                )
+            )
+
+        for row in self._profile_updates.list(ctx, cid):
+            st = str(row.status)
+            pending = st == "submitted"
+            decided = getattr(row, "decided_at", None)
+            created = getattr(row, "created_at", None) or decided
+            if not pending:
+                if decided is None or decided < cutoff:
+                    continue
+            occurred = decided or created or datetime.now(timezone.utc)
+            notes = (getattr(row, "notes", None) or "").strip()
+            items.append(
+                HrEssInboxItemResponse(
+                    id=f"profile_update:{row.id}",
+                    source_id=row.id,
+                    category="profile_update",
+                    status=st,
+                    title="Personal detail update",
+                    employee_id=row.employee_id,
+                    employee_name=_emp_name(self._master, ctx, row.employee_id),
+                    document_number=None,
+                    occurred_at=occurred,
+                    detail=notes or "Employee requested a personal detail update",
+                    pending=pending,
+                    available_actions=_profile_update_actions(st),
+                    api_path="/hr/profile-update-requests",
                 )
             )
 

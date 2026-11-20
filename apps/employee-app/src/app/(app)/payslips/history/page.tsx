@@ -91,7 +91,7 @@ export default function SalaryHistoryPage() {
           Annual Earnings {filter}
         </p>
         <p className="mt-1 text-3xl font-bold text-[#0b1c30]">
-          {hidden ? "••••••••" : `₹${annual.toLocaleString("en-IN")}`}
+          {hidden ? "₹ XX,XXX" : `₹${annual.toLocaleString("en-IN")}`}
         </p>
         <p className="mt-1 text-sm font-medium text-[#10B981]">
           8.4% vs last year
@@ -103,7 +103,7 @@ export default function SalaryHistoryPage() {
           Net Monthly Avg
         </p>
         <p className="mt-1 text-2xl font-bold text-[#0b1c30]">
-          {hidden ? "••••••" : `₹${avg.toLocaleString("en-IN")}`}
+          {hidden ? "₹ XX,XXX" : `₹${avg.toLocaleString("en-IN")}`}
         </p>
         <div className="mt-3 flex justify-between border-t border-[#c3c6d7]/30 pt-3 text-sm font-semibold text-[#004ac6]">
           <span>Next Payout</span>
@@ -141,7 +141,7 @@ export default function SalaryHistoryPage() {
                 </div>
                 <div className="text-right">
                   <p className="font-bold text-[#0b1c30]">
-                    {hidden ? "••••" : `₹${r.net_salary}`}
+                    {hidden ? "₹ XX,XXX" : `₹${r.net_salary}`}
                   </p>
                   <span className="rounded bg-emerald-500 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">
                     Deposited

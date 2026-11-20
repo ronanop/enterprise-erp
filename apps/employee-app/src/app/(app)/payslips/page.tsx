@@ -4,15 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AppHeader } from "@/components/app-header";
 import {
-  IconBank,
   IconCalendar,
-  IconCheck,
   IconChevronRight,
   IconDocument,
   IconDownload,
   IconEye,
   IconEyeOff,
-  IconInfo,
   IconWallet,
 } from "@/components/icons";
 import { AlertBox, EmptyState } from "@/components/ui";
@@ -27,7 +24,7 @@ import { essService } from "@/services/ess-service";
 import type { EssMe, EssPayslip } from "@/types/api";
 
 function formatInrParts(value: number | string, hidden: boolean) {
-  if (hidden) return { main: "₹ ••••••••", frac: "" };
+  if (hidden) return { main: "₹ XX,XXX", frac: "" };
   const n = Number(value) || 0;
   const [whole, frac = "00"] = n
     .toLocaleString("en-IN", {
@@ -96,6 +93,7 @@ export default function PayslipsPage() {
   const [loading, setLoading] = useState(true);
   const [masked, setMasked] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const breakdownRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -132,6 +130,17 @@ export default function PayslipsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!showBreakdown) return;
+    const id = window.setTimeout(() => {
+      breakdownRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
+    return () => window.clearTimeout(id);
+  }, [showBreakdown]);
+
   const latest = detail ?? rows[0] ?? null;
   const recent = rows.slice(0, 3);
   const trend = useMemo(() => {
@@ -142,12 +151,6 @@ export default function PayslipsPage() {
       amounts.length > 0
         ? amounts.reduce((s, n) => s + n, 0) / amounts.length
         : 0;
-    let ytdPct: number | null = null;
-    if (amounts.length >= 2) {
-      const first = amounts[0];
-      const last = amounts[amounts.length - 1];
-      if (first > 0) ytdPct = ((last - first) / first) * 100;
-    }
     return {
       bars: slice.map((r, i) => ({
         id: r.id,
@@ -157,7 +160,6 @@ export default function PayslipsPage() {
         active: i === slice.length - 1,
       })),
       avg,
-      ytdPct,
     };
   }, [rows]);
 
@@ -273,7 +275,7 @@ export default function PayslipsPage() {
                     Gross Earnings
                   </span>
                   <span className="text-base font-semibold text-white">
-                    {masked ? "₹ ••••••" : formatInr(parsed.gross).replace("₹", "₹ ")}
+                    {masked ? "₹ XX,XXX" : formatInr(parsed.gross).replace("₹", "₹ ")}
                   </span>
                 </div>
                 <div className="mx-3 h-6 w-px bg-white/10" />
@@ -283,7 +285,7 @@ export default function PayslipsPage() {
                   </span>
                   <span className="text-base font-semibold text-[#ffdad6]">
                     {masked
-                      ? "-₹ ••••••"
+                      ? "-₹ XX,XXX"
                       : `-${formatInr(parsed.deductionsTotal).replace("₹", "₹ ")}`}
                   </span>
                 </div>
@@ -306,12 +308,7 @@ export default function PayslipsPage() {
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  breakdownRef.current?.scrollIntoView({
-                    behavior: "smooth",
-                    block: "start",
-                  })
-                }
+                onClick={() => setShowBreakdown(true)}
                 className="flex items-center justify-center gap-1.5 rounded-xl bg-white/10 px-3 py-2.5 text-xs font-semibold text-white backdrop-blur-md transition active:scale-[0.98]"
               >
                 <IconWallet size={16} />
@@ -333,12 +330,6 @@ export default function PayslipsPage() {
                     / month
                   </p>
                 </div>
-                {trend.ytdPct != null ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-[#6ffbbe]/30 px-2 py-1 text-[10px] font-bold text-[#005236]">
-                    {trend.ytdPct >= 0 ? "+" : ""}
-                    {trend.ytdPct.toFixed(1)}% YTD
-                  </span>
-                ) : null}
               </div>
               <div className="flex h-28 w-full items-end justify-between gap-2 px-1 pb-1 pt-4">
                 {trend.bars.map((bar) => (
@@ -458,154 +449,104 @@ export default function PayslipsPage() {
             </ul>
           </section>
 
-          {/* Earnings & deductions */}
-          <section
-            ref={breakdownRef}
-            id="salary-breakdown"
-            className="space-y-4 rounded-2xl bg-white p-4 shadow-sm scroll-mt-20"
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#dbe1ff] text-[#004ac6]">
-                  <IconWallet size={16} />
+          {/* Earnings & deductions — only after tapping Breakdown */}
+          {showBreakdown ? (
+            <section
+              ref={breakdownRef}
+              id="salary-breakdown"
+              className="space-y-4 rounded-2xl bg-white p-4 shadow-sm scroll-mt-20"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#dbe1ff] text-[#004ac6]">
+                    <IconWallet size={16} />
+                  </span>
+                  <p className="text-base font-semibold tracking-tight text-[#0b1c30]">
+                    Earnings &amp; Deductions
+                  </p>
+                </div>
+                <span className="rounded-full bg-[#dde9ff] px-2 py-0.5 text-[10px] font-bold text-[#434654]">
+                  {periodLabel(latest)}
                 </span>
-                <p className="text-base font-semibold tracking-tight text-[#0b1c30]">
-                  Earnings &amp; Deductions
+              </div>
+
+              <div className="space-y-2">
+                <p className="pb-1 text-[10px] font-bold uppercase tracking-wider text-[#005236]">
+                  Earnings (Gross:{" "}
+                  {formatInr(parsed.gross).replace("₹", "₹ ")})
                 </p>
-              </div>
-              <span className="rounded-full bg-[#dde9ff] px-2 py-0.5 text-[10px] font-bold text-[#434654]">
-                {periodLabel(latest)}
-              </span>
-            </div>
-
-            <div className="space-y-2">
-              <p className="pb-1 text-[10px] font-bold uppercase tracking-wider text-[#005236]">
-                Earnings (Gross:{" "}
-                {formatInr(parsed.gross).replace("₹", "₹ ")})
-              </p>
-              <div className="space-y-2.5 rounded-xl bg-[#eff4ff] p-3">
-                {parsed.earnings.map((line) => {
-                  const bonus = isBonusLine(line);
-                  return (
-                    <div
-                      key={`e-${line.label}`}
-                      className="flex items-center justify-between gap-3"
-                    >
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span
-                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                            bonus ? "bg-[#52e1a6]" : "bg-[#004ac6]"
-                          }`}
-                        />
-                        <span className="truncate text-sm text-[#0b1c30]">
-                          {line.label}
-                        </span>
-                      </div>
-                      <span
-                        className={`shrink-0 text-sm font-semibold ${
-                          bonus ? "text-[#005236]" : "text-[#0b1c30]"
-                        }`}
-                      >
-                        {formatInr(line.amount).replace("₹", "₹ ")}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <p className="pb-1 text-[10px] font-bold uppercase tracking-wider text-[#ba1a1a]">
-                Deductions (Total:{" "}
-                {formatInr(parsed.deductionsTotal).replace("₹", "₹ ")})
-              </p>
-              <div className="space-y-2.5 rounded-xl bg-[#eff4ff] p-3">
-                {parsed.deductions.length ? (
-                  parsed.deductions.map((line) => {
-                    const tax = /tds|tax|income/i.test(line.label);
-                    return (
-                      <div
-                        key={`d-${line.label}`}
-                        className="flex items-center justify-between gap-3"
-                      >
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#ba1a1a]" />
-                          <span className="truncate text-sm text-[#0b1c30]">
-                            {line.label}
+                <div className="space-y-2.5 rounded-xl bg-[#eff4ff] p-3">
+                  {parsed.earnings.length ? (
+                    parsed.earnings.map((line) => {
+                      const bonus = isBonusLine(line);
+                      return (
+                        <div
+                          key={`e-${line.label}`}
+                          className="flex items-center justify-between gap-3"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span
+                              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                                bonus ? "bg-[#52e1a6]" : "bg-[#004ac6]"
+                              }`}
+                            />
+                            <span className="truncate text-sm text-[#0b1c30]">
+                              {line.label}
+                            </span>
+                          </div>
+                          <span
+                            className={`shrink-0 text-sm font-semibold ${
+                              bonus ? "text-[#005236]" : "text-[#0b1c30]"
+                            }`}
+                          >
+                            {formatInr(line.amount).replace("₹", "₹ ")}
                           </span>
                         </div>
-                        <span
-                          className={`shrink-0 text-sm font-semibold ${
-                            tax ? "text-[#ba1a1a]" : "text-[#0b1c30]"
-                          }`}
-                        >
-                          {formatInr(line.amount).replace("₹", "₹ ")}
-                        </span>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <p className="text-sm text-[#434654]">No deductions listed</p>
-                )}
+                      );
+                    })
+                  ) : (
+                    <p className="text-sm text-[#434654]">No earnings listed</p>
+                  )}
+                </div>
               </div>
-            </div>
-          </section>
 
-          {/* Tax planning */}
-          <section className="space-y-3.5 rounded-2xl bg-white p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#eaddff] text-[#712ae2]">
-                  <IconCheck size={16} />
-                </span>
-                <p className="text-base font-semibold tracking-tight text-[#0b1c30]">
-                  Tax Planning &amp; Form 16
+              <div className="space-y-2">
+                <p className="pb-1 text-[10px] font-bold uppercase tracking-wider text-[#ba1a1a]">
+                  Deductions (Total:{" "}
+                  {formatInr(parsed.deductionsTotal).replace("₹", "₹ ")})
                 </p>
-              </div>
-              <span className="rounded-full bg-[#eaddff]/50 px-2 py-0.5 text-[10px] font-bold text-[#712ae2]">
-                New Regime
-              </span>
-            </div>
-            <div className="flex flex-col space-y-2.5 rounded-xl bg-[#eff4ff] p-3.5">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-[#0b1c30]">
-                    Tax Declarations ({fy.replace("FY ", "FY ")})
-                  </p>
-                  <p className="text-xs text-[#434654]">
-                    Manage declarations and Form 16 from tax centre
-                  </p>
+                <div className="space-y-2.5 rounded-xl bg-[#eff4ff] p-3">
+                  {parsed.deductions.length ? (
+                    parsed.deductions.map((line) => {
+                      const tax = /tds|tax|income/i.test(line.label);
+                      return (
+                        <div
+                          key={`d-${line.label}`}
+                          className="flex items-center justify-between gap-3"
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#ba1a1a]" />
+                            <span className="truncate text-sm text-[#0b1c30]">
+                              {line.label}
+                            </span>
+                          </div>
+                          <span
+                            className={`shrink-0 text-sm font-semibold ${
+                              tax ? "text-[#ba1a1a]" : "text-[#0b1c30]"
+                            }`}
+                          >
+                            {formatInr(line.amount).replace("₹", "₹ ")}
+                          </span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <p className="text-sm text-[#434654]">No deductions listed</p>
+                  )}
                 </div>
-                <Link
-                  href="/payslips/tax"
-                  className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#6ffbbe]/30 px-2 py-0.5 text-[10px] font-bold text-[#005236]"
-                >
-                  <IconCheck size={12} />
-                  Open
-                </Link>
               </div>
-              <div className="h-px w-full bg-[#e6eeff]" />
-              <div className="flex items-center justify-between gap-2 text-xs">
-                <div className="flex items-center gap-1.5 text-[#434654]">
-                  <IconInfo size={14} className="text-[#004ac6]" />
-                  <span>Proof submission &amp; Form 16 downloads</span>
-                </div>
-                <Link
-                  href="/payslips/tax"
-                  className="font-semibold text-[#004ac6] hover:underline"
-                >
-                  Manage
-                </Link>
-              </div>
-            </div>
-            <Link
-              href="/profile/bank"
-              className="flex items-center gap-2 text-xs font-semibold text-[#004ac6]"
-            >
-              <IconBank size={14} />
-              Salary credit account
-            </Link>
-          </section>
+            </section>
+          ) : null}
         </>
       )}
     </div>

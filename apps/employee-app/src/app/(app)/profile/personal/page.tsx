@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { SubHeader } from "@/components/app-header";
 import { IconEdit, IconLocation, IconUser } from "@/components/icons";
 import { AlertBox, Avatar } from "@/components/ui";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
-import type { EssMe } from "@/types/api";
+import type { EssMe, EssProfileUpdateRequest } from "@/types/api";
 import * as ui from "@/theme/classes";
 import { formatDisplayDateDDMMYYYY } from "@/utils/datetime";
 
@@ -15,21 +15,89 @@ function display(value: string | null | undefined, fallback = "—"): string {
   return text ? text : fallback;
 }
 
+function titleCase(value: string | null | undefined): string | null {
+  const text = value?.trim();
+  if (!text) return null;
+  return text
+    .split(/[\s_]+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+}
+
 export default function PersonalInformationPage() {
   const [me, setMe] = useState<EssMe | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [notes, setNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [pending, setPending] = useState<EssProfileUpdateRequest | null>(null);
+
+  const loadRequests = useCallback(async () => {
+    try {
+      const res = await essService.listDetailUpdateRequests();
+      const rows = Array.isArray(res.data) ? res.data : [];
+      setPending(rows.find((r) => r.status === "submitted") ?? null);
+    } catch {
+      /* non-blocking */
+    }
+  }, []);
 
   useEffect(() => {
-    essService
-      .me()
-      .then((r) => setMe(r.data))
-      .catch((err) =>
-        setError(
-          err instanceof ApiClientError ? err.message : "Failed to load profile",
-        ),
+    let cancelled = false;
+    function load() {
+      essService
+        .me()
+        .then((r) => {
+          if (!cancelled) {
+            setMe(r.data);
+            setError(null);
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            setError(
+              err instanceof ApiClientError
+                ? err.message
+                : "Failed to load profile",
+            );
+          }
+        });
+      void loadRequests();
+    }
+    load();
+    function onVisible() {
+      if (document.visibilityState === "visible") load();
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [loadRequests]);
+
+  async function submitUpdateRequest() {
+    setSubmitting(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const res = await essService.createDetailUpdateRequest({
+        notes: notes.trim() || undefined,
+      });
+      setPending(res.data ?? null);
+      setNotes("");
+      setMessage(
+        res.message || "Update request submitted for HR review",
       );
-  }, []);
+    } catch (err) {
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Failed to submit update request",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -42,7 +110,12 @@ export default function PersonalInformationPage() {
         <>
           <section className="flex flex-col items-center text-center">
             <div className="relative">
-              <Avatar name={me.display_name} size="xl" ring />
+              <Avatar
+                name={me.display_name}
+                size="xl"
+                ring
+                photoUrl={me.photo_url}
+              />
               <span className="absolute bottom-1 right-1 flex h-8 w-8 items-center justify-center rounded-full bg-[#2563eb] text-white shadow-md">
                 <IconEdit size={14} />
               </span>
@@ -75,9 +148,9 @@ export default function PersonalInformationPage() {
                   : "—"
               }
             />
-            <Row label="Gender" value={display(me.gender)} />
-            <Row label="Marital Status" value={display(me.marital_status)} />
-            <Row label="Nationality" value={display(me.nationality)} />
+            <Row label="Gender" value={display(titleCase(me.gender))} />
+            <Row label="Marital Status" value={display(titleCase(me.marital_status))} />
+            <Row label="Nationality" value={display(titleCase(me.nationality))} />
             <Row label="Blood Group" value={display(me.blood_group)} />
             <Row label="Date of Joining" value={formatDisplayDateDDMMYYYY(me.date_of_joining)} />
             <Row label="Manager" value={display(me.manager_name)} />
@@ -123,13 +196,41 @@ export default function PersonalInformationPage() {
             </div>
           </Card>
 
-          <button
-            type="button"
-            className={`${ui.btn} w-full`}
-            onClick={() => setMessage("Update request submitted for HR review")}
-          >
-            Request Detail Update
-          </button>
+          <section className={`${ui.card} space-y-3 p-4`}>
+            <h3 className="text-base font-bold text-[#0b1c30]">
+              Request Detail Update
+            </h3>
+            <p className="text-xs text-[#434655]">
+              Tell HR what needs correcting. Your request appears in the HR
+              Employee Requests inbox.
+            </p>
+            {pending ? (
+              <AlertBox tone="success">
+                Request pending HR review
+                {pending.notes ? ` — ${pending.notes}` : ""}.
+              </AlertBox>
+            ) : (
+              <textarea
+                className={`${ui.input} min-h-[88px] w-full resize-y`}
+                placeholder="e.g. Update current address / mobile number / blood group…"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                maxLength={1000}
+              />
+            )}
+            <button
+              type="button"
+              className={`${ui.btn} w-full`}
+              disabled={submitting || Boolean(pending)}
+              onClick={() => void submitUpdateRequest()}
+            >
+              {submitting
+                ? "Submitting…"
+                : pending
+                  ? "Awaiting HR"
+                  : "Request Detail Update"}
+            </button>
+          </section>
           <p className="text-center text-xs text-[#434655]">
             Synced from HRMS · Joined {formatDisplayDateDDMMYYYY(me.date_of_joining)}
           </p>

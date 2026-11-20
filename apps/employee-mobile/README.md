@@ -11,10 +11,11 @@ cp .env.example .env   # optional
 npm start
 ```
 
-**Demo login** (mock mode, default):
+**Demo login** (mock mode):
 
-- Email: `demo@company.com`
-- Password: `demo123`
+- Phone: `9876543210`
+- Employee ID: `CT5354`
+- Password: `CT535415102003`
 
 ## Environment
 

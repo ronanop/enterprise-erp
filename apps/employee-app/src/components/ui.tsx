@@ -138,11 +138,56 @@ export function Avatar({
   name,
   size = "md",
   ring = false,
+  photoUrl,
 }: {
   name: string;
   size?: "sm" | "md" | "lg" | "xl";
   ring?: boolean;
+  /** Absolute http(s)/data URL, or ESS path like `/ess/me/photo` (fetched with auth). */
+  photoUrl?: string | null;
 }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let revoked: string | null = null;
+    let cancelled = false;
+    setFailed(false);
+    setBlobUrl(null);
+
+    const src = (photoUrl || "").trim();
+    if (!src) return;
+
+    // Public / data URLs can be used directly.
+    if (
+      src.startsWith("data:") ||
+      src.startsWith("blob:") ||
+      src.startsWith("http://") ||
+      src.startsWith("https://")
+    ) {
+      setBlobUrl(src);
+      return;
+    }
+
+    // Authenticated ESS photo path.
+    void import("@/services/api-client")
+      .then(({ apiClientBlob }) => apiClientBlob(src))
+      .then((blob) => {
+        if (cancelled) return;
+        const url = URL.createObjectURL(blob);
+        revoked = url;
+        setBlobUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
+
+    return () => {
+      cancelled = true;
+      if (revoked) URL.revokeObjectURL(revoked);
+    };
+  }, [photoUrl]);
+
   const initials = name
     .split(/\s+/)
     .filter(Boolean)
@@ -157,11 +202,27 @@ export function Avatar({
     xl: "h-[6.5rem] w-[6.5rem] text-3xl",
   };
 
+  const frame = `relative overflow-hidden rounded-full shadow-md shadow-[#2563eb]/20 ${sizes[size]} ${
+    ring ? "ring-[3px] ring-white" : ""
+  }`;
+
+  if (blobUrl && !failed) {
+    return (
+      <div className={frame}>
+        {/* eslint-disable-next-line @next/next/no-img-element -- authenticated blob / data URL */}
+        <img
+          src={blobUrl}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
-      className={`flex items-center justify-center rounded-full bg-gradient-to-br from-[#2563eb] to-[#712ae2] font-bold text-white shadow-md shadow-[#2563eb]/20 ${sizes[size]} ${
-        ring ? "ring-[3px] ring-white" : ""
-      }`}
+      className={`flex items-center justify-center bg-gradient-to-br from-[#2563eb] to-[#712ae2] font-bold text-white ${frame}`}
     >
       {initials || "?"}
     </div>

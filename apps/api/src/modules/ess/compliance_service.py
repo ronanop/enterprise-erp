@@ -21,36 +21,60 @@ from security.password import PasswordHasher
 
 
 def _split_policy_steps(content: str) -> list[EssPolicyStep]:
-    lines = content.strip().splitlines()
+    """Split markdown into walkthrough steps.
+
+    Preferred markers: lines starting with ``## `` (or ``# `` / ``### ``).
+    Falls back to a single Policy step when no headings exist.
+    """
+    raw = (content or "").strip()
+    if not raw:
+        return [EssPolicyStep(order=0, title="Policy", body="")]
+
+    lines = raw.replace("\r\n", "\n").splitlines()
     steps: list[EssPolicyStep] = []
     current_title = "Overview"
     current_body: list[str] = []
     order = 0
+    saw_heading = False
 
     def flush() -> None:
-        nonlocal order
+        nonlocal order, current_body
         body = "\n".join(current_body).strip()
-        if body or order == 0:
-            steps.append(
-                EssPolicyStep(
-                    order=order,
-                    title=current_title,
-                    body=body or content.strip(),
-                )
+        # Skip empty Overview before the first heading.
+        if not body and not saw_heading and order == 0:
+            current_body = []
+            return
+        if not body:
+            current_body = []
+            return
+        steps.append(
+            EssPolicyStep(
+                order=order,
+                title=current_title.strip() or f"Step {order + 1}",
+                body=body,
             )
-            order += 1
+        )
+        order += 1
+        current_body = []
 
     for line in lines:
-        if line.startswith("## "):
-            if current_body or order > 0:
-                flush()
-                current_body = []
-            current_title = line[3:].strip()
-        else:
-            current_body.append(line)
+        heading = None
+        if line.startswith("### "):
+            heading = line[4:].strip()
+        elif line.startswith("## "):
+            heading = line[3:].strip()
+        elif line.startswith("# "):
+            heading = line[2:].strip()
+        if heading is not None:
+            flush()
+            current_title = heading or f"Step {order + 1}"
+            saw_heading = True
+            continue
+        current_body.append(line)
+
     flush()
     if not steps:
-        steps.append(EssPolicyStep(order=0, title="Policy", body=content.strip()))
+        steps.append(EssPolicyStep(order=0, title="Policy", body=raw))
     return steps
 
 

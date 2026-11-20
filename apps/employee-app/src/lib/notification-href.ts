@@ -10,12 +10,33 @@ function idFromHref(href: string, prefixes: string[]): string | null {
   return null;
 }
 
+function isManagerTeamRequest(
+  n: Pick<EssNotification, "kind" | "href" | "title" | "body">,
+): boolean {
+  const raw = (n.href || "").trim();
+  const blob = `${n.kind || ""} ${n.title || ""} ${n.body || ""}`.toLowerCase();
+  if (raw === "/approvals" || raw.startsWith("/approvals")) return true;
+  if (blob.includes("[manager]")) return true;
+  if (blob.includes("team approvals") || blob.includes("open team approvals"))
+    return true;
+  if (blob.includes("submitted_manager") || blob.endsWith("_manager")) return true;
+  return (
+    blob.includes("leave request from") ||
+    blob.includes("wfh from") ||
+    blob.includes("on duty from") ||
+    blob.includes("regularization from")
+  );
+}
+
 /** In-app route for an ESS notification (approved / rejected / request pages). */
 export function resolveEssNotificationHref(
   n: Pick<EssNotification, "kind" | "href" | "title" | "body">,
 ): string {
   const raw = (n.href || "").trim();
   const kind = `${n.kind || ""} ${n.title || ""} ${n.body || ""}`.toLowerCase();
+
+  // Team member → manager: always open Team Approvals.
+  if (isManagerTeamRequest(n)) return "/approvals";
 
   // HRMS inbox paths → ESS manager approvals.
   if (raw.startsWith("/hr/ess") || raw === "/hr/ess-inbox") return "/approvals";
@@ -24,21 +45,9 @@ export function resolveEssNotificationHref(
   if (raw.startsWith("/leave/")) return raw;
   if (raw.startsWith("/payslips/")) return raw;
   if (raw.startsWith("/attendance/")) return raw;
-  if (raw === "/approvals" || raw.startsWith("/approvals")) return "/approvals";
   if (raw.startsWith("/") && !raw.startsWith("/hr/")) {
-    // Map generic section roots to the right detail when we can.
-    if (raw === "/leave" || raw.startsWith("/leave?")) {
-      // keep generic leave list unless title implies team approve
-      if (kind.includes("[manager]") || kind.includes("pending approval")) {
-        return "/approvals";
-      }
-      return "/leave";
-    }
+    if (raw === "/leave" || raw.startsWith("/leave?")) return "/leave";
     return raw;
-  }
-
-  if (kind.includes("[manager]") || kind.includes("needs approval") || kind.includes("pending approval")) {
-    return "/approvals";
   }
 
   const leaveId =
@@ -46,12 +55,20 @@ export function resolveEssNotificationHref(
     (raw.match(/leave[_-]?request[_-]?id[=:]([0-9a-f-]{36})/i)?.[1] ?? null);
   if (leaveId) return `/leave/${leaveId}`;
 
-  if (
-    kind.includes("leave") ||
-    kind.includes("compoff") ||
-    kind.includes("comp off")
-  ) {
-    if (kind.includes("approv") || kind.includes("reject") || kind.includes("cancel")) {
+  if (kind.includes("meeting") || kind.includes("meeting room") || kind.includes("room booking")) {
+    return "/rooms";
+  }
+
+  if (kind.includes("compoff") || kind.includes("comp off")) {
+    return "/attendance/compoff";
+  }
+
+  if (kind.includes("leave")) {
+    if (
+      kind.includes("approv") ||
+      kind.includes("reject") ||
+      kind.includes("cancel")
+    ) {
       return "/leave/history";
     }
     return "/leave";
@@ -60,7 +77,19 @@ export function resolveEssNotificationHref(
   if (kind.includes("wfh") || kind.includes("work from home")) {
     return "/attendance/wfh";
   }
-  if (kind.includes("on_duty") || kind.includes("on duty") || kind.includes("on-duty")) {
+  if (
+    kind.includes("on tour") ||
+    kind.includes("on_tour") ||
+    kind.includes("business travel") ||
+    kind.includes("travel request")
+  ) {
+    return "/attendance/on-tour";
+  }
+  if (
+    kind.includes("on_duty") ||
+    kind.includes("on duty") ||
+    kind.includes("on-duty")
+  ) {
     return "/attendance/on-duty";
   }
   if (
@@ -71,11 +100,19 @@ export function resolveEssNotificationHref(
   ) {
     return "/attendance/correction";
   }
-  if (kind.includes("salary") || kind.includes("payslip") || kind.includes("payroll")) {
+  if (
+    kind.includes("salary") ||
+    kind.includes("payslip") ||
+    kind.includes("payroll")
+  ) {
     return "/payslips";
   }
   if (kind.includes("policy") || kind.includes("compliance")) return "/compliance";
-  if (kind.includes("announce") || kind.includes("holiday") || kind.includes("event")) {
+  if (
+    kind.includes("announce") ||
+    kind.includes("holiday") ||
+    kind.includes("event")
+  ) {
     return "/announcements";
   }
   if (kind.includes("document")) return "/documents";

@@ -87,7 +87,7 @@ class EssHrAdapter:
             HrTrainingRequest.company_id == company_id,
             HrTrainingRequest.is_deleted.is_(False),
             HrTrainingRequest.room_id.isnot(None),
-            HrTrainingRequest.status.in_(("submitted", "approved")),
+            HrTrainingRequest.status.in_(("submitted", "approved", "cancelled", "rejected")),
         )
         if on_date is not None:
             q = q.where(HrTrainingRequest.request_date == on_date)

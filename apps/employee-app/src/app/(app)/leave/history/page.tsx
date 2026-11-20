@@ -2,11 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  AppHeader,
-  FilterChips,
-  SearchField,
-} from "@/components/app-header";
+import { AppHeader, FilterChips } from "@/components/app-header";
 import { IconCalendar } from "@/components/icons";
 import { AiFab, AlertBox, EmptyState } from "@/components/ui";
 import { ApiClientError } from "@/services/api-client";
@@ -23,7 +19,6 @@ export default function LeaveHistoryPage() {
   const [types, setTypes] = useState<EssLeaveType[]>([]);
   const [rows, setRows] = useState<EssLeaveRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All");
 
   useEffect(() => {
@@ -51,18 +46,16 @@ export default function LeaveHistoryPage() {
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
-      const name = typeName(r.leave_type_id).toLowerCase();
       const status = r.status.toLowerCase();
-      const q = query.trim().toLowerCase();
-      if (q && !`${name} ${status} ${r.start_date}`.includes(q)) return false;
       if (filter === "Approved") return status === "approved";
       if (filter === "Pending")
-        return ["submitted", "draft", "pending"].includes(status);
+        return ["submitted", "draft", "pending", "manager_approved"].includes(
+          status,
+        );
       if (filter === "Rejected") return status === "rejected";
       return true;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, query, filter, types]);
+  }, [rows, filter]);
 
   const groups = useMemo(() => groupByMonth(filtered), [filtered]);
 
@@ -72,11 +65,6 @@ export default function LeaveHistoryPage() {
 
       {error ? <AlertBox>{error}</AlertBox> : null}
 
-      <SearchField
-        value={query}
-        onChange={setQuery}
-        placeholder="Search requests..."
-      />
       <FilterChips options={FILTERS} value={filter} onChange={setFilter} />
 
       {groups.length === 0 ? (

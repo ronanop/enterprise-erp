@@ -52,6 +52,7 @@ from modules.ess.schemas import (
     EssSeparationItem,
     EssSkillItem,
     EssTeamLeaveItem,
+    EssTeamMember,
     EssTrainingItem,
 )
 from modules.foundation.domain.value_objects import TenantContext
@@ -86,6 +87,43 @@ def _business_now() -> datetime:
     except Exception:
         tz = ZoneInfo("UTC")
     return datetime.now(tz)
+
+
+def _format_address_json(raw: object | None) -> str | None:
+    """Flatten HRMS address JSON (line1/city/state/…) into a single display string."""
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        text = raw.strip()
+        return text or None
+    if not isinstance(raw, dict):
+        return None
+    parts: list[str] = []
+    for key in (
+        "line1",
+        "address_line1",
+        "line2",
+        "address_line2",
+        "city",
+        "state",
+        "postal_code",
+        "pincode",
+        "country",
+        "country_code",
+    ):
+        value = raw.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text and text not in parts:
+            parts.append(text)
+    if parts:
+        return ", ".join(parts)
+    # Fallback: any non-empty string values
+    for value in raw.values():
+        if isinstance(value, str) and value.strip():
+            parts.append(value.strip())
+    return ", ".join(parts) if parts else None
 
 
 def _attendance_response(row) -> EssAttendanceResponse:
@@ -308,6 +346,7 @@ class EssService:
         payload = row.payload_json or {}
         kind = str(payload.get("kind") or row.event_type)
         title = str(payload.get("title") or row.event_type)
+        body = str(payload.get("body") or "")
         href_raw = payload.get("href") or payload.get("action_href")
         # Prefer deep links into the request the notification is about.
         leave_id = payload.get("leave_request_id")
@@ -316,22 +355,61 @@ class EssService:
         )
         wfh_id = payload.get("wfh_request_id")
         on_duty_id = payload.get("on_duty_request_id")
+        meeting_id = payload.get("meeting_request_id") or payload.get(
+            "training_request_id"
+        )
         payslip_id = payload.get("payslip_id")
         title_l = title.lower()
+        body_l = body.lower()
         kind_l = kind.lower()
+        event_l = str(row.event_type or "").lower()
+        blob = f"{title_l} {body_l} {kind_l} {event_l}"
+        href_s = str(href_raw or "").strip()
+        # Manager inbox: team member requests always open Team Approvals.
+        is_manager_inbox = (
+            href_s == "/approvals"
+            or href_s.startswith("/approvals")
+            or title_l.startswith("[manager]")
+            or "team approvals" in blob
+            or "open team approvals" in blob
+            or event_l.endswith("_manager")
+            or "submitted_manager" in event_l
+            or any(
+                k in title_l
+                for k in (
+                    "leave request from",
+                    "wfh from",
+                    "on duty from",
+                    "regularization from",
+                    "comp off from",
+                )
+            )
+        )
         ess_href: str | None = None
-        if title_l.startswith("[manager]") or "pending approval" in title_l:
+        if is_manager_inbox:
             ess_href = "/approvals"
         elif leave_id:
             ess_href = f"/leave/{leave_id}"
         elif payslip_id:
             ess_href = f"/payslips/{payslip_id}"
+        elif meeting_id or "meeting" in kind_l or "room" in kind_l:
+            ess_href = "/rooms"
         elif correction_id or "miss" in kind_l or "attendance" in kind_l:
             ess_href = "/attendance/correction"
         elif wfh_id or kind_l == "wfh":
             ess_href = "/attendance/wfh"
+        elif "tour" in kind_l or "travel" in kind_l:
+            ess_href = "/attendance/on-tour"
         elif on_duty_id or kind_l == "on_duty":
             ess_href = "/attendance/on-duty"
+        elif kind_l == "compoff" or "comp off" in blob:
+            ess_href = "/attendance/compoff"
+        elif (
+            kind_l == "profile_update"
+            or "detail update" in blob
+            or "profile update" in blob
+        ):
+            ess_href = "/profile/personal"
         elif "payslip" in kind_l or "salary" in kind_l or "payroll" in kind_l:
             ess_href = "/payslips"
         elif "leave" in kind_l:
@@ -345,7 +423,7 @@ class EssService:
         return EssNotificationResponse(
             id=row.id,
             title=title,
-            body=str(payload.get("body") or ""),
+            body=body,
             kind=kind,
             # Only explicit read markers count — channel dispatch sets status
             # to "sent"/"delivered" without meaning the user opened the item.
@@ -395,13 +473,27 @@ class EssService:
         pending_policy_count = self._compliance().pending_policy_count(ctx)
         is_ess_admin = ess_role == "admin"
 
+        from modules.organization.models.branch import OrgBranch
+        from modules.organization.models.company import OrgCompany
         from modules.organization.models.hierarchy import OrgDepartment
+        from modules.hr.models.employee_profile import HrEmployeeProfile
 
         department_name: str | None = None
         if emp.department_id:
             dept = self._db.get(OrgDepartment, emp.department_id)
             if dept and not getattr(dept, "is_deleted", False):
                 department_name = getattr(dept, "department_name", None)
+
+        company_name: str | None = None
+        company = self._db.get(OrgCompany, emp.company_id)
+        if company and not getattr(company, "is_deleted", False):
+            company_name = getattr(company, "company_name", None)
+
+        branch_name: str | None = None
+        if emp.branch_id:
+            branch = self._db.get(OrgBranch, emp.branch_id)
+            if branch and not getattr(branch, "is_deleted", False):
+                branch_name = getattr(branch, "branch_name", None)
 
         manager_name: str | None = None
         manager_id = getattr(emp, "reporting_manager_id", None)
@@ -411,6 +503,16 @@ class EssService:
             manager = self._db.get(_MasterEmployee, manager_id)
             if manager and not getattr(manager, "is_deleted", False):
                 manager_name = f"{manager.first_name} {manager.last_name}".strip()
+
+        # Personal / bio fields live on hr_employee_profile (HRMS), not master_employee.
+        # Load by employee_id + tenant so ESS always sees the employee's own HRMS row.
+        profile = self._db.scalar(
+            select(HrEmployeeProfile).where(
+                HrEmployeeProfile.employee_id == emp.id,
+                HrEmployeeProfile.tenant_id == ctx.tenant_id,
+                HrEmployeeProfile.is_deleted.is_(False),
+            )
+        )
 
         return EssMeResponse(
             employee_id=emp.id,
@@ -428,7 +530,27 @@ class EssService:
             display_name=f"{emp.first_name} {emp.last_name}".strip(),
             department_name=department_name,
             manager_name=manager_name,
-            date_of_birth=getattr(emp, "date_of_birth", None),
+            company_name=company_name,
+            branch_name=branch_name,
+            date_of_birth=getattr(profile, "date_of_birth", None) if profile else None,
+            gender=getattr(profile, "gender", None) if profile else None,
+            marital_status=getattr(profile, "marital_status", None) if profile else None,
+            nationality=getattr(profile, "nationality", None) if profile else None,
+            blood_group=getattr(profile, "blood_group", None) if profile else None,
+            current_address=_format_address_json(
+                getattr(profile, "current_address_json", None) if profile else None
+            ),
+            permanent_address=_format_address_json(
+                getattr(profile, "permanent_address_json", None) if profile else None
+            ),
+            has_profile_photo=bool(
+                profile and getattr(profile, "profile_photo_uri", None)
+            ),
+            photo_url=(
+                "/ess/me/photo"
+                if profile and getattr(profile, "profile_photo_uri", None)
+                else None
+            ),
             role_codes=role_codes,
             ess_role=ess_role,
             is_manager=is_manager,
@@ -439,6 +561,23 @@ class EssService:
             is_ess_admin=is_ess_admin,
             admin_use_web_portal=is_ess_admin,
         )
+
+    def get_me_photo_download(self, ctx: TenantContext):
+        """Stream the signed-in employee's HRMS profile photo."""
+        from modules.hr.models.employee_profile import HrEmployeeProfile
+
+        emp = self.resolve_employee(ctx)
+        profile = self._db.scalar(
+            select(HrEmployeeProfile).where(
+                HrEmployeeProfile.employee_id == emp.id,
+                HrEmployeeProfile.tenant_id == ctx.tenant_id,
+                HrEmployeeProfile.is_deleted.is_(False),
+            )
+        )
+        uri = getattr(profile, "profile_photo_uri", None) if profile else None
+        if not uri:
+            raise NotFoundException("Profile photo not found")
+        return load_document_download(str(uri), "profile-photo")
 
     def update_me(self, ctx: TenantContext, *, mobile: str | None = None) -> EssMeResponse:
         emp = self.resolve_employee(ctx)
@@ -1471,7 +1610,18 @@ class EssService:
             and (row.branch_id is None or row.branch_id == emp.branch_id)
         ]
 
+    @staticmethod
+    def _drain_pending_notify_outbox(db, *, limit: int = 25) -> None:
+        """Best-effort: deliver stuck outbox notifies when Celery is not running."""
+        try:
+            from modules.platform.outbox.dispatcher import OutboxDispatcher
+
+            OutboxDispatcher(db).process_batch(limit=limit)
+        except Exception:
+            pass
+
     def list_notifications(self, ctx: TenantContext) -> list[EssNotificationResponse]:
+        self._drain_pending_notify_outbox(self._db)
         emp = self.resolve_employee(ctx)
         if not emp.user_id:
             return []
@@ -1755,6 +1905,45 @@ class EssService:
             self._profiles.update(ctx, profile.id, **fields)
         return self.get_education_skills(ctx)
 
+    def list_team_members(self, ctx: TenantContext) -> list[EssTeamMember]:
+        """Managers: list people who report to the signed-in employee."""
+        from modules.organization.models.hierarchy import OrgDepartment
+
+        emp = self.resolve_employee(ctx)
+        reports = list(
+            EssHrAdapter(self._db).list_direct_reports(manager_employee_id=emp.id)
+        )
+        if not reports:
+            return []
+        dept_ids = {r.department_id for r in reports if getattr(r, "department_id", None)}
+        dept_names: dict = {}
+        if dept_ids:
+            for dept in self._db.scalars(
+                select(OrgDepartment).where(
+                    OrgDepartment.id.in_(dept_ids),
+                    OrgDepartment.is_deleted.is_(False),
+                )
+            ).all():
+                dept_names[dept.id] = getattr(dept, "department_name", None)
+        out: list[EssTeamMember] = []
+        for member in sorted(
+            reports,
+            key=lambda r: f"{getattr(r, 'first_name', '')} {getattr(r, 'last_name', '')}".strip().lower(),
+        ):
+            out.append(
+                EssTeamMember(
+                    employee_id=member.id,
+                    employee_code=member.employee_code,
+                    display_name=f"{member.first_name} {member.last_name}".strip(),
+                    designation=member.designation or "",
+                    email=member.email or "",
+                    mobile=member.mobile or "",
+                    department_name=dept_names.get(member.department_id),
+                    status=member.status or "active",
+                )
+            )
+        return out
+
     def list_team_leave(self, ctx: TenantContext) -> list[EssTeamLeaveItem]:
         emp = self.resolve_employee(ctx)
         reports = list(
@@ -2017,6 +2206,7 @@ class EssService:
     def notification_unread_count(self, ctx: TenantContext) -> int:
         from sqlalchemy import func
 
+        self._drain_pending_notify_outbox(self._db, limit=15)
         emp = self.resolve_employee(ctx)
         if not emp.user_id:
             return 0
@@ -2232,6 +2422,61 @@ class EssService:
             for row in rows
             if row.employee_id == emp.id
         ]
+
+    def list_profile_update_requests(self, ctx: TenantContext):
+        from modules.ess.dependencies import pin_ess_employee_context
+        from modules.ess.schemas import EssProfileUpdateResponse
+        from modules.hr.service.profile_update_service import ProfileUpdateRequestService
+
+        emp = self.resolve_employee(ctx)
+        ctx = pin_ess_employee_context(
+            ctx, company_id=emp.company_id, branch_id=emp.branch_id
+        )
+        rows = ProfileUpdateRequestService(self._db).list_for_employee(
+            ctx, company_id=emp.company_id, employee_id=emp.id
+        )
+        rows = sorted(
+            rows,
+            key=lambda r: getattr(r, "created_at", None)
+            or datetime(1970, 1, 1, tzinfo=timezone.utc),
+            reverse=True,
+        )
+        return [
+            EssProfileUpdateResponse(
+                id=row.id,
+                notes=row.notes,
+                status=row.status,
+                created_at=getattr(row, "created_at", None),
+                decided_at=getattr(row, "decided_at", None),
+                decision_notes=getattr(row, "decision_notes", None),
+            )
+            for row in rows
+        ]
+
+    def create_profile_update_request(self, ctx: TenantContext, *, notes: str | None = None):
+        from modules.ess.dependencies import pin_ess_employee_context
+        from modules.ess.schemas import EssProfileUpdateResponse
+        from modules.hr.service.profile_update_service import ProfileUpdateRequestService
+
+        emp = self.resolve_employee(ctx)
+        ctx = pin_ess_employee_context(
+            ctx, company_id=emp.company_id, branch_id=emp.branch_id
+        )
+        row = ProfileUpdateRequestService(self._db).create(
+            ctx,
+            company_id=emp.company_id,
+            branch_id=emp.branch_id,
+            employee_id=emp.id,
+            notes=notes,
+        )
+        return EssProfileUpdateResponse(
+            id=row.id,
+            notes=row.notes,
+            status=row.status,
+            created_at=getattr(row, "created_at", None),
+            decided_at=getattr(row, "decided_at", None),
+            decision_notes=getattr(row, "decision_notes", None),
+        )
 
     def create_separation(self, ctx: TenantContext, body: EssSeparationCreate) -> EssSeparationItem:
         from modules.hr.service.separation_service import SeparationService

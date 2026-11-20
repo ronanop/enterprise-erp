@@ -690,12 +690,21 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         hint: "Auto-generated (ROOM-001…)",
       },
       {
+        key: "company_id",
+        label: "Company",
+        required: true,
+        type: "select",
+        optionsSource: "companies",
+        autoDefault: true,
+      },
+      {
         key: "branch_id",
         label: "Branch",
+        required: true,
         type: "select",
         optionsSource: "branches",
         autoDefault: true,
-        hint: "Branch where this room is located",
+        hint: "Branch where this room is located (used for company + ESS booking)",
       },
       {
         key: "capacity",
@@ -725,6 +734,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       archive: "maintenance",
     },
     buildCreateBody: (f) => ({
+      company_id: f.company_id || null,
       branch_id: f.branch_id || null,
       room_code: f.room_code || null,
       room_name: f.room_name,

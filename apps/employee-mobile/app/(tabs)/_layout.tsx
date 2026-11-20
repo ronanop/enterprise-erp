@@ -1,6 +1,7 @@
 import { Redirect, Tabs } from "expo-router";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { BottomNav } from "@/components/BottomNav";
+import { ComplianceGuard } from "@/components/ComplianceGuard";
 import { useAuth } from "@/context/auth-context";
 import { colors } from "@/theme/colors";
 
@@ -20,16 +21,23 @@ export default function TabsLayout() {
   }
 
   return (
-    <Tabs
-      tabBar={(props) => <BottomNav {...props} />}
-      screenOptions={{ headerShown: false }}
-    >
-      <Tabs.Screen name="home" options={{ title: "Home" }} />
-      <Tabs.Screen name="attendance" options={{ title: "Attendance" }} />
-      <Tabs.Screen name="leave" options={{ title: "Leave" }} />
-      <Tabs.Screen name="payslips" options={{ title: "Salary" }} />
-      <Tabs.Screen name="profile" options={{ title: "Profile" }} />
-    </Tabs>
+    <ComplianceGuard>
+      <Tabs
+        tabBar={(props) => <BottomNav {...props} />}
+        screenOptions={{
+          headerShown: false,
+          // Custom absolute dock paints above content; screens pad themselves.
+          tabBarStyle: { position: "absolute", backgroundColor: "transparent", borderTopWidth: 0, elevation: 0 },
+        }}
+      >
+        {/* Order matches PWA: Home · Leave · Attendance · Salary · Profile */}
+        <Tabs.Screen name="home" options={{ title: "Home" }} />
+        <Tabs.Screen name="leave" options={{ title: "Leave" }} />
+        <Tabs.Screen name="attendance" options={{ title: "Attendance" }} />
+        <Tabs.Screen name="payslips" options={{ title: "Salary" }} />
+        <Tabs.Screen name="profile" options={{ title: "Profile" }} />
+      </Tabs>
+    </ComplianceGuard>
   );
 }
 

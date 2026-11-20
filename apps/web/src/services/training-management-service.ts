@@ -112,6 +112,13 @@ export async function loadTrainingDirectory(): Promise<TrainingDirectory> {
     attendeeIds.set(tid, ids);
   }
 
+  const empNameById = new Map(
+    empDir.records.map((e) => [
+      String(e.id),
+      String(e.displayName || e.fullName || e.name || "").trim() || "-",
+    ]),
+  );
+
   return {
     programs: programs.map((row) => ({
       id: String(row.id),
@@ -163,14 +170,20 @@ export async function loadTrainingDirectory(): Promise<TrainingDirectory> {
     })),
     requests: requests.map((row) => {
       const attendeesRaw = Array.isArray(row.attendees_json) ? row.attendees_json : [];
+      const hostId = String(row.host_employee_id ?? row.requested_by_employee_id ?? "");
+      const hostFromRow = String(row.host_name ?? "").trim();
+      const hostName =
+        hostFromRow ||
+        (hostId ? empNameById.get(hostId) : undefined) ||
+        "-";
       return {
         id: String(row.id),
         code: String(row.request_code ?? ""),
         title: String(row.title ?? ""),
         requestType: String(row.request_type ?? "meeting"),
         requestedByEmployeeId: String(row.requested_by_employee_id ?? ""),
-        hostEmployeeId: String(row.host_employee_id ?? ""),
-        hostName: String(row.host_name ?? "-"),
+        hostEmployeeId: hostId,
+        hostName,
         roomId: String(row.room_id ?? ""),
         roomName: roomMap.get(String(row.room_id ?? "")) ?? "-",
         requestDate: String(row.request_date ?? ""),

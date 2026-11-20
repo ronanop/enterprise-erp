@@ -25,6 +25,7 @@ from modules.hr.routers import (
     leave_types_router,
     on_duty_router,
     wfh_router,
+    profile_update_requests_router,
     okrs_router,
     ot_allotments_router,
     compoff_requests_router,
@@ -79,6 +80,7 @@ hr_router.include_router(weekly_off_policies_router)
 hr_router.include_router(attendance_rules_router)
 hr_router.include_router(on_duty_router)
 hr_router.include_router(wfh_router)
+hr_router.include_router(profile_update_requests_router)
 hr_router.include_router(ot_allotments_router)
 hr_router.include_router(compoff_requests_router)
 hr_router.include_router(biometric_devices_router)

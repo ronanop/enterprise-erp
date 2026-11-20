@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   AttendancePunchSheet,
   type PunchConfirmPayload,
 } from "@/components/attendance-punch-sheet";
+import { AttendanceMonthCalendar } from "@/components/attendance-month-calendar";
 import { AppHeader } from "@/components/app-header";
 import {
   IconAlert,
@@ -17,6 +18,7 @@ import {
   IconLocation,
   IconLogin,
   IconLogout,
+  IconPlane,
   IconWallet,
 } from "@/components/icons";
 import { AlertBox } from "@/components/ui";
@@ -26,7 +28,13 @@ import {
 } from "@/lib/live-location";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
-import type { EssAttendance, EssAttendanceSummary, EssMe, EssPunchPolicy } from "@/types/api";
+import type {
+  EssAttendance,
+  EssAttendanceSummary,
+  EssLeaveRequest,
+  EssMe,
+  EssPunchPolicy,
+} from "@/types/api";
 import * as ui from "@/theme/classes";
 import {
   formatHours,
@@ -37,6 +45,20 @@ import {
   hoursBetween,
   todayLocalDate,
 } from "@/utils/datetime";
+
+function eachDateInclusive(startIso: string, endIso: string): string[] {
+  const out: string[] = [];
+  const start = new Date(`${startIso.slice(0, 10)}T12:00:00`);
+  const end = new Date(`${endIso.slice(0, 10)}T12:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return out;
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    out.push(`${y}-${m}-${day}`);
+  }
+  return out;
+}
 
 const DAILY_GOAL_H = 8;
 
@@ -54,6 +76,13 @@ const ATTENDANCE_ACTIONS = [
     subtitle: "Official duty request",
     Icon: IconCalendar,
     iconWrap: "bg-[#DCFCE7] text-[#16A34A]",
+  },
+  {
+    href: "/attendance/on-tour",
+    title: "On Tour",
+    subtitle: "Business travel request",
+    Icon: IconPlane,
+    iconWrap: "bg-[#FFEDD5] text-[#EA580C]",
   },
   {
     href: "/attendance/correction",
@@ -112,19 +141,30 @@ export default function AttendancePage() {
   const [punchPolicy, setPunchPolicy] = useState<EssPunchPolicy | null>(null);
   const [punchSheet, setPunchSheet] = useState<"in" | "out" | null>(null);
   const [officeLabel, setOfficeLabel] = useState("Office");
+  const [leaveDays, setLeaveDays] = useState<Set<string>>(() => new Set());
 
   async function refresh() {
     const monthKey = todayStr.slice(0, 7);
-    const [att, meRes, sumRes, polRes] = await Promise.all([
+    const [att, meRes, sumRes, polRes, leaveRes] = await Promise.all([
       essService.attendance(),
       essService.me(),
       essService.attendanceSummary(monthKey),
       essService.punchPolicy(),
+      essService.leaveRequests().catch(() => ({ data: [] as EssLeaveRequest[] })),
     ]);
     setRows(att.data ?? []);
     setMe(meRes.data);
     setSummary(sumRes.data);
     setPunchPolicy(polRes.data);
+    const days = new Set<string>();
+    for (const leave of leaveRes.data ?? []) {
+      const st = (leave.status || "").toLowerCase();
+      if (!["approved", "manager_approved"].includes(st)) continue;
+      for (const d of eachDateInclusive(leave.start_date, leave.end_date)) {
+        days.add(d);
+      }
+    }
+    setLeaveDays(days);
   }
 
   useEffect(() => {
@@ -256,7 +296,6 @@ export default function AttendancePage() {
   const lateDays = summary?.late_days ?? 0;
   const overtimeH = (summary?.total_overtime_minutes ?? 0) / 60;
   const firstName = me?.display_name?.split(/\s+/)[0] ?? "there";
-  const calendar = useMemo(() => buildMonthGrid(todayStr), [todayStr]);
   const punchBusy = loading || pageLoading;
 
   if (showSuccess && today?.check_in_at && !today.check_out_at) {
@@ -401,62 +440,11 @@ export default function AttendancePage() {
         ))}
       </section>
 
-      <section className={`${ui.card} overflow-hidden p-5`}>
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-semibold text-[#0b1c30]">{calendar.label}</h3>
-          <IconCalendar size={18} className="text-[#64748B]" />
-        </div>
-        <div className="mb-2 grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase text-[#434655]">
-          {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((d) => (
-            <span key={d}>{d}</span>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {calendar.cells.map((cell, i) => {
-            const row = cell.iso ? findTodayRow(rows, cell.iso) : undefined;
-            const isToday = cell.iso === todayStr;
-            const st = (row?.attendance_status ?? "").toLowerCase();
-            const dotColor =
-              st === "late"
-                ? "bg-[#ba1a1a]"
-                : st === "work_from_home"
-                  ? "bg-[#712ae2]"
-                  : st === "absent"
-                    ? "bg-[#c3c6d7]"
-                    : row?.check_in_at
-                      ? "bg-[#10B981]"
-                      : null;
-            return (
-              <div
-                key={i}
-                className={`relative flex h-9 flex-col items-center justify-center rounded-full text-sm ${
-                  isToday
-                    ? "bg-[#2563eb] font-bold text-white"
-                    : cell.day
-                      ? "text-[#0b1c30]"
-                      : ""
-                }`}
-              >
-                {cell.day || ""}
-                {dotColor && !isToday ? (
-                  <span className={`absolute bottom-0.5 h-1 w-1 rounded-full ${dotColor}`} />
-                ) : null}
-                {isToday ? (
-                  <span className="absolute bottom-1 h-1 w-1 rounded-full bg-white" />
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-3 flex gap-4 text-xs text-[#434655]">
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-[#10B981]" /> Present
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-[#712ae2]" /> WFH
-          </span>
-        </div>
-      </section>
+      <AttendanceMonthCalendar
+        todayStr={todayStr}
+        rows={rows}
+        leaveDays={leaveDays}
+      />
 
       <AttendancePunchSheet
         open={punchSheet !== null}
@@ -617,23 +605,3 @@ function CheckInSuccess({
   );
 }
 
-function buildMonthGrid(todayIso: string) {
-  const base = new Date(`${todayIso}T12:00:00`);
-  const year = base.getFullYear();
-  const month = base.getMonth();
-  const label = base.toLocaleString(undefined, {
-    month: "long",
-    year: "numeric",
-  });
-  const first = new Date(year, month, 1);
-  const startPad = (first.getDay() + 6) % 7; // Monday-first
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells: { day: number | null; iso: string | null }[] = [];
-  for (let i = 0; i < startPad; i++) cells.push({ day: null, iso: null });
-  for (let d = 1; d <= daysInMonth; d++) {
-    const iso = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-    cells.push({ day: d, iso });
-  }
-  while (cells.length % 7 !== 0) cells.push({ day: null, iso: null });
-  return { label, cells };
-}

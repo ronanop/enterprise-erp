@@ -107,7 +107,7 @@ export function Screen({
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.background },
+  safe: { flex: 1, backgroundColor: "#F5F8FC" },
   body: { flex: 1 },
   overlay: {
     position: "absolute",

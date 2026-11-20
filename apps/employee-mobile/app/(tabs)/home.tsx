@@ -1,44 +1,279 @@
-import { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
-import { AppHeader } from "@/components/AppHeader";
-import { OfflineBanner } from "@/components/OfflineBanner";
-import { QuickAction, quickToneColor } from "@/components/QuickAction";
 import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from "react";
+import {
+  Dimensions,
+  Image,
+  ImageBackground,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { useFocusEffect, useRouter } from "expo-router";
+import { CacheBrandLogo } from "@/components/CacheBrandLogo";
+import { NotificationBell } from "@/components/AppHeader";
+import { OfflineBanner } from "@/components/OfflineBanner";
+import {
+  IconBriefcase,
   IconCalendar,
+  IconCheck,
+  IconChevronRight,
   IconClock,
-  IconFingerprint,
-  IconHelp,
-  IconHome,
+  IconDocument,
+  IconGrid,
+  IconHouse,
+  IconLayers,
   IconLocation,
-  IconWallet,
+  IconMeetingRoom,
+  IconPlane,
+  IconPolicy,
+  IconSun,
+  IconUser,
+  IconUsers,
+  type IconProps,
 } from "@/components/icons";
-import { Card, ErrorBox, Screen } from "@/components/ui";
+import { AlertBox } from "@/components/ui/AlertBox";
+import { Avatar } from "@/components/ui/Avatar";
+import { Screen } from "@/components/ui/Screen";
 import { useAuth } from "@/context/auth-context";
+import { DAILY_QUOTES, quoteIndexForDate } from "@/data/daily-quotes";
 import { usePushRegistration } from "@/hooks/use-push-registration";
+import {
+  fetchLiveLocationLabel,
+  type WorkLocationFence,
+} from "@/lib/live-location";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
-import type { EssAttendance } from "@/types/api";
-import { colors } from "@/theme/colors";
-import { RADIUS_CARD, RADIUS_FULL, text } from "@/theme/tokens";
+import type {
+  EssApprovalItem,
+  EssAttendance,
+  EssHolidayCalendar,
+  EssMeetingBooking,
+} from "@/types/api";
 import {
-  formatHmsSince,
   formatTime,
   greetingForNow,
   hoursBetween,
   todayLocalDate,
 } from "@/utils/datetime";
 
-const DAILY_GOAL_H = 8;
+type QuickActionDef = {
+  href: string;
+  label: string;
+  Icon: (props: IconProps) => ReactElement;
+  tile: string;
+  border: string;
+  glow: string;
+  fg: string;
+};
+
+const QUICK_ACTIONS: QuickActionDef[] = [
+  {
+    href: "/(tabs)/leave?apply=1",
+    label: "Apply Leave",
+    Icon: IconCalendar,
+    tile: "#F6FCF8",
+    border: "#B7E4C7",
+    glow: "#BBF7D0",
+    fg: "#16A34A",
+  },
+  {
+    href: "/(tabs)/attendance/wfh",
+    label: "WFH",
+    Icon: IconHouse,
+    tile: "#F9F7FF",
+    border: "#D4C8F8",
+    glow: "#DDD6FE",
+    fg: "#7C3AED",
+  },
+  {
+    href: "/(tabs)/attendance/on-duty",
+    label: "On Duty",
+    Icon: IconBriefcase,
+    tile: "#FFF9F4",
+    border: "#F5CFA8",
+    glow: "#FED7AA",
+    fg: "#EA580C",
+  },
+  {
+    href: "/(tabs)/attendance/correction",
+    label: "Correction",
+    Icon: IconClock,
+    tile: "#FFF7F8",
+    border: "#F5B8C2",
+    glow: "#FECDD3",
+    fg: "#E11D48",
+  },
+  {
+    href: "/(tabs)/payslips",
+    label: "Payslip",
+    Icon: IconDocument,
+    tile: "#F6F9FF",
+    border: "#B8CFF5",
+    glow: "#BFDBFE",
+    fg: "#2563EB",
+  },
+  {
+    href: "/(tabs)/attendance/compoff",
+    label: "Comp Off",
+    Icon: IconLayers,
+    tile: "#F8F6FF",
+    border: "#D4C8F8",
+    glow: "#DDD6FE",
+    fg: "#7C3AED",
+  },
+  {
+    href: "/rooms",
+    label: "Meeting Rooms",
+    Icon: IconMeetingRoom,
+    tile: "#F5FAFD",
+    border: "#A8D5F0",
+    glow: "#BAE6FD",
+    fg: "#0284C7",
+  },
+];
+
+const MORE_TOGGLE = {
+  tile: "#F5FBFA",
+  border: "#A7E4D8",
+  glow: "#99F6E4",
+  fg: "#0D9488",
+};
+
+const MORE_ACTIONS: QuickActionDef[] = [
+  {
+    href: "/(tabs)/attendance/on-tour",
+    label: "On Tour",
+    Icon: IconPlane,
+    tile: "#FFF9F4",
+    border: "#F5CFA8",
+    glow: "#FED7AA",
+    fg: "#EA580C",
+  },
+  {
+    href: "/compliance",
+    label: "Policy",
+    Icon: IconPolicy,
+    tile: "#F8F6FF",
+    border: "#D4C8F8",
+    glow: "#DDD6FE",
+    fg: "#7C3AED",
+  },
+];
+
+const MANAGER_MORE_ACTIONS: QuickActionDef[] = [
+  {
+    href: "/team",
+    label: "Team",
+    Icon: IconUsers,
+    tile: "#EEF2FF",
+    border: "#C7D2FE",
+    glow: "#BFDBFE",
+    fg: "#004ac6",
+  },
+];
+
+const MANAGER_QUICK_ACTION: QuickActionDef = {
+  href: "/approvals",
+  label: "Approvals",
+  Icon: IconCheck,
+  tile: "#EEF2FF",
+  border: "#C7D2FE",
+  glow: "#BFDBFE",
+  fg: "#004ac6",
+};
+
+const PRIMARY_ACTION_SLOTS = 7;
+/** Web: px-4 (16) gutters + gap-2 (8) × 3 between 4 columns */
+const HOME_GUTTER = 16;
+const QA_GAP = 8;
+const QA_TILE_W =
+  (Dimensions.get("window").width - HOME_GUTTER * 2 - QA_GAP * 3) / 4;
+
+const APPROVAL_CATEGORY_LABEL: Record<EssApprovalItem["category"], string> = {
+  leave: "Leave",
+  on_duty: "On duty",
+  compoff: "Comp off",
+  attendance_correction: "Regularization",
+  wfh: "WFH",
+};
+
+function formatWorkingDuration(hours: number): string {
+  if (!Number.isFinite(hours) || hours <= 0) return "00h 00m";
+  const totalMinutes = Math.round(hours * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m`;
+}
+
+function formatShiftDay(d: Date): string {
+  return d.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function todayHolidayName(calendars: EssHolidayCalendar[]): string | null {
+  const today = todayLocalDate();
+  for (const cal of calendars) {
+    const rows = Array.isArray(cal.holidays_json) ? cal.holidays_json : [];
+    for (const row of rows) {
+      if (!row || typeof row !== "object") continue;
+      const date = typeof row.date === "string" ? row.date.slice(0, 10) : "";
+      const name = typeof row.name === "string" ? row.name : "";
+      if (date === today && name) return name;
+    }
+  }
+  return null;
+}
+
+function formatBookingTime12(t: string | null | undefined): string {
+  if (!t) return "";
+  const raw = String(t).slice(0, 5);
+  const [hh, mm] = raw.split(":").map(Number);
+  if (Number.isNaN(hh)) return raw;
+  const period = hh >= 12 ? "PM" : "AM";
+  const h12 = hh % 12 || 12;
+  return `${String(h12).padStart(2, "0")}:${String(mm || 0).padStart(2, "0")} ${period}`;
+}
+
+function formatBookingTimeLabel(b: EssMeetingBooking): string {
+  const start = formatBookingTime12(b.start_time);
+  if (start) return start;
+  return "All Day";
+}
+
+function isActiveBooking(status: string): boolean {
+  const s = status.toLowerCase();
+  return s !== "cancelled" && s !== "rejected";
+}
 
 export default function HomeScreen() {
   const router = useRouter();
   const { me, status } = useAuth();
   const [today, setToday] = useState<EssAttendance | null>(null);
+  const [holidayName, setHolidayName] = useState<string | null>(null);
+  const [todayMeetings, setTodayMeetings] = useState<EssMeetingBooking[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [timer, setTimer] = useState("00:00:00");
-  const [unread, setUnread] = useState(0);
   const [now, setNow] = useState(() => new Date());
+  const [workedH, setWorkedH] = useState(0);
+  const [quoteIndex, setQuoteIndex] = useState(() => quoteIndexForDate());
+  const [liveLocation, setLiveLocation] = useState<string | null>(null);
+  const [liveLocationLoading, setLiveLocationLoading] = useState(true);
+  const [teamApprovals, setTeamApprovals] = useState<EssApprovalItem[]>([]);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const isManager = Boolean(me?.can_approve_team_leave || me?.is_manager);
 
   usePushRegistration(status === "signedIn");
 
@@ -47,25 +282,85 @@ export default function HomeScreen() {
     return () => clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    setLiveLocationLoading(true);
+    (async () => {
+      let workLocations: WorkLocationFence[] = [];
+      let homeOfficeName: string | null = null;
+      try {
+        const pol = await essService.punchPolicy();
+        workLocations = (pol.data?.work_locations ?? []) as WorkLocationFence[];
+        homeOfficeName = pol.data?.home_office_name ?? null;
+        const quick =
+          homeOfficeName?.trim() ||
+          workLocations.find((loc) => loc.location_name?.trim())?.location_name ||
+          null;
+        if (!cancelled && quick) {
+          setLiveLocation(quick);
+          setLiveLocationLoading(false);
+        }
+      } catch {
+        workLocations = [];
+        homeOfficeName = null;
+      }
+      const label = await fetchLiveLocationLabel({
+        workLocations,
+        homeOfficeName,
+      });
+      if (cancelled) return;
+      setLiveLocation(label);
+      setLiveLocationLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const load = useCallback(async () => {
+    if (!me) return;
     try {
-      const [attRes, unreadRes] = await Promise.all([
+      const [attRes, holidayRes, bookingRes, unreadRes] = await Promise.all([
         essService.attendance(),
-        essService.notificationUnreadCount(),
+        essService.holidays().catch(() => ({ data: [] as EssHolidayCalendar[] })),
+        essService
+          .myMeetingBookings()
+          .catch(() => ({ data: [] as EssMeetingBooking[] })),
+        essService.notificationUnreadCount().catch(() => ({
+          data: { unread_count: 0 },
+        })),
       ]);
       const todayStr = todayLocalDate();
       setToday(
-        (attRes.data ?? []).find((row) => row.attendance_date === todayStr) ??
-          null,
+        (attRes.data ?? []).find(
+          (row) => String(row.attendance_date).slice(0, 10) === todayStr,
+        ) ?? null,
       );
+      setHolidayName(todayHolidayName(holidayRes.data ?? []));
+      const meetings = (bookingRes.data ?? [])
+        .filter(
+          (b) =>
+            String(b.request_date).slice(0, 10) === todayStr &&
+            isActiveBooking(b.status),
+        )
+        .sort((a, b) =>
+          (a.start_time || "").localeCompare(b.start_time || ""),
+        );
+      setTodayMeetings(meetings);
       setUnread(unreadRes.data?.unread_count ?? 0);
       setError(null);
     } catch (err) {
-      setError(
-        err instanceof ApiClientError ? err.message : "Failed to load home",
-      );
+      const message =
+        err instanceof ApiClientError ? err.message : "Failed to load home";
+      if (/company scope mismatch/i.test(message)) {
+        setError(null);
+        setToday(null);
+        setTodayMeetings([]);
+      } else {
+        setError(message);
+      }
     }
-  }, []);
+  }, [me]);
 
   useFocusEffect(
     useCallback(() => {
@@ -73,461 +368,1085 @@ export default function HomeScreen() {
     }, [load]),
   );
 
+  useEffect(() => {
+    if (!me?.can_approve_team_leave) {
+      setTeamApprovals([]);
+      return;
+    }
+    let cancelled = false;
+    essService
+      .approvals()
+      .then((res) => {
+        if (cancelled) return;
+        setTeamApprovals(
+          (res.data ?? []).filter((row) => row.category !== "compoff"),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setTeamApprovals([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [me?.can_approve_team_leave, me?.employee_id]);
+
   const punchDone = Boolean(today?.check_out_at);
   const punchedIn = Boolean(today?.check_in_at) && !punchDone;
 
   useEffect(() => {
     const tick = () => {
       if (today?.check_in_at && !today.check_out_at) {
-        setTimer(formatHmsSince(today.check_in_at));
+        setWorkedH(hoursBetween(today.check_in_at));
       } else if (today?.check_in_at && today.check_out_at) {
-        setTimer(
-          formatHmsSince(
+        setWorkedH(
+          hoursBetween(
             today.check_in_at,
             new Date(today.check_out_at).getTime(),
           ),
         );
+      } else if (today?.total_hours != null) {
+        setWorkedH(Number(today.total_hours) || 0);
       } else {
-        setTimer("00:00:00");
+        setWorkedH(0);
       }
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [today?.check_in_at, today?.check_out_at]);
+  }, [today?.check_in_at, today?.check_out_at, today?.total_hours]);
 
-  const workedH =
-    punchedIn && today?.check_in_at
-      ? hoursBetween(today.check_in_at)
-      : today?.total_hours != null
-        ? Number(today.total_hours)
-        : 0;
-  const pct = Math.min(100, Math.round((workedH / DAILY_GOAL_H) * 100));
-  const firstName = me?.display_name?.split(/\s+/)[0] ?? "there";
-  const pending = me?.pending_approvals_count ?? 0;
+  const fullName = me?.display_name?.trim() || "there";
+  const greeting = greetingForNow(now);
+  const checkInLabel = today?.check_in_at ? formatTime(today.check_in_at) : "--:--";
+  const checkOutLabel = today?.check_out_at
+    ? formatTime(today.check_out_at)
+    : "--:--";
 
-  const dateLine = now.toLocaleDateString("en-IN", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-  const timeLine = now.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  const progressPct = useMemo(() => {
+    if (!punchedIn && !punchDone) return 0;
+    if (punchDone) return 100;
+    return Math.min(92, Math.max(18, Math.round((workedH / 8) * 100)));
+  }, [punchedIn, punchDone, workedH]);
+
+  const punchSource = (today?.source || "").toLowerCase();
+  const machinePunch =
+    punchSource === "biometric" || punchSource === "device";
+  const statusLabel = punchDone
+    ? "Day complete"
+    : punchedIn
+      ? machinePunch
+        ? "Checked in (machine)"
+        : "You're Working"
+      : "Not checked in";
+
+  const primaryHref = "/(tabs)/attendance";
+  const primaryLabel = punchDone
+    ? "View Attendance"
+    : punchedIn
+      ? "Check Out"
+      : "Check In";
+
+  const { primaryActions, moreActions } = useMemo(() => {
+    const candidates = isManager
+      ? [
+          MANAGER_QUICK_ACTION,
+          ...QUICK_ACTIONS.filter((a) => a.href !== "/approvals"),
+        ]
+      : QUICK_ACTIONS;
+    const primary = candidates.slice(0, PRIMARY_ACTION_SLOTS);
+    const overflow = candidates.slice(PRIMARY_ACTION_SLOTS);
+    const extras = [
+      ...(isManager ? MANAGER_MORE_ACTIONS : []),
+      ...MORE_ACTIONS,
+      ...overflow,
+    ].filter(
+      (a, idx, arr) =>
+        !primary.some((p) => p.href === a.href) &&
+        arr.findIndex((x) => x.href === a.href) === idx,
+    );
+    return { primaryActions: primary, moreActions: extras };
+  }, [isManager]);
+
+  const gridActions = moreOpen
+    ? [...primaryActions, ...moreActions]
+    : primaryActions;
+
+  const barWidthPct = punchDone
+    ? 100
+    : punchedIn || today?.check_in_at
+      ? Math.min(Math.max(progressPct, 12), 50)
+      : 0;
 
   return (
     <Screen
       scroll
       tabClearance
       banner={<OfflineBanner />}
-      header={<AppHeader name={me?.display_name} unreadCount={unread} />}
+      style={styles.screen}
       contentStyle={styles.content}
     >
-      {error ? <ErrorBox>{error}</ErrorBox> : null}
+      {/* Hero */}
+      <View style={styles.heroWrap}>
+        <ImageBackground
+          source={require("../../assets/images/home/hero-building-v2.jpg")}
+          style={styles.heroImage}
+          imageStyle={styles.heroImageInner}
+          // Web object-position: 92% 72% — bias building to lower-right
+        >
+          <LinearGradient
+            colors={["#F7FAFD", "rgba(247,250,253,0.75)", "transparent"]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.heroWashLeft}
+          />
+          <LinearGradient
+            colors={["transparent", "#F7FAFD"]}
+            style={styles.heroWashBottom}
+          />
+        </ImageBackground>
 
-      {/* Greeting */}
-      <View style={styles.section}>
-        <View>
-          <Text style={styles.greeting}>
-            {greetingForNow(now)}, {firstName}
-          </Text>
-          <View style={styles.dateRow}>
-            <Text style={text.muted}>{dateLine}</Text>
-            <Text style={text.muted}>·</Text>
-            <Text style={[text.muted, styles.mono]}>{timeLine}</Text>
-          </View>
-        </View>
-
-        {me?.can_approve_team_leave || me?.is_manager ? (
-          <Pressable onPress={() => router.push("/approvals")}>
-            <Card style={styles.approvalCard}>
-              <View style={styles.approvalCopy}>
-                <Text style={styles.approvalTitle}>Team approvals</Text>
-                <Text style={text.muted}>
-                  Leave, on-duty, attendance corrections
-                </Text>
+        <View style={styles.heroContent}>
+          <View style={styles.headerRow}>
+            <CacheBrandLogo height={40} />
+            <View style={styles.headerRight}>
+              <View style={styles.bellWrap}>
+                <NotificationBell count={unread} />
               </View>
-              {pending > 0 ? (
-                <View style={styles.pendingPill}>
-                  <Text style={styles.pendingText}>
-                    {pending > 99 ? "99+" : pending}
-                  </Text>
-                </View>
-              ) : (
-                <Text style={styles.openLink}>Open</Text>
-              )}
-            </Card>
-          </Pressable>
-        ) : null}
-      </View>
-
-      {/* Current status */}
-      <Card style={styles.statusCard}>
-        <View style={styles.statusTop}>
-          <View style={styles.statusLeft}>
-            <Text style={styles.eyebrow}>Current Status</Text>
-            <View style={styles.statusRow}>
-              <View
-                style={[
-                  styles.dot,
-                  {
-                    backgroundColor: punchedIn
-                      ? colors.tertiaryContainer
-                      : punchDone
-                        ? colors.success
-                        : colors.outlineVariant,
-                  },
-                ]}
-              />
-              <Text style={styles.statusText}>
-                {punchDone
-                  ? "Day complete"
-                  : punchedIn
-                    ? "Checked In"
-                    : "Not checked in"}
-              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Profile"
+                onPress={() => router.push("/(tabs)/profile")}
+              >
+                <Avatar
+                  name={me?.display_name ?? ""}
+                  size="sm"
+                  ring
+                  photoUrl={me?.photo_url}
+                />
+              </Pressable>
             </View>
-            <Text style={text.muted}>
-              {today?.check_in_at
-                ? `Since ${formatTime(today.check_in_at)}`
-                : "Tap Check In when you arrive"}
+          </View>
+
+          {error ? (
+            <View style={styles.errorWrap}>
+              <AlertBox>{error}</AlertBox>
+            </View>
+          ) : null}
+
+          <View style={styles.greetingBlock}>
+            <Text style={styles.greetingLine}>{greeting},</Text>
+            <Text style={styles.greetingLine}>
+              {fullName}{" "}
+              <Text style={styles.wave}>👋</Text>
+            </Text>
+            <Text style={styles.subGreeting}>
+              {"Here's your day at a glance."}
             </Text>
           </View>
-          <View style={styles.statusRight}>
-            <Text style={styles.workingLabel}>Working Hours</Text>
-            <Text style={styles.timer}>{timer}</Text>
-          </View>
-        </View>
 
-        <View style={styles.goalBlock}>
-          <View style={styles.goalRow}>
-            <Text style={styles.goalLabel}>Daily Goal: {DAILY_GOAL_H}h</Text>
-            <Text style={styles.goalPct}>{pct}% Completed</Text>
-          </View>
-          <View style={styles.barTrack}>
-            <View style={[styles.barFill, { width: `${pct}%` }]} />
-          </View>
-        </View>
-      </Card>
-
-      {/* Quick actions */}
-      <View style={styles.section}>
-        <Text style={styles.sectionHeading}>Quick Actions</Text>
-
-        <View style={styles.grid}>
-          <QuickAction
-            label={punchDone ? "Attendance" : punchedIn ? "Check Out" : "Check In"}
-            tone={punchDone ? "default" : "primary"}
-            icon={
-              <IconFingerprint
-                size={28}
-                color={quickToneColor(punchDone ? "default" : "primary")}
-              />
-            }
-            onPress={() => router.push("/(tabs)/attendance")}
-          />
-          <QuickAction
-            label="Apply Leave"
-            tone="violet"
-            icon={<IconCalendar size={28} color={quickToneColor("violet")} />}
-            onPress={() => router.push("/(tabs)/leave")}
-          />
-          <QuickAction
-            label="Payslip"
-            tone="emerald"
-            icon={<IconWallet size={28} color={quickToneColor("emerald")} />}
-            onPress={() => router.push("/(tabs)/payslips")}
-          />
-          <QuickAction
-            label="Correction"
-            tone="amber"
-            icon={<IconClock size={28} color={quickToneColor("amber")} />}
-            onPress={() => router.push("/(tabs)/attendance/correction")}
-          />
-        </View>
-
-        <View style={styles.grid}>
-          <QuickAction
-            label="WFH"
-            icon={<IconHome size={28} color={quickToneColor("default")} />}
-            onPress={() => router.push("/(tabs)/attendance/wfh")}
-          />
-          <QuickAction
-            label="Meeting rooms"
-            tone="violet"
-            icon={<IconLocation size={28} color={quickToneColor("violet")} />}
-            onPress={() => router.push("/rooms")}
-          />
-          <QuickAction
-            label="Help"
-            tone="amber"
-            icon={<IconHelp size={28} color={quickToneColor("amber")} />}
-            onPress={() => router.push("/support")}
-          />
-          <View style={styles.gridSpacer} />
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipsRow}
+          >
+            <InfoChip
+              Icon={IconUser}
+              label={me?.employee_code || "—"}
+              strong
+            />
+            <InfoChip
+              Icon={IconUser}
+              label={me?.designation || "Employee"}
+              strong
+            />
+            <InfoChip
+              Icon={IconLocation}
+              label={
+                liveLocation ||
+                (liveLocationLoading
+                  ? "Locating…"
+                  : me?.branch_name || me?.company_name || "Office")
+              }
+              strong
+            />
+          </ScrollView>
         </View>
       </View>
 
-      {/* Shortcuts */}
-      <View style={styles.section}>
-        <View style={styles.sectionRow}>
-          <Text style={styles.sectionHeading}>Quick shortcuts</Text>
+      <View style={styles.body}>
+        {/* Attendance card */}
+        <View style={styles.attCard}>
+          <View style={styles.statusRow}>
+            <View
+              style={[
+                styles.statusDot,
+                {
+                  backgroundColor:
+                    punchedIn || punchDone ? "#12B76A" : "#94A3B8",
+                },
+              ]}
+            />
+            <Text style={styles.statusLabel}>{statusLabel}</Text>
+          </View>
+          <View style={styles.shiftRow}>
+            <Text style={styles.shiftDate}>{formatShiftDay(now)}</Text>
+            <Text style={styles.shiftTime}>Shift: 09:30 AM – 06:30 PM</Text>
+          </View>
+
+          <View style={styles.timelineBlock}>
+            <View style={styles.barRow}>
+              <View style={styles.barTrack}>
+                <View style={[styles.barFill, { width: `${barWidthPct}%` }]} />
+              </View>
+              <View style={styles.nodesRow}>
+                <View
+                  style={[
+                    styles.nodeSm,
+                    today?.check_in_at
+                      ? styles.nodeFilled
+                      : styles.nodeEmpty,
+                  ]}
+                />
+                <View style={styles.sunNode}>
+                  <IconSun size={14} color="#F59E0B" />
+                </View>
+                <View
+                  style={[
+                    styles.nodeSm,
+                    punchDone ? styles.nodeFilled : styles.nodeEmpty,
+                  ]}
+                />
+              </View>
+            </View>
+
+            <View style={styles.timesRow}>
+              <View style={styles.timeColLeft}>
+                <Text
+                  style={[
+                    styles.timeValueSm,
+                    !today?.check_in_at && styles.timeMuted,
+                  ]}
+                >
+                  {today?.check_in_at ? checkInLabel : "--:--"}
+                </Text>
+                <Text style={styles.timeCap}>Check In</Text>
+              </View>
+              <View style={styles.timeColCenter}>
+                <Text style={styles.timeValueLg}>
+                  {formatWorkingDuration(workedH)}
+                </Text>
+                <Text style={styles.timeCap}>Working</Text>
+              </View>
+              <View style={styles.timeColRight}>
+                <Text
+                  style={[
+                    styles.timeValueSm,
+                    !punchDone && styles.timeMuted,
+                  ]}
+                >
+                  {checkOutLabel}
+                </Text>
+                <Text style={styles.timeCap}>Check Out</Text>
+              </View>
+            </View>
+          </View>
+
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="View announcements"
-            onPress={() => router.push("/announcements")}
-            hitSlop={8}
+            onPress={() => router.push(primaryHref)}
+            style={({ pressed }) => [
+              styles.primaryBtn,
+              pressed && styles.pressed,
+            ]}
           >
-            <Text style={styles.viewAll}>Announcements</Text>
+            <Text style={styles.primaryBtnText}>{primaryLabel}</Text>
+            <Text style={styles.primaryBtnArrow}>→</Text>
           </Pressable>
         </View>
 
-        <View>
-          <TimelineItem
-            active
-            time={
-              today?.check_in_at
-                ? `${formatTime(today.check_in_at)} - now`
-                : "Attendance"
-            }
-            title={
-              punchedIn
-                ? "Active work session"
-                : punchDone
-                  ? "Session complete"
-                  : "Start your day"
-            }
-            subtitle={
-              me?.designation
-                ? `${me.designation} · Employee Portal`
-                : "Office attendance"
-            }
-            onPress={() => router.push("/(tabs)/attendance")}
-          />
-          <TimelineItem
-            soft
-            time="Leave"
-            title="Balances & requests"
-            subtitle="Check balances and apply for leave"
-            onPress={() => router.push("/(tabs)/leave")}
-          />
-          <TimelineItem
-            soft
-            last
-            time="Salary"
-            title="Latest payslips"
-            subtitle="View and download salary documents"
-            onPress={() => router.push("/(tabs)/payslips")}
-          />
+        {/* Manager approvals */}
+        {isManager ? (
+          <View style={styles.mgrCard}>
+            <View style={styles.mgrHead}>
+              <View style={styles.mgrTitleRow}>
+                <View style={styles.mgrIcon}>
+                  <IconCheck size={16} color="#ffffff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.mgrTitle}>Team Approvals</Text>
+                  <Text style={styles.mgrSub}>
+                    Requests from people who report to you
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.mgrBadge}>
+                <Text style={styles.mgrBadgeText}>
+                  {me?.pending_approvals_count ?? teamApprovals.length}
+                </Text>
+              </View>
+            </View>
+
+            {teamApprovals.length === 0 ? (
+              <Text style={styles.mgrEmpty}>
+                No pending team requests right now.
+              </Text>
+            ) : (
+              <View style={styles.mgrList}>
+                {teamApprovals.slice(0, 3).map((item) => (
+                  <Pressable
+                    key={`${item.category}:${item.id}`}
+                    onPress={() => router.push("/approvals")}
+                    style={styles.mgrRow}
+                  >
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text style={styles.mgrCat}>
+                        {APPROVAL_CATEGORY_LABEL[item.category]}
+                      </Text>
+                      <Text style={styles.mgrName} numberOfLines={1}>
+                        {item.display_name}
+                      </Text>
+                      <Text style={styles.mgrDetail} numberOfLines={1}>
+                        {item.detail}
+                      </Text>
+                    </View>
+                    <IconChevronRight size={16} color="#94A3B8" />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            <Pressable
+              onPress={() => router.push("/approvals")}
+              style={({ pressed }) => [
+                styles.mgrCta,
+                pressed && styles.pressed,
+              ]}
+            >
+              <Text style={styles.mgrCtaText}>Open team inbox →</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        <DailyQuoteBanner index={quoteIndex} onIndexChange={setQuoteIndex} />
+
+        {/* Quick Actions */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>
+            Quick Actions
+          </Text>
+          <View style={styles.qaGrid}>
+            {gridActions.map((item) => (
+              <Pressable
+                key={item.href + item.label}
+                onPress={() => router.push(item.href as never)}
+                style={({ pressed }) => [
+                  styles.qaTile,
+                  {
+                    width: QA_TILE_W,
+                    backgroundColor: item.tile,
+                    borderColor: item.border,
+                  },
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View style={styles.qaIconWrap}>
+                  <View
+                    style={[styles.qaGlow, { backgroundColor: item.glow }]}
+                  />
+                  <item.Icon size={26} color={item.fg} filled />
+                </View>
+                <Text style={styles.qaLabel} numberOfLines={2}>
+                  {item.label}
+                </Text>
+              </Pressable>
+            ))}
+            <Pressable
+              onPress={() => setMoreOpen((o) => !o)}
+              style={({ pressed }) => [
+                styles.qaTile,
+                {
+                  width: QA_TILE_W,
+                  backgroundColor: MORE_TOGGLE.tile,
+                  borderColor: MORE_TOGGLE.border,
+                },
+                moreOpen && styles.qaMoreOpen,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={styles.qaIconWrap}>
+                <View
+                  style={[styles.qaGlow, { backgroundColor: MORE_TOGGLE.glow }]}
+                />
+                <IconGrid size={26} color={MORE_TOGGLE.fg} filled />
+              </View>
+              <Text style={styles.qaLabel}>{moreOpen ? "Less" : "More"}</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Upcoming Today */}
+        <View style={[styles.section, { paddingBottom: 4 }]}>
+          <Text style={[styles.sectionTitle, styles.sectionTitleSpaced]}>
+            Upcoming Today
+          </Text>
+          {todayMeetings.length === 0 && !holidayName ? (
+            <View style={styles.emptyUpcoming}>
+              <Text style={styles.emptyUpcomingText}>
+                Nothing scheduled for today.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.upcomingCard}>
+              {todayMeetings.map((b, idx) => (
+                <UpcomingRow
+                  key={b.id}
+                  tone="purple"
+                  Icon={IconMeetingRoom}
+                  title={b.title || "Meeting"}
+                  subtitle={[b.room_name, b.status.replace(/_/g, " ")]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  time={formatBookingTimeLabel(b)}
+                  divided={
+                    idx < todayMeetings.length - 1 || Boolean(holidayName)
+                  }
+                  onPress={() => router.push("/rooms")}
+                />
+              ))}
+              {holidayName ? (
+                <UpcomingRow
+                  tone="green"
+                  Icon={IconPlane}
+                  title="Company Holiday"
+                  subtitle={holidayName}
+                  time="All Day"
+                  onPress={() => router.push("/(tabs)/leave/holidays")}
+                />
+              ) : null}
+            </View>
+          )}
         </View>
       </View>
     </Screen>
   );
 }
 
-function TimelineItem({
-  time,
-  title,
-  subtitle,
-  active,
-  soft,
-  last,
-  onPress,
+function DailyQuoteBanner({
+  index,
+  onIndexChange,
 }: {
-  time: string;
-  title: string;
-  subtitle: string;
-  active?: boolean;
-  soft?: boolean;
-  last?: boolean;
-  onPress?: () => void;
+  index: number;
+  onIndexChange: (next: number) => void;
+}) {
+  const touchX = useRef<number | null>(null);
+  const paused = useRef(false);
+  const quote = DAILY_QUOTES[index] ?? DAILY_QUOTES[0]!;
+
+  function goNext() {
+    onIndexChange((index + 1) % DAILY_QUOTES.length);
+  }
+
+  function goPrev() {
+    onIndexChange((index - 1 + DAILY_QUOTES.length) % DAILY_QUOTES.length);
+  }
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (paused.current) return;
+      onIndexChange((index + 1) % DAILY_QUOTES.length);
+    }, 5500);
+    return () => clearInterval(id);
+  }, [index, onIndexChange]);
+
+  return (
+    <View style={styles.quoteSection}>
+      <LinearGradient
+        colors={["#EDE7FF", "#F3EEFF", "#E8F1FF"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={styles.quoteCard}
+      >
+        <Pressable
+          style={styles.quoteCopy}
+          onPress={goNext}
+          onPressIn={() => {
+            paused.current = true;
+          }}
+          onPressOut={() => {
+            setTimeout(() => {
+              paused.current = false;
+            }, 4000);
+          }}
+          onTouchStart={(e) => {
+            paused.current = true;
+            touchX.current = e.nativeEvent.pageX;
+          }}
+          onTouchEnd={(e) => {
+            const start = touchX.current;
+            const end = e.nativeEvent.pageX;
+            touchX.current = null;
+            setTimeout(() => {
+              paused.current = false;
+            }, 4000);
+            if (start == null) return;
+            const delta = end - start;
+            if (Math.abs(delta) < 40) return;
+            if (delta < 0) goNext();
+            else goPrev();
+          }}
+        >
+          <Text style={styles.quoteTitle}>{quote.title}</Text>
+          <Text style={styles.quoteSub}>{quote.subtitle}</Text>
+          <View style={styles.dots}>
+            {DAILY_QUOTES.map((_, i) => (
+              <View
+                key={i}
+                style={i === index ? styles.dotActive : styles.dotIdle}
+              />
+            ))}
+          </View>
+        </Pressable>
+        <Image source={quote.image} style={styles.quoteImg} />
+        <Pressable
+          accessibilityLabel="Show next quote"
+          onPress={goNext}
+          style={styles.quoteNext}
+          hitSlop={8}
+        >
+          <IconChevronRight size={18} color="#7B61FF" />
+        </Pressable>
+      </LinearGradient>
+    </View>
+  );
+}
+
+function InfoChip({
+  Icon,
+  label,
+  strong = false,
+}: {
+  Icon: (props: IconProps) => ReactElement;
+  label: string;
+  strong?: boolean;
 }) {
   return (
+    <View style={styles.chip}>
+      <Icon size={13} color="#1A2B56" />
+      <Text
+        style={[styles.chipText, strong && styles.chipStrong]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function UpcomingRow({
+  tone,
+  Icon,
+  title,
+  subtitle,
+  time,
+  divided = false,
+  onPress,
+}: {
+  tone: "purple" | "green";
+  Icon: (props: IconProps) => ReactElement;
+  title: string;
+  subtitle: string;
+  time: string;
+  divided?: boolean;
+  onPress: () => void;
+}) {
+  const wrap = tone === "purple" ? "#EEF2FF" : "#ECFDF5";
+  const icon = tone === "purple" ? "#6366F1" : "#12B76A";
+  return (
     <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${title}. ${subtitle}`}
       onPress={onPress}
-      disabled={!onPress}
-      style={styles.timelineRow}
+      style={[styles.upcomingRow, divided && styles.upcomingDivided]}
     >
-      <View style={styles.timelineRail}>
-        <View style={[styles.timelineDot, active ? styles.timelineDotActive : null]} />
-        {!last ? <View style={styles.timelineLine} /> : null}
+      <View style={[styles.upcomingIcon, { backgroundColor: wrap }]}>
+        <Icon size={18} color={icon} />
       </View>
-      <View style={[styles.timelineBody, last ? null : styles.timelineGap]}>
-        <Text style={[styles.timelineTime, active ? styles.timelineTimeActive : null]}>
-          {time}
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.upcomingTitle} numberOfLines={1}>
+          {title}
         </Text>
-        <View style={[styles.timelineCard, soft ? styles.timelineCardSoft : styles.timelineCardSolid]}>
-          <Text style={styles.timelineTitle}>{title}</Text>
-          <Text style={styles.timelineSub}>{subtitle}</Text>
-        </View>
+        <Text style={styles.upcomingSub} numberOfLines={1}>
+          {subtitle}
+        </Text>
       </View>
+      <Text style={styles.upcomingTime}>{time}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { paddingTop: 20, gap: 32 },
-  section: { gap: 12 },
+  screen: { backgroundColor: "#F7FAFD" },
+  content: { paddingHorizontal: 0, paddingTop: 0, gap: 0 },
 
-  greeting: {
-    fontSize: 28,
-    fontWeight: "700",
-    lineHeight: 34,
-    letterSpacing: -0.5,
-    color: colors.onSurface,
+  heroWrap: {
+    position: "relative",
+    minHeight: 250,
+    marginBottom: 0,
   },
-  dateRow: {
-    marginTop: 4,
+  heroImage: {
+    ...StyleSheet.absoluteFillObject,
+    height: 300,
+  },
+  heroImageInner: {
+    resizeMode: "cover",
+    // Approximate web object-position 92% 72%
+    width: "140%",
+    height: "140%",
+    marginLeft: "-28%",
+    marginTop: "-22%",
+  },
+  heroWashLeft: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: "55%",
+  },
+  heroWashBottom: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 96,
+  },
+  heroContent: {
+    zIndex: 2,
+    paddingHorizontal: HOME_GUTTER,
+    paddingTop: 12,
+    paddingBottom: 24,
+    minHeight: 250,
+    flexGrow: 1,
+  },
+  headerRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 0,
+  },
+  headerRight: {
+    flexDirection: "row",
     alignItems: "center",
     gap: 6,
   },
-  mono: { fontVariant: ["tabular-nums"] },
-
-  approvalCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  approvalCopy: { flex: 1, gap: 2 },
-  approvalTitle: { fontSize: 15, fontWeight: "600", color: colors.onSurface },
-  pendingPill: {
-    height: 32,
-    minWidth: 32,
-    borderRadius: RADIUS_FULL,
-    backgroundColor: colors.error,
+  bellWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.7)",
+    backgroundColor: "rgba(255,255,255,0.75)",
+    overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 8,
+    shadowColor: "#1A2B56",
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
-  pendingText: { color: "#ffffff", fontSize: 14, fontWeight: "700" },
-  openLink: { fontSize: 14, fontWeight: "600", color: colors.primary },
-
-  statusCard: { gap: 16 },
-  statusTop: {
+  errorWrap: { marginTop: 20, marginBottom: 12 },
+  greetingBlock: { marginTop: 24, maxWidth: "85%" },
+  greetingLine: {
+    fontSize: 26,
+    fontWeight: "700",
+    lineHeight: 30,
+    letterSpacing: -0.26,
+    color: "#0B1C30",
+  },
+  wave: { fontSize: 24 },
+  subGreeting: {
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 17,
+    color: "#64748B",
+  },
+  chipsRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "flex-end",
+    gap: 6,
+    paddingBottom: 4,
+    marginTop: 28,
+  },
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.7)",
+    backgroundColor: "rgba(255,255,255,0.75)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    maxWidth: 192,
+    shadowColor: "#1A2B56",
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+  },
+  chipText: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: "#1A2B56",
+    maxWidth: 160,
+    lineHeight: 12,
+  },
+  chipStrong: { fontWeight: "700" },
+
+  body: {
+    marginTop: -12,
+    paddingHorizontal: HOME_GUTTER,
+    gap: 16,
+    paddingBottom: 32,
+  },
+
+  attCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#E8EEF5",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    shadowColor: "#1A2B56",
+    shadowOpacity: 0.07,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  statusLabel: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#1A2B56",
+  },
+  shiftRow: {
+    marginTop: 8,
+    flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
     gap: 12,
   },
-  statusLeft: { flex: 1, gap: 4 },
-  eyebrow: {
-    fontSize: 12,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-    color: colors.primary,
+  shiftDate: { fontSize: 12, fontWeight: "500", color: "#64748B" },
+  shiftTime: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#64748B",
+    textAlign: "right",
   },
-  statusRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  statusText: { fontSize: 20, fontWeight: "600", color: colors.onSurface },
-  statusRight: { alignItems: "flex-end" },
-  workingLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.onSurfaceVariant,
-  },
-  timer: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: colors.primary,
-    fontVariant: ["tabular-nums"],
-  },
-
-  goalBlock: { gap: 8 },
-  goalRow: { flexDirection: "row", justifyContent: "space-between" },
-  goalLabel: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.onSurfaceVariant,
-  },
-  goalPct: { fontSize: 12, fontWeight: "600", color: colors.onSurface },
+  timelineBlock: { marginTop: 16 },
+  barRow: { height: 28, justifyContent: "center" },
   barTrack: {
-    height: 8,
-    width: "100%",
-    borderRadius: RADIUS_FULL,
-    backgroundColor: colors.surfaceHighest,
+    position: "absolute",
+    left: 8,
+    right: 8,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "#E8EDF5",
     overflow: "hidden",
   },
   barFill: {
     height: "100%",
-    borderRadius: RADIUS_FULL,
-    backgroundColor: colors.primary,
+    borderRadius: 999,
+    backgroundColor: "#12B76A",
   },
-
-  sectionHeading: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: colors.onSurface,
-    paddingHorizontal: 4,
-  },
-  sectionRow: {
+  nodesRow: {
     flexDirection: "row",
-    alignItems: "flex-end",
+    alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 4,
+    zIndex: 1,
   },
-  viewAll: { fontSize: 14, fontWeight: "500", color: colors.primary },
-  grid: { flexDirection: "row", gap: 10 },
-  gridSpacer: { flex: 1 },
+  nodeSm: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  nodeFilled: { backgroundColor: "#12B76A" },
+  nodeEmpty: {
+    backgroundColor: "#ffffff",
+    borderWidth: 2,
+    borderColor: "#CBD5E1",
+  },
+  sunNode: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#F6D98A",
+    backgroundColor: "#FFF8E8",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  timesRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "flex-start",
+  },
+  timeColLeft: { flex: 1, alignItems: "flex-start" },
+  timeColCenter: { flex: 1, alignItems: "center" },
+  timeColRight: { flex: 1, alignItems: "flex-end" },
+  timeValueSm: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#1A2B56",
+    fontVariant: ["tabular-nums"],
+  },
+  timeValueLg: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1A2B56",
+    fontVariant: ["tabular-nums"],
+  },
+  timeMuted: { color: "#94A3B8" },
+  timeCap: { fontSize: 11, fontWeight: "500", color: "#64748B", marginTop: 2 },
+  primaryBtn: {
+    marginTop: 14,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: "#1A2B56",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    shadowColor: "#1A2B56",
+    shadowOpacity: 0.18,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  primaryBtnText: { fontSize: 14, fontWeight: "600", color: "#ffffff" },
+  primaryBtnArrow: { fontSize: 15, color: "#ffffff" },
+  pressed: { opacity: 0.92, transform: [{ scale: 0.99 }] },
 
-  timelineRow: { flexDirection: "row", gap: 16 },
-  timelineRail: { alignItems: "center", width: 12 },
-  timelineDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: colors.outlineVariant,
+  mgrCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#C7D2FE",
+    backgroundColor: "#F5F7FF",
+    overflow: "hidden",
+    shadowColor: "#2563eb",
+    shadowOpacity: 0.08,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
   },
-  timelineDotActive: {
-    backgroundColor: colors.primary,
-    borderWidth: 4,
-    borderColor: colors.primaryFixed,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+  mgrHead: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 8,
   },
-  timelineLine: {
+  mgrTitleRow: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
+  mgrIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#004ac6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mgrTitle: { fontSize: 15, fontWeight: "700", color: "#1A2B56" },
+  mgrSub: { fontSize: 12, fontWeight: "500", color: "#64748B" },
+  mgrBadge: {
+    borderRadius: 999,
+    backgroundColor: "#004ac6",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  mgrBadgeText: { fontSize: 11, fontWeight: "700", color: "#ffffff" },
+  mgrEmpty: {
+    paddingHorizontal: 14,
+    paddingBottom: 14,
+    fontSize: 13,
+    fontWeight: "500",
+    color: "#64748B",
+  },
+  mgrList: { borderTopWidth: 1, borderTopColor: "#E2E8F0" },
+  mgrRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E2E8F0",
+  },
+  mgrCat: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
+    color: "#004ac6",
+  },
+  mgrName: { fontSize: 13, fontWeight: "700", color: "#0b1c30" },
+  mgrDetail: { fontSize: 12, color: "#64748B" },
+  mgrCta: {
+    marginHorizontal: 14,
+    marginVertical: 12,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#004ac6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  mgrCtaText: { fontSize: 13, fontWeight: "700", color: "#ffffff" },
+
+  quoteSection: { marginBottom: 20 },
+  quoteCard: {
+    minHeight: 88,
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    shadowColor: "#7B61FF",
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  quoteCopy: { flex: 1, minWidth: 0 },
+  quoteTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    lineHeight: 20,
+    color: "#1A2B56",
+  },
+  quoteSub: {
     marginTop: 4,
-    width: 2,
-    flex: 1,
-    backgroundColor: "rgba(195,198,215,0.4)",
+    fontSize: 12,
+    lineHeight: 16,
+    color: "#6B7280",
   },
-  timelineBody: { flex: 1 },
-  timelineGap: { paddingBottom: 24 },
-  timelineTime: {
-    marginBottom: 4,
+  dots: { marginTop: 10, flexDirection: "row", alignItems: "center", gap: 6 },
+  dotActive: {
+    width: 16,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: "#7B61FF",
+  },
+  dotIdle: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: "#C4B5FD",
+  },
+  quoteImg: {
+    width: 72,
+    height: 68,
+    borderRadius: 12,
+  },
+  quoteNext: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  section: { gap: 0 },
+  sectionTitle: { fontSize: 17, fontWeight: "600", color: "#1A2B56" },
+  sectionTitleSpaced: { marginBottom: 12 },
+  qaGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: QA_GAP,
+  },
+  qaTile: {
+    flexGrow: 0,
+    flexShrink: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 4,
+    paddingVertical: 8,
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
+  },
+  qaMoreOpen: {
+    borderColor: "rgba(13,148,136,0.55)",
+    borderWidth: 2,
+  },
+  qaIconWrap: {
+    width: 32,
+    height: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  qaGlow: {
+    position: "absolute",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    opacity: 0.35,
+  },
+  qaLabel: {
     fontSize: 12,
     fontWeight: "600",
-    color: colors.onSurfaceVariant,
+    lineHeight: 15,
+    letterSpacing: -0.2,
+    textAlign: "center",
+    color: "#1A2B56",
+    paddingHorizontal: 2,
   },
-  timelineTimeActive: { color: colors.primary },
-  timelineCard: {
-    width: "100%",
-    borderRadius: RADIUS_CARD,
+
+  emptyUpcoming: {
+    borderRadius: 16,
     borderWidth: 1,
-    padding: 16,
+    borderColor: "#E5EAF2",
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+    alignItems: "center",
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.03,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
-  timelineCardSoft: {
-    borderColor: "rgba(195,198,215,0.15)",
-    backgroundColor: colors.surfaceLow,
-    opacity: 0.9,
+  emptyUpcomingText: { fontSize: 13, color: "#64748B" },
+  upcomingCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E5EAF2",
+    backgroundColor: "#ffffff",
+    overflow: "hidden",
   },
-  timelineCardSolid: {
-    borderColor: "rgba(195,198,215,0.25)",
-    backgroundColor: colors.surfaceLowest,
+  upcomingRow: {
+    minHeight: 68,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
-  timelineTitle: { fontSize: 16, fontWeight: "600", color: colors.onSurface },
-  timelineSub: {
-    marginTop: 4,
-    fontSize: 14,
-    color: colors.onSurfaceVariant,
+  upcomingDivided: { borderBottomWidth: 1, borderBottomColor: "#EEF2F7" },
+  upcomingIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
   },
+  upcomingTitle: { fontSize: 14, fontWeight: "600", color: "#1A2B56" },
+  upcomingSub: { fontSize: 12, color: "#64748B" },
+  upcomingTime: { fontSize: 12, fontWeight: "600", color: "#64748B" },
 });

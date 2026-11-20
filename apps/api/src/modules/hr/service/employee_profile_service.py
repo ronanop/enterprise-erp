@@ -34,6 +34,7 @@ class EmployeeProfileService:
             )
         )
         payload = EmployeeProfileResponse.model_validate(row)
+        payload.has_profile_photo = bool(getattr(row, "profile_photo_uri", None))
         if emp is not None:
             payload.employee_code = emp.employee_code
             payload.first_name = emp.first_name
@@ -42,6 +43,25 @@ class EmployeeProfileService:
             payload.email = emp.email
             payload.designation = emp.designation
         return payload
+
+    def _apply_profile_photo(
+        self,
+        *,
+        company_id: UUID,
+        employee_id: UUID,
+        fields: dict,
+    ) -> dict:
+        photo = fields.pop("profile_photo_data_url", None)
+        if not photo or not str(photo).strip():
+            return fields
+        from modules.hr.service.profile_photo_storage import save_profile_photo_data_url
+
+        fields["profile_photo_uri"] = save_profile_photo_data_url(
+            company_id=company_id,
+            employee_id=employee_id,
+            data_url=str(photo),
+        )
+        return fields
 
     def list(self, ctx: TenantContext, company_id: UUID | None = None):
         cid = self._scope.resolve_company_id(ctx, company_id)
@@ -78,6 +98,9 @@ class EmployeeProfileService:
         self._scope.validate_branch_access(ctx, branch_id)
         self._master.get_employee(ctx, employee_id)
         fields = normalize_kyc_fields(fields)
+        fields = self._apply_profile_photo(
+            company_id=cid, employee_id=employee_id, fields=fields
+        )
         row = self._repo.create(
             ctx,
             company_id=cid,
@@ -100,6 +123,11 @@ class EmployeeProfileService:
             raise NotFoundException("Employee profile not found")
         self._engine.validate_writable(orm)
         fields = normalize_kyc_fields(fields)
+        fields = self._apply_profile_photo(
+            company_id=orm.company_id,
+            employee_id=orm.employee_id,
+            fields=fields,
+        )
         updated = self._repo.update(ctx, row_id, **fields)
         if updated is None:
             raise NotFoundException("Employee profile not found")

@@ -38,6 +38,7 @@ import type {
   EssPunch,
   EssSeparationItem,
   EssTeamLeaveItem,
+  EssTeamMember,
   EssTrainingItem,
 } from "@/types/api";
 import { env } from "@/utils/env";
@@ -296,8 +297,25 @@ export const essService = {
 
   listOnDuty: () =>
     env.useMock
-      ? wrapMock(async () => ({ success: true, message: "OK", data: [] }))
-      : apiClient("/ess/on-duty-requests"),
+      ? wrapMock(async () => ({
+          success: true,
+          message: "OK",
+          data: [
+            {
+              id: "mock-onduty-approved",
+              duty_date: new Date().toISOString().slice(0, 10),
+              end_date: null,
+              portion: "full_day",
+              duty_location: "Airtel Office",
+              purpose: "Client visit",
+              reason: null,
+              status: "approved",
+            },
+          ] satisfies import("@/types/api").EssOnDutyRequest[],
+        }))
+      : apiClient<import("@/types/api").EssOnDutyRequest[]>(
+          "/ess/on-duty-requests",
+        ),
 
   createOnDuty: (body: {
     duty_date: string;
@@ -320,9 +338,12 @@ export const essService = {
             purpose: body.purpose ?? null,
             reason: body.reason ?? null,
             status: "submitted",
-          },
+          } satisfies import("@/types/api").EssOnDutyRequest,
         }))
-      : apiClient("/ess/on-duty-requests", { method: "POST", body }),
+      : apiClient<import("@/types/api").EssOnDutyRequest>(
+          "/ess/on-duty-requests",
+          { method: "POST", body },
+        ),
 
   listWfh: () =>
     env.useMock
@@ -387,6 +408,36 @@ export const essService = {
           data: { id: "mock-token", platform: body.platform ?? "web", is_active: true },
         }))
       : apiClient("/ess/device-tokens", { method: "POST", body }),
+
+  listDetailUpdateRequests: () =>
+    env.useMock
+      ? wrapMock(async () => ({
+          success: true,
+          message: "OK",
+          data: [] as import("@/types/api").EssProfileUpdateRequest[],
+        }))
+      : apiClient<import("@/types/api").EssProfileUpdateRequest[]>(
+          "/ess/profile/detail-update-requests",
+        ),
+
+  createDetailUpdateRequest: (body?: { notes?: string }) =>
+    env.useMock
+      ? wrapMock(async () => ({
+          success: true,
+          message: "Update request submitted for HR review",
+          data: {
+            id: "mock-profile-update",
+            notes: body?.notes ?? null,
+            status: "submitted",
+            created_at: new Date().toISOString(),
+            decided_at: null,
+            decision_notes: null,
+          } satisfies import("@/types/api").EssProfileUpdateRequest,
+        }))
+      : apiClient<import("@/types/api").EssProfileUpdateRequest>(
+          "/ess/profile/detail-update-requests",
+          { method: "POST", body: body ?? {} },
+        ),
 
   bank: () =>
     env.useMock
@@ -647,10 +698,10 @@ export const essService = {
           success: true,
           message: "OK",
           data: {
-            name: null,
-            mobile: null,
-            blood_group: null,
-            relationship: null,
+            name: "Anil",
+            mobile: "+919876543210",
+            blood_group: "A+",
+            relationship: "Father",
           } satisfies EssEmergencyContact,
         }))
       : apiClient<EssEmergencyContact>("/ess/profile/emergency"),
@@ -686,6 +737,11 @@ export const essService = {
           data: body,
         }))
       : apiClient<EssEducationSkills>("/ess/profile/education", { method: "PATCH", body }),
+
+  teamMembers: () =>
+    env.useMock
+      ? wrapMock(async () => ({ success: true, message: "OK", data: [] as EssTeamMember[] }))
+      : apiClient<EssTeamMember[]>("/ess/team"),
 
   teamLeave: () =>
     env.useMock
@@ -923,6 +979,15 @@ export const essService = {
           `/ess/meeting-rooms/availability?on_date=${encodeURIComponent(onDate)}`,
         ),
 
+  meetingBookings: () =>
+    env.useMock
+      ? wrapMock(async () => ({
+          success: true,
+          message: "OK",
+          data: [] as EssMeetingBooking[],
+        }))
+      : apiClient<EssMeetingBooking[]>("/ess/meeting-rooms/bookings"),
+
   createMeetingBooking: (body: {
     room_id: string;
     title: string;
@@ -943,7 +1008,7 @@ export const essService = {
             request_date: body.request_date,
             start_time: body.start_time ?? null,
             end_time: body.end_time ?? null,
-            status: "approved",
+            status: "submitted",
             requested_by_employee_id: "mock",
           } satisfies EssMeetingBooking,
         }))
@@ -1021,7 +1086,21 @@ export const essService = {
 
   policies: () =>
     env.useMock
-      ? wrapMock(async () => ({ success: true, message: "OK", data: [] as EssPolicyItem[] }))
+      ? wrapMock(async () => ({
+          success: true,
+          message: "OK",
+          data: [
+            {
+              id: "mock-policy-1",
+              policy_code: "CODE_OF_CONDUCT",
+              title: "Code of Conduct",
+              policy_version: 1,
+              is_mandatory: true,
+              acknowledged: false,
+              step_count: 3,
+            },
+          ] satisfies EssPolicyItem[],
+        }))
       : apiClient<EssPolicyItem[]>("/ess/policies"),
 
   policyWalkthrough: (id: string) =>
@@ -1029,7 +1108,32 @@ export const essService = {
       ? wrapMock(async () => ({
           success: true,
           message: "OK",
-          data: null as EssPolicyWalkthrough | null,
+          data: {
+            id,
+            policy_code: "CODE_OF_CONDUCT",
+            title: "Code of Conduct",
+            policy_version: 1,
+            is_mandatory: true,
+            acknowledged: false,
+            step_count: 3,
+            steps: [
+              {
+                order: 0,
+                title: "Purpose",
+                body: "This policy sets expectations for professional behaviour at work.\n\n- Treat colleagues with respect\n- Protect company and client information\n- Follow local laws and company rules",
+              },
+              {
+                order: 1,
+                title: "Workplace conduct",
+                body: "## Respect\nHarassment, discrimination, or bullying are not tolerated.\n\n## Integrity\nReport conflicts of interest promptly to HR.",
+              },
+              {
+                order: 2,
+                title: "Acknowledgment",
+                body: "By continuing you confirm you have read this policy and will follow it.\n\n**Questions?** Contact HR.",
+              },
+            ],
+          } satisfies EssPolicyWalkthrough,
         }))
       : apiClient<EssPolicyWalkthrough>(`/ess/policies/${id}`),
 

@@ -43,6 +43,7 @@ from modules.hr.models.compoff_request import HrCompoffRequest
 from modules.hr.models.shift_rotation import HrShiftRotation
 from modules.hr.models.shift_swap import HrShiftSwapRequest
 from modules.hr.models.digital_onboarding import HrDigitalOnboarding
+from modules.hr.models.profile_update_request import HrProfileUpdateRequest
 
 __all__ = [
     "HrDesignation",
@@ -87,6 +88,7 @@ __all__ = [
     "HrTrainingRequest",
     "HrSeparation",
     "HrDigitalOnboarding",
+    "HrProfileUpdateRequest",
     "HrLifecycleEvent",
     "HrJobLevel",
     "HrGrade",

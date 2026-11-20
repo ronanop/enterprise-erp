@@ -77,7 +77,10 @@ const LEAVE_SICK = "lt-sick-002";
 const LEAVE_EARNED = "lt-earned-003";
 
 export const MOCK_DEMO_EMAIL = "demo@company.com";
-export const MOCK_DEMO_PASSWORD = "demo123";
+export const MOCK_DEMO_COMPANY = "CT";
+export const MOCK_DEMO_EMPLOYEE_CODE = "CT5354";
+export const MOCK_DEMO_PASSWORD = "CT535415102003";
+export const MOCK_DEMO_MOBILE = "9876543210";
 
 export const mockMe: EssMe = {
   employee_id: "emp-demo-001",
@@ -707,6 +710,112 @@ export const mockApi = {
     return delay(ok(token, "Logged in (demo)"));
   },
 
+  essCompanies() {
+    return delay(
+      ok([
+        {
+          company_code: "CDPL",
+          company_name: "Cache Digitech Private Limited",
+          legal_name: "Cache Digitech Pvt. Ltd.",
+        },
+        {
+          company_code: "CT",
+          company_name: "Cache Technologies & Infotech",
+          legal_name: "Cache Technologies & Infotech",
+        },
+      ]),
+    );
+  },
+
+  essCaptcha() {
+    const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 5; i += 1) {
+      code += alphabet[Math.floor(Math.random() * alphabet.length)];
+    }
+    return delay(
+      ok({
+        captcha_id: `mock-captcha-${Date.now()}`,
+        question: "Please type the below code",
+        code,
+        enabled: true,
+      }),
+    );
+  },
+
+  lookupEssPhone(body: { company_code: string; mobile: string }) {
+    if (!body.company_code.trim()) {
+      return Promise.reject(new Error("Company code is required"));
+    }
+    const digits = body.mobile.replace(/\D/g, "").slice(-10);
+    const expected = MOCK_DEMO_MOBILE.replace(/\D/g, "").slice(-10);
+    if (digits !== expected) {
+      return Promise.reject(new Error("Phone number not found for this company"));
+    }
+    const name =
+      body.company_code.trim().toUpperCase() === "CT"
+        ? "Cache Technologies & Infotech"
+        : "Cache Digitech Private Limited";
+    return delay(
+      ok({
+        identified: true,
+        company_code: body.company_code.trim().toUpperCase(),
+        company_name: name,
+        mobile_masked: `******${digits.slice(-4)}`,
+      }),
+    );
+  },
+
+  verifyEssPhone(body: {
+    company_code: string;
+    mobile: string;
+    captcha_id: string;
+    captcha_answer: string;
+  }) {
+    if (!body.company_code.trim()) {
+      return Promise.reject(new Error("Company code is required"));
+    }
+    if (!body.captcha_id.trim() || !body.captcha_answer.trim()) {
+      return Promise.reject(new Error("CAPTCHA verification failed"));
+    }
+    const digits = body.mobile.replace(/\D/g, "").slice(-10);
+    const expected = MOCK_DEMO_MOBILE.replace(/\D/g, "").slice(-10);
+    if (digits !== expected) {
+      return Promise.reject(new Error("Phone number not found for this company"));
+    }
+    const name =
+      body.company_code.trim().toUpperCase() === "CT"
+        ? "Cache Technologies & Infotech"
+        : "Cache Digitech Private Limited";
+    return delay(
+      ok({
+        verified: true,
+        company_code: body.company_code.trim().toUpperCase(),
+        company_name: name,
+        mobile_masked: `******${digits.slice(-4)}`,
+      }),
+    );
+  },
+
+  essLogin(companyCode: string, employeeCode: string, password: string) {
+    void password;
+    if (!companyCode.trim()) {
+      return Promise.reject(new Error("Company code is required"));
+    }
+    if (!employeeCode.trim()) {
+      return Promise.reject(new Error("Employee code is required"));
+    }
+    const token: TokenData = {
+      access_token: "mock-access-token-demo",
+      refresh_token: "mock-refresh-token-demo",
+      token_type: "bearer",
+      session_id: "mock-session-001",
+      mfa_required: false,
+      mfa_challenge_token: null,
+    };
+    return delay(ok(token, "Logged in (demo)"));
+  },
+
   meProfile: () => delay(ok(mockAuthProfile)),
   me: () => delay(ok(mockMe)),
 
@@ -792,6 +901,19 @@ export const mockApi = {
         selfie_required: false,
         face_at_punch_required: false,
         face_enrolled: false,
+        home_office_name: "Head Office",
+        work_locations: [
+          {
+            id: "mock-sul",
+            location_name: "Sultanpur, New Delhi",
+            city: "New Delhi",
+            latitude: null,
+            longitude: null,
+            geofence_radius_meters: null,
+            location_type: "office",
+            is_home: true,
+          },
+        ],
       }),
     ),
 

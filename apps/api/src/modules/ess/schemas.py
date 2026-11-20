@@ -27,7 +27,17 @@ class EssMeResponse(BaseModel):
     display_name: str
     department_name: str | None = None
     manager_name: str | None = None
+    company_name: str | None = None
+    branch_name: str | None = None
     date_of_birth: date | None = None
+    gender: str | None = None
+    marital_status: str | None = None
+    nationality: str | None = None
+    blood_group: str | None = None
+    current_address: str | None = None
+    permanent_address: str | None = None
+    has_profile_photo: bool = False
+    photo_url: str | None = None
     role_codes: list[str] = Field(default_factory=list)
     ess_role: str = "employee"
     is_manager: bool = False
@@ -280,6 +290,19 @@ class EssTeamLeaveItem(BaseModel):
     status: str
 
 
+class EssTeamMember(BaseModel):
+    """Direct report shown on the manager Team screen."""
+
+    employee_id: UUID
+    employee_code: str
+    display_name: str
+    designation: str
+    email: str
+    mobile: str
+    department_name: str | None = None
+    status: str
+
+
 class EssApprovalItem(BaseModel):
     """Pending manager action for a direct report."""
 
@@ -418,6 +441,19 @@ class EssWfhResponse(OrmModel):
     portion: str
     reason: str | None = None
     status: str
+
+
+class EssProfileUpdateCreate(BaseModel):
+    notes: str | None = None
+
+
+class EssProfileUpdateResponse(OrmModel):
+    id: UUID
+    notes: str | None = None
+    status: str
+    created_at: datetime | None = None
+    decided_at: datetime | None = None
+    decision_notes: str | None = None
 
 
 class EssCompoffCreate(BaseModel):

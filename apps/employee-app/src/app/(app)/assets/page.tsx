@@ -7,8 +7,6 @@ import {
   IconAlert,
   IconBack,
   IconBolt,
-  IconChevronRight,
-  IconFilter,
   IconGrid,
   IconHeadset,
   IconHistory,
@@ -16,8 +14,6 @@ import {
   IconLaptop,
   IconLayers,
   IconMobile,
-  IconPhone,
-  IconQrScan,
   IconSearch,
 } from "@/components/icons";
 import { CacheBrandLogo } from "@/components/cache-brand-logo";
@@ -76,13 +72,6 @@ const CATEGORIES: {
 
 const QUICK_ACTIONS = [
   {
-    href: "/assets/scan",
-    label: "Scan QR Code",
-    Icon: IconQrScan,
-    bg: "bg-[#E7F8EF]",
-    fg: "text-[#1FA971]",
-  },
-  {
     href: "/assets",
     label: "View Assets",
     Icon: IconLaptop,
@@ -110,13 +99,6 @@ const QUICK_ACTIONS = [
     bg: "bg-[#EEE8FF]",
     fg: "text-[#7B61FF]",
   },
-  {
-    href: "/support",
-    label: "Help & Support",
-    Icon: IconHeadset,
-    bg: "bg-[#E7F8EF]",
-    fg: "text-[#1FA971]",
-  },
 ] as const;
 
 export default function AssetsPage() {
@@ -125,7 +107,6 @@ export default function AssetsPage() {
   const [category, setCategory] = useState<CategoryId>("all");
   const [assets, setAssets] = useState<EssAsset[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -191,7 +172,12 @@ export default function AssetsPage() {
           <div className="flex shrink-0 items-center gap-1.5">
             <NotificationBellLink className="!h-10 !w-10 !rounded-full !bg-white !text-[#1A2B56] !shadow-sm" />
             <Link href="/profile" className="shrink-0" aria-label="Profile">
-              <Avatar name={me?.display_name ?? ""} size="sm" ring />
+              <Avatar
+                name={me?.display_name ?? ""}
+                size="sm"
+                ring
+                photoUrl={me?.photo_url}
+              />
             </Link>
           </div>
         </header>
@@ -222,9 +208,9 @@ export default function AssetsPage() {
           </div>
         </section>
 
-        {/* Search + filter */}
-        <div className="mb-3 flex items-center gap-2.5">
-          <label className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-3.5 py-3 shadow-sm">
+        {/* Search */}
+        <div className="mb-3">
+          <label className="flex min-w-0 items-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-3.5 py-3 shadow-sm">
             <IconSearch size={18} className="shrink-0 text-[#9CA3AF]" />
             <input
               className="w-full bg-transparent text-sm text-[#152238] outline-none placeholder:text-[#9CA3AF]"
@@ -233,18 +219,6 @@ export default function AssetsPage() {
               placeholder="Search assets (e.g. Laptop, Monitor...)"
             />
           </label>
-          <button
-            type="button"
-            onClick={() => setShowFilters((v) => !v)}
-            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border transition active:scale-95 ${
-              showFilters
-                ? "border-[#7B61FF] bg-[#EEE8FF] text-[#7B61FF]"
-                : "border-[#D6DEFF] bg-white text-[#3B7CFF]"
-            }`}
-            aria-label="Filters"
-          >
-            <IconFilter size={20} />
-          </button>
         </div>
 
         {/* Category chips */}
@@ -269,13 +243,6 @@ export default function AssetsPage() {
           })}
         </div>
 
-        {showFilters ? (
-          <div className="mb-4 rounded-2xl border border-[#E5E7EB] bg-white p-3 text-xs text-[#6B7280]">
-            Showing {rows.length} of {assets.length} assets
-            {query ? ` for “${query}”` : ""}.
-          </div>
-        ) : null}
-
         {/* List / empty */}
         {loading ? (
           <div className="mb-5 rounded-[22px] border border-[#E8ECF5] bg-white px-4 py-10 text-center text-sm text-[#6B7280] shadow-sm">
@@ -296,13 +263,6 @@ export default function AssetsPage() {
             <p className="mx-auto mt-1.5 max-w-[260px] text-sm leading-relaxed text-[#6B7280]">
               You currently have no company assets assigned to your account.
             </p>
-            <Link
-              href="/assets/scan"
-              className="mt-5 inline-flex items-center justify-center gap-2 rounded-full bg-[#7B61FF] px-5 py-3 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(123,97,255,0.35)] transition active:scale-[0.98]"
-            >
-              <IconQrScan size={18} />
-              Scan QR Code
-            </Link>
           </section>
         ) : (
           <ul className="mb-5 space-y-3">
@@ -337,18 +297,11 @@ export default function AssetsPage() {
 
         {/* Quick Actions */}
         <section className="mb-4">
-          <div className="mb-3 flex items-center justify-between gap-2">
+          <div className="mb-3">
             <h2 className="flex items-center gap-1.5 text-[1.05rem] font-bold text-[#152238]">
               <IconBolt size={18} className="text-[#7B61FF]" />
               Quick Actions
             </h2>
-            <Link
-              href="/support"
-              className="inline-flex items-center gap-0.5 text-sm font-semibold text-[#7B61FF]"
-            >
-              View All
-              <IconChevronRight size={16} />
-            </Link>
           </div>
           <div className="grid grid-cols-2 gap-2.5">
             {QUICK_ACTIONS.map((item) => (
@@ -368,23 +321,6 @@ export default function AssetsPage() {
               </Link>
             ))}
           </div>
-        </section>
-
-        {/* IT help strip */}
-        <section className="flex items-center gap-3 rounded-[18px] bg-gradient-to-r from-[#EDE7FF] to-[#E8F1FF] px-3.5 py-3.5">
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-[#3B7CFF] shadow-sm">
-            <IconInfo size={18} />
-          </span>
-          <p className="min-w-0 flex-1 text-xs leading-snug text-[#4B5563]">
-            Need help with your assets? Contact IT Support for assistance.
-          </p>
-          <Link
-            href="/support/new"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#3B7CFF] bg-white px-3 py-2 text-xs font-semibold text-[#3B7CFF] transition active:scale-95"
-          >
-            <IconPhone size={14} />
-            Contact IT
-          </Link>
         </section>
       </div>
     </div>

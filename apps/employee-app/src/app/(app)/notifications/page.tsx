@@ -18,6 +18,7 @@ import {
   IconFilter,
   IconGear,
   IconLayers,
+  IconMeetingRoom,
   IconMegaphone,
   IconMoreVertical,
   IconSparkle,
@@ -28,7 +29,10 @@ import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
 import { useNotificationCenter } from "@/context/notification-center-context";
 import { resolveEssNotificationHref } from "@/lib/notification-href";
-import { registerEssWebDeviceToken } from "@/lib/ess-web-push";
+import {
+  ESS_NOTIFICATIONS_UPDATED,
+  registerEssWebDeviceToken,
+} from "@/lib/ess-web-push";
 import type { EssNotification } from "@/types/api";
 
 type IconComp = ComponentType<SVGProps<SVGSVGElement> & { size?: number }>;
@@ -126,6 +130,21 @@ function categoryFor(kind: string, title = ""): CategoryMeta {
         : k.includes("event") || k.includes("birthday")
           ? IconCalendar
           : IconMegaphone,
+    };
+  }
+  if (
+    k.includes("meeting") ||
+    k.includes("meeting room") ||
+    k.includes("room booking")
+  ) {
+    return {
+      label: "Meeting",
+      filter: "updates",
+      badgeClass: "bg-[#dbeafe] text-[#2563eb]",
+      cardClass: "bg-[#eff6ff] border-[#bfdbfe]/70",
+      iconWrap: "bg-[#dbeafe]",
+      iconColor: "text-[#2563eb]",
+      Icon: IconMeetingRoom,
     };
   }
   if (
@@ -290,20 +309,34 @@ export default function NotificationsPage() {
     }
     setBannerReady(true);
 
-    essService
-      .notifications()
-      .then((res) => setItems(toUi(res.data ?? [])))
-      .catch((err) =>
-        setError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Failed to load notifications",
-        ),
-      )
-      .finally(() => setLoading(false));
+    function loadList(showSpinner = false) {
+      if (showSpinner) setLoading(true);
+      essService
+        .notifications()
+        .then((res) => {
+          setItems(toUi(res.data ?? []));
+          setError(null);
+        })
+        .catch((err) =>
+          setError(
+            err instanceof ApiClientError
+              ? err.message
+              : "Failed to load notifications",
+          ),
+        )
+        .finally(() => setLoading(false));
+    }
 
+    loadList(true);
     registerEssWebDeviceToken();
-  }, []);
+
+    function onUpdated() {
+      loadList(false);
+      void refreshUnreadCount();
+    }
+    window.addEventListener(ESS_NOTIFICATIONS_UPDATED, onUpdated);
+    return () => window.removeEventListener(ESS_NOTIFICATIONS_UPDATED, onUpdated);
+  }, [refreshUnreadCount]);
 
   const showEnableBanner =
     bannerReady &&

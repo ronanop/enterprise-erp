@@ -1,0 +1,100 @@
+export type StatusTab = "all" | "pending" | "approved" | "rejected";
+
+export function isPendingStatus(status: string): boolean {
+  const s = status.toLowerCase();
+  return (
+    s === "submitted" ||
+    s === "pending" ||
+    s === "draft" ||
+    s === "manager_approved"
+  );
+}
+
+export function isApprovedStatus(status: string): boolean {
+  return status.toLowerCase() === "approved";
+}
+
+export function isRejectedStatus(status: string): boolean {
+  const s = status.toLowerCase();
+  return s === "rejected" || s === "cancelled";
+}
+
+export function matchesStatusTab(status: string, tab: StatusTab): boolean {
+  if (tab === "all") return true;
+  if (tab === "pending") return isPendingStatus(status);
+  if (tab === "approved") return isApprovedStatus(status);
+  return isRejectedStatus(status);
+}
+
+export function statusBadge(status: string): {
+  label: string;
+  tone: "pending" | "approved" | "rejected" | "other";
+  bg: string;
+  fg: string;
+} {
+  if (isPendingStatus(status)) {
+    return { label: "Pending", tone: "pending", bg: "#FFF1E0", fg: "#C2410C" };
+  }
+  if (isApprovedStatus(status)) {
+    return { label: "Approved", tone: "approved", bg: "#DCFCE7", fg: "#166534" };
+  }
+  if (status.toLowerCase() === "cancelled") {
+    return { label: "Cancelled", tone: "rejected", bg: "#F1F5F9", fg: "#64748B" };
+  }
+  if (isRejectedStatus(status)) {
+    return { label: "Rejected", tone: "rejected", bg: "#FFE4E1", fg: "#BA1A1A" };
+  }
+  return { label: status, tone: "other", bg: "#EFF4FF", fg: "#004AC6" };
+}
+
+export function parseYmd(ymd: string): Date {
+  const [y, m, d] = ymd.slice(0, 10).split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+}
+
+export function formatMonthShort(ymd: string): string {
+  return parseYmd(ymd)
+    .toLocaleDateString("en-US", { month: "short" })
+    .toUpperCase();
+}
+
+export function formatDayNum(ymd: string): string {
+  return String(parseYmd(ymd).getDate()).padStart(2, "0");
+}
+
+export function formatDisplayDate(ymd: string): string {
+  if (!ymd) return "";
+  return parseYmd(ymd).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+export function formatDateRange(start: string, end?: string | null): string {
+  if (!end || end === start) return formatDisplayDate(start);
+  return `${formatDisplayDate(start)} – ${formatDisplayDate(end)}`;
+}
+
+export const TOUR_PURPOSE_PREFIX = "On Tour · ";
+
+export function isOnTourPurpose(purpose: string | null | undefined): boolean {
+  return (purpose || "").trim().toLowerCase().startsWith("on tour");
+}
+
+export function stripTourPrefix(purpose: string | null | undefined): string {
+  const p = (purpose || "").trim();
+  if (p.toLowerCase().startsWith("on tour · ")) return p.slice("On Tour · ".length);
+  if (p.toLowerCase().startsWith("on tour - ")) return p.slice("On Tour - ".length);
+  if (p.toLowerCase().startsWith("on tour:")) return p.slice("On Tour:".length).trim();
+  return p;
+}
+
+export function countByStatusTab(rows: Array<{ status: string }>) {
+  return {
+    all: rows.length,
+    pending: rows.filter((r) => isPendingStatus(r.status)).length,
+    approved: rows.filter((r) => isApprovedStatus(r.status)).length,
+    rejected: rows.filter((r) => isRejectedStatus(r.status)).length,
+  };
+}

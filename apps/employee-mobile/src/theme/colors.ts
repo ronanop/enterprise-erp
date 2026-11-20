@@ -1,7 +1,8 @@
 /** Kinetic Executive ESS - Stitch Luminary HR mobile palette */
 
 export const colors = {
-  background: "#f8f9ff",
+  /** App shell bg — matches PWA `shell` (#F5F8FC). */
+  background: "#F5F8FC",
   surface: "#f8f9ff",
   surfaceLowest: "#ffffff",
   surfaceLow: "#eff4ff",

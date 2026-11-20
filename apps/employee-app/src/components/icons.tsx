@@ -225,6 +225,39 @@ export function IconLocation(props: IconProps) {
   );
 }
 
+/** Conference table + display — used for Meeting Rooms quick action */
+export function IconMeetingRoom(props: IconProps) {
+  if (props.filled) {
+    return (
+      <svg {...solidBase(props)}>
+        <path d="M4.5 4.2h15a1.3 1.3 0 0 1 1.3 1.3v5.2H3.2V5.5A1.3 1.3 0 0 1 4.5 4.2z" />
+        <path d="M3.2 12.2h17.6v1.6a1.2 1.2 0 0 1-1.2 1.2H4.4a1.2 1.2 0 0 1-1.2-1.2v-1.6z" />
+        <path d="M7.2 15.2h1.8v3.2H7.2z" />
+        <path d="M15 15.2h1.8v3.2H15z" />
+        <path d="M5.4 19.2h4.2v1.2H5.4z" />
+        <path d="M14.4 19.2h4.2v1.2h-4.2z" />
+        <path d="M11.1 15.2h1.8v4H11.1z" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...base(props)}>
+      {/* Display / TV */}
+      <rect x="5" y="3.5" width="14" height="8" rx="1.6" />
+      <path d="M10 11.5h4v1.2h-4z" />
+      {/* Conference table */}
+      <path d="M4.5 15.2h15" />
+      <path d="M6.2 15.2v2.2" />
+      <path d="M17.8 15.2v2.2" />
+      <path d="M12 15.2v2.6" />
+      {/* Chairs */}
+      <path d="M5.2 18.8h3.4" />
+      <path d="M15.4 18.8h3.4" />
+      <path d="M10.3 19.6h3.4" />
+    </svg>
+  );
+}
+
 export function IconDownload(props: IconProps) {
   return (
     <svg {...base(props)}>
@@ -437,6 +470,36 @@ export function IconDocument(props: IconProps) {
       <path d="M14 3.5V8h4.5" />
       <path d="M8.5 12h7" />
       <path d="M8.5 16h5" />
+    </svg>
+  );
+}
+
+/** Clipboard with check — distinct from IconDocument (payslip). */
+export function IconPolicy(props: IconProps) {
+  if (props.filled) {
+    return (
+      <svg {...solidBase(props)}>
+        {/* Board */}
+        <path d="M6.6 4.6c0-.9.7-1.6 1.6-1.6h1.15A2 2 0 0 1 11.2 1.7h1.6a2 2 0 0 1 1.85 1.3H16.8c.9 0 1.6.7 1.6 1.6v14.7c0 .9-.7 1.6-1.6 1.6H8.2c-.9 0-1.6-.7-1.6-1.6V4.6z" />
+        {/* Clip tab */}
+        <rect x="10.1" y="2.15" width="3.8" height="2.2" rx="0.7" />
+        {/* Check mark as raised overlay stroke */}
+        <path
+          d="M8.7 12.1 10.8 14.2 15.4 9.4"
+          fill="none"
+          stroke="#F8F6FF"
+          strokeWidth="1.85"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg {...base(props)}>
+      <rect x="6" y="4.5" width="12" height="16" rx="2" />
+      <path d="M9.5 4.5V3.75A1.25 1.25 0 0 1 10.75 2.5h2.5A1.25 1.25 0 0 1 14.5 3.75V4.5" />
+      <path d="M8.75 12.25 10.75 14.25 15.25 9.5" />
     </svg>
   );
 }

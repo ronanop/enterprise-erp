@@ -1,15 +1,19 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import { SubHeader } from "@/components/AppHeader";
 import { IconEye, IconEyeOff, IconWallet } from "@/components/icons";
 import { Card, ErrorBox, GradientCard, Screen } from "@/components/ui";
+import {
+  formatInr,
+  parsePayslipLines,
+  periodLabel,
+} from "@/lib/payslip-display";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
 import type { EssPayslip } from "@/types/api";
 import { colors } from "@/theme/colors";
 import { RADIUS_FULL } from "@/theme/tokens";
-import { formatMoney } from "@/utils/datetime";
 
 export default function PayslipBreakdownScreen() {
   const router = useRouter();
@@ -40,45 +44,27 @@ export default function PayslipBreakdownScreen() {
     }, []),
   );
 
-  const net = Number(latest?.net_salary) || 0;
-  const gross = Number(latest?.gross_salary) || 0;
-  const deductions = Number(latest?.total_deductions) || 0;
-  const earnings = (latest?.earnings ?? [])
-    .map((line) => ({
-      title: line.label ?? line.code ?? "Earnings",
-      value: Number(line.amount) || 0,
-    }))
-    .filter((line) => line.value > 0);
-  const deductionLines = (latest?.deductions ?? [])
-    .map((line) => ({
-      title: line.label ?? line.code ?? "Deduction",
-      value: Number(line.amount) || 0,
-    }))
-    .filter((line) => line.value > 0);
-  const displayEarnings =
-    earnings.length > 0
-      ? earnings
-      : [
-          { title: "Basic Salary", value: Math.round(gross * 0.55) },
-          { title: "HRA", value: Math.round(gross * 0.2) },
-          {
-            title: "Allowances",
-            value: Math.max(0, gross - Math.round(gross * 0.55) - Math.round(gross * 0.2)),
-          },
-        ];
-  const displayDeductions =
-    deductionLines.length > 0
-      ? deductionLines
-      : deductions > 0
-        ? [{ title: "Tax & PF", value: deductions }]
-        : [];
+  const parsed = useMemo(
+    () => (latest ? parsePayslipLines(latest) : null),
+    [latest],
+  );
+  const net = parsed?.net ?? 0;
+  const gross = parsed?.gross ?? 0;
+  const displayEarnings = (parsed?.earnings ?? []).map((line) => ({
+    title: line.label,
+    value: line.amount,
+  }));
+  const displayDeductions = (parsed?.deductions ?? []).map((line) => ({
+    title: line.label,
+    value: line.amount,
+  }));
 
   return (
     <Screen scroll header={<SubHeader title="Salary Breakdown" />} contentStyle={styles.content}>
       {error ? <ErrorBox>{error}</ErrorBox> : null}
       <Card style={styles.period}>
         <Text style={styles.periodText}>
-          {latest?.period_name ?? "Current Period"}
+          {latest ? periodLabel(latest) : "Current Period"}
         </Text>
       </Card>
 
@@ -97,8 +83,7 @@ export default function PayslipBreakdownScreen() {
             )}
           </Pressable>
         </View>
-        <Text style={styles.net}>{hidden ? "••••••" : formatMoney(net)}</Text>
-        <Text style={styles.increase}>+4.2% increase from last month</Text>
+        <Text style={styles.net}>{formatInr(net, hidden)}</Text>
       </GradientCard>
 
       <Card style={styles.composition}>
@@ -196,7 +181,9 @@ function PayLine({
         <Text style={styles.lineSub}>{subtitle}</Text>
       </View>
       <Text style={[styles.lineValue, { color }]}>
-        {hidden ? "••••" : `${tone === "red" ? "-" : ""}${formatMoney(value)}`}
+        {tone === "red"
+          ? `-${formatInr(value, hidden)}`
+          : formatInr(value, hidden)}
       </Text>
     </Card>
   );
@@ -211,7 +198,6 @@ const styles = StyleSheet.create({
   heroKicker: { fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.6, color: "rgba(255,255,255,0.75)" },
   eye: { width: 36, height: 36, alignItems: "center", justifyContent: "center", borderRadius: RADIUS_FULL, backgroundColor: "rgba(255,255,255,0.15)" },
   net: { fontSize: 36, fontWeight: "700", color: "#ffffff" },
-  increase: { fontSize: 14, color: "rgba(255,255,255,0.9)" },
   composition: { gap: 16, padding: 20 },
   sectionTitle: { fontSize: 16, fontWeight: "600", color: colors.onSurface },
   donut: { alignSelf: "center", width: 144, height: 144, alignItems: "center", justifyContent: "center", borderRadius: RADIUS_FULL, borderWidth: 14, borderTopColor: "#2563eb", borderRightColor: "#712ae2", borderBottomColor: colors.success, borderLeftColor: colors.error },

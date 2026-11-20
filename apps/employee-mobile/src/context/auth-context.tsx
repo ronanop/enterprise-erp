@@ -58,28 +58,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      await hydrateAuth();
-      await hydrateFaceAuth();
-      if (cancelled) return;
-      if (!isAuthenticated()) {
-        setStatus("signedOut");
-        return;
+    const bootTimeout = setTimeout(() => {
+      if (!cancelled) {
+        // Never leave the UI on the bootstrap spinner forever (slow/down API).
+        setStatus((prev) => (prev === "loading" ? "signedOut" : prev));
       }
+    }, 12000);
+
+    (async () => {
       try {
-        const res = await essService.me();
+        await hydrateAuth();
+        await hydrateFaceAuth();
         if (cancelled) return;
-        setMe(res.data);
-        setStatus("signedIn");
+        if (!isAuthenticated()) {
+          setStatus("signedOut");
+          return;
+        }
+        try {
+          const res = await essService.me();
+          if (cancelled) return;
+          setMe(res.data);
+          setStatus("signedIn");
+        } catch {
+          if (cancelled) return;
+          await authService.logout();
+          setMe(null);
+          setStatus("signedOut");
+        }
       } catch {
-        if (cancelled) return;
-        await authService.logout();
-        setMe(null);
-        setStatus("signedOut");
+        if (!cancelled) setStatus("signedOut");
+      } finally {
+        clearTimeout(bootTimeout);
       }
     })();
+
     return () => {
       cancelled = true;
+      clearTimeout(bootTimeout);
     };
   }, []);
 

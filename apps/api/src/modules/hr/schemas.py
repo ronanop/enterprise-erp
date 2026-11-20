@@ -118,6 +118,8 @@ class EmployeeProfileCreate(BaseModel):
     bank_ifsc: str | None = None
     bank_name: str | None = None
     bank_account_holder: str | None = None
+    # data:image/...;base64,... from HRMS profile photo picker
+    profile_photo_data_url: str | None = None
     status: str = "active"
 
 
@@ -140,6 +142,7 @@ class EmployeeProfileUpdate(BaseModel):
     bank_account_holder: str | None = None
     education_json: dict | list | None = None
     skills_json: dict | list | None = None
+    profile_photo_data_url: str | None = None
     status: str | None = None
     version: int | None = None
 
@@ -171,6 +174,7 @@ class EmployeeProfileResponse(OrmModel):
     bank_account_holder: str | None = None
     education_json: dict | list | None = None
     skills_json: dict | list | None = None
+    has_profile_photo: bool = False
     status: str
     company_id: UUID
     branch_id: UUID
@@ -1704,6 +1708,22 @@ class HrEssInboxItemResponse(OrmModel):
     pending: bool
     available_actions: list[str]
     api_path: str
+
+
+class ProfileUpdateRequestResponse(OrmModel):
+    id: UUID
+    company_id: UUID
+    branch_id: UUID
+    employee_id: UUID
+    notes: str | None = None
+    status: str
+    decided_at: datetime | None = None
+    decision_notes: str | None = None
+    version: int
+
+
+class ProfileUpdateDecision(BaseModel):
+    decision_notes: str | None = None
 
 class EmployeeImportRow(BaseModel):
     """Normalized Excel row for workforce bulk import."""

@@ -69,6 +69,13 @@ function curvedDockPath(notchX: number): string {
 
 export function BottomNav() {
   const pathname = usePathname();
+  // Keep compliance / forced-password screens uncluttered (no app dock).
+  if (
+    pathname.startsWith("/compliance") ||
+    pathname.startsWith("/profile/change-password")
+  ) {
+    return null;
+  }
   const activeIndex = Math.max(
     0,
     tabs.findIndex((tab) => isActive(pathname, tab.href)),

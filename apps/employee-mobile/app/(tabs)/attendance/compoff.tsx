@@ -22,6 +22,7 @@ export default function CompOffScreen() {
   const [rows, setRows] = useState<CompoffRow[]>([]);
   const [earnedDate, setEarnedDate] = useState(todayLocalDate());
   const [extraHours, setExtraHours] = useState("8");
+  const [requestedDays, setRequestedDays] = useState("1");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -52,10 +53,12 @@ export default function CompOffScreen() {
       await essService.createCompoff({
         earned_date: earnedDate,
         extra_hours: Number(extraHours) || 0,
+        requested_days: Number(requestedDays) || 1,
         reason: reason || undefined,
       });
       setMessage("Comp Off request submitted for manager → HR approval");
       setReason("");
+      setRequestedDays("1");
       await refresh();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Submit failed");
@@ -81,9 +84,15 @@ export default function CompOffScreen() {
           autoCapitalize="none"
         />
         <TextField
-          label="Extra hours"
+          label="Extra hours worked"
           value={extraHours}
           onChangeText={setExtraHours}
+          keyboardType="decimal-pad"
+        />
+        <TextField
+          label="Comp-off days requested"
+          value={requestedDays}
+          onChangeText={setRequestedDays}
           keyboardType="decimal-pad"
         />
         <TextField label="Reason" value={reason} onChangeText={setReason} />

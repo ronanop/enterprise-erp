@@ -105,23 +105,34 @@ export default function LeavePage() {
 
   const balanceCards = useMemo(() => {
     return balances.slice(0, 2).map((row, i) => {
-      const closing = Number(row.closing_balance) || 0;
+      const rawClosing = Number(row.closing_balance) || 0;
       const used = Number(row.used) || 0;
       const lt = types.find((t) => t.id === row.leave_type_id);
-      const total = Math.max(
-        closing + used,
-        Number(lt?.max_days_per_year) || closing + used,
-        1,
-      );
+      const name = typeName(row.leave_type_id);
+      const code = (lt?.leave_type_code ?? "").toUpperCase();
+      const isSick =
+        code === "SL" ||
+        code.includes("SICK") ||
+        name.toLowerCase().includes("sick");
+      // Sick leave entitlement is 5 days/year — never show remaining above that.
+      const configuredMax = Number(lt?.max_days_per_year) || 0;
+      const total = isSick
+        ? configuredMax > 0
+          ? configuredMax
+          : 5
+        : Math.max(rawClosing + used, configuredMax || rawClosing + used, 1);
+      const closing = isSick
+        ? Math.max(0, Math.min(rawClosing, total - used, total))
+        : rawClosing;
       return {
         id: row.id,
         leaveTypeId: row.leave_type_id,
-        name: typeName(row.leave_type_id),
+        name,
         closing,
         used,
         total,
         perMonth: Number(lt?.monthly_credit_days) || 0,
-        pct: (closing / total) * 100,
+        pct: total > 0 ? (closing / total) * 100 : 0,
         ...BALANCE_COLORS[i % BALANCE_COLORS.length],
       };
     });
@@ -240,11 +251,9 @@ export default function LeavePage() {
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {balanceCards.map((row) => (
-              <button
+              <div
                 key={row.id}
-                type="button"
-                onClick={() => openApply(row.leaveTypeId)}
-                className={`${ui.card} space-y-3 p-4 text-left transition active:scale-[0.98]`}
+                className={`${ui.card} space-y-3 p-4`}
                 style={{ background: row.soft }}
               >
                 <div className="flex items-start justify-between">
@@ -271,7 +280,7 @@ export default function LeavePage() {
                     }}
                   />
                 </div>
-              </button>
+              </div>
             ))}
           </div>
         )}
@@ -316,61 +325,6 @@ export default function LeavePage() {
             ))}
           </ul>
         )}
-      </section>
-
-      <section className={`${ui.card} p-5`}>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-semibold text-[#0b1c30]">Quick apply</h2>
-          <button
-            type="button"
-            onClick={() => openApply()}
-            className="text-sm font-medium text-[#004ac6]"
-          >
-            Open calendar
-          </button>
-        </div>
-        <p className="text-sm text-[#434655]">
-          Use the + button to pick leave type and dates on the calendar (dd/mm/yyyy).
-        </p>
-      </section>
-
-      <section>
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-[#0b1c30]">
-            Upcoming Holidays
-          </h2>
-          <Link href="/leave/holidays" className="text-sm font-medium text-[#004ac6]">
-            View All
-          </Link>
-        </div>
-        <ul className="space-y-2">
-          {[
-            { name: "Diwali - Festival of Lights", date: "Oct 31, Thursday", tag: "Mandatory", color: "#f59e0b" },
-            { name: "Christmas Day", date: "Dec 25, Wednesday", tag: "Restricted", color: "#10B981" },
-            { name: "New Year's Eve", date: "Dec 31, Tuesday", tag: "Mandatory", color: "#2563eb" },
-          ].map((h) => (
-            <li key={h.name}>
-              <Link
-                href="/leave/holidays"
-                className="flex items-center gap-3 rounded-2xl border border-[#c3c6d7]/20 bg-[#eff4ff] p-4"
-              >
-                <span
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-lg"
-                  style={{ color: h.color }}
-                >
-                  •
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-[#0b1c30]">{h.name}</p>
-                  <p className="text-xs text-[#434655]">{h.date}</p>
-                </div>
-                <span className="rounded-full bg-[#dbe1ff] px-2.5 py-0.5 text-[10px] font-bold text-[#004ac6]">
-                  {h.tag}
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
       </section>
 
       <section>

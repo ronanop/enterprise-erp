@@ -6,7 +6,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from core.exceptions import ConflictException, NotFoundException
+from core.exceptions import ConflictException, NotFoundException, ValidationException
 from modules.foundation.domain.value_objects import TenantContext
 from modules.platform.compat.audit_facade import PlatformAuditFacade
 from modules.hr.adapters.master_data_port import HrMasterDataAdapter
@@ -178,7 +178,20 @@ class TrainingRoomService:
         return row
 
     def create(self, ctx: TenantContext, company_id: UUID | None = None, **fields):
-        cid = self._scope.resolve_company_id(ctx, company_id)
+        branch_id = fields.get("branch_id")
+        # Module-wide HR users often have no single ctx.company_id; derive from branch
+        # (or require an explicit company) so company_id is never NULL on insert.
+        if branch_id is not None:
+            self._scope.validate_branch_access(ctx, branch_id)
+            cid = self._scope.resolve_create_company_id(
+                ctx, branch_id=branch_id, company_id=company_id
+            )
+        else:
+            cid = self._scope.resolve_company_id(ctx, company_id)
+            if cid is None:
+                raise ValidationException(
+                    "Company is required. Select a company or a branch that belongs to a company and try again."
+                )
         # Always allocate via sequence so client preview codes cannot collide with seeds.
         fields.pop("room_code", None)
         code = self._numbers.generate(HrEntityType.TRAINING_ROOM, cid, HrTrainingRoom, "room_code")
@@ -212,9 +225,22 @@ class TrainingRequestService:
         return row
 
     def create(self, ctx: TenantContext, *, branch_id: UUID, company_id: UUID | None = None, **fields):
-        cid = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
-        self._master.get_employee(ctx, fields["requested_by_employee_id"])
+        cid = self._scope.resolve_create_company_id(
+            ctx, branch_id=branch_id, company_id=company_id
+        )
+        requester = self._master.get_employee(ctx, fields["requested_by_employee_id"])
+        if not fields.get("host_name"):
+            host_id = fields.get("host_employee_id") or fields.get("requested_by_employee_id")
+            if host_id:
+                host = (
+                    requester
+                    if str(host_id) == str(requester.id)
+                    else self._master.get_employee(ctx, host_id)
+                )
+                first = getattr(host, "first_name", "") or ""
+                last = getattr(host, "last_name", "") or ""
+                fields["host_name"] = f"{first} {last}".strip() or None
         code = fields.pop("request_code", None) or self._numbers.generate(
             HrEntityType.TRAINING_REQUEST, cid, HrTrainingRequest, "request_code"
         )
@@ -279,6 +305,28 @@ class TrainingRequestService:
             operation="approve",
             performed_by=ctx.user_id,
         )
+        if row.request_type == "meeting":
+            try:
+                from modules.hr.service.hr_notify import notify_employee
+
+                notify_employee(
+                    self._db,
+                    tenant_id=ctx.tenant_id,
+                    employee_id=row.requested_by_employee_id,
+                    template_code="hr.meeting_approved",
+                    template_name="Meeting Room Approved",
+                    event_type="hr.meeting_approved",
+                    title="Meeting room approved",
+                    body=f"{row.title} on {row.request_date} was approved by HR.",
+                    kind="meeting",
+                    extra={
+                        "meeting_request_id": str(row.id),
+                        "href": "/rooms",
+                    },
+                    cc_reporting_manager=False,
+                )
+            except Exception:
+                pass
         return updated
 
     def reject(self, ctx: TenantContext, row_id: UUID, *, approval_notes: str | None = None):
@@ -293,4 +341,26 @@ class TrainingRequestService:
             operation="reject",
             performed_by=ctx.user_id,
         )
+        if row.request_type == "meeting":
+            try:
+                from modules.hr.service.hr_notify import notify_employee
+
+                notify_employee(
+                    self._db,
+                    tenant_id=ctx.tenant_id,
+                    employee_id=row.requested_by_employee_id,
+                    template_code="hr.meeting_rejected",
+                    template_name="Meeting Room Rejected",
+                    event_type="hr.meeting_rejected",
+                    title="Meeting room rejected",
+                    body=f"{row.title} on {row.request_date} was rejected by HR.",
+                    kind="meeting",
+                    extra={
+                        "meeting_request_id": str(row.id),
+                        "href": "/rooms",
+                    },
+                    cc_reporting_manager=False,
+                )
+            except Exception:
+                pass
         return updated

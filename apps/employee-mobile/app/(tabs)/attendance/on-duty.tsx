@@ -3,6 +3,8 @@ import { StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { SubHeader } from "@/components/AppHeader";
 import { Button, Card, ErrorBox, Screen, TextField } from "@/components/ui";
+import { PortionPicker } from "@/components/PortionPicker";
+import { isOnTourPurpose } from "@/lib/attendance-request-ui";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
 import { colors } from "@/theme/colors";
@@ -34,7 +36,8 @@ export default function OnDutyScreen() {
 
   const refresh = useCallback(async () => {
     const list = await essService.listOnDuty();
-    setRows((list.data as OnDutyRow[]) ?? []);
+    const all = (list.data as OnDutyRow[]) ?? [];
+    setRows(all.filter((r) => !isOnTourPurpose(r.purpose)));
   }, []);
 
   useFocusEffect(
@@ -96,12 +99,7 @@ export default function OnDutyScreen() {
           onChangeText={setEndDate}
           autoCapitalize="none"
         />
-        <TextField
-          label="Portion (full_day / first_half / second_half)"
-          value={portion}
-          onChangeText={setPortion}
-          autoCapitalize="none"
-        />
+        <PortionPicker value={portion} onChange={setPortion} />
         <TextField
           label="Location"
           value={location}

@@ -61,6 +61,8 @@ export type EssMe = {
   marital_status?: string | null;
   current_address?: string | null;
   permanent_address?: string | null;
+  has_profile_photo?: boolean;
+  photo_url?: string | null;
   role_codes?: string[];
   ess_role?: "employee" | "manager" | "admin";
   is_manager?: boolean;
@@ -167,6 +169,26 @@ export type EssPunchPolicy = {
   face_enrolled: boolean;
   work_locations?: EssWorkLocation[];
   home_office_name?: string | null;
+};
+
+export type EssProfileUpdateRequest = {
+  id: string;
+  notes: string | null;
+  status: string;
+  created_at?: string | null;
+  decided_at?: string | null;
+  decision_notes?: string | null;
+};
+
+export type EssOnDutyRequest = {
+  id: string;
+  duty_date: string;
+  end_date: string | null;
+  portion: string;
+  duty_location: string | null;
+  purpose: string | null;
+  reason: string | null;
+  status: string;
 };
 
 export type EssWfhRequest = {
@@ -302,6 +324,17 @@ export type EssTeamLeaveItem = {
   start_date: string;
   end_date: string;
   days_count: string | number;
+  status: string;
+};
+
+export type EssTeamMember = {
+  employee_id: string;
+  employee_code: string;
+  display_name: string;
+  designation: string;
+  email: string;
+  mobile: string;
+  department_name?: string | null;
   status: string;
 };
 

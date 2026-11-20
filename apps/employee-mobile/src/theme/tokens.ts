@@ -25,12 +25,12 @@ export const CARD_SURFACE = colors.surfaceLowest;
 
 /** Content gutter: px-5 */
 export const GUTTER = 20;
-/** Bottom nav clearance: pb-28 */
-export const TAB_CLEARANCE = 112;
+/** Bottom nav clearance for PWA curved dock + floating Attendance FAB. */
+export const TAB_CLEARANCE = 128;
 /** Header height: h-14 */
 export const HEADER_HEIGHT = 56;
-/** BottomNav height excluding the home-indicator inset. */
-export const NAV_HEIGHT = 64;
+/** BottomNav dock height excluding the home-indicator inset. */
+export const NAV_HEIGHT = 76;
 
 export const tokens = StyleSheet.create({
   /** ui.card - rounded-2xl bg-white/80 shadow border outlineVariant/30 */

@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { SubHeader } from "@/components/AppHeader";
+import { PortionPicker } from "@/components/PortionPicker";
 import { Button, Card, ErrorBox, Screen, TextField } from "@/components/ui";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
@@ -9,12 +10,6 @@ import type { EssWfhRequest } from "@/types/api";
 import { colors, radii } from "@/theme/colors";
 import { formatDisplayDateDDMMYYYY, todayLocalDate } from "@/utils/datetime";
 import { leaveStatusColor, leaveStatusDisplay } from "@/utils/leave-status";
-
-const PORTIONS = [
-  { id: "full_day", label: "Full day" },
-  { id: "first_half", label: "First half" },
-  { id: "second_half", label: "Second half" },
-];
 
 export default function WfhScreen() {
   const [rows, setRows] = useState<EssWfhRequest[]>([]);
@@ -89,18 +84,7 @@ export default function WfhScreen() {
           autoCapitalize="none"
           placeholder="Leave blank for single day"
         />
-        <Text style={styles.label}>Portion</Text>
-        <View style={styles.chips}>
-          {PORTIONS.map((p) => (
-            <Button
-              key={p.id}
-              title={p.label}
-              variant={portion === p.id ? "primary" : "secondary"}
-              onPress={() => setPortion(p.id)}
-              style={styles.chipBtn}
-            />
-          ))}
-        </View>
+        <PortionPicker value={portion} onChange={setPortion} />
         <TextField
           label="Reason"
           value={reason}

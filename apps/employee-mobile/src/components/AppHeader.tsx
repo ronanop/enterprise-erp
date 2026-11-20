@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useRouter } from "expo-router";
+import { CacheBrandLogo } from "@/components/CacheBrandLogo";
 import { IconBack, IconBell } from "@/components/icons";
 import { Avatar } from "@/components/ui/Avatar";
 import { colors } from "@/theme/colors";
@@ -27,35 +28,28 @@ export function NotificationBell({ count = 0 }: { count?: number }) {
 }
 
 /**
- * Mirrors the PWA AppHeader: sticky glass bar with avatar (→ profile),
- * brand title in primary blue, and the notification bell.
+ * Mirrors the PWA AppHeader: CACHE logo left, centered primary title, bell right.
  */
 export function AppHeader({
   title = "Employee Portal",
-  name,
   unreadCount = 0,
 }: {
   title?: string;
+  /** Kept for call-site compatibility; avatar replaced by company logo on PWA. */
   name?: string | null;
   unreadCount?: number;
 }) {
-  const router = useRouter();
-
   return (
     <View style={styles.header}>
-      <View style={styles.left}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open profile"
-          onPress={() => router.push("/(tabs)/profile")}
-        >
-          <Avatar name={name ?? ""} size="sm" ring />
-        </Pressable>
-        <Text style={styles.brandTitle} numberOfLines={1}>
-          {title}
-        </Text>
+      <View style={styles.side}>
+        <CacheBrandLogo href="/(tabs)/home" height={28} />
       </View>
-      <NotificationBell count={unreadCount} />
+      <Text style={styles.brandTitle} numberOfLines={1}>
+        {title}
+      </Text>
+      <View style={[styles.side, styles.sideRight]}>
+        <NotificationBell count={unreadCount} />
+      </View>
     </View>
   );
 }
@@ -126,16 +120,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: GUTTER,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(195,198,215,0.3)",
-    backgroundColor: colors.background,
+    backgroundColor: "rgba(248,249,255,0.92)",
   },
-  left: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
+  side: {
+    zIndex: 2,
+    minWidth: 72,
+    justifyContent: "center",
+  },
+  sideRight: {
+    alignItems: "flex-end",
+  },
   leftTight: { flexDirection: "row", alignItems: "center", gap: 8, flex: 1 },
   brandTitle: {
-    flex: 1,
+    ...StyleSheet.absoluteFill,
+    textAlign: "center",
+    textAlignVertical: "center",
     fontSize: 18,
     fontWeight: "700",
     letterSpacing: -0.2,
     color: colors.primary,
+    paddingHorizontal: 72,
+    lineHeight: HEADER_HEIGHT,
   },
   backBtn: {
     width: 40,

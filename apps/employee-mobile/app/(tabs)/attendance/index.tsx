@@ -1,21 +1,31 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
-import * as ImagePicker from "expo-image-picker";
 import Svg, { Circle } from "react-native-svg";
 import { AppHeader } from "@/components/AppHeader";
+import {
+  AttendancePunchSheet,
+  type PunchConfirmPayload,
+} from "@/components/AttendancePunchSheet";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import {
   IconAlert,
+  IconCalendar,
   IconCheck,
   IconChevronRight,
   IconClock,
-  IconFingerprint,
+  IconHouse,
   IconLocation,
   IconLogin,
   IconLogout,
+  IconPlane,
+  IconWallet,
 } from "@/components/icons";
-import { AlertBox, Button, Card, EmptyState, ErrorBox, Screen } from "@/components/ui";
+import {
+  fetchLiveLocationLabel,
+  formatOfficeLabel,
+} from "@/lib/live-location";
+import { AlertBox, Button, Card, ErrorBox, Screen } from "@/components/ui";
 import { useAuth } from "@/context/auth-context";
 import { ApiClientError } from "@/services/api-client";
 import { essService } from "@/services/ess-service";
@@ -41,6 +51,73 @@ const RING_STROKE = 10;
 const RING_RADIUS = (RING_SIZE - RING_STROKE) / 2;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
 
+const ATTENDANCE_ACTIONS = [
+  {
+    href: "/(tabs)/attendance/wfh" as const,
+    title: "Work From Home",
+    subtitle: "Request remote work",
+    Icon: IconHouse,
+    iconBg: "#F3E8FF",
+    iconFg: "#7C3AED",
+  },
+  {
+    href: "/(tabs)/attendance/on-duty" as const,
+    title: "On Duty",
+    subtitle: "Official duty request",
+    Icon: IconCalendar,
+    iconBg: "#DCFCE7",
+    iconFg: "#16A34A",
+  },
+  {
+    href: "/(tabs)/attendance/on-tour" as const,
+    title: "On Tour",
+    subtitle: "Business travel request",
+    Icon: IconPlane,
+    iconBg: "#FFEDD5",
+    iconFg: "#EA580C",
+  },
+  {
+    href: "/(tabs)/attendance/correction" as const,
+    title: "Regularization",
+    subtitle: "Correct missing punch",
+    Icon: IconClock,
+    iconBg: "#FFEDD5",
+    iconFg: "#EA580C",
+  },
+  {
+    href: "/(tabs)/attendance/compoff" as const,
+    title: "Comp Off",
+    subtitle: "Request comp off",
+    Icon: IconWallet,
+    iconBg: "#FEE2E2",
+    iconFg: "#DC2626",
+  },
+] as const;
+
+function attendanceDayKey(value: string | null | undefined): string {
+  if (!value) return "";
+  return String(value).slice(0, 10);
+}
+
+function findTodayRow(
+  rows: EssAttendance[],
+  day: string,
+): EssAttendance | undefined {
+  return rows.find((row) => attendanceDayKey(row.attendance_date) === day);
+}
+
+function upsertTodayRow(
+  rows: EssAttendance[],
+  next: EssAttendance,
+): EssAttendance[] {
+  const key = attendanceDayKey(next.attendance_date);
+  const idx = rows.findIndex((r) => attendanceDayKey(r.attendance_date) === key);
+  if (idx < 0) return [next, ...rows];
+  const copy = rows.slice();
+  copy[idx] = next;
+  return copy;
+}
+
 export default function AttendanceScreen() {
   const router = useRouter();
   const { me } = useAuth();
@@ -53,7 +130,7 @@ export default function AttendanceScreen() {
   const [timer, setTimer] = useState("00:00:00");
   const [showSuccess, setShowSuccess] = useState(false);
   const [punchSheet, setPunchSheet] = useState<"in" | "out" | null>(null);
-  const [selfie, setSelfie] = useState<string | null>(null);
+  const [officeLabel, setOfficeLabel] = useState("Office");
 
   const refresh = useCallback(async () => {
     const monthKey = todayLocalDate().slice(0, 7);
@@ -79,8 +156,35 @@ export default function AttendanceScreen() {
     }, [refresh]),
   );
 
+  useEffect(() => {
+    let cancelled = false;
+    const locations = policy?.work_locations ?? [];
+    const homeOfficeName = policy?.home_office_name ?? null;
+    (async () => {
+      const label = await fetchLiveLocationLabel({
+        workLocations: locations,
+        homeOfficeName,
+      });
+      if (cancelled) return;
+      if (label) {
+        setOfficeLabel(label);
+        return;
+      }
+      setOfficeLabel(
+        homeOfficeName
+          ? formatOfficeLabel(homeOfficeName)
+          : locations[0]?.location_name
+            ? formatOfficeLabel(locations[0].location_name)
+            : "Office",
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [policy]);
+
   const todayStr = todayLocalDate();
-  const today = rows.find((r) => r.attendance_date === todayStr);
+  const today = findTodayRow(rows, todayStr);
   const done = Boolean(today?.check_out_at);
   const punchedIn = Boolean(today?.check_in_at);
   const isOut = punchedIn && !done;
@@ -100,16 +204,30 @@ export default function AttendanceScreen() {
     return () => clearInterval(id);
   }, [today?.check_in_at, today?.check_out_at, today?.total_hours]);
 
-  async function runPunch(imageBase64: string | null) {
+  async function runPunch(_kind: "in" | "out", payload: PunchConfirmPayload) {
     setLoading(true);
     setError(null);
     setMessage(null);
     try {
-      const res = await essService.punch({ image_base64: imageBase64 });
+      const res = await essService.punch({
+        image_base64: payload.imageBase64,
+        ...(payload.latitude != null ? { latitude: payload.latitude } : {}),
+        ...(payload.longitude != null ? { longitude: payload.longitude } : {}),
+      });
       const action = res.data?.action;
-      const hours = res.data?.attendance?.total_hours;
+      const attendance = res.data?.attendance;
+      const hours = attendance?.total_hours;
+
+      if (attendance) {
+        setRows((prev) => upsertTodayRow(prev, attendance));
+      }
+
       if (action === "check_in") {
-        setMessage("Checked in successfully");
+        setMessage(
+          payload.locationLabel
+            ? `Checked in at ${payload.locationLabel}`
+            : "Checked in successfully",
+        );
         setShowSuccess(true);
       } else {
         setMessage(
@@ -119,8 +237,7 @@ export default function AttendanceScreen() {
         );
       }
       setPunchSheet(null);
-      setSelfie(null);
-      await refresh();
+      void refresh().catch(() => undefined);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Punch failed");
     } finally {
@@ -128,32 +245,8 @@ export default function AttendanceScreen() {
     }
   }
 
-  const needsSelfie = Boolean(
-    policy?.selfie_required || policy?.face_at_punch_required,
-  );
-
-  async function captureSelfie() {
-    setError(null);
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      setError("Camera permission is required to capture a selfie.");
-      return;
-    }
-    const result = await ImagePicker.launchCameraAsync({
-      base64: true,
-      quality: 0.6,
-      allowsEditing: true,
-      aspect: [1, 1],
-      cameraType: ImagePicker.CameraType.front,
-    });
-    if (!result.canceled && result.assets[0]?.base64) {
-      setSelfie(result.assets[0].base64);
-    }
-  }
-
   function openPunchSheet(kind: "in" | "out") {
     if ((kind === "in" && punchedIn) || (kind === "out" && !isOut)) return;
-    setSelfie(null);
     setPunchSheet(kind);
   }
 
@@ -189,7 +282,7 @@ export default function AttendanceScreen() {
             </View>
             <View>
               <Text style={styles.factLabel}>Location Verified</Text>
-              <Text style={styles.factValue}>HQ Office</Text>
+              <Text style={styles.factValue}>{officeLabel}</Text>
             </View>
           </Card>
           <Card style={styles.fact}>
@@ -233,15 +326,7 @@ export default function AttendanceScreen() {
       {error ? <ErrorBox>{error}</ErrorBox> : null}
       {message && !showSuccess ? <AlertBox tone="success">{message}</AlertBox> : null}
 
-      <View style={styles.headerLinks}>
-        <Pressable onPress={() => router.push("/(tabs)/attendance/wfh")}>
-          <Text style={styles.headerLink}>WFH</Text>
-        </Pressable>
-        <Pressable onPress={() => router.push("/(tabs)/attendance/history")}>
-          <Text style={styles.headerLink}>History</Text>
-        </Pressable>
-      </View>
-
+      {/* Web order: punch hero → stats → actions → calendar → report link */}
       <Card style={styles.hero}>
         <View style={styles.ring}>
           <Svg
@@ -254,7 +339,7 @@ export default function AttendanceScreen() {
               cx={RING_SIZE / 2}
               cy={RING_SIZE / 2}
               r={RING_RADIUS}
-              stroke={colors.surfaceContainer}
+              stroke="#e5eeff"
               strokeWidth={RING_STROKE}
               fill="none"
             />
@@ -262,7 +347,7 @@ export default function AttendanceScreen() {
               cx={RING_SIZE / 2}
               cy={RING_SIZE / 2}
               r={RING_RADIUS}
-              stroke={colors.primary}
+              stroke="#2563eb"
               strokeWidth={RING_STROKE}
               fill="none"
               strokeLinecap="round"
@@ -278,11 +363,17 @@ export default function AttendanceScreen() {
           </View>
         </View>
         <View style={styles.greetingBlock}>
-          <Text style={styles.greeting}>{greetingForNow()}, {firstName}</Text>
+          <Text style={styles.greeting}>
+            {greetingForNow()}, {firstName}
+          </Text>
           <View style={styles.locationRow}>
-            <IconLocation size={14} color={colors.primary} />
-            <Text style={styles.meta}>HQ Office</Text>
-            {punchedIn ? <Text style={styles.verified}>Verified</Text> : null}
+            <IconLocation size={14} color="#004ac6" />
+            <Text style={styles.meta}>{officeLabel}</Text>
+            {punchedIn ? (
+              <View style={styles.verifiedPill}>
+                <Text style={styles.verifiedText}>Verified</Text>
+              </View>
+            ) : null}
           </View>
         </View>
         <View style={styles.punchButtons}>
@@ -304,64 +395,78 @@ export default function AttendanceScreen() {
             style={{ flex: 1, paddingVertical: 12, paddingHorizontal: 8 }}
           />
         </View>
-        {policy?.geofence_required ? <Text style={styles.hint}>Location required for punch</Text> : null}
+        {policy?.geofence_required ? (
+          <Text style={styles.hint}>Location required for punch</Text>
+        ) : null}
       </Card>
 
-      <Modal
-        visible={punchSheet !== null}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setPunchSheet(null)}
-      >
-        <View style={styles.punchBackdrop}>
-          <View style={styles.punchSheet}>
-            <Text style={styles.punchTitle}>
-              {punchSheet === "in" ? "Check in" : "Check out"}
-            </Text>
-            <Text style={styles.punchCopy}>
-              {needsSelfie
-                ? policy?.face_at_punch_required
-                  ? "Capture your face to verify identity."
-                  : "Take a selfie for attendance."
-                : `Confirm punch${policy?.geofence_required ? " at your work location" : ""}.`}
-            </Text>
-            {needsSelfie ? (
-              <Button
-                title={selfie ? "Selfie captured" : "Take selfie"}
-                variant="secondary"
-                onPress={() => void captureSelfie()}
-              />
-            ) : null}
-            <View style={styles.punchActions}>
-              <Button
-                title="Cancel"
-                variant="secondary"
-                onPress={() => setPunchSheet(null)}
-                style={{ flex: 1 }}
-              />
-              <Button
-                title={
-                  punchSheet === "in" ? "Confirm check in" : "Confirm check out"
-                }
-                loading={loading}
-                disabled={needsSelfie && !selfie}
-                onPress={() => void runPunch(needsSelfie ? selfie : null)}
-                style={{ flex: 1 }}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <AttendancePunchSheet
+        open={punchSheet !== null}
+        kind={punchSheet ?? "in"}
+        policy={policy}
+        loading={loading}
+        onClose={() => {
+          if (!loading) setPunchSheet(null);
+        }}
+        onConfirm={(payload) => void runPunch(punchSheet ?? "in", payload)}
+      />
 
       <View style={styles.statGrid}>
-        <Metric icon={<IconClock size={20} color={colors.secondary} />} label="Overtime" value={overtimeH > 0 ? `${overtimeH.toFixed(1)}h` : "0h"} track="#eaddff" accent={colors.secondary} pct={overtimeH * 20} hint={overtimeH > 0 ? `+${Math.round((overtimeH / DAILY_GOAL_H) * 100)}%` : undefined} />
-        <Metric icon={<IconAlert size={20} color={colors.error} />} label="Late Days" value={String(lateDays)} track={colors.surfaceHighest} accent={colors.primaryContainer} pct={lateDays === 0 ? 100 : 40} hint={lateDays === 0 ? "Perfect" : "This month"} />
+        <Metric
+          icon={<IconClock size={20} color="#712ae2" />}
+          label="Overtime"
+          value={overtimeH > 0 ? `${overtimeH.toFixed(1)}h` : "0h"}
+          track="#eaddff"
+          accent="#712ae2"
+          pct={overtimeH * 20}
+          hint={
+            overtimeH > 0
+              ? `+${Math.round((overtimeH / DAILY_GOAL_H) * 100)}%`
+              : undefined
+          }
+        />
+        <Metric
+          icon={<IconAlert size={20} color="#ba1a1a" />}
+          label="Late Days"
+          value={String(lateDays)}
+          track="#d3e4fe"
+          accent="#2563eb"
+          pct={lateDays === 0 ? 100 : 40}
+          hint={lateDays === 0 ? "Perfect" : "This month"}
+        />
+      </View>
+
+      <View style={styles.actionGrid}>
+        {ATTENDANCE_ACTIONS.map((action) => (
+          <Pressable
+            key={action.href}
+            style={({ pressed }) => [
+              styles.actionCard,
+              pressed && { opacity: 0.96, transform: [{ scale: 0.99 }] },
+            ]}
+            onPress={() => router.push(action.href)}
+          >
+            <View
+              style={[styles.actionIcon, { backgroundColor: action.iconBg }]}
+            >
+              <action.Icon size={20} color={action.iconFg} />
+            </View>
+            <View style={styles.actionCopy}>
+              <Text style={styles.actionTitle} numberOfLines={1}>
+                {action.title}
+              </Text>
+              <Text style={styles.actionSubtitle} numberOfLines={2}>
+                {action.subtitle}
+              </Text>
+            </View>
+          </Pressable>
+        ))}
       </View>
 
       <Card style={styles.calendarCard}>
         <View style={styles.calendarHeader}>
           <Text style={styles.calendarTitle}>{calendar.label}</Text>
-          <Text style={styles.calendarHint}>This month</Text>
+          <IconCalendar size={18} color="#64748B" />
         </View>
         <View style={styles.weekdays}>
           {["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"].map((day) => (
@@ -372,43 +477,61 @@ export default function AttendanceScreen() {
         </View>
         <View style={styles.days}>
           {calendar.cells.map((cell, index) => {
-            const row = cell.iso
-              ? rows.find((entry) => entry.attendance_date === cell.iso)
-              : undefined;
+            const row = cell.iso ? findTodayRow(rows, cell.iso) : undefined;
             const isToday = cell.iso === todayStr;
             const state = (row?.attendance_status ?? "").toLowerCase();
-            const dotColor =
-              state === "late"
-                ? colors.error
-                : state === "work_from_home"
-                  ? colors.secondary
-                  : state === "absent"
-                    ? colors.outlineVariant
-                    : row?.check_in_at
-                      ? colors.success
-                      : undefined;
+            const isLeave =
+              state.includes("leave") ||
+              state === "on_leave" ||
+              state === "half_day";
+            const isAbsent = state.includes("absent");
+            const isWfh =
+              state.includes("work_from_home") || state.includes("wfh");
+            const isPresent =
+              !isLeave &&
+              !isAbsent &&
+              (state.includes("present") ||
+                state === "late" ||
+                Boolean(row?.check_in_at));
+
+            // Today stays blue; other days get a full status circle.
+            let circleBg: string | undefined;
+            let textColor: string | undefined;
+            if (isToday) {
+              circleBg = "#2563eb";
+              textColor = "#ffffff";
+            } else if (isLeave) {
+              circleBg = "#F59E0B";
+              textColor = "#ffffff";
+            } else if (isAbsent) {
+              circleBg = "#EF4444";
+              textColor = "#ffffff";
+            } else if (isPresent) {
+              circleBg = "#10B981";
+              textColor = "#ffffff";
+            } else if (isWfh) {
+              circleBg = "#712ae2";
+              textColor = "#ffffff";
+            }
+
             return (
               <View key={`${cell.iso ?? "x"}-${index}`} style={styles.dayCell}>
                 {cell.day ? (
-                  <View style={[styles.day, isToday ? styles.today : null]}>
+                  <View
+                    style={[
+                      styles.day,
+                      circleBg ? { backgroundColor: circleBg } : null,
+                    ]}
+                  >
                     <Text
                       style={[
                         styles.dayText,
-                        isToday ? styles.todayText : null,
+                        textColor ? { color: textColor, fontWeight: "700" } : null,
                       ]}
                     >
                       {cell.day}
                     </Text>
-                    {isToday || dotColor ? (
-                      <View
-                        style={[
-                          styles.dayDot,
-                          {
-                            backgroundColor: isToday ? "#ffffff" : dotColor,
-                          },
-                        ]}
-                      />
-                    ) : null}
+                    {isToday ? <View style={styles.todayDot} /> : null}
                   </View>
                 ) : null}
               </View>
@@ -417,53 +540,30 @@ export default function AttendanceScreen() {
         </View>
         <View style={styles.legend}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colors.success }]} />
+            <View style={[styles.legendDot, { backgroundColor: "#2563eb" }]} />
+            <Text style={styles.legendText}>Today</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: "#10B981" }]} />
             <Text style={styles.legendText}>Present</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: colors.secondary }]} />
-            <Text style={styles.legendText}>WFH</Text>
+            <View style={[styles.legendDot, { backgroundColor: "#EF4444" }]} />
+            <Text style={styles.legendText}>Absent</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: "#F59E0B" }]} />
+            <Text style={styles.legendText}>Leave</Text>
           </View>
         </View>
       </Card>
 
-      <Card style={styles.recentCard}>
-        <Text style={styles.sectionHeading}>Recent Activity</Text>
-        {rows.length === 0 ? (
-          <EmptyState
-            title="No attendance yet"
-            description="Your punches will show up here."
-            icon={<IconFingerprint size={20} color={colors.primary} />}
-          />
-        ) : (
-          rows.slice(0, 4).map((row) => (
-            <View key={row.id} style={styles.activity}>
-              <View style={styles.activityIcon}><IconClock size={18} color={colors.onSurfaceVariant} /></View>
-              <View style={styles.activityCopy}>
-                <Text style={styles.activityTitle}>Clock In - Office</Text>
-                <Text style={styles.activityMeta}>{row.attendance_date}, {formatTime(row.check_in_at)}</Text>
-              </View>
-              <Text style={styles.activityVerified}>Verified</Text>
-            </View>
-          ))
-        )}
-        <Pressable onPress={() => router.push("/(tabs)/attendance/history")}>
-          <Text style={styles.reportLink}>View Full Attendance Report</Text>
-        </Pressable>
-      </Card>
-
-      <View style={styles.requests}>
-        {[
-          { label: "Correction", href: "/(tabs)/attendance/correction" as const },
-          { label: "WFH", href: "/(tabs)/attendance/wfh" as const },
-          { label: "On Duty", href: "/(tabs)/attendance/on-duty" as const },
-          { label: "Comp Off", href: "/(tabs)/attendance/compoff" as const },
-        ].map((item) => (
-          <Pressable key={item.label} style={styles.requestPill} onPress={() => router.push(item.href)}>
-            <Text style={styles.requestText}>{item.label}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <Pressable
+        onPress={() => router.push("/(tabs)/attendance/history")}
+        style={styles.reportWrap}
+      >
+        <Text style={styles.reportLink}>View Full Attendance Report</Text>
+      </Pressable>
     </Screen>
   );
 }
@@ -524,10 +624,8 @@ function buildMonthGrid(todayIso: string) {
 }
 
 const styles = StyleSheet.create({
-  content: { paddingTop: 20, paddingBottom: 32, gap: 24 },
-  headerLinks: { flexDirection: "row", justifyContent: "flex-end", gap: 12 },
-  headerLink: { fontSize: 14, fontWeight: "600", color: colors.primary },
-  hero: { alignItems: "center", gap: 16, padding: 24 },
+  content: { paddingTop: 8, paddingBottom: 32, gap: 24 },
+  hero: { alignItems: "center", gap: 20, padding: 24 },
   ring: {
     width: RING_SIZE,
     height: RING_SIZE,
@@ -536,14 +634,47 @@ const styles = StyleSheet.create({
   },
   ringSvg: { position: "absolute" },
   ringCopy: { alignItems: "center" },
-  ringValue: { fontSize: 30, fontWeight: "700", color: colors.onSurface, fontVariant: ["tabular-nums"] },
-  ringLabel: { fontSize: 10, fontWeight: "700", letterSpacing: 0.8, textTransform: "uppercase", color: colors.onSurfaceVariant },
-  greetingBlock: { alignItems: "center", gap: 8 },
-  greeting: { fontSize: 20, fontWeight: "700", color: colors.onSurface },
-  locationRow: { flexDirection: "row", alignItems: "center", gap: 4 },
-  meta: { fontSize: 13, color: colors.onSurfaceVariant },
-  hint: { fontSize: 12, color: colors.onSurfaceVariant },
-  verified: { borderRadius: RADIUS_FULL, backgroundColor: "#d1fae5", paddingHorizontal: 8, paddingVertical: 2, fontSize: 10, fontWeight: "700", textTransform: "uppercase", color: "#065f46", overflow: "hidden" },
+  ringValue: {
+    fontSize: 30,
+    fontWeight: "700",
+    color: "#0b1c30",
+    fontVariant: ["tabular-nums"],
+  },
+  ringLabel: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: "#434655",
+  },
+  greetingBlock: { width: "100%", alignItems: "center", gap: 8 },
+  greeting: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#0b1c30",
+    textAlign: "center",
+  },
+  locationRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  meta: { fontSize: 14, color: "#434655" },
+  hint: { fontSize: 12, color: "#434655" },
+  verifiedPill: {
+    borderRadius: RADIUS_FULL,
+    backgroundColor: "#d1fae5",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  verifiedText: {
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    color: "#065f46",
+  },
   punchButtons: { width: "100%", flexDirection: "row", gap: 12 },
   punchBackdrop: {
     flex: 1,
@@ -554,49 +685,131 @@ const styles = StyleSheet.create({
   punchSheet: {
     gap: 16,
     borderRadius: 20,
-    backgroundColor: colors.surface,
+    backgroundColor: "#ffffff",
     padding: 20,
   },
-  punchTitle: { fontSize: 20, fontWeight: "700", color: colors.onSurface },
-  punchCopy: { fontSize: 14, lineHeight: 20, color: colors.onSurfaceVariant },
+  punchTitle: { fontSize: 20, fontWeight: "700", color: "#0b1c30" },
+  punchCopy: { fontSize: 14, lineHeight: 20, color: "#434655" },
   punchActions: { flexDirection: "row", gap: 12 },
   statGrid: { flexDirection: "row", gap: 12 },
-  metric: { flex: 1, gap: 4 },
-  metricTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  metricLabel: { marginTop: 4, fontSize: 14, color: colors.onSurfaceVariant },
-  metricValue: { fontSize: 24, fontWeight: "700", color: colors.onSurface },
-  metricHint: { borderRadius: RADIUS_FULL, backgroundColor: "#d1fae5", paddingHorizontal: 8, paddingVertical: 2, fontSize: 10, fontWeight: "700", overflow: "hidden" },
-  metricTrack: { height: 6, overflow: "hidden", borderRadius: RADIUS_FULL, marginTop: 8 },
+  metric: { flex: 1, gap: 4, padding: 16 },
+  metricTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  metricLabel: { marginTop: 8, fontSize: 14, color: "#434655" },
+  metricValue: { fontSize: 24, fontWeight: "700", color: "#0b1c30" },
+  metricHint: {
+    borderRadius: RADIUS_FULL,
+    backgroundColor: "#d1fae5",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#047857",
+    overflow: "hidden",
+  },
+  metricTrack: {
+    height: 6,
+    overflow: "hidden",
+    borderRadius: RADIUS_FULL,
+    marginTop: 12,
+  },
   metricFill: { height: "100%", borderRadius: RADIUS_FULL },
-  calendarCard: { padding: 20, gap: 8 },
-  calendarHeader: { flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
-  calendarTitle: { fontSize: 15, fontWeight: "600", color: colors.onSurface },
-  calendarHint: { fontSize: 12, color: colors.onSurfaceVariant },
-  weekdays: { flexDirection: "row", marginBottom: 4 },
-  weekday: { width: "14.28%", textAlign: "center", fontSize: 10, fontWeight: "700", textTransform: "uppercase", color: colors.onSurfaceVariant },
-  days: { flexDirection: "row", flexWrap: "wrap" },
-  dayCell: { width: "14.28%", height: 36, alignItems: "center", justifyContent: "center" },
-  day: { width: 36, height: 36, borderRadius: RADIUS_FULL, alignItems: "center", justifyContent: "center" },
-  today: { backgroundColor: colors.primaryContainer },
-  dayText: { fontSize: 14, color: colors.onSurface },
-  todayText: { color: "#ffffff", fontWeight: "700" },
-  dayDot: { position: "absolute", bottom: 3, width: 4, height: 4, borderRadius: RADIUS_FULL },
-  legend: { marginTop: 8, flexDirection: "row", gap: 16 },
+  calendarCard: { padding: 20, gap: 8, overflow: "hidden" },
+  calendarHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  calendarTitle: { fontSize: 15, fontWeight: "600", color: "#0b1c30" },
+  weekdays: { flexDirection: "row", marginBottom: 8 },
+  weekday: {
+    width: "14.28%",
+    textAlign: "center",
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    color: "#434655",
+  },
+  days: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
+  dayCell: {
+    width: "13.5%",
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  day: {
+    width: 36,
+    height: 36,
+    borderRadius: RADIUS_FULL,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dayText: { fontSize: 14, color: "#0b1c30" },
+  todayDot: {
+    position: "absolute",
+    bottom: 4,
+    width: 4,
+    height: 4,
+    borderRadius: RADIUS_FULL,
+    backgroundColor: "#ffffff",
+  },
+  legend: {
+    marginTop: 12,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
   legendItem: { flexDirection: "row", gap: 6, alignItems: "center" },
   legendDot: { width: 8, height: 8, borderRadius: RADIUS_FULL },
-  legendText: { fontSize: 12, color: colors.onSurfaceVariant },
-  recentCard: { gap: 12 },
-  sectionHeading: { fontSize: 18, fontWeight: "600", color: colors.onSurface },
-  activity: { flexDirection: "row", alignItems: "center", gap: 12, borderTopWidth: 1, borderTopColor: "rgba(195,198,215,0.2)", paddingTop: 12 },
-  activityIcon: { width: 40, height: 40, alignItems: "center", justifyContent: "center", borderRadius: RADIUS_FULL, backgroundColor: colors.surfaceLow },
-  activityCopy: { flex: 1 },
-  activityTitle: { fontSize: 14, fontWeight: "600", color: colors.onSurface },
-  activityMeta: { marginTop: 2, fontSize: 12, color: colors.onSurfaceVariant },
-  activityVerified: { fontSize: 12, fontWeight: "600", color: colors.success },
-  reportLink: { paddingTop: 4, textAlign: "center", fontSize: 14, fontWeight: "600", color: colors.primary },
-  requests: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  requestPill: { width: "48%", borderRadius: 12, backgroundColor: colors.surfaceLow, paddingHorizontal: 12, paddingVertical: 12 },
-  requestText: { fontSize: 13, fontWeight: "600", color: colors.primary },
+  legendText: { fontSize: 12, color: "#434655" },
+  reportWrap: { paddingBottom: 8, alignItems: "center" },
+  reportLink: {
+    textAlign: "center",
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#004ac6",
+  },
+  actionGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
+  actionCard: {
+    width: "47.5%",
+    flexGrow: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 16,
+    backgroundColor: "#ffffff",
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "rgba(195,198,215,0.3)",
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  actionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: RADIUS_FULL,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionCopy: { flex: 1, minWidth: 0 },
+  actionTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0b1c30",
+  },
+  actionSubtitle: {
+    marginTop: 2,
+    fontSize: 11,
+    lineHeight: 15,
+    color: "#64748B",
+  },
   successScreen: { justifyContent: "center" },
   successContent: { flex: 1, alignItems: "center", justifyContent: "center", paddingTop: 24, gap: 12 },
   successCheck: { width: 128, height: 128, marginBottom: 12, alignItems: "center", justifyContent: "center", borderRadius: RADIUS_FULL, backgroundColor: colors.success },
