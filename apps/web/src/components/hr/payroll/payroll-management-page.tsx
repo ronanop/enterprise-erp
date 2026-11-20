@@ -19,6 +19,7 @@ import {
   BonusDrawer,
   RevisionDrawer,
 } from "@/components/hr/payroll/payroll-drawers";
+import { AssignSalaryBulkImportDrawer } from "@/components/hr/payroll/assign-salary-bulk-import";
 import { PayrollPolicyPanel } from "@/components/hr/payroll/payroll-policy-panel";
 import { PayrollRunWorkspace } from "@/components/hr/payroll/payroll-run-workspace";
 import {
@@ -97,7 +98,8 @@ const SECTION_META: Record<PayrollSection, { title: string; description?: string
   },
   "assign-salary": {
     title: "Assign salary",
-    description: "Map employees to a structure, CTC, bank, and tax regime.",
+    description:
+      "Assign CTC to employees one-by-one, or upload Excel (employee_code, monthly_ctc, employer_contribution).",
   },
   "run-payroll": {
     title: "Run payroll",
@@ -156,12 +158,14 @@ export function PayrollManagementPage() {
 
   const [revisionOpen, setRevisionOpen] = useState(false);
   const [assignOpen, setAssignOpen] = useState(false);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [editingSalary, setEditingSalary] = useState<EmployeeSalary | null>(null);
   const [bonusOpen, setBonusOpen] = useState(false);
   const [adjOpen, setAdjOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<SalaryStructure | null>(null);
   const [confirmDeleteAssignment, setConfirmDeleteAssignment] = useState<EmployeeSalary | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [assignQuery, setAssignQuery] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -211,6 +215,17 @@ export function PayrollManagementPage() {
   }, [router, searchParams]);
 
   useEffect(() => setPage(1), [section, slipQuery, slipOpenMonth]);
+
+  const filteredAssignSalaries = useMemo(() => {
+    const rows = dir?.salaries ?? [];
+    const q = assignQuery.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((s) => {
+      const emp = employees.find((e) => e.id === s.employeeId || e.code === s.employeeId);
+      const hay = `${s.employeeName} ${s.employeeId} ${emp?.label ?? ""} ${emp?.code ?? ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [dir?.salaries, employees, assignQuery]);
 
   useEffect(() => {
     if (section !== "payslip") return;
@@ -375,17 +390,28 @@ export function PayrollManagementPage() {
               </>
             ) : null}
             {section === "assign-salary" ? (
-              <Button
-                size="sm"
-                className="cursor-pointer"
-                onClick={() => {
-                  setEditingSalary(null);
-                  setAssignOpen(true);
-                }}
-              >
-                <Plus className="size-3.5" />
-                Assign salary
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="cursor-pointer transition-colors duration-200"
+                  onClick={() => setBulkAssignOpen(true)}
+                >
+                  <Upload className="size-3.5" />
+                  Upload Excel
+                </Button>
+                <Button
+                  size="sm"
+                  className="cursor-pointer transition-colors duration-200"
+                  onClick={() => {
+                    setEditingSalary(null);
+                    setAssignOpen(true);
+                  }}
+                >
+                  <Plus className="size-3.5" />
+                  Assign salary
+                </Button>
+              </>
             ) : null}
             {section === "payslip" ? (
               <>
@@ -481,22 +507,50 @@ export function PayrollManagementPage() {
                     const f = e.target.files?.[0];
                     if (!f) return;
                     try {
-                      const name = f.name.toLowerCase();
-                      let text: string;
-                      if (name.endsWith(".csv") || f.type === "text/csv") {
-                        text = await f.text();
-                      } else {
-                        const { extractDataMatrix, matrixToCsv, parseSpreadsheetFileAsMatrix } =
-                          await import("@/lib/spreadsheet");
-                        const matrix = extractDataMatrix(
-                          await parseSpreadsheetFileAsMatrix(f),
-                          "name",
+                      const { extractDataMatrix, matrixToCsv, parseSpreadsheetFileAsMatrix } =
+                        await import("@/lib/spreadsheet");
+                      const {
+                        extractSalaryAssignImportHeaders,
+                        guessSalaryAssignColumnMapping,
+                        parseSalaryAssignImportWithMapping,
+                      } = await import("@/lib/salary-assign-import");
+                      const { bulkAssignSalariesFromImport } = await import(
+                        "@/services/payroll-management-service"
+                      );
+                      const raw = await parseSpreadsheetFileAsMatrix(f);
+                      const matrix = extractDataMatrix(raw, "employee");
+                      const working = matrix.length >= 2 ? matrix : raw;
+                      const { headerIdx, headers } = extractSalaryAssignImportHeaders(working);
+                      const mapping = guessSalaryAssignColumnMapping(headers);
+                      if (
+                        mapping.includes("employee_code") &&
+                        mapping.includes("monthly_ctc")
+                      ) {
+                        const parsed = parseSalaryAssignImportWithMapping(
+                          working,
+                          headerIdx,
+                          mapping,
                         );
-                        text = matrixToCsv(matrix);
+                        if (parsed.errors.length && !parsed.rows.length) {
+                          throw new Error(parsed.errors[0]);
+                        }
+                        const result = await bulkAssignSalariesFromImport(
+                          parsed.rows,
+                          employees,
+                        );
+                        toast(
+                          `Assigned ${result.assigned} · structures +${result.createdStructures}/~${result.updatedStructures} (employer contribution from Excel)`,
+                          result.assigned ? "success" : "error",
+                        );
+                        if (result.errors[0]) toast(result.errors[0], "error");
+                        refresh();
+                        router.replace("/hr/payroll?section=assign-salary");
+                      } else {
+                        const text = matrixToCsv(working);
+                        const n = importStructuresCsv(text);
+                        toast(`Imported ${n} structures`);
+                        refresh();
                       }
-                      const n = importStructuresCsv(text);
-                      toast(`Imported ${n} structures`);
-                      refresh();
                     } catch (err) {
                       toast(err instanceof Error ? err.message : "Import failed", "error");
                     }
@@ -583,10 +637,28 @@ export function PayrollManagementPage() {
 
           {section === "assign-salary" ? (
             <section className="space-y-3">
-              {(dir?.salaries.length ?? 0) === 0 ? (
+              <div className="rounded-xl border border-border/80 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                Bulk upload creates a salary structure per employee from{" "}
+                <span className="font-medium text-foreground">monthly_ctc</span> +{" "}
+                <span className="font-medium text-foreground">employer_contribution</span>{" "}
+                (Excel 60% Basic / 50% HRA), then assigns it by{" "}
+                <span className="font-medium text-foreground">employee_code</span>.
+              </div>
+              <Input
+                value={assignQuery}
+                onChange={(e) => setAssignQuery(e.target.value)}
+                placeholder="Search employee name or Emp Code…"
+                className="h-9 max-w-sm cursor-text transition-colors duration-200"
+                aria-label="Search assigned salaries"
+              />
+              {filteredAssignSalaries.length === 0 ? (
                 <HrEmptyState
-                  title="No assigned salaries"
-                  description="Assign a structure and CTC to employees."
+                  title={assignQuery.trim() ? "No matching salaries" : "No assigned salaries"}
+                  description={
+                    assignQuery.trim()
+                      ? "Try another name or Emp Code."
+                      : "Assign a structure and CTC, or upload Excel to create and assign in bulk."
+                  }
                 />
               ) : (
                 <div className="overflow-x-auto rounded-xl border border-border/70">
@@ -601,7 +673,7 @@ export function PayrollManagementPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {dir?.salaries.map((s) => {
+                      {filteredAssignSalaries.map((s) => {
                         const emp = employees.find(
                           (e) => e.id === s.employeeId || e.code === s.employeeId,
                         );
@@ -923,6 +995,16 @@ export function PayrollManagementPage() {
           }
         }}
       />
+      <AssignSalaryBulkImportDrawer
+        open={bulkAssignOpen}
+        onClose={() => setBulkAssignOpen(false)}
+        employees={employees}
+        onImported={() => {
+          setBulkAssignOpen(false);
+          refresh();
+        }}
+      />
+
       <AssignSalaryDrawer
         open={assignOpen}
         onClose={() => {
@@ -934,10 +1016,25 @@ export function PayrollManagementPage() {
         initial={editingSalary}
         onSubmit={async (input) => {
           const wasEdit = Boolean(editingSalary);
-          await assignEmployeeSalary(input);
-          toast(wasEdit ? "Salary updated" : "Salary assigned");
-          setEditingSalary(null);
-          refresh();
+          try {
+            const row = await assignEmployeeSalary(input);
+            toast(wasEdit ? "Salary updated" : "Salary assigned");
+            setEditingSalary(null);
+            setDir((d) => {
+              if (!d) return d;
+              const rest = d.salaries.filter(
+                (s) =>
+                  s.id !== row.id &&
+                  s.employeeId.toLowerCase() !== row.employeeId.toLowerCase() &&
+                  !(input.employeeCode && s.employeeId.toLowerCase() === input.employeeCode.toLowerCase()),
+              );
+              return { ...d, salaries: [row, ...rest] };
+            });
+            refresh();
+          } catch (e) {
+            toast(e instanceof Error ? e.message : "Salary assign failed", "error");
+            throw e;
+          }
         }}
       />
       <SetupDrawer

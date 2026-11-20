@@ -23,7 +23,11 @@ export function HrStatusBadge({ status }: { status: string }) {
     s.includes("cancel") ||
     s.includes("lost") ||
     s.includes("not served") ||
-    s.includes("direct")
+    s.includes("direct") ||
+    s.includes("resign") ||
+    s.includes("terminat") ||
+    s.includes("ex employee") ||
+    s === "inactive"
       ? "border-transparent bg-hrms-pink text-hrms-danger"
       : s.includes("active") ||
           s.includes("approved") ||

@@ -1,4 +1,22 @@
-/** Payroll Calculator.xlsx formulas (Gross CTC → CTC split + sample month preview). */
+/**
+ * Payroll CTC + statutory formulas (mapped from Payroll Calculator.xlsx, corrected).
+ *
+ * H = G (monthly CTC)
+ * I = H × basic%
+ * J = I × hra%
+ * K = H − I − J − M − L   (Special; must stay ≥ 0)
+ * N = SUM(I:M)
+ * R/S/U = component × Q/O
+ * T = K × Q/O             (NOT (N×Q/O)−R−S−U−M — that breaks under LOP)
+ * W = R+S+T+U+V
+ * X = R+T
+ * Y = MIN(X, pfCeiling) × pf%
+ * Z = EDLI/admin — employer cost only (never in employee AC)
+ * AA = employee ESI 0.75% when annualised gross < ceiling
+ * AE = N×12; AG = annual tax on AE; AH = ROUNDUP(AG/12) (Excel sheet)
+ * AC = Y + AA + AB (+ PT/other EE only)
+ * AD = W − AC
+ */
 
 export type CtcSplitInput = {
   grossCtc: number;
@@ -15,20 +33,31 @@ export type CtcSplit = {
   specialAllowance: number;
   telephoneAllowance: number;
   employerContribution: number;
+  /** Employee earnings at full month (excludes employer contribution). */
+  employeeGross: number;
   ctc: number;
   difference: number;
+  /** False when Special would be negative. */
+  valid: boolean;
 };
 
 export type StatutoryInput = {
   pfPercent: number;
+  /** PF wage ceiling (Excel used 25000; EPFO default often 15000). */
   pfWageCeiling: number;
-  pfFixedCeiling: number;
+  /** @deprecated Ignored — PF = MIN(wage, ceiling) × rate. Kept for API compat. */
+  pfFixedCeiling?: number;
   edliAdminAmount: number;
   esiPercent: number;
+  esiEmployerPercent?: number;
   esiMonthlyCeiling: number;
   totalDays: number;
   payableDays: number;
   advanceArrear: number;
+  /** TDS already deducted this FY (Excel AF). */
+  tdsAlreadyDeducted?: number;
+  /** Remaining payroll months including current (default 12). */
+  remainingMonths?: number;
 };
 
 export const EXCEL_DEFAULTS = {
@@ -37,10 +66,12 @@ export const EXCEL_DEFAULTS = {
   telephoneAllowance: 0,
   employerContribution: 1800,
   pfPercent: 0.12,
-  pfWageCeiling: 15000,
-  pfFixedCeiling: 1800,
-  edliAdminAmount: 100,
+  /** Matches sheet Y: IF(X<25000, X*12%, 3000) ≡ MIN(X,25000)*12%. */
+  pfWageCeiling: 25000,
+  pfFixedCeiling: 3000,
+  edliAdminAmount: 0,
   esiPercent: 0.0075,
+  esiEmployerPercent: 0.0325,
   esiMonthlyCeiling: 21000,
   totalDays: 30,
   payableDays: 30,
@@ -57,6 +88,17 @@ export function roundUpRupee(n: number): number {
   return Math.max(0, Math.ceil(n));
 }
 
+/** Y = MIN(PF wage, ceiling) × rate */
+export function employeePfFromWage(
+  pfWage: number,
+  percent: number = EXCEL_DEFAULTS.pfPercent,
+  ceiling: number = EXCEL_DEFAULTS.pfWageCeiling,
+): number {
+  const base = Math.max(0, pfWage);
+  const cap = ceiling > 0 ? Math.min(base, ceiling) : base;
+  return rupee(cap * percent);
+}
+
 /** Excel H–N */
 export function computeCtcSplit(input: CtcSplitInput): CtcSplit {
   const monthlyCtc = rupee(input.grossCtc);
@@ -64,10 +106,10 @@ export function computeCtcSplit(input: CtcSplitInput): CtcSplit {
   const hra = rupee(basic * input.hraPercentOfBasic);
   const telephoneAllowance = rupee(input.telephoneAllowance);
   const employerContribution = rupee(input.employerContribution);
-  const specialAllowance = rupee(
-    monthlyCtc - basic - hra - employerContribution - telephoneAllowance,
-  );
-  const ctc = rupee(basic + hra + specialAllowance + telephoneAllowance + employerContribution);
+  const specialRaw = monthlyCtc - basic - hra - employerContribution - telephoneAllowance;
+  const specialAllowance = rupee(specialRaw);
+  const employeeGross = rupee(basic + hra + specialAllowance + telephoneAllowance);
+  const ctc = rupee(employeeGross + employerContribution);
   return {
     monthlyCtc,
     basic,
@@ -75,8 +117,10 @@ export function computeCtcSplit(input: CtcSplitInput): CtcSplit {
     specialAllowance,
     telephoneAllowance,
     employerContribution,
+    employeeGross,
     ctc,
     difference: rupee(ctc - monthlyCtc),
+    valid: specialRaw >= -0.5,
   };
 }
 
@@ -100,9 +144,15 @@ export function tdsForTheYear(annualSalary: number): number {
   return rupee(totalBeforeCess * 1.04);
 }
 
-/** Excel AH2 */
-export function tdsForTheMonth(annualSalary: number): number {
-  return roundUpRupee(tdsForTheYear(annualSalary) / 12);
+/** Excel AH — remaining tax / remaining months (falls back to ÷12). */
+export function tdsForTheMonth(
+  annualSalary: number,
+  opts?: { alreadyDeducted?: number; remainingMonths?: number },
+): number {
+  const yearly = tdsForTheYear(annualSalary);
+  const remaining = Math.max(0, yearly - (opts?.alreadyDeducted ?? 0));
+  const months = Math.max(1, Math.floor(opts?.remainingMonths ?? 12));
+  return roundUpRupee(remaining / months);
 }
 
 /** Old-regime tax on already-reduced taxable income (slabs + §87A + 4% cess). */
@@ -122,31 +172,60 @@ export function oldRegimeTaxOnTaxable(taxableIncome: number): number {
   return rupee(totalBeforeCess * 1.04);
 }
 
-/** Excel O–AD sample month (does not run payroll). */
-export function computePayablePreview(split: CtcSplit, statutory: StatutoryInput) {
+export type PayablePreview = {
+  payableBasic: number;
+  payableHra: number;
+  payableSpecial: number;
+  payableTelephone: number;
+  gross: number;
+  pfWage: number;
+  pf: number;
+  /** Employer cost — not in totalDed. */
+  edli: number;
+  esi: number;
+  employerEsi: number;
+  tdsYear: number;
+  tdsMonth: number;
+  /** Employee deductions only (Y + AA + AB). */
+  totalDed: number;
+  net: number;
+  /** Excel AE = N×12 (full CTC annual, matches sheet). */
+  annualSalary: number;
+  employerCost: number;
+};
+
+/** Excel O–AD sample month (does not post payroll). */
+export function computePayablePreview(split: CtcSplit, statutory: StatutoryInput): PayablePreview {
   const o = statutory.totalDays || 30;
-  const q = statutory.payableDays;
-  const factor = q / o;
+  const q = Math.max(0, statutory.payableDays);
+  const factor = o > 0 ? q / o : 0;
   const payableBasic = rupee(split.basic * factor);
   const payableHra = rupee(split.hra * factor);
   const payableTelephone = rupee(split.telephoneAllowance * factor);
-  const payableSpecial = rupee(split.specialAllowance * factor);
+  // T = K × Q/O (corrected — do not subtract unprorated M from prorated N)
+  const payableSpecial = rupee(Math.max(0, split.specialAllowance) * factor);
   const advance = rupee(statutory.advanceArrear);
   const gross = rupee(payableBasic + payableHra + payableSpecial + payableTelephone + advance);
   const pfWage = rupee(payableBasic + payableSpecial);
-  const pf =
-    pfWage < statutory.pfWageCeiling
-      ? rupee(pfWage * statutory.pfPercent)
-      : rupee(statutory.pfFixedCeiling);
+  const pf = employeePfFromWage(pfWage, statutory.pfPercent, statutory.pfWageCeiling);
   const edli = rupee(statutory.edliAdminAmount);
-  const annualised = rupee(((gross - advance) * o) / (q || 1));
-  const esi =
-    annualised < statutory.esiMonthlyCeiling ? rupee((gross - advance) * statutory.esiPercent) : 0;
+  const earned = Math.max(0, gross - advance);
+  const annualised = q > 0 ? rupee((earned * o) / q) : rupee(split.employeeGross);
+  const esiRate = statutory.esiPercent;
+  const esiErRate = statutory.esiEmployerPercent ?? EXCEL_DEFAULTS.esiEmployerPercent;
+  const esiApplies = annualised < statutory.esiMonthlyCeiling;
+  const esi = esiApplies ? rupee(earned * esiRate) : 0;
+  const employerEsi = esiApplies ? rupee(earned * esiErRate) : 0;
+  // Excel AE = N×12; AH = ROUNDUP(AG/12) (or remaining tax ÷ remaining months when provided)
   const annualSalary = rupee(split.ctc * 12);
   const tdsYear = tdsForTheYear(annualSalary);
-  const tdsMonth = tdsForTheMonth(annualSalary);
-  const totalDed = rupee(pf + edli + esi + tdsMonth);
+  const tdsMonth = tdsForTheMonth(annualSalary, {
+    alreadyDeducted: statutory.tdsAlreadyDeducted,
+    remainingMonths: statutory.remainingMonths ?? 12,
+  });
+  const totalDed = rupee(pf + esi + tdsMonth);
   const net = rupee(gross - totalDed);
+  const employerCost = rupee(split.employerContribution + edli + employerEsi);
   return {
     payableBasic,
     payableHra,
@@ -157,11 +236,13 @@ export function computePayablePreview(split: CtcSplit, statutory: StatutoryInput
     pf,
     edli,
     esi,
+    employerEsi,
     tdsYear,
     tdsMonth,
     totalDed,
     net,
     annualSalary,
+    employerCost,
   };
 }
 
@@ -189,6 +270,11 @@ export function blankRunComponents() {
 }
 
 export function amountsFromSplit(split: CtcSplit) {
+  const employeePf = employeePfFromWage(
+    split.basic + split.specialAllowance,
+    EXCEL_DEFAULTS.pfPercent,
+    EXCEL_DEFAULTS.pfWageCeiling,
+  );
   return {
     grossCtc: split.monthlyCtc,
     telephoneAllowance: split.telephoneAllowance,
@@ -196,8 +282,9 @@ export function amountsFromSplit(split: CtcSplit) {
     ctcAmount: split.ctc,
     basic: split.basic,
     hra: split.hra,
-    specialAllowance: split.specialAllowance,
-    pf: split.employerContribution,
+    specialAllowance: Math.max(0, split.specialAllowance),
+    /** Employee PF — never the employer contribution. */
+    pf: employeePf,
     ...blankRunComponents(),
   };
 }

@@ -8,7 +8,8 @@ from modules.payroll.domain.enums import (
 
 _Q = Decimal("0.0001")
 _PF_RATE = Decimal("0.12")
-_PF_WAGE_CEILING = Decimal("15000")
+# Sheet default: MIN(wage, 25000)×12% (max ₹3,000). Override via pf_wage_ceiling.
+_PF_WAGE_CEILING = Decimal("25000")
 _ESI_EMPLOYEE_RATE = Decimal("0.0075")
 _ESI_EMPLOYER_RATE = Decimal("0.0325")
 _ESI_GROSS_CEILING = Decimal("21000")
@@ -32,21 +33,23 @@ class StatutoryContributionEngine:
         pf_employee_rate: Decimal | None = None,
         pf_employer_rate: Decimal | None = None,
         pf_wage_ceiling: Decimal | None = None,
+        pf_wage: Decimal | None = None,
         statutory_esi: bool = True,
     ) -> dict:
-        """Compute PF / ESI / Professional Tax from gross and basic.
+        """Compute PF / ESI / Professional Tax.
 
-        Statutory rates remain isolated defaults (12% / ₹15,000 / ESI 0.75%+3.25%).
-        Callers may pass company-configured PF rates and wage ceiling.
+        PF wage = ``pf_wage`` when provided (Basic+Special), else ``basic``.
+        Employee/Employer PF = MIN(wage, ceiling) × rate.
         """
         g = Decimal(str(gross or 0))
         b = Decimal(str(basic or 0))
+        wage_in = Decimal(str(pf_wage)) if pf_wage is not None else b
         ceiling = Decimal(str(pf_wage_ceiling if pf_wage_ceiling is not None else _PF_WAGE_CEILING))
         ee_rate = Decimal(str(pf_employee_rate if pf_employee_rate is not None else _PF_RATE))
         er_rate = Decimal(str(pf_employer_rate if pf_employer_rate is not None else _PF_RATE))
-        pf_wage = min(b, ceiling) if ceiling > 0 else b
-        pf_employee = _money(pf_wage * ee_rate)
-        pf_employer = _money(pf_wage * er_rate)
+        capped = min(max(Decimal("0"), wage_in), ceiling) if ceiling > 0 else max(Decimal("0"), wage_in)
+        pf_employee = _money(capped * ee_rate)
+        pf_employer = _money(capped * er_rate)
         esi_applies = statutory_esi and g <= _ESI_GROSS_CEILING
         esi_employee = _money(g * _ESI_EMPLOYEE_RATE) if esi_applies else Decimal("0.0000")
         esi_employer = _money(g * _ESI_EMPLOYER_RATE) if esi_applies else Decimal("0.0000")
@@ -59,5 +62,5 @@ class StatutoryContributionEngine:
             "esi_employer": esi_employer,
             "professional_tax": professional_tax,
             "esi_applies": esi_applies,
-            "pf_wage": pf_wage,
+            "pf_wage": capped,
         }

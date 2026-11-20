@@ -691,6 +691,11 @@ class AttendanceResponse(OrmModel):
     status: str
     notes: str | None = None
     version: int
+    # Hydrated for UI (attendance list) — not stored on hr_attendance.
+    employee_code: str | None = None
+    employee_name: str | None = None
+    department_id: UUID | None = None
+    department_name: str | None = None
 
 
 class EmployeeDocumentCreate(BaseModel):
@@ -1731,6 +1736,9 @@ class EmployeeImportRow(BaseModel):
 
     employee_code: str
     name: str
+    # Old Emp Code when Excel has \"New E codes\" (lookup + rename to employee_code).
+    previous_employee_code: str | None = None
+    old_employee_code: str | None = None
     entity: str | None = None
     organisation: str | None = None
     organization: str | None = None
@@ -1762,6 +1770,10 @@ class EmployeeImportRow(BaseModel):
     emergency_relationship: str | None = None
     father_name: str | None = None
     esi: str | None = None
+    # Workforce tag e.g. office_staff / client_side (stored on profile skills_json.tags).
+    tag: str | None = None
+    # Client deployment site/org (not HRMS Organisation). Stored on skills_json.deployed_at.
+    deployed_at: str | None = None
 
 
 class EmployeeImportRequest(BaseModel):
@@ -1792,6 +1804,20 @@ class EmployeeImportResponse(BaseModel):
 
 class EmployeeClearResponse(BaseModel):
     deleted: int
+    message: str = ""
+
+
+class EmployeeTagBackfillRequest(BaseModel):
+    """Stamp employees missing a workforce tag with a default (office_staff)."""
+
+    default_tag: str = "office_staff"
+    only_missing: bool = True
+
+
+class EmployeeTagBackfillResponse(BaseModel):
+    updated: int
+    skipped: int
+    default_tag: str
     message: str = ""
 
 

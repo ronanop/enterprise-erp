@@ -105,6 +105,7 @@ export function LeaveAdjustPanel({
     halfDay: number;
     absent: number;
     weekOff: number;
+    holiday?: number;
     payable: number;
   };
 }) {
@@ -236,25 +237,37 @@ export function LeaveAdjustPanel({
     let halfDay = 0;
     let absent = 0;
     let weekOff = 0;
+    let holiday = 0;
     let lop = 0;
     for (const d of days) {
       const punch = (d.punch_status || "").toLowerCase();
       const presence = presenceOf(d.punch_status, d.kind);
-      if (presence.label === "Week off") weekOff += 1;
+      if (presence.label === "Holiday") holiday += 1;
+      else if (presence.label === "Week off") weekOff += 1;
       else if (punch === "half_day") halfDay += 1;
       else if (presence.present === true) present += 1;
       else if (presence.present === false) absent += 1;
       if (d.proposed_result === "lop") lop += Number(d.days) || 0;
     }
+    // Half day = 0.5 present + 0.5 LOP (unless leave covers). Holiday/WO are paid.
+    const absentInclHalf = Math.round((absent + halfDay * 0.5) * 10) / 10;
+    const earned = present + halfDay * 0.5 + weekOff + holiday;
+    const payable = Math.max(
+      0,
+      Math.round(Math.min(30, Math.max(30 - lop, earned)) * 10) / 10,
+    );
     return {
       present,
       halfDay,
-      absent,
+      absent: absentInclHalf,
       weekOff,
-      payable: Math.max(0, 30 - lop),
+      holiday,
+      payable,
     };
   }, [preview]);
-  const kpi = attendanceSummary ?? attendanceKpi;
+  // Prefer day plan from leave-adjust preview (holidays / Sat+Sun). Payroll summary
+  // previously overrode this with sunday-only WO and no holiday → wrong KPI cards.
+  const kpi = preview ? attendanceKpi : (attendanceSummary ?? attendanceKpi);
   const openHistory = history.filter((h) => !h.reverted_at).length;
 
   async function runMark(code: "CL" | "SL", date = markDate) {
@@ -419,11 +432,12 @@ export function LeaveAdjustPanel({
 
       <div className="flex min-h-0 w-full flex-1 flex-col gap-3">
         {preview ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
             <BalanceCard label="Present" value={kpi.present} />
             <BalanceCard label="Half day" value={kpi.halfDay} />
             <BalanceCard label="Absent" value={kpi.absent} />
             <BalanceCard label="WO" value={kpi.weekOff} />
+            <BalanceCard label="Holiday" value={kpi.holiday ?? 0} />
             <BalanceCard label="Payable" value={`${kpi.payable}/30`} />
           </div>
         ) : null}

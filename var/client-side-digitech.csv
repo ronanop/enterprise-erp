@@ -1,0 +1,77 @@
+Sr. No.,Status,Tag,EMPLOYEE ID,New E codes,NAME,Entity,Deployed At,Base Location,Designation,Department,Reporting Manager,DOJ,Emp. Contact No.,Email id,Gender,DOB
+1,Active,client_side,CDPL2701,CDPL2701,Rohitash Kumar,Digitech,Airtel,Manesar,Lab Infra Engineer,Technical,Shweta Gaba,2023-04-03,9897429697,rohtashpanchal999@gmail.com,Male,1998-07-15
+2,Active,client_side,CT5128,CDPL5128,Shubham Singh,Digitech,Airtel,Noida,Network Engineer,Technical,Shweta Gaba,2023-11-01,6388099622,shubhamsingh92533@gmail.com,Male,1997-01-26
+3,Active,client_side,CT5138,CDPL5138,Sonu Kumar,Digitech,Airtel,Noida,Network Engineer,Technical,Shweta Gaba,2024-01-15,8271970588,sonuk4185@gmail.com,Male,1994-01-08
+4,Active,client_side,CT5178,CDPL5178,Piyush,Digitech,Airtel,Noida,Netwok security engineer,Technical,Shweta Gaba,2024-08-22,8851481288,piyush8287@gmail.com,Male,2001-01-15
+5,Active,client_side,ACT199,CDPL0199,Rohan Prakash Shinde,Digitech,Airtel,Pune,Network Engineer,Technical,Shweta Gaba,2025-01-13,9623010026,rohanshinde125@rediffmail.com,Male,1998-06-04
+6,Active,client_side,ACT200,CDPL0200,Shiv Kanaujia,Digitech,Airtel,Noida,Network Engineer,Technical,Shweta Gaba,2025-01-13,6393942722,kanaujiashiv3@gmail.com,Male,2003-07-05
+7,Active,client_side,CT5069,CDPL5069,Subrat Kumar Maharatha,Digitech,Airtel,Bhubneshwar,Network Engineer,Technical,Shweta Gaba,2022-02-15,7894438584,subratmaharatha2006@gmail.com,Male,1983-07-05
+8,Active,client_side,CT5085,CDPL5085,Ganesh Ramalingam,Digitech,Airtel,Chennai,Network Engineer,Technical,Shweta Gaba,2022-09-27,9444646946,ganesh.ramalingam383@gmail.com,Male,1983-08-03
+9,Active,client_side,CT5086,CDPL5086,Vikas Kumar,Digitech,Airtel,Noida,Major Incident Manager,Technical,Shweta Gaba,2023-01-10,9910861451,nvvikas3@gmail.com,Male,1989-01-01
+10,Active,client_side,CT5090,CDPL5090,Deepak Kumar,Digitech,Airtel,Noida,Network Engineer,Technical,Shweta Gaba,2023-04-26,8932852823,Dkgupta8785@gmail.com,Male,2001-11-25
+11,Active,client_side,ACT204,CDPL0204,Harsh Pandey,Digitech,Airtel,Noida,NOC Engineer,Technical,Shweta Gaba,2025-03-06,7007501127,harshit7425@gmail.com,Male,1998-08-21
+12,Active,client_side,ACT205,CDPL0205,Rahul Rai,Digitech,Airtel,Noida,NOC Engineer,Technical,Shweta Gaba,2025-03-03,8299566180,rahulrai8842@gmail.com,Male,1998-06-14
+13,Active,client_side,ACT215,CDPL0215,Nitish,Digitech,Airtel,Noida,Network Engineer,Technical,Shweta Gaba,2025-04-01,9045249747,nitishtyagi1512001@gmail.com,Male,2001-01-15
+14,Active,client_side,CT5096A,CDPL5096,Ankit,Digitech,Airtel,Manesar,Lab Infra Engineer,Technical,Shweta Gaba,2023-07-20,9560299916,ankitattrish000@gmail.com,Male,2002-11-07
+15,Active,client_side,ACT222,CDPL0222,Vinay Kumar Yadav,Digitech,Airtel,Noida,Network Engineer,Technical,Shweta Gaba,2025-05-15,9956058714,vinayay714@gmail.com,Male,1992-09-17
+16,Active,client_side,ACT223,CDPL0223,Aditya Tiwari,Digitech,Airtel,Noida,Change manager,Technical,Shweta Gaba,2025-05-20,8178194330,tiwari.aditya1807@gmail.com,Male,2004-07-14
+17,Active,client_side,ACT227,CDPL0227,Saurabh Negi,Digitech,Airtel,Noida,Network Engineer,Technical,Shweta Gaba,2025-06-23,6395685481,saurabhnegi220399@gmail.com,Male,1999-03-22
+18,Active,client_side,ACT231,CDPL0231,Bidisha Patgiri,Digitech,Airtel,Noida,Openstack Admin,Technical,Shweta Gaba,2025-08-11,7073806753,bidipatgiri@gmail.com,Female,1998-03-06
+22,Active,client_side,ACT238,CDPL0238,Prachi Chauhan,Digitech,Airtel,Mumbai,Devops Eng. Openstack,Technical,Shweta Gaba,2025-09-22,8219168503,prachichauhan1201@gmail.com,Female,2003-02-15
+25,Active,client_side,ACT243,CDPL0243,Subhash Chandra,Digitech,Airtel,Noida,Network Engineer,Technical,Shweta Gaba,2025-10-01,7536085934,subhash3006in@gmail.com,Male,2002-09-01
+26,Active,client_side,ACT245,CDPL0245,Geetanjali,Digitech,Airtel,Secunderabad,Network Engineer,Technical,Shweta Gaba,2025-11-03,9507598657,mailgeetanjali2003@gmail.com,Female,2004-06-28
+31,Active,client_side,CT5292,CDPL5292,Chaitanya,Digitech,Airtel,Chennai,Network Engineer,Technical,Shweta Gaba,2025-12-17,8307184588,chaitanya112949@gmail.com,Male,2003-10-11
+38,Active,client_side,ACT256,CDPL0256,Nityansh Gupta,Digitech,Airtel,Kolkata,Network Engineer,Technical,Shweta Gaba,2026-02-16,9569230398,nityanshgupta428@gmail.com,Male,2005-01-18
+50,Active,client_side,ACT274,CDPL0274,Anmol Sharma,Digitech,Airtel,Noida,Network Engineer,Technical,Shweta Gaba,2026-05-06,7579382676,Yash.meerut394@gmail.com,Male,2003-09-04
+54,Active,client_side,CT5335,CDPL5335,Ankur Kushwaha,Digitech,NEC,Noida,SOC Analyst,Technical,Shweta Gaba,2025-08-11,8851884907,ankurxkushwaha@gmail.com,Male,2003-11-09
+55,Active,client_side,ACT279,CDPL0279,Akash Tevetia,Digitech,Airtel,Noida,Major incident manager,Technical,Shweta Gaba,2026-06-22,7678272732,akashtevetia7678@gmail.com,Male,2001-10-09
+56,Active,client_side,ACT281,CDPL0281,Ranjeet Kumar,Digitech,NEC,Noida,Wintel Engineer,Technical,Shweta Gaba,2026-07-01,99580 73959,Kranjeet.pro@gmail.com,Male,1993-06-15
+57,Active,client_side,ACT282,CDPL0282,Sarvesh Kumar,Digitech,NEC,Jaipur,Wintel Engineer,Technical,Shweta Gaba,2026-07-01,9958087073,sarveshkumarupadhyay24999@gmail.com,Male,1999-09-24
+58,Active,client_side,ACT283,CDPL0283,Navin Sharma,Digitech,Airtel,Gurgaon,Network Security Engineer,Technical,Shweta Gaba,2026-07-15,9810223043,navinsharma9810@gmail.com,Male,"Feburary, 10, 1999"
+59,Active,client_side,ACT284,CDPL0284,Kriti Sharma,Digitech,Airtel,Kolkata,Openstack Admin,Technical,Shweta Gaba,2026-08-24,9319564556,kriti2805@gmail.com,Female,2001-03-29
+60,Active,client_side,ACT285,CDPL0285,Sandesh Sukhadev Jadhav,Digitech,Airtel,Noida,Network Engineer,Technical,Shweta Gaba,2026-07-27,,sandesh.jadhav005@gmail.com,Male,1986-10-25
+61,Active,client_side,ACT286,CDPL0286,Bankatesh Kumar,Digitech,Airtel,Noida,Network Engineer,Technical,Shweta Gaba,2026-08-03,8862812633,bankateshkr99@gmail.com,Male,2004-09-06
+62,Active,client_side,ACT287,CDPL0287,Chukka Hemanth Phanindra,Digitech,NEC,Noida,SOC Analyst,Technical,Shweta Gaba,2026-08-10,7842977618,hemanthphanindra071@gmail.com,Male,1996-11-03
+63,Active,client_side,ACT288,CDPL0288,Robin Kumar,Digitech,Airtel,Noida,Network Engineer,Technical,Shweta Gaba,2026-08-11,9667448572,robinsingh8789356269@gmail.com,Male,2002-01-14
+64,Active,client_side,CDPL0290,CDPL0290,Nikhil Singh,Digitech,Airtel,Noida,Change manager,Technical,Shweta Gaba,2026-09-01,9639449002,nikhils9639@gmail.com,Male,2005-11-24
+66,Active,client_side,CDPL0292,CDPL0292,Adinath Rameshwar Dhole,Digitech,Airtel,Noida,SDWAN Engineer,Technical,Shweta Gaba,2026-09-16,7709919968,adinathdhole149@gmail.com,Male,2000-07-09
+69,Active,client_side,CDPL0296,CDPL0296,Divyanshu Singh,Digitech,Airtel,Noida,NOC Engineer,Technical,Shweta Gaba,2026-09-23,9616501521,singhdivyanshu61545@gmail.com,Male,2005-09-23
+70,Active,client_side,CDPL0297,CDPL0297,Ayush Negi,Digitech,Airtel,Asansol/WB,Major incident manager,Technical,Shweta Gaba,"Monday, September 28, 2026",7251906689,ayushnegi7283@gmail.com,Male,"Wednesday, June 11, 2003"
+71,Active,client_side,CDPL0298,CDPL0298,Mahima,Digitech,Airtel,Patna/Patliputra,NOC Engineer,Technical,Shweta Gaba,"Thursday, October 1, 2026",7428303943,mahimatomar8368@gmail.com,Female,"Tuesday, November 28, 2000"
+72,Active,client_side,CDPL0299,CDPL0299,Bhavika,Digitech,Airtel,Ranchi,NOC Engineer,Technical,Shweta Gaba,"Thursday, October 1, 2026",8053704134,bhavikachanana@gmail.com,Female,"Tuesday, November 5, 2002"
+73,Active,client_side,CDPL0300,CDPL0300,Harsh Yadav,Digitech,Airtel,Guwahati,NOC Engineer,Technical,Shweta Gaba,"Thursday, October 1, 2026",9027495418,rajharsh592@gmail.com,Male,06 Feburary 1999
+74,Active,client_side,CDPL0301,CDPL0301,Niteesh Kumar,Digitech,Airtel,Kolkata,NOC Engineer,Technical,Shweta Gaba,"Thursday, October 1, 2026",9026541883,niteesh638@gmail.com,Male,"Saturday, June 15, 2002"
+75,Active,client_side,ACT289,CDPL0289,Kanchan Rana,Digitech,Airtel,Gurgaon,SDWAN Engineer,Technical,Shweta Gaba,2026-10-12,9015064318,Kanchanrana812000@gmail.com,Female,2000-01-18
+76,Active,client_side,CDPL0302,CDPL0302,Harshwardhan Dhote,Digitech,Airtel,Meerut,SDWAN Engineer,Technical,Shweta Gaba,2026-10-12,8103193937,dhoteharsh5489@gmail.com,Male,2000-12-06
+77,Active,client_side,CDPL0303,CDPL0303,Mohd  Anas,Digitech,Airtel,Noida,NOC Engineer,Technical,Shweta Gaba,2026-10-12,7309460276,mohdanas95062@gmail.com,Male,2000-05-01
+78,Active,client_side,CDPL0304,CDPL0304,Sanjiv Kumar Singh,Digitech,Airtel,Lucknow,Network Engineer,Technical,Shweta Gaba,2026-10-01,9831103201,sanjiv1311@gmail.com,Male,1982-11-13
+79,Active,client_side,CDPL0305,CDPL0305,Ram Kumar,Digitech,Airtel,Okhla,Network Engineer,Technical,Shweta Gaba,2026-10-01,9102409555,ramkumar.ptn@gmail.com,Male,1989-06-15
+80,Active,client_side,CDPL0306,CDPL0306,Joy Poddar,Digitech,Airtel,Mohali,Network Engineer,Technical,Shweta Gaba,2026-10-01,7004081969,joypoddar08@gmail.com,Male,1990-09-10
+81,Active,client_side,CDPL0307,CDPL0307,Harish Dutta,Digitech,Airtel,Shimla,Network Engineer,Technical,Shweta Gaba,2026-10-01,9864692045,harishdutta99@gmail.com,Male,1999-12-29
+82,Active,client_side,CDPL0308,CDPL0308,Supriya Mitra,Digitech,Airtel,Gurugram,Sr. Network Engineer,Technical,Shweta Gaba,2026-10-01,9903641602,mitrasupriya@gmail.com,Male,1978-01-10
+83,Active,client_side,CDPL0309,CDPL0309,Vijay deep,Digitech,Airtel,Manesar,Sr. Network Engineer,Technical,Shweta Gaba,2026-10-01,9761697439,vijaydeep8090@gmail.com,Male,1990-08-07
+84,Active,client_side,CDPL0310,CDPL0310,Parshant Kumar Sharawat,Digitech,Airtel,"Plot 5, Gurgaon",Network Engineer,Technical,Shweta Gaba,2026-10-01,8057464342,prashantsaharawat@gmail.com,Male,1989-07-07
+85,Active,client_side,CDPL0311,CDPL0311,Shiv Kumar Singh,Digitech,Airtel,Noida 81,Network Engineer,Technical,Shweta Gaba,2026-10-01,9598629509,shivkumar8998@gmail.com,Male,1991-06-02
+86,Active,client_side,CDPL0312,CDPL0312,Sujeet Shukla,Digitech,Airtel,VASANT KUNJ,Network Engineer,Technical,Shweta Gaba,2026-10-01,7708665329,Sujeet.Shukla1@hotmail.com,Male,1992-12-06
+87,Active,client_side,CDPL0313,CDPL0313,Vijay Shankar Singh,Digitech,Airtel,Noida 81,Network Engineer,Technical,Shweta Gaba,2026-10-01,9971868301,vijayshankar4691@gmail.com,Male,1991-06-04
+88,Active,client_side,CDPL0314,CDPL0314,Anupam Kumar,Digitech,Airtel,Cochin,Network Engineer,Technical,Shweta Gaba,2026-10-01,9872293997,anupamthakur099@gmail.com,Male,1987-07-17
+89,Active,client_side,CDPL0315,CDPL0315,Baldev singh,Digitech,Airtel,Hyderabad,Network Engineer,Technical,Shweta Gaba,2026-10-01,7986598562,baldevsingh4u@gmail.com,Male,1984-08-26
+90,Active,client_side,CDPL0316,CDPL0316,Qazi Basim Bashir,Digitech,Airtel,Bangalore,Network Engineer,Technical,Shweta Gaba,2026-10-01,9596153326,basimqazi@gmail.com,Male,2000-07-07
+91,Active,client_side,CDPL0317,CDPL0317,Rakesh Kumar,Digitech,Airtel,Jaipur,Network Engineer,Technical,Shweta Gaba,2026-10-01,9812708520,kumarrakesh93340@gmail.com,Male,2000-07-05
+92,Active,client_side,CDPL0318,CDPL0318,Bhupender Kumar,Digitech,Airtel,Bhopal,Network Engineer,Technical,Shweta Gaba,2026-10-01,7988461639,raobhupender2001@gmail.com,Male,2001-04-18
+93,Active,client_side,CDPL0319,CDPL0319,Ashish Ranjan,Digitech,Airtel,Indore,Network Engineer,Technical,Shweta Gaba,2026-10-01,8178680282,starashishranjan@gmail.com,Male,1999-08-19
+94,Active,client_side,CDPL0320,CDPL0320,Sandeep kumar singh,Digitech,Airtel,Pune,Network Engineer,Technical,Shweta Gaba,2026-10-01,7752934661,sandeepfilez@gmail.com,Male,1991-08-19
+95,Active,client_side,CDPL0321,CDPL0321,Shyam bihari jha,Digitech,Airtel,Mumbai,Network Engineer,Technical,Shweta Gaba,2026-10-01,9122825258,jhashyam717@gmail.com,Male,1999-04-10
+96,Active,client_side,CDPL0322,CDPL0322,Bethson Varghese Philip,Digitech,Airtel,Jammu,Network Engineer,Technical,Shweta Gaba,2026-10-01,9400632368,bethsoncoc@gmail.com,Male,1996-11-05
+97,Active,client_side,CDPL0323,CDPL0323,Kaushik bhuyan,Digitech,Airtel,Ahmedabad/Changodar,Network Engineer,Technical,Shweta Gaba,2026-10-01,9085762524,kaushikbhuyan17@gmail.com,Male,1998-12-15
+98,Active,client_side,CDPL0324,CDPL0324,Avinash Ramesh Sonavane,Digitech,Airtel,Coimbatore,Network Engineer,Technical,Shweta Gaba,2026-10-01,9890177619,avinashrs296@gmail.com,Male,29 Feburary 1996
+99,Active,client_side,CDPL0325,CDPL0325,Devendra kumar Sharma,Digitech,Airtel,Lucknow,Network Engineer,Technical,Shweta Gaba,2026-10-01,9799470222,devendra421@gmail.com,Male,1988-12-01
+100,Active,client_side,CDPL0326,CDPL0326,Abhishek,Digitech,Airtel,Chennai,Network Engineer,Technical,Shweta Gaba,2026-10-01,9131772106,asumre1995@gmail.com,Male,1995-12-12
+101,Active,client_side,CDPL0327,CDPL0327,Manish sharma,Digitech,Airtel,Bilaspur,Network Engineer,Technical,Shweta Gaba,2026-10-01,9596153326,manishsharma3800@gmail.com,Male,1991-07-27
+102,Active,client_side,CDPL0328,CDPL0328,Aditya Nagesh Dharmadhikari,Digitech,Airtel,Noida,Network Engineer,Technical,Shweta Gaba,2026-10-01,7030530477,aditya.dharmadhikari.99@gmail.com,Male,1999-03-25
+103,Active,client_side,CDPL0329,CDPL0329,Lavesh kailash Dhanmeher,Digitech,Airtel,Mumbai,Network Engineer,Technical,Shweta Gaba,2026-10-01,9321246012,laveshdhanmeher12345@gmail.com,Male,2001-03-27
+104,Active,client_side,CDPL0330,CDPL0330,Gurnoor Singh,Digitech,Airtel,Jammu,Network Engineer,Technical,Shweta Gaba,2026-10-01,7051580775,gsraina49@gmail.com,Male,2002-04-09
+105,Active,client_side,CDPL0331,CDPL0331,Shivam Mishra,Digitech,Airtel,Ahmedabad/Changodar,Sr. Network Engineer,Technical,Shweta Gaba,2026-10-21,8888644833,shivam.vmishra555@gmail.com,Male,1996-07-11
+106,Active,client_side,CDPL0332,CDPL0332,Sabareeswaran,Digitech,Airtel,Coimbatore,Network Engineer,Technical,Shweta Gaba,2026-10-21,7397619325,sabareeswaranb09@gmail.com,Male,1999-01-20
+108,Active,client_side,CT0297,CDPL0334,ShashiPrabhu,Digitech,Airtel,Chennai,Network Engineer L2,Technical,Shweta Gaba,2026-11-12,6383782728,shasiprabhu.sg20@gmail.com,Male,2000-03-20
+110,Active,client_side,CDPL0336,CDPL0336,Rishav Sharma,Digitech,Airtel,Noida,Network Engineer,Technical,Shweta Gaba,2026-11-16,,rishavsharma.sep.2003@gmail.com,Male,

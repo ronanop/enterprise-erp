@@ -71,7 +71,9 @@ function genderLabel(row: EmployeeRecord): string {
 
 function lifecycleLabel(status: EmployeeRecord["lifecycleStatus"]): string {
   if (status === "onboarding") return "Pending Join";
+  if (status === "resigned") return "Resigned";
   if (status === "inactive") return "Ex Employee";
+  if (status === "notice") return "Notice Period";
   return status;
 }
 

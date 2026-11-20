@@ -401,13 +401,24 @@ export function AssignSalaryDrawer({
   structures: SalaryStructure[];
   employees: HrMasterOption[];
   initial?: EmployeeSalary | null;
-  onSubmit: (input: Omit<EmployeeSalary, "id"> & { id?: string }) => void;
+  onSubmit: (
+    input: Omit<EmployeeSalary, "id"> & {
+      id?: string;
+      hrEmployeeUuid?: string;
+      employmentId?: string;
+      branchId?: string;
+      departmentId?: string;
+      companyId?: string;
+      employeeCode?: string;
+    },
+  ) => void | Promise<void>;
 }) {
   const [employeeKey, setEmployeeKey] = useState("");
   const [structureId, setStructureId] = useState(structures[0]?.id ?? "");
   const [effectiveDate, setEffectiveDate] = useState("");
   const [monthlyCtc, setMonthlyCtc] = useState("");
   const [bankAccount, setBankAccount] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const editing = Boolean(initial);
   const structure = structures.find((s) => s.id === structureId);
@@ -472,7 +483,7 @@ export function AssignSalaryDrawer({
         <Button
           type="button"
           className="cursor-pointer"
-          disabled={!employeeKey || !structureId}
+          disabled={!employeeKey || !structureId || saving}
           onClick={() => {
             const emp =
               employee ??
@@ -485,26 +496,41 @@ export function AssignSalaryDrawer({
                 bankName: initial?.bankName,
               } as HrMasterOption);
             const ctc = Number(monthlyCtc) || monthlyFromStructure(structure) || 0;
-            onSubmit({
-              id: initial?.id,
-              employeeId: emp.code || initial?.employeeId || emp.id,
-              employeeName: (emp.label?.split(" · ")[0] || initial?.employeeName || emp.id).trim(),
-              structureId,
-              structureName: structure?.name ?? initial?.structureName ?? "",
-              effectiveDate,
-              monthlyCtc: ctc,
-              annualCtc: ctc * 12,
-              payrollGroup: initial?.payrollGroup || "General",
-              bankAccount: bankAccount || emp.accountNumber || emp.bankAccount || "",
-              bankName: emp.bankName || initial?.bankName || "",
-              taxRegime: initial?.taxRegime || "new",
-              salaryStatus: "active",
-              department: emp.department || initial?.department || "General",
-            });
-            onClose();
+            const uuidRe =
+              /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+            setSaving(true);
+            void Promise.resolve(
+              onSubmit({
+                id: initial?.id,
+                employeeId: emp.code || initial?.employeeId || emp.id,
+                employeeCode: emp.code || undefined,
+                hrEmployeeUuid: uuidRe.test(emp.id) ? emp.id : undefined,
+                employmentId: emp.employmentId,
+                branchId: emp.branchId,
+                departmentId: emp.departmentId,
+                companyId: emp.companyId,
+                employeeName: (emp.label?.split(" · ")[0] || initial?.employeeName || emp.id).trim(),
+                structureId,
+                structureName: structure?.name ?? initial?.structureName ?? "",
+                effectiveDate,
+                monthlyCtc: ctc,
+                annualCtc: ctc * 12,
+                payrollGroup: initial?.payrollGroup || "General",
+                bankAccount: bankAccount || emp.accountNumber || emp.bankAccount || "",
+                bankName: emp.bankName || initial?.bankName || "",
+                taxRegime: initial?.taxRegime || "new",
+                salaryStatus: "active",
+                department: emp.department || initial?.department || "General",
+              }),
+            )
+              .then(() => onClose())
+              .catch(() => {
+                /* parent toasts */
+              })
+              .finally(() => setSaving(false));
           }}
         >
-          {editing ? "Save changes" : "Assign"}
+          {saving ? "Saving…" : editing ? "Save changes" : "Assign"}
         </Button>
       }
     >

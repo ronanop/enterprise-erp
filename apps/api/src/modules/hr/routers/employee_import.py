@@ -10,7 +10,13 @@ from modules.foundation.dependencies import require_any_permission, require_perm
 from modules.foundation.domain.value_objects import TenantContext
 from modules.hr.dependencies import get_db
 from modules.hr.permissions import HR_SUPERADMIN_PERMISSION
-from modules.hr.schemas import EmployeeImportRequest, EmployeeImportResponse, EmployeeClearResponse
+from modules.hr.schemas import (
+    EmployeeClearResponse,
+    EmployeeImportRequest,
+    EmployeeImportResponse,
+    EmployeeTagBackfillRequest,
+    EmployeeTagBackfillResponse,
+)
 from modules.hr.service.employee_import_service import EmployeeImportService
 
 employee_import_router = APIRouter(prefix="/employees", tags=["HR - Employee Import"])
@@ -38,6 +44,37 @@ def bulk_import_employees(
         company_id=body.company_id,
     )
     return APIResponse(message="Import completed", data=EmployeeImportResponse.model_validate(data))
+
+
+@employee_import_router.post(
+    "/backfill-tags",
+    response_model=APIResponse[EmployeeTagBackfillResponse],
+)
+def backfill_employee_tags(
+    body: EmployeeTagBackfillRequest,
+    ctx: Annotated[
+        TenantContext,
+        Depends(
+            require_any_permission(
+                "master.employee:update",
+                "hr.employee_profile:update",
+                "hr.employee_profile:create",
+            )
+        ),
+    ],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Tag existing employees (default office_staff) so client-side imports can differ."""
+    data = EmployeeImportService(db).backfill_default_tag(
+        ctx,
+        default_tag=body.default_tag or "office_staff",
+        only_missing=body.only_missing,
+    )
+    db.commit()
+    return APIResponse(
+        message=data.get("message") or "Tags updated",
+        data=EmployeeTagBackfillResponse.model_validate(data),
+    )
 
 
 @employee_import_router.post("/clear-all", response_model=APIResponse[EmployeeClearResponse])

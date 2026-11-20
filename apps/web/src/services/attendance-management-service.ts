@@ -416,10 +416,24 @@ function mergeRow(
       location,
       device: deviceLabel,
       isLate: displayStatus === "late" || ext.isLate,
-      employeeName: emp?.name ?? ext.employeeName,
-      employeeCode: emp?.code ?? ext.employeeCode,
-      departmentName: cleanDeptName(emp?.dept) || cleanDeptName(ext.departmentName),
-      departmentId: emp?.deptId || ext.departmentId,
+      employeeName:
+        emp?.name ||
+        String(row.employee_name ?? "").trim() ||
+        ext.employeeName ||
+        "",
+      employeeCode:
+        emp?.code ||
+        String(row.employee_code ?? "").trim() ||
+        ext.employeeCode ||
+        "",
+      departmentName:
+        cleanDeptName(emp?.dept) ||
+        cleanDeptName(String(row.department_name ?? "")) ||
+        cleanDeptName(ext.departmentName),
+      departmentId:
+        emp?.deptId ||
+        String(row.department_id ?? "").trim() ||
+        ext.departmentId,
       designationName: emp?.desig ?? ext.designationName,
       managerName: emp?.manager ?? ext.managerName,
       shiftName: shiftMap.get(String(row.shift_id ?? "")) ?? ext.shiftName,
@@ -504,10 +518,11 @@ function recordsFromRows(
             dayPunches[0]?.deviceName ||
             dayPunches[0]?.deviceCode ||
             String(row.source ?? ""),
-          employeeName: emp?.name,
-          employeeCode: emp?.code,
-          departmentName: cleanDeptName(emp?.dept),
-          departmentId: emp?.deptId,
+          employeeName: emp?.name || String(row.employee_name ?? "").trim() || undefined,
+          employeeCode: emp?.code || String(row.employee_code ?? "").trim() || undefined,
+          departmentName:
+            cleanDeptName(emp?.dept) || cleanDeptName(String(row.department_name ?? "")),
+          departmentId: emp?.deptId || String(row.department_id ?? "").trim() || undefined,
           designationName: emp?.desig,
           managerName: emp?.manager,
           sourceDetail: String(row.source ?? "manual") as AttendanceSource,
@@ -704,12 +719,20 @@ export async function loadAttendanceDirectory(
 export async function loadAttendanceForEmployee(
   employeeId: string,
   directory?: AttendanceDirectory | null,
+  range?: { dateFrom?: string; dateTo?: string },
 ): Promise<AttendanceRecord[]> {
   const attRows: HrRow[] = [];
   const seenFirstIds = new Set<string>();
+  const query: Record<string, string | number> = {
+    page_size: 200,
+    employee_id: employeeId,
+  };
+  if (range?.dateFrom) query.date_from = range.dateFrom.slice(0, 10);
+  if (range?.dateTo) query.date_to = range.dateTo.slice(0, 10);
+
   for (let page = 1; page <= 30; page += 1) {
     const res = await resourceService
-      .list("/hr/attendance", { page, page_size: 200, employee_id: employeeId })
+      .list("/hr/attendance", { ...query, page })
       .catch(() => ({ data: [] }));
     const rows = (Array.isArray(res.data) ? res.data : []) as HrRow[];
     const firstId = rows[0] ? String(rows[0].id ?? "") : "";
@@ -730,7 +753,9 @@ export async function loadAttendanceForEmployee(
     .filter(Boolean)
     .sort();
   const today = todayIso();
-  const punchMap = await loadPunchesForRange(dates[0] || today, dates[dates.length - 1] || today);
+  const punchFrom = range?.dateFrom || dates[0] || today;
+  const punchTo = range?.dateTo || dates[dates.length - 1] || today;
+  const punchMap = await loadPunchesForRange(punchFrom, punchTo);
   return recordsFromRows(attRows, empMap, shiftMap, punchMap);
 }
 
@@ -1475,6 +1500,9 @@ export async function applyAttendanceCorrection(input: {
   halfPortion?: "first_half" | "second_half";
   reason: string;
   attachmentName: string;
+  /** Optional HH:mm punch overrides (local time on attendance date). */
+  checkInTime?: string;
+  checkOutTime?: string;
 }): Promise<void> {
   const { record, kind, reason, attachmentName } = input;
   const { status: nextStatus, portion, label: portionLabel } = resolveRegularizeChoice(
@@ -1488,19 +1516,42 @@ export async function applyAttendanceCorrection(input: {
     .trim();
   const notes = [baseNotes, noteTag, reason].filter(Boolean).join(" · ");
 
+  const nextCheckIn =
+    input.checkInTime != null && String(input.checkInTime).trim()
+      ? parseTimeOnDate(record.attendanceDate, String(input.checkInTime).trim())
+      : null;
+  const nextCheckOut =
+    input.checkOutTime != null && String(input.checkOutTime).trim()
+      ? parseTimeOnDate(record.attendanceDate, String(input.checkOutTime).trim())
+      : null;
+  const checkInIso = nextCheckIn || record.checkIn || null;
+  const checkOutIso = nextCheckOut || record.checkOut || null;
+  const punchesChanged =
+    (nextCheckIn && nextCheckIn !== record.checkIn) ||
+    (nextCheckOut && nextCheckOut !== record.checkOut);
+  const workingHours =
+    checkInIso && checkOutIso ? diffHours(checkInIso, checkOutIso, record.breakTime || 0) : record.workingHours;
+
   await resourceService.update("/hr/attendance", record.id, {
     version: record.version,
     attendance_status: mapToApiStatus(nextStatus),
     notes,
+    ...(checkInIso ? { check_in_at: checkInIso } : {}),
+    ...(checkOutIso ? { check_out_at: checkOutIso } : {}),
+    ...(Number.isFinite(workingHours) ? { working_hours: workingHours } : {}),
   });
 
   await submitCorrection({
     attendanceId: record.id,
     employeeId: record.employeeId,
     date: record.attendanceDate,
-    field: "attendance_status",
-    oldTime: record.status,
-    newTime: nextStatus,
+    field: punchesChanged ? "check_in" : "attendance_status",
+    oldTime: punchesChanged
+      ? `in ${formatPunchAudit(record.checkIn)} / out ${formatPunchAudit(record.checkOut)}`
+      : record.status,
+    newTime: punchesChanged
+      ? `in ${formatPunchAudit(checkInIso)} / out ${formatPunchAudit(checkOutIso)} · ${nextStatus}`
+      : nextStatus,
     reason: `${portionLabel}: ${reason}`,
     attachmentName,
     portion,
@@ -1515,7 +1566,18 @@ export async function applyAttendanceCorrection(input: {
   appendAttendanceAudit({
     attendanceId: record.id,
     action: "regularized",
-    detail: `${record.status} → ${nextStatus} (${portionLabel}); punches unchanged`,
+    detail: punchesChanged
+      ? `${record.status} → ${nextStatus} (${portionLabel}); punches updated`
+      : `${record.status} → ${nextStatus} (${portionLabel})`,
     actor: actorLabel(),
   });
+}
+
+function formatPunchAudit(iso: string | null | undefined): string {
+  if (!iso) return "-";
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "-";
+  }
 }

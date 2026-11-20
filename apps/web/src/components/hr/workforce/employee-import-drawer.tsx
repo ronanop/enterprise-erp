@@ -8,11 +8,14 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import {
-  EMPLOYEE_IMPORT_SAMPLE_CSV,
+  EMPLOYEE_IMPORT_CLIENT_SAMPLE_CSV,
+  EMPLOYEE_IMPORT_OFFICE_SAMPLE_CSV,
   IMPORT_FIELD_OPTIONS,
+  defaultTagForImportTemplate,
   extractImportHeaders,
   guessColumnMapping,
   parseEmployeeImportWithMapping,
+  type EmployeeImportTemplateKind,
   type ImportFieldKey,
   type NormalizedEmployeeImportRow,
 } from "@/lib/employee-import-map";
@@ -202,6 +205,7 @@ export function EmployeeImportDrawer({
   const [resultSummary, setResultSummary] = useState<string | null>(null);
   const [entities, setEntities] = useState<EntityOption[]>([]);
   const [companyId, setCompanyId] = useState("");
+  const [templateKind, setTemplateKind] = useState<EmployeeImportTemplateKind>("office");
   const { isHrmsSuperAdmin } = useUserPermissions();
 
   useEffect(() => {
@@ -401,7 +405,10 @@ export function EmployeeImportDrawer({
     }
     setBusy(true);
     try {
-      const result = await bulkImportEmployees(rows, { companyId });
+      const result = await bulkImportEmployees(rows, {
+        companyId,
+        defaultTag: defaultTagForImportTemplate(templateKind),
+      });
       const entityLabel = entities.find((e) => e.id === companyId)?.label || "selected entity";
       const msg = `Import done into ${entityLabel} — created ${result.created}, updated ${result.updated}, skipped ${result.skipped}`;
       setResultSummary(msg);
@@ -433,7 +440,7 @@ export function EmployeeImportDrawer({
     <SetupDrawer
       open={open}
       title="Import Employees"
-      description="Pick a legal entity, upload Excel, map columns, then import. All rows go into the selected entity."
+      description="Pick office or client template, select legal entity, upload Excel, map columns, then import."
       wide
       onClose={onClose}
       footer={
@@ -454,32 +461,81 @@ export function EmployeeImportDrawer({
       }
     >
       <div className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="cursor-pointer"
-            onClick={() =>
-              downloadTextFile("employee-import-template.csv", EMPLOYEE_IMPORT_SAMPLE_CSV, "text/csv")
+        <div className="space-y-2">
+          <SetupField
+            label="Import type"
+            required
+            hint={
+              templateKind === "client"
+                ? "Client template uses Tag=client_side and Deployed At (client site), not Organisation=Cache."
+                : "Office template uses Tag=office_staff and Organisation=Cache."
             }
           >
-            <Download className="size-3.5" />
-            Download sample CSV
-          </Button>
-          {isHrmsSuperAdmin ? (
+            <SetupSelect
+              value={templateKind}
+              onChange={(e) => setTemplateKind(e.target.value as EmployeeImportTemplateKind)}
+              className="cursor-pointer"
+            >
+              <option value="office">Office staff</option>
+              <option value="client">Client side</option>
+            </SetupSelect>
+          </SetupField>
+          <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="cursor-pointer text-destructive hover:bg-destructive/10"
-              disabled={clearing}
-              onClick={() => void runClearAll()}
+              className="cursor-pointer transition-colors duration-200"
+              onClick={() => {
+                setTemplateKind("office");
+                downloadTextFile(
+                  "employee-import-office-template.csv",
+                  EMPLOYEE_IMPORT_OFFICE_SAMPLE_CSV,
+                  "text/csv",
+                );
+              }}
             >
-              <Trash2 className="size-3.5" />
-              {clearing ? "Clearing…" : "Clear all employees"}
+              <Download className="size-3.5" />
+              Office template
             </Button>
-          ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="cursor-pointer transition-colors duration-200"
+              onClick={() => {
+                setTemplateKind("client");
+                downloadTextFile(
+                  "employee-import-client-template.csv",
+                  EMPLOYEE_IMPORT_CLIENT_SAMPLE_CSV,
+                  "text/csv",
+                );
+              }}
+            >
+              <Download className="size-3.5" />
+              Client template
+            </Button>
+            {isHrmsSuperAdmin ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="cursor-pointer text-destructive transition-colors duration-200 hover:bg-destructive/10"
+                disabled={clearing}
+                onClick={() => void runClearAll()}
+              >
+                <Trash2 className="size-3.5" />
+                {clearing ? "Clearing…" : "Clear all employees"}
+              </Button>
+            ) : null}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Rows without a Tag get{" "}
+            <span className="font-medium text-foreground">
+              {defaultTagForImportTemplate(templateKind)}
+            </span>{" "}
+            from the selected import type.
+          </p>
         </div>
 
         <SetupField

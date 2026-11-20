@@ -21,6 +21,7 @@ import type {
   EmployeeRecord,
   EmployeeWizardDraft,
   PersonalInfo,
+  PreviousEmploymentEntry,
 } from "@/types/employee-management";
 import {
   ensureEmployeeExtensionsLoaded,
@@ -130,10 +131,53 @@ function defaultExtension(partial?: Partial<EmployeeExtension>): EmployeeExtensi
     documents: partial?.documents ?? [],
     education: partial?.education ?? [],
     previousEmployment: partial?.previousEmployment ?? [],
+    tags: Array.isArray(partial?.tags) ? partial!.tags : [],
     createdBy: partial?.createdBy ?? actorLabel(),
     updatedBy: partial?.updatedBy ?? actorLabel(),
     updatedAt: partial?.updatedAt ?? nowIso(),
   };
+}
+
+function normalizeTag(raw: string | undefined | null): string {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
+}
+
+function tagsFromSkillsJson(skills: unknown): string[] {
+  if (!skills || typeof skills !== "object" || Array.isArray(skills)) return [];
+  const raw = (skills as Record<string, unknown>).tags;
+  if (Array.isArray(raw)) {
+    return [...new Set(raw.map((t) => normalizeTag(String(t))).filter(Boolean))];
+  }
+  if (typeof raw === "string" && raw.trim()) return [normalizeTag(raw)];
+  return [];
+}
+
+function deployedAtFromSkillsJson(skills: unknown): string {
+  if (!skills || typeof skills !== "object" || Array.isArray(skills)) return "";
+  return String((skills as Record<string, unknown>).deployed_at ?? "").trim();
+}
+
+function mergeSkillsJsonWithTags(
+  previousEmployment: Array<Record<string, unknown> | PreviousEmploymentEntry>,
+  tags: string[],
+  deployedAt?: string,
+): Record<string, unknown> | null {
+  const cleanTags = [...new Set(tags.map(normalizeTag).filter(Boolean))];
+  const previous = previousEmployment.map((entry) => {
+    const { id: _id, ...rest } = entry as Record<string, unknown>;
+    void _id;
+    return rest;
+  });
+  const site = String(deployedAt ?? "").trim();
+  if (!previous.length && !cleanTags.length && !site) return null;
+  const out: Record<string, unknown> = {};
+  if (previous.length) out.previous_employment = previous;
+  if (cleanTags.length) out.tags = cleanTags;
+  if (site) out.deployed_at = site;
+  return out;
 }
 
 function loadExtensions(): Record<string, EmployeeExtension> {
@@ -300,14 +344,14 @@ function mapLifecycle(
   if (raw === "probation") return "probation";
   if (raw === "onboarding" || raw === "draft") return "onboarding";
   if (raw === "notice" || raw === "notice_period") return "notice";
-  if (raw === "resigned") return "resigned";
+  if (raw === "resigned" || raw === "separated") return "resigned";
   if (raw === "archived") return "archived";
   if (
     raw === "inactive" ||
-    raw === "separated" ||
     raw === "ex_employee" ||
     raw === "ended" ||
-    raw === "cancelled"
+    raw === "cancelled" ||
+    raw === "terminated"
   ) {
     return "inactive";
   }
@@ -388,6 +432,9 @@ function mergeRow(
     (managerFromExt && managerFromExt !== "-" ? managerFromExt : "") ||
     "-";
 
+  const profileTags = tagsFromSkillsJson(profile?.skills_json);
+  const deployedAt =
+    deployedAtFromSkillsJson(profile?.skills_json) || hydrated.employment.deployedAt || "";
   const nextExt: EmployeeExtension = {
     ...hydrated,
     employment: {
@@ -396,6 +443,7 @@ function mergeRow(
       entityName,
       location: locationName || hydrated.employment.location,
       locationId: locationId || hydrated.employment.locationId,
+      deployedAt,
       reportingManagerId: managerId || hydrated.employment.reportingManagerId,
       reportingManagerName:
         reportingManagerName !== "-"
@@ -405,10 +453,12 @@ function mergeRow(
         hydrated.employment.designationName ||
         String(master.designation ?? profile?.designation ?? ""),
     },
+    tags: profileTags.length ? profileTags : hydrated.tags ?? [],
   };
 
   return {
     id,
+    tags: nextExt.tags,
     masterVersion: Number(master.version ?? 1),
     profileId: profile?.id ? String(profile.id) : undefined,
     profileVersion: profile?.version ? Number(profile.version) : undefined,
@@ -419,11 +469,15 @@ function mergeRow(
     officialEmail: hydrated.personal.officialEmail,
     mobile: hydrated.personal.mobile,
     departmentId,
-    departmentName:
-      hydrated.employment.departmentName ||
-      deptMap.get(departmentId) ||
-      String(master.designation ?? "").split("·")[0] ||
-      "-",
+    departmentName: (() => {
+      const fromExt = String(hydrated.employment.departmentName ?? "").trim();
+      const fromMap = departmentId ? String(deptMap.get(departmentId) ?? "").trim() : "";
+      const pick =
+        (fromExt && fromExt !== "-" ? fromExt : "") ||
+        (fromMap && fromMap !== "-" ? fromMap : "") ||
+        "";
+      return pick || "General";
+    })(),
     designationName:
       nextExt.employment.designationName ||
       String(master.designation ?? profile?.designation ?? "-"),
@@ -1035,6 +1089,21 @@ export async function loadEmployeeDirectory(): Promise<EmployeeDirectoryResult> 
   return directoryInflight;
 }
 
+function employeeWorkforceTags(r: EmployeeRecord): string[] {
+  const raw = [...(r.tags ?? []), ...(r.extension?.tags ?? [])];
+  return [
+    ...new Set(
+      raw
+        .map((t) => String(t || "").trim().toLowerCase())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+function isClientSideEmployee(r: EmployeeRecord): boolean {
+  return employeeWorkforceTags(r).includes("client_side");
+}
+
 export function filterEmployees(
   records: EmployeeRecord[],
   query: string,
@@ -1064,7 +1133,16 @@ export function filterEmployees(
     if (filters.departmentId && r.departmentId !== filters.departmentId) return false;
     if (filters.designation && r.designationName !== filters.designation) return false;
     if (filters.employmentType && r.employmentType !== filters.employmentType) return false;
-    if (filters.status && r.lifecycleStatus !== filters.status) return false;
+    if (filters.status) {
+      if (filters.status === "inactive") {
+        // Ex Employees KPI / filter: inactive + resigned.
+        if (r.lifecycleStatus !== "inactive" && r.lifecycleStatus !== "resigned") {
+          return false;
+        }
+      } else if (r.lifecycleStatus !== filters.status) {
+        return false;
+      }
+    }
     if (filters.reportingManagerId && r.reportingManagerId !== filters.reportingManagerId) {
       return false;
     }
@@ -1077,6 +1155,9 @@ export function filterEmployees(
       return false;
     }
     if (filters.joiningFrom && r.joiningDate && r.joiningDate < filters.joiningFrom) return false;
+
+    if (filters.workforceScope === "client" && !isClientSideEmployee(r)) return false;
+    if (filters.workforceScope === "office" && isClientSideEmployee(r)) return false;
 
     if (!q) return true;
     const hay = [
@@ -1097,7 +1178,10 @@ export function filterEmployees(
 export function computeEmployeeStats(records: EmployeeRecord[]) {
   const total = records.length;
   const active = records.filter((r) => r.lifecycleStatus === "active").length;
-  const inactive = records.filter((r) => r.lifecycleStatus === "inactive").length;
+  // Ex-employee KPI includes resigned + inactive.
+  const inactive = records.filter(
+    (r) => r.lifecycleStatus === "inactive" || r.lifecycleStatus === "resigned",
+  ).length;
   const onboarding = records.filter((r) => r.lifecycleStatus === "onboarding").length;
   const probation = records.filter((r) => r.lifecycleStatus === "probation").length;
   const notice = records.filter((r) => r.lifecycleStatus === "notice").length;
@@ -1268,6 +1352,7 @@ export async function createExistingEmployee(input: {
     lifecycleStatus: "active",
     gender: "",
     isDeleted: false,
+    tags: ext.tags ?? ["office_staff"],
     extension: ext,
   };
 }
@@ -1656,14 +1741,13 @@ export async function createEmployeeFromWizard(
     },
   }).catch(() => null);
 
-  if (profileRes?.data?.id && (educationPayload.length || previousPayload.length)) {
+  const createTags = ["office_staff"];
+  if (profileRes?.data?.id && (educationPayload.length || previousPayload.length || createTags.length)) {
     await resourceService
       .update("/hr/employee-profiles", String(profileRes.data.id), {
         version: Number(profileRes.data.version ?? 1),
-        education_json: educationPayload,
-        skills_json: previousPayload.length
-          ? { previous_employment: previousPayload }
-          : null,
+        education_json: educationPayload.length ? educationPayload : undefined,
+        skills_json: mergeSkillsJsonWithTags(previousPayload, createTags),
       })
       .catch(() => undefined);
   }
@@ -1682,6 +1766,7 @@ export async function createEmployeeFromWizard(
     companyBank: draft.companyBank ?? emptyBank(),
     salary: draft.salary,
     documents: draft.documents,
+    tags: createTags,
     education: draft.education,
     previousEmployment: draft.previousEmployment,
   });
@@ -1722,6 +1807,7 @@ export async function createEmployeeFromWizard(
     lifecycleStatus: draft.employment.lifecycleStatus || "active",
     gender: draft.personal.gender,
     isDeleted: false,
+    tags: ext.tags ?? ["office_staff"],
     extension: ext,
   };
 }
@@ -1816,15 +1902,11 @@ export async function updateEmployeeRecord(  record: EmployeeRecord,
         delete education.id;
         return education;
       }),
-      skills_json: nextExt.previousEmployment.length
-        ? {
-            previous_employment: nextExt.previousEmployment.map((entry) => {
-              const previousEmployment = { ...entry };
-              delete previousEmployment.id;
-              return previousEmployment;
-            }),
-          }
-        : null,
+      skills_json: mergeSkillsJsonWithTags(
+        nextExt.previousEmployment,
+        nextExt.tags ?? [],
+        nextExt.employment.deployedAt,
+      ),
       status: nextExt.employment.lifecycleStatus,
     }).catch(() => undefined);
   }
@@ -1875,13 +1957,44 @@ export async function setEmployeeLifecycleStatus(
   };
   saveExtension(record.id, ext);
 
+  // Master employee statuses (DB check): draft|onboarding|active|probation|on_leave|
+  // notice_period|resigned|terminated|ex_employee
+  const masterStatus =
+    status === "archived"
+      ? "ex_employee"
+      : status === "notice"
+        ? "notice_period"
+        : status === "inactive"
+          ? "ex_employee"
+          : status;
+
   await apiClient<HrRow>(`/employees/${record.id}`, {
     method: "PUT",
     body: {
       version: record.masterVersion,
-      status: status === "archived" ? "archived" : status,
+      status: masterStatus,
     },
   });
+
+  if (record.employmentId) {
+    const employmentStatus = {
+      active: "active",
+      onboarding: "onboarding",
+      probation: "probation",
+      notice: "notice_period",
+      resigned: "separated",
+      archived: "ex_employee",
+      inactive: "ended",
+    }[status];
+    if (employmentStatus) {
+      await resourceService
+        .update("/hr/employment", record.employmentId, {
+          version: record.employmentVersion,
+          status: employmentStatus,
+        })
+        .catch(() => undefined);
+    }
+  }
 
   appendActivity({
     employeeId: record.id,

@@ -66,9 +66,9 @@ class SalaryStructureCreate(BaseModel):
     telephone_allowance: Decimal = Decimal("0")
     employer_contribution: Decimal = Decimal("1800")
     pf_percent: Decimal = Decimal("0.1200")
-    pf_wage_ceiling: Decimal = Decimal("15000")
-    pf_fixed_ceiling: Decimal = Decimal("1800")
-    edli_admin_amount: Decimal = Decimal("100")
+    pf_wage_ceiling: Decimal = Decimal("25000")
+    pf_fixed_ceiling: Decimal = Decimal("3000")
+    edli_admin_amount: Decimal = Decimal("0")
     esi_percent: Decimal = Decimal("0.0075")
     esi_monthly_ceiling: Decimal = Decimal("21000")
 
@@ -112,9 +112,9 @@ class SalaryStructureResponse(OrmModel):
     special_allowance: Decimal = Decimal("0")
     ctc_amount: Decimal = Decimal("0")
     pf_percent: Decimal = Decimal("0.1200")
-    pf_wage_ceiling: Decimal = Decimal("15000")
-    pf_fixed_ceiling: Decimal = Decimal("1800")
-    edli_admin_amount: Decimal = Decimal("100")
+    pf_wage_ceiling: Decimal = Decimal("25000")
+    pf_fixed_ceiling: Decimal = Decimal("3000")
+    edli_admin_amount: Decimal = Decimal("0")
     esi_percent: Decimal = Decimal("0.0075")
     esi_monthly_ceiling: Decimal = Decimal("21000")
 
@@ -659,7 +659,7 @@ class PayrollPolicyCreate(BaseModel):
     effective_to: date | None = None
     status: str = "draft"
     payroll_cycle_type: str = "day_20_to_20"
-    payroll_cycle_start_day: int = 20
+    payroll_cycle_start_day: int = 21
     leave_cycle_type: str = "calendar_month"
     leave_balance_credit_timing: str = "after_calendar_month_end"
     salary_proration_mode: str = "fixed_30_day_factor"
@@ -673,7 +673,7 @@ class PayrollPolicyCreate(BaseModel):
     pf_total_amount: Decimal | None = Decimal("3700")
     pf_employee_percent: Decimal | None = Decimal("0.1200")
     pf_employer_percent: Decimal | None = Decimal("0.1200")
-    pf_wage_ceiling: Decimal | None = Decimal("15000")
+    pf_wage_ceiling: Decimal | None = Decimal("25000")
     pf_on_lop: str = "fixed"
     sandwich_enabled: bool = True
     sandwich_off_becomes: str = "lop"

@@ -1,10 +1,19 @@
 /** Map Excel/CSV workforce headers → normalized import rows (auto + manual mapping). */
 
 export type NormalizedEmployeeImportRow = {
+  /** Target Emp Code (prefer \"New E codes\" when present). */
   employee_code: string;
   name: string;
+  /** Old EMPLOYEE ID when Excel also has New E codes (rename on import). */
+  previous_employee_code?: string;
   entity?: string;
+  /** HRMS parent org label (e.g. Cache) — office imports only. */
   organisation?: string;
+  /**
+   * Client deployment org / site (where the employee is deployed).
+   * Do not map this to Organisation — that is Cache / HRMS org.
+   */
+  deployed_at?: string;
   base_location?: string;
   designation?: string;
   department?: string;
@@ -44,6 +53,10 @@ export type NormalizedEmployeeImportRow = {
   esi?: string;
   /** Optional import status column. */
   status?: string;
+  /**
+   * Workforce tag: `office_staff` (office template) or `client_side` (client template).
+   */
+  tag?: string;
   /** Education / marksheets (Yes/No or file name). */
   marksheet_10th?: string;
   marksheet_12th?: string;
@@ -66,10 +79,21 @@ export type ImportFieldKey = keyof NormalizedEmployeeImportRow | "";
 export const IMPORT_FIELD_OPTIONS: { value: ImportFieldKey; label: string; group: string }[] = [
   { value: "", label: "- Skip -", group: "General" },
   { value: "status", label: "Status", group: "General" },
-  { value: "employee_code", label: "EMPLOYEE ID / Emp Code", group: "Identity" },
+  { value: "tag", label: "Tag (office_staff / client_side)", group: "General" },
+  { value: "employee_code", label: "New E codes / Emp Code", group: "Identity" },
+  {
+    value: "previous_employee_code",
+    label: "EMPLOYEE ID (old)",
+    group: "Identity",
+  },
   { value: "name", label: "NAME", group: "Identity" },
   { value: "entity", label: "Entity", group: "Organisation" },
-  { value: "organisation", label: "Organisation", group: "Organisation" },
+  { value: "organisation", label: "Organisation (HRMS / Cache)", group: "Organisation" },
+  {
+    value: "deployed_at",
+    label: "Deployed At (client site)",
+    group: "Organisation",
+  },
   { value: "base_location", label: "Base Location", group: "Organisation" },
   { value: "designation", label: "Designation", group: "Organisation" },
   { value: "department", label: "Department", group: "Organisation" },
@@ -125,6 +149,16 @@ const HEADER_ALIASES: Record<string, keyof NormalizedEmployeeImportRow> = {
   employee_code: "employee_code",
   employee_id: "employee_code",
   code: "employee_code",
+  new_e_codes: "employee_code",
+  new_e_code: "employee_code",
+  new_emp_code: "employee_code",
+  new_employee_code: "employee_code",
+  new_employee_id: "employee_code",
+  previous_employee_code: "previous_employee_code",
+  previous_emp_code: "previous_employee_code",
+  old_employee_code: "previous_employee_code",
+  old_emp_code: "previous_employee_code",
+  old_employee_id: "previous_employee_code",
   name: "name",
   employee_name: "name",
   full_name: "name",
@@ -134,6 +168,17 @@ const HEADER_ALIASES: Record<string, keyof NormalizedEmployeeImportRow> = {
   organisation: "organisation",
   organization: "organisation",
   org: "organisation",
+  deployed_at: "deployed_at",
+  deployedat: "deployed_at",
+  deployment: "deployed_at",
+  deployment_organisation: "deployed_at",
+  deployment_organization: "deployed_at",
+  client: "deployed_at",
+  client_name: "deployed_at",
+  client_organisation: "deployed_at",
+  client_organization: "deployed_at",
+  client_site: "deployed_at",
+  deploy_location: "deployed_at",
   base_location: "base_location",
   baselocation: "base_location",
   location: "base_location",
@@ -147,6 +192,11 @@ const HEADER_ALIASES: Record<string, keyof NormalizedEmployeeImportRow> = {
   manager: "reporting_manager",
   rm: "reporting_manager",
   status: "status",
+  tag: "tag",
+  tags: "tag",
+  employee_tag: "tag",
+  workforce_tag: "tag",
+  staff_tag: "tag",
   // Cache / official
   cache_email_id: "email",
   cache_email: "email",
@@ -329,6 +379,14 @@ function fuzzyAlias(h: string): keyof NormalizedEmployeeImportRow | "" {
   if (h.includes("aadhar")) return "aadhaar";
   if (h.includes("uan")) return "uan";
   if (h.includes("cache") && h.includes("email")) return "email";
+  if (h === "tag" || h.endsWith("_tag") || h.includes("workforce_tag")) return "tag";
+  if (
+    h.includes("deployed") ||
+    h.includes("deployment") ||
+    (h.includes("client") && (h.includes("org") || h.includes("site") || h.includes("name")))
+  ) {
+    return "deployed_at";
+  }
   return "";
 }
 
@@ -370,8 +428,24 @@ export function extractImportHeaders(matrix: string[][]): {
 /** Auto-guess mapping from header names. */
 export function guessColumnMapping(headers: string[]): ImportFieldKey[] {
   const used = new Set<string>();
+  const hasNewECode = headers.some((h) =>
+    ["new_e_codes", "new_e_code", "new_emp_code", "new_employee_code", "new_employee_id"].includes(
+      h,
+    ),
+  );
   return headers.map((h) => {
     if (!h || h === "sno" || h === "s_no" || h === "sr_no" || h === "serial_no") return "";
+    // When \"New E codes\" exists, EMPLOYEE ID is the old code used for lookup/rename.
+    if (
+      hasNewECode &&
+      (h === "employee_id" || h === "emp_code" || h === "empcode" || h === "employee_code")
+    ) {
+      if (!used.has("previous_employee_code")) {
+        used.add("previous_employee_code");
+        return "previous_employee_code";
+      }
+      return "";
+    }
     let hit: ImportFieldKey = HEADER_ALIASES[h] ?? fuzzyAlias(h) ?? "";
     // Second IFSC / bank block → salary bank fields
     if (hit === "bank_ifsc" && used.has("bank_ifsc")) hit = "salary_bank_ifsc";
@@ -485,6 +559,25 @@ export function parseEmployeeImportMatrix(matrix: string[][]): {
   return parseEmployeeImportWithMapping(matrix, headerIdx, guessColumnMapping(headers));
 }
 
-export const EMPLOYEE_IMPORT_SAMPLE_CSV = `SNo,Status,EMPLOYEE ID,NAME,Entity,Organisation,Base Location,Designation,Department,Reporting Manager,DOJ,Emp.Contact No.,Email id,cache email id,Gender,DOB,Family Member Name,Relation,Contact No.,Fathers name,ESI,UAN No,10th Marksheet,12th Marksheet,Basic Education,Higher Education,Degree,Aadhar,PAN,Previous-Employer Offer,Previous-Employer Experience letter,Personal Account Number,Bank Name,IFSC Code,Salary Bank Name,Salary Account Num,IFSC Code,Laptop,Dongel and Sim,Joinning kits,Letter of Intent,Appointment Letter
-1,Active,CDPL0001,Jane Doe,Cache Digitech,Cache,Mumbai,HR Manager,Human Resources,Sana Qureshi,2024-04-01,9876543210,jane@gmail.com,jane@cache.com,Female,1990-01-15,John Doe,Spouse,9876500001,Robert Doe,Yes,100200300,Yes,Yes,Yes,Yes,MBA,123456789012,ABCDE1234F,Yes,Yes,50100123456789,HDFC,HDFC0001234,HDFC,50100999999999,HDFC0001234,Yes,Yes,Yes,Yes,Yes
+/** Office workforce template — Tag = office_staff; Organisation = HRMS org (Cache). */
+export const EMPLOYEE_IMPORT_OFFICE_SAMPLE_CSV = `SNo,Status,Tag,EMPLOYEE ID,NAME,Entity,Organisation,Base Location,Designation,Department,Reporting Manager,DOJ,Emp.Contact No.,Email id,cache email id,Gender,DOB,Family Member Name,Relation,Contact No.,Fathers name,ESI,UAN No,10th Marksheet,12th Marksheet,Basic Education,Higher Education,Degree,Aadhar,PAN,Previous-Employer Offer,Previous-Employer Experience letter,Personal Account Number,Bank Name,IFSC Code,Salary Bank Name,Salary Account Num,IFSC Code,Laptop,Dongel and Sim,Joinning kits,Letter of Intent,Appointment Letter
+1,Active,office_staff,CDPL0001,Jane Doe,Cache Digitech,Cache,Mumbai,HR Manager,Human Resources,Sana Qureshi,2024-04-01,9876543210,jane@gmail.com,jane@cache.com,Female,1990-01-15,John Doe,Spouse,9876500001,Robert Doe,Yes,100200300,Yes,Yes,Yes,Yes,MBA,123456789012,ABCDE1234F,Yes,Yes,50100123456789,HDFC,HDFC0001234,HDFC,50100999999999,HDFC0001234,Yes,Yes,Yes,Yes,Yes
 `;
+
+/**
+ * Client-side workforce template — Tag = client_side.
+ * \"Deployed At\" = client site (not HRMS Organisation / Cache).
+ * Headers align with typical client deployment sheets.
+ */
+export const EMPLOYEE_IMPORT_CLIENT_SAMPLE_CSV = `Sr. No.,Status,Tag,EMPLOYEE ID,New E codes,NAME,Entity,Deployed At,Base Location,Designation,Department,Reporting Manager,DOJ,Emp. Contact No.,Email id,Gender,DOB
+1,Active,client_side,CT5301,E0001,Ravi Kumar,Cache Technologies,Airtel - Pune,Pune,Engineer,Operations,Sana Qureshi,2024-06-01,9876543210,ravi@gmail.com,Male,1992-03-10
+`;
+
+/** @deprecated Use EMPLOYEE_IMPORT_OFFICE_SAMPLE_CSV */
+export const EMPLOYEE_IMPORT_SAMPLE_CSV = EMPLOYEE_IMPORT_OFFICE_SAMPLE_CSV;
+
+export type EmployeeImportTemplateKind = "office" | "client";
+
+export function defaultTagForImportTemplate(kind: EmployeeImportTemplateKind): string {
+  return kind === "client" ? "client_side" : "office_staff";
+}

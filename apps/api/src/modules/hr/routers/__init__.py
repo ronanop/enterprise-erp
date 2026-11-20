@@ -395,8 +395,13 @@ def list_employment(
     db: Annotated[Session, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
+    employee_id: UUID | None = None,
 ):
-    return APIResponse(message="OK", data=paginate(EmploymentService(db).list(ctx, company_id), pagination))
+    svc = EmploymentService(db)
+    if employee_id is not None:
+        row = svc.get_for_employee(ctx, employee_id)
+        return APIResponse(message="OK", data=[row] if row is not None else [])
+    return APIResponse(message="OK", data=paginate(svc.list(ctx, company_id), pagination))
 
 
 @employment_router.post("", response_model=APIResponse[EmploymentResponse])
@@ -1027,18 +1032,17 @@ def list_attendance(
     date_from: date | None = None,
     date_to: date | None = None,
 ):
+    svc = AttendanceService(db)
+    rows = svc.list(
+        ctx,
+        company_id,
+        employee_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
     return APIResponse(
         message="OK",
-        data=paginate(
-            AttendanceService(db).list(
-                ctx,
-                company_id,
-                employee_id,
-                date_from=date_from,
-                date_to=date_to,
-            ),
-            pagination,
-        ),
+        data=paginate(svc.serialize_rows(rows), pagination),
     )
 
 

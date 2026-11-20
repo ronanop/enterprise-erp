@@ -7,6 +7,7 @@ from datetime import date, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -25,7 +26,7 @@ from modules.master_data.published import EmployeeCommands, EmployeeRead
 from modules.master_data.service.employee_service import EmployeeService
 from modules.organization.models.branch import OrgBranch
 from modules.organization.models.company import OrgCompany
-from modules.organization.models.hierarchy import OrgLocation
+from modules.organization.models.hierarchy import OrgDepartment, OrgLocation
 from modules.organization.service.branch_service import BranchService
 from modules.organization.service.company_service import CompanyService
 from modules.organization.service.hierarchy_service import DepartmentService, LocationService
@@ -47,6 +48,9 @@ ENTITY_ALIASES: dict[str, str] = {
     "ctpl": "technology",
     "cts": "technology",
 }
+
+# One shared department name for every legal entity (import ignores Excel Department FK).
+SHARED_IMPORT_DEPARTMENT = "General"
 
 # Ensure these two operating companies exist for Cache Excel uploads
 ENTITY_COMPANY_SPECS: dict[str, dict[str, str]] = {
@@ -230,6 +234,58 @@ def _match_company_by_emp_code_prefix(emp_code: str, companies: list) -> object 
     return scored[0][1]
 
 
+def _normalize_workforce_tag(raw: object | None) -> str | None:
+    text = re.sub(r"\s+", "_", str(raw or "").strip().lower())
+    text = re.sub(r"[^a-z0-9_\-]+", "", text)
+    return text or None
+
+
+def _skills_tags(skills_json: object | None) -> list[str]:
+    if not isinstance(skills_json, dict):
+        return []
+    raw = skills_json.get("tags")
+    if isinstance(raw, list):
+        out: list[str] = []
+        for item in raw:
+            tag = _normalize_workforce_tag(item)
+            if tag and tag not in out:
+                out.append(tag)
+        return out
+    if isinstance(raw, str):
+        tag = _normalize_workforce_tag(raw)
+        return [tag] if tag else []
+    return []
+
+
+def _merge_skills_meta(
+    skills_json: object | None,
+    *,
+    tag: str | None = None,
+    deployed_at: str | None = None,
+) -> dict | None:
+    base: dict
+    if isinstance(skills_json, dict):
+        base = dict(skills_json)
+    elif isinstance(skills_json, list):
+        base = {"items": skills_json}
+    else:
+        base = {}
+    normalized = _normalize_workforce_tag(tag)
+    if normalized:
+        tags = _skills_tags(base)
+        if normalized not in tags:
+            tags.append(normalized)
+        base["tags"] = tags
+    site = str(deployed_at or "").strip()
+    if site:
+        base["deployed_at"] = site
+    return base or None
+
+
+def _merge_skills_tag(skills_json: object | None, tag: str | None) -> dict | None:
+    return _merge_skills_meta(skills_json, tag=tag)
+
+
 class EmployeeImportService:
     """Import workforce rows: get-or-create masters, upsert employees by code."""
 
@@ -322,7 +378,7 @@ class EmployeeImportService:
                     "results": [],
                 }
 
-        dept_cache: dict[tuple[UUID, str], UUID] = {}
+        dept_cache: dict[tuple[UUID, UUID, str], UUID] = {}
         desig_cache: dict[tuple[UUID, str], UUID] = {}
         loc_cache: dict[tuple[UUID, str], tuple[UUID, str]] = {}
         branch_by_company: dict[UUID, UUID] = {}
@@ -377,7 +433,11 @@ class EmployeeImportService:
                     branch_id = self._default_branch(ctx, company.id, branch_by_company)
                     first_name, last_name = _split_name(name)
 
-                    department_name = str(raw.get("department") or "General").strip() or "General"
+                    previous_code = str(
+                        raw.get("previous_employee_code")
+                        or raw.get("old_employee_code")
+                        or ""
+                    ).strip().upper()
                     designation_name = str(raw.get("designation") or "Staff").strip() or "Staff"
                     base_location = str(raw.get("base_location") or "").strip()
                     manager_raw = str(raw.get("reporting_manager") or "").strip()
@@ -403,9 +463,6 @@ class EmployeeImportService:
                     if not email:
                         email = f"{emp_code.lower().replace(' ', '')}@import.cache.local"
 
-                    dept_id = self._ensure_department(
-                        ctx, company.id, branch_id, department_name, dept_cache
-                    )
                     designation_id = self._ensure_designation(
                         ctx, company.id, designation_name, desig_cache
                     )
@@ -415,8 +472,19 @@ class EmployeeImportService:
                             ctx, company.id, branch_id, base_location, loc_cache
                         )
 
-                    # Upsert by Emp Code across all companies (re-import remaps Digitech↔Technologies)
+                    # Upsert by New E code, else previous EMPLOYEE ID (code rename support).
                     existing = self._find_by_code_any(ctx, emp_code)
+                    if existing is None and previous_code and previous_code != emp_code:
+                        existing = self._find_by_code_any(ctx, previous_code)
+
+                    # Single shared department per legal entity branch — ignore Excel Department.
+                    dept_id = self._ensure_department(
+                        ctx,
+                        company.id,
+                        branch_id,
+                        SHARED_IMPORT_DEPARTMENT,
+                        dept_cache,
+                    )
                     if existing:
                         next_email = email
                         if (
@@ -460,6 +528,11 @@ class EmployeeImportService:
                             "date_of_joining": joining,
                             "status": "active",
                         }
+                        # Rename CDPL… → CT… / CCPL… / VPL… when Excel has New E codes.
+                        existing_code = str(existing.employee_code or "").strip().upper()
+                        if emp_code and emp_code != existing_code:
+                            update_fields["employee_code"] = emp_code
+
                         # After a company move email is already forced on the ORM row.
                         # Same-company updates still go through EmployeeService (with fallback).
                         if not moved_company and next_email:
@@ -476,22 +549,53 @@ class EmployeeImportService:
                                     )
 
                         try:
-                            self._employees.update_employee(ctx, existing.id, **update_fields)
+                            self._employees.update_employee(
+                                ctx,
+                                existing.id,
+                                skip_department_validation=True,
+                                **update_fields,
+                            )
                         except ConflictException as exc:
-                            if "email" not in update_fields:
+                            msg = str(exc)
+                            if "email" in update_fields and "email" in msg.lower():
+                                update_fields.pop("email", None)
+                                fallback, note = self._resolve_import_email(
+                                    company_id=company.id,
+                                    preferred=f"{emp_code.lower()}@import.cache.local",
+                                    emp_code=emp_code,
+                                    exclude_id=existing.id,
+                                )
+                                self._force_employee_email(existing.id, fallback)
+                                warnings.append(
+                                    f"Row {idx} ({emp_code}): {note or exc} — used {fallback}"
+                                )
+                                self._employees.update_employee(
+                                    ctx,
+                                    existing.id,
+                                    skip_department_validation=True,
+                                    **update_fields,
+                                )
+                            elif "department" in msg.lower():
+                                safe_dept = self._ensure_department(
+                                    ctx,
+                                    company.id,
+                                    branch_id,
+                                    SHARED_IMPORT_DEPARTMENT,
+                                    dept_cache,
+                                )
+                                update_fields["department_id"] = safe_dept
+                                self._employees.update_employee(
+                                    ctx,
+                                    existing.id,
+                                    skip_department_validation=True,
+                                    **update_fields,
+                                )
+                                warnings.append(
+                                    f"Row {idx} ({emp_code}): department remapped to "
+                                    f"{SHARED_IMPORT_DEPARTMENT} under {company.company_name}"
+                                )
+                            else:
                                 raise
-                            update_fields.pop("email", None)
-                            fallback, note = self._resolve_import_email(
-                                company_id=company.id,
-                                preferred=f"{emp_code.lower()}@import.cache.local",
-                                emp_code=emp_code,
-                                exclude_id=existing.id,
-                            )
-                            self._force_employee_email(existing.id, fallback)
-                            warnings.append(
-                                f"Row {idx} ({emp_code}): {note or exc} — used {fallback}"
-                            )
-                            self._employees.update_employee(ctx, existing.id, **update_fields)
                         emp_id = existing.id
                         self._upsert_employment(
                             ctx,
@@ -535,6 +639,7 @@ class EmployeeImportService:
                             date_of_joining=joining,
                             bypass_onboarding=True,
                             status="active",
+                            skip_department_validation=True,
                         )
                         emp_id = created_emp.id
                         self._upsert_employment(
@@ -907,33 +1012,146 @@ class EmployeeImportService:
         cache[company_id] = branch.id
         return branch.id
 
+    def _resolve_import_department(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID,
+        branch_id: UUID,
+        department_raw: str,
+        department_skipped: bool,
+        existing: EmployeeRead | None,
+        dept_cache: dict[tuple[UUID, UUID, str], UUID],
+    ) -> UUID:
+        """Pick a department that always belongs to ``company_id`` + ``branch_id``."""
+        if department_skipped and existing is not None:
+            current_id = getattr(existing, "department_id", None)
+            if current_id and self._department_belongs_to_branch(
+                ctx, current_id, branch_id, company_id=company_id
+            ):
+                return current_id
+            return self._ensure_department(ctx, company_id, branch_id, "General", dept_cache)
+
+        name = department_raw.strip() or "General"
+        return self._ensure_department(ctx, company_id, branch_id, name, dept_cache)
+
+    def _department_belongs_to_branch(
+        self,
+        ctx: TenantContext,
+        department_id: UUID,
+        branch_id: UUID,
+        *,
+        company_id: UUID | None = None,
+    ) -> bool:
+        row = self._db.get(OrgDepartment, department_id)
+        if row is None or row.is_deleted or row.tenant_id != ctx.tenant_id:
+            return False
+        if row.branch_id != branch_id:
+            return False
+        if company_id is not None and row.company_id != company_id:
+            return False
+        return True
+
     def _ensure_department(
         self,
         ctx: TenantContext,
         company_id: UUID,
         branch_id: UUID,
         name: str,
-        cache: dict[tuple[UUID, str], UUID],
+        cache: dict[tuple[UUID, UUID, str], UUID],
     ) -> UUID:
-        """Reuse one department per normalized name tenant-wide — keep Org Setup list unique."""
-        # Cache key is name-only so Digitech/Tech imports share Sales/HR/etc.
-        key = (UUID(int=0), _norm(name))
+        """Get-or-create department strictly under company + branch (direct ORM).
+
+        Never reuse Digitech/Vyuha/Calipers departments by name alone — that caused
+        \"Department does not belong to the specified branch\" on employee upsert.
+        """
+        clean = (name or "").strip() or "General"
+        norm = _norm(clean)
+        key = (company_id, branch_id, norm)
         if key in cache:
             return cache[key]
-        for d in self._departments.list_departments(ctx):
-            if _norm(d.department_name) != key[1]:
-                continue
-            cache[key] = d.id
-            return d.id
-        created = self._departments.create_department(
-            ctx,
-            company_id=company_id,
-            branch_id=branch_id,
-            department_code=_code_slug(name, "DEPT", 50),
-            department_name=name.strip(),
+
+        # Active match on this company + branch (bypass org list company-scope filters).
+        active = self._db.scalars(
+            select(OrgDepartment).where(
+                OrgDepartment.tenant_id == ctx.tenant_id,
+                OrgDepartment.company_id == company_id,
+                OrgDepartment.branch_id == branch_id,
+                OrgDepartment.is_deleted.is_(False),
+            )
+        ).all()
+        for row in active:
+            if _norm(row.department_name) == norm:
+                cache[key] = row.id
+                return row.id
+
+        code = _code_slug(clean, "DEPT", 50)
+
+        # Reactivate soft-deleted row on this branch with same name or code.
+        revived = self._db.scalar(
+            select(OrgDepartment).where(
+                OrgDepartment.tenant_id == ctx.tenant_id,
+                OrgDepartment.branch_id == branch_id,
+                OrgDepartment.is_deleted.is_(True),
+                (
+                    (OrgDepartment.department_code == code)
+                    | (OrgDepartment.department_name.ilike(clean))
+                ),
+            ).order_by(OrgDepartment.updated_at.desc())
         )
-        cache[key] = created.id
-        return created.id
+        if revived is not None:
+            revived.is_deleted = False
+            revived.deleted_at = None
+            revived.deleted_by = None
+            revived.company_id = company_id
+            revived.branch_id = branch_id
+            revived.department_name = clean
+            revived.status = "active"
+            revived.updated_by = ctx.user_id
+            self._db.flush()
+            cache[key] = revived.id
+            return revived.id
+
+        try:
+            with self._db.begin_nested():
+                created = self._departments.create_department(
+                    ctx,
+                    company_id=company_id,
+                    branch_id=branch_id,
+                    department_code=code,
+                    department_name=clean,
+                )
+            cache[key] = created.id
+            return created.id
+        except (IntegrityError, ConflictException):
+            # Unique (branch_id, department_code) — reuse whatever is already there.
+            existing = self._db.scalar(
+                select(OrgDepartment).where(
+                    OrgDepartment.tenant_id == ctx.tenant_id,
+                    OrgDepartment.branch_id == branch_id,
+                    OrgDepartment.department_code == code,
+                )
+            )
+            if existing is None:
+                existing = self._db.scalar(
+                    select(OrgDepartment).where(
+                        OrgDepartment.tenant_id == ctx.tenant_id,
+                        OrgDepartment.company_id == company_id,
+                        OrgDepartment.branch_id == branch_id,
+                        OrgDepartment.department_name.ilike(clean),
+                    )
+                )
+            if existing is None:
+                raise
+            existing.is_deleted = False
+            existing.deleted_at = None
+            existing.deleted_by = None
+            existing.company_id = company_id
+            existing.status = "active"
+            existing.updated_by = ctx.user_id
+            self._db.flush()
+            cache[key] = existing.id
+            return existing.id
 
     def _ensure_designation(
         self,
@@ -1311,6 +1529,8 @@ class EmployeeImportService:
         permanent_address = str(raw.get("permanent_address") or "").strip()
         current_json = {"line1": current_address} if current_address else None
         permanent_json = {"line1": permanent_address} if permanent_address else None
+        tag = _normalize_workforce_tag(raw.get("tag"))
+        deployed_at = str(raw.get("deployed_at") or "").strip() or None
 
         has_any = any(
             [
@@ -1330,6 +1550,8 @@ class EmployeeImportService:
                 emergency_phone,
                 current_json,
                 permanent_json,
+                tag,
+                deployed_at,
             ]
         )
         if not has_any:
@@ -1386,6 +1608,11 @@ class EmployeeImportService:
                 row.current_address_json = current_json
             if permanent_json:
                 row.permanent_address_json = permanent_json
+            if tag or deployed_at:
+                row.skills_json = _merge_skills_meta(
+                    row.skills_json, tag=tag, deployed_at=deployed_at
+                )
+                flag_modified(row, "skills_json")
             row.updated_at = hr_utcnow()
             row.updated_by = ctx.user_id
             row.version = int(row.version or 1) + 1
@@ -1417,12 +1644,89 @@ class EmployeeImportService:
             emergency_contact_mobile=emergency_phone,
             current_address_json=current_json,
             permanent_address_json=permanent_json,
+            skills_json=_merge_skills_meta(None, tag=tag, deployed_at=deployed_at)
+            if (tag or deployed_at)
+            else None,
             status="active",
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
         )
         self._db.add(row)
         self._db.flush()
+
+    def backfill_default_tag(
+        self,
+        ctx: TenantContext,
+        *,
+        default_tag: str = "office_staff",
+        only_missing: bool = True,
+    ) -> dict:
+        """Stamp existing employee profiles with a default workforce tag."""
+        tag = _normalize_workforce_tag(default_tag) or "office_staff"
+        profiles = list(
+            self._db.scalars(
+                select(HrEmployeeProfile).where(
+                    HrEmployeeProfile.tenant_id == ctx.tenant_id,
+                    HrEmployeeProfile.is_deleted.is_(False),
+                )
+            ).all()
+        )
+        updated = 0
+        skipped = 0
+        for profile in profiles:
+            existing_tags = _skills_tags(profile.skills_json)
+            if only_missing and existing_tags:
+                skipped += 1
+                continue
+            if tag in existing_tags:
+                skipped += 1
+                continue
+            profile.skills_json = _merge_skills_tag(profile.skills_json, tag)
+            flag_modified(profile, "skills_json")
+            profile.updated_at = hr_utcnow()
+            profile.updated_by = ctx.user_id
+            profile.version = int(profile.version or 1) + 1
+            updated += 1
+
+        # Employees with no profile yet — create a minimal profile so the tag sticks.
+        emp_ids_with_profile = {p.employee_id for p in profiles}
+        employees = list(
+            self._db.scalars(
+                select(MasterEmployee).where(
+                    MasterEmployee.tenant_id == ctx.tenant_id,
+                    MasterEmployee.is_deleted.is_(False),
+                )
+            ).all()
+        )
+        for emp in employees:
+            if emp.id in emp_ids_with_profile:
+                continue
+            branch_id = getattr(emp, "branch_id", None)
+            company_id = getattr(emp, "company_id", None)
+            if not branch_id or not company_id:
+                skipped += 1
+                continue
+            row = HrEmployeeProfile(
+                id=uuid4(),
+                tenant_id=ctx.tenant_id,
+                company_id=company_id,
+                branch_id=branch_id,
+                employee_id=emp.id,
+                skills_json=_merge_skills_tag(None, tag),
+                status="active",
+                created_by=ctx.user_id,
+                updated_by=ctx.user_id,
+            )
+            self._db.add(row)
+            updated += 1
+
+        self._db.flush()
+        return {
+            "updated": updated,
+            "skipped": skipped,
+            "default_tag": tag,
+            "message": f"Tagged {updated} employee(s) as {tag}",
+        }
 
     def _resolve_manager(self, manager_raw: str, code_to_id: dict[str, UUID]) -> UUID | None:
         raw = manager_raw.strip()

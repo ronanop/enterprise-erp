@@ -36,7 +36,23 @@ import type { AttendanceRecord } from "@/types/attendance-management";
 function formatPunchTimeForDisplay(iso: string): string {
   if (!iso) return "";
   try {
-    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+  } catch {
+    return "";
+  }
+}
+
+/** Normalize a display/ISO time to HH:mm for <input type="time">. */
+function toTimeInputValue(isoOrHm: string): string {
+  if (!isoOrHm) return "";
+  if (/^\d{1,2}:\d{2}/.test(isoOrHm.trim())) {
+    const [h, m] = isoOrHm.trim().split(":");
+    return `${h.padStart(2, "0")}:${m.slice(0, 2)}`;
+  }
+  try {
+    const d = new Date(isoOrHm);
+    if (Number.isNaN(d.getTime())) return "";
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   } catch {
     return "";
   }
@@ -355,21 +371,25 @@ export function AttendanceCorrectionDrawer({
 }) {
   const [kind, setKind] = useState<RegularizeKind>("full_day");
   const [halfPortion, setHalfPortion] = useState<"first_half" | "second_half">("first_half");
+  const [checkInTime, setCheckInTime] = useState("");
+  const [checkOutTime, setCheckOutTime] = useState("");
   const [reason, setReason] = useState("");
   const [fileName, setFileName] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const punchSummary = useMemo(() => {
+  const recordedSummary = useMemo(() => {
     if (!record) return "";
     const inn = formatPunchTimeForDisplay(record.checkIn) || "-";
     const out = formatPunchTimeForDisplay(record.checkOut) || "-";
-    return `In ${inn} · Out ${out}`;
+    return `Originally In ${inn} · Out ${out}`;
   }, [record]);
 
   useEffect(() => {
     if (!open || !record) return;
     setKind("full_day");
     setHalfPortion("first_half");
+    setCheckInTime(toTimeInputValue(record.checkIn));
+    setCheckOutTime(toTimeInputValue(record.checkOut));
     setReason("");
     setFileName("");
     setBusy(false);
@@ -379,7 +399,7 @@ export function AttendanceCorrectionDrawer({
     <SetupDrawer
       open={open}
       title="Regularize Attendance"
-      description="Regularize as full day, half day (1st or 2nd), absent, or work from home. Punch times stay as recorded."
+      description="Update attendance status and optionally correct check-in / check-out punch times."
       onClose={onClose}
       footer={
         <>
@@ -403,6 +423,8 @@ export function AttendanceCorrectionDrawer({
                 halfPortion: kind === "half_day" ? halfPortion : undefined,
                 reason: reason.trim(),
                 attachmentName: fileName,
+                checkInTime: checkInTime.trim() || undefined,
+                checkOutTime: checkOutTime.trim() || undefined,
               })
                 .then(() => {
                   toast("Attendance regularized", "success");
@@ -426,9 +448,25 @@ export function AttendanceCorrectionDrawer({
           <SetupField label="Date">
             <SetupInput type="date" value={record.attendanceDate} readOnly />
           </SetupField>
-          <SetupField label="Recorded punches">
-            <SetupInput value={punchSummary} readOnly />
-          </SetupField>
+          <p className="text-[10px] text-muted-foreground">{recordedSummary}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <SetupField label="Check-in">
+              <SetupInput
+                type="time"
+                value={checkInTime}
+                onChange={(e) => setCheckInTime(e.target.value)}
+                className="cursor-pointer tabular-nums"
+              />
+            </SetupField>
+            <SetupField label="Check-out">
+              <SetupInput
+                type="time"
+                value={checkOutTime}
+                onChange={(e) => setCheckOutTime(e.target.value)}
+                className="cursor-pointer tabular-nums"
+              />
+            </SetupField>
+          </div>
           <SetupField label="Attendance status" required>
             <SetupSelect
               value={kind}
@@ -463,8 +501,8 @@ export function AttendanceCorrectionDrawer({
             />
           </SetupField>
           <ol className="list-decimal pl-4 text-[10px] text-muted-foreground">
-            <li>Actual check-in / check-out times are not changed</li>
-            <li>Day is marked full day, half day (1st/2nd), absent, or work from home</li>
+            <li>You can edit check-in / check-out times (HH:mm)</li>
+            <li>Day can be marked full day, half day (1st/2nd), absent, or work from home</li>
             <li>Regularization is audit-logged on the attendance record</li>
           </ol>
         </div>

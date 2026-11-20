@@ -56,10 +56,18 @@ function baseExtension(): EmployeeExtension {
     documents: [],
     education: [],
     previousEmployment: [],
+    tags: [],
     createdBy: "Import",
     updatedBy: "Import",
     updatedAt: new Date().toISOString(),
   };
+}
+
+function normalizeImportTag(raw: string | undefined): string {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_");
 }
 
 function truthyEsi(raw: string | undefined): boolean {
@@ -177,6 +185,7 @@ export function syncImportedExcelFieldsToExtensions(
             ? "digitech"
             : prev.employment.entityId,
         location: location || prev.employment.location,
+        deployedAt: String(excel.deployed_at || prev.employment.deployedAt || "").trim(),
         designationName: String(
           excel.designation || res.designation || prev.employment.designationName || "",
         ).trim(),
@@ -224,6 +233,12 @@ export function syncImportedExcelFieldsToExtensions(
       },
       education: mergeEducationFromImport(prev.education, excel),
       documents: mergeDocumentsFromImport(prev.documents, excel),
+      tags: (() => {
+        const tag = normalizeImportTag(excel.tag);
+        const prevTags = Array.isArray(prev.tags) ? prev.tags : [];
+        if (!tag) return prevTags;
+        return prevTags.includes(tag) ? prevTags : [...prevTags, tag];
+      })(),
       updatedBy: "Import",
       updatedAt: new Date().toISOString(),
     });
@@ -312,12 +327,15 @@ function mergeDocumentsFromImport(
 function toApiImportRows(rows: NormalizedEmployeeImportRow[]) {
   return rows.map((r) => ({
     employee_code: r.employee_code,
+    previous_employee_code: (r.previous_employee_code || "").trim() || undefined,
     name: r.name,
     entity: r.entity,
     organisation: r.organisation,
+    deployed_at: (r.deployed_at || "").trim() || undefined,
     base_location: r.base_location,
     designation: r.designation,
-    department: r.department,
+    // Backend always attaches shared General per entity — Excel dept is informational only.
+    department: undefined,
     reporting_manager: r.reporting_manager,
     email: (r.email || r.personal_email || "").trim() || undefined,
     mobile: r.mobile,
@@ -342,6 +360,7 @@ function toApiImportRows(rows: NormalizedEmployeeImportRow[]) {
     emergency_relationship: (r.emergency_relationship || "").trim() || undefined,
     father_name: (r.father_name || "").trim() || undefined,
     esi: (r.esi || "").trim() || undefined,
+    tag: (r.tag || "").trim() || undefined,
   }));
 }
 
@@ -349,9 +368,25 @@ const IMPORT_CHUNK_SIZE = 40;
 
 export async function bulkImportEmployees(
   rows: NormalizedEmployeeImportRow[],
-  options?: { companyId?: string },
+  options?: { companyId?: string; defaultTag?: string },
 ): Promise<EmployeeImportResponse> {
   // Chunk to avoid proxy/API timeouts on large Excel sheets (e.g. 166 rows).
+  const defaultTag = normalizeImportTag(options?.defaultTag);
+  const isClientImport = defaultTag === "client_side";
+  const prepared = rows.map((r) => {
+    // Client sheets often put deployment site under "Organisation" — move to deployed_at.
+    const org = String(r.organisation || "").trim();
+    const deployed = String(r.deployed_at || "").trim();
+    const movedDeployed =
+      isClientImport && !deployed && org && !/^cache$/i.test(org) ? org : deployed;
+    return {
+      ...r,
+      tag: normalizeImportTag(r.tag) || defaultTag || undefined,
+      deployed_at: movedDeployed || undefined,
+      organisation: isClientImport && movedDeployed && movedDeployed === org ? undefined : r.organisation,
+    };
+  });
+
   const merged: EmployeeImportResponse = {
     created: 0,
     updated: 0,
@@ -361,8 +396,8 @@ export async function bulkImportEmployees(
     results: [],
   };
 
-  for (let i = 0; i < rows.length; i += IMPORT_CHUNK_SIZE) {
-    const chunk = rows.slice(i, i + IMPORT_CHUNK_SIZE);
+  for (let i = 0; i < prepared.length; i += IMPORT_CHUNK_SIZE) {
+    const chunk = prepared.slice(i, i + IMPORT_CHUNK_SIZE);
     const res = await apiClient<EmployeeImportResponse>("/hr/employees/bulk-import", {
       method: "POST",
       body: {
@@ -383,6 +418,44 @@ export async function bulkImportEmployees(
   merged.warnings = merged.warnings.slice(0, 200);
   merged.errors = merged.errors.slice(0, 200);
   return merged;
+}
+
+/** Stamp existing employees missing a tag as office_staff (once per directory load). */
+export async function backfillOfficeStaffTags(): Promise<{
+  updated: number;
+  skipped: number;
+  default_tag: string;
+  message: string;
+}> {
+  const res = await apiClient<{
+    updated: number;
+    skipped: number;
+    default_tag: string;
+    message: string;
+  }>("/hr/employees/backfill-tags", {
+    method: "POST",
+    body: { default_tag: "office_staff", only_missing: true },
+  });
+  if (!res.data) throw new Error("Tag backfill returned no data");
+  return res.data;
+}
+
+/** Ensure local extensions also carry office_staff when no tag is set. */
+export function stampLocalOfficeStaffTags(): number {
+  if (typeof window === "undefined") return 0;
+  const existing = getEmployeeExtensionsSync();
+  let updated = 0;
+  for (const [id, ext] of Object.entries(existing)) {
+    const tags = Array.isArray(ext.tags) ? ext.tags : [];
+    if (tags.length) continue;
+    setEmployeeExtension(id, {
+      ...ext,
+      tags: ["office_staff"],
+      updatedAt: new Date().toISOString(),
+    });
+    updated += 1;
+  }
+  return updated;
 }
 
 export async function clearAllEmployees(): Promise<{ deleted: number; message: string }> {

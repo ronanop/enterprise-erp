@@ -100,6 +100,7 @@ const EMPTY_FILTERS: EmployeeListFilters = {
   location: "",
   joiningFrom: "",
   gender: "",
+  workforceScope: "",
 };
 
 const HEADER_FILTER_COLUMNS = new Set<EmployeeTableColumnKey>([
@@ -157,8 +158,41 @@ export function EmployeeManagementPage() {
       setLoading(false);
 
       const { records: rows, options: opts, errors } = await loadEmployeeDirectory();
-      setRecords(rows);
-      setOptions(opts);
+      // Existing office employees → office_staff so client-side imports can use other tags.
+      let tagged = rows;
+      let nextOpts = opts;
+      try {
+        const { backfillOfficeStaffTags, stampLocalOfficeStaffTags } = await import(
+          "@/services/employee-import-service"
+        );
+        stampLocalOfficeStaffTags();
+        const result = await backfillOfficeStaffTags();
+        if (Number(result.updated || 0) > 0) {
+          const refreshed = await loadEmployeeDirectory();
+          tagged = refreshed.records;
+          nextOpts = refreshed.options;
+        } else {
+          tagged = rows.map((r) => {
+            const tags = r.tags?.length
+              ? r.tags
+              : r.extension?.tags?.length
+                ? r.extension.tags
+                : ["office_staff"];
+            return { ...r, tags, extension: { ...r.extension, tags } };
+          });
+        }
+      } catch {
+        tagged = rows.map((r) => {
+          const tags = r.tags?.length
+            ? r.tags
+            : r.extension?.tags?.length
+              ? r.extension.tags
+              : ["office_staff"];
+          return { ...r, tags, extension: { ...r.extension, tags } };
+        });
+      }
+      setRecords(tagged);
+      setOptions(nextOpts);
       setDirectoryReady(true);
       if (errors.length) toast(errors.join(" · "), "info");
     } catch {
@@ -268,6 +302,7 @@ export function EmployeeManagementPage() {
         { value: "onboarding", label: "Pending Join" },
         { value: "probation", label: "Probation" },
         { value: "notice", label: "Notice Period" },
+        { value: "resigned", label: "Resigned" },
         { value: "inactive", label: "Ex Employee" },
       ],
       employmentTypes: uniqueSorted(records.map((r) => r.employmentType || "")).map((value) => ({
@@ -289,7 +324,8 @@ export function EmployeeManagementPage() {
       filters.location ||
       filters.gender ||
       filters.branchId ||
-      filters.joiningFrom,
+      filters.joiningFrom ||
+      filters.workforceScope,
   );
 
   function headerFilterValue(key: EmployeeTableColumnKey): string {
@@ -610,6 +646,39 @@ export function EmployeeManagementPage() {
                 Clear filters
               </button>
             ) : null}
+            <div
+              role="group"
+              aria-label="Workforce type"
+              className="ml-auto inline-flex h-8 items-center rounded-lg border border-border bg-muted/40 p-0.5"
+            >
+              {(
+                [
+                  { value: "", label: "All" },
+                  { value: "office", label: "Office" },
+                  { value: "client", label: "Client" },
+                ] as const
+              ).map((opt) => {
+                const active = filters.workforceScope === opt.value;
+                return (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    aria-pressed={active}
+                    className={cn(
+                      "h-7 cursor-pointer rounded-md px-3 text-xs font-medium transition-colors duration-200",
+                      active
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() =>
+                      setFilters((f) => ({ ...f, workforceScope: opt.value }))
+                    }
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -637,14 +706,14 @@ export function EmployeeManagementPage() {
                     className="cursor-pointer h-7"
                     onClick={() =>
                       setConfirm({
-                        title: "Deactivate Employees",
-                        message: "Set selected employees to ex-employee status?",
-                        action: () => runBulk("inactive", "Deactivated"),
+                        title: "Mark as resigned",
+                        message: "Mark selected employees as resigned?",
+                        action: () => runBulk("resigned", "Resigned"),
                       })
                     }
                   >
                     <UserMinus className="size-3" />
-                    Deactivate
+                    Resigned
                   </Button>
                   <Button
                     size="sm"
@@ -799,13 +868,18 @@ export function EmployeeManagementPage() {
                                 <RowActionsItem
                                   onClick={() => {
                                     setMenuId(null);
-                                    void setEmployeeLifecycleStatus(row, "inactive", "Deactivated").then(
-                                      load,
-                                    );
+                                    setConfirm({
+                                      title: "Mark as resigned",
+                                      message: `Mark ${row.displayName || row.employeeCode} as resigned?`,
+                                      action: async () => {
+                                        await setEmployeeLifecycleStatus(row, "resigned", "Resigned");
+                                        await load();
+                                      },
+                                    });
                                   }}
                                 >
                                   <UserMinus className="size-3.5 text-muted-foreground" />
-                                  Deactivate
+                                  Resigned
                                 </RowActionsItem>
                                 <RowActionsItem
                                   destructive

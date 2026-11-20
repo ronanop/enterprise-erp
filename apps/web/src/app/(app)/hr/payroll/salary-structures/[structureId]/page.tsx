@@ -9,5 +9,11 @@ export default async function EditSalaryStructurePage({
 }) {
   const { structureId } = await params;
   const { mode } = await searchParams;
-  return <SalaryStructureFormPage structureId={structureId} readOnly={mode === "view"} />;
+  return (
+    <SalaryStructureFormPage
+      key={structureId}
+      structureId={structureId}
+      readOnly={mode === "view"}
+    />
+  );
 }

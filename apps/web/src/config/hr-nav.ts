@@ -149,7 +149,7 @@ export const hrNavGroups: HrNavGroup[] = [
             title: "Assign salary",
             href: "/hr/payroll?section=assign-salary",
             icon: Users,
-            description: "Assign structures and CTC to employees",
+            description: "Assign CTC or bulk-upload Excel by employee code",
             navKey: "payroll-assign-salary",
           },
           {

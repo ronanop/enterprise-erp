@@ -161,6 +161,7 @@ class EmployeeService:
         hire_source: str = "direct",
         bypass_onboarding: bool = False,
         status: str = "draft",
+        skip_department_validation: bool = False,
     ):
         # Recruitment is the default hire path. Organization provisioning and
         # explicit migration bypasses are also allowed.
@@ -178,7 +179,8 @@ class EmployeeService:
             )
         resolved_company_id = self._scope.resolve_company_id(ctx, company_id)
         self._scope.validate_branch_access(ctx, branch_id)
-        self._validate_department_scope(ctx, branch_id, department_id)
+        if not skip_department_validation:
+            self._validate_department_scope(ctx, branch_id, department_id)
 
         if employee_code is None:
             employee_code = self.allocate_next_employee_code(ctx, resolved_company_id)
@@ -227,11 +229,22 @@ class EmployeeService:
         )
         return employee
 
-    def update_employee(self, ctx: TenantContext, employee_id: UUID, **fields):
+    def update_employee(
+        self,
+        ctx: TenantContext,
+        employee_id: UUID,
+        *,
+        skip_department_validation: bool = False,
+        **fields,
+    ):
         employee = self.get_employee(ctx, employee_id)
         if "branch_id" in fields and fields["branch_id"] is not None:
             self._scope.validate_branch_access(ctx, fields["branch_id"])
-        if "department_id" in fields and fields["department_id"] is not None:
+        if (
+            not skip_department_validation
+            and "department_id" in fields
+            and fields["department_id"] is not None
+        ):
             branch_id = fields.get("branch_id", employee.branch_id)
             self._validate_department_scope(ctx, branch_id, fields["department_id"])
         if "email" in fields and fields["email"] is not None:

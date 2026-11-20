@@ -166,7 +166,7 @@ export function PayrollPolicyPanel() {
       <section className="rounded-xl border border-border/70 bg-card p-4">
         <h3 className="text-sm font-semibold">Salary basis</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          Attendance cycle stays 20th–19th. Salary is always Monthly × Payable / 30. Payable = 30 − LOP.
+          Attendance cycle stays 21st–20th. Salary is always Monthly × Payable / 30. Payable = 30 − LOP.
           Weekly offs and holidays are payable unless sandwich converts them.
         </p>
         <p className="mt-2 text-sm tabular-nums">Denominator: 30 days (locked)</p>

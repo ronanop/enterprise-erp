@@ -21,7 +21,6 @@ import { formatInr } from "@/services/payroll-service";
 import {
   getCachedPayrollPfPolicy,
   loadResolvedPayrollPfPolicy,
-  employeePfAmount,
   type PayrollPfPolicy,
 } from "@/lib/payroll-pf-policy";
 import {
@@ -59,14 +58,14 @@ export function SalaryStructureFormPage({
   const [error, setError] = useState<string | null>(null);
   const [existing, setExisting] = useState<SalaryStructure | null>(null);
 
-  const [name, setName] = useState("India Standard");
+  const [name, setName] = useState(isNew ? "India Standard" : "");
   const [code, setCode] = useState("");
-  const [grossCtc, setGrossCtc] = useState("18000");
+  const [grossCtc, setGrossCtc] = useState(isNew ? "18000" : "");
   const [basicPct, setBasicPct] = useState("60");
   const [hraPct, setHraPct] = useState("50");
   const [telephone, setTelephone] = useState("0");
-  const [employer, setEmployer] = useState("1800");
-  const [edli, setEdli] = useState("100");
+  const [employer, setEmployer] = useState(isNew ? "1800" : "0");
+  const [edli, setEdli] = useState("0");
   const [esiPct, setEsiPct] = useState("0.75");
   const [esiCeiling, setEsiCeiling] = useState("21000");
   const [totalDays, setTotalDays] = useState("30");
@@ -82,16 +81,28 @@ export function SalaryStructureFormPage({
     setBasicPct(fractionToPct(row.basicPercent, EXCEL_DEFAULTS.basicPercent));
     setHraPct(fractionToPct(row.hraPercentOfBasic, EXCEL_DEFAULTS.hraPercentOfBasic));
     setTelephone(String(row.telephoneAllowance ?? 0));
-    setEmployer(String(row.employerContribution ?? row.pf ?? EXCEL_DEFAULTS.employerContribution));
+    setEmployer(
+      String(
+        row.employerContribution != null
+          ? row.employerContribution
+          : EXCEL_DEFAULTS.employerContribution,
+      ),
+    );
     setEdli(String(row.edliAdminAmount ?? EXCEL_DEFAULTS.edliAdminAmount));
     setEsiPct(fractionToPct(row.esiPercent, EXCEL_DEFAULTS.esiPercent));
     setEsiCeiling(String(row.esiMonthlyCeiling ?? EXCEL_DEFAULTS.esiMonthlyCeiling));
+    setError(null);
   }, []);
 
   useEffect(() => {
     if (!structureId) return;
     let cancelled = false;
     setLoading(true);
+    setError(null);
+    setExisting(null);
+    setName("");
+    setCode("");
+    setGrossCtc("");
     void getSalaryStructure(structureId)
       .then((row) => {
         if (cancelled) return;
@@ -133,26 +144,21 @@ export function SalaryStructureFormPage({
   const preview = useMemo(() => {
     const days = Number(totalDays) || 30;
     const payable = Number(payableDays) || 0;
-    const raw = computePayablePreview(split, {
-      pfPercent: pfPolicy.pf_employee_percent,
-      pfWageCeiling: pfPolicy.pf_wage_ceiling,
-      pfFixedCeiling: pfPolicy.pf_employee_amount,
+    // Mapped Excel formulas (corrected): PF = MIN(X, ceiling)×12%, EDLI not in AC.
+    return computePayablePreview(split, {
+      pfPercent: EXCEL_DEFAULTS.pfPercent,
+      pfWageCeiling: Number(pfPolicy.pf_wage_ceiling) > 0
+        ? pfPolicy.pf_wage_ceiling
+        : EXCEL_DEFAULTS.pfWageCeiling,
       edliAdminAmount: Number(edli) || 0,
       esiPercent: pctToFraction(esiPct),
-      esiMonthlyCeiling: Number(esiCeiling) || 0,
+      esiEmployerPercent: EXCEL_DEFAULTS.esiEmployerPercent,
+      esiMonthlyCeiling: Number(esiCeiling) || EXCEL_DEFAULTS.esiMonthlyCeiling,
       totalDays: days,
       payableDays: payable,
       advanceArrear: 0,
     });
-    const factor = days > 0 ? Math.min(1, Math.max(0, payable / days)) : 1;
-    const pf = employeePfAmount(pfPolicy, {
-      monthlyBasic: split.basic,
-      cycleBasic: raw.payableBasic,
-      factor,
-    });
-    const totalDed = Math.round(raw.totalDed - raw.pf + pf);
-    return { ...raw, pf, totalDed, net: Math.round(raw.gross - totalDed) };
-  }, [split, pfPolicy, edli, esiPct, esiCeiling, totalDays, payableDays]);
+  }, [split, pfPolicy.pf_wage_ceiling, edli, esiPct, esiCeiling, totalDays, payableDays]);
 
   function toInput(status: "draft" | "active"): Omit<SalaryStructure, "id" | "createdAt"> {
     return {
@@ -163,9 +169,9 @@ export function SalaryStructureFormPage({
       effectiveFrom: existing?.effectiveFrom,
       basicPercent: pctToFraction(basicPct),
       hraPercentOfBasic: pctToFraction(hraPct),
-      pfPercent: pfPolicy.pf_employee_percent,
-      pfWageCeiling: pfPolicy.pf_wage_ceiling,
-      pfFixedCeiling: pfPolicy.pf_employee_amount,
+      pfPercent: EXCEL_DEFAULTS.pfPercent,
+      pfWageCeiling: pfPolicy.pf_wage_ceiling || EXCEL_DEFAULTS.pfWageCeiling,
+      pfFixedCeiling: EXCEL_DEFAULTS.pfFixedCeiling,
       edliAdminAmount: Number(edli) || EXCEL_DEFAULTS.edliAdminAmount,
       esiPercent: pctToFraction(esiPct),
       esiMonthlyCeiling: Number(esiCeiling) || EXCEL_DEFAULTS.esiMonthlyCeiling,
@@ -385,14 +391,8 @@ export function SalaryStructureFormPage({
           <section className="rounded-xl border border-border/80 bg-card p-4 shadow-sm">
             <h2 className="mb-1 text-sm font-semibold text-foreground">Sample month preview</h2>
             <p className="mb-3 text-xs text-muted-foreground">
-              Employee PF comes from{" "}
-              <Link
-                href="/hr/payroll?section=salary-configuration"
-                className="cursor-pointer font-medium text-primary underline-offset-2 hover:underline"
-              >
-                Payroll → Salary configuration
-              </Link>
-              . Live payroll uses Gross × (payable days / 30).
+              Employee PF = MIN(PF wage, ceiling) × 12%. EDLI/admin is employer cost only (not in
+              AC). Live payroll prorates Gross × (payable / 30).
             </p>
             <div className="mb-3 grid grid-cols-2 gap-3">
               <div>
@@ -424,13 +424,15 @@ export function SalaryStructureFormPage({
               <ComputedRow label="Payable special" hint="T" value={preview.payableSpecial} />
               <ComputedRow label="Gross" hint="W" value={preview.gross} />
               <ComputedRow label="PF wage" hint="X = R+T" value={preview.pfWage} />
-              <ComputedRow label="Employee PF" hint="From Salary configuration" value={preview.pf} />
-              <ComputedRow label="EDLI / admin" hint="Z" value={preview.edli} />
-              <ComputedRow label="ESI" hint="AA" value={preview.esi} />
-              <ComputedRow label="TDS for the year" hint="AG" value={preview.tdsYear} />
-              <ComputedRow label="TDS for the month" hint="AH" value={preview.tdsMonth} />
-              <ComputedRow label="Total deduction" hint="AC" value={preview.totalDed} />
+              <ComputedRow label="Employee PF" hint="Y = MIN(X,ceiling)×12%" value={preview.pf} />
+              <ComputedRow label="EDLI / admin (employer)" hint="Z — not in AC" value={preview.edli} />
+              <ComputedRow label="Employee ESI" hint="AA" value={preview.esi} />
+              <ComputedRow label="Employer ESI" hint="3.25%" value={preview.employerEsi} />
+              <ComputedRow label="TDS for the year" hint="AG on AE = N×12" value={preview.tdsYear} />
+              <ComputedRow label="TDS for the month" hint="AH = ROUNDUP(AG/12)" value={preview.tdsMonth} />
+              <ComputedRow label="Total deduction" hint="AC = Y+AA+AB" value={preview.totalDed} />
               <ComputedRow label="Net payable" hint="AD = W−AC" value={preview.net} emphasize />
+              <ComputedRow label="Employer cost" hint="M+Z+ER ESI" value={preview.employerCost} />
             </dl>
           </section>
         </div>

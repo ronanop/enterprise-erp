@@ -46,7 +46,7 @@ class PayrollPeriodService:
 
     def _cycle_start_day(self, ctx: TenantContext, company_id: UUID) -> int:
         resolved = self._policy.get_active_or_defaults(ctx, company_id)
-        return int(resolved.get("payroll_cycle_start_day") or 20)
+        return int(resolved.get("payroll_cycle_start_day") or 21)
 
     def build_period_fields(
         self,

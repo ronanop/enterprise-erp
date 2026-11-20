@@ -42,6 +42,31 @@ class AttendanceRepository(HrScopedRepository):
         stmt = stmt.order_by(HrAttendance.attendance_date.desc())
         return list(self.db.scalars(stmt).all())
 
+    def list_for_employee(
+        self,
+        ctx: TenantContext,
+        *,
+        employee_id: UUID,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ):
+        """Employee drill-down: ignore stamped company_id mismatches.
+
+        Biometric / entity ingest can write attendance under a different company
+        than hr_employment.company_id. Payroll / leave-adjust must still see punches.
+        """
+        stmt = select(HrAttendance).where(
+            HrAttendance.is_deleted.is_(False),
+            HrAttendance.employee_id == employee_id,
+        )
+        if date_from is not None:
+            stmt = stmt.where(HrAttendance.attendance_date >= date_from)
+        if date_to is not None:
+            stmt = stmt.where(HrAttendance.attendance_date <= date_to)
+        stmt = self.apply_tenant_filter(stmt, HrAttendance, ctx)
+        stmt = stmt.order_by(HrAttendance.attendance_date.desc())
+        return list(self.db.scalars(stmt).all())
+
     def list_for_employee_period(
         self,
         ctx: TenantContext,
@@ -50,23 +75,28 @@ class AttendanceRepository(HrScopedRepository):
         date_from: date,
         date_to: date,
     ):
-        """Employee drill-down: ignore stamped company_id mismatches.
-
-        Biometric / entity ingest can write attendance under a different company
-        than hr_employment.company_id. Leave-adjust and similar views must still
-        see the employee's punches for the period (tenant-scoped only).
-        """
-        stmt = (
-            select(HrAttendance)
-            .where(
-                HrAttendance.is_deleted.is_(False),
-                HrAttendance.employee_id == employee_id,
-                HrAttendance.attendance_date >= date_from,
-                HrAttendance.attendance_date <= date_to,
-            )
-            .order_by(HrAttendance.attendance_date.desc())
+        return self.list_for_employee(
+            ctx,
+            employee_id=employee_id,
+            date_from=date_from,
+            date_to=date_to,
         )
+
+    def list_for_tenant_period(
+        self,
+        ctx: TenantContext,
+        *,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ):
+        """Tenant-wide attendance (no company filter) for payroll period calc."""
+        stmt = select(HrAttendance).where(HrAttendance.is_deleted.is_(False))
+        if date_from is not None:
+            stmt = stmt.where(HrAttendance.attendance_date >= date_from)
+        if date_to is not None:
+            stmt = stmt.where(HrAttendance.attendance_date <= date_to)
         stmt = self.apply_tenant_filter(stmt, HrAttendance, ctx)
+        stmt = stmt.order_by(HrAttendance.attendance_date.desc())
         return list(self.db.scalars(stmt).all())
 
     def get_for_employee_date(

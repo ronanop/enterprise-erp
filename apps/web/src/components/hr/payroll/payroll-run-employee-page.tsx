@@ -8,7 +8,6 @@ import { Scale } from "lucide-react";
 import { LeaveAdjustPanel } from "@/components/hr/attendance/leave-adjust-panel";
 import { HrEmptyState } from "@/components/hr/hr-primitives";
 import { PageHeader } from "@/components/layout/page-header";
-import { splitPresentAndHalf } from "@/lib/payroll-attendance-cycle";
 import { isPfDeductionLabel, readPayrollCutoverDay } from "@/lib/payroll-cycle";
 import { formatInr } from "@/services/payroll-service";
 import {
@@ -17,7 +16,6 @@ import {
 } from "@/services/attendance-management-service";
 import {
   getPayrollRun,
-  getPayrollRunAttendance,
   getPayrollRunEmployeeLine,
   isMonthLocked,
   loadPayrollDirectory,
@@ -117,21 +115,6 @@ function PayrollRunEmployeeBody({
     };
   }, [runId, employeeId, isPreview, searchParams, reloadAt]);
 
-  const att = !isPreview && line
-    ? getPayrollRunAttendance(runId).find(
-        (a) =>
-          a.employeeId === line.employeeId ||
-          a.employeeCode === line.employeeCode ||
-          a.employeeId === decodeURIComponent(employeeId),
-      )
-    : undefined;
-
-  const split = splitPresentAndHalf(
-    att?.presentDays ?? line?.presentDays ?? 0,
-    att?.halfDays ?? line?.halfDays ?? 0,
-  );
-  const absentDays = att?.absentDays ?? line?.absentDays ?? 0;
-  const weeklyOff = att?.weeklyOff ?? line?.weeklyOff ?? 0;
   const payable = line?.payableDays ?? 0;
   const working = line?.periodDays || line?.workingDaysInCycle || 30;
 
@@ -183,13 +166,6 @@ function PayrollRunEmployeeBody({
                 onChanged={() => setReloadAt((n) => n + 1)}
                 selectedDate={selectedDay}
                 onSelectedDateChange={setSelectedDay}
-                attendanceSummary={{
-                  present: split.present,
-                  halfDay: split.half,
-                  absent: absentDays,
-                  weekOff: weeklyOff,
-                  payable,
-                }}
               />
             </div>
           ) : null}
