@@ -1,7 +1,8 @@
-/** Pay cycle helpers - e.g. 20th of month through 19th of next month. */
+/** Pay cycle helpers — e.g. 21st of previous month through 20th of pay month. */
 
 export type PayrollCycle = {
-  anchorMonth: string; // YYYY-MM - cycle starts on cutover day of this month
+  /** YYYY-MM — pay month; cycle ends just before cutover day in this month */
+  anchorMonth: string;
   cutoverDay: number;
   start: string; // YYYY-MM-DD inclusive
   end: string; // YYYY-MM-DD inclusive
@@ -64,16 +65,27 @@ export function countWeekdaysInRange(start: string, end: string): number {
 }
 
 /**
- * Cycle from cutover day of anchor month through day before cutover of next month.
- * Example: anchor 2026-08, cutover 20 → 20 Aug 2026 - 19 Sep 2026.
+ * Attendance window for a pay month (anchor).
+ *
+ * Cutover &gt; 1 (e.g. 21): ends on (cutover−1) of the pay month, starts on cutover
+ * of the previous month. Example: Nov 2026 + day 21 → 21 Oct 2026 – 20 Nov 2026.
+ *
+ * Cutover 1: full calendar month of the pay month (1–last day).
  */
-export function buildPayrollCycle(anchorMonth: string, cutoverDay = 20): PayrollCycle {
+export function buildPayrollCycle(anchorMonth: string, cutoverDay = 21): PayrollCycle {
   const day = Math.min(28, Math.max(1, Math.floor(cutoverDay)));
   const [y, m] = anchorMonth.split("-").map(Number);
-  const startDate = new Date(y, (m || 1) - 1, day);
-  const endDate = new Date(startDate);
-  endDate.setMonth(endDate.getMonth() + 1);
-  endDate.setDate(day - 1);
+  const monthIndex = (m || 1) - 1;
+
+  let startDate: Date;
+  let endDate: Date;
+  if (day === 1) {
+    startDate = new Date(y, monthIndex, 1);
+    endDate = new Date(y, monthIndex + 1, 0);
+  } else {
+    endDate = new Date(y, monthIndex, day - 1);
+    startDate = new Date(y, monthIndex - 1, day);
+  }
 
   const start = toIso(startDate);
   const end = toIso(endDate);
@@ -89,7 +101,7 @@ export function buildPayrollCycle(anchorMonth: string, cutoverDay = 20): Payroll
 
 export function listPayrollCycleOptions(
   count = 8,
-  cutoverDay = 20,
+  cutoverDay = 21,
   from = new Date(),
 ): { value: string; label: string; cycle: PayrollCycle }[] {
   const out: { value: string; label: string; cycle: PayrollCycle }[] = [];
@@ -99,7 +111,7 @@ export function listPayrollCycleOptions(
     const cycle = buildPayrollCycle(ym, cutoverDay);
     out.push({
       value: ym,
-      label: `${cycle.label} · ${cycle.cutoverDay}${ordinal(cycle.cutoverDay)} to next ${cycle.cutoverDay}${ordinal(cycle.cutoverDay)}`,
+      label: `${cycle.label} · pay month ${ym} · cutover ${cycle.cutoverDay}${ordinal(cycle.cutoverDay)}`,
       cycle,
     });
   }
@@ -115,16 +127,16 @@ function ordinal(day: number): string {
   return "th";
 }
 
-export const PAYROLL_CUTOVER_STORAGE_KEY = "erp_pay_cycle_cutover_v1";
+export const PAYROLL_CUTOVER_STORAGE_KEY = "erp_pay_cycle_cutover_v2";
 
 export function readPayrollCutoverDay(): number {
-  if (typeof window === "undefined") return 20;
+  if (typeof window === "undefined") return 21;
   try {
     const raw = localStorage.getItem(PAYROLL_CUTOVER_STORAGE_KEY);
-    const n = raw ? Number(raw) : 20;
-    return Number.isFinite(n) ? Math.min(28, Math.max(1, Math.floor(n))) : 20;
+    const n = raw ? Number(raw) : 21;
+    return Number.isFinite(n) ? Math.min(28, Math.max(1, Math.floor(n))) : 21;
   } catch {
-    return 20;
+    return 21;
   }
 }
 

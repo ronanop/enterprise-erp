@@ -23,6 +23,22 @@ function employeeLabel(r: EmployeeMasterRow): string {
   return name ? `${name}${code ? ` (${code})` : ""}` : code || String(r.id ?? "");
 }
 
+/**
+ * Top leadership that must not appear in exit/resignation employee pickers.
+ * Matches exact CEO / CMD / Managing Director titles only (not "EA to CEO").
+ */
+export function isCeoOrCmdRole(row: EmployeeMasterRow): boolean {
+  const title = String(row.designation ?? row.job_title ?? "")
+    .toLowerCase()
+    .replace(/\./g, "")
+    .trim();
+  if (!title) return false;
+  if (title === "ceo" || title === "chief executive officer") return true;
+  if (title === "cmd" || title === "chairman and managing director") return true;
+  if (title === "managing director" || title === "md") return true;
+  return false;
+}
+
 /** CEO / CFO / head / director / manager-style titles (and MGR codes). */
 export function looksLikeManagerRole(row: EmployeeMasterRow): boolean {
   const code = String(row.employee_code ?? "");

@@ -1,36 +1,33 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  filterShellHits,
-  modulePaneCatalog,
-  resolveShellSearchScope,
-} from "@/lib/shell-search";
+import { filterShellHits, modulePaneCatalog, resolveShellSearchScope } from "@/lib/shell-search";
 
 describe("shell-search", () => {
-  it("routes CRM and Projects to dedicated search modes", () => {
-    expect(resolveShellSearchScope("/crm/leads")).toEqual({ mode: "crm" });
-    expect(resolveShellSearchScope("/projects/my-jobs")).toEqual({ mode: "projects" });
+  it("searches HRMS panes on HR routes", () => {
+    const scope = resolveShellSearchScope("/hr/leave");
+    expect(scope.mode).toBe("panes");
+    if (scope.mode !== "panes") return;
+    expect(scope.placeholder).toBe("Search HRMS…");
+    expect(scope.panes.some((pane) => pane.href === "/hr" || pane.href.startsWith("/hr"))).toBe(true);
   });
 
-  it("exposes finance panes for module search", () => {
+  it("uses HRMS search outside leftover module paths", () => {
     const scope = resolveShellSearchScope("/finance/journals");
     expect(scope.mode).toBe("panes");
     if (scope.mode !== "panes") return;
-    expect(scope.placeholder).toBe("Search Finance…");
-    expect(scope.panes.some((p) => p.href === "/finance/journals")).toBe(true);
+    expect(scope.moduleTitle).toBe("HRMS");
   });
 
-  it("falls back to home module search outside workspaces", () => {
+  it("falls back to the HR home catalog on /home", () => {
     expect(resolveShellSearchScope("/home")).toEqual({
       mode: "home",
-      placeholder: "Search modules…",
+      placeholder: "Search HRMS…",
     });
   });
 
-  it("filters pane hits by title", () => {
-    const catalog = modulePaneCatalog("/marketing");
-    expect(catalog).not.toBeNull();
-    const hits = filterShellHits(catalog!.panes, "camp");
-    expect(hits.some((h) => h.title === "Campaigns")).toBe(true);
+  it("filters HR pane hits by title", () => {
+    const catalog = modulePaneCatalog("/hr");
+    const hits = filterShellHits(catalog.panes, "superadmin");
+    expect(hits.some((hit) => hit.href === "/hr/superadmin")).toBe(true);
   });
 });

@@ -135,3 +135,126 @@ export async function listHrActivityLogs(limit = 200): Promise<HrActivityLogReco
   });
   return res.data ?? [];
 }
+
+export type HrIntegrationCatalogItem = {
+  id: string;
+  label: string;
+  method?: string;
+  path?: string;
+  description?: string;
+};
+
+export type HrIntegrationCatalog = {
+  endpoints: HrIntegrationCatalogItem[];
+  fields: HrIntegrationCatalogItem[];
+};
+
+/** Always available in UI even if catalog API is down / API not restarted. */
+export const FALLBACK_INTEGRATION_CATALOG: HrIntegrationCatalog = {
+  endpoints: [
+    {
+      id: "employees",
+      label: "Employees",
+      method: "GET",
+      path: "/api/v1/hr/integration/employees",
+      description: "List employees with the selected fields",
+    },
+  ],
+  fields: [
+    { id: "employee_code", label: "Employee ID" },
+    { id: "name", label: "Name" },
+    { id: "first_name", label: "First name" },
+    { id: "last_name", label: "Last name" },
+    { id: "email", label: "Official email" },
+    { id: "mobile", label: "Mobile" },
+    { id: "designation", label: "Designation" },
+    { id: "department", label: "Department" },
+    { id: "manager", label: "Reporting manager" },
+    { id: "manager_code", label: "Reporting manager ID" },
+    { id: "branch", label: "Branch" },
+    { id: "company", label: "Entity / Company" },
+    { id: "status", label: "Employment status" },
+    { id: "date_of_joining", label: "Date of joining" },
+    { id: "date_of_leaving", label: "Date of leaving" },
+    { id: "gender", label: "Gender" },
+    { id: "date_of_birth", label: "Date of birth" },
+    { id: "employment_type", label: "Employment type" },
+    { id: "work_location", label: "Work location" },
+    { id: "is_manager", label: "Is manager" },
+    { id: "leave_balances", label: "Leave balances (all types)" },
+    { id: "leave_balance_total", label: "Leave balance total" },
+    { id: "leave_used_total", label: "Leave used total" },
+  ],
+};
+
+export type HrIntegrationApiKeyRecord = {
+  id: string;
+  name: string;
+  key_prefix: string;
+  endpoints: string[];
+  fields: string[];
+  company_ids: string[];
+  status: string;
+  notes: string | null;
+  created_at: string | null;
+  last_used_at: string | null;
+  expires_at: string | null;
+  api_key?: string;
+};
+
+export async function getIntegrationApiKeyCatalog(): Promise<HrIntegrationCatalog> {
+  try {
+    const res = await apiClient<HrIntegrationCatalog>("/hr/superadmin/api-keys/catalog");
+    const endpoints = res.data?.endpoints?.length
+      ? res.data.endpoints
+      : FALLBACK_INTEGRATION_CATALOG.endpoints;
+    const fields = res.data?.fields?.length
+      ? res.data.fields
+      : FALLBACK_INTEGRATION_CATALOG.fields;
+    return { endpoints, fields };
+  } catch {
+    return FALLBACK_INTEGRATION_CATALOG;
+  }
+}
+
+export async function listIntegrationApiKeys(): Promise<HrIntegrationApiKeyRecord[]> {
+  const res = await apiClient<HrIntegrationApiKeyRecord[]>("/hr/superadmin/api-keys");
+  return (res.data ?? []).map((row) => ({
+    ...row,
+    id: String(row.id),
+    endpoints: Array.isArray(row.endpoints) ? row.endpoints.map(String) : [],
+    fields: Array.isArray(row.fields) ? row.fields.map(String) : [],
+    company_ids: Array.isArray(row.company_ids) ? row.company_ids.map(String) : [],
+  }));
+}
+
+export async function createIntegrationApiKey(input: {
+  name: string;
+  endpoints: string[];
+  fields: string[];
+  companyIds?: string[];
+  notes?: string;
+}): Promise<HrIntegrationApiKeyRecord> {
+  const res = await apiClient<HrIntegrationApiKeyRecord>("/hr/superadmin/api-keys", {
+    method: "POST",
+    body: {
+      name: input.name,
+      endpoints: input.endpoints,
+      fields: input.fields,
+      company_ids: input.companyIds ?? [],
+      notes: input.notes || null,
+    },
+  });
+  if (!res.data) throw new Error(res.message || "Could not create API key");
+  return {
+    ...res.data,
+    id: String(res.data.id),
+    endpoints: Array.isArray(res.data.endpoints) ? res.data.endpoints.map(String) : [],
+    fields: Array.isArray(res.data.fields) ? res.data.fields.map(String) : [],
+    company_ids: Array.isArray(res.data.company_ids) ? res.data.company_ids.map(String) : [],
+  };
+}
+
+export async function revokeIntegrationApiKey(keyId: string): Promise<void> {
+  await apiClient<null>(`/hr/superadmin/api-keys/${keyId}`, { method: "DELETE" });
+}

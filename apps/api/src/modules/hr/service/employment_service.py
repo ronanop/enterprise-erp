@@ -34,6 +34,11 @@ class EmploymentService:
         cid = self._scope.resolve_company_id(ctx, company_id)
         return self._repo.list_rows(ctx, cid)
 
+    def get_for_employee(self, ctx: TenantContext, employee_id: UUID) -> HrEmployment | None:
+        """Active (or any live) employment row for an employee — used by payroll assign."""
+        self._master.get_employee(ctx, employee_id)
+        return self._repo.get_by_employee_id(ctx, employee_id)
+
     def get(self, ctx: TenantContext, row_id: UUID) -> HrEmployment:
         row = self._repo.get(ctx, row_id)
         if row is None:

@@ -1,3 +1,8 @@
+import {
+  mapMachineAttendanceStatus,
+  normalizeAttendanceDate,
+  normalizeAttendanceTime,
+} from "@/lib/attendance-import-map";
 import { resourceService } from "@/services/api-client";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import type { HrRow } from "@/services/hr-service";
@@ -7,6 +12,7 @@ import type {
   AttendanceCorrection,
   AttendanceExtension,
   AttendanceFilters,
+  AttendancePunch,
   AttendanceRecord,
   AttendanceSource,
   AttendanceStatusCode,
@@ -28,9 +34,20 @@ function todayIso(d = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Decimal hours → "5h 47m" (empty / invalid → "—"). */
+export function formatHoursMinutes(hours: number | null | undefined): string {
+  if (hours == null || !Number.isFinite(hours) || hours <= 0) return "—";
+  const totalMinutes = Math.round(hours * 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h <= 0) return `${m}m`;
+  if (m <= 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
 function parseLocationFromNotes(notes: string): string {
   if (!notes) return "";
-  const locMatch = notes.match(/Location:\s*(.+)$/i);
+  const locMatch = notes.match(/Location:\s*([^|]+)/i);
   if (locMatch?.[1]) return locMatch[1].trim();
   if (notes.includes("·")) {
     const parts = notes.split("·").map((p) => p.trim());
@@ -40,31 +57,59 @@ function parseLocationFromNotes(notes: string): string {
   return "";
 }
 
+function elapsedHours(startIso: string, endIso: string, breakMinutes = 0): number {
+  const a = new Date(startIso).getTime();
+  const b = new Date(endIso).getTime();
+  if (Number.isNaN(a) || Number.isNaN(b) || b <= a) return 0;
+  return Math.max(0, (b - a) / 3_600_000 - breakMinutes / 60);
+}
+
+/** Hours from first punch-in to checkout, or to now when the day is still open. */
+export function hoursFromFirstPunch(
+  punches: AttendancePunch[],
+  checkIn: string,
+  checkOut: string,
+  attendanceDate: string,
+  breakMinutes = 0,
+): number {
+  const first = punches[0]?.punchedAt || checkIn;
+  if (!first) return 0;
+  const today = todayIso();
+  let endIso = checkOut;
+  if (!endIso) {
+    if (attendanceDate === today) endIso = new Date().toISOString();
+    else if (punches.length > 1) endIso = punches[punches.length - 1]?.punchedAt || "";
+    else return 0;
+  }
+  if (!endIso) return 0;
+  return Math.round(elapsedHours(first, endIso, breakMinutes) * 100) / 100;
+}
+
 function inferDisplayStatus(
   apiStatus: string,
-  checkIn: string,
+  _checkIn: string,
   notes: string,
 ): AttendanceStatusCode {
+  // Trust API/policy status — never invent "late" from a hardcoded clock time.
   const raw = (apiStatus || "present").toLowerCase();
   if (raw === "week_off") return "weekend";
+  if (raw === "miss_punch") return "missed_punch";
   const base = raw as AttendanceStatusCode;
   if (base === "absent" && /leave/i.test(notes)) return "leave";
-  if (base !== "present") return base;
-  if (/late arrival/i.test(notes)) return "late";
-  if (checkIn) {
-    const t = new Date(checkIn);
-    if (!Number.isNaN(t.getTime()) && (t.getHours() > 9 || (t.getHours() === 9 && t.getMinutes() >= 30))) {
-      return "late";
-    }
-  }
   return base;
 }
 
-async function listAllRows(apiPath: string): Promise<HrRow[]> {
+async function listAllRows(
+  apiPath: string,
+  query: Record<string, string | number | boolean | null | undefined> = {},
+  maxPages = 30,
+): Promise<HrRow[]> {
   const all: HrRow[] = [];
   const seenFirstIds = new Set<string>();
-  for (let page = 1; page <= 30; page += 1) {
-    const res = await resourceService.list(apiPath, { page, page_size: 200 }).catch(() => ({ data: [] }));
+  for (let page = 1; page <= maxPages; page += 1) {
+    const res = await resourceService
+      .list(apiPath, { page, page_size: 200, ...query })
+      .catch(() => ({ data: [] }));
     const rows = (Array.isArray(res.data) ? res.data : []) as HrRow[];
     const firstId = rows[0] ? String(rows[0].id ?? "") : "";
     if (page > 1 && firstId && seenFirstIds.has(firstId)) break;
@@ -240,10 +285,7 @@ function parseTimeOnDate(date: string, time: string): string | null {
 
 function diffHours(checkIn: string, checkOut: string, breakMinutes: number): number {
   if (!checkIn || !checkOut) return 0;
-  const a = new Date(checkIn).getTime();
-  const b = new Date(checkOut).getTime();
-  if (Number.isNaN(a) || Number.isNaN(b) || b <= a) return 0;
-  return Math.max(0, (b - a) / 3_600_000 - breakMinutes / 60);
+  return elapsedHours(checkIn, checkOut, breakMinutes);
 }
 
 export function computeOvertime(workingHours: number): { normal: number; double: number; total: number } {
@@ -292,6 +334,7 @@ function mergeRow(
   shiftMap: Map<string, string>,
   ext: AttendanceExtension,
   savedOverride: boolean,
+  punches: AttendancePunch[] = [],
 ): AttendanceRecord {
   const id = String(row.id);
   const employeeId = String(row.employee_id);
@@ -300,23 +343,55 @@ function mergeRow(
   const checkIn = String(row.check_in_at ?? "");
   const checkOut = String(row.check_out_at ?? "");
   const notes = String(row.notes ?? "");
-  const breakMin = ext.breakMinutes || (checkIn && checkOut ? 30 : 0);
-  const totalHoursRaw = row.total_hours;
-  const working =
-    totalHoursRaw !== null && totalHoursRaw !== undefined && totalHoursRaw !== ""
-      ? Number(totalHoursRaw)
-      : diffHours(checkIn, checkOut, breakMin);
+  const breakMin = ext.breakMinutes || 0;
+  const dayPunches =
+    punches.length > 0
+      ? punches
+      : checkIn
+        ? [
+            {
+              id: `${id}-in`,
+              punchedAt: checkIn,
+              deviceCode: "",
+              deviceName: String(row.source ?? "manual"),
+              deviceLocation: parseLocationFromNotes(notes),
+            },
+            ...(checkOut
+              ? [
+                  {
+                    id: `${id}-out`,
+                    punchedAt: checkOut,
+                    deviceCode: "",
+                    deviceName: String(row.source ?? "manual"),
+                    deviceLocation: parseLocationFromNotes(notes),
+                  },
+                ]
+              : []),
+          ]
+        : [];
+  const working = hoursFromFirstPunch(dayPunches, checkIn, checkOut, date, breakMin);
   const ot = computeOvertime(Number.isFinite(working) ? working : 0);
   const apiStatus = String(row.attendance_status ?? "");
   const displayStatus = savedOverride
     ? ext.displayStatus || inferDisplayStatus(apiStatus, checkIn, notes)
     : inferDisplayStatus(apiStatus, checkIn, notes);
-  const location = ext.location || parseLocationFromNotes(notes) || (checkIn ? "HQ Office" : "");
+  const punchLocation =
+    dayPunches.find((p) => p.deviceLocation)?.deviceLocation ||
+    dayPunches[0]?.deviceLocation ||
+    "";
+  const location =
+    punchLocation || ext.location || parseLocationFromNotes(notes) || "";
+  const deviceLabel =
+    dayPunches[0]?.deviceName ||
+    dayPunches[0]?.deviceCode ||
+    ext.device ||
+    String(row.source ?? "");
 
   return {
     id,
     employeeId,
     branchId: String(row.branch_id ?? ""),
+    companyId: row.company_id ? String(row.company_id) : undefined,
     shiftId: String(row.shift_id ?? ""),
     attendanceDate: date,
     checkIn,
@@ -327,22 +402,38 @@ function mergeRow(
     status: displayStatus,
     apiStatus,
     location,
-    device: ext.device || String(row.source ?? ""),
+    device: deviceLabel,
     source: ext.sourceDetail || String(row.source ?? "manual"),
     approvalStatus: ext.approvalStatus,
     recordStatus: String(row.status ?? "recorded"),
     version: Number(row.version ?? 1),
     notes,
+    punches: dayPunches,
     extension: {
       ...ext,
       displayStatus,
       breakMinutes: breakMin,
       location,
+      device: deviceLabel,
       isLate: displayStatus === "late" || ext.isLate,
-      employeeName: emp?.name ?? ext.employeeName,
-      employeeCode: emp?.code ?? ext.employeeCode,
-      departmentName: emp?.dept ?? ext.departmentName,
-      departmentId: emp?.deptId ?? ext.departmentId,
+      employeeName:
+        emp?.name ||
+        String(row.employee_name ?? "").trim() ||
+        ext.employeeName ||
+        "",
+      employeeCode:
+        emp?.code ||
+        String(row.employee_code ?? "").trim() ||
+        ext.employeeCode ||
+        "",
+      departmentName:
+        cleanDeptName(emp?.dept) ||
+        cleanDeptName(String(row.department_name ?? "")) ||
+        cleanDeptName(ext.departmentName),
+      departmentId:
+        emp?.deptId ||
+        String(row.department_id ?? "").trim() ||
+        ext.departmentId,
       designationName: emp?.desig ?? ext.designationName,
       managerName: emp?.manager ?? ext.managerName,
       shiftName: shiftMap.get(String(row.shift_id ?? "")) ?? ext.shiftName,
@@ -352,18 +443,66 @@ function mergeRow(
   };
 }
 
+function punchKey(employeeId: string, attendanceDate: string): string {
+  return `${employeeId}|${attendanceDate}`;
+}
+
+function mapApiPunches(rows: HrRow[]): Map<string, AttendancePunch[]> {
+  const map = new Map<string, AttendancePunch[]>();
+  for (const raw of rows) {
+    const employeeId = String(raw.employee_id ?? "");
+    const attendanceDate = String(raw.attendance_date ?? "");
+    if (!employeeId || !attendanceDate) continue;
+    const punch: AttendancePunch = {
+      id: String(raw.id ?? `${employeeId}-${raw.punched_at}`),
+      punchedAt: String(raw.punched_at ?? ""),
+      deviceCode: String(raw.device_code ?? ""),
+      deviceName: String(raw.device_name ?? raw.device_code ?? ""),
+      deviceLocation: String(raw.device_location ?? "").trim(),
+    };
+    if (!punch.punchedAt) continue;
+    const key = punchKey(employeeId, attendanceDate);
+    const list = map.get(key) ?? [];
+    list.push(punch);
+    map.set(key, list);
+  }
+  for (const [, list] of map) {
+    list.sort((a, b) => a.punchedAt.localeCompare(b.punchedAt));
+  }
+  return map;
+}
+
+async function loadPunchesForRange(dateFrom: string, dateTo: string): Promise<Map<string, AttendancePunch[]>> {
+  try {
+    const res = await resourceService.list("/hr/biometric-punches", {
+      date_from: dateFrom,
+      date_to: dateTo,
+      page_size: 5000,
+      limit: 5000,
+    });
+    const rows = (Array.isArray(res.data) ? res.data : []) as HrRow[];
+    return mapApiPunches(rows);
+  } catch {
+    return new Map();
+  }
+}
+
 function recordsFromRows(
   attRows: HrRow[],
   empMap: EmpLookup,
   shiftMap: Map<string, string>,
+  punchMap: Map<string, AttendancePunch[]> = new Map(),
 ): AttendanceRecord[] {
   const extensions = loadExtensions();
   return attRows
     .map((row) => {
       const id = String(row.id);
-      const emp = empMap.get(String(row.employee_id));
+      const employeeId = String(row.employee_id);
+      const date = String(row.attendance_date ?? "");
+      const emp = empMap.get(employeeId);
       const saved = extensions[id];
       const notes = String(row.notes ?? "");
+      const dayPunches = punchMap.get(punchKey(employeeId, date)) ?? [];
       const ext =
         saved ??
         defaultExtension({
@@ -372,19 +511,25 @@ function recordsFromRows(
             String(row.check_in_at ?? ""),
             notes,
           ),
-          location: parseLocationFromNotes(notes),
-          device: String(row.source ?? ""),
-          employeeName: emp?.name,
-          employeeCode: emp?.code,
-          departmentName: emp?.dept,
-          departmentId: emp?.deptId,
+          location:
+            dayPunches.find((p) => p.deviceLocation)?.deviceLocation ||
+            parseLocationFromNotes(notes),
+          device:
+            dayPunches[0]?.deviceName ||
+            dayPunches[0]?.deviceCode ||
+            String(row.source ?? ""),
+          employeeName: emp?.name || String(row.employee_name ?? "").trim() || undefined,
+          employeeCode: emp?.code || String(row.employee_code ?? "").trim() || undefined,
+          departmentName:
+            cleanDeptName(emp?.dept) || cleanDeptName(String(row.department_name ?? "")),
+          departmentId: emp?.deptId || String(row.department_id ?? "").trim() || undefined,
           designationName: emp?.desig,
           managerName: emp?.manager,
           sourceDetail: String(row.source ?? "manual") as AttendanceSource,
-          breakMinutes: row.check_in_at && row.check_out_at ? 30 : 0,
+          breakMinutes: 0,
           approvalStatus: "approved",
         });
-      return mergeRow(row, empMap, shiftMap, ext, Boolean(saved));
+      return mergeRow(row, empMap, shiftMap, ext, Boolean(saved), dayPunches);
     })
     .sort((a, b) => {
       const byDate = b.attendanceDate.localeCompare(a.attendanceDate);
@@ -395,65 +540,178 @@ function recordsFromRows(
 
 export type AttendanceDirectory = {
   records: AttendanceRecord[];
+  /** Inclusive ISO dates currently loaded into `records`. */
+  loadedFrom?: string;
+  loadedTo?: string;
   options: {
-    branches: { id: string; label: string }[];
+    branches: { id: string; label: string; companyId?: string }[];
     departments: { id: string; label: string }[];
     shifts: { id: string; label: string }[];
     managers: { id: string; label: string }[];
-    employees: { id: string; label: string; code: string; departmentId: string; designation: string; managerId: string }[];
+    employees: {
+      id: string;
+      label: string;
+      code: string;
+      departmentId: string;
+      departmentName?: string;
+      designation: string;
+      managerId: string;
+      branchId?: string;
+      companyId?: string;
+    }[];
   };
 };
 
-export async function loadAttendanceDirectory(): Promise<AttendanceDirectory> {
-  const [attRows, empDir, branchRows, departmentRows, shiftRowsRaw] = await Promise.all([
-    listAllRows("/hr/attendance"),
-    loadEmployeeDirectory().catch(() => ({
-      records: [],
-      options: { branches: [], departments: [], designations: [], managers: [], shifts: [] },
-      errors: [],
-    })),
-    listAllRows("/branches"),
-    listAllRows("/departments"),
-    listAllRows("/hr/shifts"),
-  ]);
+export type AttendanceLoadRange = {
+  dateFrom: string;
+  dateTo: string;
+};
 
+function cleanDeptName(value: string | undefined | null): string {
+  const v = String(value ?? "").trim();
+  return !v || v === "-" ? "" : v;
+}
+
+function buildEmpMap(
+  empDir: Awaited<ReturnType<typeof loadEmployeeDirectory>>,
+): EmpLookup {
   const empMap: EmpLookup = new Map();
   for (const e of empDir.records) {
     empMap.set(e.id, {
       name: e.displayName,
       code: e.employeeCode,
-      dept: e.departmentName,
+      dept: cleanDeptName(e.departmentName),
       deptId: e.departmentId,
       desig: e.designationName,
       manager: e.reportingManagerName,
     });
   }
+  return empMap;
+}
 
-  const shiftMap = new Map(
-    shiftRowsRaw.map((s) => [String(s.id), String(s.shift_name ?? s.shift_code ?? s.id)]),
+function empMapFromOptions(
+  employees: AttendanceDirectory["options"]["employees"],
+  departments: AttendanceDirectory["options"]["departments"] = [],
+): EmpLookup {
+  const deptById = new Map(departments.map((d) => [d.id, d.label]));
+  const empMap: EmpLookup = new Map();
+  for (const e of employees) {
+    empMap.set(e.id, {
+      name: e.label,
+      code: e.code,
+      dept:
+        cleanDeptName(e.departmentName) ||
+        cleanDeptName(deptById.get(e.departmentId)) ||
+        "",
+      deptId: e.departmentId,
+      desig: e.designation,
+      manager: "",
+    });
+  }
+  return empMap;
+}
+
+/** Load attendance for a date window only (default: today). Reuses filter options from `previous`. */
+export async function loadAttendanceDirectory(
+  range?: Partial<AttendanceLoadRange>,
+  previous?: AttendanceDirectory | null,
+): Promise<AttendanceDirectory> {
+  const today = todayIso();
+  const dateFrom = (range?.dateFrom || today).slice(0, 10);
+  const dateTo = (range?.dateTo || dateFrom || today).slice(0, 10);
+  const needOptions = !previous?.options?.employees?.length;
+
+  const attPromise = listAllRows(
+    "/hr/attendance",
+    { date_from: dateFrom, date_to: dateTo },
+    20,
   );
+  const punchPromise = loadPunchesForRange(dateFrom, dateTo);
 
+  if (!needOptions && previous) {
+    const [attRows, punchMap] = await Promise.all([attPromise, punchPromise]);
+    const empMap = empMapFromOptions(
+      previous.options.employees,
+      previous.options.departments,
+    );
+    const shiftMap = new Map(previous.options.shifts.map((s) => [s.id, s.label]));
+    return {
+      records: recordsFromRows(attRows, empMap, shiftMap, punchMap),
+      loadedFrom: dateFrom,
+      loadedTo: dateTo,
+      options: previous.options,
+    };
+  }
+
+  const [attRows, empDir, branchRows, departmentRows, shiftRowsRaw, punchMap] =
+    await Promise.all([
+      attPromise,
+      loadEmployeeDirectory().catch(() => ({
+        records: [],
+        options: {
+          branches: [],
+          departments: [],
+          designations: [],
+          managers: [],
+          shifts: [],
+        },
+        errors: [],
+      })),
+      listAllRows("/branches", {}, 5),
+      listAllRows("/departments", {}, 5),
+      listAllRows("/hr/shifts", {}, 5),
+      punchPromise,
+    ]);
+
+  const empMap = buildEmpMap(empDir);
   const asOpts = (arr: HrRow[], labelKeys: string[]) =>
     arr.map((r) => ({
       id: String(r.id),
       label: String(labelKeys.map((k) => r[k]).find(Boolean) ?? r.id),
     }));
+  const departments = asOpts(departmentRows, ["department_name", "name", "department_code"]);
+  const deptById = new Map(departments.map((d) => [d.id, d.label]));
+  // Fill blank department names from /departments when directory hydration missed them.
+  for (const [id, emp] of empMap) {
+    if (!cleanDeptName(emp.dept) && emp.deptId) {
+      empMap.set(id, {
+        ...emp,
+        dept: cleanDeptName(deptById.get(emp.deptId)),
+      });
+    }
+  }
+  const shiftMap = new Map(
+    shiftRowsRaw.map((s) => [String(s.id), String(s.shift_name ?? s.shift_code ?? s.id)]),
+  );
 
   return {
-    records: recordsFromRows(attRows, empMap, shiftMap),
+    records: recordsFromRows(attRows, empMap, shiftMap, punchMap),
+    loadedFrom: dateFrom,
+    loadedTo: dateTo,
     options: {
-      branches: asOpts(branchRows, ["branch_name", "name", "branch_code"]),
-      departments: asOpts(departmentRows, ["department_name", "name", "department_code"]),
+      branches: branchRows.map((r) => ({
+        id: String(r.id),
+        label: String(r.branch_name ?? r.name ?? r.branch_code ?? r.id),
+        companyId: r.company_id ? String(r.company_id) : undefined,
+      })),
+      departments,
       shifts: asOpts(shiftRowsRaw, ["shift_name", "shift_code"]),
       managers: empDir.options.managers,
-      employees: empDir.records.map((e) => ({
-        id: e.id,
-        label: e.displayName,
-        code: e.employeeCode,
-        departmentId: e.departmentId,
-        designation: e.designationName,
-        managerId: e.reportingManagerId,
-      })),
+      employees: empDir.records.map((e) => {
+        const fromMap = empMap.get(e.id);
+        return {
+          id: e.id,
+          label: e.displayName,
+          code: e.employeeCode,
+          departmentId: e.departmentId,
+          departmentName:
+            cleanDeptName(fromMap?.dept) || cleanDeptName(e.departmentName),
+          designation: e.designationName,
+          managerId: e.reportingManagerId,
+          branchId: e.branchId,
+          companyId: e.companyId,
+        };
+      }),
     },
   };
 }
@@ -461,12 +719,20 @@ export async function loadAttendanceDirectory(): Promise<AttendanceDirectory> {
 export async function loadAttendanceForEmployee(
   employeeId: string,
   directory?: AttendanceDirectory | null,
+  range?: { dateFrom?: string; dateTo?: string },
 ): Promise<AttendanceRecord[]> {
   const attRows: HrRow[] = [];
   const seenFirstIds = new Set<string>();
+  const query: Record<string, string | number> = {
+    page_size: 200,
+    employee_id: employeeId,
+  };
+  if (range?.dateFrom) query.date_from = range.dateFrom.slice(0, 10);
+  if (range?.dateTo) query.date_to = range.dateTo.slice(0, 10);
+
   for (let page = 1; page <= 30; page += 1) {
     const res = await resourceService
-      .list("/hr/attendance", { page, page_size: 200, employee_id: employeeId })
+      .list("/hr/attendance", { ...query, page })
       .catch(() => ({ data: [] }));
     const rows = (Array.isArray(res.data) ? res.data : []) as HrRow[];
     const firstId = rows[0] ? String(rows[0].id ?? "") : "";
@@ -476,20 +742,21 @@ export async function loadAttendanceForEmployee(
     if (rows.length < 200) break;
   }
 
-  const empMap: EmpLookup = new Map();
-  for (const e of directory?.options.employees ?? []) {
-    empMap.set(e.id, {
-      name: e.label,
-      code: e.code,
-      dept: "",
-      deptId: e.departmentId,
-      desig: e.designation,
-      manager: "",
-    });
-  }
+  const empMap = empMapFromOptions(
+    directory?.options.employees ?? [],
+    directory?.options.departments ?? [],
+  );
 
   const shiftMap = new Map((directory?.options.shifts ?? []).map((s) => [s.id, s.label]));
-  return recordsFromRows(attRows, empMap, shiftMap);
+  const dates = attRows
+    .map((r) => String(r.attendance_date ?? ""))
+    .filter(Boolean)
+    .sort();
+  const today = todayIso();
+  const punchFrom = range?.dateFrom || dates[0] || today;
+  const punchTo = range?.dateTo || dates[dates.length - 1] || today;
+  const punchMap = await loadPunchesForRange(punchFrom, punchTo);
+  return recordsFromRows(attRows, empMap, shiftMap, punchMap);
 }
 
 export function filterAttendanceRecords(
@@ -639,6 +906,7 @@ export function impliedAbsentRecords(
       recordStatus: "implied",
       version: 0,
       notes: "No attendance punch for today",
+      punches: [],
       extension: {
         displayStatus: "absent",
         breakStart: "",
@@ -705,6 +973,7 @@ export async function markAttendance(payload: MarkAttendancePayload): Promise<vo
   const res = await resourceService.create("/hr/attendance", {
     branch_id: payload.branchId,
     employee_id: payload.employeeId,
+    company_id: payload.companyId || null,
     attendance_date: payload.attendanceDate,
     attendance_status: mapToApiStatus(payload.status),
     source: mapToApiSource(payload.source),
@@ -775,36 +1044,40 @@ export function exportAttendanceCsv(records: AttendanceRecord[]): string {
     "Employee",
     "Department",
     "Shift",
-    "Check In",
-    "Check Out",
+    "First In",
+    "Last Out",
     "Working Hours",
-    "Break",
     "Overtime",
     "Status",
     "Location",
     "Source",
     "Approval",
   ];
-  const lines = records.map((r) =>
-    [
+  const lines = records.map((r) => {
+    const punches = r.punches ?? [];
+    const firstIn = punches[0]?.punchedAt || r.checkIn || "";
+    const lastOut =
+      punches.length > 1
+        ? punches[punches.length - 1]?.punchedAt || r.checkOut || ""
+        : r.checkOut || "";
+    return [
       r.attendanceDate,
       r.extension.employeeCode,
       r.extension.employeeName,
       r.extension.departmentName,
       r.extension.shiftName,
-      r.checkIn,
-      r.checkOut,
-      r.workingHours,
-      r.breakTime,
-      r.overtimeHours,
+      firstIn,
+      lastOut,
+      formatHoursMinutes(r.workingHours),
+      formatHoursMinutes(r.overtimeHours),
       r.status,
       r.location,
       r.source,
       r.approvalStatus,
     ]
       .map((c) => `"${String(c).replace(/"/g, '""')}"`)
-      .join(","),
-  );
+      .join(",");
+  });
   return [headers.join(","), ...lines].join("\n");
 }
 
@@ -842,6 +1115,315 @@ export function reportSummary(records: AttendanceRecord[], label: string) {
   };
 }
 
+type AttendanceImportEmployee = {
+  id: string;
+  label: string;
+  code: string;
+  departmentId: string;
+  designation: string;
+  managerId: string;
+  branchId?: string;
+  companyId?: string;
+};
+
+/** Normalize machine/HR codes for exact compare (CDPL-5356 → CDPL5356). */
+function normEmployeeCode(raw: string): string {
+  return String(raw || "")
+    .trim()
+    .replace(/[\s\-_/]+/g, "")
+    .toUpperCase();
+}
+
+/** Letter prefix only (CDPL5356 → CDPL, CT5356 → CT). */
+function codeLetterPrefix(raw: string): string {
+  const n = normEmployeeCode(raw);
+  const m = n.match(/^[A-Z]+/);
+  return m?.[0] ?? "";
+}
+
+/**
+ * Numeric id for cross-prefix match (CDPL5356 / CT5356 / CDPL05356 → 5356).
+ * Machine files often keep an old entity prefix (CDPL) while HR Emp ID is CT….
+ */
+function codeDigitKey(raw: string): string {
+  const digits = normEmployeeCode(raw).replace(/\D/g, "");
+  return digits.replace(/^0+/, "") || "";
+}
+
+function resolveEmployeeByMachineCode(
+  machineCode: string,
+  byCode: Map<string, AttendanceImportEmployee>,
+  byDigits: Map<string, AttendanceImportEmployee[]>,
+): { emp: AttendanceImportEmployee | null; via: "exact" | "digits" | null; note?: string } {
+  const code = normEmployeeCode(machineCode);
+  if (!code) return { emp: null, via: null };
+  const exact = byCode.get(code);
+  if (exact) return { emp: exact, via: "exact" };
+
+  const dig = codeDigitKey(code);
+  if (!dig) return { emp: null, via: null };
+  const candidates = byDigits.get(dig) ?? [];
+  if (candidates.length === 1) {
+    return {
+      emp: candidates[0],
+      via: "digits",
+      note: `${machineCode} → ${candidates[0].code}`,
+    };
+  }
+  if (candidates.length > 1) {
+    const machinePrefix = codeLetterPrefix(code);
+    // Prefer a different prefix (CDPL5356 → CT5356) over another CDPL* with same digits.
+    const remapped = candidates.filter((c) => codeLetterPrefix(c.code) !== machinePrefix);
+    if (remapped.length === 1) {
+      return {
+        emp: remapped[0],
+        via: "digits",
+        note: `${machineCode} → ${remapped[0].code}`,
+      };
+    }
+    // Prefer CT when machine still shows CDPL (Digitech → Technologies remap).
+    if (machinePrefix === "CDPL") {
+      const ct = candidates.filter((c) => codeLetterPrefix(c.code) === "CT");
+      if (ct.length === 1) {
+        return { emp: ct[0], via: "digits", note: `${machineCode} → ${ct[0].code}` };
+      }
+    }
+    return {
+      emp: null,
+      via: null,
+      note: `ambiguous number ${dig}: ${candidates.map((c) => c.code).join(", ")}`,
+    };
+  }
+  return { emp: null, via: null };
+}
+
+export async function importAttendanceRows(
+  rows: {
+    employee_code: string;
+    attendance_date: string;
+    check_in?: string;
+    check_out?: string;
+    status?: AttendanceStatusCode;
+    source?: string;
+  }[],
+  directory: AttendanceDirectory,
+): Promise<{
+  created: number;
+  skipped: number;
+  skippedUnmatched: number;
+  errors: string[];
+  warnings: string[];
+}> {
+  if (!rows.length) {
+    return {
+      created: 0,
+      skipped: 0,
+      skippedUnmatched: 0,
+      errors: ["No rows to import"],
+      warnings: [],
+    };
+  }
+
+  // Refresh master employees so import sees current Emp IDs + branch/company.
+  let employeeSource: AttendanceImportEmployee[] = directory.options.employees.map((e) => ({
+    id: e.id,
+    label: e.label,
+    code: e.code,
+    departmentId: e.departmentId,
+    designation: e.designation,
+    managerId: e.managerId,
+    branchId: e.branchId,
+    companyId: e.companyId,
+  }));
+  try {
+    const fresh = await loadEmployeeDirectory();
+    if (fresh.records.length) {
+      employeeSource = fresh.records.map((e) => ({
+        id: e.id,
+        label: e.displayName,
+        code: e.employeeCode,
+        departmentId: e.departmentId,
+        designation: e.designationName,
+        managerId: e.reportingManagerId,
+        branchId: e.branchId,
+        companyId: e.companyId,
+      }));
+    }
+  } catch {
+    // Keep directory.options.employees
+  }
+
+  const byCode = new Map<string, AttendanceImportEmployee>();
+  const byDigits = new Map<string, AttendanceImportEmployee[]>();
+  const mergeEmp = (
+    existing: AttendanceImportEmployee | undefined,
+    incoming: AttendanceImportEmployee,
+  ): AttendanceImportEmployee => {
+    if (!existing) return incoming;
+    return {
+      ...existing,
+      ...incoming,
+      // Never wipe org scope already loaded from HR master.
+      branchId: incoming.branchId || existing.branchId,
+      companyId: incoming.companyId || existing.companyId,
+      departmentId: incoming.departmentId || existing.departmentId,
+      designation: incoming.designation || existing.designation,
+      managerId: incoming.managerId || existing.managerId,
+      label: incoming.label || existing.label,
+      code: incoming.code || existing.code,
+    };
+  };
+  const indexEmp = (e: AttendanceImportEmployee) => {
+    const key = normEmployeeCode(e.code);
+    if (!key) return;
+    byCode.set(key, mergeEmp(byCode.get(key), e));
+    const dig = codeDigitKey(key);
+    if (!dig) return;
+    const list = byDigits.get(dig) ?? [];
+    const idx = list.findIndex((x) => x.id === e.id);
+    if (idx >= 0) list[idx] = mergeEmp(list[idx], e);
+    else list.push(e);
+    byDigits.set(dig, list);
+  };
+  for (const e of employeeSource) indexEmp(e);
+  for (const r of directory.records) {
+    if (!r.employeeId) continue;
+    indexEmp({
+      id: r.employeeId,
+      label: r.extension.employeeName || r.extension.employeeCode,
+      code: r.extension.employeeCode,
+      departmentId: r.extension.departmentId || "",
+      designation: r.extension.designationName || "",
+      managerId: "",
+      branchId: r.branchId || undefined,
+      companyId: r.companyId || undefined,
+    });
+  }
+
+  const existing = new Set(directory.records.map((r) => `${r.employeeId}|${r.attendanceDate}`));
+  const branchCompany = new Map(
+    directory.options.branches
+      .filter((b) => b.id && b.companyId)
+      .map((b) => [b.id, b.companyId as string]),
+  );
+  const fallbackBranchId = directory.options.branches[0]?.id ?? "";
+  const fallbackCompanyId =
+    directory.options.branches.find((b) => b.companyId)?.companyId ||
+    employeeSource.find((e) => e.companyId)?.companyId ||
+    "";
+  const shiftId = directory.options.shifts[0]?.id ?? "";
+
+  let created = 0;
+  let skipped = 0;
+  let skippedUnmatched = 0;
+  const errors: string[] = [];
+  const unknownCodes = new Set<string>();
+  const remappedCodes = new Set<string>();
+
+  for (let i = 0; i < rows.length; i += 1) {
+    const row = rows[i];
+    const code = normEmployeeCode(row.employee_code);
+    const date = String(row.attendance_date || "").trim();
+    if (!date) {
+      errors.push(`Row ${i + 1}: invalid / missing date`);
+      skipped += 1;
+      continue;
+    }
+    const resolved = resolveEmployeeByMachineCode(code, byCode, byDigits);
+    const emp = resolved.emp;
+    if (!emp) {
+      // Auto-skip codes that are not in HR (no hard error per row).
+      unknownCodes.add(code || "(blank)");
+      skippedUnmatched += 1;
+      skipped += 1;
+      continue;
+    }
+    if (resolved.via === "digits" && resolved.note) {
+      remappedCodes.add(resolved.note);
+    }
+    if (existing.has(`${emp.id}|${date}`)) {
+      skipped += 1;
+      continue;
+    }
+    const status = (row.status || "present") as AttendanceStatusCode;
+    const sourceRaw = String(row.source || "biometric").toLowerCase();
+    const source = (
+      ["manual", "biometric", "mobile", "web", "qr", "face_recognition", "device"].includes(sourceRaw)
+        ? sourceRaw
+        : "biometric"
+    ) as AttendanceSource;
+    const branchId = emp.branchId || fallbackBranchId;
+    if (!branchId) {
+      errors.push(`Row ${i + 1}: employee ${emp.code} has no branch in HR`);
+      skipped += 1;
+      continue;
+    }
+    const companyId =
+      emp.companyId || branchCompany.get(branchId) || fallbackCompanyId || undefined;
+    if (!companyId) {
+      errors.push(
+        `Row ${i + 1}: employee ${emp.code} has no company in HR (set Legal Entity / company on the employee).`,
+      );
+      skipped += 1;
+      continue;
+    }
+    try {
+      await markAttendance({
+        branchId,
+        companyId,
+        employeeId: emp.id,
+        attendanceDate: date,
+        shiftId,
+        checkIn: row.check_in || "",
+        checkOut: row.check_out || "",
+        breakStart: "",
+        breakEnd: "",
+        status,
+        location: "Machine import",
+        source,
+        gpsCoordinates: "",
+        notes: `Imported from machine attendance (code ${code}${
+          resolved.via === "digits" ? ` ≈ ${emp.code}` : ""
+        })`,
+      });
+      existing.add(`${emp.id}|${date}`);
+      created += 1;
+    } catch (e) {
+      errors.push(`Row ${i + 1}: ${e instanceof Error ? e.message : "failed"}`);
+      skipped += 1;
+    }
+  }
+
+  const warnings: string[] = [];
+  if (remappedCodes.size && created > 0) {
+    warnings.push(
+      `Matched ${remappedCodes.size} machine code(s) by Emp number (e.g. CDPL5356 → CT5356): ${[...remappedCodes]
+        .slice(0, 8)
+        .join("; ")}`,
+    );
+  }
+  if (skippedUnmatched > 0) {
+    const codes = [...unknownCodes].slice(0, 12).join(", ");
+    warnings.push(
+      `Skipped ${skippedUnmatched} row(s) with no matching Emp ID${
+        codes ? ` (e.g. ${codes})` : ""
+      }.`,
+    );
+  }
+  if (!created && skippedUnmatched > 0 && !byCode.size) {
+    errors.push("No employees loaded from HR — cannot match machine codes.");
+  }
+
+  return {
+    created,
+    skipped,
+    skippedUnmatched,
+    errors: errors.slice(0, 25),
+    warnings,
+  };
+}
+
+/** Legacy CSV helper — prefers headers employee_code / attendance_date. */
 export async function importAttendanceCsv(
   csvText: string,
   directory: AttendanceDirectory,
@@ -855,66 +1437,38 @@ export async function importAttendanceCsv(
   const header = lines[0].toLowerCase().split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
   const idx = (name: string) => header.indexOf(name);
 
-  const codeIdx = idx("employee_code");
-  const dateIdx = idx("attendance_date");
-  const inIdx = idx("check_in");
-  const outIdx = idx("check_out");
-  const statusIdx = idx("status");
+  const codeIdx = idx("employee_code") >= 0 ? idx("employee_code") : idx("code");
+  const dateIdx = idx("attendance_date") >= 0 ? idx("attendance_date") : idx("date");
+  const inIdx = idx("check_in") >= 0 ? idx("check_in") : idx("first in") >= 0 ? idx("first in") : idx("first_in");
+  const outIdx = idx("check_out") >= 0 ? idx("check_out") : idx("last out") >= 0 ? idx("last out") : idx("last_out");
+  const statusIdx = idx("status") >= 0 ? idx("status") : idx("attd");
   const sourceIdx = idx("source");
   if (codeIdx < 0 || dateIdx < 0) {
-    return { created: 0, skipped: 0, errors: ["Required columns: employee_code, attendance_date"] };
+    return {
+      created: 0,
+      skipped: 0,
+      errors: ["Required columns: Code (or employee_code) and Date (or attendance_date)"],
+    };
   }
 
-  const byCode = new Map(directory.options.employees.map((e) => [e.code.toLowerCase(), e]));
-  const existing = new Set(directory.records.map((r) => `${r.employeeId}|${r.attendanceDate}`));
-  const branchId = directory.options.branches[0]?.id ?? "";
-  const shiftId = directory.options.shifts[0]?.id ?? "";
-
-  let created = 0;
-  let skipped = 0;
-  const errors: string[] = [];
-
+  const rows = [];
   for (let i = 1; i < lines.length; i += 1) {
-    const cols = lines[i].match(/("([^"]|"")*"|[^,]*)/g)?.map((c) => c.replace(/^"|"$/g, "").replace(/""/g, '"').trim()) ?? [];
-    const code = (cols[codeIdx] ?? "").trim();
-    const date = (cols[dateIdx] ?? "").trim();
-    const emp = byCode.get(code.toLowerCase());
-    if (!emp || !date) {
-      errors.push(`Row ${i + 1}: unknown employee or date`);
-      skipped += 1;
-      continue;
-    }
-    if (existing.has(`${emp.id}|${date}`)) {
-      skipped += 1;
-      continue;
-    }
-    const status = ((cols[statusIdx] || "present") as AttendanceStatusCode);
-    const source = ((cols[sourceIdx] || "manual") as AttendanceSource);
-    try {
-      await markAttendance({
-        branchId,
-        employeeId: emp.id,
-        attendanceDate: date,
-        shiftId,
-        checkIn: cols[inIdx] || "",
-        checkOut: cols[outIdx] || "",
-        breakStart: "",
-        breakEnd: "",
-        status,
-        location: "HQ Office",
-        source,
-        gpsCoordinates: "",
-        notes: "Imported from CSV",
-      });
-      existing.add(`${emp.id}|${date}`);
-      created += 1;
-    } catch (e) {
-      errors.push(`Row ${i + 1}: ${e instanceof Error ? e.message : "failed"}`);
-      skipped += 1;
-    }
+    const cols =
+      lines[i]
+        .match(/("([^"]|"")*"|[^,]*)/g)
+        ?.map((c) => c.replace(/^"|"$/g, "").replace(/""/g, '"').trim()) ?? [];
+    const date = normalizeAttendanceDate(cols[dateIdx] ?? "");
+    if (!date && !(cols[codeIdx] ?? "").trim()) continue;
+    rows.push({
+      employee_code: cols[codeIdx] ?? "",
+      attendance_date: date || (cols[dateIdx] ?? ""),
+      check_in: normalizeAttendanceTime(cols[inIdx] ?? ""),
+      check_out: normalizeAttendanceTime(cols[outIdx] ?? ""),
+      status: mapMachineAttendanceStatus(cols[statusIdx] ?? ""),
+      source: cols[sourceIdx] || "biometric",
+    });
   }
-
-  return { created, skipped, errors: errors.slice(0, 10) };
+  return importAttendanceRows(rows, directory);
 }
 
 export type RegularizeKind = "full_day" | "half_day" | "absent" | "work_from_home";
@@ -946,6 +1500,9 @@ export async function applyAttendanceCorrection(input: {
   halfPortion?: "first_half" | "second_half";
   reason: string;
   attachmentName: string;
+  /** Optional HH:mm punch overrides (local time on attendance date). */
+  checkInTime?: string;
+  checkOutTime?: string;
 }): Promise<void> {
   const { record, kind, reason, attachmentName } = input;
   const { status: nextStatus, portion, label: portionLabel } = resolveRegularizeChoice(
@@ -959,19 +1516,42 @@ export async function applyAttendanceCorrection(input: {
     .trim();
   const notes = [baseNotes, noteTag, reason].filter(Boolean).join(" · ");
 
+  const nextCheckIn =
+    input.checkInTime != null && String(input.checkInTime).trim()
+      ? parseTimeOnDate(record.attendanceDate, String(input.checkInTime).trim())
+      : null;
+  const nextCheckOut =
+    input.checkOutTime != null && String(input.checkOutTime).trim()
+      ? parseTimeOnDate(record.attendanceDate, String(input.checkOutTime).trim())
+      : null;
+  const checkInIso = nextCheckIn || record.checkIn || null;
+  const checkOutIso = nextCheckOut || record.checkOut || null;
+  const punchesChanged =
+    (nextCheckIn && nextCheckIn !== record.checkIn) ||
+    (nextCheckOut && nextCheckOut !== record.checkOut);
+  const workingHours =
+    checkInIso && checkOutIso ? diffHours(checkInIso, checkOutIso, record.breakTime || 0) : record.workingHours;
+
   await resourceService.update("/hr/attendance", record.id, {
     version: record.version,
     attendance_status: mapToApiStatus(nextStatus),
     notes,
+    ...(checkInIso ? { check_in_at: checkInIso } : {}),
+    ...(checkOutIso ? { check_out_at: checkOutIso } : {}),
+    ...(Number.isFinite(workingHours) ? { working_hours: workingHours } : {}),
   });
 
   await submitCorrection({
     attendanceId: record.id,
     employeeId: record.employeeId,
     date: record.attendanceDate,
-    field: "attendance_status",
-    oldTime: record.status,
-    newTime: nextStatus,
+    field: punchesChanged ? "check_in" : "attendance_status",
+    oldTime: punchesChanged
+      ? `in ${formatPunchAudit(record.checkIn)} / out ${formatPunchAudit(record.checkOut)}`
+      : record.status,
+    newTime: punchesChanged
+      ? `in ${formatPunchAudit(checkInIso)} / out ${formatPunchAudit(checkOutIso)} · ${nextStatus}`
+      : nextStatus,
     reason: `${portionLabel}: ${reason}`,
     attachmentName,
     portion,
@@ -986,7 +1566,18 @@ export async function applyAttendanceCorrection(input: {
   appendAttendanceAudit({
     attendanceId: record.id,
     action: "regularized",
-    detail: `${record.status} → ${nextStatus} (${portionLabel}); punches unchanged`,
+    detail: punchesChanged
+      ? `${record.status} → ${nextStatus} (${portionLabel}); punches updated`
+      : `${record.status} → ${nextStatus} (${portionLabel})`,
     actor: actorLabel(),
   });
+}
+
+function formatPunchAudit(iso: string | null | undefined): string {
+  if (!iso) return "-";
+  try {
+    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return "-";
+  }
 }

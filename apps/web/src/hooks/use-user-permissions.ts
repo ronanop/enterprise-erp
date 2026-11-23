@@ -5,7 +5,10 @@ import { useCallback, useEffect, useState } from "react";
 import { parseAuthMe } from "@/lib/auth-user";
 import { isAuthenticated } from "@/lib/auth";
 import { authService } from "@/services/api-client";
-import { HR_SUPERADMIN_PERMISSION, type UserProfile } from "@/types/api";
+import type { UserProfile } from "@/types/api";
+
+/** Matches backend `HR_SUPERADMIN_PERMISSION` / hr module-admin gate. */
+export const HR_SUPERADMIN_PERMISSION = "hr.superadmin:manage";
 
 export function useUserPermissions() {
   const [user, setUser] = useState<UserProfile | null>(null);

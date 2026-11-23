@@ -79,6 +79,7 @@ function toModuleNavItem(item: HrNavItem): ModuleNavItem {
     href: item.href,
     icon: item.icon,
     keywords: item.description,
+    expandOnly: item.expandOnly,
     children: item.children?.map(toModuleNavItem),
   };
 }

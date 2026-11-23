@@ -5,11 +5,13 @@ import { Building2 } from "lucide-react";
 
 import { getStoredOrgContext, setStoredOrgContext } from "@/lib/org-context-storage";
 import { ApiClientError, contextService } from "@/services/api-client";
+import { clearDashboardCache } from "@/services/hr-executive-dashboard-service";
 import type { OrgCompanyOption } from "@/types/org-context";
 import { cn } from "@/lib/utils";
 
 /** Sentinel select value for tenant-wide (all companies) context. */
 const ALL_ENTITIES = "all";
+const ALL_ENTITIES_LABEL = "All assigned entities";
 
 function normalizeCompanies(data: unknown): OrgCompanyOption[] {
   if (!Array.isArray(data)) return [];
@@ -35,11 +37,11 @@ export function CompanyContextBadge({ className }: { className?: string }) {
 
   useEffect(() => {
     const stored = getStoredOrgContext();
-    if (stored?.allCompanies) {
+    if (stored?.allCompanies || (!stored?.companyId && stored?.companyName)) {
       setCompanyId(ALL_ENTITIES);
-      setCompanyName("All");
-    } else if (stored?.companyName) {
-      setCompanyId(stored.companyId || "");
+      setCompanyName(ALL_ENTITIES_LABEL);
+    } else if (stored?.companyId && stored?.companyName) {
+      setCompanyId(stored.companyId);
       setCompanyName(stored.companyName);
     }
 
@@ -57,10 +59,10 @@ export function CompanyContextBadge({ className }: { className?: string }) {
 
         if (ctxRes?.data?.all_companies) {
           setCompanyId(ALL_ENTITIES);
-          setCompanyName("All");
+          setCompanyName(ALL_ENTITIES_LABEL);
           setStoredOrgContext({
             companyId: "",
-            companyName: "All",
+            companyName: ALL_ENTITIES_LABEL,
             allCompanies: true,
           });
           return;
@@ -79,19 +81,49 @@ export function CompanyContextBadge({ className }: { className?: string }) {
             companyName: match.company_name,
             branchId: current?.branchId,
             branchName: current?.branchName,
+            allCompanies: false,
           });
-        } else if (stored?.companyId && stored.companyName) {
-          // Server lost Redis company scope — re-apply stored company
+          return;
+        }
+
+        // Stored/session company was wiped (re-import) — fall back to All entities.
+        if (rows.length > 1) {
           try {
             await contextService.switchContext({
-              company_id: stored.companyId,
-              branch_id: stored.branchId ?? null,
+              all_companies: true,
+              company_id: null,
+              branch_id: null,
             });
-            setCompanyId(stored.companyId);
-            setCompanyName(stored.companyName);
+            setCompanyId(ALL_ENTITIES);
+            setCompanyName(ALL_ENTITIES_LABEL);
+            setStoredOrgContext({
+              companyId: "",
+              companyName: ALL_ENTITIES_LABEL,
+              allCompanies: true,
+            });
+            return;
           } catch {
-            setCompanyName(stored.companyName);
+            /* fall through to first company if All is forbidden */
           }
+        }
+
+        if (rows[0]) {
+          try {
+            await contextService.switchContext({
+              company_id: rows[0].id,
+              branch_id: null,
+              all_companies: false,
+            });
+          } catch {
+            /* ignore */
+          }
+          setCompanyId(rows[0].id);
+          setCompanyName(rows[0].company_name);
+          setStoredOrgContext({
+            companyId: rows[0].id,
+            companyName: rows[0].company_name,
+            allCompanies: false,
+          });
         }
       } catch (err) {
         if (!cancelled) {
@@ -118,9 +150,11 @@ export function CompanyContextBadge({ className }: { className?: string }) {
           company_id: null,
           branch_id: null,
         });
+        setCompanyId(ALL_ENTITIES);
+        setCompanyName(ALL_ENTITIES_LABEL);
         setStoredOrgContext({
           companyId: "",
-          companyName: "All",
+          companyName: ALL_ENTITIES_LABEL,
           allCompanies: true,
         });
       } else {
@@ -134,19 +168,33 @@ export function CompanyContextBadge({ className }: { className?: string }) {
           branch_id: null,
           all_companies: false,
         });
-        setStoredOrgContext({ companyId: next.id, companyName: next.company_name });
+        setCompanyId(next.id);
+        setCompanyName(next.company_name);
+        setStoredOrgContext({
+          companyId: next.id,
+          companyName: next.company_name,
+          allCompanies: false,
+        });
       }
+      clearDashboardCache();
       window.location.reload();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Could not switch entity");
+      const message =
+        err instanceof ApiClientError ? err.message : "Could not switch entity";
+      setError(message);
       setSwitching(false);
     }
   }
 
-  if (loading && !companyName) return null;
-  if (!companyName && companies.length === 0) return null;
+  if (loading && !companyName && companies.length === 0) return null;
+  if (!loading && !companyName && companies.length === 0) return null;
 
-  const label = companyName || "Entity";
+  const selectValue =
+    companyId === ALL_ENTITIES || companies.some((c) => c.id === companyId)
+      ? companyId
+      : companies.length > 1
+        ? ALL_ENTITIES
+        : companies[0]?.id || "";
 
   return (
     <div
@@ -160,31 +208,29 @@ export function CompanyContextBadge({ className }: { className?: string }) {
       {companies.length > 1 ? (
         <select
           aria-label="Active entity"
-          value={
-            companyId === ALL_ENTITIES || companies.some((c) => c.id === companyId)
-              ? companyId
-              : ""
-          }
+          value={selectValue}
           disabled={switching}
           onChange={(e) => void onChange(e.target.value)}
           className="h-8 max-w-[14rem] cursor-pointer truncate rounded-lg border border-border/70 bg-muted/40 px-2 text-xs font-medium text-foreground outline-none transition-colors duration-200 hover:border-primary/40 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {companies.length > 1 ? (
-            <option value={ALL_ENTITIES}>All assigned entities</option>
-          ) : null}
+          <option value={ALL_ENTITIES}>{ALL_ENTITIES_LABEL}</option>
           {companies.map((company) => (
             <option key={company.id} value={company.id}>
               {company.company_name}
-              {company.company_code ? ` (${company.company_code})` : ""}
             </option>
           ))}
         </select>
       ) : (
         <span className="max-w-[10rem] truncate rounded-lg border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-medium text-foreground">
-          {companies[0]?.company_name || label}
+          {companies[0]?.company_name || companyName || "Entity"}
         </span>
       )}
       {switching ? <span className="text-[10px] text-muted-foreground">…</span> : null}
+      {error ? (
+        <span className="max-w-[12rem] truncate text-[10px] text-destructive" title={error}>
+          {error}
+        </span>
+      ) : null}
     </div>
   );
 }

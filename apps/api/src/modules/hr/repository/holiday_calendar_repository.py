@@ -26,6 +26,21 @@ class HolidayCalendarRepository(HrScopedRepository):
         stmt = self.apply_hr_filter(stmt, HrHolidayCalendar, ctx, branch_scoped=False)
         return list(self.db.scalars(stmt).all())
 
+    def list_published_for_tenant(self, ctx: TenantContext):
+        """All published calendars in the tenant (ignore company stamp).
+
+        Holiday calendars are often created under one entity while employees
+        sit on another; attendance / leave-adjust must still apply them.
+        """
+        from modules.hr.domain.enums import HolidayCalendarStatus
+
+        stmt = select(HrHolidayCalendar).where(
+            HrHolidayCalendar.is_deleted.is_(False),
+            HrHolidayCalendar.status == HolidayCalendarStatus.PUBLISHED.value,
+        )
+        stmt = self.apply_tenant_filter(stmt, HrHolidayCalendar, ctx)
+        return list(self.db.scalars(stmt).all())
+
     def create(self, ctx: TenantContext, **fields) -> HrHolidayCalendar:
         row = HrHolidayCalendar(
             id=uuid4(),

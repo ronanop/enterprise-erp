@@ -1,1 +1,0 @@
-"""Analytics cross-module adapters."""

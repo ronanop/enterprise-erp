@@ -1,24 +1,29 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Download, Trash2, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, Download, Trash2, Upload } from "lucide-react";
 
-import { SetupDrawer, SetupField } from "@/components/hr/setup/setup-drawer";
+import { SetupDrawer, SetupField, SetupSelect } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { useUserPermissions } from "@/hooks/use-user-permissions";
 import {
-  EMPLOYEE_IMPORT_SAMPLE_CSV,
+  EMPLOYEE_IMPORT_CLIENT_SAMPLE_CSV,
+  EMPLOYEE_IMPORT_OFFICE_SAMPLE_CSV,
   IMPORT_FIELD_OPTIONS,
+  defaultTagForImportTemplate,
   extractImportHeaders,
   guessColumnMapping,
   parseEmployeeImportWithMapping,
+  type EmployeeImportTemplateKind,
   type ImportFieldKey,
   type NormalizedEmployeeImportRow,
 } from "@/lib/employee-import-map";
 import {
   extractDataMatrix,
-  parseSpreadsheetFileAsMatrix,
+  listSpreadsheetSheetNames,
+  mergeSpreadsheetMatrices,
+  parseSpreadsheetSheetsAsMatrices,
 } from "@/lib/spreadsheet";
 import { clearAllEmployeeExtensions } from "@/lib/employee-extensions-store";
 import {
@@ -26,10 +31,154 @@ import {
   invalidateEmployeeDirectoryCache,
 } from "@/services/employee-management-service";
 import { bulkImportEmployees, clearAllEmployees } from "@/services/employee-import-service";
-import { ApiClientError } from "@/services/api-client";
+import { ApiClientError, contextService } from "@/services/api-client";
 import { cn } from "@/lib/utils";
 
+type EntityOption = { id: string; label: string };
+
 const LOCAL_EMP_KEY = "erp_hr_local_employees_v1";
+
+function fieldLabel(value: ImportFieldKey): string {
+  return IMPORT_FIELD_OPTIONS.find((o) => o.value === value)?.label ?? "- Skip -";
+}
+
+/** Scrollable picker — native select clips options inside the drawer. */
+function ImportFieldPicker({
+  value,
+  onChange,
+  usedValues,
+}: {
+  value: ImportFieldKey;
+  onChange: (next: ImportFieldKey) => void;
+  usedValues: Set<string>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(
+    null,
+  );
+  const rootRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function place() {
+      const rect = btnRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const width = Math.max(rect.width, 260);
+      const left = Math.min(rect.left, window.innerWidth - width - 8);
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const openUp = spaceBelow < 280 && rect.top > spaceBelow;
+      const top = openUp ? Math.max(8, rect.top - 276) : rect.bottom + 4;
+      setMenuPos({ top, left: Math.max(8, left), width });
+    }
+    place();
+    function onDoc(e: MouseEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    document.addEventListener("mousedown", onDoc);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+      document.removeEventListener("mousedown", onDoc);
+    };
+  }, [open]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return IMPORT_FIELD_OPTIONS;
+    return IMPORT_FIELD_OPTIONS.filter(
+      (o) =>
+        o.label.toLowerCase().includes(q) ||
+        o.group.toLowerCase().includes(q) ||
+        String(o.value).toLowerCase().includes(q),
+    );
+  }, [query]);
+
+  const groups = useMemo(() => {
+    const map = new Map<string, typeof IMPORT_FIELD_OPTIONS>();
+    for (const opt of filtered) {
+      const list = map.get(opt.group) ?? [];
+      list.push(opt);
+      map.set(opt.group, list);
+    }
+    return [...map.entries()];
+  }, [filtered]);
+
+  return (
+    <div ref={rootRef} className="relative min-w-[16rem] flex-1">
+      <button
+        ref={btnRef}
+        type="button"
+        className="flex h-8 w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-border bg-background px-2 text-left text-xs transition-colors duration-150 hover:border-primary/40"
+        onClick={() => {
+          setOpen((v) => !v);
+          setQuery("");
+        }}
+        aria-expanded={open}
+      >
+        <span className="truncate">{fieldLabel(value)}</span>
+        <ChevronDown className={cn("size-3.5 shrink-0 text-muted-foreground", open && "rotate-180")} />
+      </button>
+      {open && menuPos ? (
+        <div
+          className="fixed z-[80] overflow-hidden rounded-lg border border-border bg-card shadow-lg"
+          style={{ top: menuPos.top, left: menuPos.left, width: menuPos.width }}
+        >
+          <div className="border-b border-border p-1.5">
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search fields…"
+              className="h-7 w-full rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary/40"
+            />
+          </div>
+          <div className="max-h-64 overflow-y-auto p-1">
+            {groups.map(([group, opts]) => (
+              <div key={group} className="mb-1">
+                <p className="px-2 py-1 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">
+                  {group}
+                </p>
+                {opts.map((opt) => {
+                  const taken = Boolean(opt.value && usedValues.has(opt.value) && opt.value !== value);
+                  const selected = opt.value === value;
+                  return (
+                    <button
+                      key={`${opt.value || "skip"}-${opt.label}`}
+                      type="button"
+                      disabled={taken}
+                      className={cn(
+                        "flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors duration-150",
+                        selected && "bg-primary/10 text-primary",
+                        !selected && !taken && "hover:bg-muted/60",
+                        taken && "cursor-not-allowed opacity-40",
+                      )}
+                      onClick={() => {
+                        if (taken) return;
+                        onChange(opt.value);
+                        setOpen(false);
+                      }}
+                    >
+                      <span className="min-w-0 flex-1 truncate">{opt.label}</span>
+                      {selected ? <Check className="size-3.5 shrink-0" /> : null}
+                      {taken ? <span className="text-[10px] text-muted-foreground">used</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+            {!filtered.length ? (
+              <p className="px-2 py-3 text-center text-[11px] text-muted-foreground">No matching fields</p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function EmployeeImportDrawer({
   open,
@@ -41,6 +190,9 @@ export function EmployeeImportDrawer({
   onImported: () => void;
 }) {
   const [fileName, setFileName] = useState("");
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [selectedSheets, setSelectedSheets] = useState<string[]>([]);
   const [matrix, setMatrix] = useState<string[][]>([]);
   const [headerIdx, setHeaderIdx] = useState(-1);
   const [displayHeaders, setDisplayHeaders] = useState<string[]>([]);
@@ -51,7 +203,38 @@ export function EmployeeImportDrawer({
   const [busy, setBusy] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [resultSummary, setResultSummary] = useState<string | null>(null);
+  const [entities, setEntities] = useState<EntityOption[]>([]);
+  const [companyId, setCompanyId] = useState("");
+  const [templateKind, setTemplateKind] = useState<EmployeeImportTemplateKind>("office");
   const { isHrmsSuperAdmin } = useUserPermissions();
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    void contextService
+      .listCompanies()
+      .then((res) => {
+        if (cancelled) return;
+        const rows = (Array.isArray(res.data) ? res.data : [])
+          .map((c) => ({
+            id: String(c.id ?? ""),
+            label: String(c.company_name || c.company_code || "").trim(),
+          }))
+          .filter((c) => c.id && c.label)
+          .sort((a, b) => a.label.localeCompare(b.label));
+        setEntities(rows);
+        setCompanyId((prev) => {
+          if (prev && rows.some((r) => r.id === prev)) return prev;
+          return rows[0]?.id ?? "";
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setEntities([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   const previewRows = useMemo(() => {
     if (headerIdx < 0 || !matrix.length) return [];
@@ -72,28 +255,70 @@ export function EmployeeImportDrawer({
     setWarnings(parsed.warnings);
   }
 
+  function prepareWorkingMatrix(raw: string[][]): string[][] {
+    const matrixA = extractDataMatrix(raw, "emp code");
+    const matrixB =
+      matrixA === raw || matrixA.length < 2 ? extractDataMatrix(raw, "name") : matrixA;
+    const matrixC =
+      matrixB === raw || matrixB.length < 2
+        ? extractDataMatrix(raw, "employee")
+        : matrixB;
+    return matrixC.length >= 2 ? matrixC : raw;
+  }
+
+  function applyWorkingMatrix(working: string[][], extraWarnings: string[] = []) {
+    setMatrix(working);
+    const { headerIdx: hi, headers, displayHeaders: dh } = extractImportHeaders(working);
+    setHeaderIdx(hi);
+    setDisplayHeaders(dh);
+    const guessed = guessColumnMapping(headers);
+    applyMapping(guessed, working, hi);
+    if (extraWarnings.length) {
+      setWarnings((prev) => [...extraWarnings, ...prev].slice(0, 80));
+    }
+  }
+
+  async function loadSheets(file: File, sheets: string[]) {
+    if (!sheets.length) {
+      setMatrix([]);
+      setHeaderIdx(-1);
+      setDisplayHeaders([]);
+      setColumnMapping([]);
+      setRows([]);
+      setWarnings([]);
+      setErrors(["Select at least one Excel sheet to import."]);
+      return;
+    }
+    const parts = await parseSpreadsheetSheetsAsMatrices(file, sheets);
+    const prepared = parts.map((p) => ({
+      sheet: p.sheet,
+      matrix: prepareWorkingMatrix(p.matrix),
+    }));
+    const working = mergeSpreadsheetMatrices(prepared);
+    const extraWarnings =
+      sheets.length > 1
+        ? [
+            `Merged ${sheets.length} sheets (${sheets.join(", ")}). Columns align to the first selected sheet’s headers.`,
+          ]
+        : [];
+    applyWorkingMatrix(working, extraWarnings);
+  }
+
   async function onFile(file: File | null) {
     if (!file) return;
     setFileName(file.name);
+    setSourceFile(file);
     setResultSummary(null);
     try {
-      const raw = await parseSpreadsheetFileAsMatrix(file);
-      const matrixA = extractDataMatrix(raw, "emp code");
-      const matrixB =
-        matrixA === raw || matrixA.length < 2 ? extractDataMatrix(raw, "name") : matrixA;
-      const matrixC =
-        matrixB === raw || matrixB.length < 2
-          ? extractDataMatrix(raw, "employee")
-          : matrixB;
-      const working = matrixC.length >= 2 ? matrixC : raw;
-      setMatrix(working);
-
-      const { headerIdx: hi, headers, displayHeaders: dh } = extractImportHeaders(working);
-      setHeaderIdx(hi);
-      setDisplayHeaders(dh);
-      const guessed = guessColumnMapping(headers);
-      applyMapping(guessed, working, hi);
+      const names = await listSpreadsheetSheetNames(file);
+      setSheetNames(names);
+      const initial = names.length ? [names[0]] : [];
+      setSelectedSheets(initial);
+      await loadSheets(file, initial);
     } catch (err) {
+      setSourceFile(null);
+      setSheetNames([]);
+      setSelectedSheets([]);
       setMatrix([]);
       setHeaderIdx(-1);
       setDisplayHeaders([]);
@@ -101,6 +326,33 @@ export function EmployeeImportDrawer({
       setRows([]);
       setWarnings([]);
       setErrors([err instanceof Error ? err.message : "Could not read file."]);
+    }
+  }
+
+  async function toggleSheet(name: string) {
+    if (!sourceFile) return;
+    const next = selectedSheets.includes(name)
+      ? selectedSheets.filter((s) => s !== name)
+      : [...selectedSheets, name];
+    // Keep selection order matching workbook order
+    const ordered = sheetNames.filter((s) => next.includes(s));
+    setSelectedSheets(ordered);
+    setResultSummary(null);
+    try {
+      await loadSheets(sourceFile, ordered);
+    } catch (err) {
+      setErrors([err instanceof Error ? err.message : "Could not read selected sheets."]);
+    }
+  }
+
+  async function selectAllSheets() {
+    if (!sourceFile || !sheetNames.length) return;
+    setSelectedSheets(sheetNames);
+    setResultSummary(null);
+    try {
+      await loadSheets(sourceFile, sheetNames);
+    } catch (err) {
+      setErrors([err instanceof Error ? err.message : "Could not read selected sheets."]);
     }
   }
 
@@ -147,10 +399,18 @@ export function EmployeeImportDrawer({
 
   async function runImport() {
     if (!rows.length || errors.length) return;
+    if (!companyId) {
+      toast("Select a legal entity before importing", "error");
+      return;
+    }
     setBusy(true);
     try {
-      const result = await bulkImportEmployees(rows);
-      const msg = `Import done - created ${result.created}, updated ${result.updated}, skipped ${result.skipped}`;
+      const result = await bulkImportEmployees(rows, {
+        companyId,
+        defaultTag: defaultTagForImportTemplate(templateKind),
+      });
+      const entityLabel = entities.find((e) => e.id === companyId)?.label || "selected entity";
+      const msg = `Import done into ${entityLabel} — created ${result.created}, updated ${result.updated}, skipped ${result.skipped}`;
       setResultSummary(msg);
       toast(msg, result.skipped && !result.created && !result.updated ? "error" : "success");
       if (result.warnings?.length) {
@@ -164,7 +424,13 @@ export function EmployeeImportDrawer({
         onImported();
       }
     } catch (err) {
-      toast(err instanceof ApiClientError ? err.message : "Import failed", "error");
+      const msg =
+        err instanceof ApiClientError
+          ? err.message === "Invalid API response"
+            ? "Import failed — API did not return JSON (backend may have crashed or timed out). Retry after API restart."
+            : err.message
+          : "Import failed";
+      toast(msg, "error");
     } finally {
       setBusy(false);
     }
@@ -174,11 +440,7 @@ export function EmployeeImportDrawer({
     <SetupDrawer
       open={open}
       title="Import Employees"
-      description={
-        isHrmsSuperAdmin
-          ? "Map Excel columns to employee fields, then import. Clear all first if you want a fresh import."
-          : "Map Excel columns to employee fields, then import."
-      }
+      description="Pick office or client template, select legal entity, upload Excel, map columns, then import."
       wide
       onClose={onClose}
       footer={
@@ -190,7 +452,7 @@ export function EmployeeImportDrawer({
             type="button"
             size="sm"
             className="cursor-pointer"
-            disabled={busy || rows.length === 0 || errors.length > 0}
+            disabled={busy || !companyId || rows.length === 0 || errors.length > 0}
             onClick={() => void runImport()}
           >
             {busy ? "Importing…" : `Import ${rows.length || ""} row${rows.length === 1 ? "" : "s"}`}
@@ -199,36 +461,104 @@ export function EmployeeImportDrawer({
       }
     >
       <div className="space-y-4">
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="cursor-pointer"
-            onClick={() =>
-              downloadTextFile("employee-import-template.csv", EMPLOYEE_IMPORT_SAMPLE_CSV, "text/csv")
+        <div className="space-y-2">
+          <SetupField
+            label="Import type"
+            required
+            hint={
+              templateKind === "client"
+                ? "Client template uses Tag=client_side and Deployed At (client site), not Organisation=Cache."
+                : "Office template uses Tag=office_staff and Organisation=Cache."
             }
           >
-            <Download className="size-3.5" />
-            Download sample CSV
-          </Button>
-          {isHrmsSuperAdmin ? (
+            <SetupSelect
+              value={templateKind}
+              onChange={(e) => setTemplateKind(e.target.value as EmployeeImportTemplateKind)}
+              className="cursor-pointer"
+            >
+              <option value="office">Office staff</option>
+              <option value="client">Client side</option>
+            </SetupSelect>
+          </SetupField>
+          <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="cursor-pointer text-destructive hover:bg-destructive/10"
-              disabled={clearing}
-              onClick={() => void runClearAll()}
+              className="cursor-pointer transition-colors duration-200"
+              onClick={() => {
+                setTemplateKind("office");
+                downloadTextFile(
+                  "employee-import-office-template.csv",
+                  EMPLOYEE_IMPORT_OFFICE_SAMPLE_CSV,
+                  "text/csv",
+                );
+              }}
             >
-              <Trash2 className="size-3.5" />
-              {clearing ? "Clearing…" : "Clear all employees"}
+              <Download className="size-3.5" />
+              Office template
             </Button>
-          ) : null}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="cursor-pointer transition-colors duration-200"
+              onClick={() => {
+                setTemplateKind("client");
+                downloadTextFile(
+                  "employee-import-client-template.csv",
+                  EMPLOYEE_IMPORT_CLIENT_SAMPLE_CSV,
+                  "text/csv",
+                );
+              }}
+            >
+              <Download className="size-3.5" />
+              Client template
+            </Button>
+            {isHrmsSuperAdmin ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="cursor-pointer text-destructive transition-colors duration-200 hover:bg-destructive/10"
+                disabled={clearing}
+                onClick={() => void runClearAll()}
+              >
+                <Trash2 className="size-3.5" />
+                {clearing ? "Clearing…" : "Clear all employees"}
+              </Button>
+            ) : null}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Rows without a Tag get{" "}
+            <span className="font-medium text-foreground">
+              {defaultTagForImportTemplate(templateKind)}
+            </span>{" "}
+            from the selected import type.
+          </p>
         </div>
 
+        <SetupField
+          label="Legal entity"
+          required
+          hint="Required. Every imported row is saved under this entity (ignore Entity column in Excel)."
+        >
+          <SetupSelect
+            value={companyId}
+            onChange={(e) => setCompanyId(e.target.value)}
+            className="cursor-pointer"
+          >
+            <option value="">{entities.length ? "Select entity…" : "No entities — create one in Org Setup"}</option>
+            {entities.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.label}
+              </option>
+            ))}
+          </SetupSelect>
+        </SetupField>
+
         <SetupField label="Upload file" hint="CSV or Excel - then map each column below">
-          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-border px-3 py-6 text-xs text-muted-foreground hover:bg-muted/30">
+          <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-dashed border-border px-3 py-6 text-xs text-muted-foreground transition-colors duration-150 hover:bg-muted/30">
             <Upload className="size-4" />
             {fileName || "Choose CSV or Excel file"}
             <input
@@ -240,40 +570,101 @@ export function EmployeeImportDrawer({
           </label>
         </SetupField>
 
+        {sheetNames.length > 1 ? (
+          <SetupField
+            label="Excel sheets"
+            hint="Select one or more sheets. Rows are merged using the first selected sheet’s column headers."
+          >
+            <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  className="cursor-pointer"
+                  onClick={() => void selectAllSheets()}
+                >
+                  Select all ({sheetNames.length})
+                </Button>
+                <span className="text-[10px] text-muted-foreground">
+                  {selectedSheets.length} selected · {rows.length} ready row
+                  {rows.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <ul className="grid gap-1.5 sm:grid-cols-2">
+                {sheetNames.map((name) => {
+                  const checked = selectedSheets.includes(name);
+                  return (
+                    <li key={name}>
+                      <label
+                        className={cn(
+                          "flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-2 text-xs transition-colors duration-150",
+                          checked
+                            ? "border-primary/40 bg-primary/5 text-foreground"
+                            : "border-border/70 bg-card text-muted-foreground hover:border-primary/30",
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          className="size-3.5 cursor-pointer accent-primary"
+                          checked={checked}
+                          onChange={() => void toggleSheet(name)}
+                        />
+                        <span className="min-w-0 truncate font-medium">{name}</span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </SetupField>
+        ) : null}
+
         {displayHeaders.length ? (
           <div className="rounded-lg border border-border/70 bg-muted/20 p-3">
             <p className="mb-2 text-[11px] font-semibold text-foreground">
               Map Excel columns → employee fields
             </p>
             <p className="mb-3 text-[10px] text-muted-foreground">
-              Auto-detected where possible. Change any dropdown if your headers differ. EMPLOYEE ID
-              and NAME are required.
+              All {displayHeaders.length} Excel columns are listed below. Open each dropdown and
+              scroll/search to pick the matching HR field (Gender, DOB, Aadhaar, Bank, etc.).
+              EMPLOYEE ID and NAME are required.
             </p>
             <ul className="space-y-2">
-              {displayHeaders.map((header, idx) => (
-                <li
-                  key={`${header}-${idx}`}
-                  className="flex flex-wrap items-center gap-2 text-xs"
-                >
-                  <span className="min-w-[8rem] flex-1 truncate font-medium text-foreground">
-                    {header || `(Column ${idx + 1})`}
-                  </span>
-                  <span className="text-muted-foreground">→</span>
-                  <select
-                    className="h-8 min-w-[16rem] max-w-full flex-1 cursor-pointer rounded-md border border-border bg-background px-2 text-xs"
-                    value={columnMapping[idx] ?? ""}
-                    onChange={(e) => updateMapAt(idx, e.target.value as ImportFieldKey)}
+              {displayHeaders.map((header, idx) => {
+                const used = new Set(
+                  columnMapping.filter((v, i) => v && i !== idx).map(String),
+                );
+                return (
+                  <li
+                    key={`${header}-${idx}`}
+                    className="relative flex flex-wrap items-center gap-2 text-xs"
                   >
-                    {IMPORT_FIELD_OPTIONS.map((opt) => (
-                      <option key={`${opt.value}-${opt.label}`} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </li>
-              ))}
+                    <span
+                      className="min-w-[8rem] flex-1 truncate font-medium text-foreground"
+                      title={header || `Column ${idx + 1}`}
+                    >
+                      {header || `(Column ${idx + 1})`}
+                    </span>
+                    <span className="text-muted-foreground">→</span>
+                    <ImportFieldPicker
+                      value={columnMapping[idx] ?? ""}
+                      usedValues={used}
+                      onChange={(next) => updateMapAt(idx, next)}
+                    />
+                  </li>
+                );
+              })}
             </ul>
             <p className="mt-3 text-[10px] text-muted-foreground">
+              Excel columns:{" "}
+              <span className="font-medium text-foreground">{displayHeaders.length}</span>
+              {" · "}
+              Mapped:{" "}
+              <span className="font-medium text-foreground">
+                {columnMapping.filter(Boolean).length}
+              </span>
+              {" · "}
               Ready rows: <span className="font-medium text-foreground">{rows.length}</span>
             </p>
           </div>

@@ -364,18 +364,6 @@ export function PayrollRunWorkspace({
   }
 
   const locked = openRun ? isMonthLocked(openRun.month) || openRun.status === "locked" : false;
-  const att = openRun && payLine
-    ? getPayrollRunAttendance(openRun.id).find(
-        (a) =>
-          a.employeeId === payLine.employeeId ||
-          a.employeeCode === payLine.employeeCode ||
-          a.employeeId === openEmployeeId,
-      )
-    : undefined;
-  const split = splitPresentAndHalf(
-    att?.presentDays ?? payLine?.presentDays ?? 0,
-    att?.halfDays ?? payLine?.halfDays ?? 0,
-  );
   const payable = payLine?.payableDays ?? 0;
   const working = payLine?.periodDays || payLine?.workingDaysInCycle || 30;
   const factor = payLine?.attendanceFactor || (working ? payable / working : 1);
@@ -418,13 +406,6 @@ export function PayrollRunWorkspace({
                   onChanged={() => {
                     setPayReload((n) => n + 1);
                     onRefresh();
-                  }}
-                  attendanceSummary={{
-                    present: split.present,
-                    halfDay: split.half,
-                    absent: att?.absentDays ?? payLine.absentDays ?? 0,
-                    weekOff: att?.weeklyOff ?? payLine.weeklyOff ?? 0,
-                    payable,
                   }}
                 />
               </div>
@@ -711,7 +692,7 @@ export function PayrollRunWorkspace({
         wide
         className="sm:max-w-5xl"
         title="Generate payroll"
-        description="Pick a month. The same month is updated if it already exists."
+        description="Pick the pay month. With cycle start 21, November uses attendance 21 Oct – 20 Nov."
         onClose={() => setGenerateOpen(false)}
         footer={
           <div className="flex justify-end gap-2">

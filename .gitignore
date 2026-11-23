@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.*.local
+.env.vm
 
 # Local object/file storage (S3 in deploy; keep .gitkeep placeholders only)
 apps/api/var/crm-attachments/*

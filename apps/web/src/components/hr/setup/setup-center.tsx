@@ -47,6 +47,8 @@ function mapDepartment(row: SetupRow): SetupRow {
     ...row,
     code: row.department_code,
     name: row.department_name,
+    company: row.company_name ?? row.company ?? "-",
+    branch: row.branch_name ?? row.branch ?? "-",
     head: row.head_employee_id ?? "-",
   };
 }
@@ -85,6 +87,7 @@ function mapEntity(row: SetupRow): SetupRow {
     ...row,
     code: row.company_code,
     name: row.company_name,
+    employee_code_prefix: String(row.employee_code_prefix ?? "").trim().toUpperCase(),
   };
 }
 
@@ -294,7 +297,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     ],
     fields: [
       { key: "branch_name", label: "Branch Name", required: true },
-      { key: "branch_code", label: "Branch Code", required: true, readOnly: true, hint: "Auto-generated" },
+      { key: "branch_code", label: "Branch Code", required: true, readOnly: true, hidden: true },
       {
         key: "company_id",
         label: "Company",
@@ -327,8 +330,9 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       {
         key: "head_employee_id",
         label: "Branch head",
-        type: "select",
+        type: "searchable",
         optionsSource: "employees",
+        placeholder: "Search employee…",
         hint: "Employee who leads this branch",
       },
       BRANCH_STATUS_FIELD,
@@ -366,7 +370,8 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapDepartment,
     columns: [
       { key: "name", label: "Department" },
-      { key: "code", label: "Code" },
+      { key: "company", label: "Entity" },
+      { key: "branch", label: "Branch" },
       { key: "head", label: "Head" },
       { key: "status", label: "Status" },
     ],
@@ -377,7 +382,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         label: "Department Code",
         required: true,
         readOnly: true,
-        hint: "Auto-generated (DEP-001, DEP-002…)",
+        hidden: true,
       },
       {
         key: "company_id",
@@ -407,8 +412,9 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       {
         key: "head_employee_id",
         label: "Department head",
-        type: "select",
+        type: "searchable",
         optionsSource: "employees",
+        placeholder: "Search employee…",
         hint: "Shown on employee onboarding / add employee",
       },
       BRANCH_STATUS_FIELD,
@@ -439,7 +445,6 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapDesignation,
     columns: [
       { key: "name", label: "Designation" },
-      { key: "code", label: "Code" },
       { key: "level", label: "Level" },
       { key: "status", label: "Status" },
     ],
@@ -450,7 +455,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         label: "Designation Code",
         required: true,
         readOnly: true,
-        hint: "Auto-generated",
+        hidden: true,
       },
       {
         key: "branch_id",
@@ -497,13 +502,12 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapJobLevel,
     columns: [
       { key: "name", label: "Level" },
-      { key: "code", label: "Code" },
       { key: "sort_order", label: "Order" },
       { key: "status", label: "Status" },
     ],
     fields: [
       { key: "level_name", label: "Level Name", required: true },
-      { key: "level_code", label: "Code", required: true, readOnly: true },
+      { key: "level_code", label: "Code", required: true, readOnly: true, hidden: true },
       {
         key: "rank_order",
         label: "Sort Order",
@@ -536,14 +540,13 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapGrade,
     columns: [
       { key: "name", label: "Grade" },
-      { key: "code", label: "Code" },
       { key: "min_salary", label: "Min Salary" },
       { key: "max_salary", label: "Max Salary" },
       { key: "status", label: "Status" },
     ],
     fields: [
       { key: "grade_name", label: "Grade Name", required: true, placeholder: "e.g. L1 / Band A" },
-      { key: "grade_code", label: "Code", required: true, readOnly: true },
+      { key: "grade_code", label: "Code", required: true, readOnly: true, hidden: true },
       {
         key: "min_ctc",
         label: "Minimum Salary (Annual CTC)",
@@ -595,13 +598,12 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     columns: [
       { key: "name", label: "Work Location" },
       { key: "branch", label: "Branch" },
-      { key: "code", label: "Code" },
       { key: "location_type", label: "Type" },
       { key: "status", label: "Status" },
     ],
     fields: [
       { key: "location_name", label: "Work Location Name", required: true, placeholder: "e.g. Mumbai, Maharashtra" },
-      { key: "location_code", label: "Code", required: true, readOnly: true },
+      { key: "location_code", label: "Code", required: true, readOnly: true, hidden: true },
       {
         key: "company_id",
         label: "Company",
@@ -687,7 +689,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         label: "Room Code",
         required: true,
         readOnly: true,
-        hint: "Auto-generated (ROOM-001…)",
+        hidden: true,
       },
       {
         key: "company_id",
@@ -756,13 +758,12 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     nameKeys: ["name"],
     columns: [
       { key: "name", label: "Type" },
-      { key: "code", label: "Code" },
       { key: "description", label: "Description" },
       { key: "status", label: "Status" },
     ],
     fields: [
       { key: "name", label: "Name", required: true },
-      { key: "code", label: "Code", required: true, readOnly: true },
+      { key: "code", label: "Code", required: true, readOnly: true, hidden: true },
       { key: "description", label: "Description", type: "textarea" },
       STATUS_FIELD,
     ],
@@ -773,7 +774,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapEntity,
     columns: [
       { key: "name", label: "Entity" },
-      { key: "code", label: "Code" },
+      { key: "employee_code_prefix", label: "Emp prefix" },
       { key: "status", label: "Status" },
     ],
     fields: [
@@ -787,7 +788,15 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         key: "company_code",
         label: "Code",
         required: true,
-        hint: "Company code used in Assign HR (e.g. DEMOCO)",
+        readOnly: true,
+        hidden: true,
+      },
+      {
+        key: "employee_code_prefix",
+        label: "Employee code prefix",
+        required: true,
+        placeholder: "e.g. CDPL / CT / VPL",
+        hint: "Used on Excel import — CDPL0001 goes to this entity. Letters/numbers only, no hyphen.",
       },
       {
         key: "country_code",
@@ -832,10 +841,15 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     },
     buildCreateBody: (f) => {
       const companyName = String(f.company_name || "").trim();
+      const empPrefix = String(f.employee_code_prefix || "")
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "");
       return {
         company_code: String(f.company_code || "").trim().toUpperCase(),
         company_name: companyName,
         legal_name: companyName,
+        employee_code_prefix: empPrefix || null,
         country_code: f.country_code || "IN",
         currency_code: f.currency_code || "INR",
         timezone: "Asia/Kolkata",
@@ -852,10 +866,15 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     },
     buildUpdateBody: (f) => {
       const companyName = String(f.company_name || "").trim();
+      const empPrefix = String(f.employee_code_prefix || "")
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "");
       return {
         company_code: String(f.company_code || "").trim().toUpperCase() || undefined,
         company_name: companyName,
         legal_name: companyName,
+        employee_code_prefix: empPrefix || null,
         country_code: f.country_code || undefined,
         currency_code: f.currency_code || undefined,
         status: f.status,
@@ -875,7 +894,6 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     columns: [
       { key: "name", label: "Type" },
       { key: "value", label: "Value key" },
-      { key: "code", label: "Code" },
       { key: "status", label: "Status" },
     ],
     fields: [
@@ -886,7 +904,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
         required: true,
         hint: "Stored on employee profile (e.g. permanent, contract)",
       },
-      { key: "code", label: "Code", required: true, readOnly: true },
+      { key: "code", label: "Code", required: true, readOnly: true, hidden: true },
       STATUS_FIELD,
     ],
   },
@@ -909,7 +927,6 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     nameKeys: ["name"],
     columns: [
       { key: "name", label: "Document" },
-      { key: "code", label: "Code" },
       { key: "kind", label: "Kind" },
       {
         key: "mandatory",
@@ -926,7 +943,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     ],
     fields: [
       { key: "name", label: "Name", required: true },
-      { key: "code", label: "Code", required: true, readOnly: true },
+      { key: "code", label: "Code", required: true, readOnly: true, hidden: true },
       {
         key: "kind",
         label: "Onboarding kind",
@@ -963,14 +980,13 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     nameKeys: ["name"],
     columns: [
       { key: "name", label: "Policy" },
-      { key: "code", label: "Code" },
       { key: "leave_type", label: "Leave Type" },
       { key: "leave_days", label: "Days" },
       { key: "status", label: "Status" },
     ],
     fields: [
       { key: "name", label: "Policy Name", required: true },
-      { key: "code", label: "Code", required: true, readOnly: true },
+      { key: "code", label: "Code", required: true, readOnly: true, hidden: true },
       {
         key: "leave_type",
         label: "Leave Type",
@@ -1005,7 +1021,6 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapLeaveType,
     columns: [
       { key: "name", label: "Leave Type" },
-      { key: "code", label: "Code" },
       { key: "paid", label: "Paid" },
       { key: "max_year", label: "Days / Year" },
       { key: "per_month", label: "Leave / Month" },
@@ -1013,7 +1028,7 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     ],
     fields: [
       { key: "leave_type_name", label: "Name", required: true },
-      { key: "leave_type_code", label: "Code", required: true, readOnly: true },
+      { key: "leave_type_code", label: "Code", required: true, readOnly: true, hidden: true },
       { key: "is_paid", label: "Paid", type: "checkbox" },
       { key: "max_days_per_year", label: "Max Days / Year", type: "number" },
       {
@@ -1046,6 +1061,8 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       archive: "inactive",
     },
     buildCreateBody: (f) => ({
+      company_id: f.company_id || undefined,
+      branch_id: f.branch_id || undefined,
       leave_type_code: f.leave_type_code,
       leave_type_name: f.leave_type_name,
       is_paid: f.is_paid === "true",
@@ -1091,13 +1108,12 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapHoliday,
     columns: [
       { key: "name", label: "Calendar" },
-      { key: "code", label: "Code" },
       { key: "year", label: "Year" },
       { key: "status", label: "Status" },
     ],
     fields: [
       { key: "calendar_name", label: "Holiday / Calendar Name", required: true },
-      { key: "calendar_code", label: "Code", required: true, readOnly: true },
+      { key: "calendar_code", label: "Code", required: true, readOnly: true, hidden: true },
       { key: "calendar_year", label: "Year", type: "number", required: true },
       { key: "branch_id", label: "Branch ID" },
       HOLIDAY_STATUS_FIELD,
@@ -1125,13 +1141,12 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapShift,
     columns: [
       { key: "name", label: "Shift" },
-      { key: "code", label: "Code" },
       { key: "timing", label: "Timing" },
       { key: "status", label: "Status" },
     ],
     fields: [
       { key: "shift_name", label: "Shift Name", required: true },
-      { key: "shift_code", label: "Shift Code", required: true, readOnly: true },
+      { key: "shift_code", label: "Shift Code", required: true, readOnly: true, hidden: true },
       {
         key: "shift_type",
         label: "Shift Type",
@@ -1175,6 +1190,8 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
       STATUS_FIELD,
     ],
     buildCreateBody: (f) => ({
+      company_id: f.company_id || undefined,
+      branch_id: f.branch_id || undefined,
       shift_code: f.shift_code,
       shift_name: f.shift_name,
       shift_type: f.shift_type || "general",
@@ -1196,13 +1213,12 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     nameKeys: ["name"],
     columns: [
       { key: "name", label: "Rotation" },
-      { key: "code", label: "Code" },
       { key: "cycle", label: "Cycle" },
       { key: "status", label: "Status" },
     ],
     fields: [
       { key: "name", label: "Rotation Name", required: true },
-      { key: "code", label: "Code", required: true, readOnly: true },
+      { key: "code", label: "Code", required: true, readOnly: true, hidden: true },
       {
         key: "cycle",
         label: "Cycle",
@@ -1283,14 +1299,13 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     }),
     columns: [
       { key: "name", label: "Rule" },
-      { key: "code", label: "Code" },
       { key: "half_day_hours", label: "Half Day Hrs" },
       { key: "full_day_hours", label: "Full Day Hrs" },
       { key: "status", label: "Status" },
     ],
     fields: [
       { key: "rule_name", label: "Rule Name", required: true },
-      { key: "rule_code", label: "Code", required: true, readOnly: true },
+      { key: "rule_code", label: "Code", required: true, readOnly: true, hidden: true },
       { key: "grace_minutes", label: "Grace Minutes", type: "number" },
       { key: "late_mark_after_minutes", label: "Late Mark After (min)", type: "number" },
       { key: "half_day_hours", label: "Half Day Hours", type: "number" },
@@ -1355,7 +1370,6 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapComponent,
     columns: [
       { key: "name", label: "Component" },
-      { key: "code", label: "Code" },
       { key: "class", label: "Class" },
       { key: "status", label: "Status" },
     ],
@@ -1385,7 +1399,6 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     nameKeys: ["name"],
     columns: [
       { key: "name", label: "Bank" },
-      { key: "code", label: "Code" },
       { key: "ifsc_prefix", label: "IFSC Prefix" },
       { key: "status", label: "Status" },
     ],
@@ -1403,7 +1416,6 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapTax,
     columns: [
       { key: "name", label: "Tax Rule" },
-      { key: "code", label: "Code" },
       { key: "tax_type", label: "Type" },
       { key: "status", label: "Status" },
     ],
@@ -1435,7 +1447,6 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapStatutory,
     columns: [
       { key: "name", label: "Contribution" },
-      { key: "code", label: "Code" },
       { key: "employee_rate_percent", label: "Employee %" },
       { key: "employer_rate_percent", label: "Employer %" },
       { key: "status", label: "Status" },
@@ -1461,7 +1472,6 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapWorkflow,
     columns: [
       { key: "name", label: "Workflow" },
-      { key: "code", label: "Code" },
       { key: "module", label: "Module" },
       { key: "status", label: "Status", render: (r) => <HrStatusBadge status={cell(r, "status")} /> },
     ],
@@ -1486,7 +1496,6 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapTemplate,
     columns: [
       { key: "name", label: "Template" },
-      { key: "code", label: "Code" },
       { key: "channel", label: "Channel" },
       { key: "status", label: "Status" },
     ],
@@ -1520,13 +1529,12 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     nameKeys: ["name"],
     columns: [
       { key: "name", label: "Channel" },
-      { key: "code", label: "Code" },
       { key: "channel", label: "Type" },
       { key: "status", label: "Status" },
     ],
     fields: [
       { key: "name", label: "Name", required: true },
-      { key: "code", label: "Code", required: true, readOnly: true },
+      { key: "code", label: "Code", required: true, readOnly: true, hidden: true },
       {
         key: "channel",
         label: "Channel",
@@ -1548,7 +1556,6 @@ const TAB_CONFIG: Partial<Record<HrSetupTabId, TabConfig>> = {
     mapApiRow: mapRole,
     columns: [
       { key: "name", label: "Role" },
-      { key: "code", label: "Code" },
       { key: "description", label: "Description" },
       { key: "status", label: "Status" },
     ],

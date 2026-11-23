@@ -79,6 +79,7 @@ class CompanyRepository(OrgScopedRepository):
         fiscal_year_start_month: int = 4,
         timezone: str = "UTC",
         status: str = "active",
+        employee_code_prefix: str | None = None,
     ) -> CompanyEntity:
         row = OrgCompany(
             id=uuid4(),
@@ -100,6 +101,7 @@ class CompanyRepository(OrgScopedRepository):
             fiscal_year_start_month=fiscal_year_start_month,
             timezone=timezone,
             status=status or "active",
+            employee_code_prefix=employee_code_prefix,
             created_by=ctx.user_id,
             updated_by=ctx.user_id,
         )
@@ -119,7 +121,13 @@ class CompanyRepository(OrgScopedRepository):
         if row is None:
             return None
         for key, value in fields.items():
-            if hasattr(row, key) and value is not None:
+            if not hasattr(row, key):
+                continue
+            # Allow clearing nullable string fields (e.g. employee_code_prefix).
+            if value is None and key in {"employee_code_prefix"}:
+                setattr(row, key, None)
+                continue
+            if value is not None:
                 setattr(row, key, value)
         row.updated_at = utcnow()
         row.updated_by = ctx.user_id
@@ -164,4 +172,5 @@ class CompanyRepository(OrgScopedRepository):
             city=row.city,
             state_name=row.state_name,
             postal_code=row.postal_code,
+            employee_code_prefix=getattr(row, "employee_code_prefix", None),
         )

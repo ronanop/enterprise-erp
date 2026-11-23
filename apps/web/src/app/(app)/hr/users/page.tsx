@@ -1,5 +1,6 @@
-import { ModuleUsersPage } from "@/components/organization/module-users-page";
+import { redirect } from "next/navigation";
 
-export default function Page() {
-  return <ModuleUsersPage moduleKey="hr" />;
+/** Module membership is managed from the Superadmin Panel in standalone HRMS. */
+export default function HrUsersPage() {
+  redirect("/hr/superadmin");
 }

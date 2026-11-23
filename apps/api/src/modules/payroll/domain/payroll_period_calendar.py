@@ -1,4 +1,4 @@
-"""Payroll period date math (20th-20th and variants)."""
+"""Payroll period date math (21st–20th and variants)."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ def payroll_period_bounds_day_to_day(
     payroll_year: int,
     payroll_month: int,
     *,
-    cycle_start_day: int = 20,
+    cycle_start_day: int = 21,
 ) -> tuple[date, date]:
     """Return inclusive start/end for the salary month anchor.
 
-    ``payroll_month`` is the payment / salary month (e.g. February payroll →
-    20 Jan through 19 Feb when ``cycle_start_day`` is 20).
+    ``payroll_month`` is the payment / salary month (e.g. November payroll →
+    21 Oct through 20 Nov when ``cycle_start_day`` is 21).
     """
     if not 1 <= payroll_month <= 12:
         raise ValueError("payroll_month must be 1-12")
@@ -58,13 +58,13 @@ def payroll_period_display_name(start: date, end: date, payroll_year: int, payro
     )
 
 
-def default_payment_date(payroll_year: int, payroll_month: int, cycle_start_day: int = 20) -> date:
+def default_payment_date(payroll_year: int, payroll_month: int, cycle_start_day: int = 21) -> date:
     """Default pay date: cycle start day of the anchor month."""
     return date(payroll_year, payroll_month, cycle_start_day)
 
 
-def payroll_anchor_for_date(on_date: date, *, cycle_start_day: int = 20) -> tuple[int, int]:
-    """Map a calendar date to (payroll_year, payroll_month) for the 20-20 window containing it."""
+def payroll_anchor_for_date(on_date: date, *, cycle_start_day: int = 21) -> tuple[int, int]:
+    """Map a calendar date to (payroll_year, payroll_month) for the 21–20 window containing it."""
     if on_date.day >= cycle_start_day:
         if on_date.month == 12:
             return on_date.year + 1, 1

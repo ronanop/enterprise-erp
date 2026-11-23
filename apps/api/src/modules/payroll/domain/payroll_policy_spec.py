@@ -54,7 +54,7 @@ def default_company_payroll_policy_fields() -> dict[str, Any]:
         "policy_name": "Standard monthly payroll (20th-20th)",
         "status": "active",
         "payroll_cycle_type": PayrollCycleType.DAY_20_TO_20.value,
-        "payroll_cycle_start_day": 20,
+        "payroll_cycle_start_day": 21,
         "leave_cycle_type": PayrollCycleType.CALENDAR_MONTH.value,
         "leave_balance_credit_timing": LeaveBalanceCreditTiming.AFTER_CALENDAR_MONTH_END.value,
         "salary_proration_mode": SalaryProrationMode.FIXED_30_DAY_FACTOR.value,
@@ -68,7 +68,7 @@ def default_company_payroll_policy_fields() -> dict[str, Any]:
         "pf_total_amount": Decimal("3700.0000"),
         "pf_employee_percent": Decimal("0.1200"),
         "pf_employer_percent": Decimal("0.1200"),
-        "pf_wage_ceiling": Decimal("15000.0000"),
+        "pf_wage_ceiling": Decimal("25000.0000"),
         "pf_on_lop": PfOnLopMode.FIXED.value,
         "net_pay_formula": NetPayFormula.GROSS_MINUS_EMPLOYEE_PF_ONLY.value,
         "sandwich_enabled": True,
@@ -77,7 +77,7 @@ def default_company_payroll_policy_fields() -> dict[str, Any]:
         "attendance_rules_json": dict(DEFAULT_ATTENDANCE_PAY_RULES),
         "notes": (
             "Gross X: Basic=60%×X, HRA=50%×Basic, Special=remainder. "
-            "Payable days = 30 − LOP. Payable gross = X×(paid_days/30) on the 20th–19th cycle. "
+            "Payable days = 30 − LOP. Payable gross = X×(paid_days/30) on the 21st–20th cycle. "
             "Net = payable_gross − employee PF. Employer PF is not deducted from net. "
             "Sandwich is ON: week-off/holiday between leave or unauthorized absence becomes LOP."
         ),

@@ -123,7 +123,8 @@ export function PeopleRolesPanel() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((row) => {
-      if (filter === "manager" && !row.is_manager) return false;
+      // Anyone flagged Manager, or who already has direct reports as reporting manager.
+      if (filter === "manager" && !isTaggedManager(row)) return false;
       if (filter === "hiring_manager" && !row.is_hiring_manager) return false;
       if (filter === "recruiter" && !row.is_recruiter) return false;
       if (filter === "hr" && !row.is_hr) return false;

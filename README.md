@@ -1,9 +1,9 @@
-# iConnect Plus
+# iConnect Plus — HRMS
 
-Multi-Industry, Multi-Company, Enterprise-Grade ERP Platform.
+Standalone Human Resource Management System (admin web + employee PWA).
 
-**Architecture Baseline:** v1.1 — LOCKED · **Addendum:** v1.2 (implementation reality)  
-**Product:** iConnect Plus / Connect Plus (B2B SaaS admin)
+**Architecture Baseline:** v1.1 — LOCKED · **Addendum:** v1.2 · **HRMS scope:** v1.3  
+**Product:** iConnect Plus HRMS (B2B SaaS)
 
 ## Architecture
 
@@ -15,7 +15,7 @@ Multi-Industry, Multi-Company, Enterprise-Grade ERP Platform.
 | Objects | MinIO (local / on-prem) · AWS S3 (cloud) |
 | Antivirus | ClamAV (upload scanning) |
 | Cache / Queue | Redis, RabbitMQ |
-| Auth | User id + password (HRMS-synced logins) · JWT in **HttpOnly cookies** |
+| Auth | Email or employee code + password · JWT in **HttpOnly cookies** (web) |
 | Deploy | Docker Compose · Coolify on EC2 (`docker-compose.coolify.yml`) |
 
 **Pattern:** Clean Architecture · DDD · Modular Monolith  
@@ -55,11 +55,11 @@ enterprise-erp/
 └── .env.example
 ```
 
-### Backend modules (high level)
+### Backend modules (HRMS)
 
-Foundation · Organization · Master Data · **Platform** · Finance · Sales · Procurement · Inventory · Manufacturing · Quality · CRM · HR · ESS · Payroll · Recruitment · Project · Asset · Service · Helpdesk · Document · Marketing · GRC · Analytics · Integration · Ecommerce · Portal · Voice Agent · Agent Read  
+Foundation · Organization · Master Data (employees) · **Platform** · HR · ESS · Payroll · Recruitment  
 
-See [`docs/00_CURRENT/MODULE_CATALOG.md`](docs/00_CURRENT/MODULE_CATALOG.md).
+See [`docs/05_ARCHITECTURE_LOCK/HRMS_Standalone_Addendum_v1.3.md`](docs/05_ARCHITECTURE_LOCK/HRMS_Standalone_Addendum_v1.3.md).
 
 ## Quick start (local Docker)
 
@@ -101,10 +101,10 @@ docker compose -f docker-compose.local.yml up -d --build
 
 ### 3. Sign-in
 
-Sign in at http://localhost:3000/login with your email ID or employee code and password.  
-Create the first ERP admin with `python -m scripts.bootstrap_erp_admin --email … --password …` (from `apps/api`) — admin status is stored in the database (`user_type`), not env.  
-ERP admins sync logins from HRMS (Organization → Users) and grant module Admin / User access.  
-Tokens are **HttpOnly cookies** — not `localStorage`.
+Sign in at http://localhost:3000/login with your email ID or employee code and password (lands on `/hr`).  
+Create the first superadmin with `python -m scripts.bootstrap_erp_admin --email … --password …` (from `apps/api`) — admin status is stored in the database (`user_type`), not env.  
+From **HR → Superadmin Panel**, grant other users HR access, company/entity scope, and sidebar menus.  
+Tokens are **HttpOnly cookies** — not `localStorage`. Employee PWA uses the same `/auth/login`.
 
 ## Compose files
 
@@ -133,6 +133,12 @@ cd apps/web
 cp .env.example .env.local
 npm install
 npm run dev
+```
+
+Biometric punches auto-fetch every 1 minute via Celery beat (`hr.biometric_fetch_punches`). Without Celery, run the always-on script from `apps/api`:
+
+```powershell
+.\scripts\run_fetch_biometric_punches.ps1
 ```
 
 ## Quality checks

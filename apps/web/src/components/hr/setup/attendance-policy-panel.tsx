@@ -25,7 +25,12 @@ import { Input } from "@/components/ui/input";
 import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { nextCode, type HrSetupTab } from "@/config/hr-setup";
 import { ApiClientError, resourceService } from "@/services/api-client";
-import { listSetupApi, type SetupRow } from "@/services/hr-setup-service";
+import {
+  listSetupApi,
+  loadSetupOrgLookups,
+  resolveSetupCompanyId,
+  type SetupRow,
+} from "@/services/hr-setup-service";
 import { cn } from "@/lib/utils";
 
 const API = "/hr/attendance-rules";
@@ -93,14 +98,25 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
   const [okUntil, setOkUntil] = useState("11:00");
   const [afterStatus, setAfterStatus] = useState<AfterStatus>("half_day");
   const [shiftWindows, setShiftWindows] = useState<ShiftWindowRow[]>([]);
+  const [companies, setCompanies] = useState<{ value: string; label: string }[]>([]);
+  const [branches, setBranches] = useState<{ value: string; companyId?: string }[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [rules, shiftRes] = await Promise.all([
+      const [rules, shiftRes, lookups] = await Promise.all([
         listSetupApi(API),
         resourceService.list(SHIFTS_API).catch(() => ({ data: [] })),
+        loadSetupOrgLookups().catch(() => ({
+          companies: [] as { value: string; label: string }[],
+          branches: [] as { value: string; companyId?: string }[],
+          departments: [],
+          employees: [],
+          shifts: [],
+        })),
       ]);
+      setCompanies(lookups.companies);
+      setBranches(lookups.branches);
       setRows(
         rules.map((r) => ({
           ...r,
@@ -206,9 +222,11 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
   }
 
   function buildBody() {
+    const companyId = resolveSetupCompanyId({ companies, branches });
     return {
       rule_code: ruleCode,
       rule_name: ruleName,
+      company_id: companyId || undefined,
       grace_minutes: Number(graceMinutes || 15),
       late_mark_after_minutes: Number(lateMarkAfter || 15),
       half_day_hours: Number(halfDayHours || 4),
@@ -360,7 +378,6 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
                 <tr key={String(row.id)} className="border-b border-border/40 last:border-0">
                   <td className="px-3 py-2">
                     <p className="font-medium text-foreground">{String(row.name)}</p>
-                    <p className="text-[11px] text-muted-foreground">{String(row.code)}</p>
                   </td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {row.arrival_policy_enabled
@@ -438,13 +455,6 @@ export function AttendancePolicyPanel({ tab }: { tab: HrSetupTab }) {
             <div className="grid gap-3 sm:grid-cols-2">
               <SetupField label="Policy name" required>
                 <SetupInput value={ruleName} onChange={(e) => setRuleName(e.target.value)} />
-              </SetupField>
-              <SetupField label="Code" required>
-                <SetupInput
-                  value={ruleCode}
-                  onChange={(e) => setRuleCode(e.target.value)}
-                  readOnly={mode === "edit"}
-                />
               </SetupField>
               <SetupField label="Grace (minutes)">
                 <SetupInput

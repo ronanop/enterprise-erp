@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   BadgeCheck,
   Bell,
@@ -33,17 +34,24 @@ import {
   PremiumMultiLineChart,
   PremiumStackedBarChart,
 } from "@/components/hr/dashboard/hr-analytics-charts";
+import {
+  SetupDrawer,
+} from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuthUser } from "@/hooks/use-auth-user";
 import { cn } from "@/lib/utils";
 import {
+  dashboardCacheScopeKey,
   greetingForHour,
   loadHrExecutiveDashboard,
+  readDashboardCache,
+  writeDashboardCache,
 } from "@/services/hr-executive-dashboard-service";
 import type {
   CalendarEvent,
+  DashboardEmployeeBrief,
   DashboardRole,
   HrExecutiveDashboard,
   LeaveTrendPoint,
@@ -151,37 +159,68 @@ function GreetingTitle({ role, displayName }: { role: DashboardRole; displayName
 }
 
 export function HrExecutiveDashboardPage() {
+  const router = useRouter();
   const { user: authUser } = useAuthUser();
-  const [data, setData] = useState<HrExecutiveDashboard | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [chartsLoading, setChartsLoading] = useState(true);
+  const cacheScope = dashboardCacheScopeKey(authUser?.id);
+  const [data, setData] = useState<HrExecutiveDashboard | null>(() =>
+    readDashboardCache(dashboardCacheScopeKey()),
+  );
+  const [loading, setLoading] = useState(() => !readDashboardCache(dashboardCacheScopeKey()));
+  const [chartsLoading, setChartsLoading] = useState(
+    () => !readDashboardCache(dashboardCacheScopeKey()),
+  );
+  const [refreshing, setRefreshing] = useState(false);
   const [role, setRole] = useState<DashboardRole>("hr");
   const [query, setQuery] = useState("");
   const [period, setPeriod] = useState<AnalyticsPeriod>("last_6");
+  const [listDrill, setListDrill] = useState<{
+    kind: "department" | "location" | "gender";
+    label: string;
+    count: number;
+  } | null>(null);
+  const [listSearch, setListSearch] = useState("");
 
-  const load = useCallback(async (opts?: { silent?: boolean }) => {
-    if (!opts?.silent) {
-      setLoading(true);
-      setChartsLoading(true);
-    }
-    try {
-      setRole("hr");
-      const core = await loadHrExecutiveDashboard("hr", "core");
-      setData(core);
-      setLoading(false);
-      const full = await loadHrExecutiveDashboard("hr", "full");
-      setData(full);
-    } catch {
-      if (!opts?.silent) toast("Failed to load HR dashboard", "error");
-    } finally {
-      setLoading(false);
-      setChartsLoading(false);
-    }
-  }, []);
+  const load = useCallback(
+    async (opts?: { silent?: boolean; force?: boolean }) => {
+      const silent = Boolean(opts?.silent) || (!opts?.force && Boolean(readDashboardCache(cacheScope)));
+      if (!silent) {
+        setLoading(true);
+        setChartsLoading(true);
+      } else {
+        setRefreshing(true);
+      }
+      try {
+        setRole("hr");
+        const core = await loadHrExecutiveDashboard("hr", "core");
+        setData(core);
+        writeDashboardCache(cacheScope, core);
+        setLoading(false);
+        setChartsLoading(false);
+        const full = await loadHrExecutiveDashboard("hr", "full");
+        setData(full);
+        writeDashboardCache(cacheScope, full);
+      } catch {
+        if (!silent) toast("Failed to load HR dashboard", "error");
+      } finally {
+        setLoading(false);
+        setChartsLoading(false);
+        setRefreshing(false);
+      }
+    },
+    [cacheScope],
+  );
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    const cached = readDashboardCache(cacheScope);
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+      setChartsLoading(false);
+      void load({ silent: true });
+      return;
+    }
+    void load({ force: true });
+  }, [cacheScope, load]);
 
   useEffect(() => {
     const id = window.setInterval(() => void load({ silent: true }), 120_000);
@@ -253,6 +292,40 @@ export function HrExecutiveDashboardPage() {
   const employeeGrowth = sliceNamed(charts?.employeeGrowth ?? [], period);
   const attendanceStacked = sliceStacked(charts?.attendanceStacked ?? [], period);
   const leaveTrendByType = sliceLeave(charts?.leaveTrendByType ?? [], period);
+  const attritionByMonth = sliceNamed(charts?.attritionByMonth ?? [], period);
+  const attritionByDepartment = charts?.attritionByDepartment ?? [];
+  const attritionByReason = charts?.attritionByReason ?? [];
+
+  const drillEmployees = useMemo(() => {
+    if (!listDrill) return [] as DashboardEmployeeBrief[];
+    const source =
+      listDrill.kind === "location"
+        ? data?.employeesByLocation
+        : listDrill.kind === "gender"
+          ? data?.employeesByGender
+          : data?.employeesByDepartment;
+    const list = source?.[listDrill.label] ?? [];
+    const q = listSearch.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((e) =>
+      [e.name, e.code ?? "", e.designation ?? ""].join(" ").toLowerCase().includes(q),
+    );
+  }, [
+    data?.employeesByDepartment,
+    data?.employeesByLocation,
+    data?.employeesByGender,
+    listDrill,
+    listSearch,
+  ]);
+
+  function openEmployeeList(
+    kind: "department" | "location" | "gender",
+    label: string,
+    count: number,
+  ) {
+    setListSearch("");
+    setListDrill({ kind, label, count });
+  }
 
   const displayName = authUser?.displayName || data?.displayName;
 
@@ -294,11 +367,16 @@ export function HrExecutiveDashboardPage() {
               size="sm"
               variant="outline"
               className="h-10 cursor-pointer rounded-xl px-4"
-              disabled={loading || chartsLoading}
-              onClick={() => void load()}
+              disabled={loading || chartsLoading || refreshing}
+              onClick={() => void load({ force: true, silent: Boolean(data) })}
             >
-              <RefreshCw className={cn("size-3.5", (loading || chartsLoading) && "animate-spin")} />
-              Refresh
+              <RefreshCw
+                className={cn(
+                  "size-3.5",
+                  (loading || chartsLoading || refreshing) && "animate-spin",
+                )}
+              />
+              {refreshing && data ? "Updating…" : "Refresh"}
             </Button>
           </div>
         </div>
@@ -389,18 +467,21 @@ export function HrExecutiveDashboardPage() {
                   value={stats?.presentToday ?? 0}
                   icon={UserCheck}
                   tone="bg-hrms-mint text-hrms-success"
+                  href="/hr/time?tab=list&stats=present"
                 />
                 <AttendanceBar
                   label="Absent"
                   value={stats?.absentToday ?? 0}
                   icon={UserX}
                   tone="bg-hrms-pink text-hrms-danger"
+                  href="/hr/time?tab=list&stats=absent"
                 />
                 <AttendanceBar
                   label="On Leave"
                   value={stats?.onLeave ?? 0}
                   icon={CalendarDays}
                   tone="bg-hrms-blue text-hrms-info"
+                  href="/hr/leave?view=on-leave-today"
                 />
               </div>
             </DashboardListBox>
@@ -467,58 +548,205 @@ export function HrExecutiveDashboardPage() {
               </label>
             </div>
 
-            <ChartHeightContext.Provider value={268}>
-              <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
-                <ChartFrame>
+            <ChartHeightContext.Provider value={210}>
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <ChartFrame compact>
                   <PremiumBarChart
                     title="Department-wise Employees"
                     data={departmentWise}
-                    layout="horizontal"
+                    layout="vertical"
                     showValues
+                    clickHint="Click a bar to open the employee list"
+                    onBarClick={(label, value) => openEmployeeList("department", label, value)}
                   />
                 </ChartFrame>
-                <ChartFrame>
+                <ChartFrame compact>
                   <PremiumBarChart
                     title="Location-wise Employees"
                     data={locationWise}
-                    layout="horizontal"
+                    layout="vertical"
                     showValues
+                    clickHint="Click a bar to open the employee list"
+                    onBarClick={(label, value) => openEmployeeList("location", label, value)}
                   />
                 </ChartFrame>
+              </div>
+            </ChartHeightContext.Provider>
+
+            <ChartHeightContext.Provider value={268}>
+              <div className="mt-4 grid grid-cols-1 gap-5 xl:grid-cols-2">
                 <ChartFrame>
                   <PremiumDonutChart
                     title="Gender Diversity"
                     data={charts?.genderDiversity ?? []}
+                    clickHint="Click a slice or legend to open employees"
+                    onSliceClick={(label, value) => openEmployeeList("gender", label, value)}
                   />
                 </ChartFrame>
-                <ChartFrame>
+                <ChartFrame href="/hr/workforce" hrefLabel="Open workforce">
                   <PremiumBarChart
                     title="Headcount Trend"
                     data={employeeGrowth}
                     showValues
+                    clickHint="Open workforce directory"
+                    onBarClick={() => {
+                      router.push("/hr/workforce");
+                    }}
                   />
                 </ChartFrame>
-                <ChartFrame>
+                <ChartFrame href="/hr/time?tab=list" hrefLabel="Open attendance">
                   <PremiumStackedBarChart
                     title="Attendance Trend"
                     data={attendanceStacked}
+                    clickHint="Click a segment to filter today's attendance"
+                    onSegmentClick={(segment) => {
+                      const map: Record<string, string> = {
+                        present: "/hr/time?tab=list&stats=present",
+                        absent: "/hr/time?tab=list&stats=absent",
+                        late: "/hr/time?tab=list&stats=late",
+                        halfDay: "/hr/time?tab=list&status=half_day",
+                        leave: "/hr/leave?view=on-leave-today",
+                      };
+                      router.push(map[segment] ?? "/hr/time?tab=list");
+                    }}
                   />
                 </ChartFrame>
-                <ChartFrame>
+                <ChartFrame href="/hr/leave" hrefLabel="Open leave">
                   <PremiumMultiLineChart
-                    title="Leave Trend"
+                    title="Leave by Type (monthly)"
                     data={leaveTrendByType}
                   />
                 </ChartFrame>
               </div>
             </ChartHeightContext.Provider>
+
+            <div className="mt-6 mb-3">
+              <h2 className="text-base font-semibold tracking-tight">
+                Attrition · Employees Leaving
+              </h2>
+            </div>
+            <ChartHeightContext.Provider value={268}>
+              <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
+                <ChartFrame>
+                  <PremiumBarChart
+                    title="Month Wise"
+                    data={attritionByMonth}
+                    showValues
+                  />
+                </ChartFrame>
+                <ChartFrame>
+                  <PremiumBarChart
+                    title="Department Wise"
+                    data={attritionByDepartment}
+                    layout="vertical"
+                    showValues
+                  />
+                </ChartFrame>
+                <ChartFrame>
+                  <PremiumBarChart
+                    title="Reason Wise"
+                    data={attritionByReason}
+                    layout="vertical"
+                    showValues
+                  />
+                </ChartFrame>
+              </div>
+            </ChartHeightContext.Provider>
           </section>
+
+      <SetupDrawer
+        open={!!listDrill}
+        wide
+        title={listDrill ? listDrill.label : "Employees"}
+        description={
+          listDrill
+            ? `${listDrill.count.toLocaleString("en-IN")} employee${listDrill.count === 1 ? "" : "s"} · ${listDrill.kind} · click a name to open the profile`
+            : undefined
+        }
+        onClose={() => {
+          setListDrill(null);
+          setListSearch("");
+        }}
+      >
+        <div className="space-y-3">
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={listSearch}
+              onChange={(e) => setListSearch(e.target.value)}
+              placeholder="Search name, code, or designation"
+              className="h-9 pl-8 text-sm"
+            />
+          </div>
+          {!drillEmployees.length ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              {listSearch.trim()
+                ? "No employees match this search."
+                : "No employees found for this selection."}
+            </p>
+          ) : (
+            <ul className="divide-y divide-border rounded-xl border border-border">
+              {drillEmployees.map((emp) => (
+                <li key={emp.id}>
+                  <Link
+                    href={`/hr/workforce/${emp.id}`}
+                    className="flex cursor-pointer items-center gap-3 px-3 py-2.5 transition-colors duration-150 hover:bg-muted/50"
+                  >
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">
+                      {initialsFromName(emp.name)}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-foreground">
+                        {emp.name}
+                      </span>
+                      <span className="block truncate text-[11px] text-muted-foreground">
+                        {[emp.code, emp.designation].filter(Boolean).join(" · ") || "—"}
+                      </span>
+                    </span>
+                    <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </SetupDrawer>
     </div>
   );
 }
 
-function ChartFrame({ children }: { children: ReactNode }) {
-  return <div className="h-[340px] min-h-[300px]">{children}</div>;
+function ChartFrame({
+  children,
+  compact = false,
+  href,
+  hrefLabel,
+}: {
+  children: ReactNode;
+  compact?: boolean;
+  href?: string;
+  hrefLabel?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative",
+        compact ? "h-[280px] min-h-[240px]" : "h-[380px] min-h-[320px]",
+      )}
+    >
+      {children}
+      {href && hrefLabel ? (
+        <div className="absolute right-3 bottom-2 z-10">
+          <Link
+            href={href}
+            className="inline-flex cursor-pointer items-center gap-1 rounded-full bg-card/95 px-2.5 py-1 text-[11px] font-semibold text-primary shadow-sm ring-1 ring-border transition-colors duration-150 hover:bg-primary/10"
+          >
+            {hrefLabel}
+            <ChevronRight className="size-3.5" />
+          </Link>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function DashboardListBox({
@@ -588,18 +816,20 @@ function AttendanceBar({
   value,
   icon: Icon,
   tone,
+  href,
 }: {
   label: string;
   value: number;
   icon: LucideIcon;
   tone: string;
+  href?: string;
 }) {
-  return (
-    <div className={cn("flex min-h-[2.75rem] flex-1 items-center gap-2 rounded-lg px-2.5 py-2", tone)}>
+  const body = (
+    <>
       <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-white/80">
         <Icon className="size-3.5" />
       </span>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold tabular-nums leading-none">
           {value.toLocaleString("en-IN")}
         </p>
@@ -607,8 +837,22 @@ function AttendanceBar({
           {label}
         </p>
       </div>
-    </div>
+      {href ? <ChevronRight className="size-3.5 shrink-0 opacity-70" /> : null}
+    </>
   );
+  const className = cn(
+    "flex min-h-[2.75rem] flex-1 items-center gap-2 rounded-lg px-2.5 py-2 transition-colors duration-150",
+    tone,
+    href && "cursor-pointer hover:brightness-[0.97]",
+  );
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        {body}
+      </Link>
+    );
+  }
+  return <div className={className}>{body}</div>;
 }
 
 function eventDisplayTitle(event: CalendarEvent): string {
@@ -625,8 +869,8 @@ function EventRow({ event }: { event: CalendarEvent }) {
     label: event.type,
     className: "bg-muted text-muted-foreground",
   };
-  return (
-    <li className="flex items-center gap-2.5 py-2.5">
+  const body = (
+    <>
       <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-hrms-lavender text-[11px] font-semibold text-primary">
         {initialsFromName(name)}
       </span>
@@ -647,8 +891,24 @@ function EventRow({ event }: { event: CalendarEvent }) {
           {event.meta ? ` · ${event.meta}` : ""}
         </p>
       </div>
-    </li>
+      {event.employeeId ? (
+        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+      ) : null}
+    </>
   );
+  if (event.employeeId) {
+    return (
+      <li>
+        <Link
+          href={`/hr/workforce/${event.employeeId}`}
+          className="flex cursor-pointer items-center gap-2.5 py-2.5 transition-colors duration-150 hover:bg-muted/40"
+        >
+          {body}
+        </Link>
+      </li>
+    );
+  }
+  return <li className="flex items-center gap-2.5 py-2.5">{body}</li>;
 }
 
 function HolidayRow({ event }: { event: CalendarEvent }) {
@@ -663,18 +923,24 @@ function HolidayRow({ event }: { event: CalendarEvent }) {
     ? d.toLocaleDateString("en-IN", { weekday: "long" })
     : "";
   return (
-    <li className="flex items-center gap-3 py-2.5">
-      <div className="w-11 shrink-0 text-center">
-        <p className="text-lg font-bold leading-none tabular-nums text-primary">{day}</p>
-        <p className="mt-0.5 text-[10px] font-semibold tracking-wide text-primary">{month}</p>
-      </div>
-      <div className="min-w-0">
-        <p className="truncate text-xs font-medium text-foreground">{event.title}</p>
-        <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-          {weekday}
-          {event.meta ? ` · ${event.meta}` : ""}
-        </p>
-      </div>
+    <li>
+      <Link
+        href="/hr/setup?section=leave"
+        className="flex cursor-pointer items-center gap-3 py-2.5 transition-colors duration-150 hover:bg-muted/40"
+      >
+        <div className="w-11 shrink-0 text-center">
+          <p className="text-lg font-bold leading-none tabular-nums text-primary">{day}</p>
+          <p className="mt-0.5 text-[10px] font-semibold tracking-wide text-primary">{month}</p>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-xs font-medium text-foreground">{event.title}</p>
+          <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+            {weekday}
+            {event.meta ? ` · ${event.meta}` : ""}
+          </p>
+        </div>
+        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+      </Link>
     </li>
   );
 }

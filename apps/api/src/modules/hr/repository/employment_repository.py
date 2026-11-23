@@ -54,7 +54,10 @@ class EmploymentRepository(HrScopedRepository):
         stmt = select(HrEmployment).where(
             HrEmployment.employee_id == employee_id,
             HrEmployment.is_deleted.is_(False),
+            HrEmployment.tenant_id == ctx.tenant_id,
         )
-        stmt = self.apply_hr_filter(stmt, HrEmployment, ctx, branch_scoped=True)
+        # Not branch-scoped: payroll/salary assign must resolve employment for any
+        # entity the user can see (company filter still applied via module access).
+        stmt = self.apply_hr_filter(stmt, HrEmployment, ctx, branch_scoped=False)
         stmt = stmt.order_by(HrEmployment.date_of_joining.desc())
         return self.db.scalars(stmt).first()

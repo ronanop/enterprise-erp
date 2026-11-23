@@ -29,6 +29,8 @@ class OrgCompany(Base, AuditMixin, TenantMixin, SoftDeleteMixin, VersionMixin):
     company_code: Mapped[str] = mapped_column(String(50), nullable=False)
     company_name: Mapped[str] = mapped_column(String(255), nullable=False)
     legal_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Excel / new-hire Emp Code prefix (e.g. CDPL, CT, VPL) — letters/digits only, no hyphen
+    employee_code_prefix: Mapped[str | None] = mapped_column(String(20), nullable=True)
     registration_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
     tax_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
     tan_number: Mapped[str | None] = mapped_column(String(32), nullable=True)

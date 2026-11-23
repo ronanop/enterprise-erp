@@ -1,15 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Archive,
   Columns3,
   Download,
   Eye,
   Pencil,
   Plus,
+  Trash2,
   Upload,
   UserCheck,
   UserMinus,
@@ -28,7 +28,6 @@ import {
   HrToolbar,
 } from "@/components/hr/hr-primitives";
 import { SetupConfirmDialog } from "@/components/hr/setup/setup-confirm";
-import { SetupSelect } from "@/components/hr/setup/setup-drawer";
 import { toast, SetupToastHost } from "@/components/hr/setup/setup-toast";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -37,14 +36,44 @@ import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu
 import { isAuthenticated } from "@/lib/auth";
 import {
   EXACT_CASE_HEADER_COLUMNS,
+  excelEntityCell,
+  excelOrganisationCell,
   renderEmployeeCell,
 } from "@/lib/employee-table-columns";
 import {
+  ALL_EMPLOYEE_TABLE_COLUMN_KEYS,
   EMPLOYEE_TABLE_COLUMN_LABELS,
+  EXCEL_EMPLOYEE_TABLE_COLUMNS,
+  EXTRA_EMPLOYEE_TABLE_COLUMNS,
   REQUIRED_EMPLOYEE_TABLE_COLUMNS,
   useEmployeeTablePrefs,
   type EmployeeTableColumnKey,
 } from "@/hooks/use-employee-table-prefs";
+import { FilterSelect } from "@/components/ui/filter-select";
+
+/** Keep header and body cells on the same grid (avoids Excel-field column drift). */
+const COLUMN_CELL_CLASS: Partial<Record<EmployeeTableColumnKey, string>> = {
+  employeeCode: "min-w-[7.5rem] max-w-[9rem]",
+  name: "min-w-[11rem] max-w-[14rem]",
+  entity: "min-w-[8rem] max-w-[11rem]",
+  organisation: "min-w-[7rem] max-w-[10rem]",
+  location: "min-w-[7rem] max-w-[10rem]",
+  designation: "min-w-[8rem] max-w-[11rem]",
+  department: "min-w-[8rem] max-w-[11rem]",
+  reportingManager: "min-w-[8rem] max-w-[11rem]",
+  phone: "min-w-[7.5rem] max-w-[9rem]",
+  personalEmail: "min-w-[10rem] max-w-[14rem]",
+  email: "min-w-[10rem] max-w-[14rem]",
+  gender: "min-w-[4.5rem]",
+  dob: "min-w-[6rem]",
+  joiningDate: "min-w-[6rem]",
+  emergencyName: "min-w-[8rem] max-w-[11rem]",
+  emergencyRelation: "min-w-[5.5rem]",
+  emergencyPhone: "min-w-[7.5rem] max-w-[9rem]",
+  fatherName: "min-w-[7rem] max-w-[10rem]",
+  esi: "min-w-[5rem]",
+  status: "min-w-[5.5rem]",
+};
 import {
   computeEmployeeStats,
   downloadTextFile,
@@ -58,19 +87,11 @@ import {
 } from "@/services/employee-management-service";
 import type { EmployeeListFilters, EmployeeRecord } from "@/types/employee-management";
 import { cn } from "@/lib/utils";
-import {
-  EMPLOYMENT_TYPE_FILTER_OPTIONS,
-  GENDER_OPTIONS,
-  LIFECYCLE_STATUS_OPTIONS,
-} from "@/config/hr-master-options";
-import {
-  listEmploymentTypeOptions,
-  type SetupMasterOption,
-} from "@/services/hr-setup-service";
 
 const EMPTY_FILTERS: EmployeeListFilters = {
   branchId: "",
   entityId: "",
+  organisation: "",
   departmentId: "",
   designation: "",
   employmentType: "",
@@ -79,7 +100,27 @@ const EMPTY_FILTERS: EmployeeListFilters = {
   location: "",
   joiningFrom: "",
   gender: "",
+  workforceScope: "",
 };
+
+const HEADER_FILTER_COLUMNS = new Set<EmployeeTableColumnKey>([
+  "entity",
+  "organisation",
+  "location",
+  "designation",
+  "department",
+  "reportingManager",
+  "gender",
+  "status",
+  "employmentType",
+  "branch",
+]);
+
+function uniqueSorted(values: Iterable<string>): string[] {
+  return [...new Set([...values].map((v) => v.trim()).filter((v) => v && v !== "-"))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+}
 
 export function EmployeeManagementPage() {
   const router = useRouter();
@@ -104,10 +145,8 @@ export function EmployeeManagementPage() {
   } | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [menuId, setMenuId] = useState<string | null>(null);
-  const [employmentTypeOptions, setEmploymentTypeOptions] = useState<SetupMasterOption[]>(
-    EMPLOYMENT_TYPE_FILTER_OPTIONS,
-  );
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [earlyCompanies, setEarlyCompanies] = useState<{ id: string; label: string }[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -118,13 +157,42 @@ export function EmployeeManagementPage() {
       setRecords(first.records);
       setLoading(false);
 
-      const [{ records: rows, options: opts, errors }, employmentTypes] = await Promise.all([
-        loadEmployeeDirectory(),
-        listEmploymentTypeOptions(),
-      ]);
-      setRecords(rows);
-      setOptions(opts);
-      setEmploymentTypeOptions(employmentTypes);
+      const { records: rows, options: opts, errors } = await loadEmployeeDirectory();
+      // Existing office employees → office_staff so client-side imports can use other tags.
+      let tagged = rows;
+      let nextOpts = opts;
+      try {
+        const { backfillOfficeStaffTags, stampLocalOfficeStaffTags } = await import(
+          "@/services/employee-import-service"
+        );
+        stampLocalOfficeStaffTags();
+        const result = await backfillOfficeStaffTags();
+        if (Number(result.updated || 0) > 0) {
+          const refreshed = await loadEmployeeDirectory();
+          tagged = refreshed.records;
+          nextOpts = refreshed.options;
+        } else {
+          tagged = rows.map((r) => {
+            const tags = r.tags?.length
+              ? r.tags
+              : r.extension?.tags?.length
+                ? r.extension.tags
+                : ["office_staff"];
+            return { ...r, tags, extension: { ...r.extension, tags } };
+          });
+        }
+      } catch {
+        tagged = rows.map((r) => {
+          const tags = r.tags?.length
+            ? r.tags
+            : r.extension?.tags?.length
+              ? r.extension.tags
+              : ["office_staff"];
+          return { ...r, tags, extension: { ...r.extension, tags } };
+        });
+      }
+      setRecords(tagged);
+      setOptions(nextOpts);
       setDirectoryReady(true);
       if (errors.length) toast(errors.join(" · "), "info");
     } catch {
@@ -138,11 +206,210 @@ export function EmployeeManagementPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void import("@/services/api-client")
+      .then(({ contextService }) => contextService.listCompanies())
+      .then((res) => {
+        if (cancelled) return;
+        const rows = Array.isArray(res.data) ? res.data : [];
+        setEarlyCompanies(
+          rows
+            .map((c) => ({
+              id: String(c.id ?? ""),
+              label: String(c.company_name ?? "").trim(),
+            }))
+            .filter((c) => c.id && c.label)
+            .sort((a, b) => a.label.localeCompare(b.label)),
+        );
+      })
+      .catch(() => {
+        /* directory options still populate later */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const entityOptions = useMemo(() => {
+    const fromCompanies = (options?.companies ?? []).map((c) => ({
+      id: c.id,
+      label: c.label,
+    }));
+    if (fromCompanies.length) return fromCompanies;
+    if (earlyCompanies.length) return earlyCompanies;
+    const byId = new Map<string, string>();
+    for (const r of records) {
+      const id = r.companyId || r.extension.employment.entityId;
+      const label = excelEntityCell(r);
+      if (id && label && label !== "-") byId.set(id, label);
+    }
+    return [...byId.entries()].map(([id, label]) => ({ id, label }));
+  }, [options?.companies, earlyCompanies, records]);
+
+  const entityLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const e of entityOptions) map.set(e.id, e.label);
+    return map;
+  }, [entityOptions]);
+
   const filtered = useMemo(
-    () => filterEmployees(records, query, filters),
-    [records, query, filters],
+    () => filterEmployees(records, query, filters, { entityLabelById }),
+    [records, query, filters, entityLabelById],
   );
   const stats = useMemo(() => computeEmployeeStats(records), [records]);
+
+  const headerFilterOptions = useMemo(() => {
+    const orgs = uniqueSorted(records.map((r) => excelOrganisationCell(r)));
+    const locations = uniqueSorted(
+      records.map((r) => r.locationName || r.extension.employment.location || ""),
+    );
+    const designations = uniqueSorted(
+      (options?.designations ?? []).map((d) => d.label).concat(records.map((r) => r.designationName)),
+    );
+    const departments = (options?.departments ?? []).map((d) => ({ value: d.id, label: d.label }));
+    const deptFallback = uniqueSorted(records.map((r) => r.departmentName)).map((label) => {
+      const hit = records.find((r) => r.departmentName === label);
+      return { value: hit?.departmentId || label, label };
+    });
+    const managers = (options?.managers?.length ? options.managers : options?.employees ?? []).map(
+      (m) => ({
+        value: m.id,
+        label: m.label,
+      }),
+    );
+    const managerFallback = uniqueSorted(records.map((r) => r.reportingManagerName || "")).map(
+      (label) => {
+        const hit = records.find((r) => r.reportingManagerName === label);
+        return { value: hit?.reportingManagerId || label, label };
+      },
+    );
+    const branches = (options?.branches ?? []).map((b) => ({ value: b.id, label: b.label }));
+    return {
+      organisations: orgs.map((label) => ({ value: label, label })),
+      locations: locations.map((label) => ({ value: label, label })),
+      designations: designations.map((label) => ({ value: label, label })),
+      departments: departments.length ? departments : deptFallback,
+      managers: managers.length ? managers : managerFallback,
+      branches,
+      genders: [
+        { value: "male", label: "Male" },
+        { value: "female", label: "Female" },
+        { value: "other", label: "Other" },
+      ],
+      statuses: [
+        { value: "active", label: "Active" },
+        { value: "onboarding", label: "Pending Join" },
+        { value: "probation", label: "Probation" },
+        { value: "notice", label: "Notice Period" },
+        { value: "resigned", label: "Resigned" },
+        { value: "inactive", label: "Ex Employee" },
+      ],
+      employmentTypes: uniqueSorted(records.map((r) => r.employmentType || "")).map((value) => ({
+        value,
+        label: value,
+      })),
+    };
+  }, [records, options]);
+
+  const filtersActive = Boolean(
+    query ||
+      filters.entityId ||
+      filters.organisation ||
+      filters.departmentId ||
+      filters.designation ||
+      filters.employmentType ||
+      filters.status ||
+      filters.reportingManagerId ||
+      filters.location ||
+      filters.gender ||
+      filters.branchId ||
+      filters.joiningFrom ||
+      filters.workforceScope,
+  );
+
+  function headerFilterValue(key: EmployeeTableColumnKey): string {
+    switch (key) {
+      case "entity":
+        return filters.entityId;
+      case "organisation":
+        return filters.organisation;
+      case "location":
+        return filters.location;
+      case "designation":
+        return filters.designation;
+      case "department":
+        return filters.departmentId;
+      case "reportingManager":
+        return filters.reportingManagerId;
+      case "gender":
+        return filters.gender;
+      case "status":
+        return filters.status;
+      case "employmentType":
+        return filters.employmentType;
+      case "branch":
+        return filters.branchId;
+      default:
+        return "";
+    }
+  }
+
+  function onHeaderFilterChange(key: EmployeeTableColumnKey, value: string) {
+    setFilters((f) => {
+      switch (key) {
+        case "entity":
+          return { ...f, entityId: value };
+        case "organisation":
+          return { ...f, organisation: value };
+        case "location":
+          return { ...f, location: value };
+        case "designation":
+          return { ...f, designation: value };
+        case "department":
+          return { ...f, departmentId: value };
+        case "reportingManager":
+          return { ...f, reportingManagerId: value };
+        case "gender":
+          return { ...f, gender: value };
+        case "status":
+          return { ...f, status: value };
+        case "employmentType":
+          return { ...f, employmentType: value };
+        case "branch":
+          return { ...f, branchId: value };
+        default:
+          return f;
+      }
+    });
+  }
+
+  function headerFilterChoices(key: EmployeeTableColumnKey): { value: string; label: string }[] {
+    switch (key) {
+      case "entity":
+        return entityOptions.map((e) => ({ value: e.id, label: e.label }));
+      case "organisation":
+        return headerFilterOptions.organisations;
+      case "location":
+        return headerFilterOptions.locations;
+      case "designation":
+        return headerFilterOptions.designations;
+      case "department":
+        return headerFilterOptions.departments;
+      case "reportingManager":
+        return headerFilterOptions.managers;
+      case "gender":
+        return headerFilterOptions.genders;
+      case "status":
+        return headerFilterOptions.statuses;
+      case "employmentType":
+        return headerFilterOptions.employmentTypes;
+      case "branch":
+        return headerFilterOptions.branches;
+      default:
+        return [];
+    }
+  }
 
   useEffect(() => {
     setPage(1);
@@ -174,10 +441,7 @@ export function EmployeeManagementPage() {
     }
   }
   const orderedVisibleColumns = useMemo(
-    () =>
-      (Object.keys(EMPLOYEE_TABLE_COLUMN_LABELS) as EmployeeTableColumnKey[]).filter((key) =>
-        visibleColumns.has(key),
-      ),
+    () => ALL_EMPLOYEE_TABLE_COLUMN_KEYS.filter((key) => visibleColumns.has(key)),
     [visibleColumns],
   );
 
@@ -209,96 +473,6 @@ export function EmployeeManagementPage() {
     toast(`${title} - ${selectedRecords.length} employee(s)`, "success");
     setSelected(new Set());
     void load();
-  }
-
-  function renderColumnFilter(key: EmployeeTableColumnKey): ReactNode {
-    switch (key) {
-      case "entity":
-        // Company/entity scope is the top-right header switcher — no table filter.
-        return null;
-      case "location":
-        return (
-          <HeaderFilterSelect
-            value={filters.location}
-            onChange={(v) => setFilters((f) => ({ ...f, location: v }))}
-            options={[
-              ...new Map(
-                (options?.locations ?? []).map((loc) => [
-                  loc.label.toLowerCase(),
-                  { value: loc.label, label: loc.label },
-                ]),
-              ).values(),
-            ]}
-          />
-        );
-      case "designation":
-        return (
-          <HeaderFilterSelect
-            value={filters.designation}
-            onChange={(v) => setFilters((f) => ({ ...f, designation: v }))}
-            options={[...new Set(records.map((r) => r.designationName))]
-              .filter(Boolean)
-              .map((d) => ({ value: d, label: d }))}
-          />
-        );
-      case "department":
-        return (
-          <HeaderFilterSelect
-            value={filters.departmentId}
-            onChange={(v) => setFilters((f) => ({ ...f, departmentId: v }))}
-            options={options?.departments.map((d) => ({ value: d.id, label: d.label })) ?? []}
-          />
-        );
-      case "reportingManager":
-        return (
-          <HeaderFilterSelect
-            value={filters.reportingManagerId}
-            onChange={(v) => setFilters((f) => ({ ...f, reportingManagerId: v }))}
-            options={options?.managers.map((m) => ({ value: m.id, label: m.label })) ?? []}
-          />
-        );
-      case "employmentType":
-        return (
-          <HeaderFilterSelect
-            value={filters.employmentType}
-            onChange={(v) => setFilters((f) => ({ ...f, employmentType: v }))}
-            options={employmentTypeOptions.map((t) => ({
-              value: t.value,
-              label: t.label,
-            }))}
-          />
-        );
-      case "gender":
-        return (
-          <HeaderFilterSelect
-            value={filters.gender}
-            onChange={(v) => setFilters((f) => ({ ...f, gender: v }))}
-            options={GENDER_OPTIONS.map((g) => ({ value: g.value, label: g.label }))}
-          />
-        );
-      case "joiningDate":
-        return (
-          <Input
-            type="date"
-            className="h-7 w-full min-w-[110px] text-[10px]"
-            value={filters.joiningFrom}
-            onChange={(e) => setFilters((f) => ({ ...f, joiningFrom: e.target.value }))}
-          />
-        );
-      case "status":
-        return (
-          <HeaderFilterSelect
-            value={filters.status}
-            onChange={(v) => setFilters((f) => ({ ...f, status: v }))}
-            options={LIFECYCLE_STATUS_OPTIONS.map((s) => ({
-              value: s.value,
-              label: s.label,
-            }))}
-          />
-        );
-      default:
-        return null;
-    }
   }
 
   return (
@@ -376,6 +550,16 @@ export function EmployeeManagementPage() {
               placeholder="Search name, ID, email, phone…"
               className="h-8 w-full max-w-xs text-xs"
             />
+            <FilterSelect
+              className={cn("w-[200px]", filters.entityId && "font-medium")}
+              value={filters.entityId}
+              onChange={(entityId) => setFilters((f) => ({ ...f, entityId }))}
+              placeholder="All entities"
+              options={[
+                { value: "", label: "All entities" },
+                ...entityOptions.map((c) => ({ value: c.id, label: c.label })),
+              ]}
+            />
             <div className="relative">
               <Button
                 type="button"
@@ -385,7 +569,7 @@ export function EmployeeManagementPage() {
                 onClick={() => setColumnsOpen((open) => !open)}
               >
                 <Columns3 className="size-3.5" />
-                Columns
+                Edit columns
               </Button>
               {columnsOpen ? (
                 <>
@@ -395,32 +579,50 @@ export function EmployeeManagementPage() {
                     aria-label="Close column picker"
                     onClick={() => setColumnsOpen(false)}
                   />
-                  <div className="absolute top-9 left-0 z-20 max-h-72 w-56 overflow-y-auto rounded-lg border border-border bg-card p-2 shadow-md">
+                  <div className="absolute top-9 left-0 z-20 max-h-80 w-72 overflow-y-auto rounded-lg border border-border bg-card p-2 shadow-md">
                     <p className="px-1.5 pb-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                      Show columns
+                      Excel fields — add or remove
                     </p>
-                    {(Object.keys(EMPLOYEE_TABLE_COLUMN_LABELS) as EmployeeTableColumnKey[]).map(
-                      (key) => {
-                        const required = REQUIRED_EMPLOYEE_TABLE_COLUMNS.includes(key);
-                        return (
+                    {EXCEL_EMPLOYEE_TABLE_COLUMNS.map((key) => {
+                      const required = REQUIRED_EMPLOYEE_TABLE_COLUMNS.includes(key);
+                      return (
+                        <label
+                          key={key}
+                          className={cn(
+                            "flex items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted/60",
+                            required ? "cursor-default opacity-80" : "cursor-pointer",
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={visibleColumns.has(key)}
+                            disabled={required}
+                            onChange={() => toggleColumn(key)}
+                          />
+                          {EMPLOYEE_TABLE_COLUMN_LABELS[key]}
+                        </label>
+                      );
+                    })}
+                    {EXTRA_EMPLOYEE_TABLE_COLUMNS.length ? (
+                      <>
+                        <p className="mt-2 px-1.5 pb-1 pt-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground border-t border-border/60">
+                          More columns
+                        </p>
+                        {EXTRA_EMPLOYEE_TABLE_COLUMNS.map((key) => (
                           <label
                             key={key}
-                            className={cn(
-                              "flex items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted/60",
-                              required ? "cursor-default opacity-80" : "cursor-pointer",
-                            )}
+                            className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-xs hover:bg-muted/60"
                           >
                             <input
                               type="checkbox"
                               checked={visibleColumns.has(key)}
-                              disabled={required}
                               onChange={() => toggleColumn(key)}
                             />
                             {EMPLOYEE_TABLE_COLUMN_LABELS[key]}
                           </label>
-                        );
-                      },
-                    )}
+                        ))}
+                      </>
+                    ) : null}
                     <button
                       type="button"
                       className="mt-2 w-full cursor-pointer rounded-md border border-border/70 px-2 py-1 text-[11px] font-medium text-primary hover:bg-muted/40"
@@ -432,13 +634,51 @@ export function EmployeeManagementPage() {
                 </>
               ) : null}
             </div>
-            <button
-              type="button"
-              className="cursor-pointer text-xs font-medium text-primary hover:underline"
-              onClick={() => setFilters(EMPTY_FILTERS)}
+            {filtersActive ? (
+              <button
+                type="button"
+                className="cursor-pointer text-xs font-medium text-primary transition-colors duration-200 hover:underline"
+                onClick={() => {
+                  setFilters(EMPTY_FILTERS);
+                  setQuery("");
+                }}
+              >
+                Clear filters
+              </button>
+            ) : null}
+            <div
+              role="group"
+              aria-label="Workforce type"
+              className="ml-auto inline-flex h-8 items-center rounded-lg border border-border bg-muted/40 p-0.5"
             >
-              Clear filters
-            </button>
+              {(
+                [
+                  { value: "", label: "All" },
+                  { value: "office", label: "Office" },
+                  { value: "client", label: "Client" },
+                ] as const
+              ).map((opt) => {
+                const active = filters.workforceScope === opt.value;
+                return (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    aria-pressed={active}
+                    className={cn(
+                      "h-7 cursor-pointer rounded-md px-3 text-xs font-medium transition-colors duration-200",
+                      active
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                    onClick={() =>
+                      setFilters((f) => ({ ...f, workforceScope: opt.value }))
+                    }
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -466,29 +706,14 @@ export function EmployeeManagementPage() {
                     className="cursor-pointer h-7"
                     onClick={() =>
                       setConfirm({
-                        title: "Deactivate Employees",
-                        message: "Set selected employees to ex-employee status?",
-                        action: () => runBulk("inactive", "Deactivated"),
+                        title: "Mark as resigned",
+                        message: "Mark selected employees as resigned?",
+                        action: () => runBulk("resigned", "Resigned"),
                       })
                     }
                   >
                     <UserMinus className="size-3" />
-                    Deactivate
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="cursor-pointer h-7"
-                    onClick={() =>
-                      setConfirm({
-                        title: "Archive Employees",
-                        message: "Soft-archive selected employees? Records are retained.",
-                        action: () => runBulk("archived", "Archived"),
-                      })
-                    }
-                  >
-                    <Archive className="size-3" />
-                    Archive
+                    Resigned
                   </Button>
                   <Button
                     size="sm"
@@ -518,11 +743,11 @@ export function EmployeeManagementPage() {
                 />
               ) : (
                 <div className="overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
-                  <div className="erp-scroll max-h-[calc(100vh-18rem)] overflow-auto">
-                    <table className="w-full min-w-[960px] text-left text-sm">
+                  <div className="erp-scroll max-h-[calc(100vh-18rem)] overflow-auto [scrollbar-gutter:stable]">
+                    <table className="w-max min-w-full border-collapse text-left text-sm">
                       <thead className="sticky top-0 z-10 border-b border-border/70 bg-muted/95 backdrop-blur-sm">
                         <tr>
-                          <th className="w-10 px-2 py-2 align-bottom">
+                          <th className="w-10 min-w-10 px-2 py-2 align-middle">
                             <input
                               type="checkbox"
                               className="cursor-pointer"
@@ -531,15 +756,49 @@ export function EmployeeManagementPage() {
                             />
                           </th>
                           {orderedVisibleColumns.map((key) => (
-                            <HeaderFilterTh
+                            <th
                               key={key}
-                              label={EMPLOYEE_TABLE_COLUMN_LABELS[key]}
-                              exactCase={EXACT_CASE_HEADER_COLUMNS.has(key)}
+                              className={cn(
+                                "px-2 py-2 align-top",
+                                COLUMN_CELL_CLASS[key] ?? "min-w-[6.5rem]",
+                              )}
                             >
-                              {renderColumnFilter(key)}
-                            </HeaderFilterTh>
+                              <div className="space-y-1">
+                                <span
+                                  className={cn(
+                                    "block truncate text-[10px] font-semibold tracking-wide text-muted-foreground",
+                                    EXACT_CASE_HEADER_COLUMNS.has(key)
+                                      ? "normal-case"
+                                      : "uppercase",
+                                  )}
+                                  title={EMPLOYEE_TABLE_COLUMN_LABELS[key]}
+                                >
+                                  {EMPLOYEE_TABLE_COLUMN_LABELS[key]}
+                                </span>
+                                {HEADER_FILTER_COLUMNS.has(key) ? (
+                                  <select
+                                    className={cn(
+                                      "h-7 w-full max-w-full cursor-pointer truncate rounded-md border border-input/80 bg-background px-1.5 text-[10px] outline-none transition-colors duration-200",
+                                      "hover:bg-muted/30 focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40",
+                                      headerFilterValue(key) &&
+                                        "border-primary/40 bg-primary/5 font-medium text-foreground",
+                                    )}
+                                    value={headerFilterValue(key)}
+                                    onChange={(e) => onHeaderFilterChange(key, e.target.value)}
+                                    aria-label={`Filter ${EMPLOYEE_TABLE_COLUMN_LABELS[key]}`}
+                                  >
+                                    <option value="">All</option>
+                                    {headerFilterChoices(key).map((opt) => (
+                                      <option key={`${key}-${opt.value}`} value={opt.value}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : null}
+                              </div>
+                            </th>
                           ))}
-                          <th className="w-12 px-2 py-2" />
+                          <th className="w-12 min-w-12 px-2 py-2" />
                         </tr>
                       </thead>
                       <tbody>
@@ -548,7 +807,7 @@ export function EmployeeManagementPage() {
                             key={row.id}
                             className="border-b border-border/50 transition-colors hover:bg-muted/30"
                           >
-                            <td className="px-2 py-2">
+                            <td className="w-10 min-w-10 px-2 py-2 align-middle">
                               <input
                                 type="checkbox"
                                 className="cursor-pointer"
@@ -557,25 +816,33 @@ export function EmployeeManagementPage() {
                               />
                             </td>
                             {orderedVisibleColumns.map((key) => (
-                              <td key={key} className="px-2 py-2 text-xs">
+                              <td
+                                key={key}
+                                className={cn(
+                                  "px-2 py-2 align-middle text-xs",
+                                  COLUMN_CELL_CLASS[key] ?? "min-w-[6.5rem]",
+                                )}
+                              >
                                 {key === "name" ? (
                                   <Link
                                     href={`/hr/workforce/${row.id}`}
-                                    className="flex cursor-pointer items-center gap-2 hover:text-primary"
+                                    className="flex min-w-0 cursor-pointer items-center gap-2 hover:text-primary"
                                   >
                                     <EmsAvatar
                                       name={row.displayName}
                                       photoUrl={row.profilePhotoDataUrl}
                                       size="sm"
                                     />
-                                    <span className="font-medium">{row.displayName}</span>
+                                    <span className="truncate font-medium">{row.displayName}</span>
                                   </Link>
                                 ) : (
-                                  renderEmployeeCell(key, row)
+                                  <span className="block truncate">
+                                    {renderEmployeeCell(key, row)}
+                                  </span>
                                 )}
                               </td>
                             ))}
-                            <td className="px-2 py-2">
+                            <td className="w-12 min-w-12 px-2 py-2 align-middle">
                               <RowActionsMenu
                                 open={menuId === row.id}
                                 onOpenChange={(open) => setMenuId(open ? row.id : null)}
@@ -601,30 +868,35 @@ export function EmployeeManagementPage() {
                                 <RowActionsItem
                                   onClick={() => {
                                     setMenuId(null);
-                                    void setEmployeeLifecycleStatus(row, "inactive", "Deactivated").then(
-                                      load,
-                                    );
+                                    setConfirm({
+                                      title: "Mark as resigned",
+                                      message: `Mark ${row.displayName || row.employeeCode} as resigned?`,
+                                      action: async () => {
+                                        await setEmployeeLifecycleStatus(row, "resigned", "Resigned");
+                                        await load();
+                                      },
+                                    });
                                   }}
                                 >
                                   <UserMinus className="size-3.5 text-muted-foreground" />
-                                  Deactivate
+                                  Resigned
                                 </RowActionsItem>
                                 <RowActionsItem
                                   destructive
                                   onClick={() => {
                                     setConfirm({
-                                      title: "Archive Employee",
+                                      title: "Delete Employee",
                                       message:
-                                        "Soft delete - status becomes archived. Record is retained.",
+                                        "Soft delete this employee? The record is retained and can be restored later.",
                                       action: async () => {
-                                        await setEmployeeLifecycleStatus(row, "archived", "Archived");
+                                        await setEmployeeLifecycleStatus(row, "archived", "Deleted");
                                         await load();
                                       },
                                     });
                                     setMenuId(null);
                                   }}
                                 >
-                                  <Archive className="size-3.5" />
+                                  <Trash2 className="size-3.5" />
                                   Delete
                                 </RowActionsItem>
                               </RowActionsMenu>
@@ -652,7 +924,7 @@ export function EmployeeManagementPage() {
         open={Boolean(confirm)}
         title={confirm?.title ?? ""}
         message={confirm?.message ?? ""}
-        destructive={confirm?.title.toLowerCase().includes("archive") || confirm?.title.toLowerCase().includes("delete")}
+        destructive={confirm?.title.toLowerCase().includes("delete")}
         loading={confirmLoading}
         onCancel={() => setConfirm(null)}
         onConfirm={() => {
@@ -665,60 +937,5 @@ export function EmployeeManagementPage() {
         }}
       />
     </div>
-  );
-}
-
-function HeaderFilterTh({
-  label,
-  children,
-  exactCase = false,
-}: {
-  label: string;
-  children?: ReactNode;
-  /** Keep label casing (Excel-style) instead of forcing uppercase */
-  exactCase?: boolean;
-}) {
-  return (
-    <th className="px-1.5 py-2 align-bottom">
-      <div className="space-y-1">
-        <span
-          className={cn(
-            "block whitespace-nowrap text-[10px] font-semibold tracking-wide text-muted-foreground",
-            exactCase ? "normal-case" : "uppercase",
-          )}
-        >
-          {label}
-        </span>
-        {children ?? <span className="block h-7" />}
-      </div>
-    </th>
-  );
-}
-
-function HeaderFilterSelect({
-  value,
-  onChange,
-  options,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <SetupSelect
-      className={cn(
-        "h-7 w-full min-w-[88px] max-w-[130px] cursor-pointer px-1.5 text-[10px]",
-        value && "border-primary/40 bg-primary/5 font-medium",
-      )}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option value="">All</option>
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label}
-        </option>
-      ))}
-    </SetupSelect>
   );
 }

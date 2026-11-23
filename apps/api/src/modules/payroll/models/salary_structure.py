@@ -48,9 +48,9 @@ class PaySalaryStructure(Base, *PayMasterMixin):
     special_allowance: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0"))
     ctc_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0"))
     pf_percent: Mapped[Decimal] = mapped_column(Numeric(9, 4), nullable=False, default=Decimal("0.1200"))
-    pf_wage_ceiling: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("15000"))
-    pf_fixed_ceiling: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("1800"))
-    edli_admin_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("100"))
+    pf_wage_ceiling: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("25000"))
+    pf_fixed_ceiling: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("3000"))
+    edli_admin_amount: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False, default=Decimal("0"))
     esi_percent: Mapped[Decimal] = mapped_column(Numeric(9, 4), nullable=False, default=Decimal("0.0075"))
     esi_monthly_ceiling: Mapped[Decimal] = mapped_column(
         Numeric(18, 4), nullable=False, default=Decimal("21000")

@@ -9,6 +9,7 @@ HR_SIDEBAR_NAV_KEYS: tuple[str, ...] = (
     # Workforce collapsible group (sidebar children)
     "employees",
     "attendance",
+    "leave",
     "performance",
     "org-chart",
     "training",

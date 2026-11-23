@@ -4,6 +4,7 @@ import {
   SetupField,
   SetupSelect,
 } from "@/components/hr/setup/setup-drawer";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { HrMasterOption } from "@/services/hr-master-connector";
 
 export function EmployeeSelect({
@@ -14,6 +15,7 @@ export function EmployeeSelect({
   required,
   placeholder = "Select employee…",
   allowEmpty = true,
+  searchPlaceholder = "Search name or Emp Code…",
 }: {
   label?: string;
   value: string;
@@ -22,27 +24,30 @@ export function EmployeeSelect({
   required?: boolean;
   placeholder?: string;
   allowEmpty?: boolean;
+  searchPlaceholder?: string;
 }) {
+  const selectOptions = options.map((o) => ({
+    value: o.id,
+    label: `${o.label}${o.department ? ` · ${o.department}` : ""}`,
+    description: o.code || undefined,
+  }));
+
   return (
     <SetupField label={label} required={required}>
-      <SetupSelect
+      <SearchableSelect
         value={value}
-        onChange={(e) => {
-          const id = e.target.value;
+        placeholder={placeholder}
+        searchPlaceholder={searchPlaceholder}
+        allowCustomValue={Boolean(allowEmpty)}
+        options={selectOptions}
+        onChange={(id) => {
           onChange(
             id,
             options.find((o) => o.id === id),
           );
         }}
-      >
-        {allowEmpty ? <option value="">{placeholder}</option> : null}
-        {options.map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.label}
-            {o.department ? ` · ${o.department}` : ""}
-          </option>
-        ))}
-      </SetupSelect>
+        className="w-full"
+      />
     </SetupField>
   );
 }

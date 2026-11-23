@@ -14,10 +14,20 @@ import {
 } from "@/components/hr/setup/setup-drawer";
 import { toast } from "@/components/hr/setup/setup-toast";
 import { Button } from "@/components/ui/button";
+import { WEEKLY_OFF_RULE_OPTIONS, type WeeklyOffRuleCode } from "@/lib/hr/weekly-off-rules";
+import { ApiClientError, formatApiError } from "@/services/api-client";
 import { createShift, peekNextShiftCode, updateShift } from "@/services/shift-roster-service";
 import type { ShiftRosterDirectory } from "@/services/shift-roster-service";
-import type { ShiftRecord, ShiftTypeCode } from "@/types/shift-roster-management";
-import { DEFAULT_SHIFT_EXTENSION, SHIFT_TYPE_LABELS } from "@/types/shift-roster-management";
+import type { ShiftRecord, ShiftTypeCode, WeeklyOffRule } from "@/types/shift-roster-management";
+import {
+  coerceShiftExtension,
+  DEFAULT_SHIFT_EXTENSION,
+  SHIFT_TYPE_LABELS,
+} from "@/types/shift-roster-management";
+
+const SHIFT_WEEKLY_OFF_OPTIONS = WEEKLY_OFF_RULE_OPTIONS.filter(
+  (r) => r.id !== "custom" && r.id !== "rotating",
+);
 
 export function CreateShiftDrawer({
   open,
@@ -49,9 +59,9 @@ export function CreateShiftDrawer({
   const [earlyExit, setEarlyExit] = useState("15");
   const [overnight, setOvernight] = useState(false);
   const [otAllowed, setOtAllowed] = useState(true);
-  const [autoAtt, setAutoAtt] = useState(false);
   const [color, setColor] = useState("#0F766E");
-  const [weeklyOff, setWeeklyOff] = useState("sunday");
+  const [weeklyOffRules, setWeeklyOffRules] = useState<WeeklyOffRule[]>(["sunday"]);
+  const [altSatStart, setAltSatStart] = useState("");
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState("active");
   const [saving, setSaving] = useState(false);
@@ -59,7 +69,7 @@ export function CreateShiftDrawer({
   useEffect(() => {
     if (!open) return;
     if (initial) {
-      const ext = { ...DEFAULT_SHIFT_EXTENSION, ...initial.extension };
+      const ext = coerceShiftExtension(initial.extension);
       setShiftCode(initial.shiftCode);
       setShiftName(initial.shiftName);
       setShiftType(initial.shiftType);
@@ -76,9 +86,9 @@ export function CreateShiftDrawer({
       setEarlyExit(String(ext.earlyExitBeforeMinutes ?? 15));
       setOvernight(Boolean(initial.isOvernight));
       setOtAllowed(ext.overtimeAllowed !== false);
-      setAutoAtt(Boolean(ext.autoAttendance));
       setColor(ext.color || "#0F766E");
-      setWeeklyOff(ext.weeklyOffRule || "sunday");
+      setWeeklyOffRules(ext.weeklyOffRules);
+      setAltSatStart(ext.weeklyOffAlternateSaturdayStart || "");
       setDescription(ext.description || "");
       setStatus(initial.status || "active");
       return;
@@ -99,16 +109,28 @@ export function CreateShiftDrawer({
     setEarlyExit("15");
     setOvernight(false);
     setOtAllowed(true);
-    setAutoAtt(false);
     setColor("#0F766E");
-    setWeeklyOff("sunday");
+    setWeeklyOffRules(["sunday"]);
+    setAltSatStart("");
     setDescription("");
     setStatus("active");
   }, [open, initial]);
 
+  function toggleWeeklyOff(id: WeeklyOffRuleCode, checked: boolean) {
+    setWeeklyOffRules((prev) => {
+      if (checked) return prev.includes(id) ? prev : [...prev, id];
+      const next = prev.filter((r) => r !== id);
+      return next.length ? next : ["sunday"];
+    });
+  }
+
   async function submit() {
     if (!shiftName.trim()) {
       toast("Shift name required", "error");
+      return;
+    }
+    if (!weeklyOffRules.length) {
+      toast("Select at least one weekly off day", "error");
       return;
     }
     setSaving(true);
@@ -124,9 +146,11 @@ export function CreateShiftDrawer({
         lateAfterMinutes: Number(lateAfter) || 15,
         earlyExitBeforeMinutes: Number(earlyExit) || 15,
         overtimeAllowed: otAllowed,
-        autoAttendance: autoAtt,
         color,
-        weeklyOffRule: weeklyOff as typeof DEFAULT_SHIFT_EXTENSION.weeklyOffRule,
+        weeklyOffRules,
+        weeklyOffAlternateSaturdayStart: weeklyOffRules.includes("alternate_saturday")
+          ? altSatStart
+          : "",
       };
       const body = {
         shiftName: shiftName.trim(),
@@ -144,15 +168,21 @@ export function CreateShiftDrawer({
       } else {
         await createShift({
           ...body,
-          shiftCode,
+          shiftCode: shiftCode.trim() || peekNextShiftCode(),
           branchId: directory?.options.branches[0]?.id,
         });
         toast("Shift created", "success");
       }
       onSaved();
       onClose();
-    } catch {
-      toast(isEdit ? "Update failed" : "Create failed", "error");
+    } catch (err) {
+      toast(
+        formatApiError(err, isEdit ? "Update failed" : "Create failed"),
+        "error",
+      );
+      if (!(err instanceof ApiClientError)) {
+        console.error(isEdit ? "Shift update failed" : "Shift create failed", err);
+      }
     } finally {
       setSaving(false);
     }
@@ -164,8 +194,8 @@ export function CreateShiftDrawer({
       title={isEdit ? "Edit shift" : "Create shift"}
       description={
         isEdit
-          ? "Update shift master timing, grace, OT, color, and status."
-          : "Shift master - timing, grace, OT, color, weekly off rule."
+          ? "Update shift timing, grace, OT, color, weekly offs, and status."
+          : "Shift master — timing, grace, OT, color, and weekly offs for this shift."
       }
       wide
       onClose={onClose}
@@ -251,16 +281,6 @@ export function CreateShiftDrawer({
         <SetupField label="Early exit before (min)">
           <SetupInput type="number" value={earlyExit} onChange={(e) => setEarlyExit(e.target.value)} />
         </SetupField>
-        <SetupField label="Weekly off rule">
-          <SetupSelect value={weeklyOff} onChange={(e) => setWeeklyOff(e.target.value)}>
-            <option value="sunday">Sunday</option>
-            <option value="saturday">Saturday (every week)</option>
-            <option value="alternate_saturday">Alternate Saturday</option>
-            <option value="second_saturday">Second Saturday</option>
-            <option value="rotating">Rotating weekly off</option>
-            <option value="custom">Custom</option>
-          </SetupSelect>
-        </SetupField>
         {isEdit ? (
           <SetupField label="Status">
             <SetupSelect value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -269,6 +289,58 @@ export function CreateShiftDrawer({
             </SetupSelect>
           </SetupField>
         ) : null}
+
+        <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 p-3 text-xs sm:col-span-2">
+          <p className="font-medium text-foreground">Weekly offs for this shift</p>
+          <p className="text-[11px] text-muted-foreground">
+            Applies to employees assigned to this shift (e.g. Sat + Sun). Roster WO uses these rules.
+          </p>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 cursor-pointer text-[11px]"
+              onClick={() => setWeeklyOffRules(["saturday", "sunday"])}
+            >
+              Sat + Sun
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 cursor-pointer text-[11px]"
+              onClick={() => setWeeklyOffRules(["sunday"])}
+            >
+              Sunday only
+            </Button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {SHIFT_WEEKLY_OFF_OPTIONS.map((rule) => (
+              <label key={rule.id} className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={weeklyOffRules.includes(rule.id)}
+                  onChange={(e) => toggleWeeklyOff(rule.id, e.target.checked)}
+                />
+                {rule.label}
+              </label>
+            ))}
+          </div>
+          {weeklyOffRules.includes("alternate_saturday") ? (
+            <SetupField
+              label="Alternate Saturday starts on"
+              hint="First Saturday that is weekly off in the cycle"
+            >
+              <SetupInput
+                type="date"
+                value={altSatStart}
+                onChange={(e) => setAltSatStart(e.target.value)}
+              />
+            </SetupField>
+          ) : null}
+        </div>
+
         <div className="flex flex-col gap-2 text-xs sm:col-span-2">
           <label className="flex cursor-pointer items-center gap-2">
             <input type="checkbox" checked={overnight} onChange={(e) => setOvernight(e.target.checked)} />
@@ -277,10 +349,6 @@ export function CreateShiftDrawer({
           <label className="flex cursor-pointer items-center gap-2">
             <input type="checkbox" checked={otAllowed} onChange={(e) => setOtAllowed(e.target.checked)} />
             Overtime allowed
-          </label>
-          <label className="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" checked={autoAtt} onChange={(e) => setAutoAtt(e.target.checked)} />
-            Auto attendance
           </label>
         </div>
         <SetupField label="Description" hint={`API times ${toApiTimeValue(startTime)} - ${toApiTimeValue(endTime)}`}>

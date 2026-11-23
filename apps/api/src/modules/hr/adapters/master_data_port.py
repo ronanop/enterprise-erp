@@ -20,6 +20,11 @@ class HrMasterDataAdapter:
     def get_employee_by_code(self, ctx: TenantContext, company_id: UUID, employee_code: str):
         return self._employees.get_employee_by_code(ctx, company_id, employee_code)
 
+    def resolve_by_machine_code(
+        self, ctx: TenantContext, company_id: UUID | None, employee_code: str
+    ):
+        return self._employees.resolve_by_machine_code(ctx, company_id, employee_code)
+
     def sync_designation_label(self, ctx: TenantContext, employee_id: UUID, designation: str):
         return self._employees.update_employee(ctx, employee_id, designation=designation)
 

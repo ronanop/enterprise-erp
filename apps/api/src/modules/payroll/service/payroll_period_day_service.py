@@ -10,7 +10,6 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from modules.foundation.domain.value_objects import TenantContext
-from modules.hr.domain.enums import HolidayCalendarStatus
 from modules.hr.repository.employment_repository import EmploymentRepository
 from modules.hr.repository.holiday_calendar_repository import HolidayCalendarRepository
 from modules.hr.repository.management_group_repository import ManagementGroupRepository
@@ -122,13 +121,28 @@ class PayrollPeriodDayService:
             cache.weekly_off_by_id[policy.id] = policy
 
         years = {period_start.year, period_end.year}
-        for cal in self._holiday_cal.list_rows(ctx, company_id):
-            if cal.status != HolidayCalendarStatus.PUBLISHED.value:
-                continue
+        # Tenant-wide published calendars — company stamp on the calendar often
+        # differs from employment.company_id (same class of bug as attendance).
+        for cal in self._holiday_cal.list_published_for_tenant(ctx):
             dates = holiday_dates_from_json(cal.holidays_json)
             cache.holidays_by_calendar[cal.id] = dates
-            if int(cal.calendar_year or 0) in years:
-                cache.company_holiday_dates |= dates
+            # Apply every published holiday date that falls in the period years.
+            cache.company_holiday_dates |= {d for d in dates if d.year in years}
+
+        # If this company has no weekly-off policy, still try tenant policies so
+        # Sat+Sun (or configured rules) apply instead of leaving Saturdays as Absent.
+        if cache.company_weekly_off is None and not cache.weekly_off_by_id:
+            for policy in self._weekly_off.list_rows(ctx, None):
+                cache.weekly_off_by_id[policy.id] = policy
+                if bool(getattr(policy, "is_default", False)) and str(
+                    getattr(policy, "status", "")
+                ).lower() == "active":
+                    cache.company_weekly_off = policy
+            if cache.company_weekly_off is None:
+                for policy in cache.weekly_off_by_id.values():
+                    if str(getattr(policy, "status", "")).lower() == "active":
+                        cache.company_weekly_off = policy
+                        break
 
         for row in self._roster.list_rows(ctx, company_id):
             if row.roster_date < period_start or row.roster_date > period_end:

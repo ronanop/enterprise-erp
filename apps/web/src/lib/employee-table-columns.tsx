@@ -1,23 +1,63 @@
 import type { ReactNode } from "react";
 
 import { HrStatusBadge } from "@/components/hr/hr-primitives";
-import { formatEmploymentTypeLabel } from "@/config/hr-master-options";
+import {
+  formatEmploymentTypeLabel,
+  formatRelationshipLabel,
+} from "@/config/hr-master-options";
 import type { EmployeeTableColumnKey } from "@/hooks/use-employee-table-prefs";
 import type { EmployeeRecord } from "@/types/employee-management";
 
-export function excelEntityCell(row: EmployeeRecord): string {
-  const blob = `${row.extension.employment.entityName || ""} ${row.companyName || ""}`.toLowerCase();
-  if (blob.includes("technolog")) return "Technologies";
-  if (blob.includes("digitech")) return "Digitech";
-  return row.extension.employment.entityName?.trim() || "-";
+/** Prefer employee-code prefix when company_id is mis-tagged (common CT* → wrong entity). */
+export function entityFromEmployeeCode(employeeCode?: string | null): string {
+  const code = String(employeeCode ?? "").trim().toUpperCase();
+  if (!code) return "";
+  if (code.startsWith("CDPL") || code.startsWith("VPL")) return "Cache Digitech";
+  if (/^CT\d/i.test(code)) return "Cache Technologies";
+  return "";
 }
 
+export function excelEntityCell(row: EmployeeRecord): string {
+  const fromCode = entityFromEmployeeCode(row.employeeCode);
+  if (fromCode) return fromCode;
+  const raw =
+    row.extension.employment.entityName?.trim() ||
+    row.companyName?.trim() ||
+    "";
+  const blob = raw.toLowerCase();
+  if (blob.includes("digitech")) return "Cache Digitech";
+  if (blob.includes("technolog")) return "Cache Technologies";
+  return raw || "-";
+}
+
+/** Normalized compare for entity filter (Cache Digitech ≈ Digitech Private Limited). */
+export function entityLabelsMatch(a: string, b: string): boolean {
+  const na = a.trim().toLowerCase();
+  const nb = b.trim().toLowerCase();
+  if (!na || !nb) return false;
+  if (na === nb) return true;
+  const digitech = (s: string) => s.includes("digitech");
+  const tech = (s: string) => s.includes("technolog");
+  if (digitech(na) && digitech(nb)) return true;
+  if (tech(na) && tech(nb)) return true;
+  return na.includes(nb) || nb.includes(na);
+}
+
+/**
+ * Excel Organisation = parent group under which entities sit.
+ * Cache Digitech (CDPL) + Cache Technologies (CT) → Organisation "Cache".
+ */
 export function excelOrganisationCell(row: EmployeeRecord): string {
-  const blob = `${row.extension.employment.entityName || ""} ${row.companyName || ""}`.toLowerCase();
-  if (blob.includes("digitech") || blob.includes("technolog") || blob.includes("cache")) {
+  const fromCode = entityFromEmployeeCode(row.employeeCode);
+  if (fromCode === "Cache Digitech" || fromCode === "Cache Technologies") return "Cache";
+  const entity = row.extension.employment.entityName?.trim() || "";
+  const company = row.companyName?.trim() || "";
+  const blob = `${entity} ${company}`.toLowerCase();
+  if (blob.includes("digitech") || blob.includes("technolog") || /\bcache\b/.test(blob)) {
     return "Cache";
   }
-  return row.companyName || row.branchName || "-";
+  if (blob.includes("vyuha")) return company || entity || "-";
+  return company || row.branchName?.trim() || "-";
 }
 
 function dash(value?: string | null): string {
@@ -31,7 +71,9 @@ function genderLabel(row: EmployeeRecord): string {
 
 function lifecycleLabel(status: EmployeeRecord["lifecycleStatus"]): string {
   if (status === "onboarding") return "Pending Join";
+  if (status === "resigned") return "Resigned";
   if (status === "inactive") return "Ex Employee";
+  if (status === "notice") return "Notice Period";
   return status;
 }
 
@@ -39,6 +81,8 @@ export function renderEmployeeCell(key: EmployeeTableColumnKey, row: EmployeeRec
   switch (key) {
     case "employeeCode":
       return <span className="font-mono text-xs text-muted-foreground">{row.employeeCode}</span>;
+    case "name":
+      return dash(row.displayName);
     case "entity":
       return excelEntityCell(row);
     case "organisation":
@@ -69,6 +113,21 @@ export function renderEmployeeCell(key: EmployeeTableColumnKey, row: EmployeeRec
       return dash(row.extension.personal.personalEmail);
     case "phone":
       return dash(row.mobile || row.extension.personal.mobile);
+    case "fatherName":
+      return dash(row.extension.personal.fatherName);
+    case "emergencyName":
+      return dash(row.extension.personal.emergency?.name);
+    case "emergencyRelation":
+      return dash(
+        formatRelationshipLabel(row.extension.personal.emergency?.relationship),
+      );
+    case "emergencyPhone":
+      return dash(row.extension.personal.emergency?.phone);
+    case "esi": {
+      const esic = row.extension.governmentIds?.esic?.trim();
+      if (esic) return esic;
+      return row.extension.salary?.esi ? "Yes" : "No";
+    }
     case "grade":
       return dash(row.extension.employment.grade);
     case "jobLevel":
@@ -91,8 +150,11 @@ export function renderEmployeeCell(key: EmployeeTableColumnKey, row: EmployeeRec
       return dash(row.extension.employment.confirmationDate);
     case "status":
       return <HrStatusBadge status={lifecycleLabel(row.lifecycleStatus)} />;
-    default:
+    default: {
+      const _exhaustive: never = key;
+      void _exhaustive;
       return "-";
+    }
   }
 }
 
@@ -110,6 +172,11 @@ export const EXACT_CASE_HEADER_COLUMNS = new Set<EmployeeTableColumnKey>([
   "phone",
   "personalEmail",
   "email",
+  "fatherName",
+  "emergencyName",
+  "emergencyRelation",
+  "emergencyPhone",
+  "esi",
   "gender",
   "dob",
   "joiningDate",

@@ -88,7 +88,7 @@ class PayPayrollPolicy(Base, *PayMasterMixin):
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="draft", index=True)
 
     payroll_cycle_type: Mapped[str] = mapped_column(String(40), nullable=False)
-    payroll_cycle_start_day: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=20)
+    payroll_cycle_start_day: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=21)
     leave_cycle_type: Mapped[str] = mapped_column(String(40), nullable=False)
     leave_balance_credit_timing: Mapped[str] = mapped_column(String(60), nullable=False)
 

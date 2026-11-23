@@ -1,6 +1,7 @@
 import { apiClient, resourceService } from "@/services/api-client";
 import { loadEmployeeDirectory } from "@/services/employee-management-service";
 import type { HrRow } from "@/services/hr-service";
+import type { NormalizedLeaveBalanceImportRow } from "@/lib/leave-balance-import-map";
 import type {
   ApplyLeavePayload,
   CarryForwardRecord,
@@ -22,6 +23,51 @@ import {
 } from "@/types/leave-management";
 import { validateLeaveCycleOnApply } from "@/lib/hr/leave-cycle-rules";
 import { devError, devWarn } from "@/lib/dev-log";
+
+export type LeaveBalanceImportResponse = {
+  created: number;
+  updated: number;
+  skipped: number;
+  warnings: string[];
+  errors: string[];
+  results: Array<{
+    row: number;
+    employee_code: string;
+    leave_type_code: string;
+    action: string;
+    balance_id: string;
+    closing_balance: number | string;
+  }>;
+};
+
+export async function bulkImportLeaveBalances(
+  rows: NormalizedLeaveBalanceImportRow[],
+): Promise<LeaveBalanceImportResponse> {
+  const res = await apiClient<LeaveBalanceImportResponse>("/hr/leave-balances/bulk-import", {
+    method: "POST",
+    body: {
+      rows: rows.map((r) => ({
+        employee_code: r.employee_code,
+        leave_type_code: r.leave_type_code,
+        balance_year: r.balance_year ?? null,
+        remaining: r.remaining ?? null,
+        opening_balance: r.opening_balance ?? null,
+        accrued: r.accrued ?? null,
+        used: r.used ?? null,
+      })),
+    },
+  });
+  return (
+    res.data ?? {
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      warnings: [],
+      errors: ["Empty import response"],
+      results: [],
+    }
+  );
+}
 
 const EXT_KEY = "erp_leave_request_ext_v1";
 const AUDIT_KEY = "erp_leave_audit_v1";
@@ -57,13 +103,86 @@ function readJson<T>(key: string, fallback: T): T {
 
 function writeJson(key: string, value: unknown): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (err) {
+    const quota =
+      err instanceof DOMException &&
+      (err.name === "QuotaExceededError" || err.code === 22);
+    if (!quota) throw err;
+    // Leave audit can grow large — trim until it fits, then give up quietly.
+    if (key === AUDIT_KEY && Array.isArray(value)) {
+      for (const n of [500, 200, 50, 10]) {
+        try {
+          localStorage.setItem(key, JSON.stringify(value.slice(0, n)));
+          return;
+        } catch {
+          /* try smaller */
+        }
+      }
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    try {
+      localStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+function isBlankEntityLabel(value: string | undefined | null): boolean {
+  const v = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  return !v || v === "-" || v === "—" || v === "n/a" || v === "na" || v === "null";
+}
+
+/** Resolve legal-entity label for leave grids (never leave Entity blank). */
+function resolveLeaveEntityName(
+  e: {
+    companyName?: string;
+    employeeCode?: string;
+    companyId?: string;
+    extension?: { employment?: { entityName?: string; entityId?: string } };
+  },
+  companyById: Map<string, { name: string; code: string }>,
+): string {
+  const candidates = [
+    e.companyName,
+    e.extension?.employment?.entityName,
+  ];
+  for (const c of candidates) {
+    if (!isBlankEntityLabel(c)) {
+      const raw = String(c).trim();
+      if (/digitech/i.test(raw)) return raw.includes("Private") ? raw : "Cache Digitech Private Limited";
+      if (/technolog/i.test(raw)) return "Cache Technologies";
+      return raw;
+    }
+  }
+  const companyId = String(e.companyId || e.extension?.employment?.entityId || "").trim();
+  const info = companyId ? companyById.get(companyId) : undefined;
+  if (info) {
+    const blob = `${info.name} ${info.code}`.toLowerCase();
+    if (blob.includes("digitech")) return info.name || "Cache Digitech Private Limited";
+    if (blob.includes("technolog")) return "Cache Technologies";
+    if (!isBlankEntityLabel(info.name)) return info.name;
+  }
+  // Code-prefix fallback for Cache imports when company_id was never set
+  const code = String(e.employeeCode || "").trim().toUpperCase();
+  if (code.startsWith("CDPL")) return "Cache Digitech Private Limited";
+  if (code.startsWith("CT") || code.startsWith("VPL")) return "Cache Technologies";
+  return "";
 }
 
 export function appendLeaveAudit(entry: Omit<LeaveAuditEntry, "id" | "at">): void {
   const all = readJson<LeaveAuditEntry[]>(AUDIT_KEY, []);
   all.unshift({ ...entry, id: crypto.randomUUID(), at: new Date().toISOString() });
-  writeJson(AUDIT_KEY, all.slice(0, 5000));
+  writeJson(AUDIT_KEY, all.slice(0, 500));
 }
 
 export function listLeaveAudit(requestId?: string): LeaveAuditEntry[] {
@@ -191,6 +310,9 @@ export type LeaveDirectory = {
       employmentType: string;
       joiningDate: string;
       branchId: string;
+      companyName: string;
+      /** Employee lifecycle — leave UI should exclude pending-join / archived. */
+      lifecycleStatus: string;
     }[];
     leaveTypes: { id: string; label: string; code: string; color: string }[];
     managers: { id: string; label: string }[];
@@ -205,7 +327,17 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
     listAllRows("/hr/holiday-calendars"),
     loadEmployeeDirectory().catch(() => ({
       records: [],
-      options: { branches: [], departments: [], designations: [], managers: [], shifts: [] },
+      options: {
+        branches: [],
+        departments: [],
+        designations: [],
+        managers: [],
+        shifts: [],
+        locations: [],
+        companies: [],
+        managementGroups: [],
+        employees: [],
+      },
       errors: [],
     })),
     listAllRows("/branches"),
@@ -377,19 +509,35 @@ export async function loadLeaveDirectory(): Promise<LeaveDirectory> {
         id: String(d.id),
         label: String(d.department_name ?? d.name ?? d.id),
       })),
-      employees: empDir.records.map((e) => ({
-        id: e.id,
-        label: e.displayName,
-        code: e.employeeCode,
-        departmentId: e.departmentId,
-        departmentName: e.departmentName,
-        managerId: e.reportingManagerId,
-        managerName: e.reportingManagerName,
-        gender: e.gender,
-        employmentType: e.employmentType,
-        joiningDate: e.joiningDate,
-        branchId: e.branchId,
-      })),
+      // Leave module: activated employees only (exclude pending-join / probation / notice / archived).
+      employees: (() => {
+        const companyById = new Map(
+          (empDir.options.companies || []).map((c) => [c.id, { name: c.label, code: c.code }]),
+        );
+        return empDir.records
+          .filter((e) => String(e.lifecycleStatus || "").toLowerCase() === "active")
+          .filter((e) => {
+            const name = String(e.displayName || "").trim();
+            const code = String(e.employeeCode || "").trim();
+            // Drop ghost master rows with no identity (cause blank Name/Code cells)
+            return Boolean(name || code);
+          })
+          .map((e) => ({
+            id: e.id,
+            label: e.displayName || e.employeeCode,
+            code: e.employeeCode,
+            departmentId: e.departmentId,
+            departmentName: e.departmentName,
+            managerId: e.reportingManagerId,
+            managerName: e.reportingManagerName,
+            gender: e.gender,
+            employmentType: e.employmentType,
+            joiningDate: e.joiningDate,
+            branchId: e.branchId,
+            companyName: resolveLeaveEntityName(e, companyById),
+            lifecycleStatus: e.lifecycleStatus || "active",
+          }));
+      })(),
       leaveTypes: leaveTypes
         .filter((t) => isVisibleLeaveType(t.code, t.name))
         .filter((t) => String(t.status ?? "active").toLowerCase() === "active")

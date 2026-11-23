@@ -33,6 +33,7 @@ import {
   amountsFromSplit,
   computeCtcSplit,
 } from "@/lib/salary-structure-excel";
+import type { NormalizedSalaryAssignRow } from "@/lib/salary-assign-import";
 import {
   buildPayrollCycle,
   isPfDeductionLabel,
@@ -62,16 +63,28 @@ function asNum(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function resolveEmployerContribution(
+  input: Pick<SalaryStructure, "employerContribution"> & { pf?: number },
+  fallback = EXCEL_DEFAULTS.employerContribution,
+): number {
+  // Never treat `pf` as employer contribution — after amountsFromSplit, `pf` is employee PF.
+  if (input.employerContribution != null && Number.isFinite(Number(input.employerContribution))) {
+    return Math.round(Number(input.employerContribution));
+  }
+  return fallback;
+}
+
 function excelSplitFromInput(input: Omit<SalaryStructure, "id" | "createdAt">) {
   return computeCtcSplit({
-    grossCtc: asNum(input.grossCtc ?? input.ctcAmount ?? input.basic + input.hra + input.specialAllowance + input.pf),
+    grossCtc: asNum(
+      input.grossCtc ??
+        input.ctcAmount ??
+        input.basic + input.hra + input.specialAllowance + resolveEmployerContribution(input, 0),
+    ),
     basicPercent: asNum(input.basicPercent, EXCEL_DEFAULTS.basicPercent),
     hraPercentOfBasic: asNum(input.hraPercentOfBasic, EXCEL_DEFAULTS.hraPercentOfBasic),
     telephoneAllowance: asNum(input.telephoneAllowance, 0),
-    employerContribution: asNum(
-      input.employerContribution ?? input.pf,
-      EXCEL_DEFAULTS.employerContribution,
-    ),
+    employerContribution: resolveEmployerContribution(input),
   });
 }
 
@@ -136,12 +149,41 @@ function isPlaceholderSalary(row: { employeeId?: string; employeeName?: string }
   return PLACEHOLDER_NAME_RE.test(name) || PLACEHOLDER_ID_RE.test(id);
 }
 
-function findHrEmployee(employees: HrMasterOption[], employeeId: string): HrMasterOption | undefined {
+/** Drop placeholder / demo salary rows only (not real employees). */
+export function purgeExcludedAssignSalaries(rows: EmployeeSalary[]): EmployeeSalary[] {
+  return rows.filter((r) => !isPlaceholderSalary(r));
+}
+
+function findHrEmployee(
+  employees: HrMasterOption[],
+  employeeId: string,
+  code?: string,
+): HrMasterOption | undefined {
   const key = employeeSalaryKey(employeeId);
-  if (!key) return undefined;
-  return employees.find(
-    (e) => e.id.toLowerCase() === key || (e.code && e.code.toLowerCase() === key),
-  );
+  const codeKey = employeeSalaryKey(code || "");
+  if (!key && !codeKey) return undefined;
+  return employees.find((e) => {
+    const id = e.id.toLowerCase();
+    const c = (e.code || "").toLowerCase();
+    return (
+      (key && (id === key || c === key)) ||
+      (codeKey && (id === codeKey || c === codeKey))
+    );
+  });
+}
+
+/** Same person whether stored by Emp Code or HR UUID. */
+function salaryRowMatchesEmployee(
+  row: EmployeeSalary,
+  employeeId: string,
+  hrUuid?: string,
+  code?: string,
+): boolean {
+  const rowKey = employeeSalaryKey(row.employeeId);
+  const keys = [employeeId, hrUuid, code]
+    .map((v) => employeeSalaryKey(v || ""))
+    .filter(Boolean);
+  return keys.some((k) => rowKey === k);
 }
 
 function hrDisplayName(emp: HrMasterOption): string {
@@ -212,7 +254,11 @@ function mergeSalaryLists(
     const enriched = enrichSalaryWithHr(row, hr);
     if (!enriched) return;
     const emp = findHrEmployee(hr, enriched.employeeId);
-    merged.set((emp?.id || enriched.employeeId).toLowerCase(), {
+    const primary = (emp?.id || enriched.employeeId).toLowerCase();
+    // Collapse Emp Code / UUID duplicates for the same person.
+    if (emp?.id) merged.delete(emp.id.toLowerCase());
+    if (emp?.code) merged.delete(emp.code.toLowerCase());
+    merged.set(primary, {
       ...enriched,
       employeeId: emp?.id || enriched.employeeId,
     });
@@ -238,7 +284,9 @@ async function resolveEmployeeSalaries(hr?: HrMasterOption[]): Promise<EmployeeS
   } catch {
     api = [];
   }
-  const merged = mergeSalaryLists(load<EmployeeSalary>(K.salaries), api, employees);
+  const merged = purgeExcludedAssignSalaries(
+    mergeSalaryLists(load<EmployeeSalary>(K.salaries), api, employees),
+  );
   save(K.salaries, merged);
   return merged;
 }
@@ -851,6 +899,8 @@ function payslipsFromRunLines(run: PayrollRun, lines: PayrollRunEmployeeLine[]):
     bankAccount: line.bankAccount,
     presentDays: line.presentDays,
     leaveDays: line.leaveDays,
+    unpaidLeaveDays: line.absentDays ?? line.lopDays ?? 0,
+    lateCount: 0,
     payableDays: line.payableDays,
     periodDays: line.periodDays ?? line.workingDaysInCycle,
     lopDays: line.lopDays,
@@ -942,7 +992,10 @@ async function loadPayrollAttendanceCalendar(): Promise<PayrollAttendanceCalenda
   const apiRules = Array.isArray(activePolicy?.rules_json)
     ? (activePolicy.rules_json as WeeklyOffRuleCode[])
     : null;
-  const weeklyOffRules: WeeklyOffRuleCode[] = apiRules?.length ? apiRules : ["sunday"];
+  // Match backend India default (Sat+Sun) when no weekly-off policy exists.
+  const weeklyOffRules: WeeklyOffRuleCode[] = apiRules?.length
+    ? apiRules
+    : ["saturday", "sunday"];
   const alternateSaturdayStart = activePolicy?.alternate_saturday_start
     ? String(activePolicy.alternate_saturday_start).slice(0, 10)
     : null;
@@ -951,6 +1004,8 @@ async function loadPayrollAttendanceCalendar(): Promise<PayrollAttendanceCalenda
     string,
     unknown
   >[]) {
+    const status = String(cal.status ?? "").toLowerCase();
+    if (status && status !== "published") continue;
     const json = cal.holidays_json;
     if (!Array.isArray(json)) continue;
     for (const h of json) {
@@ -973,14 +1028,15 @@ async function buildAttendanceLinesForCycle(
   const { loadLeaveDirectory } = await import("@/services/leave-management-service");
 
   const records: Awaited<ReturnType<typeof loadAttendanceForEmployee>> = [];
+  const range = { dateFrom: cycle.start, dateTo: cycle.end };
   const chunkSize = 8;
   for (let i = 0; i < people.length; i += chunkSize) {
     const chunk = people.slice(i, i + chunkSize);
     const parts = await Promise.all(
       chunk.map(async (p) => {
-        const byId = await loadAttendanceForEmployee(p.id).catch(() => []);
+        const byId = await loadAttendanceForEmployee(p.id, null, range).catch(() => []);
         if (!p.code || p.code === p.id) return byId;
-        const byCode = await loadAttendanceForEmployee(p.code).catch(() => []);
+        const byCode = await loadAttendanceForEmployee(p.code, null, range).catch(() => []);
         return [...byId, ...byCode];
       }),
     );
@@ -990,7 +1046,7 @@ async function buildAttendanceLinesForCycle(
   const leaveDir = await loadLeaveDirectory().catch(() => null);
   const leaveRequests = leaveDir?.requests ?? [];
   const calendar = await loadPayrollAttendanceCalendar().catch(() => ({
-    weeklyOffRules: ["sunday"] as WeeklyOffRuleCode[],
+    weeklyOffRules: ["saturday", "sunday"] as WeeklyOffRuleCode[],
   }));
 
   const refs = people.map((p) => ({
@@ -1058,14 +1114,17 @@ function mapApiStructure(
     ),
     telephoneAllowance: asNum(s.telephone_allowance ?? prev?.telephoneAllowance, 0),
     employerContribution: asNum(
-      s.employer_contribution ?? prev?.employerContribution ?? prev?.pf,
+      s.employer_contribution ?? prev?.employerContribution,
       EXCEL_DEFAULTS.employerContribution,
     ),
   });
   const basic = asNum(s.basic_amount ?? s.basic, split.basic);
   const hra = asNum(s.hra_amount ?? s.hra, split.hra);
   const special = asNum(s.special_allowance, split.specialAllowance);
-  const employer = asNum(s.employer_contribution ?? s.pf, split.employerContribution);
+  const employer = asNum(
+    s.employer_contribution ?? prev?.employerContribution,
+    split.employerContribution,
+  );
   return {
     id,
     code,
@@ -1149,7 +1208,7 @@ export async function loadPayrollDirectory(): Promise<PayrollDirectory> {
     const fromSalaryApi = salaryRows
       .map((e) => mapApiEmployeeSalary(e as Record<string, unknown>, structures))
       .filter((row): row is EmployeeSalary => Boolean(row));
-    salaries = mergeSalaryLists(salaries, fromSalaryApi, hr);
+    salaries = purgeExcludedAssignSalaries(mergeSalaryLists(salaries, fromSalaryApi, hr));
     save(K.salaries, salaries);
 
     if (overview.runs.length) {
@@ -1389,15 +1448,48 @@ export async function updateStructure(
 }
 
 export async function getSalaryStructure(id: string): Promise<SalaryStructure | null> {
-  if (UUID_RE.test(id)) {
+  const needle = String(id ?? "").trim();
+  if (!needle) return null;
+
+  if (UUID_RE.test(needle)) {
     try {
-      const res = await resourceService.get<Record<string, unknown>>("/payroll/salary-structures", id);
-      if (res.data) return mapApiStructure(res.data as Record<string, unknown>, 0);
+      const res = await resourceService.get<Record<string, unknown>>(
+        "/payroll/salary-structures",
+        needle,
+      );
+      if (res.data) {
+        const mapped = mapApiStructure(res.data as Record<string, unknown>, 0);
+        const all = load<SalaryStructure>(K.structures).filter((s) => s.id !== mapped.id);
+        all.unshift(mapped);
+        save(K.structures, all);
+        return mapped;
+      }
     } catch (err) {
-      devWarn("getSalaryStructure API failed; trying local cache");
+      devWarn("getSalaryStructure API failed; trying local / list cache");
     }
   }
-  return load<SalaryStructure>(K.structures).find((s) => s.id === id) ?? null;
+
+  const local = load<SalaryStructure>(K.structures).find(
+    (s) =>
+      s.id === needle ||
+      s.code?.toUpperCase() === needle.toUpperCase() ||
+      s.name.toLowerCase() === needle.toLowerCase(),
+  );
+  if (local) return local;
+
+  try {
+    const dir = await loadPayrollDirectory();
+    return (
+      dir.structures.find(
+        (s) =>
+          s.id === needle ||
+          s.code?.toUpperCase() === needle.toUpperCase() ||
+          s.name.toLowerCase() === needle.toLowerCase(),
+      ) ?? null
+    );
+  } catch {
+    return null;
+  }
 }
 
 export function deleteStructureLocal(id: string): void {
@@ -1469,63 +1561,230 @@ export async function resetStructuresToCacheDigitech(): Promise<SalaryStructure[
   return created;
 }
 
+/** Resolve HR employment UUID for payroll salary assign (create if missing). */
+async function resolveEmploymentForSalaryAssign(input: {
+  employeeUuid: string;
+  branchId: string;
+  companyId?: string;
+  joiningDate?: string;
+}): Promise<string> {
+  const empId = input.employeeUuid;
+  if (!UUID_RE.test(empId)) {
+    throw new Error("Employee UUID required to assign salary");
+  }
+  const listed = await resourceService.list("/hr/employment", {
+    employee_id: empId,
+    page_size: 20,
+  });
+  const rows = (Array.isArray(listed.data) ? listed.data : []) as Array<Record<string, unknown>>;
+  const existing = rows.find((r) => String(r.employee_id ?? "") === empId && !r.is_deleted);
+  const existingId = existing ? String(existing.id ?? "") : "";
+  if (UUID_RE.test(existingId)) return existingId;
+
+  if (!UUID_RE.test(input.branchId)) {
+    throw new Error("Branch is required to create employment for salary assign");
+  }
+  const created = await resourceService.create<Record<string, unknown>>("/hr/employment", {
+    company_id: input.companyId && UUID_RE.test(input.companyId) ? input.companyId : undefined,
+    branch_id: input.branchId,
+    employee_id: empId,
+    employment_type: "permanent",
+    date_of_joining: (input.joiningDate || nowIso()).slice(0, 10),
+    payroll_eligible: true,
+    lifecycle_source: "salary_assign",
+    status: "active",
+  });
+  const newId = String(created.data?.id ?? "");
+  if (!UUID_RE.test(newId)) {
+    throw new Error("Could not create employment record for salary assign");
+  }
+  return newId;
+}
+
 export async function assignEmployeeSalary(
-  input: Omit<EmployeeSalary, "id"> & { id?: string },
+  input: Omit<EmployeeSalary, "id"> & {
+    id?: string;
+    /** Optional HR UUID when employeeId is a code. */
+    hrEmployeeUuid?: string;
+    employmentId?: string;
+    branchId?: string;
+    departmentId?: string;
+    companyId?: string;
+    employeeCode?: string;
+  },
 ): Promise<EmployeeSalary> {
   const all = load<EmployeeSalary>(K.salaries);
-  const key = employeeSalaryKey(input.employeeId);
-  const existingIdx = all.findIndex((s) => employeeSalaryKey(s.employeeId) === key);
-  const existing = existingIdx >= 0 ? all[existingIdx] : undefined;
+  const inputCode = String(input.employeeCode || input.employeeId || "").trim();
+
+  const ctx = readJson<{
+    branchId?: string;
+    employmentId?: string;
+    departmentId?: string;
+  }>(PAY_CTX_KEY, {});
+  let hrUuid = input.hrEmployeeUuid || "";
+  let employmentId = input.employmentId || ctx.employmentId || "";
+  let branchId = input.branchId || ctx.branchId || "";
+  let departmentId = input.departmentId || ctx.departmentId || "";
+  let companyId = input.companyId || "";
+  let resolvedCode = inputCode;
+
+  if (typeof window !== "undefined") {
+    const hr = await loadHrMasterDirectory();
+    const needle = String(input.employeeId).trim().toUpperCase();
+    const match =
+      findHrEmployee(hr.employees, input.employeeId, input.employeeCode) ??
+      hr.employees.find(
+        (e) =>
+          e.code?.toUpperCase() === needle ||
+          e.id === input.employeeId ||
+          e.id === hrUuid,
+      ) ??
+      null;
+    const record =
+      hr.records.find(
+        (r) =>
+          r.employeeCode?.toUpperCase() === needle ||
+          r.employeeCode?.toUpperCase() === inputCode.toUpperCase() ||
+          r.id === match?.id ||
+          r.id === input.employeeId ||
+          r.id === hrUuid,
+      ) ?? null;
+    if (match?.id && UUID_RE.test(match.id)) hrUuid = match.id;
+    if (record?.id && UUID_RE.test(record.id)) hrUuid = record.id;
+    if (match?.code) resolvedCode = match.code;
+    else if (record?.employeeCode) resolvedCode = record.employeeCode;
+    if (!employmentId && match?.employmentId && UUID_RE.test(match.employmentId)) {
+      employmentId = match.employmentId;
+    }
+    if (!employmentId && record?.employmentId && UUID_RE.test(record.employmentId)) {
+      employmentId = record.employmentId;
+    }
+    if (!UUID_RE.test(branchId)) {
+      if (record?.branchId && UUID_RE.test(record.branchId)) branchId = record.branchId;
+      else if (match?.branchId && UUID_RE.test(match.branchId)) branchId = match.branchId;
+    }
+    if (!UUID_RE.test(departmentId)) {
+      if (record?.departmentId && UUID_RE.test(record.departmentId)) {
+        departmentId = record.departmentId;
+      } else if (match?.departmentId && UUID_RE.test(match.departmentId)) {
+        departmentId = match.departmentId;
+      }
+    }
+    if (!UUID_RE.test(companyId)) {
+      if (record?.companyId && UUID_RE.test(record.companyId)) companyId = record.companyId;
+      else if (match?.companyId && UUID_RE.test(match.companyId)) companyId = match.companyId;
+    }
+  }
+
+  const structureIsUuid = UUID_RE.test(input.structureId);
+  const employeeUuid = UUID_RE.test(hrUuid)
+    ? hrUuid
+    : UUID_RE.test(input.employeeId)
+      ? input.employeeId
+      : "";
+  if (!structureIsUuid) {
+    throw new Error("Salary structure must be saved on the server before assign");
+  }
+  if (!employeeUuid) {
+    throw new Error("Employee not found — use a valid Emp Code from the directory");
+  }
+  if (!UUID_RE.test(branchId)) {
+    throw new Error("Employee has no branch — set branch on the employee first");
+  }
+
+  const existing =
+    all.find((s) =>
+      salaryRowMatchesEmployee(s, input.employeeId, employeeUuid, resolvedCode),
+    ) ??
+    (input.id ? all.find((s) => s.id === input.id) : undefined);
+
   const id = input.id || existing?.id || crypto.randomUUID();
   const row: EmployeeSalary = {
-    ...input,
-    id,
+    employeeId: employeeUuid,
+    employeeName: input.employeeName,
+    structureId: input.structureId,
+    structureName: input.structureName,
+    effectiveDate: input.effectiveDate,
+    monthlyCtc: input.monthlyCtc,
     annualCtc: input.annualCtc || (Number(input.monthlyCtc) || 0) * 12,
+    payrollGroup: input.payrollGroup,
+    bankAccount: input.bankAccount,
+    bankName: input.bankName,
+    taxRegime: input.taxRegime,
+    salaryStatus: input.salaryStatus,
+    department: input.department,
+    id,
   };
 
-  try {
-    const ctx = readJson<{
-      branchId?: string;
-      employmentId?: string;
-      departmentId?: string;
-    }>(PAY_CTX_KEY, {});
-    const structureIsUuid = UUID_RE.test(input.structureId);
-    const employeeIsUuid = UUID_RE.test(input.employeeId);
-    const employmentId = ctx.employmentId;
-    const payload = {
-      salary_structure_id: structureIsUuid ? input.structureId : undefined,
-      effective_from: input.effectiveDate || nowIso().slice(0, 10),
-      ctc_amount: input.monthlyCtc * 12,
-      gross_amount: input.monthlyCtc,
-      currency_code: "INR",
-      status: "active",
-    };
+  if (!UUID_RE.test(employmentId)) {
+    employmentId = await resolveEmploymentForSalaryAssign({
+      employeeUuid,
+      branchId,
+      companyId,
+      joiningDate: input.effectiveDate,
+    });
+  }
 
-    if (UUID_RE.test(id) && existing) {
-      await resourceService.update("/payroll/employee-salaries", id, payload);
-    } else if (ctx.branchId && structureIsUuid && employeeIsUuid && employmentId && UUID_RE.test(employmentId)) {
+  const payload = {
+    salary_structure_id: input.structureId,
+    effective_from: input.effectiveDate || nowIso().slice(0, 10),
+    ctc_amount: input.monthlyCtc * 12,
+    gross_amount: input.monthlyCtc,
+    currency_code: "INR",
+    status: "active",
+  };
+
+  // Prefer local cache id, else find existing server assignment for this employee.
+  let apiSalaryId =
+    existing && UUID_RE.test(String(existing.id)) ? String(existing.id) : "";
+  if (!apiSalaryId && input.id && UUID_RE.test(input.id)) {
+    apiSalaryId = input.id;
+  }
+  if (!apiSalaryId) {
+    try {
+      const listed = await listAllPayrollRows("/payroll/employee-salaries");
+      const hit = listed.find(
+        (r) => String((r as Record<string, unknown>).employee_id ?? "") === employeeUuid,
+      ) as Record<string, unknown> | undefined;
+      const hitId = hit ? String(hit.id ?? "") : "";
+      if (UUID_RE.test(hitId)) apiSalaryId = hitId;
+    } catch {
+      /* create path below */
+    }
+  }
+
+  try {
+    if (apiSalaryId) {
+      await resourceService.update("/payroll/employee-salaries", apiSalaryId, payload);
+      row.id = apiSalaryId;
+      row.employeeId = employeeUuid;
+    } else {
       const res = await resourceService.create<Record<string, unknown>>("/payroll/employee-salaries", {
-        branch_id: ctx.branchId,
-        employee_id: input.employeeId,
+        branch_id: branchId,
+        employee_id: employeeUuid,
         employment_id: employmentId,
-        department_id: ctx.departmentId || null,
+        department_id: departmentId && UUID_RE.test(departmentId) ? departmentId : null,
         ...payload,
       });
       const apiId = String(res.data?.id ?? "");
-      if (apiId) row.id = apiId;
+      if (!UUID_RE.test(apiId)) {
+        throw new Error("Salary assign API did not return an id");
+      }
+      row.id = apiId;
+      row.employeeId = employeeUuid;
     }
   } catch (err) {
-    devWarn("assignEmployeeSalary API failed; local cache kept");
+    const msg = err instanceof Error ? err.message : "Salary assign failed";
+    throw new Error(msg);
   }
 
-  if (existingIdx >= 0) {
-    const without = all.filter((s) => employeeSalaryKey(s.employeeId) !== key);
-    without.unshift(row);
-    save(K.salaries, without);
-  } else {
-    all.unshift(row);
-    save(K.salaries, dedupeEmployeeSalaries(all));
-  }
+  const without = all.filter(
+    (s) =>
+      s.id !== row.id &&
+      !salaryRowMatchesEmployee(s, input.employeeId, employeeUuid, resolvedCode),
+  );
+  without.unshift(row);
+  save(K.salaries, without);
   appendPayrollAudit({
     action: existing ? "salary_updated" : "salary_assigned",
     detail: `${row.employeeName} → ${row.structureName} (${formatInr(row.monthlyCtc)}/mo)`,
@@ -1535,20 +1794,227 @@ export async function assignEmployeeSalary(
 }
 
 export async function deleteEmployeeSalary(id: string): Promise<void> {
-  if (UUID_RE.test(id)) {
-    await resourceService.delete("/payroll/employee-salaries", id);
-  }
+  // Always clear local first so stuck / orphan rows can be removed even if API fails.
   const all = load<EmployeeSalary>(K.salaries);
   const existing = all.find((s) => s.id === id);
   save(
     K.salaries,
     all.filter((s) => s.id !== id),
   );
+  if (UUID_RE.test(id)) {
+    try {
+      await resourceService.delete("/payroll/employee-salaries", id);
+    } catch {
+      // Local row already removed; ignore API 404 / soft-delete failures.
+    }
+  }
   appendPayrollAudit({
     action: "salary_deleted",
     detail: existing?.employeeName ?? id,
     actor: actor(),
   });
+}
+
+export type BulkAssignSalaryResult = {
+  createdStructures: number;
+  updatedStructures: number;
+  assigned: number;
+  skipped: number;
+  /** Employees found in directory (preview "matched"). */
+  matched: number;
+  /** Emp codes with no directory hit. */
+  notFound: number;
+  errors: string[];
+  warnings: string[];
+};
+
+/**
+ * For each Excel row: create/update a salary structure from Monthly CTC + employer
+ * contribution (Excel 60/50 split), then assign it to the employee by code.
+ */
+export async function bulkAssignSalariesFromImport(
+  rows: NormalizedSalaryAssignRow[],
+  employees: HrMasterOption[],
+): Promise<BulkAssignSalaryResult> {
+  const result: BulkAssignSalaryResult = {
+    createdStructures: 0,
+    updatedStructures: 0,
+    assigned: 0,
+    skipped: 0,
+    matched: 0,
+    notFound: 0,
+    errors: [],
+    warnings: [],
+  };
+  if (!rows.length) return result;
+
+  const dir = await loadPayrollDirectory();
+  const structures = [...dir.structures];
+  const byCode = new Map<string, HrMasterOption>();
+  const byDigits = new Map<string, HrMasterOption[]>();
+  for (const e of employees) {
+    const code = String(e.code ?? "").trim().toUpperCase();
+    if (code) byCode.set(code, e);
+    const dig = code.replace(/\D/g, "");
+    if (dig.length >= 3 && dig.length <= 6) {
+      const list = byDigits.get(dig) ?? [];
+      list.push(e);
+      byDigits.set(dig, list);
+    }
+  }
+
+  function findEmployee(code: string): HrMasterOption | undefined {
+    const needle = code.trim().toUpperCase();
+    const exact = byCode.get(needle);
+    if (exact) return exact;
+    const dig = needle.replace(/\D/g, "");
+    if (dig.length < 3 || dig.length > 6) return undefined;
+    const cands = byDigits.get(dig) ?? [];
+    if (!cands.length) return undefined;
+    const score = (e: HrMasterOption) => {
+      const c = String(e.code ?? "").toUpperCase();
+      if (c.startsWith("CT") && /^\d/.test(c.slice(2))) return 0;
+      if (c.startsWith("CCPL")) return 1;
+      if (c.startsWith("VPL")) return 2;
+      if (c.startsWith("CDPL")) return 3;
+      return 4;
+    };
+    return [...cands].sort((a, b) => score(a) - score(b))[0];
+  }
+
+  const today = nowIso().slice(0, 10);
+
+  for (const row of rows) {
+    const emp = findEmployee(row.employeeCode);
+    if (!emp) {
+      result.notFound += 1;
+      result.skipped += 1;
+      result.errors.push(`Row ${row.rowNumber}: employee ${row.employeeCode} not found`);
+      continue;
+    }
+    result.matched += 1;
+
+    const empName =
+      row.employeeName?.trim() ||
+      emp.label?.split(" · ")[0]?.trim() ||
+      row.employeeCode;
+    // Structure code always uses the live Emp Code (may differ from Excel CDPL↔CT).
+    const liveCode = String(emp.code || row.employeeCode).trim().toUpperCase();
+    const structureCode = `SS-${liveCode}`.slice(0, 50);
+    const structureName = `${empName} (${liveCode})`.slice(0, 255);
+    let employerContribution = Math.max(0, Math.round(Number(row.employerContribution) || 0));
+    // Wrong column mapped as employer (e.g. annual figure) blows Special — fall back to default PF.
+    const maxEmployer = Math.max(
+      0,
+      Math.round(row.monthlyCtc * (1 - EXCEL_DEFAULTS.basicPercent * (1 + EXCEL_DEFAULTS.hraPercentOfBasic))),
+    );
+    if (employerContribution > maxEmployer) {
+      result.warnings.push(
+        `Row ${row.rowNumber} (${liveCode}): employer ${employerContribution} too high for CTC ${row.monthlyCtc} — using ${EXCEL_DEFAULTS.employerContribution}`,
+      );
+      employerContribution = EXCEL_DEFAULTS.employerContribution;
+    }
+    const split = computeCtcSplit({
+      grossCtc: row.monthlyCtc,
+      basicPercent: EXCEL_DEFAULTS.basicPercent,
+      hraPercentOfBasic: EXCEL_DEFAULTS.hraPercentOfBasic,
+      telephoneAllowance: EXCEL_DEFAULTS.telephoneAllowance,
+      employerContribution,
+    });
+    if (!split.valid) {
+      result.skipped += 1;
+      result.errors.push(
+        `Row ${row.rowNumber} (${liveCode}): Special allowance negative — check CTC vs employer contribution`,
+      );
+      continue;
+    }
+
+    const payload: Omit<SalaryStructure, "id" | "createdAt"> = {
+      ...amountsFromSplit(split),
+      // Force Excel employer column through createStructure (do not let pf overwrite it)
+      employerContribution,
+      grossCtc: row.monthlyCtc,
+      name: structureName,
+      code: structureCode,
+      status: "active",
+      basicPercent: EXCEL_DEFAULTS.basicPercent,
+      hraPercentOfBasic: EXCEL_DEFAULTS.hraPercentOfBasic,
+      pfPercent: EXCEL_DEFAULTS.pfPercent,
+      pfWageCeiling: EXCEL_DEFAULTS.pfWageCeiling,
+      pfFixedCeiling: EXCEL_DEFAULTS.pfFixedCeiling,
+      edliAdminAmount: EXCEL_DEFAULTS.edliAdminAmount,
+      esiPercent: EXCEL_DEFAULTS.esiPercent,
+      esiMonthlyCeiling: EXCEL_DEFAULTS.esiMonthlyCeiling,
+    };
+
+    let structure: SalaryStructure;
+    try {
+      const existing = structures.find(
+        (s) => s.code?.toUpperCase() === structureCode || s.name.toLowerCase() === structureName.toLowerCase(),
+      );
+      if (existing && UUID_RE.test(existing.id)) {
+        structure = await updateStructure(existing.id, payload);
+        result.updatedStructures += 1;
+        const idx = structures.findIndex((s) => s.id === existing.id);
+        if (idx >= 0) structures[idx] = structure;
+      } else if (existing && !UUID_RE.test(existing.id)) {
+        // Local-only stale row — create fresh on server
+        structure = await createStructure(payload);
+        result.createdStructures += 1;
+        structures.unshift(structure);
+      } else {
+        structure = await createStructure(payload);
+        result.createdStructures += 1;
+        structures.unshift(structure);
+      }
+    } catch (err) {
+      result.skipped += 1;
+      result.errors.push(
+        `Row ${row.rowNumber} (${row.employeeCode}): structure failed — ${
+          err instanceof Error ? err.message : "unknown error"
+        }`,
+      );
+      continue;
+    }
+
+    try {
+      await assignEmployeeSalary({
+        employeeId: emp.code || row.employeeCode,
+        hrEmployeeUuid: UUID_RE.test(emp.id) ? emp.id : undefined,
+        employmentId: emp.employmentId,
+        employeeName: empName,
+        structureId: structure.id,
+        structureName: structure.name,
+        effectiveDate: row.effectiveDate || today,
+        monthlyCtc: row.monthlyCtc,
+        annualCtc: row.monthlyCtc * 12,
+        payrollGroup: "General",
+        bankAccount: emp.accountNumber || emp.bankAccount || "",
+        bankName: emp.bankName || "",
+        taxRegime: "new",
+        salaryStatus: "active",
+        department: emp.department || "General",
+        branchId: emp.branchId,
+        departmentId: emp.departmentId,
+        companyId: emp.companyId,
+      });
+      result.assigned += 1;
+    } catch (err) {
+      result.skipped += 1;
+      result.errors.push(
+        `Row ${row.rowNumber} (${row.employeeCode}): assign failed — ${
+          err instanceof Error ? err.message : "unknown error"
+        }`,
+      );
+    }
+  }
+
+  appendPayrollAudit({
+    action: "salary_bulk_assigned",
+    detail: `assigned ${result.assigned}, structures +${result.createdStructures}/~${result.updatedStructures}, skipped ${result.skipped}`,
+    actor: actor(),
+  });
+  return result;
 }
 
 export async function runPayroll(month: string, cutoverDay?: number): Promise<PayrollRun> {
@@ -1823,6 +2289,19 @@ export function unlockPayrollMonth(month: string, reason: string): MonthLock | n
     actor: actor(),
   });
   return all[idx];
+}
+
+/** Salary revisions for one employee, newest effective date first. */
+export function listSalaryRevisionsForEmployee(employeeId: string): SalaryRevision[] {
+  const id = (employeeId || "").trim().toLowerCase();
+  if (!id) return [];
+  return load<SalaryRevision>(K.revisions)
+    .filter((r) => (r.employeeId || "").trim().toLowerCase() === id)
+    .sort((a, b) => {
+      const byDate = (b.effectiveDate || "").localeCompare(a.effectiveDate || "");
+      if (byDate !== 0) return byDate;
+      return (b.createdAt || "").localeCompare(a.createdAt || "");
+    });
 }
 
 export function createRevision(
@@ -2256,6 +2735,11 @@ export async function generatePayslips(runId: string): Promise<PayslipRecord[]> 
         bankAccount: sal.bankAccount,
         presentDays: att?.presentDays ?? 0,
         leaveDays: att?.leaveDays ?? 0,
+        unpaidLeaveDays: att?.absentDays ?? att?.lopDays ?? 0,
+        lateCount: 0,
+        payableDays: att?.payableDays,
+        periodDays: att?.periodDays,
+        lopDays: att?.lopDays ?? att?.absentDays ?? 0,
         earnings: scaledEarnings,
         deductions: scaledDeductions,
         gross,
@@ -2406,13 +2890,49 @@ export function filterRuns(runs: PayrollRun[], f: PayrollFilters) {
   );
 }
 
+/**
+ * Legacy CSV import for salary structures.
+ * Prefer Assign salary → Upload Excel for employee_code + monthly_ctc + employer_contribution
+ * (that path creates structures AND assigns them).
+ */
 export function importStructuresCsv(text: string): number {
-  const lines = text.trim().split(/\r?\n/).slice(1);
+  const lines = text
+    .trim()
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return 0;
+
+  const headerCells = lines[0].split(",").map((c) => c.replace(/^"|"$/g, "").trim().toLowerCase());
+  const isAssignFormat =
+    headerCells.some((h) => /employee[_\s]?code|emp[_\s]?code/.test(h)) &&
+    headerCells.some((h) => /monthly[_\s]?ctc|gross[_\s]?ctc|ctc/.test(h));
+
+  // Assign-format sheets must not go through this path (employer was hard-coded to 1800).
+  if (isAssignFormat) {
+    throw new Error(
+      "This file looks like an employee salary sheet (employee_code, monthly_ctc, employer_contribution). Use Payroll → Assign salary → Upload Excel so employer contribution is applied and salaries are assigned by employee code.",
+    );
+  }
+
+  const nameIdx = headerCells.findIndex((h) => h === "name" || h === "structure" || h === "structure_name");
+  const grossIdx = headerCells.findIndex((h) =>
+    /gross|monthly_ctc|ctc/.test(h),
+  );
+  const erIdx = headerCells.findIndex((h) => /employer/.test(h));
+  const hasHeader = nameIdx >= 0 || grossIdx >= 0;
+  const dataLines = hasHeader ? lines.slice(1) : lines;
   let n = 0;
-  for (const line of lines) {
-    const [name, gross] = line.split(",").map((c) => c.replace(/^"|"$/g, "").trim());
+  for (const line of dataLines) {
+    const cells = line.split(",").map((c) => c.replace(/^"|"$/g, "").trim());
+    const name = (hasHeader && nameIdx >= 0 ? cells[nameIdx] : cells[0]) || "";
     if (!name) continue;
-    const grossCtc = Number(gross) || 18000;
+    const grossRaw = hasHeader && grossIdx >= 0 ? cells[grossIdx] : cells[1];
+    const erRaw = hasHeader && erIdx >= 0 ? cells[erIdx] : cells[2];
+    const grossCtc = Number(String(grossRaw ?? "").replace(/[,₹\s]/g, "")) || 18000;
+    const employerContribution = Number.isFinite(Number(String(erRaw ?? "").replace(/[,₹\s]/g, "")))
+      ? Math.round(Number(String(erRaw ?? "").replace(/[,₹\s]/g, "")))
+      : EXCEL_DEFAULTS.employerContribution;
     void createStructure({
       ...amountsFromSplit(
         computeCtcSplit({
@@ -2420,7 +2940,7 @@ export function importStructuresCsv(text: string): number {
           basicPercent: EXCEL_DEFAULTS.basicPercent,
           hraPercentOfBasic: EXCEL_DEFAULTS.hraPercentOfBasic,
           telephoneAllowance: EXCEL_DEFAULTS.telephoneAllowance,
-          employerContribution: EXCEL_DEFAULTS.employerContribution,
+          employerContribution,
         }),
       ),
       name,

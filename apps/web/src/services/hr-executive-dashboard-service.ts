@@ -1,10 +1,12 @@
 /**
- * HRMS executive dashboard - real API data only (no mock / localStorage metrics).
+ * HRMS executive dashboard — live API data with stale-while-revalidate local cache
+ * so revisits paint immediately while a background refresh updates numbers.
  * Joins the live Employee directory with HR attendance, leave, and recruitment APIs.
  * Payroll is intentionally excluded from this surface.
  */
 
 import { isAuthenticated } from "@/lib/auth";
+import { getStoredOrgContext } from "@/lib/org-context-storage";
 import {
   asNumber,
   asStatus,
@@ -31,6 +33,7 @@ import type {
   ActivityItem,
   ApprovalItem,
   CalendarEvent,
+  DashboardEmployeeBrief,
   DashboardRole,
   DashboardTrainingItem,
   HrDashboardCharts,
@@ -247,6 +250,7 @@ type DashboardPerson = {
   emp: MasterEmployee;
   departmentName: string;
   locationName: string;
+  managerName: string;
   gender: string;
   dob: unknown;
   doj: unknown;
@@ -277,10 +281,12 @@ function peopleFromDirectory(records: EmployeeRecord[]): {
         r.extension?.employment?.location ||
         r.branchName ||
         "";
+      const mgr = String(r.reportingManagerName || "").trim();
       return {
         emp,
         departmentName: (r.departmentName || r.extension?.employment?.departmentName || "").trim() || "Unassigned",
         locationName: normalizeLocationCity(locRaw) || "Unassigned",
+        managerName: mgr && mgr !== "-" ? mgr : "Unassigned",
         gender: String(r.gender || r.extension?.personal?.gender || "unspecified").toLowerCase(),
         dob: r.extension?.personal?.dateOfBirth || undefined,
         doj: r.joiningDate || r.extension?.employment?.joiningDate || undefined,
@@ -326,6 +332,7 @@ function peopleFromHrOverview(overview: HrOverview): {
         emp,
         departmentName: "Unassigned",
         locationName: normalizeLocationCity(String(employment?.work_location_text ?? "")),
+        managerName: "Unassigned",
         gender: String(profile.gender ?? "unspecified").toLowerCase(),
         dob: profile.date_of_birth,
         doj: employment?.date_of_joining ?? undefined,
@@ -335,6 +342,15 @@ function peopleFromHrOverview(overview: HrOverview): {
     .filter((row): row is DashboardPerson => row !== null);
 
   const empById = new Map(people.map((p) => [String(p.emp.id), p.emp]));
+  // Resolve manager names from reporting_manager_id when directory hydration is unavailable.
+  for (const p of people) {
+    const empId = String(p.emp.id);
+    const employment = overview.employment.find((row) => String(row.employee_id ?? "") === empId);
+    const mgrId = String(employment?.reporting_manager_id ?? "").trim();
+    if (!mgrId) continue;
+    const mgr = empById.get(mgrId);
+    if (mgr) p.managerName = employeeNameFromMaster(mgr);
+  }
   return { people, empById };
 }
 
@@ -643,19 +659,71 @@ function buildCharts(
     value: onboardingByStatus.get(s.status) ?? 0,
   }));
 
+  const exitStatuses = new Set([
+    "completed",
+    "approved",
+    "exited",
+    "separated",
+    "closed",
+  ]);
   const separations = overview.separation.filter((r) =>
-    ["completed", "approved"].includes(asStatus(r.status)),
+    exitStatuses.has(asStatus(r.status)),
   );
+  const peopleById = new Map(people.map((p) => [String(p.emp.id), p]));
+  const separationExitDate = (r: (typeof overview.separation)[number]) =>
+    parseDate(
+      r.approved_last_working_date ??
+        r.last_working_date ??
+        r.expected_exit_date ??
+        r.requested_last_working_date ??
+        r.resignation_date ??
+        r.updated_at ??
+        r.created_at,
+    );
+
+  const attritionByMonth: NamedCount[] = months.map((key) => {
+    const exits = separations.filter((r) => {
+      const d = separationExitDate(r);
+      return d != null && monthKey(d) === key;
+    }).length;
+    return { label: monthLabel(key), value: exits };
+  });
+
   const attritionTrend: NamedCount[] = months.map((key) => {
     const headcount =
       employeeGrowth.find((g) => g.label === monthLabel(key))?.value || people.length || 1;
-    const exits = separations.filter((r) => {
-      const d = parseDate(r.last_working_date ?? r.updated_at ?? r.created_at);
-      return d != null && monthKey(d) === key;
-    }).length;
+    const exits = attritionByMonth.find((row) => row.label === monthLabel(key))?.value ?? 0;
     const pct = Number(((exits / Math.max(1, headcount)) * 100).toFixed(1));
     return { label: monthLabel(key), value: pct };
   });
+
+  const exitByDepartment = new Map<string, number>();
+  const exitByReason = new Map<string, number>();
+  const monthKeySet = new Set(months);
+  const normalizeExitReason = (raw: unknown): string => {
+    const full = String(raw ?? "").trim();
+    if (!full) return "Unspecified";
+    // Dropdown reason may be stored as "Reason — notes"
+    const base = full.split(/\s+[—–-]\s+/)[0]?.trim() || full;
+    return base || "Unspecified";
+  };
+  for (const r of separations) {
+    const d = separationExitDate(r);
+    if (!d || !monthKeySet.has(monthKey(d))) continue;
+    const person = peopleById.get(String(r.employee_id ?? ""));
+    const dept = person?.departmentName || "Unassigned";
+    const reason = normalizeExitReason(r.reason);
+    exitByDepartment.set(dept, (exitByDepartment.get(dept) ?? 0) + 1);
+    exitByReason.set(reason, (exitByReason.get(reason) ?? 0) + 1);
+  }
+  const attritionByDepartment = [...exitByDepartment.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 12);
+  const attritionByReason = [...exitByReason.entries()]
+    .map(([label, value]) => ({ label, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 12);
 
   const ratingBucket = (rating: number) => {
     if (rating >= 5) return "Exceeds";
@@ -709,9 +777,69 @@ function buildCharts(
     leaveTrendByType,
     onboardingProgress,
     attritionTrend,
+    attritionByMonth,
+    attritionByDepartment,
+    attritionByReason,
     performanceDistribution,
     trainingCompletion,
   };
+}
+
+function toEmployeeBrief(p: DashboardPerson): DashboardEmployeeBrief {
+  return {
+    id: String(p.emp.id),
+    name: employeeNameFromMaster(p.emp),
+    code: p.emp.employee_code ? String(p.emp.employee_code) : undefined,
+    designation: p.emp.designation ? String(p.emp.designation) : undefined,
+  };
+}
+
+function sortEmployeeBriefs(map: Record<string, DashboardEmployeeBrief[]>) {
+  for (const list of Object.values(map)) {
+    list.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  }
+  return map;
+}
+
+function buildEmployeesByDepartment(
+  people: DashboardPerson[],
+): Record<string, DashboardEmployeeBrief[]> {
+  const map: Record<string, DashboardEmployeeBrief[]> = {};
+  for (const p of people) {
+    const dept = p.departmentName || "Unassigned";
+    if (!map[dept]) map[dept] = [];
+    map[dept].push(toEmployeeBrief(p));
+  }
+  return sortEmployeeBriefs(map);
+}
+
+function buildEmployeesByLocation(
+  people: DashboardPerson[],
+): Record<string, DashboardEmployeeBrief[]> {
+  const map: Record<string, DashboardEmployeeBrief[]> = {};
+  for (const p of people) {
+    const loc = p.locationName || "Unassigned";
+    if (!map[loc]) map[loc] = [];
+    map[loc].push(toEmployeeBrief(p));
+  }
+  return sortEmployeeBriefs(map);
+}
+
+function buildEmployeesByGender(
+  people: DashboardPerson[],
+): Record<string, DashboardEmployeeBrief[]> {
+  const map: Record<string, DashboardEmployeeBrief[]> = {
+    Male: [],
+    Female: [],
+    Other: [],
+  };
+  for (const p of people) {
+    let label = "Other";
+    if (p.gender === "male") label = "Male";
+    else if (p.gender === "female") label = "Female";
+    map[label]!.push(toEmployeeBrief(p));
+  }
+  return sortEmployeeBriefs(map);
 }
 
 function buildCalendar(
@@ -736,6 +864,7 @@ function buildCalendar(
           type: "birthday",
           at: next.toISOString(),
           meta: p.departmentName,
+          employeeId: String(p.emp.id),
         });
       }
     }
@@ -752,6 +881,7 @@ function buildCalendar(
           type: "anniversary",
           at: next.toISOString(),
           meta: p.departmentName,
+          employeeId: String(p.emp.id),
         });
       }
     }
@@ -1277,6 +1407,9 @@ export async function loadHrExecutiveDashboard(
     displayName: greetingName(role),
     stats,
     charts: buildCharts(overview, people, recruitment, onboardingCases),
+    employeesByDepartment: buildEmployeesByDepartment(people),
+    employeesByLocation: buildEmployeesByLocation(people),
+    employeesByGender: buildEmployeesByGender(people),
     calendar: buildCalendar(overview, people, empById, recruitment),
     trainingItems: buildTrainingItems(overview),
     approvals,
@@ -1305,4 +1438,69 @@ export function downloadBlob(filename: string, content: string, type = "text/csv
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+const DASHBOARD_CACHE_PREFIX = "erp.hr.executiveDashboard.v1";
+
+type DashboardCacheEnvelope = {
+  savedAt: number;
+  scopeKey: string;
+  payload: HrExecutiveDashboard;
+};
+
+/** Scope cache by user + active entity so switching company does not flash wrong KPIs. */
+export function dashboardCacheScopeKey(userId?: string | null): string {
+  const org = getStoredOrgContext();
+  const entity =
+    org?.allCompanies || !org?.companyId ? "all" : String(org.companyId);
+  return `${userId?.trim() || "anon"}:${entity}`;
+}
+
+function dashboardCacheStorageKey(scopeKey: string): string {
+  return `${DASHBOARD_CACHE_PREFIX}:${scopeKey}`;
+}
+
+export function readDashboardCache(scopeKey: string): HrExecutiveDashboard | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(dashboardCacheStorageKey(scopeKey));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as DashboardCacheEnvelope;
+    if (!parsed?.payload || parsed.scopeKey !== scopeKey) return null;
+    return parsed.payload;
+  } catch {
+    return null;
+  }
+}
+
+export function writeDashboardCache(scopeKey: string, payload: HrExecutiveDashboard): void {
+  if (typeof window === "undefined") return;
+  try {
+    const envelope: DashboardCacheEnvelope = {
+      savedAt: Date.now(),
+      scopeKey,
+      payload,
+    };
+    localStorage.setItem(dashboardCacheStorageKey(scopeKey), JSON.stringify(envelope));
+  } catch {
+    /* quota / private mode — ignore */
+  }
+}
+
+export function clearDashboardCache(scopeKey?: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (scopeKey) {
+      localStorage.removeItem(dashboardCacheStorageKey(scopeKey));
+      return;
+    }
+    const keys: string[] = [];
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (key?.startsWith(`${DASHBOARD_CACHE_PREFIX}:`)) keys.push(key);
+    }
+    for (const key of keys) localStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
 }

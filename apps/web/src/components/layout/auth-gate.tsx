@@ -91,7 +91,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
     void apiClient<{ user?: { must_change_password?: boolean } }>("/auth/me", { auth: true })
       .then((res) => {
         if (cancelled || !res.data?.user?.must_change_password) return;
-        const nextPath = safeNextPath(pathname, searchParams.toString()) ?? "/home";
+        const nextPath = safeNextPath(pathname, searchParams.toString()) ?? "/hr";
         router.replace(`/change-password?next=${encodeURIComponent(nextPath)}`);
       })
       .catch(() => {});

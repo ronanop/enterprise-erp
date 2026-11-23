@@ -156,9 +156,9 @@ export function PayslipLetterhead({
             ["Working Days", String(figures.salaryDays)],
             ["Present Days", String(figures.presentDays)],
             ["Paid Leave", String(figures.leaveDays)],
-            ["Unpaid Leave", figures.unpaidLeaveDays == null ? "—" : String(figures.unpaidLeaveDays)],
+            ["Unpaid Leave", String(figures.unpaidLeaveDays)],
             ["LOP Days", String(figures.lopDays)],
-            ["Late Count", show(ctx.lateCount)],
+            ["Late Count", ctx.lateCount.trim() ? ctx.lateCount : "0"],
           ] as const
         ).map(([label, value]) => (
           <div key={label} className="rounded-md border border-border px-2 py-1.5 text-center">

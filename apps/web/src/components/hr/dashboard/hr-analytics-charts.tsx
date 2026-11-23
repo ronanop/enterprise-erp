@@ -77,7 +77,7 @@ function ChartShell({
         className,
       )}
     >
-      <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
+      <div className="mb-2.5 flex shrink-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
           {subtitle ? (
@@ -114,6 +114,71 @@ function truncateLabel(value: string, max = 14): string {
   return `${s.slice(0, max - 1)}…`;
 }
 
+/** Category tick that keeps the full label in a native tooltip when truncated. */
+function CategoryTick({
+  x = 0,
+  y = 0,
+  payload,
+  maxChars = 22,
+}: {
+  x?: number;
+  y?: number;
+  payload?: { value?: string | number };
+  maxChars?: number;
+}) {
+  const full = String(payload?.value ?? "");
+  const shown = truncateLabel(full, maxChars);
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <title>{full}</title>
+      <text
+        x={-4}
+        y={0}
+        dy={4}
+        textAnchor="end"
+        fill="var(--foreground)"
+        fontSize={11}
+        fontWeight={500}
+      >
+        {shown}
+      </text>
+    </g>
+  );
+}
+
+/** Angled category labels for vertical (column) charts. */
+function VerticalCategoryTick({
+  x = 0,
+  y = 0,
+  payload,
+  maxChars = 14,
+}: {
+  x?: number;
+  y?: number;
+  payload?: { value?: string | number };
+  maxChars?: number;
+}) {
+  const full = String(payload?.value ?? "");
+  const shown = truncateLabel(full, maxChars);
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <title>{full}</title>
+      <text
+        x={0}
+        y={0}
+        dy={10}
+        textAnchor="end"
+        fill="var(--foreground)"
+        fontSize={11}
+        fontWeight={500}
+        transform="rotate(-35)"
+      >
+        {shown}
+      </text>
+    </g>
+  );
+}
+
 function ChartTooltip({
   active,
   payload,
@@ -129,18 +194,23 @@ function ChartTooltip({
   return (
     <div className="rounded-lg border border-border/80 bg-card/95 px-3 py-2 text-xs shadow-lg backdrop-blur-sm">
       {label ? <p className="mb-1 font-medium text-foreground">{label}</p> : null}
-      {payload.map((p, i) => (
-        <p key={`${p.name}-${i}`} className="flex items-center gap-2 text-muted-foreground">
-          <span
-            className="size-2 rounded-full"
-            style={{ background: p.color ?? HR_CHART_COLORS[i % HR_CHART_COLORS.length] }}
-          />
-          <span>{p.name ?? "Value"}</span>
-          <span className="ml-auto font-mono tabular-nums text-foreground">
-            {formatValue(Number(p.value ?? 0))}
-          </span>
-        </p>
-      ))}
+      {payload.map((p, i) => {
+        const n = Number(p.value ?? 0);
+        const isEmployees = String(p.name ?? "").toLowerCase() === "employees";
+        return (
+          <p key={`${p.name}-${i}`} className="flex items-center gap-2 text-muted-foreground">
+            <span
+              className="size-2 rounded-full"
+              style={{ background: p.color ?? HR_CHART_COLORS[i % HR_CHART_COLORS.length] }}
+            />
+            <span className="ml-auto font-medium tabular-nums text-foreground">
+              {isEmployees
+                ? `${formatValue(n)} employee${n === 1 ? "" : "s"}`
+                : `${p.name ?? "Value"} · ${formatValue(n)}`}
+            </span>
+          </p>
+        );
+      })}
     </div>
   );
 }
@@ -218,6 +288,8 @@ export function PremiumBarChart({
   formatValue,
   layout = "vertical",
   showValues = false,
+  onBarClick,
+  clickHint,
 }: {
   title: string;
   subtitle?: string;
@@ -226,15 +298,37 @@ export function PremiumBarChart({
   layout?: "vertical" | "horizontal";
   /** Draw count labels on each bar (good for location / head-count). */
   showValues?: boolean;
+  /** When set, bars are clickable and open a drill-down (e.g. employee list). */
+  onBarClick?: (label: string, value: number) => void;
+  /** Optional helper under the title when bars are clickable. */
+  clickHint?: string;
 }) {
   const fmt = formatValue ?? defaultFormat;
   const rows = useMemo(() => data.map((d) => ({ name: d.label, value: d.value })), [data]);
   const horizontal = layout === "horizontal";
-  const autoH = Math.max(220, horizontal ? 48 + Math.max(rows.length, 1) * 36 : 220);
-  const chartHeight = useChartHeight(autoH);
+  /** Horizontal: grow height per row. Vertical: fit full width, no scroll. */
+  const plotH = horizontal
+    ? Math.max(180, 16 + Math.max(rows.length, 1) * 30)
+    : Math.max(180, 180);
+  const chartHeight = useChartHeight(plotH);
+  const interactive = typeof onBarClick === "function";
+  const yAxisWidth = useMemo(() => {
+    if (!horizontal) return 36;
+    const longest = rows.reduce((m, r) => Math.max(m, String(r.name).length), 0);
+    // ~7.2px per character at 11px font, clamped for layout.
+    return Math.min(210, Math.max(132, Math.ceil(longest * 7.2) + 12));
+  }, [horizontal, rows]);
+  const labelMaxChars = Math.max(16, Math.floor((yAxisWidth - 10) / 7));
+  const yMax = useMemo(() => {
+    const peak = rows.reduce((m, r) => Math.max(m, r.value), 0);
+    if (peak <= 0) return 1;
+    // Tight domain so short series (e.g. locations) don't leave empty headroom.
+    return Math.max(peak + Math.ceil(peak * 0.12), peak + 1);
+  }, [rows]);
+
   if (!rows.length) {
     return (
-      <ChartShell title={title} subtitle={subtitle}>
+      <ChartShell title={title} subtitle={subtitle} className="p-4">
         <EmptyChart height={chartHeight} />
       </ChartShell>
     );
@@ -245,87 +339,124 @@ export function PremiumBarChart({
   return (
     <ChartShell
       title={title}
-      subtitle={subtitle}
+      subtitle={subtitle ?? (interactive ? clickHint ?? "Click a bar to view employees" : undefined)}
       total={showValues ? total : undefined}
+      className="p-4"
     >
-      <div className="h-full w-full min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={rows}
-            layout={horizontal ? "vertical" : "horizontal"}
-            margin={{
-              top: 8,
-              right: showValues ? 36 : 8,
-              left: horizontal ? 8 : -12,
-              bottom: 4,
-            }}
-          >
-            <CartesianGrid
-              strokeDasharray="3 3"
-              stroke="var(--border)"
-              horizontal={!horizontal}
-              vertical={horizontal}
-            />
-            {horizontal ? (
-              <>
-                <XAxis
-                  type="number"
-                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v) => fmt(Number(v))}
-                  allowDecimals={false}
-                />
-                <YAxis
-                  type="category"
-                  dataKey="name"
-                  width={118}
-                  tick={{ fontSize: 11, fill: "var(--foreground)", fontWeight: 500 }}
-                  axisLine={false}
-                  tickLine={false}
-                  tickFormatter={(v) => truncateLabel(String(v), 15)}
-                />
-              </>
-            ) : (
-              <>
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
-                  axisLine={false}
-                  tickLine={false}
-                  width={40}
-                  tickFormatter={(v) => fmt(Number(v))}
-                  allowDecimals={false}
-                />
-              </>
-            )}
-            <Tooltip content={<ChartTooltip formatValue={fmt} />} cursor={{ fill: "var(--muted)", opacity: 0.45 }} />
-            <Bar
-              dataKey="value"
-              name="Employees"
-              radius={horizontal ? [0, 6, 6, 0] : [6, 6, 0, 0]}
-              maxBarSize={36}
-              isAnimationActive={false}
+      <div
+        className={cn(
+          "h-full w-full min-h-0 overflow-hidden",
+          interactive && "cursor-pointer",
+        )}
+      >
+        <div
+          className="h-full w-full"
+          style={
+            horizontal
+              ? { height: plotH, minHeight: plotH }
+              : { height: "100%", minHeight: chartHeight }
+          }
+        >
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={rows}
+              layout={horizontal ? "vertical" : "horizontal"}
+              margin={{
+                top: showValues && !horizontal ? 14 : 4,
+                right: showValues && horizontal ? 36 : 8,
+                left: horizontal ? 4 : -4,
+                bottom: horizontal ? 0 : 36,
+              }}
+              barCategoryGap={horizontal ? "12%" : "6%"}
+              barGap={2}
             >
-              {rows.map((_, i) => (
-                <Cell key={rows[i].name} fill={HR_CHART_COLORS[i % HR_CHART_COLORS.length]} />
-              ))}
-              {showValues ? (
-                <LabelList
-                  dataKey="value"
-                  position={horizontal ? "right" : "top"}
-                  formatter={(v) => fmt(Number(v ?? 0))}
-                  className="fill-foreground text-[11px] font-semibold tabular-nums"
-                />
-              ) : null}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
+              <CartesianGrid
+                strokeDasharray="3 3"
+                stroke="var(--border)"
+                horizontal={!horizontal}
+                vertical={false}
+              />
+              {horizontal ? (
+                <>
+                  <XAxis
+                    type="number"
+                    tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => fmt(Number(v))}
+                    allowDecimals={false}
+                    domain={[0, yMax]}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    width={yAxisWidth}
+                    interval={0}
+                    axisLine={false}
+                    tickLine={false}
+                    tick={<CategoryTick maxChars={labelMaxChars} />}
+                  />
+                </>
+              ) : (
+                <>
+                  <XAxis
+                    dataKey="name"
+                    interval={0}
+                    height={40}
+                    tick={<VerticalCategoryTick maxChars={12} />}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={36}
+                    tickFormatter={(v) => fmt(Number(v))}
+                    allowDecimals={false}
+                    domain={[0, yMax]}
+                  />
+                </>
+              )}
+              <Tooltip
+                content={<ChartTooltip formatValue={fmt} />}
+                cursor={{ fill: "var(--muted)", opacity: 0.45 }}
+              />
+              <Bar
+                dataKey="value"
+                name="Employees"
+                radius={horizontal ? [0, 6, 6, 0] : [4, 4, 0, 0]}
+                maxBarSize={horizontal ? 26 : 64}
+                isAnimationActive={false}
+                cursor={interactive ? "pointer" : undefined}
+                onClick={(entry) => {
+                  if (!interactive) return;
+                  const payload = entry?.payload as { name?: string; value?: number } | undefined;
+                  const label = String(payload?.name ?? entry?.name ?? "");
+                  const value = Number(payload?.value ?? entry?.value ?? 0);
+                  if (!label) return;
+                  onBarClick?.(label, value);
+                }}
+              >
+                {rows.map((_, i) => (
+                  <Cell
+                    key={rows[i].name}
+                    fill={HR_CHART_COLORS[i % HR_CHART_COLORS.length]}
+                    className={interactive ? "cursor-pointer transition-opacity duration-150 hover:opacity-85" : undefined}
+                  />
+                ))}
+                {showValues ? (
+                  <LabelList
+                    dataKey="value"
+                    position={horizontal ? "right" : "top"}
+                    formatter={(v) => fmt(Number(v ?? 0))}
+                    className="fill-foreground text-[11px] font-semibold tabular-nums"
+                  />
+                ) : null}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </ChartShell>
   );
@@ -336,11 +467,15 @@ export function PremiumDonutChart({
   subtitle,
   data,
   formatValue,
+  onSliceClick,
+  clickHint,
 }: {
   title: string;
   subtitle?: string;
   data: NamedCount[];
   formatValue?: FormatFn;
+  onSliceClick?: (label: string, value: number) => void;
+  clickHint?: string;
 }) {
   const chartH = useChartHeight(220);
   const rows = useMemo(
@@ -360,8 +495,14 @@ export function PremiumDonutChart({
   const pieRows = rows.filter((r) => r.value > 0);
   const donutSize = Math.min(Math.max(chartH - 24, 180), 220);
 
+  const interactive = typeof onSliceClick === "function";
+
   return (
-    <ChartShell title={title} subtitle={subtitle} total={total}>
+    <ChartShell
+      title={title}
+      subtitle={subtitle ?? (interactive ? clickHint ?? "Click a slice or legend to view employees" : undefined)}
+      total={total}
+    >
       <div className="flex h-full min-h-[200px] items-center justify-center gap-6">
         <div className="relative shrink-0" style={{ width: donutSize, height: donutSize }}>
           <ResponsiveContainer width="100%" height="100%">
@@ -378,11 +519,18 @@ export function PremiumDonutChart({
                 stroke="var(--card)"
                 strokeWidth={3}
                 isAnimationActive={false}
+                className={interactive ? "cursor-pointer" : undefined}
+                onClick={(_, index) => {
+                  if (!interactive) return;
+                  const row = pieRows[index];
+                  if (row) onSliceClick?.(row.name, row.value);
+                }}
               >
                 {pieRows.map((r) => (
                   <Cell
                     key={r.name}
                     fill={GENDER_COLORS[r.name] ?? HR_CHART_COLORS[0]}
+                    className={interactive ? "cursor-pointer outline-none" : undefined}
                   />
                 ))}
               </Pie>
@@ -400,13 +548,25 @@ export function PremiumDonutChart({
           {rows.map((r) => {
             const pct = total ? Math.round((r.value / total) * 100) : 0;
             return (
-              <li key={r.name} className="flex items-center gap-2 text-xs">
-                <span
-                  className="size-2.5 shrink-0 rounded-full"
-                  style={{ background: GENDER_COLORS[r.name] ?? HR_CHART_COLORS[0] }}
-                />
-                <span className="min-w-0 flex-1 truncate text-muted-foreground">{r.name}</span>
-                <span className="font-medium tabular-nums text-foreground">{pct}%</span>
+              <li key={r.name}>
+                <button
+                  type="button"
+                  disabled={!interactive}
+                  onClick={() => onSliceClick?.(r.name, r.value)}
+                  className={cn(
+                    "flex w-full items-center gap-2 text-xs",
+                    interactive
+                      ? "cursor-pointer rounded-md px-1 py-0.5 text-left transition-colors duration-150 hover:bg-muted/60"
+                      : "cursor-default",
+                  )}
+                >
+                  <span
+                    className="size-2.5 shrink-0 rounded-full"
+                    style={{ background: GENDER_COLORS[r.name] ?? HR_CHART_COLORS[0] }}
+                  />
+                  <span className="min-w-0 flex-1 truncate text-muted-foreground">{r.name}</span>
+                  <span className="font-medium tabular-nums text-foreground">{pct}%</span>
+                </button>
               </li>
             );
           })}
@@ -489,10 +649,14 @@ export function PremiumStackedBarChart({
   title,
   subtitle,
   data,
+  onSegmentClick,
+  clickHint,
 }: {
   title: string;
   subtitle?: string;
   data: StackedAttendancePoint[];
+  onSegmentClick?: (segment: "present" | "absent" | "leave" | "halfDay" | "late", monthLabel: string) => void;
+  clickHint?: string;
 }) {
   const chartH = useChartHeight(240);
   const rows = useMemo(
@@ -511,6 +675,8 @@ export function PremiumStackedBarChart({
     (r) => r.present + r.absent + r.leave + r.halfDay + r.late > 0,
   );
 
+  const interactive = typeof onSegmentClick === "function";
+
   if (!rows.length || !hasValues) {
     return (
       <ChartShell title={title} subtitle={subtitle}>
@@ -520,7 +686,13 @@ export function PremiumStackedBarChart({
   }
 
   return (
-    <ChartShell title={title} subtitle={subtitle}>
+    <ChartShell
+      title={title}
+      subtitle={
+        subtitle ??
+        (interactive ? clickHint ?? "Click a segment to open attendance" : undefined)
+      }
+    >
       <div className="h-full w-full min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={rows} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
@@ -554,6 +726,12 @@ export function PremiumStackedBarChart({
                 maxBarSize={36}
                 radius={s.key === "late" ? [4, 4, 0, 0] : 0}
                 isAnimationActive={false}
+                className={interactive ? "cursor-pointer" : undefined}
+                onClick={(bar) => {
+                  if (!interactive) return;
+                  const monthLabel = String((bar as { name?: string })?.name ?? "");
+                  onSegmentClick?.(s.key, monthLabel);
+                }}
               />
             ))}
           </BarChart>

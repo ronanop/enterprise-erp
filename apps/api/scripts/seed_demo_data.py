@@ -58,8 +58,8 @@ CACHE_ORG_ROWS: list[dict[str, str]] = [
     },
     {
         "company_code": "CACHETECH",
-        "company_name": "Cache Technologies & Infotech",
-        "legal_name": "Cache Technologies & Infotech",
+        "company_name": "Cache Technologies",
+        "legal_name": "Cache Technologies",
         "branch_code": "GK",
         "branch_name": "Greater Kailash Branch",
         "location_code": "LOC-GK",

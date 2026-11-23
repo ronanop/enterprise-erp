@@ -1,5 +1,4 @@
 import { isHrPath } from "@/config/hr-nav";
-import { WORKSPACE_SIDEBARS } from "@/config/workspace-sidebars";
 
 export const NOTIFICATION_POLL_MS = 15_000;
 
@@ -36,10 +35,7 @@ const CUSTOM_ROOTS: { scope: string; root: string }[] = [
   { scope: "assets", root: "/assets" },
   { scope: "marketing", root: "/marketing" },
   { scope: "service", root: "/service" },
-  ...WORKSPACE_SIDEBARS.map((entry) => ({
-    scope: entry.moduleKey,
-    root: entry.root,
-  })),
+  { scope: "finance", root: "/finance" },
 ];
 
 function underRoot(pathname: string, root: string): boolean {

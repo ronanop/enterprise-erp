@@ -9,16 +9,6 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from core.exceptions import AppException
-from modules.foundation.domain.erp_modules import (
-    MARKETING_FUNCTIONAL_ROLES,
-    MARKETING_ROLE_APPROVAL_HEAD,
-    MARKETING_ROLE_ASSOCIATE,
-    MARKETING_ROLE_CONTENT_CREATOR,
-    MARKETING_ROLE_GRAPHIC_DESIGNER,
-    MARKETING_ROLE_HEAD,
-    MARKETING_ROLE_SUPPORTING_MEMBER,
-    MARKETING_ROLE_VIDEO_EDITOR,
-)
 from modules.foundation.domain.value_objects import TenantContext
 from modules.foundation.models.security import (
     SecPermission,
@@ -31,11 +21,19 @@ from modules.foundation.models.security import (
 )
 from modules.foundation.service.module_admin_service import ModuleAdminService
 from modules.foundation.service.user_service import UserService
-from modules.marketing.permissions import (
-    MARKETING_EDITOR_PERMISSIONS,
-    MARKETING_MANAGER_PERMISSIONS,
-    MARKETING_VIEWER_PERMISSIONS,
-)
+
+# Marketing demo constants removed — standalone HRMS.
+MARKETING_FUNCTIONAL_ROLES: tuple[tuple[str, str], ...] = ()
+MARKETING_ROLE_APPROVAL_HEAD = "approval_head"
+MARKETING_ROLE_ASSOCIATE = "marketing_associate"
+MARKETING_ROLE_CONTENT_CREATOR = "content_creator"
+MARKETING_ROLE_GRAPHIC_DESIGNER = "graphic_designer"
+MARKETING_ROLE_HEAD = "marketing_head"
+MARKETING_ROLE_SUPPORTING_MEMBER = "supporting_member"
+MARKETING_ROLE_VIDEO_EDITOR = "video_editor"
+MARKETING_EDITOR_PERMISSIONS: tuple[str, ...] = ()
+MARKETING_MANAGER_PERMISSIONS: tuple[str, ...] = ()
+MARKETING_VIEWER_PERMISSIONS: tuple[str, ...] = ()
 from modules.master_data.models.employee import MasterEmployee
 from modules.organization.models.branch import OrgBranch
 from modules.organization.models.company import OrgCompany

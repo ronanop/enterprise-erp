@@ -695,6 +695,11 @@ class AttendanceResponse(OrmModel):
     status: str
     notes: str | None = None
     version: int
+    # Hydrated for UI (attendance list) — not stored on hr_attendance.
+    employee_code: str | None = None
+    employee_name: str | None = None
+    department_id: UUID | None = None
+    department_name: str | None = None
 
 
 class EmployeeDocumentCreate(BaseModel):
@@ -1361,6 +1366,21 @@ class BiometricDeviceCreate(BaseModel):
     generate_api_key: bool = True
 
 
+class BiometricDeviceUpdate(BaseModel):
+    branch_id: UUID | None = None
+    device_code: str | None = None
+    device_name: str | None = None
+    device_model: str | None = None
+    ip_address: str | None = None
+    port: int | None = None
+    subnet_mask: str | None = None
+    gateway: str | None = None
+    comm_password: str | None = None
+    location_text: str | None = None
+    status: str | None = None
+    version: int | None = None
+
+
 class BiometricDeviceResponse(OrmModel):
     id: UUID
     company_id: UUID
@@ -1392,11 +1412,28 @@ class BiometricDeviceLiveLogItem(BaseModel):
     updated_at: datetime | None = None
 
 
+class BiometricPunchResponse(BaseModel):
+    id: UUID
+    device_id: UUID | None = None
+    device_code: str
+    device_name: str | None = None
+    device_location: str | None = None
+    employee_id: UUID | None = None
+    employee_code: str | None = None
+    employee_name: str | None = None
+    employee_code_raw: str
+    punched_at: datetime
+    attendance_date: date
+    notes: str | None = None
+
+
 class BiometricDeviceFeedResponse(BaseModel):
     device: BiometricDeviceResponse
     reachable: bool
     reachability_message: str
     today_ingested_count: int
+    today_punch_count: int = 0
+    punches: list[BiometricPunchResponse] = []
     ingested_records: list[BiometricDeviceLiveLogItem]
 
 
@@ -1427,6 +1464,8 @@ class DeviceSyncResponse(BaseModel):
     updated: int
     skipped: int
     total: int
+    punch_created: int = 0
+    punch_existing: int = 0
 
 
 class BiometricDownloadResponse(DeviceSyncResponse):
@@ -1730,6 +1769,9 @@ class EmployeeImportRow(BaseModel):
 
     employee_code: str
     name: str
+    # Old Emp Code when Excel has \"New E codes\" (lookup + rename to employee_code).
+    previous_employee_code: str | None = None
+    old_employee_code: str | None = None
     entity: str | None = None
     organisation: str | None = None
     organization: str | None = None
@@ -1739,11 +1781,38 @@ class EmployeeImportRow(BaseModel):
     reporting_manager: str | None = None
     email: str | None = None
     mobile: str | None = None
+    alternate_mobile: str | None = None
     joining_date: str | None = None
+    gender: str | None = None
+    dob: str | None = None
+    date_of_birth: str | None = None
+    marital_status: str | None = None
+    blood_group: str | None = None
+    nationality: str | None = None
+    aadhaar: str | None = None
+    pan: str | None = None
+    uan: str | None = None
+    bank_name: str | None = None
+    bank_account: str | None = None
+    bank_ifsc: str | None = None
+    bank_holder: str | None = None
+    current_address: str | None = None
+    permanent_address: str | None = None
+    emergency_name: str | None = None
+    emergency_phone: str | None = None
+    emergency_relationship: str | None = None
+    father_name: str | None = None
+    esi: str | None = None
+    # Workforce tag e.g. office_staff / client_side (stored on profile skills_json.tags).
+    tag: str | None = None
+    # Client deployment site/org (not HRMS Organisation). Stored on skills_json.deployed_at.
+    deployed_at: str | None = None
 
 
 class EmployeeImportRequest(BaseModel):
     rows: list[EmployeeImportRow]
+    # When set, every row is imported into this legal entity (UI entity picker).
+    company_id: str | None = None
 
 
 class EmployeeImportResultRow(BaseModel):
@@ -1752,6 +1821,9 @@ class EmployeeImportResultRow(BaseModel):
     action: str
     employee_id: str
     company: str
+    entity: str | None = None
+    base_location: str | None = None
+    designation: str | None = None
 
 
 class EmployeeImportResponse(BaseModel):
@@ -1766,6 +1838,55 @@ class EmployeeImportResponse(BaseModel):
 class EmployeeClearResponse(BaseModel):
     deleted: int
     message: str = ""
+
+
+class EmployeeTagBackfillRequest(BaseModel):
+    """Stamp employees missing a workforce tag with a default (office_staff)."""
+
+    default_tag: str = "office_staff"
+    only_missing: bool = True
+
+
+class EmployeeTagBackfillResponse(BaseModel):
+    updated: int
+    skipped: int
+    default_tag: str
+    message: str = ""
+
+
+class LeaveBalanceImportRow(BaseModel):
+    """Normalized Excel row for leave balance bulk upsert."""
+
+    employee_code: str
+    leave_type_code: str
+    balance_year: int | None = None
+    # Prefer remaining/leaves_left when migrating from another HR system.
+    remaining: Decimal | None = None
+    opening_balance: Decimal | None = None
+    accrued: Decimal | None = None
+    used: Decimal | None = None
+
+
+class LeaveBalanceImportRequest(BaseModel):
+    rows: list[LeaveBalanceImportRow]
+
+
+class LeaveBalanceImportResultRow(BaseModel):
+    row: int
+    employee_code: str
+    leave_type_code: str
+    action: str
+    balance_id: str
+    closing_balance: Decimal
+
+
+class LeaveBalanceImportResponse(BaseModel):
+    created: int
+    updated: int
+    skipped: int
+    warnings: list[str] = []
+    errors: list[str] = []
+    results: list[LeaveBalanceImportResultRow] = []
 
 
 class HrAdminAssignRequest(BaseModel):
@@ -1886,4 +2007,51 @@ class PeopleRoleResponse(BaseModel):
     has_login: bool = False
     role_codes: list[str] = []
     hr_note: str | None = None
+
+
+class HrIntegrationCatalog(BaseModel):
+    endpoints: list[dict[str, str]]
+    fields: list[dict[str, str]]
+
+
+class HrIntegrationApiKeyCreateRequest(BaseModel):
+    name: str
+    endpoints: list[str]
+    fields: list[str]
+    company_ids: list[UUID] = []
+    notes: str | None = None
+    expires_at: datetime | None = None
+
+
+class HrIntegrationApiKeyRecord(BaseModel):
+    id: UUID
+    name: str
+    key_prefix: str
+    endpoints: list[str] = []
+    fields: list[str] = []
+    company_ids: list[UUID] = []
+    status: str
+    notes: str | None = None
+    created_at: datetime | None = None
+    last_used_at: datetime | None = None
+    expires_at: datetime | None = None
+
+
+class HrIntegrationApiKeyCreated(HrIntegrationApiKeyRecord):
+    """Returned once on create — includes plaintext API key."""
+
+    api_key: str
+
+
+class HrIntegrationEmployeeRow(BaseModel):
+    id: str
+    data: dict[str, object]
+
+
+class HrIntegrationEmployeesResponse(BaseModel):
+    total: int
+    page: int
+    page_size: int
+    fields: list[str]
+    rows: list[HrIntegrationEmployeeRow]
 

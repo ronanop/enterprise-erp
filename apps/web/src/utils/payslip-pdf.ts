@@ -219,7 +219,7 @@ export function payslipPdfContext(
     bankAccountNumber: account,
     bankName: capitalizeWords(bankName),
     ifsc: clean(bankSource?.ifsc) || clean(option?.bankIfsc),
-    lateCount: slip.lateCount == null ? "" : String(slip.lateCount),
+    lateCount: slip.lateCount == null ? "0" : String(slip.lateCount),
     paymentStatus: paymentLabel(slip.paymentStatus),
     entityName: clean(
       company?.legalName || company?.companyName || record?.companyName || option?.companyName,
@@ -289,7 +289,7 @@ export type PayslipFigures = {
   salaryDays: number;
   presentDays: number;
   leaveDays: number;
-  unpaidLeaveDays: number | null;
+  unpaidLeaveDays: number;
   lopDays: number;
   earnings: PayslipMoneyRow[];
   deductions: PayslipMoneyRow[];
@@ -360,12 +360,10 @@ function earningYearly(figures: PayslipFigures, labelPattern: RegExp): number {
     .reduce((sum, row) => sum + row.yearly, 0);
 }
 
-/** Inject Income Tax (TDS) into Deduction (B) when payroll omitted the line. */
+/** Inject Income Tax (TDS) into Deduction (B) when payroll omitted the line (including ₹0). */
 export function ensurePayslipTds(figures: PayslipFigures, monthTds: number): PayslipFigures {
-  const amount = Math.round(monthTds);
-  if (amount <= 0) return figures;
-  const existing = deductionAmount(figures, isTdsLabel);
-  if (existing > 0) return figures;
+  const amount = Math.max(0, Math.round(monthTds));
+  if (figures.deductions.some((row) => isTdsLabel(row.label))) return figures;
   const deductions = [...figures.deductions, moneyRow("Income Tax (TDS)", amount, true)];
   const monthlyDeductions = deductions.reduce((sum, row) => sum + row.monthly, 0);
   const yearlyDeductions = deductions.reduce((sum, row) => sum + row.yearly, 0);
@@ -544,7 +542,7 @@ export function payslipFigures(slip: PayslipRecord): PayslipFigures {
     salaryDays: workingDays,
     presentDays: slip.presentDays ?? 0,
     leaveDays: slip.leaveDays ?? 0,
-    unpaidLeaveDays: slip.unpaidLeaveDays == null ? null : slip.unpaidLeaveDays,
+    unpaidLeaveDays: slip.unpaidLeaveDays ?? 0,
     lopDays: slip.lopDays ?? 0,
     earnings,
     deductions,
@@ -710,9 +708,9 @@ function drawSlipPage(
     ["Location", dash(ctx.location), "Date Of Joining", dash(ctx.joiningDate)],
     ["UAN", dash(ctx.uan), "PAN", dash(ctx.pan)],
     ["Bank Account Number", dash(ctx.bankAccountNumber), "Bank Name", dash(ctx.bankName)],
-    ["IFSC", dash(ctx.ifsc), "Late Count", dash(ctx.lateCount)],
+    ["IFSC", dash(ctx.ifsc), "Late Count", ctx.lateCount.trim() ? ctx.lateCount : "0"],
     ["Working Days", String(figures.salaryDays), "Present", String(figures.presentDays)],
-    ["Paid Leave", String(figures.leaveDays), "Unpaid Leave", figures.unpaidLeaveDays == null ? "—" : String(figures.unpaidLeaveDays)],
+    ["Paid Leave", String(figures.leaveDays), "Unpaid Leave", String(figures.unpaidLeaveDays)],
     ["LOP Days", String(figures.lopDays), "Pay Days", String(slip.payableDays ?? slip.periodDays ?? figures.salaryDays)],
   ];
   const metaRowH = 5.2;

@@ -58,6 +58,8 @@ function namedFromEmployee(row: Record<string, unknown>): NamedOption {
   const code = String(row.employee_code ?? "").trim();
   const email = String(row.email ?? row.work_email ?? "").trim();
   const departmentId = String(row.department_id ?? row.departmentId ?? "").trim();
+  const companyId = String(row.company_id ?? row.companyId ?? "").trim();
+  const branchId = String(row.branch_id ?? row.branchId ?? "").trim();
   const isManager =
     row.is_manager === true ||
     row.is_hiring_manager === true ||
@@ -67,6 +69,8 @@ function namedFromEmployee(row: Record<string, unknown>): NamedOption {
     name: code && !name.includes(code) ? `${name} (${code})` : name,
     ...(email ? { email } : {}),
     ...(departmentId ? { departmentId } : {}),
+    ...(companyId ? { companyId } : {}),
+    ...(branchId ? { branchId } : {}),
     ...(isManager ? { isManager: true } : {}),
   };
 }

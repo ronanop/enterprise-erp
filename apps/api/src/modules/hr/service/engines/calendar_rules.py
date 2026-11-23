@@ -5,6 +5,10 @@ from __future__ import annotations
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any, Iterable, Sequence
+from zoneinfo import ZoneInfo
+
+# Biometric / shift wall-clock comparisons (India).
+_ATTENDANCE_LOCAL_TZ = ZoneInfo("Asia/Kolkata")
 
 
 WEEKLY_OFF_RULES = frozenset(
@@ -169,12 +173,12 @@ def resolve_arrival_status(
     - before/during window (and within grace of shift start): present or late
     - after ok_until: half_day / absent / late (per after_status)
     """
-    local = check_in_at
-    if local.tzinfo is not None:
-        # compare as local wall-clock
-        punched = local.timetz().replace(tzinfo=None)
+    # Shift / policy times are local wall-clock; punches are stored in UTC.
+    if check_in_at.tzinfo is not None:
+        local = check_in_at.astimezone(_ATTENDANCE_LOCAL_TZ)
     else:
-        punched = local.time()
+        local = check_in_at.replace(tzinfo=_ATTENDANCE_LOCAL_TZ)
+    punched = local.time().replace(microsecond=0)
 
     late_minutes = 0
     if shift_start is not None:

@@ -2,11 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
-  Archive,
   CheckSquare,
   Download,
   Eye,
-  History,
   Pencil,
   Plus,
   RefreshCw,
@@ -34,9 +32,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { RowActionsItem, RowActionsMenu } from "@/components/ui/row-actions-menu";
 import { nextCode, type HrSetupTab } from "@/config/hr-setup";
 import { getStoredOrgContext } from "@/lib/org-context-storage";
-import { useUserPermissions } from "@/hooks/use-user-permissions";
 import { ApiClientError, resourceService } from "@/services/api-client";
-import { loadUserDirectory } from "@/services/user-directory-service";
 import {
   archiveLocal,
   cell,
@@ -47,6 +43,7 @@ import {
   listReportingManagers,
   listSetupApi,
   loadSetupOrgLookups,
+  resolveSetupCompanyId,
   softDeleteLocal,
   updateLocalSetup,
   type SetupRow,
@@ -76,6 +73,8 @@ export type FieldDef = {
   autoDefault?: boolean;
   placeholder?: string;
   hint?: string;
+  /** Keep in form / API payload but do not show in create/edit/view */
+  hidden?: boolean;
 };
 
 type ColumnDef = {
@@ -84,7 +83,7 @@ type ColumnDef = {
   render?: (row: SetupRow) => ReactNode;
 };
 
-type Mode = "create" | "edit" | "view" | "history" | null;
+type Mode = "create" | "edit" | "view" | null;
 
 const PAGE_SIZE = 10;
 
@@ -180,41 +179,6 @@ function setupColumnWidths(columns: { key: string }[]): string[] {
   return weights.map((w) => `${((w / total) * budget).toFixed(2)}%`);
 }
 
-function formatAuditWhen(value: unknown): string {
-  if (value == null || String(value).trim() === "") return "-";
-  const raw = String(value).trim();
-  const d = new Date(raw);
-  if (Number.isNaN(d.getTime())) return raw;
-  return d.toLocaleString(undefined, {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatAuditWho(value: unknown, usersById: Record<string, string>): string {
-  if (value == null || String(value).trim() === "") return "-";
-  const id = String(value).trim();
-  if (usersById[id]) return usersById[id];
-  if (id === "current.user") {
-    try {
-      const raw = localStorage.getItem("erp_user_profile");
-      if (raw) {
-        const p = JSON.parse(raw) as { full_name?: string; email?: string };
-        return p.full_name || p.email || "Current user";
-      }
-    } catch {
-      /* ignore */
-    }
-    return "Current user";
-  }
-  // UUID → short readable fallback
-  if (/^[0-9a-f-]{36}$/i.test(id)) return `User ${id.slice(0, 8)}…`;
-  return id;
-}
-
 function resolveEmployeeLabel(
   value: unknown,
   employees: { value: string; label: string }[],
@@ -228,35 +192,6 @@ function resolveEmployeeLabel(
   }
   if (/^[0-9a-f-]{36}$/i.test(id)) return "-";
   return id;
-}
-
-function AuditBlock({
-  row,
-  usersById,
-}: {
-  row: SetupRow;
-  usersById: Record<string, string>;
-}) {
-  return (
-    <div className="mt-4 grid gap-2 rounded-xl border border-border/70 bg-muted/30 p-3 text-[11px] text-muted-foreground sm:grid-cols-2">
-      <div>
-        <span className="font-medium text-foreground">Created by</span>
-        <p>{formatAuditWho(row.created_by, usersById)}</p>
-      </div>
-      <div>
-        <span className="font-medium text-foreground">Created at</span>
-        <p>{formatAuditWhen(row.created_at)}</p>
-      </div>
-      <div>
-        <span className="font-medium text-foreground">Updated by</span>
-        <p>{formatAuditWho(row.updated_by, usersById)}</p>
-      </div>
-      <div>
-        <span className="font-medium text-foreground">Updated at</span>
-        <p>{formatAuditWhen(row.updated_at)}</p>
-      </div>
-    </div>
-  );
 }
 
 export function SetupEntityPanel({
@@ -284,7 +219,6 @@ export function SetupEntityPanel({
     archive?: string;
   };
 }) {
-  const { canExact, loading: permLoading } = useUserPermissions();
   const [rows, setRows] = useState<SetupRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -296,7 +230,7 @@ export function SetupEntityPanel({
   const [form, setForm] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [confirm, setConfirm] = useState<{
-    type: "delete" | "archive" | "activate" | "deactivate";
+    type: "delete" | "activate" | "deactivate";
     ids: string[];
   } | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
@@ -307,9 +241,8 @@ export function SetupEntityPanel({
     employees: { value: string; label: string }[];
     shifts: { value: string; label: string }[];
   }>({ companies: [], branches: [], departments: [], employees: [], shifts: [] });
-  const [usersById, setUsersById] = useState<Record<string, string>>({});
-
-  const needsOrgLookups = fields.some((f) => f.optionsSource);
+  // Always load org lookups for API tabs so create can attach company_id even when the form has no company field.
+  const needsOrgLookups = tab.source === "api" || fields.some((f) => f.optionsSource);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -321,11 +254,30 @@ export function SetupEntityPanel({
         data = await listReportingManagers();
       } else if (tab.apiPath) {
         data = await listSetupApi(tab.apiPath);
+        let lookups = orgLookups;
+        if (needsOrgLookups) {
+          lookups = await loadSetupOrgLookups();
+          setOrgLookups(lookups);
+        }
         if (mapApiRow) data = data.map(mapApiRow);
+        // Label company/branch so same dept names under different entities are clear.
+        const companyLabel = (id: string) =>
+          lookups.companies.find((c) => c.value === id)?.label || "-";
+        const branchLabel = (id: string) =>
+          lookups.branches.find((b) => b.value === id)?.label || "-";
+        data = data.map((row) => ({
+          ...row,
+          company:
+            String(row.company_name ?? row.company ?? "").trim() ||
+            companyLabel(String(row.company_id ?? "")),
+          branch:
+            String(row.branch_name ?? row.branch ?? "").trim() ||
+            branchLabel(String(row.branch_id ?? "")),
+        }));
       }
       setRows(data);
       setSelected(new Set());
-      if (needsOrgLookups) {
+      if (needsOrgLookups && tab.source !== "api") {
         const lookups = await loadSetupOrgLookups();
         setOrgLookups(lookups);
       }
@@ -343,17 +295,6 @@ export function SetupEntityPanel({
     setQuery("");
     setStatusFilter("all");
   }, [load]);
-
-  useEffect(() => {
-    if (permLoading) return;
-    let cancelled = false;
-    void loadUserDirectory(canExact("foundation.user:read")).then((map) => {
-      if (!cancelled) setUsersById(map);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [permLoading, canExact]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -393,11 +334,18 @@ export function SetupEntityPanel({
     const prefix = tab.codePrefix ?? "CFG";
     const initial: Record<string, string> = {};
     const usedCodes = [...codes];
+    // Always mint identity code behind the scenes (even when the field is hidden).
+    if (codeKey) {
+      const minted = nextCode(prefix, usedCodes);
+      initial[codeKey] = minted;
+      usedCodes.push(minted);
+    }
     for (const f of fields) {
       // Only mint the entity identity code - never state_code / country_code / etc.
       const isIdentityCode =
         f.key === codeKey || f.key === "code" || f.key === "document_number";
       if (isIdentityCode) {
+        if (initial[f.key]) continue;
         const minted = nextCode(prefix, usedCodes);
         initial[f.key] = minted;
         usedCodes.push(minted);
@@ -487,11 +435,6 @@ export function SetupEntityPanel({
     setMode(viewOnly ? "view" : "edit");
   }
 
-  function openHistory(row: SetupRow) {
-    setActive(row);
-    setMode("history");
-  }
-
   async function save() {
     for (const f of fields) {
       if (f.required && !String(form[f.key] ?? "").trim()) {
@@ -522,19 +465,29 @@ export function SetupEntityPanel({
         if (mode === "create") {
           // Avoid duplicate identity codes (e.g. BR-001 already used)
           let createForm = { ...form };
-          if (codeKey && createForm[codeKey]) {
+          if (codeKey) {
             const existing = new Set(
               rows.flatMap((r) =>
                 [r[codeKey], r.code].map((v) => String(v ?? "").toUpperCase()).filter(Boolean),
               ),
             );
-            let code = String(createForm[codeKey]);
-            if (existing.has(code.toUpperCase())) {
+            let code = String(createForm[codeKey] ?? "").trim();
+            if (!code || existing.has(code.toUpperCase())) {
               code = nextCode(tab.codePrefix ?? "CFG", Array.from(existing));
               createForm = { ...createForm, [codeKey]: code };
             }
           }
-          const body = buildCreateBody ? buildCreateBody(createForm) : createForm;
+          const body = {
+            ...(buildCreateBody ? buildCreateBody(createForm) : createForm),
+          } as Record<string, unknown>;
+          const companyId = resolveSetupCompanyId({
+            companyId: String(body.company_id ?? createForm.company_id ?? ""),
+            branchId: String(body.branch_id ?? createForm.branch_id ?? ""),
+            branches: orgLookups.branches,
+            companies: orgLookups.companies,
+          });
+          if (companyId && !body.company_id) body.company_id = companyId;
+          if (!body.branch_id && createForm.branch_id) body.branch_id = createForm.branch_id;
           await resourceService.create(tab.apiPath, body);
         } else if (active) {
           const body = buildUpdateBody ? buildUpdateBody(form) : form;
@@ -558,7 +511,6 @@ export function SetupEntityPanel({
       const { type, ids } = confirm;
       if (tab.source === "local") {
         if (type === "delete") await softDeleteLocal(tab.id, ids);
-        if (type === "archive") await archiveLocal(tab.id, ids, true);
         if (type === "activate") await archiveLocal(tab.id, ids, false);
         if (type === "deactivate") await archiveLocal(tab.id, ids, true);
       } else if (tab.apiPath) {
@@ -571,10 +523,6 @@ export function SetupEntityPanel({
               await load();
               return;
             }
-          } else if (type === "archive") {
-            await resourceService.update(tab.apiPath, id, {
-              status: statusActions?.archive ?? "archived",
-            });
           } else if (type === "deactivate") {
             await resourceService.update(tab.apiPath, id, {
               status: statusActions?.deactivate ?? "inactive",
@@ -690,15 +638,6 @@ export function SetupEntityPanel({
             onClick={() => setConfirm({ type: "deactivate", ids: [...selected] })}
           >
             Deactivate
-          </Button>
-          <Button
-            type="button"
-            size="xs"
-            variant="outline"
-            className="cursor-pointer"
-            onClick={() => setConfirm({ type: "archive", ids: [...selected] })}
-          >
-            Archive
           </Button>
           <Button
             type="button"
@@ -854,24 +793,6 @@ export function SetupEntityPanel({
                           Edit
                         </RowActionsItem>
                         <RowActionsItem
-                          onClick={() => {
-                            setMenuId(null);
-                            openHistory(row);
-                          }}
-                        >
-                          <History className="size-3.5 text-muted-foreground" />
-                          History
-                        </RowActionsItem>
-                        <RowActionsItem
-                          onClick={() => {
-                            setMenuId(null);
-                            setConfirm({ type: "archive", ids: [row.id] });
-                          }}
-                        >
-                          <Archive className="size-3.5 text-muted-foreground" />
-                          Archive
-                        </RowActionsItem>
-                        <RowActionsItem
                           destructive
                           onClick={() => {
                             setMenuId(null);
@@ -948,7 +869,7 @@ export function SetupEntityPanel({
         }
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          {fields.map((f) => (
+          {fields.filter((f) => !f.hidden).map((f) => (
             <div
               key={f.key}
               className={
@@ -971,13 +892,17 @@ export function SetupEntityPanel({
                     onChange={(e) => setForm((prev) => ({ ...prev, [f.key]: e.target.value }))}
                     placeholder={f.placeholder}
                   />
-                ) : f.type === "searchable" ? (
+                ) : f.type === "searchable" || f.optionsSource === "employees" ? (
                   <SearchableSelect
                     value={form[f.key] ?? ""}
                     disabled={readOnly || f.readOnly}
                     options={resolveFieldOptions(f)}
                     placeholder={f.placeholder || (f.required ? "Select…" : "None")}
-                    searchPlaceholder={`Search ${f.label.toLowerCase()}…`}
+                    searchPlaceholder={
+                      f.optionsSource === "employees"
+                        ? "Search name or emp code…"
+                        : `Search ${f.label.toLowerCase()}…`
+                    }
                     onChange={(value) =>
                       setForm((prev) => ({ ...prev, [f.key]: value }))
                     }
@@ -1068,26 +993,6 @@ export function SetupEntityPanel({
             </div>
           ))}
         </div>
-        {active ? <AuditBlock row={active} usersById={usersById} /> : null}
-      </SetupDrawer>
-
-      <SetupDrawer
-        open={mode === "history"}
-        title="Audit history"
-        description="Created / updated metadata for this record"
-        onClose={() => setMode(null)}
-        footer={
-          <Button type="button" variant="outline" className="cursor-pointer" onClick={() => setMode(null)}>
-            Close
-          </Button>
-        }
-      >
-        {active ? (
-          <>
-            <p className="text-sm font-medium">{cell(active, ...nameKeys)}</p>
-            <AuditBlock row={active} usersById={usersById} />
-          </>
-        ) : null}
       </SetupDrawer>
 
       <SetupConfirmDialog
@@ -1095,11 +1000,9 @@ export function SetupEntityPanel({
         title={
           confirm?.type === "delete"
             ? "Delete records?"
-            : confirm?.type === "archive"
-              ? "Archive records?"
-              : confirm?.type === "deactivate"
-                ? "Deactivate records?"
-                : "Activate records?"
+            : confirm?.type === "deactivate"
+              ? "Deactivate records?"
+              : "Activate records?"
         }
         message={
           confirm?.type === "delete"

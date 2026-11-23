@@ -268,32 +268,21 @@ class EssWorkplaceService:
     def create_support_ticket(
         self, ctx: TenantContext, body: EssSupportTicketCreate
     ) -> EssSupportTicketDetail:
-        from modules.helpdesk.service.ticket_service import TicketService
-
         emp = self._ess.resolve_employee(ctx)
         if emp.branch_id is None:
             raise ConflictException("Employee branch is required to raise a ticket")
-        category_id, priority_id = self._resolve_ticket_routing(ctx, emp.company_id, body.kind)
-        ticket_type = "incident" if body.kind in {"asset", "it"} else "service_request"
-        row = TicketService(self._db).create(
+        row = self._helpdesk.create_ticket(
             ctx,
-            branch_id=emp.branch_id,
             company_id=emp.company_id,
-            category_id=category_id,
-            priority_id=priority_id,
-            ticket_type=ticket_type,
+            branch_id=emp.branch_id,
             requester_employee_id=emp.id,
             subject=body.subject.strip(),
             description=body.description.strip() if body.description else None,
-            channel="ess",
-            urgency=(body.urgency or "medium").lower()[:20],
+            kind=body.kind,
+            urgency=body.urgency,
             asset_id=body.asset_id,
-            status="draft",
-            opened_at=utcnow(),
         )
-        TicketService(self._db).submit(ctx, row.id)
-        refreshed = TicketService(self._db).get(ctx, row.id)
-        return self._ticket_to_detail(refreshed)
+        return self._ticket_to_detail(row)
 
     def list_support_ticket_comments(
         self, ctx: TenantContext, ticket_id: UUID
@@ -313,19 +302,14 @@ class EssWorkplaceService:
     def add_support_ticket_comment(
         self, ctx: TenantContext, ticket_id: UUID, body: EssSupportTicketCommentCreate
     ) -> EssSupportTicketCommentItem:
-        from modules.helpdesk.service.ticket_comment_service import TicketCommentService
-
         self._get_own_ticket(ctx, ticket_id)
         emp = self._ess.resolve_employee(ctx)
-        row = TicketCommentService(self._db).create(
+        row = self._helpdesk.add_comment(
             ctx,
             company_id=emp.company_id,
             ticket_id=ticket_id,
             author_employee_id=emp.id,
             body=body.body.strip(),
-            is_public=True,
-            commented_at=datetime.now(timezone.utc),
-            status="active",
         )
         return EssSupportTicketCommentItem(
             id=row.id,
@@ -420,11 +404,9 @@ class EssWorkplaceService:
         return row
 
     def _ticket_to_item(self, row) -> EssSupportTicketItem:
-        kind = "it"
-        if row.channel == "ess" and row.ticket_type == "service_request":
-            kind = "grievance"
-        if row.asset_id:
-            kind = "asset"
+        kind = getattr(row, "kind", None) or "it"
+        if kind not in {"it", "asset", "grievance"}:
+            kind = "asset" if row.asset_id else "it"
         return EssSupportTicketItem(
             id=row.id,
             document_number=row.document_number,
@@ -445,21 +427,3 @@ class EssWorkplaceService:
             resolved_at=row.resolved_at,
         )
 
-    def _resolve_ticket_routing(self, ctx: TenantContext, company_id: UUID, kind: str) -> tuple[UUID, UUID]:
-        cat_code = {
-            "grievance": "ESS_GRIEVANCE",
-            "asset": "ESS_ASSET",
-            "it": "ESS_IT",
-        }.get(kind, "ESS_IT")
-        cat_name = {
-            "grievance": "Employee grievance",
-            "asset": "Asset support",
-            "it": "IT support",
-        }.get(kind, "IT support")
-
-        cat = self._helpdesk.resolve_or_create_category(
-            ctx, company_id=company_id, category_code=cat_code, category_name=cat_name
-        )
-        pri = self._helpdesk.resolve_or_create_priority(ctx, company_id=company_id)
-
-        return cat.id, pri.id

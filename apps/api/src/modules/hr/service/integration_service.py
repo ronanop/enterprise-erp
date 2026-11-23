@@ -45,7 +45,9 @@ class HRIntegrationService:
         ]
 
     def payroll_attendance_facts(self, ctx: TenantContext, company_id: UUID | None = None) -> list[dict]:
-        cid = self._scope.resolve_company_id(ctx, company_id)
+        # Ignore company_id stamp — punches may live under a different entity than
+        # employment / payroll period company (same issue as leave-adjust).
+        _ = company_id
         return [
             {
                 "attendance_id": r.id,
@@ -57,7 +59,7 @@ class HRIntegrationService:
                 "shift_id": getattr(r, "shift_id", None),
                 "overtime_minutes": int(getattr(r, "overtime_minutes", None) or 0),
             }
-            for r in self._attendance.list_rows(ctx, cid)
+            for r in self._attendance.list_for_tenant_period(ctx)
         ]
 
     def payroll_leave_facts(self, ctx: TenantContext, company_id: UUID | None = None) -> list[dict]:

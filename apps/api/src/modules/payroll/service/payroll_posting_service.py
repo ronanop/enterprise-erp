@@ -1,4 +1,4 @@
-"""Payroll posting - Finance via PostingService only."""
+"""Payroll posting — status is stored on payroll tables only."""
 
 from decimal import Decimal
 from uuid import UUID
@@ -51,7 +51,7 @@ class PayrollPostingService:
         row = self.get(ctx, row_id)
         amount = Decimal(str(row.debit_total))
         try:
-            jid = self._finance.post_salary_expense(
+            self._finance.post_salary_expense(
                 ctx,
                 row,
                 amount=amount,
@@ -63,7 +63,6 @@ class PayrollPostingService:
                 ctx,
                 row_id,
                 status=row.status,
-                finance_journal_id=jid,
             )
             self._audit.log_entity_change(
                 tenant_id=ctx.tenant_id,

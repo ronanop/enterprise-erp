@@ -592,11 +592,14 @@ class LeaveAdjustService:
         cid = self._scope.resolve_company_id(ctx, company_id or employment.company_id)
         cache = self._days.build_cache(ctx, cid, period_start, period_end)
         scheduled = set(self._days._scheduled_dates(cache, employee_id))
-        att_rows = [
-            r
-            for r in self._attendance.list_rows(ctx, cid, employee_id=employee_id)
-            if period_start <= r.attendance_date <= period_end
-        ]
+        # Do not pin by employment.company_id — punches may be stamped under another
+        # entity (e.g. employment=Vyuha, attendance=Cache Technologies).
+        att_rows = self._attendance.list_for_employee_period(
+            ctx,
+            employee_id=employee_id,
+            date_from=period_start,
+            date_to=period_end,
+        )
         att_by_date = {r.attendance_date: r.attendance_status for r in att_rows}
         types = {t.id: t for t in self._types.list_rows(ctx, cid)}
         paid_leave_by_date: dict[date, tuple[UUID | None, str | None]] = {}

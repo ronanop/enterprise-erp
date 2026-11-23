@@ -33,6 +33,8 @@ export type HrMasterOption = {
   companyId?: string;
   companyName?: string;
   designation?: string;
+  /** HR employment UUID — required to POST payroll employee-salaries. */
+  employmentId?: string;
   headEmployeeId?: string;
   shiftId?: string;
   shiftName?: string;
@@ -76,17 +78,20 @@ function writeJson(key: string, value: unknown): void {
 
 function recordToOption(r: EmployeeRecord): HrMasterOption {
   const sal = r.extension?.salary;
+  const deptRaw = String(r.departmentName ?? "").trim();
+  const department = !deptRaw || deptRaw === "-" ? "General" : deptRaw;
   return {
     id: r.id,
     label: `${r.displayName} · ${r.employeeCode}`,
     code: r.employeeCode,
-    department: r.departmentName,
+    department,
     departmentId: r.departmentId,
     branchId: r.branchId,
     branchName: r.branchName,
     companyId: r.companyId,
     companyName: r.companyName,
     designation: r.designationName,
+    employmentId: r.employmentId || undefined,
     shiftId: r.extension?.employment?.shiftId,
     shiftName: r.extension?.employment?.shiftName,
     bankAccount: r.extension?.bank?.accountNumber
@@ -170,6 +175,7 @@ export function registerLocalEmployee(
     lifecycleStatus: lifecycle,
     gender: "",
     isDeleted: false,
+    tags: ["office_staff"],
     extension: {
       personal,
       employment,
@@ -180,6 +186,7 @@ export function registerLocalEmployee(
       documents: [],
       education: [],
       previousEmployment: [],
+      tags: ["office_staff"],
       createdBy: "Onboarding",
       updatedBy: "Onboarding",
       updatedAt: new Date().toISOString(),

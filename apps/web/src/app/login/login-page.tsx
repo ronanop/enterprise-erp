@@ -34,7 +34,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(searchParams.get("error"));
 
   async function finishSignIn() {
-    let redirect = nextPath ?? "/home";
+    let redirect = nextPath ?? "/hr";
     let userName = "there";
     let mustChange = false;
     try {
@@ -44,7 +44,7 @@ export default function LoginPage() {
       mustChange = Boolean(raw?.must_change_password);
       if (user) {
         userName = welcomeDisplayName(user.displayName, user.email);
-        if (!nextPath && user.email) redirect = getPostLoginRedirect(user.email);
+        if (!nextPath) redirect = getPostLoginRedirect(user.email);
       }
     } catch {
       // Session cookie is set; AuthGate re-validates on the next page.

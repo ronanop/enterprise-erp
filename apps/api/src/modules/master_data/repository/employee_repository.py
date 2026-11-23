@@ -3,7 +3,7 @@
 from datetime import date
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from modules.foundation.domain.value_objects import TenantContext
@@ -64,9 +64,40 @@ class EmployeeRepository(MasterScopedRepository):
         row = self.db.scalar(stmt.where(MasterEmployee.employee_code == code))
         if row is not None:
             return row
+        # Machine codes sometimes include spaces ("CT 5156").
+        compact = "".join(code.split())
+        if compact != code:
+            row = self.db.scalar(stmt.where(MasterEmployee.employee_code.ilike(compact)))
+            if row is not None:
+                return row
         return self.db.scalar(
             stmt.where(MasterEmployee.employee_code.ilike(code))
         )
+
+    def find_by_code_digits(
+        self,
+        ctx: TenantContext,
+        *,
+        company_id: UUID | None,
+        digit_key: str,
+        limit: int = 25,
+    ) -> list[MasterEmployee]:
+        """Match Emp IDs by numeric suffix (CDPL5356 ↔ CT5356)."""
+        dig = (digit_key or "").strip()
+        if not dig:
+            return []
+        # Compare digit-only forms, ignoring leading zeros.
+        code_digits = func.regexp_replace(MasterEmployee.employee_code, r"\D", "", "g")
+        norm_code = func.nullif(func.ltrim(code_digits, "0"), "")
+        stmt = select(MasterEmployee).where(
+            MasterEmployee.tenant_id == ctx.tenant_id,
+            MasterEmployee.is_deleted.is_(False),
+            norm_code == dig,
+        )
+        if company_id is not None:
+            stmt = stmt.where(MasterEmployee.company_id == company_id)
+        stmt = stmt.order_by(MasterEmployee.employee_code.asc()).limit(max(1, min(limit, 50)))
+        return list(self.db.scalars(stmt).all())
 
     def create(
         self,

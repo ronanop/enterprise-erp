@@ -1,21 +1,9 @@
 /**
- * Resolves topbar search scope from the current path: home module finder,
- * or the active module's workspace panes.
+ * Topbar search for standalone HRMS — HR navigation panes.
  */
 
-import { CRM_NAV } from "@/components/crm/crm-workspace-nav";
-import { MARKETING_NAV } from "@/components/marketing/marketing-workspace-nav";
-import { ALL_PROCUREMENT_NAV } from "@/components/procurement/procurement-workspace-nav";
-import { PROJECTS_NAV } from "@/components/projects/projects-workspace-nav";
-import { SERVICE_NAV } from "@/components/service/service-workspace-nav";
-import {
-  assetDomainSwitcherItems,
-  itAssetWorkspaceNav,
-  nonItAssetWorkspaceNav,
-} from "@/config/assets";
-import { hrNavGroups, isHrPath, type HrNavItem } from "@/config/hr-nav";
+import { hrNavGroups, type HrNavItem } from "@/config/hr-nav";
 import type { NavItem } from "@/config/navigation";
-import { WORKSPACE_SIDEBARS } from "@/config/workspace-sidebars";
 
 export type ShellSearchHit = {
   id: string;
@@ -26,28 +14,24 @@ export type ShellSearchHit = {
 };
 
 export type ShellSearchScope =
-  | { mode: "crm" }
-  | { mode: "projects" }
   | { mode: "home"; placeholder: string }
   | { mode: "panes"; moduleTitle: string; placeholder: string; panes: ShellSearchHit[] };
-
-function underRoot(pathname: string, root: string): boolean {
-  return pathname === root || pathname.startsWith(`${root}/`);
-}
 
 function flattenHrItems(items: readonly HrNavItem[], groupLabel: string): ShellSearchHit[] {
   const out: ShellSearchHit[] = [];
   for (const item of items) {
-    out.push({
-      id: `hr:${item.href}`,
-      title: item.title,
-      subtitle: groupLabel,
-      href: item.href,
-      keywords: item.description,
-    });
+    if (!item.expandOnly) {
+      out.push({
+        id: `hr:${item.href}`,
+        title: item.title,
+        subtitle: groupLabel,
+        href: item.href,
+        keywords: item.description,
+      });
+    }
     for (const child of item.children ?? []) {
       out.push({
-        id: `hr:${child.href}`,
+        id: `hr:${child.href}:${child.title}`,
         title: child.title,
         subtitle: `${groupLabel} · ${item.title}`,
         href: child.href,
@@ -58,122 +42,19 @@ function flattenHrItems(items: readonly HrNavItem[], groupLabel: string): ShellS
   return out;
 }
 
-function assetPanes(): ShellSearchHit[] {
-  const out: ShellSearchHit[] = [];
-  for (const item of assetDomainSwitcherItems) {
-    out.push({
-      id: `assets:switch:${item.href}:${item.title}`,
-      title: item.title,
-      subtitle: "Domain",
-      href: item.href,
-    });
-  }
-  for (const group of [...itAssetWorkspaceNav, ...nonItAssetWorkspaceNav]) {
-    for (const item of group.items) {
-      out.push({
-        id: `assets:${item.href}:${item.title}`,
-        title: item.title,
-        subtitle: group.title,
-        href: item.href,
-      });
-    }
-  }
-  return out;
-}
-
 function hrPanes(): ShellSearchHit[] {
   return hrNavGroups.flatMap((group) => flattenHrItems(group.items, group.label || "HRMS"));
 }
 
-function workspacePanes(root: string, title: string): ShellSearchHit[] | null {
-  const config = WORKSPACE_SIDEBARS.find((entry) => entry.root === root);
-  if (!config) return null;
-  return config.items.map((item) => ({
-    id: `${config.moduleKey}:${item.href}`,
-    title: item.title,
-    subtitle: title,
-    href: item.href,
-  }));
-}
-
-/** Static pane catalog for a module root (CRM / Projects use dedicated search UIs). */
-export function modulePaneCatalog(pathname: string): {
+/** HRMS pane catalog. Every signed-in route searches the HR sidebar. */
+export function modulePaneCatalog(_pathname: string): {
   moduleTitle: string;
   panes: ShellSearchHit[];
-} | null {
-  if (isHrPath(pathname)) {
-    return { moduleTitle: "HRMS", panes: hrPanes() };
-  }
-  if (underRoot(pathname, "/marketing")) {
-    return {
-      moduleTitle: "Marketing",
-      panes: MARKETING_NAV.map((item) => ({
-        id: `marketing:${item.href}`,
-        title: item.title,
-        subtitle: "Marketing",
-        href: item.href,
-      })),
-    };
-  }
-  if (underRoot(pathname, "/service")) {
-    return {
-      moduleTitle: "Service",
-      panes: SERVICE_NAV.map((item) => ({
-        id: `service:${item.href}`,
-        title: item.title,
-        subtitle: "Service",
-        href: item.href,
-      })),
-    };
-  }
-  if (underRoot(pathname, "/procurement")) {
-    return {
-      moduleTitle: "Procurement",
-      panes: ALL_PROCUREMENT_NAV.map((item) => ({
-        id: `procurement:${item.href}`,
-        title: item.title,
-        subtitle: "Procurement",
-        href: item.href,
-      })),
-    };
-  }
-  if (underRoot(pathname, "/assets")) {
-    return { moduleTitle: "Assets", panes: assetPanes() };
-  }
-  if (underRoot(pathname, "/crm")) {
-    return {
-      moduleTitle: "CRM",
-      panes: CRM_NAV.map((item) => ({
-        id: `crm:${item.href}`,
-        title: item.title,
-        subtitle: "CRM",
-        href: item.href,
-      })),
-    };
-  }
-  if (underRoot(pathname, "/projects")) {
-    return {
-      moduleTitle: "Projects",
-      panes: PROJECTS_NAV.map((item) => ({
-        id: `projects:${item.href}`,
-        title: item.title,
-        subtitle: "Projects",
-        href: item.href,
-      })),
-    };
-  }
-
-  for (const config of WORKSPACE_SIDEBARS) {
-    if (underRoot(pathname, config.root)) {
-      const panes = workspacePanes(config.root, config.title);
-      if (panes) return { moduleTitle: config.title, panes };
-    }
-  }
-
-  return null;
+} {
+  return { moduleTitle: "HRMS", panes: hrPanes() };
 }
 
-/** Home / platform rail: searchable ERP modules from the global navigation config. */
+/** Home / platform rail: searchable links from the shell catalog. */
 export function homeModuleHits(items: readonly NavItem[]): ShellSearchHit[] {
   return items.map((item) => ({
     id: `module:${item.href}`,
@@ -185,20 +66,16 @@ export function homeModuleHits(items: readonly NavItem[]): ShellSearchHit[] {
 }
 
 export function resolveShellSearchScope(pathname: string): ShellSearchScope {
-  if (underRoot(pathname, "/crm")) return { mode: "crm" };
-  if (underRoot(pathname, "/projects")) return { mode: "projects" };
-
-  const catalog = modulePaneCatalog(pathname);
-  if (catalog) {
-    return {
-      mode: "panes",
-      moduleTitle: catalog.moduleTitle,
-      placeholder: `Search ${catalog.moduleTitle}…`,
-      panes: catalog.panes,
-    };
+  if (pathname === "/home" || pathname === "/") {
+    return { mode: "home", placeholder: "Search HRMS…" };
   }
-
-  return { mode: "home", placeholder: "Search modules…" };
+  const catalog = modulePaneCatalog(pathname);
+  return {
+    mode: "panes",
+    moduleTitle: catalog.moduleTitle,
+    placeholder: `Search ${catalog.moduleTitle}…`,
+    panes: catalog.panes,
+  };
 }
 
 export function filterShellHits(panes: readonly ShellSearchHit[], query: string): ShellSearchHit[] {

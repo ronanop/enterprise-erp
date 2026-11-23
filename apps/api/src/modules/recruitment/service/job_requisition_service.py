@@ -46,16 +46,19 @@ class JobRequisitionService:
         branch_id: UUID,
         company_id: UUID | None,
     ) -> UUID:
-        """Creates need a concrete company_id (NOT NULL). Prefer explicit, else branch."""
-        cid = self._scope.resolve_company_id(ctx, company_id)
-        if cid is not None:
-            return cid
+        """Creates need a concrete company_id (NOT NULL). Prefer the branch entity.
+
+        Ignore a stale client company_id when it disagrees with the selected branch
+        (common Digitech vs Technologies cache mismatch).
+        """
         branch = self._db.get(OrgBranch, branch_id)
         if branch is None or getattr(branch, "is_deleted", False):
             raise NotFoundException("Branch not found")
-        cid = branch.company_id
-        if cid is None:
+        branch_cid = branch.company_id
+        if branch_cid is None:
             raise ValidationException("Branch has no company; cannot create job requisition")
+
+        cid = company_id if company_id is not None and company_id == branch_cid else branch_cid
         self._scope.validate_company_access(ctx, cid)
         return cid
 

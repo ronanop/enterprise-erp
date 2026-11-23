@@ -16,13 +16,22 @@ import { loadEmployeeIdConfig, saveEmployeeIdConfig } from "@/config/employee-id
 import { portalToWizardDraft, summarizePortalDetails } from "@/lib/onboarding-to-employee";
 import { resolveOrgHeadsForEmployment } from "@/lib/hr/org-heads";
 import {
+  amountOnly,
+  digitsOnly,
   findUniquenessConflicts,
+  lettersOnly,
   validateAadhaar,
+  validateAmount,
   validateBankAccount,
   validateEmail,
+  validateEsic,
   validateIfsc,
   validateMobile,
   validatePan,
+  validatePincode,
+  validateRequired,
+  validateUan,
+  validateYear,
 } from "@/lib/employee-validators";
 import {
   ALLOWED_DOC_TYPES,
@@ -32,12 +41,13 @@ import {
   MAX_DOCUMENT_BYTES,
   MAX_PHOTO_BYTES,
   previewNextEmployeeCode,
+  previewNextEmployeeCodeForEntity,
   readFileAsDataUrl,
   uniquenessSnapshot,
 } from "@/services/employee-management-service";
 import { loadOnboardingDirectory } from "@/services/onboarding-management-service";
 import { listSalaryStructureOptions } from "@/services/hr-master-connector";
-import { listEntityOptions } from "@/services/hr-setup-service";
+import { listEntityOptions, type SetupMasterOption } from "@/services/hr-setup-service";
 import type { OnboardingCase } from "@/types/onboarding-management";
 import type { EmployeeDocumentItem, EmployeeWizardDraft, EducationEntry, PreviousEmploymentEntry } from "@/types/employee-management";
 import {
@@ -86,7 +96,7 @@ export function EmployeeWizardPage() {
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingCases, setOnboardingCases] = useState<OnboardingCase[]>([]);
   const [previewCase, setPreviewCase] = useState<OnboardingCase | null>(null);
-  const [entityOptions, setEntityOptions] = useState<{ value: string; label: string }[]>([]);
+  const [entityOptions, setEntityOptions] = useState<SetupMasterOption[]>([]);
 
   const load = useCallback(async () => {
     const [{ records: rows, options: opts }, ents] = await Promise.all([
@@ -99,6 +109,12 @@ export function EmployeeWizardPage() {
     if (duplicateId) {
       const src = getEmployeeById(rows, duplicateId);
       if (src) {
+        const entityId = src.extension.employment.entityId || ents[0]?.value || "";
+        const ent = ents.find((e) => e.value === entityId);
+        const nextCode = await previewNextEmployeeCodeForEntity(
+          entityId || undefined,
+          ent?.empPrefix || ent?.code,
+        );
         setDraft({
           personal: {
             ...src.extension.personal,
@@ -108,7 +124,9 @@ export function EmployeeWizardPage() {
           },
           employment: {
             ...src.extension.employment,
-            employeeCode: previewNextEmployeeCode(),
+            entityId,
+            entityName: ent?.label || src.extension.employment.entityName || "",
+            employeeCode: nextCode,
           },
           governmentIds: { ...src.extension.governmentIds, pan: "", aadhaar: "" },
           bank: { ...src.extension.bank, accountNumber: "", confirmAccountNumber: "" },
@@ -120,28 +138,35 @@ export function EmployeeWizardPage() {
         });
       }
     } else {
-      setDraft((d) => {
-        const branchId = d.employment.branchId || opts.branches[0]?.id || "";
-        const departmentId = d.employment.departmentId || opts.departments[0]?.id || "";
-        const heads = resolveOrgHeadsForEmployment(branchId, departmentId, opts);
-        const entityId = d.employment.entityId || ents[0]?.value || "";
-        return {
+      const branchId = opts.branches[0]?.id || "";
+      const departmentId = opts.departments[0]?.id || "";
+      const heads = resolveOrgHeadsForEmployment(branchId, departmentId, opts);
+      const entityId = ents[0]?.value || "";
+      const ent = ents.find((e) => e.value === entityId);
+      const nextCode = await previewNextEmployeeCodeForEntity(
+        entityId || undefined,
+        ent?.empPrefix || ent?.code,
+      );
+      setDraft((d) => ({
         ...d,
         employment: {
           ...d.employment,
+          employeeCode: nextCode || d.employment.employeeCode || previewNextEmployeeCode(),
           joiningDate: d.employment.joiningDate || new Date().toISOString().slice(0, 10),
-          entityId,
-          entityName: d.employment.entityName || ents.find((e) => e.value === entityId)?.label || "",
-          branchId,
+          entityId: d.employment.entityId || entityId,
+          entityName:
+            d.employment.entityName ||
+            ents.find((e) => e.value === (d.employment.entityId || entityId))?.label ||
+            "",
+          branchId: d.employment.branchId || branchId,
           branchName: d.employment.branchName || opts.branches[0]?.label || "",
-          departmentId,
+          departmentId: d.employment.departmentId || departmentId,
           departmentName: d.employment.departmentName || opts.departments[0]?.label || "",
           designationName: d.employment.designationName || opts.designations[0]?.label || "",
           branchHeadName: heads.branchHeadName,
           departmentHeadName: heads.departmentHeadName,
         },
-      };
-      });
+      }));
     }
   }, [duplicateId]);
 
@@ -159,39 +184,115 @@ export function EmployeeWizardPage() {
 
   const stepErrors = useMemo(() => {
     const e: string[] = [];
-    if (step === 0) {
-      if (!draft.personal.firstName.trim()) e.push("First name is required");
-      if (!draft.personal.lastName.trim()) e.push("Last name is required");
-      const em = validateEmail(draft.personal.officialEmail);
+    const checkPersonal = step === 0 || step === 8;
+    const checkEmployment = step === 1 || step === 8;
+    const checkGov = step === 2 || step === 8;
+    const checkBank = step === 3 || step === 8;
+    const checkEducation = step === 4 || step === 8;
+    const checkPrevious = step === 5 || step === 8;
+    const checkSalary = step === 6 || step === 8;
+    const checkDocuments = step === 7 || step === 8;
+
+    if (checkPersonal) {
+      const first = validateRequired(draft.personal.firstName, "First name");
+      if (first) e.push(first);
+      const last = validateRequired(draft.personal.lastName, "Last name");
+      if (last) e.push(last);
+      if (!draft.personal.gender.trim()) e.push("Gender is required");
+      if (!draft.personal.dateOfBirth) e.push("Date of birth is required");
+      const em = validateEmail(draft.personal.officialEmail, {
+        required: true,
+        label: "cache email id",
+      });
       if (em) e.push(em);
-      const mob = validateMobile(draft.personal.mobile);
+      const pem = validateEmail(draft.personal.personalEmail, { label: "Email id" });
+      if (pem) e.push(pem);
+      const mob = validateMobile(draft.personal.mobile, {
+        required: true,
+        label: "Emp. Contact No.",
+      });
       if (mob) e.push(mob);
+      const alt = validateMobile(draft.personal.alternateMobile, { label: "Alternate mobile" });
+      if (alt) e.push(alt);
+      const pin = validatePincode(draft.personal.currentAddress.pincode, { required: true });
+      if (pin) e.push(pin);
+      if (!draft.personal.currentAddress.line1.trim()) e.push("Current address is required");
+      if (!draft.personal.currentAddress.city.trim()) e.push("City is required");
+      const emPhone = validateMobile(draft.personal.emergency.phone, {
+        label: "Family contact no.",
+      });
+      if (emPhone) e.push(emPhone);
+      if (draft.personal.emergency.phone.trim() && !draft.personal.emergency.name.trim()) {
+        e.push("Family member name is required when contact is provided");
+      }
     }
-    if (step === 1) {
+    if (checkEmployment) {
+      if (!draft.employment.employeeCode.trim()) e.push("Employee ID is required");
       if (!draft.employment.joiningDate) e.push("Joining date is required");
-      if (!draft.employment.entityId && !entityOptions[0]) e.push("Legal entity is required");
-      if (!draft.employment.branchId && !options?.branches[0]) e.push("Branch is required");
+      if (!draft.employment.entityId) e.push("Legal entity is required");
+      if (!draft.employment.branchId) e.push("Branch is required");
       if (!draft.employment.locationId && !draft.employment.location.trim()) {
         e.push("Location is required");
       }
-      if (!draft.employment.departmentId && !options?.departments[0]) e.push("Department is required");
+      if (!draft.employment.departmentId) e.push("Department is required");
       if (!draft.employment.designationName.trim()) e.push("Designation is required");
+      if (!draft.employment.employmentType.trim()) e.push("Employment type is required");
     }
-    if (step === 2) {
-      const pan = validatePan(draft.governmentIds.pan);
+    if (checkGov) {
+      const pan = validatePan(draft.governmentIds.pan, { required: true });
       if (pan) e.push(pan);
-      const aad = validateAadhaar(draft.governmentIds.aadhaar);
+      const aad = validateAadhaar(draft.governmentIds.aadhaar, { required: true });
       if (aad) e.push(aad);
+      const uan = validateUan(draft.governmentIds.uan);
+      if (uan) e.push(uan);
+      const esic = validateEsic(draft.governmentIds.esic);
+      if (esic) e.push(esic);
     }
-    if (step === 3) {
-      const ifsc = validateIfsc(draft.bank.ifsc);
-      if (ifsc) e.push(ifsc);
-      const acc = validateBankAccount(draft.bank.accountNumber, draft.bank.confirmAccountNumber);
-      if (acc) e.push(acc);
+    if (checkBank) {
       if (!draft.bank.accountHolderName.trim()) e.push("Account holder name is required");
       if (!draft.bank.bankName.trim()) e.push("Bank name is required");
+      const ifsc = validateIfsc(draft.bank.ifsc, { required: true });
+      if (ifsc) e.push(ifsc);
+      const acc = validateBankAccount(
+        draft.bank.accountNumber,
+        draft.bank.confirmAccountNumber,
+        { required: true },
+      );
+      if (acc) e.push(acc);
     }
-    if (step === 7) {
+    if (checkEducation) {
+      for (const [i, row] of draft.education.entries()) {
+        if (!row.degree.trim() && !row.institution.trim() && !row.grade.trim()) continue;
+        if (!row.degree.trim()) e.push(`Education ${i + 1}: degree is required`);
+        if (!row.institution.trim()) e.push(`Education ${i + 1}: institution is required`);
+        if (!row.grade.trim()) e.push(`Education ${i + 1}: grade / marks is required`);
+        const yr = validateYear(row.year);
+        if (yr) e.push(`Education ${i + 1}: ${yr}`);
+      }
+    }
+    if (checkPrevious) {
+      for (const [i, row] of draft.previousEmployment.entries()) {
+        const any =
+          row.company.trim() ||
+          row.designation.trim() ||
+          row.fromDate ||
+          row.toDate ||
+          row.lastCtc.trim();
+        if (!any) continue;
+        if (!row.company.trim()) e.push(`Previous employer ${i + 1}: company is required`);
+        if (!row.designation.trim()) e.push(`Previous employer ${i + 1}: designation is required`);
+        if (row.fromDate && row.toDate && row.toDate < row.fromDate) {
+          e.push(`Previous employer ${i + 1}: To date must be after From date`);
+        }
+      }
+    }
+    if (checkSalary) {
+      const basic = validateAmount(draft.salary.basicSalary, "Basic salary");
+      if (basic) e.push(basic);
+      const ctc = validateAmount(draft.salary.ctc, "CTC");
+      if (ctc) e.push(ctc);
+    }
+    if (checkDocuments) {
       const needed = ["Photo", "PAN", "Aadhaar", "Cancelled Cheque"];
       for (const label of needed) {
         if (!draft.documents.some((d) => d.documentType === label && d.fileName)) {
@@ -212,7 +313,7 @@ export function EmployeeWizardPage() {
       ),
     );
     return e;
-  }, [step, draft, options, records]);
+  }, [step, draft, records]);
 
   function patchPersonal(p: Partial<EmployeeWizardDraft["personal"]>) {
     setDraft((d) => ({ ...d, personal: { ...d.personal, ...p } }));
@@ -269,6 +370,10 @@ export function EmployeeWizardPage() {
 
   async function submit() {
     if (!options) return;
+    if (stepErrors.length) {
+      toast(stepErrors[0], "error");
+      return;
+    }
     setSubmitting(true);
     try {
       const created = await createEmployeeFromWizard(draft, options);
@@ -472,25 +577,28 @@ export function EmployeeWizardPage() {
               <SetupField label="First name" required>
                 <SetupInput
                   placeholder="e.g. Anil"
+                  maxLength={80}
                   value={draft.personal.firstName}
-                  onChange={(e) => patchPersonal({ firstName: e.target.value })}
+                  onChange={(e) => patchPersonal({ firstName: lettersOnly(e.target.value) })}
                 />
               </SetupField>
               <SetupField label="Middle name">
                 <SetupInput
                   placeholder="Optional"
+                  maxLength={80}
                   value={draft.personal.middleName}
-                  onChange={(e) => patchPersonal({ middleName: e.target.value })}
+                  onChange={(e) => patchPersonal({ middleName: lettersOnly(e.target.value) })}
                 />
               </SetupField>
               <SetupField label="Last name" required>
                 <SetupInput
                   placeholder="e.g. Kumar"
+                  maxLength={80}
                   value={draft.personal.lastName}
-                  onChange={(e) => patchPersonal({ lastName: e.target.value })}
+                  onChange={(e) => patchPersonal({ lastName: lettersOnly(e.target.value) })}
                 />
               </SetupField>
-              <SetupField label="Gender">
+              <SetupField label="Gender" required>
                 <SetupSelect value={draft.personal.gender} onChange={(e) => patchPersonal({ gender: e.target.value })}>
                   <option value="">Select gender</option>
                   {GENDER_OPTIONS.map((g) => (
@@ -498,7 +606,7 @@ export function EmployeeWizardPage() {
                   ))}
                 </SetupSelect>
               </SetupField>
-              <SetupField label="Date of birth">
+              <SetupField label="Date of birth" required>
                 <SetupInput type="date" value={draft.personal.dateOfBirth} onChange={(e) => patchPersonal({ dateOfBirth: e.target.value })} />
               </SetupField>
               <SetupField label="Marital status">
@@ -527,16 +635,18 @@ export function EmployeeWizardPage() {
                 <SetupInput
                   placeholder="10-digit mobile"
                   inputMode="numeric"
+                  maxLength={10}
                   value={draft.personal.mobile}
-                  onChange={(e) => patchPersonal({ mobile: e.target.value })}
+                  onChange={(e) => patchPersonal({ mobile: digitsOnly(e.target.value, 10) })}
                 />
               </SetupField>
               <SetupField label="Alternate mobile">
                 <SetupInput
                   placeholder="Optional alternate number"
                   inputMode="numeric"
+                  maxLength={10}
                   value={draft.personal.alternateMobile}
-                  onChange={(e) => patchPersonal({ alternateMobile: e.target.value })}
+                  onChange={(e) => patchPersonal({ alternateMobile: digitsOnly(e.target.value, 10) })}
                 />
               </SetupField>
               <SetupField label="cache email id" required>
@@ -558,14 +668,14 @@ export function EmployeeWizardPage() {
             </EmsFormGrid>
             <h3 className="text-xs font-semibold uppercase text-muted-foreground">Current address</h3>
             <EmsFormGrid>
-              <SetupField label="Address">
+              <SetupField label="Address" required>
                 <SetupInput
                   placeholder="House / street / area"
                   value={draft.personal.currentAddress.line1}
                   onChange={(e) => patchPersonal({ currentAddress: { ...draft.personal.currentAddress, line1: e.target.value } })}
                 />
               </SetupField>
-              <SetupField label="City">
+              <SetupField label="City" required>
                 <SetupInput
                   placeholder="e.g. Bengaluru"
                   value={draft.personal.currentAddress.city}
@@ -598,12 +708,20 @@ export function EmployeeWizardPage() {
                   searchPlaceholder="Search country…"
                 />
               </SetupField>
-              <SetupField label="Pincode">
+              <SetupField label="Pincode" required>
                 <SetupInput
                   placeholder="6-digit pincode"
                   inputMode="numeric"
+                  maxLength={6}
                   value={draft.personal.currentAddress.pincode}
-                  onChange={(e) => patchPersonal({ currentAddress: { ...draft.personal.currentAddress, pincode: e.target.value } })}
+                  onChange={(e) =>
+                    patchPersonal({
+                      currentAddress: {
+                        ...draft.personal.currentAddress,
+                        pincode: digitsOnly(e.target.value, 6),
+                      },
+                    })
+                  }
                 />
               </SetupField>
             </EmsFormGrid>
@@ -618,16 +736,29 @@ export function EmployeeWizardPage() {
               <SetupField label="Family Member Name">
                 <SetupInput
                   placeholder="Full name"
+                  maxLength={80}
                   value={draft.personal.emergency.name}
-                  onChange={(e) => patchPersonal({ emergency: { ...draft.personal.emergency, name: e.target.value } })}
+                  onChange={(e) =>
+                    patchPersonal({
+                      emergency: { ...draft.personal.emergency, name: lettersOnly(e.target.value) },
+                    })
+                  }
                 />
               </SetupField>
               <SetupField label="Contact No.">
                 <SetupInput
                   placeholder="10-digit mobile"
                   inputMode="numeric"
+                  maxLength={10}
                   value={draft.personal.emergency.phone}
-                  onChange={(e) => patchPersonal({ emergency: { ...draft.personal.emergency, phone: e.target.value } })}
+                  onChange={(e) =>
+                    patchPersonal({
+                      emergency: {
+                        ...draft.personal.emergency,
+                        phone: digitsOnly(e.target.value, 10),
+                      },
+                    })
+                  }
                 />
               </SetupField>
               <SetupField label="Relation">
@@ -644,8 +775,9 @@ export function EmployeeWizardPage() {
               <SetupField label="Fathers name">
                 <SetupInput
                   placeholder="Father's full name"
+                  maxLength={80}
                   value={draft.personal.fatherName || ""}
-                  onChange={(e) => patchPersonal({ fatherName: e.target.value })}
+                  onChange={(e) => patchPersonal({ fatherName: lettersOnly(e.target.value) })}
                 />
               </SetupField>
             </EmsFormGrid>
@@ -655,7 +787,15 @@ export function EmployeeWizardPage() {
         {step === 1 ? (
           <div className="space-y-4">
             <div className="flex flex-wrap items-end gap-2">
-              <SetupField label="Employee ID" hint="Auto-generated · configurable">
+              <SetupField
+                label="Employee ID"
+                required
+                hint={
+                  entityOptions.find((e) => e.value === draft.employment.entityId)?.empPrefix
+                    ? `Auto from entity prefix ${entityOptions.find((e) => e.value === draft.employment.entityId)?.empPrefix}`
+                    : "Auto-generated from legal entity Emp prefix"
+                }
+              >
                 <SetupInput
                   value={draft.employment.employeeCode}
                   onChange={(e) => patchEmployment({ employeeCode: e.target.value })}
@@ -667,6 +807,8 @@ export function EmployeeWizardPage() {
             </div>
             {idConfigOpen ? (
               <IdConfigPanel
+                entityOptions={entityOptions}
+                entityId={draft.employment.entityId}
                 onApplied={(code) => {
                   patchEmployment({ employeeCode: code });
                   setIdConfigOpen(false);
@@ -674,14 +816,21 @@ export function EmployeeWizardPage() {
               />
             ) : null}
             <EmsFormGrid>
-              <SetupField label="Legal entity" required hint="HR Setup → Legal Entities">
+              <SetupField label="Legal entity" required hint="HR Setup → Legal Entities (Emp prefix)">
                 <SetupSelect
                   value={draft.employment.entityId}
                   onChange={(e) => {
                     const id = e.target.value;
-                    patchEmployment({
-                      entityId: id,
-                      entityName: entityOptions.find((x) => x.value === id)?.label ?? "",
+                    const ent = entityOptions.find((x) => x.value === id);
+                    void previewNextEmployeeCodeForEntity(
+                      id || undefined,
+                      ent?.empPrefix || ent?.code,
+                    ).then((code) => {
+                      patchEmployment({
+                        entityId: id,
+                        entityName: ent?.label ?? "",
+                        ...(code ? { employeeCode: code } : {}),
+                      });
                     });
                   }}
                 >
@@ -689,6 +838,7 @@ export function EmployeeWizardPage() {
                   {entityOptions.map((ent) => (
                     <option key={ent.value} value={ent.value}>
                       {ent.label}
+                      {ent.empPrefix ? ` (${ent.empPrefix})` : ""}
                     </option>
                   ))}
                 </SetupSelect>
@@ -854,7 +1004,7 @@ export function EmployeeWizardPage() {
                   ))}
                 </SetupSelect>
               </SetupField>
-              <SetupField label="Employment type">
+              <SetupField label="Employment type" required>
                 <SetupSelect
                   value={draft.employment.employmentType}
                   onChange={(e) => {
@@ -867,6 +1017,7 @@ export function EmployeeWizardPage() {
                     });
                   }}
                 >
+                  <option value="">Select type…</option>
                   {EMPLOYMENT_TYPE_OPTIONS.map((t) => (
                     <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
@@ -925,8 +1076,11 @@ export function EmployeeWizardPage() {
                   <SetupInput
                     placeholder="e.g. 90"
                     inputMode="numeric"
+                    maxLength={4}
                     value={draft.employment.probationPeriodDays}
-                    onChange={(e) => patchEmployment({ probationPeriodDays: e.target.value })}
+                    onChange={(e) =>
+                      patchEmployment({ probationPeriodDays: digitsOnly(e.target.value, 4) })
+                    }
                   />
                 </SetupField>
               ) : null}
@@ -935,8 +1089,11 @@ export function EmployeeWizardPage() {
                   <SetupInput
                     placeholder="e.g. 90"
                     inputMode="numeric"
+                    maxLength={4}
                     value={draft.employment.trainingDurationDays}
-                    onChange={(e) => patchEmployment({ trainingDurationDays: e.target.value })}
+                    onChange={(e) =>
+                      patchEmployment({ trainingDurationDays: digitsOnly(e.target.value, 4) })
+                    }
                   />
                 </SetupField>
               ) : null}
@@ -1018,10 +1175,33 @@ export function EmployeeWizardPage() {
   );
 }
 
-function IdConfigPanel({ onApplied }: { onApplied: (code: string) => void }) {
+function IdConfigPanel({
+  onApplied,
+  entityOptions,
+  entityId,
+}: {
+  onApplied: (code: string) => void;
+  entityOptions: SetupMasterOption[];
+  entityId: string;
+}) {
   const [cfg, setCfg] = useState(loadEmployeeIdConfig());
+  const selected = entityOptions.find((e) => e.value === entityId);
+  const entityPrefix = selected?.empPrefix || selected?.code || "";
   return (
     <div className="rounded-lg border border-border/70 bg-muted/20 p-3 text-xs space-y-2">
+      <p className="text-muted-foreground">
+        Prefer the Legal Entity Emp prefix
+        {entityPrefix ? (
+          <>
+            {" "}
+            (<span className="font-mono font-medium text-foreground">{entityPrefix}</span>
+            → {entityPrefix}000001)
+          </>
+        ) : (
+          " (set under HR Setup → Legal Entities)"
+        )}
+        . Legacy formats below are optional overrides.
+      </p>
       <SetupField label="Format">
         <SetupSelect value={cfg.mode} onChange={(e) => setCfg({ ...cfg, mode: e.target.value as typeof cfg.mode })}>
           <option value="emp_seq">EMP-000001</option>
@@ -1034,17 +1214,33 @@ function IdConfigPanel({ onApplied }: { onApplied: (code: string) => void }) {
       <SetupField label="Company code">
         <SetupInput value={cfg.companyCode} onChange={(e) => setCfg({ ...cfg, companyCode: e.target.value })} />
       </SetupField>
-      <Button
-        type="button"
-        size="sm"
-        className="cursor-pointer"
-        onClick={() => {
-          saveEmployeeIdConfig(cfg);
-          onApplied(previewNextEmployeeCode());
-        }}
-      >
-        Apply & regenerate ID
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          size="sm"
+          className="cursor-pointer"
+          onClick={() => {
+            void previewNextEmployeeCodeForEntity(entityId || undefined, entityPrefix || undefined).then(
+              (code) => onApplied(code),
+            );
+          }}
+          disabled={!entityPrefix && !entityId}
+        >
+          Use entity prefix
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="cursor-pointer"
+          onClick={() => {
+            saveEmployeeIdConfig(cfg);
+            onApplied(previewNextEmployeeCode());
+          }}
+        >
+          Apply legacy format
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1058,26 +1254,74 @@ function GovIdsStep({
 }) {
   const g = draft.governmentIds;
   const set = (p: Partial<typeof g>) => setDraft((d) => ({ ...d, governmentIds: { ...d.governmentIds, ...p } }));
-  const fields: { label: string; key: keyof typeof g; required?: boolean; placeholder: string }[] = [
-    { label: "Aadhaar", key: "aadhaar", required: true, placeholder: "16-digit Aadhaar" },
-    { label: "PAN", key: "pan", required: true, placeholder: "ABCDE1234F" },
-    { label: "Passport", key: "passport", placeholder: "Optional passport number" },
-    { label: "Driving license", key: "drivingLicense", placeholder: "Optional DL number" },
-    { label: "UAN", key: "uan", placeholder: "PF UAN (optional)" },
-    { label: "ESIC", key: "esic", placeholder: "ESIC number (optional)" },
-    { label: "Voter ID", key: "voterId", placeholder: "Optional voter ID" },
-  ];
   return (
     <EmsFormGrid>
-      {fields.map(({ label, key, required, placeholder }) => (
-        <SetupField key={key} label={label} required={required}>
-          <SetupInput
-            placeholder={placeholder}
-            value={String(g[key] ?? "")}
-            onChange={(e) => set({ [key]: e.target.value })}
-          />
-        </SetupField>
-      ))}
+      <SetupField label="Aadhaar" required>
+        <SetupInput
+          placeholder="12-digit Aadhaar"
+          inputMode="numeric"
+          maxLength={12}
+          value={g.aadhaar}
+          onChange={(e) => set({ aadhaar: digitsOnly(e.target.value, 12) })}
+        />
+      </SetupField>
+      <SetupField label="PAN" required>
+        <SetupInput
+          placeholder="ABCDE1234F"
+          maxLength={10}
+          value={g.pan}
+          onChange={(e) =>
+            set({
+              pan: e.target.value
+                .toUpperCase()
+                .replace(/[^A-Z0-9]/g, "")
+                .slice(0, 10),
+            })
+          }
+        />
+      </SetupField>
+      <SetupField label="Passport">
+        <SetupInput
+          placeholder="Optional passport number"
+          maxLength={20}
+          value={g.passport}
+          onChange={(e) => set({ passport: e.target.value.toUpperCase().slice(0, 20) })}
+        />
+      </SetupField>
+      <SetupField label="Driving license">
+        <SetupInput
+          placeholder="Optional DL number"
+          maxLength={20}
+          value={g.drivingLicense}
+          onChange={(e) => set({ drivingLicense: e.target.value.toUpperCase().slice(0, 20) })}
+        />
+      </SetupField>
+      <SetupField label="UAN">
+        <SetupInput
+          placeholder="12-digit PF UAN"
+          inputMode="numeric"
+          maxLength={12}
+          value={g.uan}
+          onChange={(e) => set({ uan: digitsOnly(e.target.value, 12) })}
+        />
+      </SetupField>
+      <SetupField label="ESIC">
+        <SetupInput
+          placeholder="10–17 digit ESIC number"
+          inputMode="numeric"
+          maxLength={17}
+          value={g.esic}
+          onChange={(e) => set({ esic: digitsOnly(e.target.value, 17) })}
+        />
+      </SetupField>
+      <SetupField label="Voter ID">
+        <SetupInput
+          placeholder="Optional voter ID"
+          maxLength={20}
+          value={g.voterId}
+          onChange={(e) => set({ voterId: e.target.value.toUpperCase().slice(0, 20) })}
+        />
+      </SetupField>
       <SetupField label="Issue date">
         <SetupInput type="date" value={g.issueDate} onChange={(e) => set({ issueDate: e.target.value })} />
       </SetupField>
@@ -1102,52 +1346,73 @@ function BankStep({
       <SetupField label="Account holder name" required>
         <SetupInput
           placeholder="Name as on bank account"
+          maxLength={80}
           value={b.accountHolderName}
-          onChange={(e) => set({ accountHolderName: e.target.value })}
+          onChange={(e) => set({ accountHolderName: lettersOnly(e.target.value) })}
         />
       </SetupField>
       <SetupField label="Bank name" required>
         <SetupInput
           placeholder="e.g. HDFC Bank"
+          maxLength={80}
           value={b.bankName}
-          onChange={(e) => set({ bankName: e.target.value })}
+          onChange={(e) => set({ bankName: e.target.value.slice(0, 80) })}
         />
       </SetupField>
       <SetupField label="Branch name">
         <SetupInput
           placeholder="e.g. Koramangala"
+          maxLength={80}
           value={b.branchName}
-          onChange={(e) => set({ branchName: e.target.value })}
+          onChange={(e) => set({ branchName: e.target.value.slice(0, 80) })}
         />
       </SetupField>
       <SetupField label="Account number" required>
         <SetupInput
-          placeholder="9-18 digit account number"
+          placeholder="9–18 digit account number"
           inputMode="numeric"
+          maxLength={18}
           value={b.accountNumber}
-          onChange={(e) => set({ accountNumber: e.target.value })}
+          onChange={(e) => set({ accountNumber: digitsOnly(e.target.value, 18) })}
         />
       </SetupField>
       <SetupField label="Confirm account number" required>
         <SetupInput
           placeholder="Re-enter account number"
           inputMode="numeric"
+          maxLength={18}
           value={b.confirmAccountNumber}
-          onChange={(e) => set({ confirmAccountNumber: e.target.value })}
+          onChange={(e) => set({ confirmAccountNumber: digitsOnly(e.target.value, 18) })}
         />
       </SetupField>
       <SetupField label="IFSC" required>
         <SetupInput
           placeholder="e.g. HDFC0001234"
+          maxLength={11}
           value={b.ifsc}
-          onChange={(e) => set({ ifsc: e.target.value.toUpperCase() })}
+          onChange={(e) =>
+            set({
+              ifsc: e.target.value
+                .toUpperCase()
+                .replace(/[^A-Z0-9]/g, "")
+                .slice(0, 11),
+            })
+          }
         />
       </SetupField>
       <SetupField label="Swift">
         <SetupInput
           placeholder="Optional SWIFT code"
+          maxLength={11}
           value={b.swift}
-          onChange={(e) => set({ swift: e.target.value })}
+          onChange={(e) =>
+            set({
+              swift: e.target.value
+                .toUpperCase()
+                .replace(/[^A-Z0-9]/g, "")
+                .slice(0, 11),
+            })
+          }
         />
       </SetupField>
     </EmsFormGrid>
@@ -1171,10 +1436,20 @@ function SalaryStep({
       </p>
       <EmsFormGrid>
         <SetupField label="Basic salary">
-          <SetupInput value={s.basicSalary} onChange={(e) => set({ basicSalary: e.target.value })} />
+          <SetupInput
+            placeholder="e.g. 35000"
+            inputMode="decimal"
+            value={s.basicSalary}
+            onChange={(e) => set({ basicSalary: amountOnly(e.target.value) })}
+          />
         </SetupField>
         <SetupField label="CTC">
-          <SetupInput value={s.ctc} onChange={(e) => set({ ctc: e.target.value })} />
+          <SetupInput
+            placeholder="e.g. 600000"
+            inputMode="decimal"
+            value={s.ctc}
+            onChange={(e) => set({ ctc: amountOnly(e.target.value) })}
+          />
         </SetupField>
         <SetupField label="Salary structure">
           {structures.length > 0 ? (
@@ -1200,9 +1475,6 @@ function SalaryStep({
               placeholder="Create structures in Payroll first"
             />
           )}
-        </SetupField>
-        <SetupField label="Payroll group">
-          <SetupInput value={s.payrollGroup} onChange={(e) => set({ payrollGroup: e.target.value })} />
         </SetupField>
         <SetupField label="Income tax regime">
           <SetupSelect value={s.incomeTaxRegime} onChange={(e) => set({ incomeTaxRegime: e.target.value })}>
@@ -1397,8 +1669,9 @@ function EducationStep({
                 <SetupInput
                   placeholder="e.g. 2018"
                   inputMode="numeric"
+                  maxLength={4}
                   value={row.year}
-                  onChange={(e) => update(row.id, { year: e.target.value })}
+                  onChange={(e) => update(row.id, { year: digitsOnly(e.target.value, 4) })}
                 />
               </SetupField>
               <SetupField label="Grade / marks" required>
@@ -1507,14 +1780,14 @@ function PreviousEmploymentStep({
               </Button>
             </div>
             <EmsFormGrid>
-              <SetupField label="Company">
+              <SetupField label="Company" required>
                 <SetupInput
                   placeholder="Previous company name"
                   value={row.company}
                   onChange={(e) => update(row.id, { company: e.target.value })}
                 />
               </SetupField>
-              <SetupField label="Designation">
+              <SetupField label="Designation" required>
                 <SetupInput
                   placeholder="e.g. Software Engineer"
                   value={row.designation}
@@ -1529,9 +1802,10 @@ function PreviousEmploymentStep({
               </SetupField>
               <SetupField label="Last CTC">
                 <SetupInput
-                  placeholder="e.g. 8 LPA"
+                  placeholder="e.g. 800000"
+                  inputMode="decimal"
                   value={row.lastCtc}
-                  onChange={(e) => update(row.id, { lastCtc: e.target.value })}
+                  onChange={(e) => update(row.id, { lastCtc: amountOnly(e.target.value) })}
                 />
               </SetupField>
               <SetupField label="Reason for leaving">

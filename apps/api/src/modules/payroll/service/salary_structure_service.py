@@ -49,6 +49,10 @@ def _apply_ctc_split(fields: dict, existing: PaySalaryStructure | None = None) -
             existing.employer_contribution if existing else Decimal("1800"),
         ),
     )
+    if not split.get("valid", True):
+        raise InvalidSalaryStructureState(
+            "Special allowance would be negative — raise Gross CTC or lower Basic/HRA/employer/telephone"
+        )
     payload["basic_amount"] = split["basic"]
     payload["hra_amount"] = split["hra"]
     payload["special_allowance"] = split["special_allowance"]

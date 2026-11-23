@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { SetupDrawer } from "@/components/hr/setup/setup-drawer";
 import { Button } from "@/components/ui/button";
+import { formatHoursMinutes } from "@/services/attendance-management-service";
 import type { AttendanceRecord } from "@/types/attendance-management";
 import { CALENDAR_CODES } from "@/types/attendance-management";
 import { cn } from "@/lib/utils";
@@ -132,8 +133,9 @@ export function AttendanceDayDetailDrawer({
               <p className="font-medium">{r.extension.employeeName}</p>
               <p className="text-muted-foreground">
                 {r.checkIn ? new Date(r.checkIn).toLocaleTimeString() : "-"} -{" "}
-                {r.checkOut ? new Date(r.checkOut).toLocaleTimeString() : "-"} · {r.workingHours}h · OT{" "}
-                {r.overtimeHours}h
+                {r.checkOut ? new Date(r.checkOut).toLocaleTimeString() : "-"} ·{" "}
+                {formatHoursMinutes(r.workingHours)}
+                {r.overtimeHours > 0 ? ` · OT ${formatHoursMinutes(r.overtimeHours)}` : ""}
               </p>
               <p className="capitalize text-muted-foreground">{r.status.replace(/_/g, " ")}</p>
             </li>

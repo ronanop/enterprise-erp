@@ -78,6 +78,7 @@ function presentWeight(status: string): number {
     case "work_from_home":
     case "early_exit":
     case "on_duty":
+    case "miss_punch":
       return 1;
     case "half_day":
       return 0.5;

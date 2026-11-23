@@ -1,0 +1,35 @@
+Sr. No.,Status,Tag,EMPLOYEE ID,New E codes,NAME,Entity,Deployed At,Base Location,Designation,Department,Reporting Manager,DOJ,Emp. Contact No.,Email id,Gender,DOB
+19,Active,client_side,CT5252,CT5252,Sajjad Mahiboob Shaikh,Technologies,CBI,Mumbai,Linux Admintrator,Technical,Shweta Gaba,2025-10-01,8208121105,sajjadshaikhs847@gmail.com,Male,1996-09-27
+20,Active,client_side,ACT235,CT0235,Navneesh Kumar Maurya,Technologies,NSE,Noida,Server engineer,Technical,Shweta Gaba,2025-08-23,8726123133,navneeshmaurya4096@gmail.com,Male,1996-05-20
+21,Active,client_side,ACT236,CT0236,Jagnnath Mishra,Technologies,Airtel,Noida,Network Engineer,Technical,Shweta Gaba,2025-09-08,7607580078,cmishra2507@gmail.com,Male,1996-07-25
+23,Resigned,client_side,ACT239,CT0239,Akash Mangaru Kushwaha,Technologies,CBI,Mumbai,Network Admin,Technical,Shweta Gaba,2025-10-28,7517741679,akushwaha54321@gmail.com,Male,2001-09-25
+24,Active,client_side,ACT241,CT0241,Ansari Sadique Azim,Technologies,CBI,Noida,Windows Admin,Technical,Shweta Gaba,2025-11-12,9769504515,ansarisadique255@gmail.com,Male,2003-09-23
+27,Active,client_side,ACT246,CT0246,Praveen Kumar Pandiyan,Technologies,NSE,Hubali,Senior Technical Engineer,Technical,Shweta Gaba,2025-10-31,6381455639,ppraveenkumar6381@gmail.com,Male,2000-05-02
+28,Active,client_side,ACT247,CT0247,Pankaj Kumar Maurya,Technologies,NSE,Noida,Data Centre Operations Engineer,Technical,Shweta Gaba,2025-11-26,7977183871,pankajmauryait@gmail.com,Male,1994-06-21
+29,Active,client_side,CT5289,CT5289,Kristapati Hari Krishna Reddy,Technologies,CRIS,Mumbai,SOC Analyst,Technical,Shweta Gaba,2025-12-08,8867180875,harikrishnahkr111@gmail.com,Male,1999-04-23
+30,Active,client_side,CT5290,CT5290,Ruddula Rohit Krishna Kumar,Technologies,CRIS,Bilaspur,SOC Analyst,Technical,Shweta Gaba,2025-12-08,6362780387,rohitsoc348@gmail.com,Male,1994-12-10
+32,Active,client_side,ACT250,CT0250,Nallamsetty Charan,Technologies,CBI,Kolkata,Data Base Admin,Technical,Shweta Gaba,2025-12-22,7995128648,charandba07@gmail.com,Male,2001-06-16
+33,Resigned,client_side,ACT253,CT0253,Pothalam Bharath Teja,Technologies,CRIS,Chittranjan,SOC Analyst,Technical,Shweta Gaba,2026-01-27,7989331199,bharathteja944@gmail.com,Male,2001-03-18
+34,Active,client_side,ACT251,CT0251,Roshan Ragupathi,Technologies,CRIS,Mumbai,SOC Analyst,Technical,Shweta Gaba,2026-01-19,7397025309,roshaninfo2001@gmail.com,Male,2001-03-14
+35,Active,client_side,ACT249,CT0249,Chinthaparthi Jeju Reddy,Technologies,CRIS,Noida,SOC Analyst,Technical,Shweta Gaba,2026-01-05,9381830140,chinthaparthijeju123@gmail.com,Male,2001-02-21
+36,Active,client_side,ACT254,CT0254,Avala Diwakar,Technologies,CRIS,Kapurthala,SOC Analyst,Technical,Shweta Gaba,2026-01-29,6281745181,diwakaravala09@gmail.com,Male,2000-07-20
+37,Active,client_side,ACT255,CT0255,Yelukur Raju,Technologies,CRIS,Bhubneshwar,SOC Analyst,Technical,Shweta Gaba,2026-02-02,9885791820,yelkurraju13@gmail.com,Male,1999-07-17
+39,Active,client_side,ACT257,CT0257,Mayur Mahadu Patil,Technologies,CRIS,Bilaspur,SOC Analyst,Technical,Shweta Gaba,2026-02-10,7229090515,mayurpatil6853@gmail.com,Male,1999-06-29
+40,Active,client_side,ACT260,CT0260,Pendyala.Harish,Technologies,CRIS,Patiala,SOC Analyst,Technical,Shweta Gaba,2026-02-23,6301615186,ph.hari26@gmail.com,Male,2000-08-26
+41,Active,client_side,ACT261,CT0261,Sangeeta Kumari,Technologies,CRIS,Allahbad,SOC Analyst,Technical,Shweta Gaba,2026-03-02,9304585491,sangeeta7386@gmail.com,Female,1993-06-25
+42,Active,client_side,ACT263,CT0263,MD Shamser Alam,Technologies,CRIS,Lucknow,SOC Analyst,Technical,Shweta Gaba,2026-03-09,9693579246,shamserali899@gmail.com,Male,2002-05-10
+43,Active,client_side,ACT264,CT0264,Mankush Mittal,Technologies,CRIS,Gorkhpur,SOC Analyst,Technical,Shweta Gaba,2026-03-11,8528220387,mankushmittal56@gmail.com,Male,1997-11-21
+44,Resigned,client_side,ACT265,CT0265,Mohammad Wakar,Technologies,CRIS,Kapurthala,SOC Analyst,Technical,Shweta Gaba,2026-03-12,6306547922,mohammedwakar04@gmail.com,Male,1995-04-09
+45,Active,client_side,ACT267,CT0267,Mohd Zubair,Technologies,CRIS,Hazipur,SOC Analyst,Technical,Shweta Gaba,2026-03-12,9758651786,zubairmhmmd@gmail.com,Male,1992-09-12
+46,Active,client_side,ACT268,CT0268,Amarjeet,Technologies,CRIS,Patiala,SOC Analyst,Technical,Shweta Gaba,2026-03-27,7895100756,amarjeetg901@zohomail.com,Male,1997-09-10
+47,Active,client_side,ACT270,CT0270,Rohit B Nikhre,Technologies,CRIS,Noida,SOC Analyst,Technical,Shweta Gaba,2026-04-02,8869855178,nikhrerohit@gmail.com,Male,1998-12-31
+48,Active,client_side,ACT271,CT0271,Shaikh Muzzafar Moosa Gawli,Technologies,CRIS,Chennai,SOC Analyst,Technical,Shweta Gaba,2026-04-02,7720836779,mmshaikh.tech@gmail.com,Male,1993-10-18
+49,Active,client_side,ACT273,CT0273,Ajay,Technologies,CRIS,Mumbai,SOC Analyst,Technical,Shweta Gaba,2026-04-27,8708445585,ajaykumarsharma5665@gmail.com,Male,1993-03-07
+51,Active,client_side,ACT275,CT0275,Ravi Prakash Yadav,Technologies,CRIS,Noida,SOC Analyst,Technical,Shweta Gaba,2026-05-07,94509 80427,yadavravi945098@gmail.com,Male,1995-08-14
+52,Active,client_side,ACT276,CT0276,Kuna Shiva Kumar,Technologies,CBI,Noida,Oracle DBA,Technical,Shweta Gaba,2026-05-07,7799633279,shivakumarkuna.96@gmail.com,Male,1996-07-01
+53,Active,client_side,CT5246,CT5246,Himanshu Popli,Technologies,Cache,Banglore,Senior Azure Analyst,Technical,Shweta Gaba,2025-08-11,9999006298,himanshupopli1991@gmail.com,Male,1991-03-13
+65,Active,client_side,CT0291,CT0291,Abhishek Singh,Technologies,CRIS,Noida,SOC Analyst,Technical,Shweta Gaba,2026-09-15,7976641177,abhishekreshu1@gmail.com,Male,1998-10-15
+67,Active,client_side,CT0293,CT0293,Prakash Sahoo,Technologies,CRIS,Gurgaon,SOC Analyst,Technical,Shweta Gaba,2026-09-16,7682001546,prakashofficial404@gmail.com,Male,2000-05-15
+68,Active,client_side,CT0295,CT0295,Mukul,Technologies,Airtel,Gurgaon,Cisco RE,Technical,Shweta Gaba,2026-09-22,9625389143,Mukulrajput312@gmail.com,Male,2001-09-27
+107,Active,client_side,CT0296,CT0296,Shashwat Shukla,Technologies,Cris,Lucknow,SOC Analyst,Technical,Shweta Gaba,2026-11-11,9956000731,Shashwats101@gmail.com,Male,1999-07-12
+109,Active,client_side,CT0297,CT0297,Kunal Mallick,Technologies,Cris,Bilaspur,SOC Analyst,Technical,Shweta Gaba,2026-11-13,,kunal.mallick.cs@gmail.com,Male,

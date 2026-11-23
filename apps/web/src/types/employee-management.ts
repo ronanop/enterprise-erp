@@ -82,8 +82,8 @@ export type EmployeeDocumentItem = {
   fileDataUrl?: string;
   uploadedBy: string;
   uploadedAt: string;
-  /** Where the file came from - onboarding portal vs HR/manual. */
-  source?: "onboarding" | "bg_check" | "hr" | "manual";
+  /** Where the file came from - onboarding portal vs HR/manual / certificate. */
+  source?: "onboarding" | "bg_check" | "hr" | "manual" | "certificate";
 };
 
 export type EducationEntry = {
@@ -153,6 +153,8 @@ export type EmploymentInfo = {
   managementGroupName: string;
   entityId: string;
   entityName: string;
+  /** Client deployment site / org (client_side imports). Not HRMS Organisation. */
+  deployedAt: string;
   leavePolicyId: string;
   leavePolicyName: string;
   probationPeriodDays: string;
@@ -173,6 +175,8 @@ export type EmployeeExtension = {
   documents: EmployeeDocumentItem[];
   education: EducationEntry[];
   previousEmployment: PreviousEmploymentEntry[];
+  /** Workforce tags e.g. office_staff, client_side. */
+  tags: string[];
   createdBy: string;
   updatedBy: string;
   updatedAt: string;
@@ -226,12 +230,18 @@ export type EmployeeRecord = {
   profilePhotoDataUrl?: string;
   gender: string;
   isDeleted: boolean;
+  /** Workforce tags e.g. office_staff (from profile skills_json / import). */
+  tags: string[];
   extension: EmployeeExtension;
 };
+
+export type EmployeeWorkforceScope = "" | "office" | "client";
 
 export type EmployeeListFilters = {
   branchId: string;
   entityId: string;
+  /** Display organisation label (e.g. Cache, Vyuha.AI). */
+  organisation: string;
   departmentId: string;
   designation: string;
   employmentType: string;
@@ -240,6 +250,8 @@ export type EmployeeListFilters = {
   location: string;
   joiningFrom: string;
   gender: string;
+  /** "" = All, office = office_staff, client = client_side. */
+  workforceScope: EmployeeWorkforceScope;
 };
 
 export type EmployeeWizardDraft = {
@@ -308,6 +320,7 @@ export function emptyEmployment(code = ""): EmploymentInfo {
     managementGroupName: "",
     entityId: "",
     entityName: "",
+    deployedAt: "",
     leavePolicyId: "",
     leavePolicyName: "",
     probationPeriodDays: "90",

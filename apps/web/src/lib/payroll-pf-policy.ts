@@ -19,7 +19,7 @@ export const DEFAULT_PAYROLL_PF_POLICY: PayrollPfPolicy = {
   pf_employer_amount: 1900,
   pf_employee_percent: 0.12,
   pf_employer_percent: 0.12,
-  pf_wage_ceiling: 15000,
+  pf_wage_ceiling: 25000,
   pf_on_lop: "fixed",
   net_pay_formula: "gross_minus_employee_pf_only",
 };

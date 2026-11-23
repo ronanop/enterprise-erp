@@ -1,5 +1,6 @@
 """HR REST routers."""
 
+from datetime import date
 from typing import Annotated
 from uuid import UUID
 
@@ -65,6 +66,8 @@ from modules.hr.schemas import (
     LeaveAdjustmentResponse,
     LeaveApproveRequest,
     LeaveBalanceCreate,
+    LeaveBalanceImportRequest,
+    LeaveBalanceImportResponse,
     LeaveBalanceResponse,
     LeaveBalanceUpdate,
     CompOffCreditRequest,
@@ -92,6 +95,8 @@ from modules.hr.schemas import (
     BiometricDeviceCreate,
     BiometricDeviceFeedResponse,
     BiometricDeviceResponse,
+    BiometricDeviceUpdate,
+    BiometricPunchResponse,
     DeviceSyncRequest,
     BiometricDownloadResponse,
     DeviceSyncResponse,
@@ -397,8 +402,13 @@ def list_employment(
     db: Annotated[Session, Depends(get_db)],
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
+    employee_id: UUID | None = None,
 ):
-    return APIResponse(message="OK", data=paginate(EmploymentService(db).list(ctx, company_id), pagination))
+    svc = EmploymentService(db)
+    if employee_id is not None:
+        row = svc.get_for_employee(ctx, employee_id)
+        return APIResponse(message="OK", data=[row] if row is not None else [])
+    return APIResponse(message="OK", data=paginate(svc.list(ctx, company_id), pagination))
 
 
 @employment_router.post("", response_model=APIResponse[EmploymentResponse])
@@ -837,6 +847,21 @@ def create_balance(
     return APIResponse(message="OK", data=LeaveBalanceService(db).create(ctx, **body.model_dump()))
 
 
+@leave_balances_router.post("/bulk-import", response_model=APIResponse[LeaveBalanceImportResponse])
+def bulk_import_leave_balances(
+    body: LeaveBalanceImportRequest,
+    ctx: Annotated[TenantContext, Depends(_require_leave_balance_manage)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    """Upsert leave balances from Excel/CSV (employee_code + leave_type_code + remaining)."""
+    rows = [r.model_dump() for r in body.rows]
+    data = LeaveBalanceService(db).import_rows(ctx, rows)
+    return APIResponse(
+        message="Leave balance import completed",
+        data=LeaveBalanceImportResponse.model_validate(data),
+    )
+
+
 @leave_balances_router.patch("/{row_id}", response_model=APIResponse[LeaveBalanceResponse])
 def update_balance(
     row_id: UUID,
@@ -1011,10 +1036,20 @@ def list_attendance(
     pagination: Annotated[PaginationParams, Depends(get_pagination)],
     company_id: UUID | None = None,
     employee_id: UUID | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
 ):
+    svc = AttendanceService(db)
+    rows = svc.list(
+        ctx,
+        company_id,
+        employee_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
     return APIResponse(
         message="OK",
-        data=paginate(AttendanceService(db).list(ctx, company_id, employee_id), pagination),
+        data=paginate(svc.serialize_rows(rows), pagination),
     )
 
 
@@ -1503,6 +1538,17 @@ def create_biometric_device(
     return APIResponse(message="OK", data=data)
 
 
+@biometric_devices_router.patch("/{row_id}", response_model=APIResponse[BiometricDeviceResponse])
+def update_biometric_device(
+    row_id: UUID,
+    body: BiometricDeviceUpdate,
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:update"))],
+    db: Annotated[Session, Depends(get_db)],
+):
+    row = BiometricDeviceService(db).update(ctx, row_id, **extract_update_fields(body))
+    return APIResponse(message="OK", data=BiometricDeviceResponse.model_validate(row))
+
+
 @biometric_devices_router.delete("/{row_id}", response_model=APIResponse[None])
 def delete_biometric_device(
     row_id: UUID,
@@ -1523,7 +1569,7 @@ def download_biometric_logs(
     db: Annotated[Session, Depends(get_db)],
 ):
     result = BiometricDeviceService(db).download_logs(ctx, row_id)
-    return APIResponse(message="Attendance downloaded", data=result)
+    return APIResponse(message="Punches fetched", data=result)
 
 
 @biometric_devices_router.post("/{row_id}/rotate-api-key", response_model=APIResponse[dict])
@@ -1547,6 +1593,41 @@ def biometric_device_live_feed(
         message="OK",
         data=BiometricDeviceService(db).live_feed(ctx, row_id, days=days),
     )
+
+
+@attendance_router.get(
+    "/biometric-punches",
+    response_model=APIResponse[list[BiometricPunchResponse]],
+)
+def list_biometric_punches(
+    ctx: Annotated[TenantContext, Depends(require_permission("hr.attendance:read"))],
+    db: Annotated[Session, Depends(get_db)],
+    employee_id: UUID | None = None,
+    company_id: UUID | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    limit: int = 5000,
+):
+    """List biometric punches (one employee or a date range across devices)."""
+    svc = BiometricDeviceService(db)
+    if employee_id is not None:
+        data = svc.list_employee_punches(
+            ctx,
+            employee_id=employee_id,
+            company_id=company_id,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+        )
+    else:
+        data = svc.list_punches_for_range(
+            ctx,
+            company_id=company_id,
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+        )
+    return APIResponse(message="OK", data=data)
 
 
 @attendance_router.post("/device-sync", response_model=APIResponse[DeviceSyncResponse])

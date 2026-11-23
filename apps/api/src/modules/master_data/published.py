@@ -1,9 +1,4 @@
-"""Master-data published language for other modules.
-
-Owner ORM models in ``modules.master_data.models`` are private to master_data.
-Other modules read through the read-only projections below (safe for joins and
-filters) and change master rows only through the owner commands.
-"""
+"""Master-data published language for other modules — employees only (standalone HRMS)."""
 
 from __future__ import annotations
 
@@ -15,8 +10,6 @@ from sqlalchemy.orm import Session
 
 from database.base import Base
 from modules.master_data.models.employee import MasterEmployee
-from modules.master_data.models.party import MasterCustomer, MasterVendor
-from modules.master_data.models.reference import MasterTax
 
 
 class PublishedReadOnlyError(RuntimeError):
@@ -29,18 +22,6 @@ class _ReadOnlyProjection:
 
 class EmployeeRead(_ReadOnlyProjection, Base):
     __table__ = MasterEmployee.__table__
-
-
-class CustomerRead(_ReadOnlyProjection, Base):
-    __table__ = MasterCustomer.__table__
-
-
-class VendorRead(_ReadOnlyProjection, Base):
-    __table__ = MasterVendor.__table__
-
-
-class TaxRead(_ReadOnlyProjection, Base):
-    __table__ = MasterTax.__table__
 
 
 @event.listens_for(Session, "before_flush")
@@ -129,7 +110,7 @@ class EmployeeCommands:
         self._touch(row, deleted_by)
 
     def create_system_employee(self, *, created_by: UUID | None, **fields) -> UUID:
-        """Provision a minimal employee for a login (e.g. CRM owner without HR record)."""
+        """Provision a minimal employee for a login."""
         row = MasterEmployee(id=uuid4(), created_by=created_by, updated_by=created_by, **fields)
         self._db.add(row)
         self._db.flush()
@@ -152,10 +133,7 @@ class EmployeeCommands:
 
 
 __all__ = [
-    "CustomerRead",
     "EmployeeCommands",
     "EmployeeRead",
     "PublishedReadOnlyError",
-    "TaxRead",
-    "VendorRead",
 ]

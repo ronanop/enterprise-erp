@@ -5,6 +5,27 @@
 import { ApiClientError, resourceService } from "@/services/api-client";
 import { buildReportingManagerOptions } from "@/lib/hr/reporting-managers";
 import { nextCode, type HrSetupTabId } from "@/config/hr-setup";
+import { getStoredOrgContext } from "@/lib/org-context-storage";
+
+/** Resolve a concrete company UUID for create payloads (session → branch → first company). */
+export function resolveSetupCompanyId(opts?: {
+  companyId?: string | null;
+  branchId?: string | null;
+  branches?: { value: string; companyId?: string }[];
+  companies?: { value: string }[];
+}): string | undefined {
+  const explicit = String(opts?.companyId ?? "").trim();
+  if (explicit) return explicit;
+  const session = String(getStoredOrgContext()?.companyId ?? "").trim();
+  if (session) return session;
+  const branchId = String(opts?.branchId ?? "").trim();
+  if (branchId && opts?.branches?.length) {
+    const br = opts.branches.find((b) => b.value === branchId);
+    if (br?.companyId) return br.companyId;
+  }
+  const first = opts?.companies?.[0]?.value;
+  return first ? String(first) : undefined;
+}
 
 export type SetupRow = Record<string, unknown> & {
   id: string;
@@ -882,7 +903,14 @@ export function cell(row: SetupRow, ...keys: string[]): string {
   return "-";
 }
 
-export type SetupMasterOption = { value: string; label: string; code?: string };
+export type SetupMasterOption = {
+  value: string;
+  label: string;
+  /** Company code (e.g. DEMOCO). */
+  code?: string;
+  /** Emp ID prefix from Legal Entity setup (e.g. CDPL / CT). Falls back to code. */
+  empPrefix?: string;
+};
 
 /** Legal entities from organization.org_company (same source as Assign HR). */
 export async function listEntityOptions(): Promise<SetupMasterOption[]> {
@@ -893,12 +921,17 @@ export async function listEntityOptions(): Promise<SetupMasterOption[]> {
       const code = String(r.company_code ?? r.code ?? "")
         .trim()
         .toUpperCase();
+      const empPrefix = String(r.employee_code_prefix ?? "")
+        .trim()
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, "");
       return {
         value: String(r.id),
         label: String(
           r.company_name ?? r.name ?? r.legal_name ?? (code || "Entity"),
         ),
         code: code || undefined,
+        empPrefix: empPrefix || code || undefined,
       };
     });
 }

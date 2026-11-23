@@ -15,6 +15,14 @@ import { createOffboardingCase, isApiError } from "@/services/offboarding-servic
 import type { SeparationType } from "@/types/offboarding";
 import { SEPARATION_TYPE_LABELS } from "@/types/offboarding";
 
+const EXIT_REASON_OPTIONS = [
+  "Better Career Opportunity",
+  "Personal Reasons",
+  "Higher Salary / Compensation",
+  "Career Growth",
+  "Health / Family Issues",
+] as const;
+
 export function NewResignationDrawer({
   open,
   onClose,
@@ -34,17 +42,21 @@ export function NewResignationDrawer({
   const [noticeDays, setNoticeDays] = useState("30");
   const [serveNotice, setServeNotice] = useState(true);
   const [reason, setReason] = useState("");
+  const [reasonNotes, setReasonNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setError(null);
-    void Promise.all([listHrBranchOptions(), listHrEmployeeOptions()]).then(([b, e]) => {
+    void Promise.all([
+      listHrBranchOptions(),
+      listHrEmployeeOptions({ excludeCeoCmd: true }),
+    ]).then(([b, e]) => {
       setBranches(b);
       setEmployees(e);
       if (!branchId && b[0]) setBranchId(b[0].id);
-      if (!employeeId && e[0]) setEmployeeId(e[0].id);
+      setEmployeeId((prev) => (e.some((x) => x.id === prev) ? prev : e[0]?.id ?? ""));
     });
     const today = new Date();
     setResignationDate(today.toISOString().slice(0, 10));
@@ -55,6 +67,7 @@ export function NewResignationDrawer({
     setServeNotice(true);
     setSeparationType("resignation");
     setReason("");
+    setReasonNotes("");
   }, [open, branchId]);
 
   async function submit() {
@@ -63,6 +76,12 @@ export function NewResignationDrawer({
       setError("Branch, employee, and last working day are required.");
       return;
     }
+    if (!reason.trim()) {
+      setError("Reason for exit is required.");
+      return;
+    }
+    const notes = reasonNotes.trim();
+    const reasonPayload = notes ? `${reason.trim()} — ${notes}` : reason.trim();
     setSaving(true);
     try {
       await createOffboardingCase({
@@ -70,7 +89,7 @@ export function NewResignationDrawer({
         employeeId,
         separationType,
         requestedLastWorkingDate: lwd,
-        reason: reason.trim() || undefined,
+        reason: reasonPayload,
         resignationDate: resignationDate || undefined,
         noticePeriodDays: serveNotice && noticeDays ? Number(noticeDays) : null,
         expectedExitDate: lwd || undefined,
@@ -227,8 +246,27 @@ export function NewResignationDrawer({
         <SetupField label="Expected exit date" required>
           <SetupInput type="date" value={lwd} onChange={(e) => setLwd(e.target.value)} />
         </SetupField>
-        <SetupField label="Reason for exit" hint="Shown to approvers">
-          <SetupTextarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} />
+        <SetupField label="Reason for exit" required hint="Shown to approvers">
+          <SetupSelect
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            className="cursor-pointer transition-colors duration-200"
+          >
+            <option value="">Select reason</option>
+            {EXIT_REASON_OPTIONS.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </SetupSelect>
+        </SetupField>
+        <SetupField label="Additional details" hint="Optional notes for approvers">
+          <SetupTextarea
+            value={reasonNotes}
+            onChange={(e) => setReasonNotes(e.target.value)}
+            rows={3}
+            placeholder="Add any extra context…"
+          />
         </SetupField>
       </div>
     </SetupDrawer>
