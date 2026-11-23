@@ -33,17 +33,17 @@ export const HEADER_HEIGHT = 56;
 export const NAV_HEIGHT = 76;
 
 export const tokens = StyleSheet.create({
-  /** ui.card - rounded-2xl bg-white/80 shadow border outlineVariant/30 */
+  /** ui.card - opaque white + clear edge (Android-safe; no translucent fill) */
   card: {
     borderRadius: RADIUS_CARD,
     backgroundColor: CARD_SURFACE,
     borderWidth: 1,
-    borderColor: "rgba(195,198,215,0.3)",
-    shadowColor: "#000000",
-    shadowOpacity: 0.05,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    borderColor: "#D5DEEA",
+    shadowColor: "#1A2B56",
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
 
   /** ui.cardFlush - card with overflow hidden, no inner padding */
@@ -52,12 +52,12 @@ export const tokens = StyleSheet.create({
     overflow: "hidden",
     backgroundColor: CARD_SURFACE,
     borderWidth: 1,
-    borderColor: "rgba(195,198,215,0.3)",
-    shadowColor: "#000000",
-    shadowOpacity: 0.05,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    borderColor: "#D5DEEA",
+    shadowColor: "#1A2B56",
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
 
   /** ui.cardSoft - tinted surface card */

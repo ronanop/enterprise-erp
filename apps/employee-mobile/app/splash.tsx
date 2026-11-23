@@ -3,11 +3,14 @@ import {
   Animated,
   Easing,
   Image,
+  Platform,
   StyleSheet,
   Text,
   View,
   type ViewStyle,
 } from "react-native";
+
+const USE_NATIVE_DRIVER = Platform.OS !== "web";
 import { useRouter, type Href } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -69,13 +72,13 @@ function useLoop(duration: number, delay = 0) {
           duration: duration / 2,
           delay,
           easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
         Animated.timing(value, {
           toValue: 0,
           duration: duration / 2,
           easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
+          useNativeDriver: USE_NATIVE_DRIVER,
         }),
       ]),
     );
@@ -95,7 +98,7 @@ function useFadeUp(delay: number) {
       duration: 900,
       delay,
       easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
+      useNativeDriver: USE_NATIVE_DRIVER,
     });
     animation.start();
     return () => animation.stop();

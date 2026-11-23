@@ -9,7 +9,7 @@ import {
 import {
   Dimensions,
   Image,
-  ImageBackground,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -487,12 +487,13 @@ export default function HomeScreen() {
     >
       {/* Hero */}
       <View style={styles.heroWrap}>
-        <ImageBackground
-          source={require("../../assets/images/home/hero-building-v2.jpg")}
-          style={styles.heroImage}
-          imageStyle={styles.heroImageInner}
-          // Web object-position: 92% 72% — bias building to lower-right
-        >
+        <View style={styles.heroImage} pointerEvents="none">
+          <Image
+            source={require("../../assets/images/home/hero-building-v2.jpg")}
+            style={styles.heroImageInner}
+            resizeMode="cover"
+            accessibilityIgnoresInvertColors
+          />
           <LinearGradient
             colors={["#F7FAFD", "rgba(247,250,253,0.75)", "transparent"]}
             start={{ x: 0, y: 0.5 }}
@@ -503,7 +504,7 @@ export default function HomeScreen() {
             colors={["transparent", "#F7FAFD"]}
             style={styles.heroWashBottom}
           />
-        </ImageBackground>
+        </View>
 
         <View style={styles.heroContent}>
           <View style={styles.headerRow}>
@@ -982,8 +983,47 @@ function UpcomingRow({
   );
 }
 
+/** Soft lift like PWA CSS shadows; Android uses elevation + stronger border. */
+const cardLift = Platform.select({
+  ios: {
+    shadowColor: "#1A2B56",
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 } as const,
+  },
+  android: {
+    elevation: 4,
+  },
+  default: {
+    shadowColor: "#1A2B56",
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 } as const,
+    elevation: 3,
+  },
+});
+
+const tileLift = Platform.select({
+  ios: {
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 } as const,
+  },
+  android: {
+    elevation: 2,
+  },
+  default: {
+    shadowColor: "#0f172a",
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 } as const,
+    elevation: 2,
+  },
+});
+
 const styles = StyleSheet.create({
-  screen: { backgroundColor: "#F7FAFD" },
+  screen: { backgroundColor: "#F5F8FC" },
   content: { paddingHorizontal: 0, paddingTop: 0, gap: 0 },
 
   heroWrap: {
@@ -992,11 +1032,11 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   heroImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     height: 300,
+    overflow: "hidden",
   },
   heroImageInner: {
-    resizeMode: "cover",
     // Approximate web object-position 92% 72%
     width: "140%",
     height: "140%",
@@ -1042,15 +1082,16 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.7)",
-    backgroundColor: "rgba(255,255,255,0.75)",
+    borderColor: "rgba(255,255,255,0.85)",
+    backgroundColor: "rgba(255,255,255,0.92)",
     overflow: "hidden",
     alignItems: "center",
     justifyContent: "center",
     shadowColor: "#1A2B56",
-    shadowOpacity: 0.06,
+    shadowOpacity: 0.08,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   errorWrap: { marginTop: 20, marginBottom: 12 },
   greetingBlock: { marginTop: 24, maxWidth: "85%" },
@@ -1082,15 +1123,16 @@ const styles = StyleSheet.create({
     gap: 6,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.7)",
-    backgroundColor: "rgba(255,255,255,0.75)",
+    borderColor: "rgba(255,255,255,0.85)",
+    backgroundColor: "rgba(255,255,255,0.92)",
     paddingHorizontal: 10,
     paddingVertical: 6,
     maxWidth: 192,
     shadowColor: "#1A2B56",
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   chipText: {
     fontSize: 12,
@@ -1111,15 +1153,11 @@ const styles = StyleSheet.create({
   attCard: {
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#E8EEF5",
+    borderColor: "#D5DEEA",
     backgroundColor: "#ffffff",
     paddingHorizontal: 14,
     paddingVertical: 14,
-    shadowColor: "#1A2B56",
-    shadowOpacity: 0.07,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
+    ...cardLift,
   },
   statusRow: { flexDirection: "row", alignItems: "center", gap: 6 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
@@ -1231,14 +1269,12 @@ const styles = StyleSheet.create({
   mgrCard: {
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: "#C7D2FE",
+    borderColor: "#B8C4F5",
     backgroundColor: "#F5F7FF",
-    overflow: "hidden",
+    // Keep edges crisp; clip list rows with an inner border instead of overflow:hidden
+    // so Android elevation is not cut off.
+    ...cardLift,
     shadowColor: "#2563eb",
-    shadowOpacity: 0.08,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
   },
   mgrHead: {
     flexDirection: "row",
@@ -1308,16 +1344,17 @@ const styles = StyleSheet.create({
   quoteCard: {
     minHeight: 88,
     borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(196,181,253,0.55)",
     paddingVertical: 14,
     paddingHorizontal: 16,
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
+    // Avoid overflow:"hidden" — it clips Android elevation under the card.
+    ...cardLift,
     shadowColor: "#7B61FF",
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
+    shadowOpacity: 0.16,
   },
   quoteCopy: { flex: 1, minWidth: 0 },
   quoteTitle: {
@@ -1373,14 +1410,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 4,
     borderRadius: 12,
-    borderWidth: 1,
+    borderWidth: 1.5,
     paddingHorizontal: 4,
     paddingVertical: 8,
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.03,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
+    ...tileLift,
   },
   qaMoreOpen: {
     borderColor: "rgba(13,148,136,0.55)",
@@ -1412,23 +1445,21 @@ const styles = StyleSheet.create({
   emptyUpcoming: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E5EAF2",
+    borderColor: "#D5DEEA",
     backgroundColor: "#ffffff",
     paddingHorizontal: 16,
     paddingVertical: 20,
     alignItems: "center",
-    shadowColor: "#0f172a",
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
+    ...tileLift,
   },
   emptyUpcomingText: { fontSize: 13, color: "#64748B" },
   upcomingCard: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#E5EAF2",
+    borderColor: "#D5DEEA",
     backgroundColor: "#ffffff",
     overflow: "hidden",
+    ...tileLift,
   },
   upcomingRow: {
     minHeight: 68,

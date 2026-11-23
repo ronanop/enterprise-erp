@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import {
   Animated,
+  Platform,
   ScrollView,
   StyleSheet,
   View,
@@ -54,7 +55,7 @@ export function Screen({
     Animated.timing(entrance, {
       toValue: 1,
       duration: 240,
-      useNativeDriver: true,
+      useNativeDriver: Platform.OS !== "web",
     }).start();
   }, [entrance]);
 
