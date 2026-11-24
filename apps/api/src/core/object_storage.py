@@ -99,7 +99,14 @@ def _client():
         region_name=(cfg.s3_region.strip() or "us-east-1"),
         aws_access_key_id=access,
         aws_secret_access_key=secret,
-        config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+        config=Config(
+            signature_version="s3v4",
+            s3={"addressing_style": "path"},
+            # Fail fast when MinIO is unreachable so downloads don't hang until the UI aborts.
+            connect_timeout=5,
+            read_timeout=30,
+            retries={"max_attempts": 2, "mode": "standard"},
+        ),
     )
 
 

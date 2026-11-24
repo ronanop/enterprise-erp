@@ -1923,12 +1923,27 @@ export async function openReceiptBatchAttachment(
     fileName?: string | null;
     /** Window opened synchronously on click (survives popup blockers after await). */
     pendingWindow?: Window | null;
+    /** Override blob fetch timeout (default 90s for invoice documents). */
+    timeoutMs?: number;
   },
 ): Promise<void> {
   const forceDownload = options?.download !== false;
   const pending = options?.pendingWindow ?? null;
+  // Prefer absolute API origin for binary downloads when configured — avoids Next
+  // rewrite buffering hangs on attachment content (same approach as asset documents).
+  const configured = (process.env.NEXT_PUBLIC_API_URL || "").trim().replace(/\/+$/, "");
+  const binaryBase = /^https?:\/\//i.test(configured)
+    ? configured
+    : /^https?:\/\//i.test(env.apiUrlFallback)
+      ? env.apiUrlFallback
+      : undefined;
   const result = await apiGetBlob(
     `${SCM_API}/receipt-batch-attachments/${encodeURIComponent(attachmentId)}/content`,
+    undefined,
+    {
+      ...(binaryBase ? { baseUrl: binaryBase } : {}),
+      timeoutMs: options?.timeoutMs ?? 90_000,
+    },
   );
   if (result.kind === "legacy") {
     if (pending && !pending.closed) {

@@ -514,17 +514,6 @@ export function DeliveryChallanListPage() {
     const busyKey = `billing:${row.id}`;
     setPdfBusyId(busyKey);
     setPdfError(null);
-    // Open synchronously so the invoice still appears if download is blocked after await.
-    const pendingWindow = window.open("about:blank", "_blank");
-    if (pendingWindow) {
-      try {
-        pendingWindow.document.title = "Loading invoice…";
-        pendingWindow.document.body.innerHTML =
-          '<p style="font:14px system-ui;padding:24px;color:#334155">Loading invoice document…</p>';
-      } catch {
-        /* cross-origin / opaque about:blank — ignore */
-      }
-    }
     try {
       let attachmentId = (meta?.attachmentId || "").trim();
       let fileName = (meta?.attachmentFileName || "").trim();
@@ -551,13 +540,13 @@ export function DeliveryChallanListPage() {
           "No invoice document is attached for this billing row yet. Complete the My Jobs invoice with a file first.",
         );
       }
+      // Force-download the My Jobs vendor-invoice attach (not a generated billing PDF).
       await openReceiptBatchAttachment(attachmentId, {
         download: true,
         fileName: fileName || "invoice.pdf",
-        pendingWindow,
+        timeoutMs: 90_000,
       });
     } catch (err) {
-      pendingWindow?.close();
       setPdfError(
         err instanceof Error ? err.message : "Failed to download billing invoice PDF",
       );
@@ -1204,8 +1193,8 @@ function PendingGrnQueueCard({
                                 procurementUi.actionBtn,
                                 "cursor-pointer text-[#0369A1] hover:text-[#0369A1]",
                               )}
-                              title="Open the invoice document attached in My Jobs"
-                              aria-label={`Open billing PDF for ${displayInvoiceNumber}`}
+                              title="Download the invoice document attached in My Jobs"
+                              aria-label={`Download invoice document for ${displayInvoiceNumber}`}
                               onClick={() => void onDownloadBillingPdf(row, invoiceMeta)}
                             >
                               <FileDown className="mr-1 size-3.5" />

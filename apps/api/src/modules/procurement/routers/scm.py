@@ -1629,9 +1629,7 @@ def download_receipt_batch_attachment(
     ctx: Annotated[TenantContext, Depends(require_permission("procurement.grn:read"))],
     db: Annotated[Session, Depends(get_db)],
 ):
-    from io import BytesIO
-
-    from fastapi.responses import StreamingResponse
+    from fastapi.responses import Response
 
     from shared.upload_safety import content_disposition_type
 
@@ -1640,21 +1638,15 @@ def download_receipt_batch_attachment(
     ).resolve_receipt_batch_attachment_file(ctx, attachment_id)
     media = content_type or "application/octet-stream"
     disposition = content_disposition_type(file_name, content_type)
-    headers = {"X-Content-Type-Options": "nosniff"}
-    if content is not None:
-        return StreamingResponse(
-            BytesIO(content),
-            media_type=media,
-            headers={
-                **headers,
-                "Content-Disposition": f'{disposition}; filename="{file_name}"',
-            },
-        )
-    assert path is not None
-    return FileResponse(
-        path=path,
-        filename=file_name,
-        media_type=media,
-        content_disposition_type=disposition,
-        headers=headers,
-    )
+    # Buffer + Content-Length (same pattern as asset documents). StreamingResponse
+    # through the Next.js /api/v1 rewrite leaves the browser pending until timeout.
+    if content is None:
+        assert path is not None
+        content = path.read_bytes()
+    headers = {
+        "Content-Disposition": f'{disposition}; filename="{file_name}"',
+        "Content-Length": str(len(content)),
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, no-store",
+    }
+    return Response(content=content, media_type=media, headers=headers)
